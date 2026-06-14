@@ -120,7 +120,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
               precision = 1;
             }
             type.set_precision(precision);
-            if (lib::is_mysql_mode() && ob_is_double_tc(type.get_type())) {
+            if (ob_is_double_tc(type.get_type())) {
               type.set_precision(PRECISION_UNKNOWN_YET);
               type.set_scale(SCALE_UNKNOWN_YET);
             }

@@ -108,7 +108,7 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
       } else {
         cast_coll_type = type_ctx.get_coll_type();
       }
-    } else if (lib::is_mysql_mode() && ob_is_json(expect_type_)) {
+    } else if (ob_is_json(expect_type_)) {
       cast_coll_type = CS_TYPE_UTF8MB4_BIN;
     }
 
@@ -168,7 +168,7 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
     } else if (ob_is_string_or_lob_type(expect_type_)) {
       type.set_collation_level(type1.get_collation_level());
       type.set_collation_type(type1.get_collation_type());
-    } else if (lib::is_mysql_mode() && ob_is_json(expect_type_)) {
+    } else if (ob_is_json(expect_type_)) {
       type.set_collation_level(type1.get_collation_level());
       type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {

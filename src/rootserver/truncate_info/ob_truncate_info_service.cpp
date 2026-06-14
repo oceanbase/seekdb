@@ -93,7 +93,7 @@ int ObTruncatePartKeyInfo::init(
   const uint64_t data_table_id = data_table_schema.get_table_id();
   if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("Failed to get tenant schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(create_tmp_session(tenant_id, lib::is_oracle_mode(), schema_guard, free_session_ctx_, session_))) {
+  } else if (OB_FAIL(create_tmp_session(tenant_id, false, schema_guard, free_session_ctx_, session_))) {
     LOG_WARN("Failed to create temp session", K(ret));
   } else if (OB_UNLIKELY(ObPartitionLevel::PARTITION_LEVEL_ONE != part_level
       && ObPartitionLevel::PARTITION_LEVEL_TWO != part_level)) {

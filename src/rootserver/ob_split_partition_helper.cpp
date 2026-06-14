@@ -444,7 +444,7 @@ int ObSplitPartitionHelper::prepare_dst_tablet_creator_(
       const int64_t auto_split_size = part_option.get_auto_part_size();
       double cur_ratio = 0;
       int64_t real_auto_split_size = 0;
-      int64_t tablets_limit_per_table = lib::is_oracle_mode() ? OB_MAX_PARTITION_NUM_ORACLE : OB_MAX_PARTITION_NUM_MYSQL;
+      int64_t tablets_limit_per_table = OB_MAX_PARTITION_NUM_MYSQL;
       if (cur_part_num  > tablets_limit_per_table) {
         ret = OB_TOO_MANY_PARTITIONS_ERROR;
         LOG_WARN("doesn't support splitting the tablet, when the number of tablets of the table is greater than the limit", K(ret), K(tablets_limit_per_table));

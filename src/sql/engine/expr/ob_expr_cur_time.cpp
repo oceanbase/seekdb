@@ -361,14 +361,12 @@ ObExprCurDate::~ObExprCurDate()
 int ObExprCurDate::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ctx) const
 {
   UNUSED(type_ctx);
-  if (lib::is_mysql_mode()) {
+  {
     if (type_ctx.enable_mysql_compatible_dates()) {
       type.set_mysql_date();
     } else {
       type.set_date();
     }
-  } else {
-    type.set_datetime();
   }
   if (type.get_scale() < MIN_SCALE_FOR_TEMPORAL) {
     type.set_scale(MIN_SCALE_FOR_TEMPORAL);

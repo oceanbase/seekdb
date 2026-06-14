@@ -755,7 +755,7 @@ void ObCSVFormats::init(const ObDataInFileStruct &file_formats)
         INT64_MAX : file_formats.line_term_str_[0];
   enclose_char_ = file_formats.field_enclosed_char_;
   escape_char_ = file_formats.field_escaped_char_;
-  null_column_fill_zero_string_ = lib::is_mysql_mode();
+  null_column_fill_zero_string_ = true;
 
   if (!file_formats.field_term_str_.empty()
       && file_formats.line_term_str_.empty()) {

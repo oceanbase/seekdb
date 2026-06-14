@@ -126,7 +126,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   ObObjType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
 
-  bool is_oracle = lib::is_oracle_mode();
+  bool is_oracle = false;
   bool allow_partial_update = false;
 
   if (OB_UNLIKELY(OB_FAIL(json_arg->eval(ctx, json_datum)))) {
@@ -153,7 +153,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
     } else {
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
       ObJsonInType expect_type = need_to_tree ? ObJsonInType::JSON_TREE : j_in_type;
-      bool relax_json = (lib::is_oracle_mode() && relax);
+      bool relax_json = false;
       uint32_t parse_flag = relax_json ? ObJsonParser::JSN_RELAXED_FLAG : 0;
       ADD_FLAG_IF_NEED(preserve_dup, parse_flag, ObJsonParser::JSN_PRESERVE_DUP_FLAG);
       if (is_oracle && j_str.length() == 0) {

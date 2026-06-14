@@ -1328,7 +1328,7 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(gis_context, result))) {
       LOG_WARN("eval st intersection failed", K(ret));
       ObGeoExprUtils::geo_func_error_handle(ret, N_ST_INTERSECTS);
-    } else if (lib::is_mysql_mode() && geo1.type() == ObGeoType::POINT
+    } else if (geo1.type() == ObGeoType::POINT
                     && geo2.type() == ObGeoType::POINT
                     && result == true
                     && OB_FAIL(ObGeoTypeUtil::eval_point_box_intersects(srs, &geo1, &geo2, result))) {

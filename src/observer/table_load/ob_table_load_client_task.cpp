@@ -403,7 +403,7 @@ public:
         ObPartGetter part_getter(*table_schema);
         if (OB_FAIL(part_getter.get_part_ids(partition_name, partition_ids))) {
           LOG_WARN("fail to get part ids", K(ret), K(partition_name));
-          if (OB_UNKNOWN_PARTITION == ret && lib::is_mysql_mode()) {
+          if (OB_UNKNOWN_PARTITION == ret) {
             LOG_USER_ERROR(OB_UNKNOWN_PARTITION, partition_name.length(), partition_name.ptr(),
                           table_schema->get_table_name_str().length(),
                           table_schema->get_table_name_str().ptr());

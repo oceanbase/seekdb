@@ -827,7 +827,7 @@ int ObTransformLateMaterialization::generate_pk_join_conditions(const uint64_t r
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> key_col_ids;
   ObSEArray<uint64_t, 4> part_col_ids;
-  const bool is_mysql_mode = lib::is_mysql_mode();
+  const bool is_mysql_mode = true;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) ||
       OB_ISNULL(schema_guard = ctx_->sql_schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;

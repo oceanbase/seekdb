@@ -113,6 +113,8 @@
 #include "sql/resolver/xa/ob_xa_prepare_resolver.h"
 #include "sql/resolver/xa/ob_xa_commit_resolver.h"
 #include "sql/resolver/xa/ob_xa_rollback_resolver.h"
+#include "sql/resolver/cmd/ob_create_restore_point_resolver.h"
+#include "sql/resolver/cmd/ob_drop_restore_point_resolver.h"
 #include "sql/resolver/cmd/ob_get_diagnostics_resolver.h"
 #include "sql/resolver/cmd/ob_mock_resolver.h"
 #include "sql/resolver/cmd/ob_event_resolver.h"
@@ -405,6 +407,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(SetConfig);
         break;
       }
+      case T_CHANGE_EXTERNAL_STORAGE_DEST: {
+        REGISTER_STMT_RESOLVER(ChangeExternalStorageDest);
+        break;
+      }
       case T_ALTER_SYSTEM_SETTP: {
         REGISTER_STMT_RESOLVER(SetTP);
         break;
@@ -584,6 +590,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_FUNCTION_CODE:
       case T_SHOW_TRIGGERS:
       case T_SHOW_CREATE_TABLEGROUP:
+      case T_SHOW_RESTORE_PREVIEW:
       case T_SHOW_QUERY_RESPONSE_TIME:
       case T_SHOW_STATUS:
       case T_SHOW_CREATE_TRIGGER:
@@ -862,6 +869,30 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(Trigger);
         break;
       }
+      case T_ARCHIVE_LOG: {
+        REGISTER_STMT_RESOLVER(ArchiveLog);
+        break;
+      }
+      case T_BACKUP_DATABASE: {
+        REGISTER_STMT_RESOLVER(BackupDatabase);
+        break;
+      }
+      case T_CANCEL_RESTORE: {
+        REGISTER_STMT_RESOLVER(CancelRestore);
+        break;
+      }
+      case T_CANCEL_RECOVER_TABLE: {
+        REGISTER_STMT_RESOLVER(CancelRecoverTable);
+        break;
+      }
+      case T_BACKUP_CLUSTER_PARAMETERS: {
+        REGISTER_STMT_RESOLVER(BackupClusterParam);
+        break;
+      }
+      case T_RECOVER_TABLE: {
+        REGISTER_STMT_RESOLVER(RecoverTable);
+        break;
+      }
       case T_ACTIVATE_STANDBY: {
         REGISTER_STMT_RESOLVER(SwitchRole);
         break;
@@ -872,6 +903,46 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_SWITCHOVER_TO_PRIMARY: {
         REGISTER_STMT_RESOLVER(SwitchRole);
+        break;
+      }
+      case T_BACKUP_MANAGE: {
+        REGISTER_STMT_RESOLVER(BackupManage);
+        break;
+      }
+      case T_BACKUP_CLEAN: {
+        REGISTER_STMT_RESOLVER(BackupClean);
+        break;
+      }
+      case T_DELETE_POLICY: {
+        REGISTER_STMT_RESOLVER(DeletePolicy);
+        break;
+      }
+      case T_BACKUP_ARCHIVELOG: {
+        REGISTER_STMT_RESOLVER(BackupArchiveLog);
+        break;
+      }
+      case T_BACKUP_SET_ENCRYPTION: {
+        REGISTER_STMT_RESOLVER(BackupSetEncryption);
+        break;
+      }
+      case T_BACKUP_SET_DECRYPTION: {
+        REGISTER_STMT_RESOLVER(BackupSetDecryption);
+        break;
+      }
+      case T_ADD_RESTORE_SOURCE: {
+        REGISTER_STMT_RESOLVER(AddRestoreSource);
+        break;
+      }
+      case T_CLEAR_RESTORE_SOURCE: {
+        REGISTER_STMT_RESOLVER(ClearRestoreSource);
+        break;
+      }
+      case T_CREATE_RESTORE_POINT: {
+        REGISTER_STMT_RESOLVER(CreateRestorePoint);
+        break;
+      }
+      case T_DROP_RESTORE_POINT: {
+        REGISTER_STMT_RESOLVER(DropRestorePoint);
         break;
       }
       case T_CREATE_DIRECTORY: {
@@ -1014,8 +1085,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       // todo yanli:check leader-follower database
     }
     
-    if (OB_SUCC(ret) && stmt->is_dml_stmt() && !params_.session_info_->is_varparams_sql_prepare()
-          && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret) && stmt->is_dml_stmt() && !params_.session_info_->is_varparams_sql_prepare()) {
       ObDMLStmt *dml_stmt = static_cast<ObDMLStmt*>(stmt);
       ObRawExprWrapEnumSet enum_set_wrapper(*params_.expr_factory_, params_.session_info_);
       if (OB_FAIL(enum_set_wrapper.wrap_enum_set(*dml_stmt))) {

@@ -422,7 +422,7 @@ int ObMVChecker::check_mav_refresh_type_basic(const ObSelectStmt &stmt, bool &is
   } else if (!stmt.is_scala_group_by() && NULL == default_count) {
     fast_refreshable_error_.assign_fmt("a count(*) item is required to be added to the select item list");
     is_valid = false;
-  } else if (lib::is_mysql_mode() && OB_FAIL(check_is_standard_group_by(stmt, is_valid))) {
+  } else if (OB_FAIL(check_is_standard_group_by(stmt, is_valid))) {
     LOG_WARN("failed to check is standard group by", K(ret));
   } else if (!is_valid) {
     fast_refreshable_error_.assign_fmt("the select item list contains columns that are not in the group by clause");

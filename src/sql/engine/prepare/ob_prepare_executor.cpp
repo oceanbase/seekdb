@@ -73,7 +73,7 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
         }
       } else if (OB_INVALID_ID != ps_id) {
         bool is_in_use = false;
-        if (lib::is_mysql_mode() && OB_FAIL(ctx.get_my_session()->check_ps_stmt_id_in_use(ps_id, is_in_use))) {
+        if (OB_FAIL(ctx.get_my_session()->check_ps_stmt_id_in_use(ps_id, is_in_use))) {
           LOG_WARN("failed to check ps stmt id is in use",  K(ret), K(ps_id), K(is_in_use));
         } else if(!is_in_use) {
           if (OB_FAIL(ctx.get_my_session()->remove_prepare(stmt_name))) {

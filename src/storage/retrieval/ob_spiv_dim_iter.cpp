@@ -61,7 +61,7 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
   } else {
     sql::ObExprBasicFuncs *basic_funcs =
         ObDatumFuncs::get_basic_func(inv_scan_domain_id_expr_->datum_meta_.type_, CS_TYPE_BINARY);
-    cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+    cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cmp_func is NULL", K(ret));

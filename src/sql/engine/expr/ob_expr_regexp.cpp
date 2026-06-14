@@ -133,7 +133,7 @@ int ObExprRegexp::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObE
   int ret = OB_SUCCESS;
   const ObRawExpr *text = raw_expr.get_param_expr(0);
   const ObRawExpr *pattern = raw_expr.get_param_expr(1);
-  CK(lib::is_mysql_mode()); // regexp is mysql only expr
+  // regexp is mysql only expr
   CK(2 == rt_expr.arg_cnt_);
   CK(NULL != text);
   CK(NULL != pattern);

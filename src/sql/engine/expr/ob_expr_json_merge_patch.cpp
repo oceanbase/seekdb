@@ -47,7 +47,7 @@ int ObExprJsonMergePatch::calc_result_typeN(ObExprResType& type,
 {
   UNUSED(type_ctx);
   INIT_SUCC(ret);
-  if (lib::is_mysql_mode()) {
+  {
     const ObString name(N_JSON_MERGE_PATCH);
     if (param_num < 2) {
       ret = OB_ERR_PARAM_SIZE;
@@ -59,49 +59,6 @@ int ObExprJsonMergePatch::calc_result_typeN(ObExprResType& type,
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
       if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, i, N_JSON_MERGE_PRESERVE))) {
         LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[i].get_type()));
-      }
-    }
-  } else {
-    for (size_t i = 0; i < 2 && OB_SUCC(ret); ++i) {
-      ObObjType doc_type = types_stack[i].get_type();
-      if (types_stack[i].get_type() == ObNullType) {
-        if (i == 1) {
-          ret = OB_ERR_JSON_PATCH_INVALID;
-          LOG_USER_ERROR(OB_ERR_JSON_PATCH_INVALID);
-        }
-      } else if (!ObJsonExprHelper::is_convertible_to_json(doc_type)) {
-        ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(types_stack[i].get_type()), "JSON");
-      } else if (ob_is_string_type(doc_type)) {
-        if (types_stack[i].get_collation_type() == CS_TYPE_BINARY) {
-          types_stack[i].set_calc_collation_type(types_stack[i].get_collation_type());
-        } else if (types_stack[i].get_charset_type() != CHARSET_UTF8MB4) {
-          types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-        }
-      } else if (doc_type == ObJsonType) {
-        types_stack[i].set_calc_type(ObJsonType);
-        types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-      } else {
-        types_stack[i].set_calc_type(types_stack[i].get_type());
-        types_stack[i].set_calc_collation_type(types_stack[i].get_collation_type());
-      }
-    }
-
-    // returning type : 2 
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObJsonExprHelper::parse_res_type(types_stack[0], types_stack[2], type, type_ctx))) {
-       LOG_WARN("fail to parse res type.", K(ret));
-    } else if (OB_FAIL(ObJsonExprHelper::parse_asc_option(types_stack[4], types_stack[0], type, type_ctx))) {
-      LOG_WARN("fail to parse asc option.", K(ret));
-    }
-
-    for (size_t i = 2; OB_SUCC(ret) && i < param_num; ++i) {
-      if (!ob_is_integer_type(types_stack[i].get_type())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to calc type param type should be int type", K(types_stack[i].get_type()));
-      } else {
-        types_stack[i].set_calc_collation_type(types_stack[i].get_collation_type());
-        types_stack[i].set_calc_type(types_stack[i].get_type());
       }
     }
   }
@@ -428,11 +385,7 @@ int ObExprJsonMergePatch::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
 {
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
-  if (lib::is_mysql_mode()) {
-    rt_expr.eval_func_ = eval_json_merge_patch;
-  } else {
-    rt_expr.eval_func_ = eval_ora_json_merge_patch;
-  }
+  rt_expr.eval_func_ = eval_json_merge_patch;
   return OB_SUCCESS;
 }
 

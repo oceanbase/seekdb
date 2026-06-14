@@ -756,7 +756,7 @@ int ObGeo3DTo2DVisitor::visit_collectionz_start(ObGeometry3D *geo, uint32_t nums
 /**************************************ObGeo3DToWktVisitor**************************************/
 
 ObGeo3DToWktVisitor::ObGeo3DToWktVisitor(int64_t maxdecimaldigits/* = -1*/) 
-    : wkt_buf_(NULL), is_oracle_mode_(lib::is_oracle_mode()), is_mpt_visit_(false)
+    : wkt_buf_(NULL), is_oracle_mode_(false), is_mpt_visit_(false)
 {
   if (maxdecimaldigits >= 0 && maxdecimaldigits < ObGeoToWktVisitor::MAX_DIGITS_IN_DOUBLE) {
     scale_ = maxdecimaldigits;

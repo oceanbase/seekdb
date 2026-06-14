@@ -66,9 +66,6 @@ int ObHexUtilsBase::unhex(const ObString &text, ObIAllocator &alloc, ObObj &resu
         }  else {
           break;
         }
-      } else if (lib::is_oracle_mode()) {
-        ret = OB_ERR_INVALID_HEX_NUMBER;
-        LOG_WARN("invalid hex number", K(ret), K(c1), K(c2), K(text));
       } else {
         all_valid_char = false;
         result.set_null();
@@ -142,9 +139,6 @@ int ObHexUtilsBase::unhex(const ObString &text, ObIAllocator &alloc, char *&bina
         } else {
           break;
         }
-      } else if (lib::is_oracle_mode()) {
-        ret = OB_ERR_INVALID_HEX_NUMBER;
-        LOG_WARN("invalid hex number", K(ret), K(c1), K(c2), K(text));
       } else {
         all_valid_char = false;
       }

@@ -671,16 +671,7 @@ int ObJsonSchemaTree::handle_keywords_with_specific_type(const ObString& key_wor
     if (OB_FAIL(generate_schema_and_record(key_word, node, schema_vec_stk, is_composition, comp_array))) {
       LOG_WARN( "fail to add type schema", K(key_word), K(ret));
     }
-  } /*else if (lib::is_oracle_mode()) {
-    if implement oracle json schema, check each keyword and its expect type, because:
-     a.in mysql mode:
-        1. if the keywords and its expect_type didn't match, mysql would ignore the keyword;
-        2. but if a composition/item keywords is array type, but its children aren't object, mysql would coredump;
-        (in this situation, raise error anyway)
-     b.in oracle mode:
-        1. if the keywords and its expect_type didn't match, oracle would return error "invalid JSON schema document";
-     c.but if an objects which key doesn't match key_words, both oracle and mysql would ignore. 
-  }*/
+  }
   return ret;
 }
 

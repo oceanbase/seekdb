@@ -828,8 +828,7 @@ OB_INLINE int ObSumAggCell::eval_float_inner(const common::ObDatum &datum, const
   } else {
     float left_f = result_datum.get_float();
     float right_f = datum.get_float();
-    if (OB_UNLIKELY(sql::ObArithExprOperator::is_float_out_of_range(left_f + right_f))
-        && !lib::is_oracle_mode()) {
+    if (OB_UNLIKELY(sql::ObArithExprOperator::is_float_out_of_range(left_f + right_f))) {
       ret = OB_OPERATE_OVERFLOW;
       char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
       int64_t pos = 0;

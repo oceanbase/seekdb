@@ -192,7 +192,7 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
 {
   int ret = OB_SUCCESS;
   ObString res;
-  const bool is_mysql = lib::is_mysql_mode();
+  const bool is_mysql = true;
   ObExprStrResAlloc alloc(expr, ctx);
   ObDatum *text = NULL;
   ObDatum *from = NULL;

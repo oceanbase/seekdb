@@ -420,7 +420,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
         if (OB_FAIL(ObDropUserExecutor::build_fail_msg(failed_users, failed_hosts, fail_msg))) {
           LOG_WARN("Build fail msg error", K(arg), K(ret));
         } else {
-          const char *ERR_CMD = (arg.is_role_ && lib::is_mysql_mode()) ? "DROP ROLE" : "DROP USER";
+          const char *ERR_CMD = (arg.is_role_) ? "DROP ROLE" : "DROP USER";
           ret = OB_CANNOT_USER;
           LOG_USER_ERROR(OB_CANNOT_USER, (int)strlen(ERR_CMD), ERR_CMD, (int)fail_msg.length(), fail_msg.ptr());
         }
@@ -530,7 +530,7 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
     LOG_WARN("session is NULL", K(ret));
   } else {
     const uint64_t tenant_id = session->get_effective_tenant_id();
-    const uint64_t user_id = lib::is_mysql_mode() ? session->get_priv_user_id() : session->get_user_id();
+    const uint64_t user_id = session->get_priv_user_id();
     const ObUserInfo * user_info = NULL;
     common::ObArray<uint64_t> enable_role_id_array;
     ObSchemaGetterGuard schema_guard;

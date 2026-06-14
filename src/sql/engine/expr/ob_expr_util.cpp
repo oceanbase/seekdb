@@ -223,10 +223,8 @@ int ObExprUtil::get_int_param_val(ObDatum *datum, bool is_decint, int64_t &int_v
           int_val = INT64_MAX;
         }
       }
-    } else if (lib::is_mysql_mode()) {
+    } else {
       int_val = datum->get_int();
-    } else if (OB_FAIL(trunc_num2int64(*datum, int_val))) {
-      LOG_WARN("truncate number 2 int failed", K(ret), K(*datum));
     }
   }
   return ret;

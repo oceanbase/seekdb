@@ -80,7 +80,7 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
     }
 
     // 1.resolve if not exists and ccl name
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (node->children_[IF_NOT_EXIST] != NULL) {
         if (node->children_[IF_NOT_EXIST]->type_ != T_IF_NOT_EXISTS) {
           ret = OB_ERR_UNEXPECTED;

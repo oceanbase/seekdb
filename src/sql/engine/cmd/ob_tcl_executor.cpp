@@ -43,15 +43,11 @@ int ObEndTransExecutor::end_trans(ObExecContext &ctx, ObEndTransStmt &stmt)
     LOG_ERROR("session ptr is null", K(ret));
   } else if (my_session->is_in_transaction() &&
              my_session->associated_xa()) {
-    if (lib::is_mysql_mode()) {
+    {
       // mysql mode
       ret = OB_TRANS_XA_RMFAIL;
       LOG_WARN("the command cannot be executed in xa trans", K(ret), K(my_session->get_xid()));
       ctx.set_need_disconnect(false);
-    } else {
-      // oracle mode
-      ret = OB_NOT_SUPPORTED;
-      LOG_ERROR("not support", K(ret), K(my_session->get_xid()));
     }
   } else if (OB_FAIL(ObSqlTransControl::explicit_end_trans(ctx, stmt.get_is_rollback(), stmt.get_hint()))) {
     LOG_WARN("fail end trans", K(ret));

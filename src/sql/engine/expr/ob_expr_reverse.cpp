@@ -60,7 +60,7 @@ int ObExprReverse::do_reverse(const ObString &input_str,
     int64_t char_length = 0;
     char *buf_tail = buf + input_length;
     while (OB_SUCC(ret) && (converted_length < input_length)) {
-      if (lib::is_mysql_mode() && OB_FAIL(ObCharset::first_valid_char(cs_type,
+      if (OB_FAIL(ObCharset::first_valid_char(cs_type,
           input_start + char_begin,
           input_length - converted_length,
           char_length))) {

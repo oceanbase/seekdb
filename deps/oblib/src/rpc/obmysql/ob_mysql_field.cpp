@@ -117,21 +117,9 @@ int ObMySQLField::serialize_pro41(char *buf, const int64_t len, int64_t &pos) co
   }
   if (OB_SUCC(ret)) {
     // filler is two bytes, the first byte is used to return the precision field; the second byte is used to return InOutMode;
-    if (lib::is_oracle_mode()) {
-      if (OB_FAIL(ObMySQLUtil::store_int1(buf, len, precision, pos))) {
-        if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-          LOG_WARN("serialize 0 failed", K(ret));
-        }
-      } else if (OB_FAIL(ObMySQLUtil::store_int1(buf, len, inout_mode_, pos))) {
-        if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-          LOG_WARN("serialize 0 failed", K(ret));
-        }
-      }
-    } else {
-      if (OB_FAIL(ObMySQLUtil::store_int2(buf, len, 0, pos))) {
-        if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-          LOG_WARN("serialize 0 failed", K(ret));
-        }
+    if (OB_FAIL(ObMySQLUtil::store_int2(buf, len, 0, pos))) {
+      if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
+        LOG_WARN("serialize 0 failed", K(ret));
       }
     }
   }

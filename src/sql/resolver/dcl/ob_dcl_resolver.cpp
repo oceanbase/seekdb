@@ -408,7 +408,7 @@ int ObDCLResolver::resolve_user_host(const ParseNode *user_pass,
       host_name.assign_ptr(user_pass->children_[3]->str_value_,
                            static_cast<int32_t>(user_pass->children_[3]->str_len_));
     }
-    if (OB_SUCC(ret) && lib::is_mysql_mode() && NULL != user_pass->children_[4]) {
+    if (OB_SUCC(ret) && NULL != user_pass->children_[4]) {
       /* here code is to mock a auth plugin check. */
       ObString auth_plugin(static_cast<int32_t>(user_pass->children_[4]->str_len_),
                             user_pass->children_[4]->str_value_);

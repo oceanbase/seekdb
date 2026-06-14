@@ -1877,11 +1877,7 @@ int ObPathUtil::get_parser_type(ObIMulModeBase *doc, ObParserType& parser_type)
       break;
     }
     case ObNodeDataType::OB_JSON_TYPE: {
-      if (lib::is_oracle_mode()) {
-        parser_type = ObParserType::PARSER_JSON_PATH_LAX;
-      } else {
-        parser_type = ObParserType::PARSER_JSON_PATH_STRICT;
-      }
+      parser_type = ObParserType::PARSER_JSON_PATH_STRICT;
     }
     default: {
       ret = OB_INVALID_DATA;

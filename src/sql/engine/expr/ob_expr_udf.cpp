@@ -131,7 +131,7 @@ int ObExprUDF::calc_result_typeN(ObExprResType &type,
         type.set_length(result_type_.get_length());
       }
     }
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() & ~CM_WARN_ON_FAIL);
     }
   }
@@ -724,15 +724,16 @@ int ObExprUDF::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObEx
   return ret;
 }
 
-int ObExprUDF::ObExprUDFCtx::init_param_store(int param_num)
+int ObExprUDF::ObExprUDFCtx::init_param_store(ObIAllocator &allocator,
+                                              int param_num)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(param_store_buf_ = ctx_allocator_.alloc(sizeof(ParamStore)))) {
+  if (OB_ISNULL(param_store_buf_ = allocator.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret));
   } else {
-    params_ = new(param_store_buf_)ParamStore(ObWrapperAllocator(ctx_allocator_));
+    params_ = new(param_store_buf_)ParamStore(ObWrapperAllocator(allocator));
   }
   OZ (params_->prepare_allocate(param_num));
   OX (params_->reuse());
@@ -749,7 +750,7 @@ int ObExprUDF::build_udf_ctx(int64_t udf_ctx_id,
   if (OB_ISNULL(udf_ctx = static_cast<ObExprUDFCtx *>(exec_ctx.get_expr_op_ctx(udf_ctx_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(udf_ctx_id, udf_ctx))) {
       LOG_WARN("failed to create operator ctx", K(ret));
-    } else if (OB_FAIL(udf_ctx->init_param_store(param_num))) {
+    } else if (OB_FAIL(udf_ctx->init_param_store(exec_ctx.get_allocator(), param_num))) {
       LOG_WARN("failed to init param", K(ret));
     }
   } else {

@@ -115,7 +115,7 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
     ObScale scale1 = static_cast<ObScale>(MAX(type1.get_scale(), 0));
     ObScale scale2 = static_cast<ObScale>(MAX(type2.get_scale(), 0));
     scale = MAX(scale1, scale2);
-    if (lib::is_mysql_mode() && type.is_double()) {
+    if (type.is_double()) {
       precision = ObMySQLUtil::float_length(scale);
     } else if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
       precision = MAX(type1.get_precision(), type2.get_precision());
@@ -134,7 +134,7 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
     } else {
       type.set_precision(precision);
     }
-    if (lib::is_mysql_mode() && is_no_unsigned_subtraction(session->get_sql_mode())) {
+    if (is_no_unsigned_subtraction(session->get_sql_mode())) {
       ObObjType convert_type = type.get_type();
       convert_unsigned_type_to_signed(convert_type);
       type.set_type(convert_type);

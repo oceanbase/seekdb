@@ -346,7 +346,7 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
   bool is_support_outrow_locator_v2 = my_session.is_client_support_lob_locatorv2();
   if (!(value.is_lob() || value.is_json() || value.is_geometry() || value.is_roaringbitmap())) {
     // not lob types, do nothing
-  } else if (lib::is_mysql_mode()) {
+  } else {
     ObString raw_str = value.get_string();
     // remove locator header and read full lob data
     ObString data;
@@ -369,7 +369,7 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
       // remove has lob header flag
       value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
     }
-  } else { /* do nothing */ }
+  }
   return ret;
 }
 

@@ -318,18 +318,10 @@ public:
   {
     return (ob_is_text_tc(get_type()) && CS_TYPE_BINARY != get_collation_type());
   }
-  /*OB_INLINE bool is_oracle_clob() const
-  {
-    return (lib::is_oracle_mode() && ObLongTextType == get_type() && CS_TYPE_BINARY != get_collation_type());
-  }*/
   OB_INLINE bool is_clob() const
   {
     return false;
   }
-  /*OB_INLINE bool is_oracle_blob() const
-  {
-    return (lib::is_oracle_mode() && ObLongTextType == get_type() && CS_TYPE_BINARY == get_collation_type());
-  }*/
   OB_INLINE bool is_blob() const
   {
     return (ob_is_text_tc(get_type()) && CS_TYPE_BINARY == get_collation_type());

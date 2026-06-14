@@ -114,7 +114,7 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
     } else {
       type.set_scale(-1);
     }
-    if (lib::is_mysql_mode() && SCALE_UNKNOWN_YET != type.get_scale()) {
+    if (SCALE_UNKNOWN_YET != type.get_scale()) {
       if (ob_is_real_type(type.get_type())) {
         type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type.get_scale())));
       } else if (ob_is_number_or_decimal_int_tc(type.get_type())) {

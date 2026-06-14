@@ -172,9 +172,6 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
         }
         case (DTD_IDENTIFIER): {
           int16_t precision_or_length_semantics = param_type.get_precision();
-          if (lib::is_oracle_mode() && param_type.get_meta_type().is_varchar_or_char() && precision_or_length_semantics == default_length_semantics) {
-            precision_or_length_semantics = LS_DEFAULT;
-          }
           int64_t pos = 0;
           char *column_type_str = static_cast<char *>(allocator_->alloc(OB_MAX_SYS_PARAM_NAME_LENGTH));
           if (OB_ISNULL(column_type_str)) {

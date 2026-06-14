@@ -111,7 +111,6 @@ int ObShowDatabaseStatus::add_all_database_status()
     } else {
       ObServer &server = ObServer::get_instance();
       const ObAddr server_ip = server.get_self();
-      const bool is_oracle_mode = lib::is_oracle_mode();
       for (int64_t i = 0; OB_SUCC(ret) && i < database_schemas.count(); ++i) {
         const ObDatabaseSchema* database_schema = database_schemas.at(i);
         const ObString database_name(database_schema->get_database_name());
@@ -119,9 +118,6 @@ int ObShowDatabaseStatus::add_all_database_status()
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "database not exist", K(ret));
         } else if (database_schema->is_in_recyclebin() || database_schema->is_hidden()) {
-          continue;
-        } else if (is_oracle_mode && is_oceanbase_sys_database_id(database_schema->get_database_id())) {
-          // To skip for oceanbase in Oracle mode
           continue;
         } else if (OB_FAIL(add_database_status(server_ip, *database_schema, cells, col_count))) {
           SERVER_LOG(WARN, "failed to add table constraint of database schema!", K(ret));

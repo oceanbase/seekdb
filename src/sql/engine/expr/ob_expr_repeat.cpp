@@ -56,7 +56,6 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
   // Set cast mode for %count parameter, truncate string to integer.
   type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC);
   // repeat is mysql only epxr.
-  CK(lib::is_mysql_mode());
   if (OB_SUCC(ret)) {
     ObObjType res_type = ObMaxType;
     if (text.is_null() && !count.is_null()) {

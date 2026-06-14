@@ -38,10 +38,7 @@ int ObExprPow::calc_result_type2(ObExprResType &type,
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
   UNUSED(type2);
-  if (!lib::is_mysql_mode()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pow is only for mysql mode", K(ret));
-  } else if (NOT_ROW_DIMENSION == row_dimension_) {
+  if (NOT_ROW_DIMENSION == row_dimension_) {
     if (ObMaxType == type1.get_type()) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     } else {
@@ -64,8 +61,7 @@ int ObExprPow::calc_result_type2(ObExprResType &type,
 int ObExprPow::safe_set_double(ObDatum &datum, double value)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode() &&
-          (std::isinf(value) || isnan(static_cast<float>(value)))) {
+  if ((std::isinf(value) || isnan(static_cast<float>(value)))) {
     ret = OB_OPERATE_OVERFLOW;
   } else {
     datum.set_double(value);

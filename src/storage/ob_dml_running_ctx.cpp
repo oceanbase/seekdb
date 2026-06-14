@@ -232,7 +232,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
   } else if (OB_FAIL(cmp_funcs_.init(column_cnt, allocator_))) {
     STORAGE_LOG(WARN, "Failed to reserve cmp func array", K(ret));
   } else {
-    bool is_oracle_mode = lib::is_oracle_mode();
     ObCmpFunc cmp_func;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_descs.count(); i++) {
       const share::schema::ObColDesc &col_desc = col_descs.at(i);
@@ -247,7 +246,7 @@ int ObDMLRunningCtx::init_cmp_funcs()
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
                                                                         col_desc.col_type_.get_collation_type(),
                                                                         col_desc.col_type_.get_scale(),
-                                                                        is_oracle_mode,
+                                                                        false,
                                                                         has_lob_header,
                                                                         precision);
       if (OB_UNLIKELY(nullptr == basic_funcs || nullptr == basic_funcs->null_last_cmp_)) {
@@ -255,7 +254,7 @@ int ObDMLRunningCtx::init_cmp_funcs()
         STORAGE_LOG(ERROR, "Unexpected null basic funcs", K(ret), K(col_desc));
       } else {
         if (is_ascending) {
-          cmp_func.cmp_func_ = is_oracle_mode ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+          cmp_func.cmp_func_ = basic_funcs->null_first_cmp_;
           if (OB_FAIL(cmp_funcs_.push_back(ObStorageDatumCmpFunc(cmp_func)))) {
             STORAGE_LOG(WARN, "Failed to push back cmp func", K(ret), K(i), K(col_desc));
           }

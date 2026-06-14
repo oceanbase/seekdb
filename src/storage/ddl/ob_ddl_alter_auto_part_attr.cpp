@@ -355,13 +355,6 @@ int ObAlterAutoPartAttrOp::check_and_set_table_auto_part_func(
         ObString in_old_expr_str = old_expr_strs.at(i).trim();
         ObString out_new_expr_str = in_new_expr_str;
         ObString out_old_expr_str = in_old_expr_str;
-        if (lib::is_oracle_mode()) {
-          if (OB_FAIL(ob_simple_low_to_up(allocator, in_new_expr_str, out_new_expr_str))) {
-            LOG_WARN("failed to transfer low to up column name", K(ret));
-          } else if (OB_FAIL(ob_simple_low_to_up(allocator, in_old_expr_str, out_old_expr_str))) {
-            LOG_WARN("failed to transfer low to up column name", K(ret));
-          }
-        }
         if (OB_SUCC(ret) && (out_new_expr_str != out_old_expr_str)) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("fail to alter table partition, ori table func expr is diff from alter partition func expr", 

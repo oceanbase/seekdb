@@ -675,7 +675,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
         LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
       }
       // In MySQL mode, the SQL execution plan will include virtual generated columns
-      else if (OB_FAIL(table_schema->get_column_ids(col_descs, lib::is_oracle_mode()/*no_virtual*/))) {
+      else if (OB_FAIL(table_schema->get_column_ids(col_descs, false/*no_virtual*/))) {
         LOG_WARN("fail to get column ids", KR(ret));
       } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
         LOG_WARN("fail to prepare col descs", KR(ret), KPC(table_schema), K(col_descs));
@@ -846,7 +846,7 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
     }
     // In MySQL mode, SQL execution plan includes virtual generated columns
     else if (OB_FAIL(
-               table_schema->get_column_ids(col_descs, lib::is_oracle_mode() /*no_virtual*/))) {
+               table_schema->get_column_ids(col_descs, false /*no_virtual*/))) {
       LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
       LOG_WARN("fail to prepare col descs", KR(ret), KPC(table_schema), K(col_descs));

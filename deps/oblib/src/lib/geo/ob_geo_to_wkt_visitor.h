@@ -34,7 +34,7 @@ public:
     has_scale_(false),
     in_multi_visit_(false),
     colloction_level_(0),
-    is_oracle_mode_(lib::is_oracle_mode()),
+    is_oracle_mode_(false),
     comma_length_(1) {}
   ~ObGeoToWktVisitor() {}
   bool prepare(ObGeometry *geo) { UNUSED(geo); return true; }

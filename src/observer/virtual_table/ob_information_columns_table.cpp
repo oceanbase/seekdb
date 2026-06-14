@@ -853,7 +853,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               extra = ObString::make_string("STORED GENERATED");
             }
 
-            if (OB_SUCC(ret) && lib::is_mysql_mode() && column_schema->is_invisible_column()) {
+            if (OB_SUCC(ret) && column_schema->is_invisible_column()) {
               int64_t append_len = sizeof("INVISIBLE");
               if (extra.length() > 0) {
                 append_len += 1;
@@ -1235,7 +1235,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
         case NUMERIC_PRECISION: {
             ObPrecision precision = column_attributes.result_type_.get_precision();
             //for float(xx), precision==x, scale=-1
-            if (!lib::is_oracle_mode() && column_attributes.result_type_.get_scale() < 0) {
+            if (column_attributes.result_type_.get_scale() < 0) {
               //mysql float(xx)'s NUMERIC_PRECISION is always 12 from Field.field_length
               //mysql double(xx)'s NUMERIC_PRECISION is always 22  from Field.field_length
               //as ob does not have Field.field_length, we set hard code here for compat

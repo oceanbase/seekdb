@@ -1404,7 +1404,7 @@ int to_number(const ObDecimalInt *decint, const int32_t int_bytes, int16_t scale
     COMMON_LOG(WARN, "invalid decimal int", K(decint), K(int_bytes));
   } else if (OB_UNLIKELY(scale == NUMBER_SCALE_UNKNOWN_YET)) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "invalid scale", K(ret), K(scale), K(lib::is_oracle_mode()));
+    COMMON_LOG(WARN, "invalid scale", K(ret), K(scale), K(false));
   } else {
     DISPATCH_WIDTH_TASK(int_bytes, ASSIGN_NMB);
   }

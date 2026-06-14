@@ -1019,10 +1019,7 @@ int ObXMLExprHelper::process_sql_udt_results(common::ObObj& value,
     OB_LOG(WARN, "not supported udt type", K(ret),
            K(value.get_type()), K(value.get_udt_subschema_id()));
   } else if (value.is_geometry()) {
-    if (lib::is_mysql_mode()) {
-    } else if (is_ps_protocol) {
-      ret = OB_NOT_SUPPORTED;
-    }
+    // mysql mode: no-op
   } else {
     if (OB_ISNULL(exec_context)) {
       ret = OB_BAD_NULL_ERROR;

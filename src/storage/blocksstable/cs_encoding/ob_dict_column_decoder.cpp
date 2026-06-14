@@ -827,7 +827,6 @@ bool ObDictColumnDecoder::is_empty_varying_string(const ObDictColumnDecoderCtx &
   bool bool_ret = false;
   bool_ret = (0 == filter_datum.len_
               && ctx.obj_meta_.is_varying_len_char_type()
-              && lib::is_mysql_mode()
               && !ctx.dict_meta_->is_sorted()
               && !ctx.col_header_->is_fixed_length()
               && ctx.dict_meta_->distinct_val_cnt_ > 0);

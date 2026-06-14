@@ -667,10 +667,8 @@ int vector_month_name(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &ski
       OB_LOCALE_TYPE *locale_type_mon = ob_cur_locale->month_names_;
       const char ** locale_monthnames = locale_type_mon->type_names_;
       const char *const *month_name = nullptr;
-      if (lib::is_mysql_mode()) {
+      {
         month_name = locale_monthnames;
-      } else {
-        month_name = &(MON_NAMES+1)->ptr_;
       }
       ObTime ob_time;
       BATCH_CALC({

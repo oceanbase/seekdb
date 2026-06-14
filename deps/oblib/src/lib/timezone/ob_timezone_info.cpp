@@ -39538,7 +39538,7 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
   const common::ObSArray<ObTZRevertTypeInfo> &tz_revt_types = get_tz_revt_types();
   tz_id = static_cast<int32_t>(tz_id_);
   int64_t type_idx = 0;
-  const bool is_oracle_mode = lib::is_oracle_mode();
+  const bool is_oracle_mode = false;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz info is invalid", K(ret));

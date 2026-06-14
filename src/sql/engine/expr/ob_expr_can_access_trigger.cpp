@@ -68,7 +68,7 @@ int ObExprCanAccessTrigger::can_access_trigger(const ObExpr &expr,
     } else if (OB_FAIL(session->check_feature_enable(
               ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
       LOG_WARN("failed to check feature enable", K(ret));
-    } else if (need_check && lib::is_mysql_mode()) {
+    } else if (need_check) {
       if (OB_FAIL(session->get_session_priv_info(session_priv))) {
         LOG_WARN("faile to get session priv info", K(ret));
       } else {

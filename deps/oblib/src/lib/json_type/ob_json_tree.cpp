@@ -1157,7 +1157,7 @@ ObJsonDatetime::ObJsonDatetime(const ObTime &time, ObObjType field_type)
   field_type_ = field_type;
   json_type_ = ObJsonNodeType::J_ERROR;
   if (field_type == ObDateType) {
-    json_type_ = lib::is_mysql_mode() ? ObJsonNodeType::J_DATE : ObJsonNodeType::J_ORACLEDATE;
+    json_type_ = ObJsonNodeType::J_DATE;
   } else if (field_type == ObMySQLDateType) {
     json_type_ = ObJsonNodeType::J_MYSQL_DATE;
   } else if (field_type == ObDateTimeType) {
@@ -1165,7 +1165,7 @@ ObJsonDatetime::ObJsonDatetime(const ObTime &time, ObObjType field_type)
   } else if (field_type == ObMySQLDateTimeType) {
     json_type_ = ObJsonNodeType::J_MYSQL_DATETIME;
   } else if (field_type == ObTimestampType) {
-    json_type_ = lib::is_mysql_mode() ? ObJsonNodeType::J_TIMESTAMP : ObJsonNodeType::J_OTIMESTAMP;
+    json_type_ = ObJsonNodeType::J_TIMESTAMP;
   } else if (field_type == ObTimeType) {
     json_type_ = ObJsonNodeType::J_TIME;
   }

@@ -1144,7 +1144,7 @@ bool ObParquetTableRowIterator::is_parquet_store_utc(const parquet::LogicalType 
 
 bool ObParquetTableRowIterator::DataLoader::is_ob_type_store_utc(const ObDatumMeta &meta)
 {
-  return (lib::is_mysql_mode() && ObTimestampType == meta.type_);
+  return (ObTimestampType == meta.type_);
 }
 
 int64_t ObParquetTableRowIterator::DataLoader::calc_tz_adjust_us()

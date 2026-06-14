@@ -93,7 +93,7 @@ int ObExprDemoteCastBase::set_calc_type_for_const_param(const ObExprResType &col
   // Cast constant expression to a computable intermediate type result.
   if (ObRelationalExprOperator::can_cmp_without_cast(constant_type, column_type, CO_EQ)) {
     // Constant expr has already been cast, there is no need to set calc_type again
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (ob_is_int_uint_tc(column_type.get_type())
         || ob_is_number_or_decimal_int_tc(column_type.get_type())) {
       constant_type.set_calc_type(ObNumberType);

@@ -544,14 +544,14 @@ int ObTableLoadSchema::init_table_schema(const ObTableSchema *table_schema)
       LOG_WARN("fail to prepare column descs", KR(ret));
     } else if (OB_FAIL(datum_utils_.init(column_descs_,
                                          rowkey_column_count_,
-                                         lib::is_oracle_mode(),
+                                         false,
                                          allocator_))) {
       LOG_WARN("fail to init datum utils", KR(ret));
     } else if (OB_FAIL(init_lob_storage(column_descs_))) {
       LOG_WARN("fail to check lob storage", KR(ret));
     } else if (OB_FAIL(gen_lob_meta_datum_utils())) {
       LOG_WARN("fail to gen lob meta datum utils", KR(ret));
-    } else if (OB_FAIL(init_cmp_funcs(column_descs_, lib::is_oracle_mode()))) {
+    } else if (OB_FAIL(init_cmp_funcs(column_descs_, false))) {
       LOG_WARN("fail to init cmp funcs", KR(ret));
     }
     if (OB_SUCC(ret)) {

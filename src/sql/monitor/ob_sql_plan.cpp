@@ -589,11 +589,7 @@ int ObSqlPlan::inner_escape_quotes(char* &ptr, int64_t &length)
     } else {
       for (int64_t i = 0; i < length; ++i) {
         if (ptr[i] == '\'') {
-          if (lib::is_mysql_mode()) {
-            buf[pos++] = '\\';
-          } else {
-            buf[pos++] = '\'';
-          }
+          buf[pos++] = '\\';
         }
         buf[pos++] = ptr[i];
       }

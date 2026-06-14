@@ -304,8 +304,6 @@ int ObIMulModeBase::print_attr(ObStringBuffer& x_buf, uint32_t format_flag)
   bool is_mysql_key_only = false;
 
   if (OB_FAIL(ret)) {
-  } else if (lib::is_oracle_mode()) {
-    // do nothing
   } else if (type() != M_ATTRIBUTE) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("print attributes but type not attribute.", K(ret), K(type()));
@@ -714,10 +712,6 @@ int ObIMulModeBase::print_text(ObStringBuffer& x_buf, uint32_t format_flag)
   ObString value;
   if (OB_FAIL(get_value(value))) {
     LOG_WARN("fail to get value.", K(ret));
-  } else if (!(format_flag & NO_ENTITY_ESCAPE) && !lib::is_mysql_mode()) {
-    if (OB_FAIL(ObXmlParserUtils::escape_xml_text(value, x_buf))) {
-      LOG_WARN("fail to print text with escape char", K(ret), K(value));
-    }
   } else if (OB_FAIL(x_buf.append(value, 0))) {
     LOG_WARN("fail to print text", K(ret), K(value));
   }

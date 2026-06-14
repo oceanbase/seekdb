@@ -518,7 +518,7 @@ int ObWktParser::parse_linestring(bool is_ring)
             bool not_same_point = MEMCMP(wkb_buf_.ptr() + pos + sizeof(uint32_t),
               wkb_buf_.ptr() + wkb_buf_.length() - dim * sizeof(double), 2 * sizeof(double));
 
-            if (not_same_point && !lib::is_oracle_mode()) {
+            if (not_same_point) {
               ret = OB_ERR_PARSER_SYNTAX;
               LOG_WARN("first point and last point have to be the same in a ring", K(ret));
             }

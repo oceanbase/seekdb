@@ -2258,17 +2258,6 @@ int ObTimeConverter::str_to_digit_with_date(const ObString &str, ObTimeDigits *d
        // parse datetime parts.
       pos = first_digit;
       int64_t part_cnt = DATETIME_PART_CNT;
-      /*
-      if (lib::is_oracle_mode()) {
-        if (HAS_TYPE_ORACLE(ob_time.mode_)) {
-          part_cnt = DATETIME_PART_CNT;
-        } else if (HAS_TYPE_TIME(ob_time.mode_)) {
-          part_cnt = ORACLE_DATE_PART_CNT;
-        } else {
-          part_cnt = DATE_PART_CNT;
-        }
-      }
-      */
       for (int i = 0; OB_SUCC(ret) && i < part_cnt && pos < end; ++i) {
         if (OB_FAIL(get_datetime_digits_delims(pos, end, expect_lens[i], digits[i], delims[i]))) {
           LOG_WARN("failed to get datetime digits from string", K(ret));
@@ -2281,11 +2270,7 @@ int ObTimeConverter::str_to_digit_with_date(const ObString &str, ObTimeDigits *d
 
       if (OB_SUCC(ret)) {
         const char *end_ptr = HAS_TYPE_ORACLE(ob_time.mode_) ? end : NULL;
-        /*if (lib::is_oracle_mode() && !HAS_TYPE_ORACLE(ob_time.mode_) && pos < end) {
-          //for date type
-          ret = OB_INVALID_DATE_FORMAT_END;
-          LOG_WARN("invalid date format", K(pos - first_digit),  K(end - first_digit), K(str.length()));
-        } else */if (OB_FAIL(get_time_zone(delims, ob_time, end_ptr))) {
+        if (OB_FAIL(get_time_zone(delims, ob_time, end_ptr))) {
           LOG_WARN("fail to get time zone", "delims", ObArrayWrap<ObTimeDelims>(delims, DATETIME_PART_CNT), K(ret));
         }
       }

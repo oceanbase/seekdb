@@ -101,12 +101,12 @@ inline bool is_oracle_compatible(ObSQLMode mode)
 }
 inline ObCompatibilityMode get_compatibility_mode()
 {
-  return lib::is_oracle_mode() ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE;
+  return ObCompatibilityMode::MYSQL_MODE;
 }
 
 inline bool is_only_full_group_by_on(ObSQLMode mode)
 {
-  return (SMO_ONLY_FULL_GROUP_BY & mode) || lib::is_oracle_mode();
+  return (SMO_ONLY_FULL_GROUP_BY & mode);
 }
 
 inline bool is_time_truncate_fractional(ObSQLMode mode)

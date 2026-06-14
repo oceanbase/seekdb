@@ -65,7 +65,7 @@ int ObExprJsonSchemaValid::cg_expr(ObExprCGCtx &op_cg_ctx,
 {
   INIT_SUCC(ret);
   const ObRawExpr *schema = raw_expr.get_param_expr(0);
-  if (lib::is_mysql_mode() && OB_JSON_SCHEMA_EXPR_ARG_NUM == rt_expr.arg_cnt_ 
+  if (OB_JSON_SCHEMA_EXPR_ARG_NUM == rt_expr.arg_cnt_ 
      && OB_NOT_NULL(schema) && (schema->is_const_expr() || schema->is_static_scalar_const_expr())
      && schema->get_expr_type() != T_OP_GET_USER_VAR) {
     ObIAllocator &alloc = *op_cg_ctx.allocator_;

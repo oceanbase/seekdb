@@ -113,7 +113,7 @@ int ObExprInnerTableOptionPrinter::eval_inner_table_option_printer(const ObExpr 
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerTableOptionPrinter, raw_expr) {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(1);
     EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
   }
@@ -199,7 +199,7 @@ int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExp
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprInnerTableSequenceGetter, raw_expr) {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(1);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   }

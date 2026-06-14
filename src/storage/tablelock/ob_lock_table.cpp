@@ -21,7 +21,6 @@
 #include "storage/ls/ob_ls.h"                  // ObLS
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"
 
 namespace oceanbase
 {
@@ -94,7 +93,7 @@ int ObLockTable::restore_lock_table_(ObITable &sstable)
     LOG_WARN("failed to push back key", K(ret), K(key));
   } else if (OB_FAIL(columns.push_back(value))) {
     LOG_WARN("failed to push back value", K(ret), K(value));
-  } else if (OB_FAIL(read_info.init(allocator, LOCKTABLE_SCHEMA_COLUMN_CNT, LOCKTABLE_SCHEMA_ROEKEY_CNT, lib::is_oracle_mode(), columns, nullptr/*storage_cols_index*/))) {
+  } else if (OB_FAIL(read_info.init(allocator, LOCKTABLE_SCHEMA_COLUMN_CNT, LOCKTABLE_SCHEMA_ROEKEY_CNT, false, columns, nullptr/*storage_cols_index*/))) {
     LOG_WARN("Fail to init read_info", K(ret));
   } else if (FALSE_IT(iter_param.read_info_ = &read_info)) {
   } else if (OB_FAIL(sstable.scan(iter_param,
@@ -940,7 +939,7 @@ int ObLockTable::flush(share::SCN &scn)
     TABLELOCK_LOG(WARN, "get lock memtable failed", K(ret));
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
     TABLELOCK_LOG(ERROR, "get lock memtable from lock handle failed", K(ret));
-  } else if (OB_FAIL(storage::acquire_checkpoint_batch_trace_id(ls_id, trace_id))) {
+  } else if (OB_FAIL(MTL(storage::checkpoint::ObCheckpointDiagnoseMgr*)->acquire_trace_id(ls_id, trace_id))) {
     TABLELOCK_LOG(WARN, "acquire trace_id failed", K(ret), K(ls_id));
   } else if (OB_FAIL(memtable->flush(scn, trace_id))) {
     TABLELOCK_LOG(WARN, "ObLockTable::flush failed", K(ret), K(scn));                                    

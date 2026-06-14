@@ -774,8 +774,7 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
   uint64_t package_id = OB_INVALID_ID;
   uint64_t database_id = OB_INVALID_ID;
   const ObPackageInfo *package_info = NULL;
-  int64_t compatible_mode = lib::is_oracle_mode() ? COMPATIBLE_ORACLE_MODE
-                                                : COMPATIBLE_MYSQL_MODE;
+  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));

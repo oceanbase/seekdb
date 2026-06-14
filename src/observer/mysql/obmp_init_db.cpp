@@ -104,8 +104,7 @@ int ObMPInitDB::process()
       LOG_WARN("fail get process extra info", K(ret));
     } else {
       need_disconnect = false;
-      bool perserve_lettercase = lib::is_oracle_mode() ?
-          true : (mode != OB_LOWERCASE_AND_INSENSITIVE);
+      bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(allocator,
                                                                      session->get_dtc_params(),
                                                                      db_name_))) {

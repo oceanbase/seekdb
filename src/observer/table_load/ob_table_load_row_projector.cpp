@@ -527,7 +527,7 @@ int ObTableLoadMainToUniqueIndexProjector::projector(const ObBatchDatumRows &src
 void ObTableLoadMainToUniqueIndexProjector::shadow_columns(ObDirectLoadDatumRow &datum_row) const
 {
   bool need_shadow_columns = false;
-  if (lib::is_mysql_mode()) {
+  {
     // compatible with mysql: contain null value in unique index key,
     // need to fill shadow pk with the real pk value
     bool rowkey_has_null = false;
@@ -535,14 +535,6 @@ void ObTableLoadMainToUniqueIndexProjector::shadow_columns(ObDirectLoadDatumRow 
       rowkey_has_null = datum_row.storage_datums_[i].is_null();
     }
     need_shadow_columns = rowkey_has_null;
-  } else {
-    // compatible with Oracle: only all unique index keys are null value
-    // need to fill shadow pk with the real pk value
-    bool is_rowkey_all_null = true;
-    for (int64_t i = 0; is_rowkey_all_null && i < dest_index_rowkey_cnt_; i++) {
-      is_rowkey_all_null = datum_row.storage_datums_[i].is_null();
-    }
-    need_shadow_columns = is_rowkey_all_null;
   }
   if (!need_shadow_columns) {
     for (int64_t i = 0; i < dest_spk_cnt_; ++i) {

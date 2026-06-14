@@ -2318,7 +2318,7 @@ private:
   ObCollationType cast_coll_type = CS_TYPE_INVALID;                        \
   ObCastMode cp_cast_mode_ = (expr_ctx).cast_mode_ | (cast_mode);          \
   if (NULL != (expr_ctx).my_session_) {                                    \
-    if (lib::is_mysql_mode()) {                                            \
+    {                                            \
       if (common::OB_SUCCESS != (expr_ctx).my_session_->                   \
           get_collation_connection(cast_coll_type)) {                      \
         SQL_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "fail to get collation_connection, "                \

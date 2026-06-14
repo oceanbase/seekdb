@@ -1865,7 +1865,7 @@ int ObNFMToChar::process_tm_format(const ObNFMObj &nfm_obj, const int64_t in_sca
         MEMCPY(buf, num_str_buf, num_str_len);
         pos += num_str_len;
       } else if (num_str_len > 64) {
-        if (lib::is_mysql_mode()) {
+        {
           // remove '0' before '.'
           if (num_str_len > 2 && 0 == MEMCMP(num_str_buf, "0.", 2)) {
             MEMMOVE(num_str_buf, num_str_buf + 1, num_str_len - 1);
@@ -1926,7 +1926,7 @@ int ObNFMToChar::process_tme_format(const ObNFMObj &nfm_obj, const int64_t in_sc
       LOG_WARN("invalid obj type", K(ret), K(obj_type));
     }
     if (OB_SUCC(ret)) {
-      if (lib::is_mysql_mode()) {
+      {
         // remove '0' before '.'
         if (num_str_len > 2 && 0 == MEMCMP(num_str_buf, "0.", 2)) {
           MEMMOVE(num_str_buf, num_str_buf + 1, num_str_len - 1);

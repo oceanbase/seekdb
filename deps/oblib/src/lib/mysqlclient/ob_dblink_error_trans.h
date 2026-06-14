@@ -31,7 +31,7 @@ namespace sqlclient
 
 #define TRANSLATE_CLIENT_ERR(ret, errmsg)  \
   const int orginal_ret = ret;\
-  bool is_oracle_err = lib::is_oracle_mode();\
+  bool is_oracle_err = false;\
   int translate_ret = OB_SUCCESS;\
   if (OB_SUCCESS == ret) {\
   } else if (OB_SUCCESS != (translate_ret = oceanbase::common::sqlclient::ObDblinkErrorTrans::\

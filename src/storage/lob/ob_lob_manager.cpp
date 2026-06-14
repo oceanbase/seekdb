@@ -46,9 +46,7 @@ const ObLobCommon ObLobManager::ZERO_LOB = ObLobCommon();
 static int is_store_char_len(ObLobAccessParam& param, int64_t store_chunk_size, int64_t add_len)
 {
   int ret = OB_SUCCESS;
-  if (! lib::is_mysql_mode()) {
-    LOG_DEBUG("not mysql mode", K(add_len), K(store_chunk_size), K(param));
-  } else if (! param.is_char()) {
+  if (! param.is_char()) {
     LOG_DEBUG("not text", K(add_len), K(store_chunk_size), K(param));
   } else if (store_chunk_size <= (param.byte_size_ + add_len)) {
     LOG_DEBUG("not single", K(add_len), K(store_chunk_size), K(param));

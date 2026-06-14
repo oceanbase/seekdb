@@ -181,8 +181,7 @@ int ObDictColumnEncoder::do_sort_dict_()
   sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
       column_type_.get_type(), column_type_.get_collation_type());
   ObCmpFunc cmp_func;
-  cmp_func.cmp_func_ = lib::is_oracle_mode()
-      ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+  cmp_func.cmp_func_ = basic_funcs->null_first_cmp_;
   if (OB_FAIL(ctx_->ht_->sort_dict(cmp_func))) {
     LOG_WARN("fail to sort dict", K(ret));
   } else {

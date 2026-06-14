@@ -236,7 +236,7 @@ int to_string(const ObDecimalInt *decint, const int32_t int_bytes, const int64_t
     pos++;
     is_neg = true;
   }
-  bool oracle_mode = lib::is_oracle_mode();
+  bool oracle_mode = false;
   bool need_transform_sci = false;
   if (OB_SUCC(ret) && !zero_val) {
     if (scale > 0) {

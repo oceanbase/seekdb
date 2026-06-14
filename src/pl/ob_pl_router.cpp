@@ -87,7 +87,7 @@ int ObPLRouter::check_error_in_resolve(int code)
     case OB_ERR_CANNOT_UPDATE_VIRTUAL_COL_IN_TRG:
     case OB_ERR_VIEW_SELECT_CONTAIN_QUESTIONMARK:
     case OB_ERR_VIEW_SELECT_CONTAIN_INTO: {
-      if (lib::is_mysql_mode()) {
+      {
         ret = code;
         break;
       }
@@ -246,7 +246,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
       LOG_WARN("failed to init resolver", K(routine_info_), K(ret));
     } else if (OB_FAIL(resolver.resolve(parse_tree, func_ast))) {
       LOG_WARN("failed to analyze pl body", K(routine_info_), K(ret));
-    } else if (lib::is_mysql_mode() && func_ast.is_function() && !func_ast.has_return()) {
+    } else if (func_ast.is_function() && !func_ast.has_return()) {
       ret = OB_ERR_NO_RETURN_IN_FUNCTION;
       LOG_WARN("mysql func need return. ", K(ret));
       LOG_USER_ERROR(OB_ERR_NO_RETURN_IN_FUNCTION, func_ast.get_name().length(), 

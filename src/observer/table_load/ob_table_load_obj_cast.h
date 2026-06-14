@@ -207,21 +207,12 @@ private:
 
     ObPrecision precision = accuracy.get_precision();
     ObScale scale = accuracy.get_scale();
-    if (lib::is_oracle_mode()) {
-      if (OB_MAX_NUMBER_PRECISION >= precision && precision >= OB_MIN_NUMBER_PRECISION &&
-          number::ObNumber::MAX_SCALE >= scale && scale >= number::ObNumber::MIN_SCALE) {
-        // do noting
-      } else {
-        return OB_EAGAIN;
-      }
+    if (precision >= scale && number::ObNumber::MAX_PRECISION >= precision &&
+        precision >= OB_MIN_DECIMAL_PRECISION && number::ObNumber::MAX_SCALE >= scale &&
+        scale >= 0) {
+      // do noting
     } else {
-      if (precision >= scale && number::ObNumber::MAX_PRECISION >= precision &&
-          precision >= OB_MIN_DECIMAL_PRECISION && number::ObNumber::MAX_SCALE >= scale &&
-          scale >= 0) {
-        // do noting
-      } else {
-        return OB_EAGAIN;
-      }
+      return OB_EAGAIN;
     }
 
     number::ObNumber nmb = obj.get_number();

@@ -148,7 +148,7 @@ int ObSkipIndexSortedness::init_compare_func(const ObTableSchema &schema, const 
         = ObDatumFuncs::get_basic_func(col_type.get_type(),
                                        col_type.get_collation_type(),
                                        col_type.get_scale(),
-                                       lib::is_oracle_mode(),
+                                       false,
                                        is_lob_storage(col_type.get_type()),
                                        precision);
 

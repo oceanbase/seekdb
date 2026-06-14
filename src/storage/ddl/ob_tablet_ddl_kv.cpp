@@ -79,7 +79,7 @@ int ObBlockMetaTree::init(const ObTablet &tablet,
       const bool is_column_store = true;
       if (OB_FAIL(col_descs.push_back(int_col_desc))) {
         LOG_WARN("push back col desc failed", K(ret));
-      } else if (OB_FAIL(row_id_datum_utils_.init(col_descs, col_descs.count(), lib::is_oracle_mode(), arena_, is_column_store))) {
+      } else if (OB_FAIL(row_id_datum_utils_.init(col_descs, col_descs.count(), false, arena_, is_column_store))) {
         LOG_WARN("init row id datum utils failed", K(ret), K(col_descs));
       } else {
         datum_utils_ = &row_id_datum_utils_;

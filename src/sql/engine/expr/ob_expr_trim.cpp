@@ -1434,7 +1434,7 @@ int ObExprTrim::eval_trim_vector(VECTOR_EVAL_FUNC_ARG_DECL)
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprTrim, raw_expr) {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(1);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   }

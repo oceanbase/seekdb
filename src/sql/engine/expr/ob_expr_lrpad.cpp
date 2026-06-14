@@ -141,13 +141,10 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
   ObObjType len_type = ObNullType;
   int64_t max_len = OB_MAX_VARCHAR_LENGTH;
   int64_t text_len = text.get_length();
-  if (lib::is_mysql_mode()) {
+  {
     len_type = ObIntType;
     text_type = ObVarcharType;
     max_len = OB_MAX_VARCHAR_LENGTH;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error compat mode", K(ret));
   }
 
   const ObSQLSessionInfo *session = type_ctx.get_session();

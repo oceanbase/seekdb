@@ -750,7 +750,6 @@ bool ObDictDecoder::fast_string_equal_valid(
 {
   return 0 == ref_datum.len_
            && col_ctx.obj_meta_.is_varying_len_char_type()
-           && lib::is_mysql_mode()
            && !meta_header_->is_sorted_dict()
            && !meta_header_->is_fix_length_dict()
            && meta_header_->count_ > 0;

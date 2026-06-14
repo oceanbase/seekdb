@@ -223,11 +223,7 @@ int ObJsonParser::check_json_syntax(const ObString &j_doc, ObIAllocator *allocat
         }
       } else {
         allocator->free(alloc_buf);
-        if (lib::is_oracle_mode() && handler.has_duplicate_key()) {
-          ret = OB_ERR_DUPLICATE_KEY;
-        } else {
-          ret = OB_ERR_INVALID_JSON_TEXT;
-        }
+        ret = OB_ERR_INVALID_JSON_TEXT;
         if (syntaxerr != NULL) {
           syntaxerr = rapidjson::GetParseError_En(reader.GetParseErrorCode());
         }

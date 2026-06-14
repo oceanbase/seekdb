@@ -53,13 +53,6 @@ static int pad_obj(ObTableLoadCastObjCtx &cast_obj_ctx, const ObColumnSchemaV2 *
   int ret = OB_SUCCESS;
   bool is_pad = false;
   bool is_fixed_string = obj.is_fixed_len_char_type() || obj.is_binary();
-  //if (lib::is_mysql_mode()) {
-  //  if (is_fixed_string && (SMO_PAD_CHAR_TO_FULL_LENGTH & cast_obj_ctx.param_.sql_mode_)) {
-  //    is_pad = true;
-  //  }
-  //} else {
-  //  is_pad = is_fixed_string;
-  //}
   if (is_fixed_string) {
     int32_t fixed_len = column_schema->get_data_length();
     if (fixed_len > obj.val_len_) {

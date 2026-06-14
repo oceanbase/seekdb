@@ -203,12 +203,10 @@ int ObExprFuncPartHash::calc_value(
 int ObExprFuncPartHash::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
-    if (1 != rt_expr.arg_cnt_) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("expect one parameter in mysql", K(ret));
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "part hash");
-    }
+  if (1 != rt_expr.arg_cnt_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("expect one parameter in mysql", K(ret));
+    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "part hash");
   }
 
   if (OB_SUCC(ret)) {

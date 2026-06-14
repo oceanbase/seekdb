@@ -36,10 +36,7 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  if (!lib::is_mysql_mode()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("bool expr is only for mysql mode", K(ret));
-  } else if (ob_is_numeric_type(type1.get_type()) || ob_is_json(type1.get_type())) {
+  if (ob_is_numeric_type(type1.get_type()) || ob_is_json(type1.get_type())) {
     type1.set_calc_meta(type1.get_obj_meta());
     type1.set_calc_accuracy(type1.get_accuracy());
     if (ob_is_json(type1.get_type())) {

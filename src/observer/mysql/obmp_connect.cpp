@@ -403,14 +403,14 @@ int ObMPConnect::process()
         case OB_PASSWORD_WRONG:
         case OB_ERR_INVALID_TENANT_NAME: {
           ret = OB_PASSWORD_WRONG;
-          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret, lib::is_oracle_mode()),
+          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret, false),
                    user_name_.length(), user_name_.ptr(),
                    host_name.length(), host_name.ptr(),
                    (hsr_.get_auth_response().empty() ? "NO" : "YES"));
           break;
         }
         case OB_CLUSTER_NO_MATCH: {
-          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret, lib::is_oracle_mode()),
+          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret, false),
                    GCONF.cluster.str());
           break;
         }

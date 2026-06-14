@@ -58,7 +58,7 @@ private:
 
   explicit ObWktParser (ObIAllocator &allocator, const ObString &wkt) :
     allocator_(allocator), wkt_(wkt.ptr()), wkb_buf_(allocator), cur_pos_(0), wkt_len_(wkt.length()), 
-    dim_type_(ObGeoDimType::NOT_INIT), is_oracle_mode_(lib::is_oracle_mode()) {}
+    dim_type_(ObGeoDimType::NOT_INIT), is_oracle_mode_(false) {}
   ~ObWktParser(){};
 
   int parse(ObGeometry *&geo, bool is_geographical);

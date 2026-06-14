@@ -1088,7 +1088,7 @@ int ObCsSliceWriter::init_last_rowkey()
     if (OB_FAIL(storage_schema->get_rowkey_column_ids(rowkey_column_descs))) {
       LOG_WARN("get column desc failed", K(ret));
     } else if (OB_FAIL(datum_utils_.init(rowkey_column_descs, rowkey_column_count_, is_oracle_mode, arena_))) {
-      LOG_WARN("init datum utils failed", K(ret), K(rowkey_column_count_), K(rowkey_column_descs), K(lib::is_oracle_mode()));
+      LOG_WARN("init datum utils failed", K(ret), K(rowkey_column_count_), K(rowkey_column_descs), K(false));
     }
   }
   if (OB_SUCC(ret)) {

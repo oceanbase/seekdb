@@ -110,26 +110,7 @@ int ObMySQLUtil::get_length(const char *&pos, uint64_t &length)
       get_uint3(pos, s4);
       length = s4;
     } else if (sentinel == 254) {
-      if (lib::is_oracle_mode()) {
-        get_uint8(pos, length);
-      } else {
-        /*
-          In our client-server protocol all numbers bigger than 2^24
-          stored as 8 bytes with uint8korr. Here we always know that
-          parameter length is less than 2^4 so we don't look at the second
-          4 bytes. But still we need to obey the protocol hence 9 in the
-          assignment below.
-          if (packet_left_len < 9) {
-            *header_len = 0;
-            return 0;
-          }
-          *header_len = 9;
-          return static_cast<ulong>(uint4korr(packet + 1));
-      
-          OceanBase length parsing compatible with mysql, so we don't look at the second
-          4 bytes. But still we need to obey the protocol hence 9 in the
-          assignment below.
-        */
+      {
         get_uint4(pos, s4);
         length = s4;
         pos += 4;
@@ -887,10 +868,6 @@ int ObMySQLUtil::double_cell_str(char *buf, const int64_t len, double val,
     LOG_WARN("invalid input", KP(buf), K(ret));
   } else {
     if (BINARY == type) {
-      if (lib::is_oracle_mode() && // only oracle mode need convert
-          std::fpclassify(val) == FP_ZERO && std::signbit(val)) {
-        val = val * -1; // if -0.0, change to 0.0
-      }
       if (len - pos > DBL_SIZE) {
         MEMCPY(buf + pos, &val, DBL_SIZE);
         pos += DBL_SIZE;

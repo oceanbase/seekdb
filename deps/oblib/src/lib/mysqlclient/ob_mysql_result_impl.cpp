@@ -796,10 +796,7 @@ int ObMySQLResultImpl::get_obj(const int64_t col_idx, ObObj &obj,
       case ObTextType:
       case ObMediumTextType:
       case ObLongTextType: {
-        if (lib::is_oracle_mode()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("oracle mode dblink not support lob type", K(ret), K(type.get_type()));
-        } else if (OB_SUCC(get_varchar(col_idx, obj_str))) {
+        if (OB_SUCC(get_varchar(col_idx, obj_str))) {
           obj.set_lob_value(type.get_type(), obj_str.ptr(), obj_str.length());
           obj.set_collation_type(type.get_collation_type());
         }

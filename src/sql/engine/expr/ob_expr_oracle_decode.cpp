@@ -94,7 +94,7 @@ int ObExprOracleDecode::calc_result_typeN(ObExprResType &type,
       type.set_type(ObVarcharType);
       type.set_collation_level(types_stack[RESULT_TYPE_INDEX].get_collation_level());
       type.set_collation_type(types_stack[RESULT_TYPE_INDEX].get_collation_type());
-    } else if (lib::is_mysql_mode() && types_stack[RESULT_TYPE_INDEX].is_integer_type()) {
+    } else if (types_stack[RESULT_TYPE_INDEX].is_integer_type()) {
       bool has_number = false;
       for (int64_t i = RESULT_TYPE_INDEX; i < param_num && !has_number; i += 2 /*skip conditions */) {
         if (ob_is_number_tc(types_stack[i].get_type())

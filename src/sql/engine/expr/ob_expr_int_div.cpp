@@ -414,8 +414,7 @@ int ObExprIntDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
     LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
-    if (lib::is_mysql_mode()
-        && is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())
+    if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())
         && is_strict_mode(op_cg_ctx.session_->get_sql_mode())
         && !op_cg_ctx.session_->is_ignore_stmt()
         && (stmt::T_INSERT == stmt_type

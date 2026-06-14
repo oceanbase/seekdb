@@ -194,7 +194,7 @@ bool ObLobAccessParam::has_single_chunk() const
   int ret = OB_SUCCESS;
   bool res = false;
   int64_t chunk_size = 0;
-  if (! lib::is_mysql_mode() || byte_size_ <= 0) {
+  if (byte_size_ <= 0) {
     // skip
   } else if (OB_FAIL(get_store_chunk_size(chunk_size))) {
     LOG_WARN("get_store_chunk_size fail", K(ret), KPC(this));

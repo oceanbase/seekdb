@@ -2338,18 +2338,9 @@ inline int ObNumber::round_v3(const int64_t scale, const bool for_oracle_to_char
 inline int ObNumber::round_for_sci(const int64_t scale, const bool for_oracle_to_char/*false*/)
 {
   int ret = OB_SUCCESS;
-  if (!lib::is_oracle_mode()) {
+  if (OB_UNLIKELY(true)) {
     ret = OB_ERR_UNEXPECTED;
     LIB_LOG(WARN, "only for oracle mode", K(ret));
-  } else if (is_zero()) {
-    ret = OB_SUCCESS;
-  } else if (OB_ISNULL(digits_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(scale < MIN_SCI_SIZE) || OB_UNLIKELY(scale > (-MIN_SCI_SIZE))) {
-    ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "invalid param", K(scale), K(ret));
-  } else if (OB_FAIL(round_scale_v3_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
   }
   return ret;
 }

@@ -202,7 +202,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               }
             }
           } else {
-            if (lib::is_mysql_mode() && check_var_name_length) {
+            if (check_var_name_length) {
               if (OB_FAIL(ObResolverUtils::check_user_variable_length(var_node.variable_name_.ptr(),
                                                                       var_node.variable_name_.length()))) {
                 LOG_WARN("check user variable length fail", K(ret));

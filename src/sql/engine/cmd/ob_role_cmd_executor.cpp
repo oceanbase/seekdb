@@ -51,7 +51,7 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
     arg.creator_id_ = mysession->get_user_id();
   }
 
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     ObSArray<int64_t> failed_index;
     arg.if_not_exist_ = stmt.get_if_not_exists();
     arg.is_create_role_ = true;

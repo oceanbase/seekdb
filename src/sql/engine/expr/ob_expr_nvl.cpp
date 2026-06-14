@@ -113,7 +113,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
     } else {
       type.set_scale(-1);
     }
-    if (lib::is_mysql_mode() && SCALE_UNKNOWN_YET != type.get_scale()) {
+    if (SCALE_UNKNOWN_YET != type.get_scale()) {
       if (ob_is_real_type(type.get_type())) {
         type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type.get_scale())));
       } else if (ob_is_number_or_decimal_int_tc(type.get_type())) {
@@ -125,8 +125,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
     }
     type.set_length(MAX(type1.get_length(), type2.get_length()));
     // For int and uint64 mixed types, need to promote type to decimal
-    if (lib::is_mysql_mode()
-        && (ObUInt64Type == type1.get_type() || ObUInt64Type == type2.get_type())
+    if ((ObUInt64Type == type1.get_type() || ObUInt64Type == type2.get_type())
         && ObIntType == type.get_type()) {
       bool enable_decimalint = false;
       if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {

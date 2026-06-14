@@ -95,7 +95,7 @@ int ObSQLMockSchemaUtils::mock_pseudo_columns_schema(share::schema::ObTableSchem
   if (is_virtual_table(table_schema.get_table_id())
       || table_schema.is_index_table()) {
     LOG_TRACE("do not mock rowid column", K(table_schema.get_table_name_str()),
-                                          K(lib::is_mysql_mode()),
+                                          K(true),
                                           K(table_schema.is_index_table()));
   } else {
     ObString part_id_column_name(OB_PART_ID_PSEUDO_COLUMN_NAME);

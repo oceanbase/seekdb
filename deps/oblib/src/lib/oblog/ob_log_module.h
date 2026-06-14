@@ -1178,14 +1178,7 @@ LOG_MOD_END(PL)
 
 
 // used for the log return for user;
-// if you want to return ERROR message for user, and the error message parameters returned
-// in mysql mode and oracle mode are the same. you should use LOG_USER_ERROR or FORWARD_USER_ERROR.
-// otherwise, you should use it like below
-// if (lib::is_oracle_mode()) {
-//  LOG_ORACLE_USER_ERROR(...);
-// } else {
-//  LOG_MYSQL_USER_ERROR(...);
-// }
+// if you want to return ERROR message for user, use LOG_USER_ERROR or FORWARD_USER_ERROR.
 // the LOG_USER_* supports string format,
 // while the LOG_USER_*_MSG dose not support and only can be used for rpc proxy on the remote/distribute msg.
 #define _LOG_USER_MSG(level, errcode, umsg, args...)                      \
@@ -1214,15 +1207,7 @@ LOG_MOD_END(PL)
   do                                                                    \
   {                                                                     \
     CHECK_LOG_USER_CONST_FMT(errcode)                                   \
-    if (lib::is_oracle_mode()) {                                                 \
-      if (!g_enable_ob_error_msg_style) {                               \
-        _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __ORA_USER_ERROR_MSG), ##args); \
-      } else {                                                          \
-        _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __OBE_USER_ERROR_MSG), ##args); \
-      }                                                                 \
-    } else {                                                                            \
-      _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
-    }                                                                   \
+    _LOG_USER_MSG(level, errcode, LOG_MACRO_JOIN(errcode, __USER_ERROR_MSG), ##args); \
   } while(0)
 #define LOG_USER_MYSQL(level, errcode, args...)                                \
   do                                                                    \

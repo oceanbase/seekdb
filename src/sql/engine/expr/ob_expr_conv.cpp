@@ -138,7 +138,7 @@ int ObExprConv::eval_conv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprConv, raw_expr) {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(1);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   }

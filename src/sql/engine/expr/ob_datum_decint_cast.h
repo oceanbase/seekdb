@@ -457,7 +457,7 @@ static void logging_truncated_decint(const ObExpr &expr, ObEvalCtx &ctx, int64_t
                                      const ObBitVector &skip, const ObScale in_scale, const ObScale out_scale)
 {
   ObDatumVector arg_dv = expr.args_[0]->locate_expr_datumvector(ctx);
-  if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale && lib::is_mysql_mode()) {
+  if (CM_IS_COLUMN_CONVERT(expr.extra_) && in_scale > out_scale) {
     in_type sf = get_scale_factor<in_type>(in_scale - out_scale);
     int diff_len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(in_scale - out_scale);
     for (int i = 0; i < batch_size; i++) {
@@ -841,8 +841,7 @@ ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const ObObjTypeClas
                                                              const ObObjTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
-  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_ORACLE_EXPLICIT;
-  if (lib::is_mysql_mode()) { func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT; }
+  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
   if (func_arr[tc1][tc2] == cast_not_expected || func_arr[tc1][tc2] == cast_not_support
       || func_arr[tc1][tc2] == cast_inconsistent_types
       || func_arr[tc1][tc2] == cast_inconsistent_types_json) {
@@ -856,8 +855,7 @@ ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const ObObjTypeClas
                                                              const ObObjTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
-  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_ORACLE_IMPLICIT;
-  if (lib::is_mysql_mode()) { func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT; }
+  ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
   if (func_arr[tc1][tc2] == cast_not_expected || func_arr[tc1][tc2] == cast_not_support
       || func_arr[tc1][tc2] == cast_inconsistent_types
       || func_arr[tc1][tc2] == cast_inconsistent_types_json) {

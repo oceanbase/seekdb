@@ -56,7 +56,7 @@ int ObExprSplitPart::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
     LOG_WARN("The first argument type is incorrect", K(ret), K(types[0].get_type()));
     LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (ObTextType == types[0].get_type()
         || ObMediumTextType == types[0].get_type()
         || ObLongTextType == types[0].get_type()) {
@@ -77,22 +77,6 @@ int ObExprSplitPart::calc_result_typeN(ObExprResType &type,
       if (param_num == 4) {
         types[3].set_calc_type(ObIntType);
       }
-    }
-  } else {
-    ObLengthSemantics length_semantic = type.get_length_semantics();
-    ObSEArray<ObExprResType*, 1, ObNullAllocator> params;
-    OZ (params.push_back(&types[0]));
-    OZ (aggregate_string_type_and_charset_oracle(*type_ctx.get_session(), params, type));
-    types[0].set_calc_meta(type);
-    types[1].set_calc_type(ObVarcharType);
-    for (int i = 0; OB_SUCC(ret) && i < 2; i++) {
-      types[i].set_calc_collation_type(type.get_collation_type());
-      types[i].set_calc_collation_level(type.get_collation_level());
-      types[i].set_calc_length_semantics(length_semantic);
-    }
-    types[2].set_calc_type(ObIntType);
-    if (param_num == 4) {
-      types[3].set_calc_type(ObIntType);
     }
   }
   if (OB_SUCC(ret)) {

@@ -587,7 +587,7 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
     LOG_WARN("allocate select buffer failed", K(ret), "size", sizeof(ObSelectResolver));
   } else {
     // value from sub-query(insert into table select ..)
-    is_mock_ = lib::is_mysql_mode() && value_node.reserved_;
+    is_mock_ = value_node.reserved_;
     ObSelectStmt *select_stmt = NULL;
     sub_select_resolver_ = new(select_buffer) ObSelectResolver(params_);
     //insert clause and select clause in insert into select belong to the same namespace level

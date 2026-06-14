@@ -32,7 +32,7 @@ int ObGeoWkbCheckVisitor::check_common_header(T *geo, ObGeoType geo_type, ObGeoW
   } else {
     bo = static_cast<ObGeoWkbByteOrder>(*(wkb_.ptr() + pos_));
     if ((ObGeoWkbByteOrder::BigEndian != bo && ObGeoWkbByteOrder::LittleEndian != bo)
-        || (bo != bo_ && !lib::is_oracle_mode())) { // different byte order in wkb isn't supported in mysql mode
+        || (bo != bo_)) { // different byte order in wkb isn't supported in mysql mode
       ret = OB_INVALID_DATA;
       LOG_WARN("invalid byte order", K(ret), K(pos_), K(geo_type), K(wkb_), K(bo), K(bo_));
     } else {

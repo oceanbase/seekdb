@@ -51,7 +51,6 @@ inline int ObExprSubstringIndex::calc_result_type3(ObExprResType &type,
   //count.set_calc_type(ObIntType);
 
   // substring_index is mysql only expr.
-  CK(true == lib::is_mysql_mode());
   CK(NULL != type_ctx.get_session());
 
   if (OB_SUCC(ret)) {

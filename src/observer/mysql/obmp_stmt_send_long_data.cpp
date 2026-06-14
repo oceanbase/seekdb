@@ -100,10 +100,7 @@ int ObMPStmtSendLongData::process()
   int64_t query_timeout = 0;
   ObSMConnection *conn = get_conn();
 
-  if (lib::is_oracle_mode()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("send long data not support oracle mode. use send_piece_data instead.",  K(ret));
-  } else if (OB_ISNULL(req_) || OB_ISNULL(conn)) {
+  if (OB_ISNULL(req_) || OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("req or conn is null", K_(req), K(conn), K(ret));
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {

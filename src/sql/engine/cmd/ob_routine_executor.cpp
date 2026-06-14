@@ -343,7 +343,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   ObString routine_name = alter_routine_arg.routine_info_.get_routine_name();
   ObRoutineType type = alter_routine_arg.routine_info_.get_routine_type();
   bool has_error = ERROR_STATUS_HAS_ERROR == alter_routine_arg.error_info_.get_error_status();
-  bool need_create_routine = (lib::is_mysql_mode() && alter_routine_arg.is_need_alter_);
+  bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
   if (need_create_routine) {

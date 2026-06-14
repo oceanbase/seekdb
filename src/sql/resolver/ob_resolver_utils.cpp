@@ -2327,10 +2327,6 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       // Convert to character set used by server, MySQL does not need
       // To be consistent with MySQL error reporting, we check if the string is valid here, just a check, if invalid then report an error, no other operations are performed
       // check_well_formed_str's ret_error parameter is true, the is_strict_mode parameter is invalid, therefore is_strict_mode is directly passed as true here
-      //if (OB_SUCC(ret) && lib::is_mysql_mode() &&
-      //    OB_FAIL(ObSQLUtils::check_well_formed_str(val, result_val, true, true))) {
-      //  LOG_WARN("invalid str", K(ret), K(val));
-      //}
       val.set_param_meta(val.get_meta());
       LOG_DEBUG("resolve const char", K(val));
       break;

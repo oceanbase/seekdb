@@ -102,9 +102,6 @@ int ObSrsCacheGuard::get_srs_item(uint64_t original_srs_id, const ObSrsItem *&sr
   int ret = OB_SUCCESS;
   const ObSrsItem *tmp_srs_item = NULL;
   uint64_t srs_id = original_srs_id;
-  if (lib::is_oracle_mode() && srs_id == 8307) {
-    srs_id = 4326;
-  }
   if (OB_ISNULL(srs_cache_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("srs_cache is null", K(ret));

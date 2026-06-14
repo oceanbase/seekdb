@@ -694,7 +694,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
     // collation
     // The result cannot be of character type, no need to set collation
-    if (lib::is_mysql_mode() && type.is_double() && type1.get_scale() != SCALE_UNKNOWN_YET) {
+    if (type.is_double() && type1.get_scale() != SCALE_UNKNOWN_YET) {
       type.set_scale(type1.get_scale());
       type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(type1.get_scale())));
     } else {

@@ -515,16 +515,8 @@ int ObDbmsXplan::set_display_result(sql::ObExecContext &ctx,
                                     common::ObObj &result)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_oracle_mode()) {
-    if (OB_FAIL(set_display_result_for_oracle(ctx,
-                                              plan_text, 
-                                              result))) {
-      LOG_WARN("failed to set display result", K(ret));
-    }
-  } else {
-    if (OB_FAIL(set_display_result_for_mysql(ctx, plan_text, result))) {
-      LOG_WARN("failed to set display result", K(ret));
-    }
+  if (OB_FAIL(set_display_result_for_mysql(ctx, plan_text, result))) {
+    LOG_WARN("failed to set display result", K(ret));
   }
   return ret;
 }

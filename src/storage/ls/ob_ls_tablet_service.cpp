@@ -3199,7 +3199,6 @@ int ObLSTabletService::update_rows(
       const bool use_row_by_row_update = ctx.mvcc_acc_ctx_.write_flag_.is_immediate_row_check() &&
         rowkey_change && (!relative_table.is_storage_index_table() || relative_table.is_unique_index());
       // delay_new is for oracle compatible, refer to
-      //const bool delay_new = check_exist && lib::is_oracle_mode();
       // batch interface can be compatible with the oracle behavior in a batch, so no need delay_new for performance
       const bool delay_new = false;
       const ObColDescIArray &col_descs = *(run_ctx.col_descs_);

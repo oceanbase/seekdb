@@ -66,7 +66,7 @@ int ObDropLocationResolver::resolve(const ParseNode &parse_tree)
   } else {
     ObCollationType cs_type = CS_TYPE_UTF8MB4_BIN;
     ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
-    int max_name_length = lib::is_oracle_mode() ? OB_MAX_LOCATION_NAME_LENGTH : OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
+    int max_name_length = OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
     ObString location_name;
     ParseNode *child_node = node->children_[LOCATION_NAME];
     if (OB_ISNULL(child_node)) {

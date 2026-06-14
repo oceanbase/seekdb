@@ -197,8 +197,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
         if (OB_FAIL(print_base_table(table_item))) {
           LOG_WARN("failed to print base table", K(ret), K(*table_item));
         } else if (!no_print_alias && !table_item->alias_name_.empty()) {
-          //DATA_PRINTF(lib::is_oracle_mode() ? " \"%.*s\"" : " `%.*s`",
-          //            LEN_AND_PTR(table_item->alias_name_));
           DATA_PRINTF(" ");
           PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
         }
@@ -208,8 +206,6 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
         if (OB_FAIL(print_base_table(table_item))) {
           LOG_WARN("failed to print base table", K(ret), K(*table_item));
         } else if (!no_print_alias && !table_item->alias_name_.empty()) {
-          //DATA_PRINTF(lib::is_oracle_mode() ? " \"%.*s\"" : " `%.*s`",
-          //            LEN_AND_PTR(table_item->alias_name_));
           DATA_PRINTF(" ");
           PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
         }

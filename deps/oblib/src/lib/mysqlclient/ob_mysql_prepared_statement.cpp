@@ -522,11 +522,7 @@ int ObBindParamDecode::decode_datetime(DECODE_FUNC_ARG_DECL)
     ob_time.parts_[DT_HOUR] = tm->hour;
     ob_time.parts_[DT_MIN] = tm->minute;
     ob_time.parts_[DT_SEC] = tm->second;
-    if (lib::is_oracle_mode()) {
-      ob_time.parts_[DT_USEC] = 0;
-    } else {
-      ob_time.parts_[DT_USEC] = tm->second_part;
-    }
+    ob_time.parts_[DT_USEC] = tm->second_part;
     ObTimeConvertCtx cvrt_ctx(NULL, false);
     ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
     if (MYSQL_TYPE_DATE == field_type) {

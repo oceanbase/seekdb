@@ -85,7 +85,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           task_ctx->set_query_tenant_begin_schema_version(tenant_version);
           task_ctx->set_query_sys_begin_schema_version(sys_version);
           task_ctx->set_min_cluster_version(GET_MIN_CLUSTER_VERSION());
-          if(lib::is_mysql_mode() && OB_FAIL(ctx.get_my_session()->add_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
+          if(OB_FAIL(ctx.get_my_session()->add_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
             LOG_WARN("fail add ps stmt id to hash set", K(ret), K(stmt.get_prepare_id()));
           } else {
             if (OB_FAIL(result_set.init())) {
@@ -190,7 +190,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
             }
           }
           int tmp_ret = OB_SUCCESS;
-          if(lib::is_mysql_mode() && OB_TMP_FAIL(ctx.get_my_session()->earse_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
+          if(OB_TMP_FAIL(ctx.get_my_session()->earse_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
             if(OB_SUCC(ret)) {
               ret = tmp_ret;
             }

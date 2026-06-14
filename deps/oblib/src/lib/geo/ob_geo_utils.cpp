@@ -2942,9 +2942,7 @@ int ObGeoTypeUtil::collection_has_dimension(T_IBIN *geo, ObGeoDimension dim, boo
 bool ObGeoTypeUtil::need_get_srs(const uint32_t srid)
 {
   bool ret_bool = true;
-  if (lib::is_oracle_mode() && srid == UINT_MAX32) {
-    ret_bool = false;
-  } else if (0 == srid) {
+  if (0 == srid) {
     ret_bool = false;
   }
   return ret_bool;

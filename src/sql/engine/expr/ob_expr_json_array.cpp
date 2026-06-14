@@ -48,7 +48,7 @@ int ObExprJsonArray::calc_result_typeN(ObExprResType& type,
 {
   UNUSED(type_ctx);
   INIT_SUCC(ret);
-  if (lib::is_mysql_mode()) {
+  {
     if (OB_UNLIKELY(param_num < 0)) {
       ret = OB_ERR_PARAM_SIZE;
       ObString name("json_array");
@@ -67,71 +67,6 @@ int ObExprJsonArray::calc_result_typeN(ObExprResType& type,
           }
         } else if (types_stack[i].get_type() == ObJsonType) {
           types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-        }
-      }
-    }
-  } else {
-    if (OB_UNLIKELY(param_num < 4)) {
-      ret = OB_ERR_PARAM_SIZE;
-      ObString name("json_array");
-      LOG_USER_ERROR(OB_ERR_PARAM_SIZE, name.length(), name.ptr());
-    } else {
-      int64_t ele_idx = param_num - 3;
-      for (int64_t i = 0; i < ele_idx && OB_SUCC(ret); i += 2) {
-        if (types_stack[i].get_type() == ObNullType) {
-        } else if (ob_is_string_type(types_stack[i].get_type())) {
-          if (types_stack[i].get_collation_type() == CS_TYPE_BINARY) {
-            types_stack[i].set_calc_collation_type(CS_TYPE_BINARY);
-          } else if (types_stack[i].get_charset_type() != CHARSET_UTF8MB4) {
-            types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-          }
-          //types_stack[i].set_calc_collation_type(types_stack[i].get_collation_type());
-        } else if (types_stack[i].get_type() == ObJsonType) {
-          types_stack[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
-        } else {
-          types_stack[i].set_calc_type(types_stack[i].get_type());
-          types_stack[i].set_calc_collation_type(types_stack[i].get_collation_type());
-        }
-
-        if (OB_FAIL(ret)) {
-        } else if (!ob_is_integer_type(types_stack[i + 1].get_type())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to calc type param type should be int type", K(types_stack[i + 1].get_type()));
-        } else {
-          types_stack[i + 1].set_calc_collation_type(types_stack[i + 1].get_collation_type());
-          types_stack[i + 1].set_calc_type(types_stack[i + 1].get_type());
-        }
-      }
-
-      // returning type : 2 
-      if (OB_SUCC(ret)) {
-        ObExprResType dst_type;
-        dst_type.set_type(ObJsonType);
-        dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-        int16_t length_semantics = (OB_NOT_NULL(type_ctx.get_session())
-                ? type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
-        dst_type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
-
-        dst_type.set_collation_level(CS_LEVEL_IMPLICIT);
-        if (ele_idx > 0 && OB_FAIL(ObJsonExprHelper::parse_res_type(types_stack[0], types_stack[param_num - 2], dst_type, type_ctx))) {
-          LOG_WARN("get cast dest type failed", K(ret));
-        } else if (OB_FAIL(ObJsonExprHelper::set_dest_type(types_stack[0], type, dst_type, type_ctx))) {
-          LOG_WARN("set dest type failed", K(ret));
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (!ob_is_integer_type(types_stack[param_num - 3].get_type()) 
-            || !ob_is_integer_type(types_stack[param_num - 1].get_type())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to calc type param type should be int type",
-                   K(types_stack[param_num - 1].get_type()), K(types_stack[param_num - 3].get_type()));
-        } else {
-          types_stack[param_num - 3].set_calc_collation_type(types_stack[param_num - 3].get_collation_type());
-          types_stack[param_num - 3].set_calc_type(types_stack[param_num - 3].get_type());
-
-          types_stack[param_num - 1].set_calc_collation_type(types_stack[param_num - 1].get_collation_type());
-          types_stack[param_num - 1].set_calc_type(types_stack[param_num - 1].get_type());
         }
       }
     }

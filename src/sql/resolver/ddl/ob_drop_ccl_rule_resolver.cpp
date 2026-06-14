@@ -62,7 +62,7 @@ int ObDropCCLRuleResolver::resolve(const ParseNode &parse_tree)
     stmt_ = drop_ccl_rule_stmt;
     drop_ccl_rule_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
     // 1.resolve if exists
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (node->children_[IF_EXIST] != NULL) {
         if (node->children_[IF_EXIST]->type_ != T_IF_EXISTS) {
           ret = OB_ERR_UNEXPECTED;
