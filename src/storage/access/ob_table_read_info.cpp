@@ -1186,7 +1186,7 @@ int ObTenantCGReadInfoMgr::construct_index_read_info(ObIAllocator &allocator, Ob
   } else if (OB_FAIL(index_read_info.init(allocator,
                                           2, /* schema_column_count */
                                           1, /* schema_rowkey_count */
-                                          lib::is_oracle_mode(),
+                                          false,
                                           idx_cols_desc,
                                           true, /* is_cg_sstable */
                                           true /* use_default_compat_version */,

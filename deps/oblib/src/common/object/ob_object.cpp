@@ -484,11 +484,6 @@ int ObLobLocatorV2::get_inrow_data(ObString &inrow_data) const
       COMMON_LOG(WARN, "Lob: Maybe a bug, get inrow data of outrow lob", K(ret), K(lbt()));
     }
   }
-  if (OB_SUCC(ret) && inrow_data.length() == 0 && lib::is_oracle_mode()) {
-    // Compatible with null string without header (old impliemnt of orale empty lob)
-    // refer to mysqltest regula_expression_sqlqa.regular_replace_mysql
-    inrow_data.assign_ptr(NULL, 0);
-  } 
   return ret;
 }
 
@@ -1339,7 +1334,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other, int &cmp) const
     const int32_t lhs_len = get_val_len();
     const int32_t rhs_len = other.get_val_len();
     const int32_t cmp_len = std::min(lhs_len, rhs_len);
-    const bool is_oracle = lib::is_oracle_mode();
+    const bool is_oracle = false;
     bool need_skip_tail_space = false;
     cmp = memcmp(get_string_ptr(), other.get_string_ptr(), cmp_len);
     if (is_oracle) {
@@ -1403,7 +1398,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other) const
     const int32_t lhs_len = get_val_len();
     const int32_t rhs_len = other.get_val_len();
     const int32_t cmp_len = std::min(lhs_len, rhs_len);
-    const bool is_oracle = lib::is_oracle_mode();
+    const bool is_oracle = false;
     bool need_skip_tail_space = false;
     cmp = memcmp(get_string_ptr(), other.get_string_ptr(), cmp_len);
     if (is_oracle) {
@@ -2495,8 +2490,7 @@ int ObObjCharacterUtil::print_safe_hex_represent(const ObObj &obj, char* buf, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected obj type", K(ret), K(obj.get_type()), K(obj.get_collation_type()));
   } else {
-    ret = lib::is_oracle_mode() ? print_safe_hex_represent_oracle(obj, buf, buf_len, pos, accuracy)
-            : print_safe_hex_represent_mysql(obj, buf, buf_len, pos);
+    ret = print_safe_hex_represent_mysql(obj, buf, buf_len, pos);
   }
   return ret;
 }

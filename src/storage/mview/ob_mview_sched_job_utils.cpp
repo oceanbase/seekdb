@@ -136,7 +136,7 @@ int ObMViewSchedJobUtils::add_scheduler_job(
       job_info.job_action_ = job_action;
       job_info.lowner_ = ObString("oceanbase");
       job_info.cowner_ = ObString("oceanbase");
-      job_info.powner_ = lib::is_oracle_mode() ? ObString("SYS") : ObString("root@%");
+      job_info.powner_ = ObString("root@%");
       job_info.job_style_ = ObString("regular");
       job_info.job_type_ = ObString("PLSQL_BLOCK");
       job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");
@@ -613,7 +613,7 @@ int ObMViewSchedJobUtils::replace_mview_refresh_job(common::ObISQLClient &sql_cl
   // stop job use sys tenant, can not use trans as sql client
   if (!mview_info.get_refresh_job().empty()) {
     ObDBMSSchedJobInfo job_info;
-    bool is_oracle_mode = lib::is_oracle_mode();
+    bool is_oracle_mode = false;
     ObString job_name = mview_info.get_refresh_job();
     if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -700,7 +700,7 @@ int ObMViewSchedJobUtils::disable_and_stop_job(
     LOG_WARN("fail to fetch mview info", K(ret), K(mview_id));
   } else if (!mview_info.get_refresh_job().empty()) {
     ObDBMSSchedJobInfo job_info;
-    bool is_oracle_mode = lib::is_oracle_mode();
+    bool is_oracle_mode = false;
     ObString job_name = mview_info.get_refresh_job();
     ObObj obj;
     obj.set_bool(false);

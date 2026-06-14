@@ -41,7 +41,7 @@ bool is_calc_with_end_space(ObObjType type1, ObObjType type2,
 #define CALC_WITH_END_SPACE(ob1, ob2, cmctx)                 \
   is_calc_with_end_space(ob1.get_type(),                     \
                           ob2.get_type(),                    \
-                          lib::is_oracle_mode(),             \
+                          false,                             \
                           ob1.get_collation_type(),          \
                           ob2.get_collation_type()           \
                           )
@@ -298,8 +298,7 @@ bool is_calc_with_end_space(ObObjType type1, ObObjType type2,
              : CR_EQ; \
   }
 
-#define IS_FIXED_DOUBLE_CMP obj1.is_fixed_double() && obj2.is_fixed_double() && \
-  lib::is_mysql_mode()
+#define IS_FIXED_DOUBLE_CMP (obj1.is_fixed_double() && obj2.is_fixed_double())
 
 #define DEFINE_CMP_OP_FUNC_REAL_REAL_EQ(real1_tc, real1_type, real2_tc, real2_type) \
   template <> inline \
@@ -3910,7 +3909,7 @@ int ObObjCmpFuncs::compare(const ObObj &obj1,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("obj1 and obj2 can't compare", K(obj1), K(obj2), K(obj1.get_meta()), K(obj2.get_meta()));
   } else {
-    ObCompareCtx cmp_ctx(ObMaxType, cs_type, true, INVALID_TZ_OFF, lib::is_oracle_mode() ? NULL_LAST : NULL_FIRST);
+    ObCompareCtx cmp_ctx(ObMaxType, cs_type, true, INVALID_TZ_OFF, NULL_FIRST);
     if (OB_UNLIKELY(CR_OB_ERROR == (cmp = cmp_func(obj1, obj2, cmp_ctx)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to compare obj1 and obj2", K(obj1), K(obj2), K(obj1.get_meta()), K(obj2.get_meta()));
@@ -3933,7 +3932,7 @@ int ObObjCmpFuncs::compare_nullsafe(const ObObj &obj1,
     LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "obj1 and obj2 can't compare", K(obj1), K(obj2), K(obj1.get_meta()), K(obj2.get_meta()));
     right_to_die_or_duty_to_live();
   } else {
-    ObCompareCtx cmp_ctx(ObMaxType, cs_type, true, INVALID_TZ_OFF, lib::is_oracle_mode() ? NULL_LAST : NULL_FIRST);
+    ObCompareCtx cmp_ctx(ObMaxType, cs_type, true, INVALID_TZ_OFF, NULL_FIRST);
     if (OB_UNLIKELY(CR_OB_ERROR == (cmp = cmp_func(obj1, obj2, cmp_ctx)))) {
       LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "failed to compare obj1 and obj2", K(obj1), K(obj2), K(obj1.get_meta()), K(obj2.get_meta()));
       right_to_die_or_duty_to_live();
