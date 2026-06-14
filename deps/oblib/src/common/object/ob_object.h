@@ -59,7 +59,7 @@ enum ObCmpNullPos
 
 inline ObCmpNullPos default_null_pos()
 {
-  return lib::is_oracle_mode() ? NULL_LAST : NULL_FIRST;
+  return NULL_FIRST;
 }
 
 struct ObEnumSetInnerValue
@@ -324,7 +324,7 @@ public:
   }*/
   OB_INLINE bool is_clob() const
   {
-    return (lib::is_oracle_mode() && ObLongTextType == get_type() && CS_TYPE_BINARY != get_collation_type());
+    return false;
   }
   /*OB_INLINE bool is_oracle_blob() const
   {
@@ -494,8 +494,7 @@ public:
     set_subschema_id(subschema_id);
   }
   OB_INLINE bool is_calc_end_space() const {
-    return ((type_ == ObVarcharType && cs_type_ != CS_TYPE_BINARY))
-           && lib::is_oracle_mode();
+    return false;
   }
 
   void set_stored_precision(int16_t precision)
@@ -3398,7 +3397,7 @@ OB_INLINE static uint64_t varchar_hash_with_collation(const ObObj &obj,
                                                       const uint64_t hash, hash_algo hash_al)
 {
   return ObCharset::hash(cs_type, obj.get_string_ptr(), obj.get_string_len(), hash,
-           obj.is_varying_len_char_type() && lib::is_oracle_mode(), hash_al);
+           false, hash_al);
 }
 
 inline uint64_t ObObj::varchar_hash(ObCollationType cs_type, uint64_t seed) const
@@ -3788,9 +3787,9 @@ public:
     }
     if (ob_is_numeric_type(get_type())) {
       ObPrecision default_prec =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[lib::is_oracle_mode()][get_type()].get_precision();
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][get_type()].get_precision();
       ObScale default_scale =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[lib::is_oracle_mode()][get_type()].get_scale();
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][get_type()].get_scale();
       if (get_scale() < 0) {
         if (meta_.get_scale() >= 0) {
           set_scale(meta_.get_scale());
@@ -3969,10 +3968,10 @@ class ObHexEscapeSqlStr
 public:
   ObHexEscapeSqlStr(const common::ObString &str) : str_(str),
                                                    skip_escape_(false),
-                                                   do_oracle_mode_escape_(lib::is_oracle_mode()) { }
+                                                   do_oracle_mode_escape_(false) { }
   ObHexEscapeSqlStr(const common::ObString &str, const bool skip_escape) : str_(str),
                                                                            skip_escape_(skip_escape),
-                                                                           do_oracle_mode_escape_(lib::is_oracle_mode()){ }
+                                                                           do_oracle_mode_escape_(false){ }
   ObHexEscapeSqlStr(const common::ObString &str,
                     const bool skip_escape,
                     const bool do_oracle_mode_escape)
