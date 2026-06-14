@@ -643,30 +643,7 @@ double ObCharset::strntodv2(const char *str,
                           int *err)
 {
   double result = 0.0;
-  if (lib::is_oracle_mode()) {
-    ObString str_orig(str_len, str);
-    ObString str_trim = str_orig.trim();
-    if ((str_trim.case_compare("NAN") == 0)
-            || (str_trim.case_compare("-NAN") == 0)
-            || (str_trim.case_compare("+NAN") == 0)) {
-      result = NAN;
-      *endptr = str_trim.ptr() + str_trim.length();
-    } else if ((str_trim.case_compare("+INFINITY") == 0)
-           || (str_trim.case_compare("INFINITY") == 0)
-           || (str_trim.case_compare("INF") == 0)) {
-      result = INFINITY;
-      *endptr = str_trim.ptr() + str_trim.length();
-    } else if ((str_trim.case_compare("-INFINITY") == 0)
-            || (str_trim.case_compare("-INF") == 0)) {
-      result = -INFINITY;
-      *endptr = str_trim.ptr() + str_trim.length();
-    } else {
-      result = strntod(str, str_len, endptr, err);
-    }
-  } else {
-    result = strntod(str, str_len, endptr, err);
-  }
-
+  result = strntod(str, str_len, endptr, err);
   return result;
 }
 
@@ -1142,7 +1119,7 @@ uint64_t ObCharset::hash(ObCollationType collation_type,
                          int64_t str_len,
                          uint64_t seed,
                          hash_algo hash_algo) {
-  return hash(collation_type, str, str_len, seed, lib::is_oracle_mode(), hash_algo);
+  return hash(collation_type, str, str_len, seed, false, hash_algo);
 }
 
 int ObCharset::like_range(ObCollationType collation_type,
@@ -2235,15 +2212,6 @@ int ObCharset::aggregate_collation_new(
         res_type = CS_TYPE_BINARY;
         res_level = CS_LEVEL_NONE;
       }
-      if (lib::is_oracle_mode()) {
-          if (charset_type1 == CHARSET_UTF8MB4 && charset_type2 == CHARSET_UTF16) {
-            res_type = collation_type2;
-            res_level = collation_level2;
-          } else if (charset_type1 == CHARSET_UTF16 && charset_type2 == CHARSET_UTF8MB4) {
-            res_type = collation_type1;
-            res_level = collation_level1;
-          }
-      }
     } else if (collation_level1 < collation_level2) {
       res_type = collation_type1;
       res_level = collation_level1;
@@ -2675,9 +2643,7 @@ int ObCharset::get_default_collation(const ObCollationType &in, ObCollationType 
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(CHARSET_INVALID == (charset_type = ObCharset::charset_type_by_coll(in)))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(CS_TYPE_INVALID == (out = (lib::is_mysql_mode() ?
-              ObCharset::get_default_collation(charset_type)
-            : ObCharset::get_default_collation_oracle(charset_type))))) {
+  } else if (OB_UNLIKELY(CS_TYPE_INVALID == (out = ObCharset::get_default_collation(charset_type)))) {
     ret = OB_ERR_UNEXPECTED;
   }
   return ret;
@@ -2959,9 +2925,7 @@ bool ObCharset::case_sensitive_equal(const ObString &one, const ObString &anothe
 // When tenant mode is mysql, case insensitive match, tenant mode is oracle, case sensitive match
 bool ObCharset::case_compat_mode_equal(const ObString &one, const ObString &another)
 {
-  return lib::is_oracle_mode() ?
-         case_sensitive_equal(one, another) :
-         case_insensitive_equal(one, another);
+  return case_insensitive_equal(one, another);
 }
 /* for db objects' name use, like column names, table names; on oracle mode, trailing spaces are always part of the hash calc
  * although trailing spaces are not allowed in db object's name, "a" and "a " are two different names in Oracle
@@ -2972,7 +2936,7 @@ uint64_t ObCharset::hash(const ObCollationType collation_type, const ObString &s
   uint64_t ret = 0;
   if (!str.empty()) {
     ret = ObCharset::hash(collation_type, str.ptr(), str.length(),
-                          seed, lib::is_oracle_mode(), hash_algo);
+                          seed, false, hash_algo);
   }
   return ret;
 }

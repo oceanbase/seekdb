@@ -30,17 +30,17 @@ ObWkbToJsonVisitor::ObWkbToJsonVisitor(ObIAllocator *allocator, uint32_t max_dec
   : buffer_(allocator),
     in_multi_visit_(false),
     colloction_level_(0),
-    is_mysql_mode_(lib::is_mysql_mode()),
+    is_mysql_mode_(true),
     flag_(flag),
     max_dec_digits_(max_dec_digits),
     srid_(srid),
     allocator_(allocator),
     append_crs_(false)
 {
-  left_curly_bracket_ = lib::is_mysql_mode() ? "{" : "{ ";
-  right_curly_bracket_ = lib::is_mysql_mode() ? "}" : " }";
-  left_sq_bracket_ = lib::is_mysql_mode() ? "[" : "[ ";
-  right_sq_bracket_ = lib::is_mysql_mode() ? "]" : " ]";
+  left_curly_bracket_ = "{";
+  right_curly_bracket_ = "}";
+  left_sq_bracket_ = "[";
+  right_sq_bracket_ = "]";
 }
 
 bool ObWkbToJsonVisitor::prepare(ObIWkbGeogMultiPoint *geo)

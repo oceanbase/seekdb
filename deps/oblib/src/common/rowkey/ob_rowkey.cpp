@@ -88,7 +88,7 @@ int ObRowkey::equal(const ObRowkey &rhs, bool &is_equal) const
           break;
         case ObDoubleTC:
           {
-            if (lib::is_mysql_mode() && obj.is_fixed_double() && rhs_obj.is_fixed_double()) {
+            if (obj.is_fixed_double() && rhs_obj.is_fixed_double()) {
               is_equal = ObObjCmpFuncs::fixed_double_cmp(obj, rhs_obj) == 0;
             } else {
               is_equal = (obj.v_.double_ == rhs_obj.v_.double_);
@@ -104,10 +104,6 @@ int ObRowkey::equal(const ObRowkey &rhs, bool &is_equal) const
           bool cmp_padding_space = false;
           if (obj.val_len_ != rhs_obj.val_len_
               || 0 != MEMCMP(obj.v_.string_, rhs_obj.v_.string_, obj.val_len_)) {
-            if (lib::is_oracle_mode() && (obj.is_varying_len_char_type()
-                                          || rhs_obj.is_varying_len_char_type())) {
-              cmp_padding_space = true;
-            }
             is_equal = (ObCharset::strcmpsp(obj.get_collation_type(), obj.v_.string_, obj.val_len_,
                 rhs_obj.v_.string_, rhs_obj.val_len_, cmp_padding_space) == 0);
             }
@@ -132,24 +128,18 @@ int ObRowkey::equal(const ObRowkey &rhs, bool &is_equal) const
           break;
         }
         case ObTextTC: { // only for string
-          if (lib::is_mysql_mode()) {
-            ObString str;
-            ObString rhs_str;
-            if (OB_UNLIKELY(obj.is_outrow_lob() || rhs_obj.is_outrow_lob())) {
-              ret = OB_ERR_UNEXPECTED;
-              COMMON_LOG(WARN, "not supported outrow lob", K(ret), K(obj), K(rhs_obj));
-            } else if (OB_FAIL(obj.get_string(str))) {
-              COMMON_LOG(WARN, "Lob: get inrow string failed", K(ret), K(obj));
-            } else if (OB_FAIL(rhs_obj.get_string(rhs_str))) {
-              COMMON_LOG(WARN, "Lob: get inrow string failed", K(ret), K(rhs_obj));
-            } else if (str.length() != rhs_str.length() || 0 != str.compare(rhs_str)) {
-              is_equal = (ObCharset::strcmpsp(obj.get_collation_type(), str.ptr(), str.length(),
-                rhs_str.ptr(), rhs_str.length(), false/*cmp_padding_space*/) == 0);
-            }
-          } else {
+          ObString str;
+          ObString rhs_str;
+          if (OB_UNLIKELY(obj.is_outrow_lob() || rhs_obj.is_outrow_lob())) {
             ret = OB_ERR_UNEXPECTED;
-            COMMON_LOG(ERROR, "not supported mode", K(ret));
-            
+            COMMON_LOG(WARN, "not supported outrow lob", K(ret), K(obj), K(rhs_obj));
+          } else if (OB_FAIL(obj.get_string(str))) {
+            COMMON_LOG(WARN, "Lob: get inrow string failed", K(ret), K(obj));
+          } else if (OB_FAIL(rhs_obj.get_string(rhs_str))) {
+            COMMON_LOG(WARN, "Lob: get inrow string failed", K(ret), K(rhs_obj));
+          } else if (str.length() != rhs_str.length() || 0 != str.compare(rhs_str)) {
+            is_equal = (ObCharset::strcmpsp(obj.get_collation_type(), str.ptr(), str.length(),
+              rhs_str.ptr(), rhs_str.length(), false/*cmp_padding_space*/) == 0);
           }
           break;
         }
@@ -209,7 +199,7 @@ bool ObRowkey::simple_equal(const ObRowkey &rhs) const
           break;
         case ObDoubleTC:
           {
-            if (lib::is_mysql_mode() && obj.is_fixed_double() && rhs_obj.is_fixed_double()) {
+            if (obj.is_fixed_double() && rhs_obj.is_fixed_double()) {
               ret = ObObjCmpFuncs::fixed_double_cmp(obj, rhs_obj) == 0;
             } else {
               ret = (obj.v_.double_ == rhs_obj.v_.double_);
@@ -225,10 +215,6 @@ bool ObRowkey::simple_equal(const ObRowkey &rhs) const
           bool cmp_padding_space = false;
           if (obj.val_len_ != rhs_obj.val_len_
               || 0 != MEMCMP(obj.v_.string_, rhs_obj.v_.string_, obj.val_len_)) {
-            if (lib::is_oracle_mode() && (obj.is_varying_len_char_type()
-                                          || rhs_obj.is_varying_len_char_type())) {
-              cmp_padding_space = true;
-            }
             ret = (ObCharset::strcmpsp(obj.get_collation_type(), obj.v_.string_, obj.val_len_,
                 rhs_obj.v_.string_, rhs_obj.val_len_, cmp_padding_space) == 0);
             }
