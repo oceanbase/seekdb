@@ -56,7 +56,7 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
         LOG_WARN("the parameter is not castable", K(ret), K(i));
       }
     }
-    if (OB_SUCC(ret) && is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       ObExprResType cmp_type;
       if (OB_FAIL(ObExprRegexContext::check_binary_compatible(types, 2))) {
         LOG_WARN("types are not compatible with binary.", K(ret));
@@ -147,7 +147,7 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   ObDatum *pattern = NULL;
   ObDatum *match_type = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, text, pattern, match_type))) {
-    if (lib::is_mysql_mode() && ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
+    if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
       expr_datum.set_null();
       const char *charset_name = ObCharset::charset_name(expr.args_[0]->datum_meta_.cs_type_);
@@ -168,7 +168,7 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                           expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expr));
-  } else if (lib::is_mysql_mode() && !pattern->is_null() && pattern->get_string().empty()) {
+  } else if (!pattern->is_null() && pattern->get_string().empty()) {
     if (NULL == match_type || !match_type->is_null()) {
       ret = OB_ERR_REGEXP_ERROR;
       LOG_WARN("empty regex expression", K(ret));
@@ -222,7 +222,7 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     }
     if (OB_FAIL(ret)) {
     } else if (text->is_null() || pattern->is_null() ||
-               (lib::is_mysql_mode() && NULL != match_type && match_type->is_null())) {
+               (NULL != match_type && match_type->is_null())) {
       expr_datum.set_null();
     } else {
       const ObCollationType constexpr expected_bin_coll = CS_TYPE_UTF16_BIN;

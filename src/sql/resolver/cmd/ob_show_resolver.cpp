@@ -912,7 +912,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       }
       case T_SHOW_GRANTS: {
         [&] {
-          if (OB_UNLIKELY(parse_tree.num_child_ != (lib::is_mysql_mode() ? 2 : 1)
+          if (OB_UNLIKELY(parse_tree.num_child_ != 2
                           || NULL == parse_tree.children_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("parse tree is wrong",
@@ -958,7 +958,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               }
             }
             if (OB_SUCC(ret)
-                && lib::is_mysql_mode()
                 && OB_NOT_NULL(parse_tree.children_[1])
                 && parse_tree.children_[1]->num_child_ > 0) {
               ParseNode *role_list = parse_tree.children_[1];
@@ -992,7 +991,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             }
             if (OB_SUCC(ret)) {
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_GRANTS, show_user_name.length(), show_user_name.ptr(), show_host_name.length(), show_host_name.ptr());
-              if (lib::is_mysql_mode() && role_list_str.length() > 0) {
+              if (role_list_str.length() > 0) {
                 GEN_SQL_STEP_2(ObShowSqlSet::SHOW_GRANTS_USING_ROLES,
                                OB_SYS_DATABASE_NAME,
                                OB_TENANT_VIRTUAL_PRIVILEGE_GRANT_TNAME,
@@ -1079,11 +1078,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             } else {
               show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLE_STATUS;
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLE_STATUS);
-              if (lib::is_mysql_mode()) {
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL, show_db_id);
-              } else {
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL_ORA, show_db_id);
-              }
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL, show_db_id);
             }
           }
         }();
@@ -1657,6 +1652,22 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               }
             }
           }
+        }
+        break;
+      }
+      case T_SHOW_RESTORE_PREVIEW: {
+        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
+        } else if (!is_sys_tenant(real_tenant_id)) {
+          ret = OB_OP_NOT_ALLOW;
+          LOG_WARN("the tenant has no priv to show restore preview", K(ret), K(real_tenant_id));
+        } else {
+          show_resv_ctx.stmt_type_ = stmt::T_SHOW_RESTORE_PREVIEW;
+          GEN_SQL_STEP_1(ObShowSqlSet::SHOW_RESTORE_PREVIEW);
+          GEN_SQL_STEP_2(ObShowSqlSet::SHOW_RESTORE_PREVIEW,
+                         OB_SYS_DATABASE_NAME,
+                         OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TNAME);
         }
         break;
       }
@@ -3719,6 +3730,11 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_RECYCLEBIN,
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, TYPE, CREATETIME",
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, case TYPE when 1 then 'TABLE' when 2 then 'INDEX' when 3 then 'VIEW' when 4 then 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' when 7 then 'TENANT' else 'INVALID' end as TYPE, gmt_create as CREATETIME FROM %s.%s WHERE TYPE != 8 AND TYPE != 9",
                        R"(SELECT "OBJECT_NAME", "ORIGINAL_NAME", CASE "TYPE" WHEN 1 THEN 'TABLE' WHEN 2 THEN 'INDEX' WHEN 3 THEN 'VIEW' WHEN 4 THEN 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' WHEN 7 THEN 'TENANT' ELSE 'INVALID' END AS "TYPE", "GMT_CREATE" AS "CREATETIME" FROM %s.%s WHERE TYPE != 8 AND TYPE != 9)",
+                       NULL);
+DEFINE_SHOW_CLAUSE_SET(SHOW_RESTORE_PREVIEW,
+                       NULL,
+                       "SELECT * FROM %s.%s",
+                       NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SEQUENCES,
                        "SELECT sequence_name AS `Sequences_in_%.*s` ",

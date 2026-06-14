@@ -101,7 +101,7 @@ int ObGrantResolver::resolve_grant_user(
     LOG_WARN("resolve grant_user error", K(ret));
   } else {
     if (grant_user->type_ == T_CREATE_USER_SPEC) {
-      if (OB_UNLIKELY(lib::is_mysql_mode() && 5 != grant_user->num_child_)) {
+      if (OB_UNLIKELY(5 != grant_user->num_child_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Parse node error in grentee ", K(ret));
       } else {
@@ -117,7 +117,7 @@ int ObGrantResolver::resolve_grant_user(
           host_name.assign_ptr(const_cast<char *>(grant_user->children_[3]->str_value_),
             static_cast<int32_t>(grant_user->children_[3]->str_len_));
         }
-        if (lib::is_mysql_mode() && NULL != grant_user->children_[4]) {
+        if (NULL != grant_user->children_[4]) {
           /* here code is to mock a auth plugin check. */
           ObString auth_plugin(static_cast<int32_t>(grant_user->children_[4]->str_len_),
                                 grant_user->children_[4]->str_value_);
@@ -461,7 +461,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
               if (OB_ISNULL(user_node)) {
                 ret = OB_ERR_PARSE_SQL;
                 LOG_WARN("Parse SQL error, user node should not be NULL", K(user_node), K(ret));
-              } else if (OB_UNLIKELY(lib::is_mysql_mode() && 5 != user_node->num_child_)) {
+              } else if (OB_UNLIKELY(5 != user_node->num_child_)) {
                 ret = OB_ERR_PARSE_SQL;
                 LOG_WARN("User specification's child node num error", K(ret));
               } else if (OB_ISNULL(user_node->children_[0])) {
@@ -485,7 +485,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                   host_name.assign_ptr(user_node->children_[3]->str_value_,
                       static_cast<int32_t>(user_node->children_[3]->str_len_));
                 }
-                if (lib::is_mysql_mode() && NULL != user_node->children_[4]) {
+                if (NULL != user_node->children_[4]) {
                   /* here code is to mock a auth plugin check. */
                   ObString auth_plugin(static_cast<int32_t>(user_node->children_[4]->str_len_),
                                       user_node->children_[4]->str_value_);

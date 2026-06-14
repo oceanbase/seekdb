@@ -38,7 +38,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
   CK (CREATE_PACKAGE_NODE_CHILD_COUNT == parse_tree.num_child_);
   CK (OB_NOT_NULL(parse_tree.children_));
   CK (OB_NOT_NULL(session_info_));
-  if (OB_SUCC(ret) && lib::is_mysql_mode() &&
+  if (OB_SUCC(ret) &&
       OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported package in mysql mode", K(ret), K(lbt()));
@@ -149,8 +149,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory for create package stmt failed", K(ret));
         } else {
-          common::ObCompatibilityMode compa_mode = lib::is_mysql_mode() ? common::MYSQL_MODE
-                                                                        : common::ORACLE_MODE;
+          common::ObCompatibilityMode compa_mode = common::MYSQL_MODE;
           obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
           ObPackageInfo &package_info = create_package_arg.package_info_;
           ObString package_block(static_cast<int32_t>(package_block_node->str_len_), package_block_node->str_value_);
@@ -515,7 +514,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
   CK (OB_LIKELY(T_PACKAGE_CREATE_BODY == parse_tree.type_));
   CK (OB_LIKELY(CREATE_PACKAGE_BODY_NODE_CHILD_COUNT == parse_tree.num_child_));
 
-  if (OB_SUCC(ret) && lib::is_mysql_mode() &&
+  if (OB_SUCC(ret) &&
       OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported package in mysql mode", K(ret), K(lbt()));
@@ -690,8 +689,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
     //set package body common info
     if (OB_SUCC(ret)) {
-      common::ObCompatibilityMode compa_mode = lib::is_mysql_mode() ? common::MYSQL_MODE
-                                                                    : common::ORACLE_MODE;
+      common::ObCompatibilityMode compa_mode = common::MYSQL_MODE;
       obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
       ObPackageInfo &package_info = create_package_arg.package_info_;
       ObString package_body_block(static_cast<int32_t>(package_body_block_node->str_len_),

@@ -609,7 +609,7 @@ OB_INLINE void ObResultSet::store_affected_rows(ObPhysicalPlanCtx &plan_ctx)
     affected_row = 0;
   } else if (stmt::T_SELECT == get_stmt_type()) {
     affected_row = plan_ctx.get_affected_rows();
-    if (lib::is_mysql_mode() && 0 == affected_row) {
+    if (0 == affected_row) {
       affected_row = -1;
     }
   } else {
@@ -1564,8 +1564,7 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
           copy_str_len = raw_params.at(idx)->node_->text_len_;
           copy_str = raw_params.at(idx)->node_->raw_text_;
         } else if (PARAM_CTX->esc_str_flag_) {
-          if (lib::is_mysql_mode()
-              && 1 == raw_params.at(idx)->node_->num_child_) {
+          if (1 == raw_params.at(idx)->node_->num_child_) {
             LOG_DEBUG("concat str node");
             if (OB_ISNULL(raw_params.at(idx)->node_->children_)
                 || OB_ISNULL(raw_params.at(idx)->node_->children_[0])
@@ -1580,8 +1579,7 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
             copy_str_len = raw_params.at(idx)->node_->str_len_;
             copy_str = raw_params.at(idx)->node_->str_value_;
           }
-        } else if (lib::is_mysql_mode() &&
-                   0 == field.paramed_ctx_->paramed_cname_.compare("?") &&
+        } else if (0 == field.paramed_ctx_->paramed_cname_.compare("?") &&
                    1 == PARAM_CTX->param_idxs_.count() &&
                    T_NULL == raw_params.at(idx)->node_->type_ &&
                    enable_modify_null_name) {
@@ -1616,7 +1614,7 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (lib::is_mysql_mode() && OB_FAIL(make_final_field_name(buf, pos, field.cname_))) {
+    } else if (OB_FAIL(make_final_field_name(buf, pos, field.cname_))) {
       LOG_WARN("failed to make final field name", K(ret));
     } else {
       // do nothing
