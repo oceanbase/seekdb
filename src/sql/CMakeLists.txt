@@ -741,7 +741,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_or.cpp
   engine/expr/ob_expr_oracle_decode.cpp
   engine/expr/ob_expr_oracle_to_char.cpp
-  engine/expr/ob_expr_oracle_trunc.cpp
   engine/expr/ob_expr_output_pack.cpp
   engine/expr/ob_expr_pad.cpp
   engine/expr/ob_expr_mysql_port.cpp
@@ -1166,6 +1165,8 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_anonymous_block_stmt.cpp
   resolver/cmd/ob_call_procedure_resolver.cpp
   resolver/cmd/ob_call_procedure_stmt.cpp
+  resolver/cmd/ob_create_restore_point_resolver.cpp
+  resolver/cmd/ob_drop_restore_point_resolver.cpp
   resolver/cmd/ob_empty_query_resolver.cpp
   resolver/cmd/ob_get_diagnostics_resolver.cpp
   resolver/cmd/ob_get_diagnostics_stmt.cpp

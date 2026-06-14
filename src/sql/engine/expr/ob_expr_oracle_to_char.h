@@ -121,18 +121,6 @@ protected:
                                       const common::ObCollationType src_coll_type);
 };
 
-class ObExprOracleToChar : public ObExprToCharCommon
-{
-public:
-  explicit ObExprOracleToChar(common::ObIAllocator &alloc);
-  virtual ~ObExprOracleToChar();
-  virtual int calc_result_typeN(ObExprResType &type,
-                                ObExprResType *type_array,
-                                int64_t params_count,
-                                common::ObExprTypeCtx &type_ctx) const;
-  static int eval_oracle_to_char(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-};
-
 class ObExprToChar : public ObExprToCharCommon
 {
 public:

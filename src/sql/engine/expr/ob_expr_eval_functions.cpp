@@ -453,8 +453,6 @@ extern int calc_collation_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_coercibility_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_set_collation_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_cmp_meta_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
-extern int calc_trunc_expr_datetime(const ObExpr &, ObEvalCtx &, ObDatum &);
-extern int calc_trunc_expr_numeric(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_truncate_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
 extern int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
 extern int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
@@ -740,8 +738,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   calc_coercibility_expr,                                             /* 260 */
   calc_set_collation_expr,                                            /* 261 */
   calc_cmp_meta_expr,                                                 /* 262 */
-  calc_trunc_expr_datetime,                                           /* 263 */
-  calc_trunc_expr_numeric,                                            /* 264 */
+  NULL, /* calc_trunc_expr_datetime removed */                         /* 263 */
+  NULL, /* calc_trunc_expr_numeric removed */                          /* 264 */
   calc_truncate_expr,                                                 /* 265 */
   ObExprEstimateNdv::calc_estimate_ndv_expr,                          /* 266 */
   ObExprFindInSet::calc_find_in_set_expr,                             /* 267 */
@@ -810,7 +808,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprPad::calc_pad_expr,                                           /* 330 */
   ObExprFunValues::eval_values,                                       /* 331 */
   NULL,                                                               /* 332 */
-  ObExprOracleToChar::eval_oracle_to_char,                            /* 333 */
+  NULL, /* ObExprOracleToChar removed */                               /* 333 */
   ObExprPartId::eval_part_id,                                         /* 334 */
   ObExprHex::eval_hex,                                                /* 335 */
   ObExprShadowUKProject::shadow_uk_project,                           /* 336 */
@@ -819,7 +817,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprAesDecrypt::eval_aes_decrypt,                                 /* 339 */
   ObExprAesEncrypt::eval_aes_encrypt,                                 /* 340 */
   ObExprCase::calc_case_expr,                                         /* 341 */
-  ObExprOracleDecode::eval_decode,                                    /* 342 */
+  NULL, /* ObExprOracleDecode removed */                                /* 342 */
   ObExprRemoveConst::eval_remove_const,                               /* 343 */
   ObExprSleep::eval_sleep,                                            /* 344 */
   NULL,                                                               /* 345 */
@@ -1436,7 +1434,7 @@ static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
   ObExprSubstr::eval_substr_batch,                                    /* 73 */
   ObExprJoinFilter::eval_bloom_filter_batch,                          /* 74 */
   NULL,                                                               /* 75 */
-  ObExprToCharCommon::eval_oracle_to_char_batch,                      /* 76 */
+  NULL, /* eval_oracle_to_char_batch removed */                        /* 76 */
   NULL,                                                               /* 77 */
   ObExprExtract::calc_extract_mysql_batch,                            /* 78 */
   cast_eval_arg_batch,                                                /* 79 */

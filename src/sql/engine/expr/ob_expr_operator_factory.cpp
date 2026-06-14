@@ -40,7 +40,6 @@
 #include "sql/engine/expr/ob_expr_bm25.h"
 #include "sql/engine/expr/ob_expr_case.h"
 #include "sql/engine/expr/ob_expr_oracle_decode.h"
-#include "sql/engine/expr/ob_expr_oracle_trunc.h"
 #include "sql/engine/expr/ob_expr_fun_values.h"
 #include "sql/engine/expr/ob_expr_fun_default.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -605,8 +604,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprCurrentUser);
     REG_OP(ObExprCurrentUserPriv);
     REG_OP(ObExprYear);
-    REG_OP(ObExprOracleDecode);
-    REG_OP(ObExprOracleTrunc);
     REG_OP(ObExprDiv);
     REG_OP(ObExprAggDiv);
     REG_OP(ObExprEffectiveTenant);

@@ -24,9 +24,9 @@
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfo, ObAllTenantInfoProxy
 #include "storage/tx/ob_timestamp_service.h"  // ObTimestampService
 #include "rootserver/standby/ob_standby_service.h" // ObStandbyService
-#include "share/oracle_errno.h"//oracle error code
 // Removed ob_service_name_command.h include - ObServiceName functionality not needed for single tenant/single LS scenario
 #include "share/restore/ob_log_restore_source.h" // ObLogRestoreSourceItem
+#include "share/backup/ob_log_restore_struct.h" // ObRestoreSourceServiceAttr
 #include "share/config/ob_server_config.h" // GCONF
 #include "rootserver/standby/ob_service_grpc.h"  // ObServiceGrpcClient
 #include "share/ob_ls_id.h"  // SYS_LS
@@ -108,7 +108,7 @@ namespace rootserver
   switch (ret) {                                                                                                                          \
     case -ER_TABLEACCESS_DENIED_ERROR:                                                                                                    \
     case OB_ERR_NO_TABLE_PRIVILEGE:                                                                                                       \
-    case -OER_TABLE_OR_VIEW_NOT_EXIST:                                                                                                    \
+    case -942:                                                                                                    \
     case -ER_DBACCESS_DENIED_ERROR:                                                                                                       \
     case OB_ERR_NO_DB_PRIVILEGE:                                                                                                          \
     case OB_ERR_NULL_VALUE:                                                                                                               \
@@ -117,7 +117,7 @@ namespace rootserver
     case OB_PASSWORD_WRONG:                                                                                                               \
     case -ER_ACCESS_DENIED_ERROR:                                                                                                         \
     case OB_ERR_NO_LOGIN_PRIVILEGE:                                                                                                       \
-    case -OER_INTERNAL_ERROR_CODE:                                                                                                        \
+    case -600:                                                                                                        \
       if (OB_TMP_FAIL(str.assign_fmt("query primary failed(original error code: %d), switchover to primary is", ret))) {                         \
         LOG_WARN("tenant role trans user error str assign failed");                                                                       \
       } else {                                                                                                                            \
@@ -1006,6 +1006,8 @@ int ObTenantRoleTransitionService::wait_sys_ls_sync_to_latest_until_timeout_(
 int ObTenantRoleTransitionService::check_restore_source_for_switchover_to_primary_()
 {
   int ret = OB_SUCCESS;
+  ObSqlString standby_source_value;
+  ObRestoreSourceServiceAttr service_attr;
   has_restore_source_ = true;
 
   if (OB_FAIL(check_inner_stat())) {
@@ -1016,6 +1018,39 @@ int ObTenantRoleTransitionService::check_restore_source_for_switchover_to_primar
     if (config_value.empty()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "empty log_restore_source is");
+    } else if (OB_FAIL(standby_source_value.assign(config_value))) {
+      LOG_WARN("fail to assign standby source value", K(config_value));
+    } else if (OB_FAIL(service_attr.parse_service_attr_from_str(standby_source_value))) {
+      LOG_WARN("fail to parse service attr", K(config_value), K(standby_source_value));
+    } else {
+      // net service mode, check whether previous primary tenant becomes standby
+      // Use gRPC to get tenant info instead of MySQL client
+      if (OB_UNLIKELY(service_attr.addr_.count() <= 0)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("service_attr has no server address", KR(ret), K(service_attr));
+      } else {
+        // Use first available server address
+        const common::ObAddr& server_addr = service_attr.addr_.at(0);
+        const int64_t timeout = 10 * 1000 * 1000; // 10 seconds
+
+        rootserver::standby::ObServiceGrpcClient grpc_client;
+        if (OB_FAIL(grpc_client.init(server_addr, timeout))) {
+          LOG_WARN("fail to init grpc client", KR(ret), K(server_addr), K(service_attr));
+        } else {
+          share::ObAllTenantInfo tenant_info;
+          if (OB_FAIL(grpc_client.get_tenant_info(tenant_info))) {
+            LOG_WARN("fail to get tenant info via gRPC", KR(ret), K(server_addr));
+          } else if (OB_UNLIKELY(!tenant_info.is_standby())) {
+            ret = OB_OP_NOT_ALLOW;
+            LOG_WARN("tenant role not match", KR(ret), K(tenant_info.get_tenant_role()), K(service_attr));
+            LOG_USER_ERROR(OB_OP_NOT_ALLOW, "restore source is primary, switchover to primary is");
+          } else if (OB_UNLIKELY(!tenant_info.is_normal_status())) {
+            ret = OB_OP_NOT_ALLOW;
+            LOG_WARN("tenant switchover status not match", KR(ret), K(tenant_info.get_switchover_status()), K(service_attr));
+            LOG_USER_ERROR(OB_OP_NOT_ALLOW, "restore source is not in normal switchover status, switchover to primary is");
+          }
+        }
+      }
     }
   }
   return ret;

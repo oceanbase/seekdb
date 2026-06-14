@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_log_restore_proxy.h"
-#include "observer/ob_server_struct.h"  
-#include "share/oracle_errno.h"
+#include "observer/ob_server_struct.h"
 #include "share/backup/ob_log_restore_struct.h"
 #include "rootserver/standby/ob_service_grpc.h"
 
@@ -29,7 +28,7 @@ namespace share
 #define RESTORE_PROXY_USER_ERROR(args)                                                                 \
   switch (ret) {                                                                                       \
     case -ER_TABLEACCESS_DENIED_ERROR:                                                                 \
-    case -OER_TABLE_OR_VIEW_NOT_EXIST:                                                                 \
+    case -942:                                                                 \
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "get primary " args ", privilege is insufficient");          \
       break;                                                                                           \
     case -ER_ACCESS_DENIED_ERROR:                                                                      \

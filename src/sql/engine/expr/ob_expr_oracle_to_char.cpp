@@ -937,13 +937,6 @@ int ObExprToCharCommon::process_number_sci_value(
 }
 
 
-int ObExprOracleToChar::eval_oracle_to_char(const ObExpr &expr,
-                                                    ObEvalCtx &ctx,
-                                                    ObDatum &expr_datum)
-{
-  return ObExprToCharCommon::eval_to_char(expr, ctx, expr_datum);
-}
-
 DEF_SET_LOCAL_SESSION_VARS(ObExprToCharCommon, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(4);
