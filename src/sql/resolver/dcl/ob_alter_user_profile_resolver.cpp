@@ -54,8 +54,7 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
   } else {
     ObString user_name;
     ObString host_name(OB_DEFAULT_HOST_NAME);
-    uint64_t session_user_id = lib::is_mysql_mode() ? params_.session_info_->get_priv_user_id()
-                                                    : params_.session_info_->get_user_id();
+    uint64_t session_user_id = params_.session_info_->get_priv_user_id();
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(params_.schema_checker_->get_user_info(
          params_.session_info_->get_effective_tenant_id(),
@@ -99,22 +98,6 @@ int ObAlterUserProfileResolver::resolve_role_list(
       if (NULL == role) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("role opt identified by node is null", K(ret));
-      } else if (lib::is_mysql_mode()) {
-      } else if (T_IDENT == role->type_) {
-      } else if (T_SET_ROLE_PASSWORD != role->type_) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("role type is error", K(ret), K(role->type_));
-      } else if (2 == role->value_ && NULL == role->children_[1]) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("passwd_node is NULL", K(ret));
-      } else if (NULL == role->children_[0]) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("role node is null", K(ret));
-      } else {
-        if (2 == role->value_) {
-          pwd_node = role->children_[1];
-        }
-        role = role->children_[0];
       }
       if (OB_SUCC(ret)) {
         ObString role_name;
@@ -151,11 +134,7 @@ int ObAlterUserProfileResolver::resolve_role_list(
           role_id = role_info->get_user_id();
           if (has_exist_in_array(arg.role_id_array_, role_id)) {
             /* if role duplicate in role list, then raise error */
-            if (lib::is_mysql_mode()) {
-              skip = true;
-            } else {
-              ret = OB_PRIV_DUP;
-            }
+            skip = true;
           } else {
             ObString cur_user_name;
             ObString cur_host_name;
@@ -317,15 +296,8 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
         if (user_info == NULL) {
           ret = OB_USER_NOT_EXIST;
           LOG_USER_ERROR(OB_USER_NOT_EXIST, user_name.length(), user_name.ptr());
-        } else if (lib::is_mysql_mode()) {
-          OZ (arg.user_ids_.push_back(user_info->get_user_id()));
-        } else if (OB_FAIL(check_dcl_on_inner_user(parse_tree.type_,
-                                                    session_info_->get_priv_user_id(),
-                                                    user_info->get_user_id()))) {
-          LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user", K(ret),
-                  K(session_info_->get_user_name()), K(user_name));
         } else {
-          arg.user_id_ = user_info->get_user_id();
+          OZ (arg.user_ids_.push_back(user_info->get_user_id()));
         }
       }
       
@@ -347,7 +319,7 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
     OZ (resolve_default_role_clause(parse_tree.children_[1], arg, 
                                     user_info->get_role_id_array(), true));
 
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       ObSqlCtx *sql_ctx = NULL;
       if (OB_ISNULL(params_.session_info_->get_cur_exec_ctx())
           || OB_ISNULL(sql_ctx = params_.session_info_->get_cur_exec_ctx()->get_sql_ctx())) {

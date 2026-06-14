@@ -71,7 +71,7 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   }
 
   // resolve with clause before resolve table items
-  if (OB_SUCC(ret) && is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
       LOG_WARN("resolve outline data hints failed", K(ret));
     }
@@ -163,7 +163,7 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("resolve limit clause failed", K(ret));
     } else if (OB_FAIL(try_expand_returning_exprs())) {
       LOG_WARN("failed to try expand returning exprs", K(ret));
-    } else if (is_mysql_mode() && !update_stmt->is_ignore() &&
+    } else if (!update_stmt->is_ignore() &&
                OB_FAIL(check_join_update_conflict())) {
       LOG_WARN("failed to check join update conflict", K(ret));
     } else if (OB_FAIL(update_stmt->formalize_stmt(session_info_))) {
@@ -178,7 +178,7 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("failed to check dml need filter null", K(ret));
     } else if (OB_FAIL(update_stmt->check_dml_source_from_join())) {
       LOG_WARN("failed to check dml source from join", K(ret));
-    } else if (lib::is_mysql_mode() && OB_FAIL(check_safe_update_mode(update_stmt))) {
+    } else if (OB_FAIL(check_safe_update_mode(update_stmt))) {
       LOG_WARN("failed to check fulfill safe update mode", K(ret));
     } else { /*do nothing*/ }
   }
@@ -418,7 +418,7 @@ int ObUpdateResolver::resolve_table_list(const ParseNode &parse_tree)
       }
     }
   }
-  if (OB_SUCC(ret) && is_mysql_mode() && 1 == update_stmt->get_from_item_size()) {
+  if (OB_SUCC(ret) && 1 == update_stmt->get_from_item_size()) {
     const TableItem *table_item = update_stmt->get_table_item(update_stmt->get_from_item(0));
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
@@ -537,7 +537,7 @@ int ObUpdateResolver::check_view_updatable()
   if (NULL == update_stmt) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("update stmt is NULL", K(ret));
-  } else if (is_mysql_mode()) {
+  } else {
     ObIArray<ObUpdateTableInfo*> &tables_info = update_stmt->get_update_table_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < tables_info.count(); i++) {
       const TableItem *table_item = NULL;
@@ -590,7 +590,7 @@ int ObUpdateResolver::check_view_updatable()
         }
       }
     }
-  } else { /*do nothing*/ }
+  }
   return ret;
 }
 

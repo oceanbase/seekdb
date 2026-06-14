@@ -63,8 +63,7 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init ObLobLocatorHelper", K(ret), K(table_param), K(snapshot_version));
   } else {
-    if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())
-        && OB_UNLIKELY(!lib::is_oracle_mode() || is_sys_table(table_param.get_table_id()))) {
+    if (OB_UNLIKELY(!table_param.enable_lob_locator_v2())) {
       // only oracle mode user table support lob locator if lob locator v2 not enabled
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected tenant mode to init ObLobLocatorHelper", K(ret), K(table_param));
@@ -138,7 +137,7 @@ int ObLobLocatorHelper::fill_lob_locator(ObDatumRow &row,
   } else if (OB_ISNULL(col_descs = access_param.iter_param_.get_out_col_descs())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected null col_descs", K(ret), K(access_param.iter_param_));
-  } else if (!lib::is_oracle_mode() || is_sys_table(access_param.iter_param_.table_id_)) {
+  } else if (true) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Only oracle mode need build lob locator", K(ret));
   } else if (OB_ISNULL(access_param.output_exprs_) || OB_ISNULL(access_param.get_op())) {
@@ -155,7 +154,7 @@ bool ObLobLocatorHelper::can_skip_build_mem_lob_locator(const common::ObString &
   const ObLobCommon *lob_common = reinterpret_cast<const ObLobCommon *>(payload.ptr());
   if (payload.length() == 0) {
     // do nothing
-  } else if (lob_common->in_row_ && lib::is_mysql_mode()) {
+  } else if (lob_common->in_row_) {
     // mysql mode inrow lob can skip build mem lob locator
     bret = true;
   }
@@ -262,7 +261,7 @@ int ObLobLocatorHelper::fuse_mem_lob_header(ObObj &def_obj, uint64_t col_id, boo
       int64_t payload_size = def_obj.get_string().length();
       payload_size += sizeof(ObLobCommon);
       // mysql inrow lobs & systable lobs do not have extern fields
-      bool has_extern = (lib::is_oracle_mode() && !is_systable);
+      bool has_extern = false;
       ObMemLobExternFlags extern_flags(has_extern);
       extern_flags.has_retry_info_ = 0; // default obj should only be inrow, no need retry info
       ObLobCommon lob_common;
@@ -358,7 +357,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
       is_dst_inrow = true;
     }
     // oracle user table lobs and mysql user table outrow lobs need extern.
-    bool has_extern = (!is_simple) && (lib::is_oracle_mode() || !is_dst_inrow);
+    bool has_extern = (!is_simple) && (!is_dst_inrow);
     ObMemLobExternFlags extern_flags(has_extern);
 
     bool padding_char_size = false;

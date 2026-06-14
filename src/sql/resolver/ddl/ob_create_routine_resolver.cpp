@@ -173,12 +173,12 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
         }
       }
     }
-  } else if (lib::is_mysql_mode()) {
+  } else {
     // Do not specify definer, default to current user and host
     user_name = cur_user_name;
     host_name = cur_host_name;
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     // user@host as a whole is stored in the priv_user field
     char tmp_buf[common::OB_MAX_USER_NAME_LENGTH + common::OB_MAX_HOST_NAME_LENGTH + 2] = {};
     snprintf(tmp_buf, sizeof(tmp_buf), "%.*s@%.*s", user_name.length(), user_name.ptr(),
@@ -700,7 +700,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
       if (OB_SUCC(ret)
           && 3 == param_node->num_child_ // oracle mode has default node
           && OB_NOT_NULL(param_node->children_[2])) {
-        if (lib::is_mysql_mode()) {
+        if (true) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("stored procedure's paramlist not supported default value in mysql mode", K(ret), K(lbt()));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "stored procedure's paramlist use default value in mysql mode");
@@ -907,8 +907,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
   if (OB_SUCC(ret)) {
     ObRoutineType type = T_SF_CREATE == parse_tree.type_ ? ROUTINE_FUNCTION_TYPE :
                  T_SP_CREATE == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : INVALID_ROUTINE_TYPE;
-    if (lib::is_mysql_mode()
-               && session_info_->is_inner()
+    if (session_info_->is_inner()
                && FALSE_IT(crt_routine_arg->is_or_replace_ = true)) {
       // MySQL mode this field is reused to indicate whether the request is sent by InnerSQL. Used to restore Routine placed in the recycle bin under MySQL.
       // Oracle mode does not process, because PL objects do not enter the recycle bin in Oracle mode.
@@ -922,7 +921,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
                                     crt_routine_arg))) {
       LOG_WARN("failed to resolve routine info", K(ret));
     } else {
-      if (parse_tree.value_ != 0 && is_mysql_mode()) {
+      if (parse_tree.value_ != 0) {
         OX (crt_routine_arg->with_if_not_exist_ = parse_tree.value_);
       }
     }

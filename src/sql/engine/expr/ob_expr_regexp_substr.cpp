@@ -170,7 +170,7 @@ int ObExprRegexpSubstr::is_valid_for_generated_column(const ObRawExpr*expr,
                                                       const common::ObIArray<ObRawExpr *> &exprs,
                                                       bool &is_valid) const {
   int ret = OB_SUCCESS;
-  is_valid = lib::is_mysql_mode();
+  is_valid = true;
   return ret;
 }
 
@@ -188,7 +188,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   int64_t occur = 1;
   int64_t subexpr_val = 0;
   if (OB_FAIL(expr.eval_param_value(ctx, text, pattern, position, occurrence, match_type, subexpr))) {
-    if (lib::is_mysql_mode() && ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
+    if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
       expr_datum.set_null();
       const char *charset_name = ObCharset::charset_name(expr.args_[0]->datum_meta_.cs_type_);
@@ -209,7 +209,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                           expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expr));
-  } else if (lib::is_mysql_mode() && !pattern->is_null() && pattern->get_string().empty()) {
+  } else if (!pattern->is_null() && pattern->get_string().empty()) {
     if (NULL == match_type || !match_type->is_null()) {
       ret = OB_ERR_REGEXP_ERROR;
       LOG_WARN("empty regex expression", K(ret));
@@ -220,7 +220,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     bool null_result = (position != NULL && position->is_null()) ||
                        (occurrence != NULL && occurrence->is_null()) ||
                        (subexpr != NULL && subexpr->is_null()) ||
-                       (lib::is_mysql_mode() && match_type != NULL && match_type->is_null());
+                       (match_type != NULL && match_type->is_null());
     if (OB_FAIL(ObExprUtil::get_int_param_val(
           position, (expr.arg_cnt_ > 2 && expr.args_[2]->obj_meta_.is_decimal_int()), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
@@ -275,7 +275,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                 (NULL != position && position->is_null()) ||
                 (NULL != occurrence && occurrence->is_null()) ||
                 (NULL != subexpr && subexpr->is_null()) ||
-                (lib::is_mysql_mode() && NULL != match_type && match_type->is_null())) {
+                (NULL != match_type && match_type->is_null())) {
         expr_datum.set_null();
         is_final = true;
       } else if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {

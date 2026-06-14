@@ -77,7 +77,7 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
                               alter_routine_stmt->get_routine_arg()));
     //Step4: do real alter resolve
     if (OB_FAIL(ret)) {
-    } else if (lib::is_mysql_mode()) {
+    } else {
       if (OB_NOT_NULL(parse_tree.children_[1])) {
         OZ (resolve_impl(alter_routine_stmt->get_routine_arg(), *routine_info, *(parse_tree.children_[1])));
       } else {
@@ -87,14 +87,6 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
       OX (alter_routine_stmt->get_routine_arg().routine_info_.set_tenant_id(routine_info->get_tenant_id()));
       OX (alter_routine_stmt->get_routine_arg().routine_info_.set_routine_id(routine_info->get_routine_id()));
       OX (alter_routine_stmt->get_routine_arg().is_need_alter_ = true);
-    } else {
-      CK (OB_NOT_NULL(parse_tree.children_[1]));
-      OZ (resolve_impl(
-        alter_routine_stmt->get_routine_arg(), *routine_info, *(parse_tree.children_[1])));
-      OX (alter_routine_stmt->get_routine_arg()
-        .routine_info_.set_tenant_id(routine_info->get_tenant_id()));
-      OX (alter_routine_stmt->get_routine_arg()
-        .routine_info_.set_routine_id(routine_info->get_routine_id()));
     }
     //Step5: collection error info
     if (OB_SUCC(ret)) {
@@ -121,11 +113,11 @@ int ObAlterRoutineResolver::resolve_clause_list(
           } else if (SP_DEFINER == child->value_) {
             crt_routine_arg.routine_info_.clear_invoker_right();
           }
-        } else if (T_COMMENT == child->type_ && lib::is_mysql_mode()) {
+        } else if (T_COMMENT == child->type_) {
           ObString routine_comment;
           OX (routine_comment = ObString(child->str_len_, child->str_value_));
           OZ (crt_routine_arg.routine_info_.set_comment(routine_comment));
-        } else if (T_SP_DATA_ACCESS == child->type_ && lib::is_mysql_mode()) {
+        } else if (T_SP_DATA_ACCESS == child->type_) {
           if (SP_NO_SQL == child->value_) {
             crt_routine_arg.routine_info_.set_no_sql();
           } else if (SP_READS_SQL_DATA == child->value_) {
@@ -325,13 +317,11 @@ int ObAlterRoutineResolver::parse_routine(
   MEMSET(&parse_result, 0, SIZEOF(ParseResult));
   OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(
                                   *(params_.allocator_), dtc_params, body));
-  if(lib::is_mysql_mode()) {
+  {
     char * buf;
     buf = static_cast<char *>(allocator_->alloc(orig_body.length() + 8));
     snprintf(buf, orig_body.length() + 8, "create %s", orig_body.ptr());
     body = ObString(orig_body.length() + 7, buf);
-  } else {
-    body= source;
   }
   OZ (parser.parse(body, orig_body, parse_result));
   CK (OB_NOT_NULL(parse_result.result_tree_));
@@ -375,7 +365,7 @@ int ObAlterRoutineResolver::resolve_routine(
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(source_tree));
   if (OB_FAIL(ret)) {
-  } else if (lib::is_mysql_mode()) {
+  } else {
     switch (source_tree->type_) {
       case T_SP_CREATE: {
         HEAP_VAR(ObCreateProcedureResolver, resolver, params_) {
@@ -388,34 +378,6 @@ int ObAlterRoutineResolver::resolve_routine(
         HEAP_VAR(ObCreateFunctionResolver, resolver, params_) {
           OX (resolver.set_basic_stmt(get_basic_stmt()));
           OZ (resolver.resolve_impl(*source_tree, &crt_routine_arg));
-        }
-        break;
-      }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected source tree type", K(ret), K(source_tree->type_));
-        break;
-    }
-  } else {
-    switch (source_tree->type_) {
-      case T_SP_SOURCE: {
-        ParseNode *crt_tree = nullptr;
-        HEAP_VAR(ObCreateProcedureResolver, resolver, params_) {
-          OX (resolver.set_basic_stmt(get_basic_stmt()));
-          OZ (mock_create_parse_node(
-                  source_tree, need_recreate, routine_info.is_noneditionable(), crt_tree));
-          OZ (resolver.resolve_impl(*crt_tree, &crt_routine_arg));
-        }
-        break;
-      }
-      case T_SF_SOURCE:
-      case T_SF_AGGREGATE_SOURCE: {
-        ParseNode *crt_tree = nullptr;
-        HEAP_VAR(ObCreateFunctionResolver, resolver, params_) {
-          OX (resolver.set_basic_stmt(get_basic_stmt()));
-          OZ (mock_create_parse_node(
-                  source_tree, need_recreate, routine_info.is_noneditionable(), crt_tree));
-          OZ (resolver.resolve_impl(*crt_tree, &crt_routine_arg));
         }
         break;
       }
