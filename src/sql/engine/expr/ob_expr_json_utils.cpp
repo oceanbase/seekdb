@@ -778,7 +778,7 @@ int cast_to_string(common::ObIAllocator *allocator,
       bool is_need_string_string_convert = ((CS_TYPE_BINARY == cast_param.dst_coll_type_) 
                           || (ObCharset::charset_type_by_coll(cast_param.in_coll_type_) != 
                               ObCharset::charset_type_by_coll(cast_param.dst_coll_type_)))
-                              && !(lib::is_mysql_mode() && temp_str_val.length() == 0);
+                              && !(temp_str_val.length() == 0);
       if (is_need_string_string_convert) {
         if (CS_TYPE_BINARY != cast_param.in_coll_type_
             && CS_TYPE_BINARY != cast_param.dst_coll_type_
@@ -803,7 +803,7 @@ int cast_to_string(common::ObIAllocator *allocator,
             // just copy string when in_cs_type or out_cs_type is binary
             const ObCharsetInfo *cs = NULL;
             int64_t align_offset = 0;
-            if (CS_TYPE_BINARY == cast_param.in_coll_type_ && lib::is_mysql_mode()
+            if (CS_TYPE_BINARY == cast_param.in_coll_type_
                 && (NULL != (cs = ObCharset::get_charset(cast_param.dst_coll_type_)))) {
               if (cs->mbminlen > 0 && temp_str_val.length() % cs->mbminlen != 0) {
                 align_offset = cs->mbminlen - temp_str_val.length() % cs->mbminlen;
@@ -1250,7 +1250,7 @@ int cast_to_float(common::ObIAllocator *allocator,
     LOG_WARN("wrapper to date failed.", K(ret), K(*j_base));
   } else {
     val = static_cast<float>(tmp_val);
-    if (lib::is_mysql_mode() && CAST_FAIL(real_range_check(cast_param.dst_type_, tmp_val, val))) {
+    if (CAST_FAIL(real_range_check(cast_param.dst_type_, tmp_val, val))) {
       LOG_WARN("real_range_check failed", K(ret), K(tmp_val));
     } else if (!cast_param.is_only_check_) {
       res.set_float(val);
@@ -1465,7 +1465,7 @@ int ObJsonUtil::cast_to_res(common::ObIAllocator *allocator,
   INIT_SUCC(ret);
   ObJsonUtil::ObJsonCastSqlScalar cast_func_ = get_json_cast_func(cast_param.dst_type_);
   if (OB_ISNULL(j_base)
-      || (lib::is_mysql_mode() && j_base->json_type() == common::ObJsonNodeType::J_NULL)) {
+      || (j_base->json_type() == common::ObJsonNodeType::J_NULL)) {
     res.set_null();
   } else if (OB_ISNULL(cast_func_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1695,7 +1695,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
   } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
   } else {
     ObString j_str;

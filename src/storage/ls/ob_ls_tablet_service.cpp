@@ -4418,8 +4418,6 @@ int ObLSTabletService::insert_tablet_rows(
       if (OB_TMP_FAIL(table.get_index_name(index_name))) {
         LOG_WARN("Failed to get index name", K(ret), K(tmp_ret));
       }
-    } else if (lib::is_oracle_mode() && OB_TMP_FAIL(table.get_primary_key_name(index_name))) {
-      LOG_WARN("Failed to get pk name", K(ret), K(tmp_ret));
     }
     LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, rowkey_buffer, index_name.length(), index_name.ptr());
   }
@@ -5515,8 +5513,6 @@ int ObLSTabletService::process_new_rows(
             if (OB_TMP_FAIL(relative_table.get_index_name(index_name))) {
               LOG_WARN("Failed to get index name", K(ret), K(tmp_ret));
             }
-          } else if (lib::is_oracle_mode() && OB_TMP_FAIL(relative_table.get_primary_key_name(index_name))) {
-            LOG_WARN("Failed to get pk name", K(ret), K(tmp_ret));
           }
           LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, rowkey_buffer, index_name.length(), index_name.ptr());
         } else if (OB_TRY_LOCK_ROW_CONFLICT != ret && OB_TRANSACTION_SET_VIOLATION != ret) {
@@ -5709,20 +5705,13 @@ int ObLSTabletService::check_datum_row_shadow_pk(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index column count is invalid", K(ret),
                K(index_col_cnt), K(rowkey_cnt), K(spk_cnt), K(column_ids.count()));
-    } else if (lib::is_mysql_mode()) {
+    } else {
       // mysql compatibility: as long as there is a null column in the unique index key, the shadow column needs to be filled
       bool rowkey_has_null = false;
       for (int64_t i = 0; !rowkey_has_null && i < index_col_cnt; i++) {
         rowkey_has_null = datum_row.storage_datums_[i].is_null();
       }
       need_spk = rowkey_has_null;
-    } else {
-      // oracle compatibility: only when all columns of unique index key are null, do we need to fill the shadow column
-      bool is_rowkey_all_null = true;
-      for (int64_t i = 0; is_rowkey_all_null && i < index_col_cnt; i++) {
-        is_rowkey_all_null = datum_row.storage_datums_[i].is_null();
-      }
-      need_spk = is_rowkey_all_null;
     }
     for (int64_t i = index_col_cnt; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
       uint64_t spk_column_id = column_ids.at(i);

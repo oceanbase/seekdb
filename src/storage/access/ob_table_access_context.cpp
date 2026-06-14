@@ -27,10 +27,7 @@ namespace storage
 int ObTableAccessContext::init_column_scale_info(ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  if (!lib::is_oracle_mode()) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected tenant mode", K(ret));
-  } else if (OB_ISNULL(scan_param.table_param_)) {
+  if (OB_ISNULL(scan_param.table_param_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected table parameter to init column scale info", K(ret), KPC(scan_param.table_param_));
   } else {
@@ -157,10 +154,10 @@ int ObTableAccessContext::build_lob_locator_helper(ObTableScanParam &scan_param,
     STORAGE_LOG(WARN, "Invalid argument to build lob locator helper", K(ret), K(scan_param), KP_(stmt_allocator));
   } else if (!scan_param.table_param_->use_lob_locator()) {
     lob_locator_helper_ = nullptr;
-  } else if (!scan_param.table_param_->enable_lob_locator_v2() && !lib::is_oracle_mode()) {
+  } else if (!scan_param.table_param_->enable_lob_locator_v2()) {
     // if lob locator v2 is enabled, locator will be used for all types of lobs, including mysql mode
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected tenant mode", K(ret), K(lib::is_oracle_mode()));
+    STORAGE_LOG(WARN, "Unexpected tenant mode", K(ret));
   } else if (OB_ISNULL(buf = lob_allocator_.alloc(sizeof(ObLobLocatorHelper)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Failed to alloc memory for ObLobLocatorHelper", K(ret));
@@ -243,9 +240,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     if(OB_FAIL(build_lob_locator_helper(scan_param, ctx, trans_version_range))) {
       STORAGE_LOG(WARN, "Failed to build lob locator helper", K(ret));
       // new static engine do not need fill scale
-    } else if (lib::is_oracle_mode() && OB_ISNULL(scan_param.output_exprs_)
-        && OB_FAIL(init_column_scale_info(scan_param))) {
-      LOG_WARN("init column scale info failed", K(ret), K(scan_param));
     } else if (!micro_block_handle_mgr_.is_valid()
                && OB_FAIL(micro_block_handle_mgr_.init(
                   static_cast<sql::ObStoragePushdownFlag>(scan_param.pd_storage_flag_).is_enable_prefetch_limiting(),

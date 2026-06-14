@@ -366,7 +366,7 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_id = job_info.tenant_id_;
-  bool is_oracle_tenant =  lib::is_oracle_mode();
+  bool is_oracle_tenant = false;
   ObSqlString sql;
 
   if (OB_SUCC(ret)) {
@@ -475,7 +475,7 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
     const bool if_exists)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_tenant =  lib::is_oracle_mode();
+  bool is_oracle_tenant = false;
   if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || job_name.empty() || OB_FAIL(check_is_valid_name(job_name)))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(tenant_id), K(job_name));
@@ -510,7 +510,7 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
     const dbms_scheduler::ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_tenant =  lib::is_oracle_mode();
+  bool is_oracle_tenant = false;
   if ((job_info.func_type_ >= ObDBMSSchedFuncType::FUNCTION_TYPE_MAXNUM)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("func type has not register", K(ret), K(job_info), K(job_info.func_type_));
@@ -624,7 +624,7 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
                                                     const bool from_pl_set_attr)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_tenant =  lib::is_oracle_mode();
+  bool is_oracle_tenant = false;
   const int64_t now = ObTimeUtility::current_time();
   ObDMLSqlSplicer dml;
   int64_t exec_tenant_id = 0;
@@ -805,7 +805,7 @@ int ObDBMSSchedJobUtils::check_dbms_sched_job_priv(const ObUserInfo *user_info,
                                                    const ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_tenant =  lib::is_oracle_mode();
+  bool is_oracle_tenant = false;
   if (OB_ISNULL(user_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user info is NULL", KR(ret));
