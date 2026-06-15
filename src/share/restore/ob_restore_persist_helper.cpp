@@ -438,7 +438,6 @@ int ObHisRestoreJobPersistInfo::parse_from(common::sqlclient::ObMySQLResult &res
     }
   }
 
-  EXTRACT_INT_FIELD_MYSQL(result, "backup_cluster_version", backup_cluster_version_, int64_t);
   //TODO start time and finish time
 
   RETRIEVE_STR_VALUE(restore_tenant_name);
@@ -552,7 +551,6 @@ int ObHisRestoreJobPersistInfo::fill_dml(ObDMLSqlSplicer &dml) const
   ADD_LONG_STR_COLUMN_DML(remap_database_list);
   ADD_LONG_STR_COLUMN_DML(backup_piece_list);
   ADD_LONG_STR_COLUMN_DML(backup_set_list);
-  ADD_COMMON_COLUMN_DML(backup_cluster_version);
 
   ADD_COMMON_COLUMN_DML(ls_count);
   ADD_COMMON_COLUMN_DML(finish_ls_count);
@@ -624,8 +622,7 @@ int ObHisRestoreJobPersistInfo::init_with_job(const share::ObPhysicalRestoreJob 
     restore_tenant_id_ = job.get_tenant_id();
     backup_tenant_id_ = job.get_backup_tenant_id();
     restore_scn_ = job.get_restore_scn();
-    backup_cluster_version_ = job.get_source_cluster_version(); 
-    
+
     if (PHYSICAL_RESTORE_SUCCESS == job.get_status()) {
       set_success();
     } else {

@@ -26,8 +26,6 @@ ObTenantRestoreCtx::ObTenantRestoreCtx()
     restore_scn_(),
     consistent_scn_(),
     tenant_id_(0),
-    backup_cluster_version_(0),
-    backup_data_version_(0),
     progress_display_mode_(share::ObRestoreProgressDisplayMode::TABLET_CNT)
 {
 }
@@ -53,8 +51,6 @@ int ObTenantRestoreCtx::assign(const ObTenantRestoreCtx &args)
     restore_scn_ = args.get_restore_scn();
     consistent_scn_ = args.get_consistent_scn();
     tenant_id_ = args.get_tenant_id();
-    backup_cluster_version_ = args.get_backup_cluster_version();
-    backup_data_version_ = args.get_backup_data_version();
     progress_display_mode_ = args.progress_display_mode_;
   }
   return ret;

@@ -311,8 +311,6 @@ struct ObHisRestoreJobPersistInfo final : public ObIInnerTableRow
   LongString backup_piece_list_;
   LongString backup_set_list_;
 
-  int64_t backup_cluster_version_;
-
   int64_t ls_count_;
   int64_t start_time_; // job handle time
   int64_t finish_time_; // job finish time
@@ -336,7 +334,6 @@ struct ObHisRestoreJobPersistInfo final : public ObIInnerTableRow
     backup_tenant_id_ = OB_INVALID_TENANT_ID;
     
     restore_scn_ = share::SCN::min_scn();
-    backup_cluster_version_ = 0;
 
     ls_count_ = 0;
     finish_ls_count_ = 0;
@@ -401,7 +398,7 @@ struct ObHisRestoreJobPersistInfo final : public ObIInnerTableRow
   TO_STRING_KV(K_(key), K_(start_time), K_(finish_time), K_(restore_type), 
     K_(restore_tenant_name), K_(restore_tenant_id), K_(backup_tenant_id), K_(backup_dest),
     K_(restore_scn), K_(restore_option), K_(table_list), K_(remap_table_list), 
-    K_(database_list), K_(remap_database_list), K_(backup_piece_list), K_(backup_set_list), K_(backup_cluster_version),
+    K_(database_list), K_(remap_database_list), K_(backup_piece_list), K_(backup_set_list),
     K_(ls_count), K_(finish_ls_count), K_(tablet_count), K_(finish_tablet_count), K_(total_bytes), 
     K_(finish_bytes), K_(status), K_(description), K_(comment), K_(initiator_job_id), K_(initiator_tenant_id));
 

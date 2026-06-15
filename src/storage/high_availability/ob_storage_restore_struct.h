@@ -42,24 +42,16 @@ struct ObRestoreBaseInfo
   int assign(const ObRestoreBaseInfo &restore_base_info);
   int copy_from(const ObTenantRestoreCtx &restore_arg);
   int get_restore_backup_set_dest(const int64_t backup_set_id, share::ObRestoreBackupSetBriefInfo &backup_set_dest) const;
-  int get_restore_data_dest_id(
-      common::ObISQLClient &proxy,
-      const uint64_t tenant_id,
-      int64_t &dest_id) const;
   int get_last_backup_set_desc(share::ObBackupSetDesc &backup_set_desc) const;
   VIRTUAL_TO_STRING_KV(
       K_(job_id),
       K_(restore_scn),
-      K_(backup_cluster_version),
-      K_(backup_data_version),
       K_(backup_compatible),
       K_(backup_dest),
       K_(backup_set_list));
 
   int64_t job_id_;
   share::SCN restore_scn_;
-  uint64_t backup_cluster_version_;
-  uint64_t backup_data_version_;
   share::ObBackupSetFileDesc::Compatible backup_compatible_;
   share::ObBackupDest backup_dest_;
   common::ObArray<share::ObRestoreBackupSetBriefInfo> backup_set_list_;

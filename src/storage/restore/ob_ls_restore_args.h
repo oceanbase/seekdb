@@ -42,8 +42,6 @@ struct ObTenantRestoreCtx
   const share::SCN &get_restore_scn() const { return restore_scn_; }
   const share::SCN &get_consistent_scn() const { return consistent_scn_; }
   uint64_t get_tenant_id() const { return tenant_id_; }
-  uint64_t get_backup_cluster_version() const { return backup_cluster_version_; }
-  uint64_t get_backup_data_version() const { return backup_data_version_; }
   const share::ObRestoreProgressDisplayMode &get_progress_display_mode() const { return progress_display_mode_; }
   TO_STRING_KV(
       K_(job_id),
@@ -51,8 +49,6 @@ struct ObTenantRestoreCtx
       K_(restore_scn),
       K_(consistent_scn),
       K_(tenant_id),
-      K_(backup_cluster_version),
-      K_(backup_data_version),
       K_(progress_display_mode));
 
   int64_t job_id_;
@@ -60,8 +56,6 @@ struct ObTenantRestoreCtx
   share::SCN restore_scn_; // restore end scn
   share::SCN consistent_scn_;
   uint64_t tenant_id_;
-  uint64_t backup_cluster_version_;
-  uint64_t backup_data_version_;
   share::ObRestoreProgressDisplayMode progress_display_mode_;
 };
 

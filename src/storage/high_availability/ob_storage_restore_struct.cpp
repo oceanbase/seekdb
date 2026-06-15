@@ -25,8 +25,6 @@ namespace storage
 ObRestoreBaseInfo::ObRestoreBaseInfo()
   : job_id_(0),
     restore_scn_(),
-    backup_cluster_version_(0),
-    backup_data_version_(0),
     backup_compatible_(ObBackupSetFileDesc::MAX_COMPATIBLE_VERSION),
     backup_dest_(),
     backup_set_list_()
@@ -37,8 +35,6 @@ void ObRestoreBaseInfo::reset()
 {
   job_id_ = 0;
   restore_scn_.reset();
-  backup_cluster_version_ = 0;
-  backup_data_version_ = 0;
   backup_compatible_ = ObBackupSetFileDesc::MAX_COMPATIBLE_VERSION;
   backup_dest_.reset();
   backup_set_list_.reset();
@@ -48,8 +44,6 @@ bool ObRestoreBaseInfo::is_valid() const
 {
   return job_id_ > 0
       && restore_scn_.is_valid()
-      && backup_cluster_version_ > 0
-      && backup_data_version_ > 0
       && backup_dest_.is_valid()
       && !backup_set_list_.empty()
       && backup_compatible_ >= ObBackupSetFileDesc::COMPATIBLE_VERSION_1
@@ -67,8 +61,6 @@ int ObRestoreBaseInfo::assign(const ObRestoreBaseInfo &restore_base_info)
   } else {
     job_id_ = restore_base_info.job_id_;
     restore_scn_ = restore_base_info.restore_scn_;
-    backup_cluster_version_ = restore_base_info.backup_cluster_version_;
-    backup_data_version_ = restore_base_info.backup_data_version_;
     backup_compatible_ = restore_base_info.backup_compatible_;
     if (OB_FAIL(backup_dest_.deep_copy(restore_base_info.backup_dest_))) {
       LOG_WARN("failed to set backup dest", K(ret), K(restore_base_info));
@@ -88,8 +80,6 @@ int ObRestoreBaseInfo::copy_from(const ObTenantRestoreCtx &restore_arg)
   } else {
     job_id_ = restore_arg.get_job_id();
     restore_scn_ = restore_arg.get_restore_scn();
-    backup_cluster_version_ = restore_arg.get_backup_cluster_version();
-    backup_data_version_ = restore_arg.get_backup_data_version();
     backup_dest_.reset();
     backup_set_list_.reset();
   }
@@ -116,19 +106,6 @@ int ObRestoreBaseInfo::get_restore_backup_set_dest(const int64_t backup_set_id,
     ret = OB_OBJECT_NOT_EXIST;
     LOG_WARN("backup set not exist", K(ret), K(backup_set_id), K(backup_set_list_));
   }
-  return ret;
-}
-
-int ObRestoreBaseInfo::get_restore_data_dest_id(
-    common::ObISQLClient &proxy,
-    const uint64_t tenant_id,
-    int64_t &dest_id) const
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(proxy);
-  UNUSED(tenant_id);
-  dest_id = 0;
-  LOG_WARN("get_restore_data_dest_id is not supported", K(ret));
   return ret;
 }
 
