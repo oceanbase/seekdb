@@ -552,17 +552,6 @@ public:
   common::ObAddr server_;
 };
 
-class ObRecoverTableStmt : public ObSystemCmdStmt
-{
-public:
-  ObRecoverTableStmt()
-    : ObSystemCmdStmt(stmt::T_RECOVER_TABLE), rpc_arg_() {}
-  virtual ~ObRecoverTableStmt() {}
-  obcall::ObRecoverTableArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obcall::ObRecoverTableArg rpc_arg_;
-};
-
 
 
 class ObResetConfigStmt : public ObSystemCmdStmt

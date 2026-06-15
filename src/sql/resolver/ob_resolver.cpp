@@ -867,10 +867,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         ret = OB_NOT_SUPPORTED;
         break;
       }
-      case T_CANCEL_RECOVER_TABLE: {
-        REGISTER_STMT_RESOLVER(CancelRecoverTable);
-        break;
-      }
       case T_BACKUP_CLUSTER_PARAMETERS: {
         ret = OB_NOT_SUPPORTED;
         break;

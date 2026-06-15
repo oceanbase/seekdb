@@ -19483,12 +19483,6 @@ alter_with_opt_hint SYSTEM BACKUP CLUSTER PARAMETERS TO STRING_VALUE
   malloc_non_terminal_node($$, result->malloc_pool_, T_BACKUP_CLUSTER_PARAMETERS, 1, $7);
 }
 |
-alter_with_opt_hint SYSTEM CANCEL RECOVER TABLE relation_name
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_CANCEL_RECOVER_TABLE, 1, $6);
-}
-|
 alter_with_opt_hint SYSTEM SUSPEND BACKUP
 {
   (void)($1);

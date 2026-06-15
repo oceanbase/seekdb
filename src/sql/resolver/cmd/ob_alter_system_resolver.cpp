@@ -2886,47 +2886,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObCancelRecoverTableResolver::resolve(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  uint64_t session_tenant_id = session_info_->get_effective_tenant_id();
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
-  ObRecoverTableStmt *stmt = nullptr;
-  ObSchemaGetterGuard schema_guard;
-  ObString tenant_name;
-  if (OB_UNLIKELY(T_CANCEL_RECOVER_TABLE != parse_tree.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_CANCEL_RESTORE", "type", get_type_name(parse_tree.type_));
-  } else if (OB_UNLIKELY(NULL == parse_tree.children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children should not be null", K(ret));
-  } else if (OB_UNLIKELY(1 != parse_tree.num_child_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children num not match", K(ret), "num_child", parse_tree.num_child_);
-  } else if (!is_sys_tenant(session_tenant_id)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("user tenant cancel recover table is not allowed", K(ret), K(session_tenant_id));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "user tenant cancel recover table is");
-  } else if (OB_ISNULL(stmt = create_stmt<ObRecoverTableStmt>())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("failed to create stmt", K(ret));
-  } else if (OB_UNLIKELY(T_IDENT != parse_tree.children_[0]->type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid node", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(session_tenant_id, schema_guard))) {
-    LOG_WARN("failed to get_tenant_schema_guard", KR(ret));
-  } else if (OB_FALSE_IT(tenant_name.assign_ptr(parse_tree.children_[0]->str_value_, parse_tree.children_[0]->str_len_))) {
-  } else if (OB_FAIL(schema_guard.get_tenant_id(tenant_name, tenant_id))) {
-    LOG_WARN("failed to get tenant id from schema guard", KR(ret), K(tenant_name));
-  } else {
-    stmt->get_rpc_arg().tenant_id_ = tenant_id;
-    stmt->get_rpc_arg().tenant_name_ = tenant_name;
-    stmt->get_rpc_arg().action_ = ObRecoverTableArg::CANCEL;
-  }
-  
-  return ret;
-}
-
 int ObAlterSystemResolverUtil::get_tenant_ids(const ParseNode &t_node, ObIArray<uint64_t> &tenant_ids)
 {
   int ret = OB_SUCCESS;

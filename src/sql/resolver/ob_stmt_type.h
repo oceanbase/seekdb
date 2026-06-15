@@ -227,8 +227,8 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_BACKUP_SET_ENCRYPTION, no_priv_needed, 252)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_BACKUP_SET_DECRYPTION, get_sys_tenant_super_priv, 253)
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_RECOVERY, get_sys_tenant_alter_system_priv, 254)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_RESTORE_POINT, get_restore_point_priv, 255)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_RESTORE_POINT, get_restore_point_priv, 256)
+// 255: T_CREATE_RESTORE_POINT abandoned, id reserved
+// 256: T_DROP_RESTORE_POINT abandoned, id reserved
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_RUN_UPGRADE_JOB, get_sys_tenant_alter_system_priv, 257)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_STOP_UPGRADE_JOB, get_sys_tenant_alter_system_priv, 258)
@@ -252,10 +252,10 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_PHYSICAL_RESTORE_STANDBY_TENANT, get_sys_tenant_al
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECOVER, get_sys_tenant_alter_system_priv, 279)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_SEQUENCES, err_stmt_type_priv, 283)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_BACKUP_KEY, get_sys_tenant_alter_system_priv, 284)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CANCEL_RESTORE, get_sys_tenant_alter_system_priv, 286) 
+// 286: T_CANCEL_RESTORE abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_TABLE_TTL, get_sys_tenant_alter_system_priv, 287)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECOVER_TABLE, get_sys_tenant_alter_system_priv, 288)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CANCEL_RECOVER_TABLE, get_sys_tenant_alter_system_priv, 289)
+// 288: T_RECOVER_TABLE abandoned, id reserved
+// 289: T_CANCEL_RECOVER_TABLE abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ACTIVATE_STANDBY, get_sys_tenant_alter_system_priv, 290)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCHOVER_TO_STANDBY, get_sys_tenant_alter_system_priv, 291)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCHOVER_TO_PRIMARY, get_sys_tenant_alter_system_priv, 293)
@@ -266,7 +266,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_PRIVILEGES, no_priv_needed, 298)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_LS_REPLICA, get_sys_tenant_alter_system_priv, 299)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_PROCEDURE_CODE, err_stmt_type_priv, 300)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_FUNCTION_CODE, err_stmt_type_priv, 301)
-OB_STMT_TYPE_DEF(T_CHANGE_EXTERNAL_STORAGE_DEST, no_priv_needed, 302, ACTION_TYPE_ALTER_SYSTEM)
+// 302: T_CHANGE_EXTERNAL_STORAGE_DEST abandoned, id reserved
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_USER, err_stmt_type_priv, 304)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_INSTALL_PLUGIN, no_priv_needed, 305)

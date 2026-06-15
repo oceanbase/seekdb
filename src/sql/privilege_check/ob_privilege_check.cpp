@@ -2289,28 +2289,6 @@ int get_purge_database_stmt_need_privs(
 
 }
 
-int get_restore_point_priv(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_SYS_TENANT_ID == session_priv.tenant_id_) {
-    ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("Only non sys tenant can do this operation",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    ObNeedPriv need_priv;
-    need_priv.priv_set_ = OB_PRIV_SELECT;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
-  }
-  return ret;
-}
-
 int get_lock_table_priv(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
