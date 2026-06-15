@@ -1776,57 +1776,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                       if (OB_FAIL(item.tenant_name_.assign(tenant_name))) {
                         LOG_WARN("assign tenant name failed", K(tenant_name), K(ret));
                         break;
-                      } else if (0 == config_name.case_compare(ARCHIVE_LAG_TARGET)) {
-                        ObSArray <uint64_t> tenant_ids;
-                        bool affect_all;
-                        bool affect_all_user;
-                        bool affect_all_meta;
-                        if (OB_FAIL(ObAlterSystemResolverUtil::resolve_tenant(*n,
-                                                                              tenant_id,
-                                                                              tenant_ids,
-                                                                              affect_all,
-                                                                              affect_all_user,
-                                                                              affect_all_meta))) {
-                          LOG_WARN("fail to get reslove tenant", K(ret), "exec_tenant_id", tenant_id);
-                        } else if (affect_all || affect_all_meta) {
-                          ret = OB_NOT_SUPPORTED;
-                          LOG_WARN("all/all_meta is not supported by ALTER SYSTEM SET ARCHIVE_LAG_TARGET", 
-                                  KR(ret), K(affect_all), K(affect_all_user), K(affect_all_meta));
-                          LOG_USER_ERROR(OB_NOT_SUPPORTED, 
-                                        "use all/all_meta in 'ALTER SYSTEM SET ARCHIVE_LAG_TARGET' syntax is");
-                        } else if (affect_all_user) {
-                          ObSchemaGetterGuard schema_guard;
-                          ObSArray <uint64_t> all_tenant_ids;
-                          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-                            LOG_WARN("get_schema_guard failed", K(ret));
-                          } else if (OB_FAIL(schema_guard.get_tenant_ids(all_tenant_ids))) {
-                            LOG_WARN("fail to get tenant id from schema guard", K(ret));
-                          } else {
-                            ARRAY_FOREACH_X(all_tenant_ids, i, cnt, OB_SUCC(ret)) {
-                              const uint64_t tmp_tenant_id = all_tenant_ids.at(i);
-                              if (is_user_tenant(tmp_tenant_id)) {
-                                if (OB_FAIL(tenant_ids.push_back(tmp_tenant_id))) {
-                                  LOG_WARN("fail to push back", K(ret), K(tmp_tenant_id));
-                                }
-                              } 
-                            }
-                          }
-                        } else if (tenant_ids.empty()) {
-                          if (OB_FAIL(tenant_ids.push_back(tenant_id))) {
-                            LOG_WARN("fail to push back", K(ret), K(tenant_id));
-                          }
-                        } 
-                        if (OB_SUCC(ret) && !tenant_ids.empty()) {
-                          bool valid = true;
-                          for (int i = 0; i < tenant_ids.count() && valid; i++) {
-                            const uint64_t tenant_id = tenant_ids.at(i);
-                            valid = valid && ObConfigArchiveLagTargetChecker::check(tenant_id, item);
-                            if (!valid) {
-                              ret = OB_OP_NOT_ALLOW; //log_user_error is handled in checker
-                              LOG_WARN("can not set archive_lag_target", "item", item, K(ret), K(i), K(tenant_id));
-                            }
-                          }
-                        }
                       } else if (0 == config_name.case_compare(DEFAULT_TABLE_ORGANIZATION)) {
                         ObSArray<uint64_t> tenant_ids;
                         bool affect_all = false;
@@ -1880,12 +1829,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                     ret = OB_ERR_UNEXPECTED;
                     LOG_WARN("resolve tenant name failed", K(ret));
                     break;
-                  }
-                } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), ARCHIVE_LAG_TARGET))) {
-                  bool valid = ObConfigArchiveLagTargetChecker::check(item.exec_tenant_id_, item);
-                  if (!valid) {
-                    ret = OB_OP_NOT_ALLOW;
-                    LOG_WARN("can not set archive_lag_target", "item", item, K(ret), "tenant_id", item.exec_tenant_id_);
                   }
                 } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), DEFAULT_TABLE_ORGANIZATION))) {
                   bool valid = ObConfigDefaultTableOrganizationChecker::check(item);
@@ -2856,12 +2799,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                   if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_oracle_mode(
                       setconfig_stmt->get_rpc_arg(), item, tenant_id, schema_checker_))) {
                     LOG_WARN("constraint check failed", K(ret));
-                  } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), ARCHIVE_LAG_TARGET))) {
-                    bool valid = ObConfigArchiveLagTargetChecker::check(item.exec_tenant_id_, item);
-                    if (!valid) {
-                      ret = OB_OP_NOT_ALLOW;
-                      LOG_WARN("can not set archive_lag_target", "item", item, K(ret), "tenant_id", item.exec_tenant_id_);
-                    }
                   } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), DEFAULT_TABLE_ORGANIZATION))) {
                     LOG_WARN("can not set default_table_organization", "item", item, "tenant_id", item.exec_tenant_id_);
                     LOG_USER_NOTE(OB_NOT_SUPPORTED, "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in the oracle tenant is");

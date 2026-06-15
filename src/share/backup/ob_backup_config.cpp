@@ -637,9 +637,6 @@ int ObLogArchiveDestConfigParser::check_before_update_inner_config(common::ObISQ
   } else if (OB_FAIL(backup_dest.set(backup_dest_))) {
     LOG_WARN("fail to set backup dest", K(ret));
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
-    const int64_t lag_target = tenant_config.is_valid() ? tenant_config->archive_lag_target : 0L;
-    UNUSED(lag_target);
     if (OB_FAIL(dest_mgr.init(tenant_id_, dest_type, backup_dest_, trans))) {
       LOG_WARN("fail to update archive dest config", K(ret), K_(tenant_id));
     } else if (OB_FAIL(dest_mgr.check_dest_validity(false/*need_format_file*/))) {

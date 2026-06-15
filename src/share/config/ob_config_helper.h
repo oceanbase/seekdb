@@ -967,15 +967,6 @@ class ObConfigDDLNoLoggingChecker: public ObConfigChecker {
     DISALLOW_COPY_AND_ASSIGN(ObConfigDDLNoLoggingChecker);
 };
 
-class ObConfigArchiveLagTargetChecker {
-public:
-  ObConfigArchiveLagTargetChecker(){}
-  virtual ~ObConfigArchiveLagTargetChecker(){}
-  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigArchiveLagTargetChecker);
-};
-
 class ObConfigMigrationChooseSourceChecker
   : public ObConfigChecker
 {

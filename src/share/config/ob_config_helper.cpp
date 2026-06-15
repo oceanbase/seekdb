@@ -1340,17 +1340,6 @@ bool ObConfigMigrationChooseSourceChecker::check(const ObConfigItem &t) const
       || 0 == v_str.case_compare("region");
 }
 
-bool ObConfigArchiveLagTargetChecker::check(const uint64_t tenant_id, const ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int ret = OB_SUCCESS;
-  int64_t value = ObConfigTimeParser::get(t.value_.ptr(), is_valid);
-  if (is_valid) {
-    is_valid = true;
-  }
-  return is_valid;
-}
-
 bool ObConfigSQLSpillCompressionCodecChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;
