@@ -4671,12 +4671,6 @@ OB_SERIALIZE_MEMBER(ObTrxToolArg, trans_id_, status_,
 OB_SERIALIZE_MEMBER(ObTrxToolRes, trans_info_);
 
 OB_SERIALIZE_MEMBER(ObRefreshTimezoneArg, tenant_id_);
-OB_SERIALIZE_MEMBER(ObCreateRestorePointArg,
-                   tenant_id_,
-                   name_);
-OB_SERIALIZE_MEMBER(ObDropRestorePointArg,
-                   tenant_id_,
-                   name_);
 
 OB_SERIALIZE_MEMBER(ObCheckBuildIndexTaskExistArg,
                     tenant_id_, task_id_, scheduler_id_);
@@ -6537,19 +6531,6 @@ int ObTTLRequestArg::assign(const ObTTLRequestArg &other)
 
   return ret;
 }
-
-OB_SERIALIZE_MEMBER(ObRecoverTableArg, tenant_id_, tenant_name_, import_arg_, restore_tenant_arg_, action_);
-
-ObRecoverTableArg::ObRecoverTableArg()
- : tenant_id_(OB_INVALID_TENANT_ID), tenant_name_(), import_arg_(), restore_tenant_arg_(), action_() {}
-
-bool ObRecoverTableArg::is_valid() const
-{
-  bool ret = OB_INVALID_TENANT_ID != tenant_id_
-          && (Action::CANCEL == action_ || !restore_tenant_arg_.restore_option_.empty());
-  return ret;
-}
-
 
 OB_SERIALIZE_MEMBER(ObBroadcastConsensusVersionRes, ret_);
 

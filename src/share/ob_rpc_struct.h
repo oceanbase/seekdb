@@ -6924,54 +6924,6 @@ public:
   uint64_t tenant_id_;
 };
 
-struct ObCreateRestorePointArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObCreateRestorePointArg() :
-      tenant_id_(0),
-      name_()
-   { }
-  int assign(const ObCreateRestorePointArg &arg)
-  {
-    int ret = common::OB_SUCCESS;
-    tenant_id_ = arg.tenant_id_;
-    name_ = arg.name_;
-    return ret;
-  }
-  bool is_valid() const
-  {
-    return tenant_id_ > 0 && !name_.empty();
-  }
-  int64_t tenant_id_;
-  common::ObString name_;
-  TO_STRING_KV(K(tenant_id_), K(name_));
-};
-
-struct ObDropRestorePointArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObDropRestorePointArg() :
-      tenant_id_(0),
-      name_()
-   { }
-  int assign(const ObDropRestorePointArg &arg)
-  {
-    int ret = common::OB_SUCCESS;
-    tenant_id_ = arg.tenant_id_;
-    name_ = arg.name_;
-    return ret;
-  }
-  bool is_valid() const
-  {
-    return tenant_id_ > 0 && !name_.empty();
-  }
-  int64_t tenant_id_;
-  common::ObString name_;
-  TO_STRING_KV(K(tenant_id_), K(name_));
-};
-
 struct ObCheckBuildIndexTaskExistArg
 {
   OB_UNIS_VERSION(1);
@@ -8440,29 +8392,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObBroadcastConsensusVersionRes);
 private:
   int ret_;
-};
-
-struct ObRecoverTableArg
-{
-public:
-  OB_UNIS_VERSION(1);
-public:
-  enum Action
-  {
-    INITIATE = 0,
-    CANCEL,
-    MAX
-  };
-  ObRecoverTableArg();
-  ~ObRecoverTableArg() {}
-  bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(tenant_name), K_(import_arg), K_(restore_tenant_arg), K_(action));
-public:
-  uint64_t tenant_id_; // tenant which is the table recover to.
-  common::ObString tenant_name_;
-  share::ObImportArg import_arg_;
-  ObPhysicalRestoreTenantArg restore_tenant_arg_;
-  Action action_;
 };
 
 struct ObSwitchoverToPrimaryArg
