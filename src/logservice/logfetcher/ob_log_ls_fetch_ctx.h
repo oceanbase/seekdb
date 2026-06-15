@@ -48,8 +48,6 @@ class ObLogExternalStorageHandler;
 namespace logfetcher
 {
 
-using logservice::ObRemoteLogParent;
-using logservice::ObRemoteLogGroupEntryIterator;
 /////////////////////////////// LSFetchCtx /////////////////////////////////
 
 class ObLogFetcherConfig;
@@ -63,24 +61,6 @@ typedef ObLogDListNode<LSFetchCtx> FetchTaskListNode;
 
 // Two-way linked list of fetch log tasks
 typedef ObLogDList<LSFetchCtx> FetchTaskList;
-
-class LSFetchCtxGetSourceFunctor
-{
-public:
-  explicit LSFetchCtxGetSourceFunctor(LSFetchCtx &ctx) : ls_fetch_ctx_(ctx) {}
-  int operator()(const ObLSID &id, logservice::ObRemoteSourceGuard &guard);
-private:
-  LSFetchCtx &ls_fetch_ctx_;
-};
-
-class LSFetchCtxUpdateSourceFunctor
-{
-public:
-  explicit LSFetchCtxUpdateSourceFunctor(LSFetchCtx &ctx) : ls_fetch_ctx_(ctx) {}
-  int operator()(const ObLSID &id, ObRemoteLogParent *source);
-private:
-  LSFetchCtx &ls_fetch_ctx_;
-};
 
 // LSFetchCtx
 // LS fetch context, managing the fetch status of LS in the fetcher module
@@ -113,11 +93,6 @@ public:
       const char *&buf,
       const share::SCN replayable_point,
       const obcall::ObCdcFetchRawSource data_end_source);
-  int get_next_remote_group_entry(
-      palf::LogGroupEntry &group_entry,
-      palf::LSN &lsn,
-      const char *&buf,
-      int64_t &buf_size);
   int get_log_entry_iterator(
       const palf::LogGroupEntry &group_entry,
       const palf::LSN &start_lsn,
@@ -165,15 +140,6 @@ public:
   int get_large_buffer_pool(archive::LargeBufferPool *&large_buffer_pool);
 
   int get_fetcher_config(const ObLogFetcherConfig *&cfg);
-
-  ObRemoteLogParent *get_archive_source() { return source_; }
-
-  bool is_remote_iter_inited() { return remote_iter_.is_init(); }
-
-  void reset_remote_iter() {
-    remote_iter_.update_source_cb();
-    remote_iter_.reset();
-  }
 
   /// Iterate over the next server in the service log
   /// 1. If the server has completed one round of iteration (all servers have been iterated over), then OB_ITER_END is returned
@@ -461,8 +427,6 @@ public:
       K_(progress_id),
       KP_(ls_fetch_mgr),
       KP_(ls_ctx_add_info),
-      KP_(source),
-      K_(remote_iter),
       K_(last_sync_progress),
       K_(progress),
       K_(fetch_info),
@@ -493,9 +457,6 @@ protected:
   IObLogLSFetchMgr        *ls_fetch_mgr_;           // LSFetchCtx manager
   FetchStream             *fetch_stream_host_;      // FetchStream host
   ObILogFetcherLSCtxAddInfo *ls_ctx_add_info_;
-
-  ObRemoteLogParent             *source_;
-  ObRemoteLogGroupEntryIterator remote_iter_;
 
   // Last synced progress
   int64_t                 last_sync_progress_ CACHE_ALIGNED;

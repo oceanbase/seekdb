@@ -41,51 +41,8 @@ namespace oceanbase
 {
 namespace logfetcher
 {
-/////////////////////////////// Functors //////////////////////////////////
-int LSFetchCtxGetSourceFunctor::operator()(const ObLSID &id, logservice::ObRemoteSourceGuard &guard)
-{
-  int ret = OB_SUCCESS;
-  logservice::ObRemoteLogParent *source = NULL;
-  logservice::ObRemoteLogParent *ctx_source = ls_fetch_ctx_.get_archive_source();
-  if (OB_ISNULL(ctx_source)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("source in LSFetchCtx is null", KR(ret), K(ls_fetch_ctx_));
-  } else if (OB_ISNULL(source = logservice::ObResSrcAlloctor::alloc(ctx_source->get_source_type(), id))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("allocate remote log parent failed", KR(ret), KPC(ctx_source), K(id));
-  } else if (OB_FAIL(ctx_source->deep_copy_to(*source))) {
-    LOG_ERROR("deep copy source failed", KR(ret), KPC(ctx_source));
-  } else if (OB_FAIL(guard.set_source(source))) {
-    LOG_ERROR("source guard set source failed", KR(ret), KPC(source));
-  }
-
-  if (OB_FAIL(ret) && OB_NOT_NULL(source)) {
-    logservice::ObResSrcAlloctor::free(source);
-    source = nullptr;
-  }
-  return ret;
-}
-
-int LSFetchCtxUpdateSourceFunctor::operator()(const ObLSID &id, logservice::ObRemoteLogParent *source)
-{
-  int ret = OB_SUCCESS;
-  logservice::ObRemoteLogParent *ctx_source = ls_fetch_ctx_.get_archive_source();
-  if (OB_ISNULL(ctx_source) || OB_ISNULL(source)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("source_ in LSFetchCtx or the argument source is null", KR(ret), K(ls_fetch_ctx_), K(ctx_source), K(source));
-  } else if (ctx_source->get_source_type() != source->get_source_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("source type not same when updating source", KR(ret), K(ls_fetch_ctx_), KPC(ctx_source), KPC(source));
-  } else if (OB_FAIL(ctx_source->update_locate_info(*source))) {
-    LOG_ERROR("update locate info failed", KR(ret), KPC(ctx_source), KPC(source));
-  } else { }
-  return ret;
-}
-
 /////////////////////////////// LSFetchCtx /////////////////////////////////
-LSFetchCtx::LSFetchCtx() :
-    source_(NULL),
-    remote_iter_(LSFetchCtxGetSourceFunctor(*this), LSFetchCtxUpdateSourceFunctor(*this))
+LSFetchCtx::LSFetchCtx()
 {
   reset();
 }
@@ -102,11 +59,6 @@ void LSFetchCtx::reset()
   state_ = STATE_NORMAL;
   discarded_ = false;
   is_loading_data_dict_baseline_data_ = false;
-  if (NULL != source_) {
-    logservice::ObResSrcAlloctor::free(source_);
-    source_ = NULL;
-  }
-  remote_iter_.reset();
   tls_id_.reset();
   serve_info_.reset();
   progress_id_ = -1;
@@ -253,26 +205,6 @@ int LSFetchCtx::get_next_group_entry(
     LOG_ERROR("get_next_group_entry failed", KR(ret), K_(group_iterator), K(group_entry), K(lsn));
   } else { /* success */ }
 
-  return ret;
-}
-
-int LSFetchCtx::get_next_remote_group_entry(
-    palf::LogGroupEntry &group_entry,
-    palf::LSN &lsn,
-    const char *&buf,
-    int64_t &buf_size)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(! remote_iter_.is_init())) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("remote iter not inited", KR(ret));
-  } else if (OB_FAIL(remote_iter_.next(group_entry, lsn, buf, buf_size))) {
-    if (OB_INVALID_DATA == ret) {
-      LOG_WARN("remote log group entry contains invalid data, maybe write-read conflict", KR(ret), K_(remote_iter));
-    } else if (OB_ITER_END != ret && OB_NEED_RETRY != ret) {
-      LOG_ERROR("remote iterator failed to iterate", KR(ret), K_(remote_iter));
-    }
-  }
   return ret;
 }
 
