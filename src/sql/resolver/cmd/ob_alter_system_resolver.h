@@ -61,8 +61,6 @@ public:
   // resolve opt_server_or_zone
   template <typename RPC_ARG>
   static int resolve_server_or_zone(const ParseNode *parse_tree, RPC_ARG &arg);
-  // resolve opt_backup_tenant_list
-  static int get_tenant_ids(const ParseNode &t_node, common::ObIArray<uint64_t> &tenant_ids);
 
 
   static int resolve_tablet_id(const ParseNode *opt_tablet_id, ObTabletID &tablet_id);

@@ -790,10 +790,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObLocationUtilsStmt, ObLocationUtilsExecutor);
         break;
       }
-      case stmt::T_BACKUP_BACKUPPIECE: {
-        ret = OB_NOT_SUPPORTED;
-        break;
-      }
       case stmt::T_CREATE_CONTEXT: {
         DEFINE_EXECUTE_CMD(ObCreateContextStmt, ObCreateContextExecutor);
         break;

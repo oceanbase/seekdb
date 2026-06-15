@@ -233,7 +233,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_RECOVERY, get_sys_tenant_alter_system_priv, 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_RUN_UPGRADE_JOB, get_sys_tenant_alter_system_priv, 257)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ADMIN_STOP_UPGRADE_JOB, get_sys_tenant_alter_system_priv, 258)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_DAG_WARNINGS, get_sys_tenant_super_priv, 259)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_BACKUP_BACKUPPIECE, get_sys_tenant_alter_system_priv, 261)
+// 261: T_BACKUP_BACKUPPIECE abandoned, id reserved
 // 262: T_ADD_RESTORE_SOURCE abandoned, id reserved
 // 263: T_CLEAR_RESTORE_SOURCE abandoned, id reserved
 // 264: T_SHOW_RESTORE_PREVIEW abandoned, id reserved

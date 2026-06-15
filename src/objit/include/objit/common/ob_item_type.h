@@ -2397,7 +2397,7 @@ typedef enum ObItemType
   T_COPY_ID = 4499,
   T_CREATE_DIRECTORY = 4500,
   T_DROP_DIRECTORY = 4501,
-  T_BACKUP_BACKUPPIECE = 4502,
+  // 4502: T_BACKUP_BACKUPPIECE abandoned, id reserved
   // 4503: T_ADD_RESTORE_SOURCE abandoned, id reserved
   // 4504: T_CLEAR_RESTORE_SOURCE abandoned, id reserved
 

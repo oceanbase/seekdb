@@ -279,9 +279,9 @@ END_P SET_VAR DELIMITER
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
 
-        BACKUP BACKUP_COPIES BALANCE BASE BASELINE BASELINE_ID BASIC BEGI BINDING SHARDING BINARY_FORMAT BINLOG BIT BIT_AND
+        BACKUP BALANCE BASE BASELINE BASELINE_ID BASIC BEGI BINDING SHARDING BINARY_FORMAT BINLOG BIT BIT_AND
         BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BTREE BYTE
-        BREADTH BUCKETS BISON_LIST BACKUPSET BACKED BACKUPPIECE BACKUP_BACKUP_DEST BACKUPROUND
+        BREADTH BUCKETS BISON_LIST
         BADFILE BOUNDARY_COLUMN BOUNDARY_COLUMN_UNIT BUFFER_SIZE BIGINT_PRECISION
 
         CACHE CALIBRATION CALIBRATION_INFO CANCEL CASCADED CAST CATALOG CATALOGS CATALOG_NAME CHAIN CHANGED CHARSET CHECKSUM CHECKPOINT CHUNK CIPHER
@@ -370,11 +370,11 @@ END_P SET_VAR DELIMITER
         TABLE_CHECKSUM TABLE_MODE TABLE_ID TABLE_NAME TABLEGROUPS TABLES TABLET TABLET_ID TABLET_MAX_SIZE TASK_ID
         TEMPLATE TEMPORARY TEMPTABLE TENANT TEXT THAN TIME TIMESTAMP TIMESTAMPADD TIMESTAMPDIFF TP_NO
         THEIRS TP_NAME TRACE TRADITIONAL TRANSACTION TRIGGERS TRIM TRUNCATE TYPE TYPES TASK TABLET_SIZE
-        TABLEGROUP_ID TENANT_ID THROTTLE TIME_ZONE_INFO TOP_K_FRE_HIST TIMES TRIM_SPACE TTL
+        TABLEGROUP_ID TENANT_ID THROTTLE TIME_ZONE_INFO TOP_K_FRE_HIST TRIM_SPACE TTL
         TRANSFER TUNNEL_ENDPOINT TENANT_STS_CREDENTIAL TABLETS TIME_UNIT TIME_ZONE
 
         UNCOMMITTED UNCONDITIONAL UNDEFINED UNDO_BUFFER_SIZE UNDOFILE UNNEST UNICODE UNINSTALL UNIT UNIT_GROUP UNIT_NUM UNLOCKED UNTIL
-        UNUSUAL UPGRADE URL USE_BLOOM_FILTER UNKNOWN USE_FRM USER USER_RESOURCES UNBOUNDED UP UNLIMITED USER_SPECIFIED
+        UNUSUAL UPGRADE URL USE_BLOOM_FILTER UNKNOWN USE_FRM USER USER_RESOURCES UNBOUNDED UNLIMITED USER_SPECIFIED
 
         VALID VALUE VARIANCE VARIABLES VERBOSE VERIFY VIEW VISIBLE VIRTUAL_COLUMN_ID VALIDATE VAR_POP
         VAR_SAMP VALIDATION VECTOR VECTOR_DISTANCE MICRO_INDEX_CLUSTERED VECTOR_SIMILARITY
@@ -526,7 +526,7 @@ END_P SET_VAR DELIMITER
 %type <node> create_savepoint_stmt rollback_savepoint_stmt release_savepoint_stmt
 %type <node> opt_qb_name opt_qb_name_list_with_quotes parallel_hint pq_set_hint_desc pq_subquery_hint_desc
 %type <node> opt_sql_throttle_for_priority opt_sql_throttle_using_cond sql_throttle_one_or_more_metrics sql_throttle_metric
-%type <node> opt_backup_backup_dest opt_tenant_info opt_with_active_piece get_format_unit
+%type <node> opt_tenant_info get_format_unit
 %type <node> new_or_old new_or_old_column_ref diagnostics_info_ref
 %type <node> on_empty on_error json_on_response opt_returning_type opt_on_empty_or_error json_value_expr opt_ascii opt_truncate_clause
 %type <node> json_extract_unquote_expr json_extract_expr json_query_expr opt_multivalue opt_asis opt_array opt_pretty opt_wrapper opt_scalars opt_query_on_error_or_empty_or_mismatch  on_empty_query  on_error_query on_mismatch_query opt_response_query
@@ -19326,73 +19326,6 @@ alter_with_opt_hint SYSTEM CANCEL TTL opt_tenant_list_v2
   malloc_non_terminal_node($$, result->malloc_pool_, T_TABLE_TTL, 2, type, $5);
 }
 |
-alter_with_opt_hint SYSTEM BACKUP BACKUPPIECE ALL opt_with_active_piece opt_tenant_info opt_backup_backup_dest
-{
-  (void)($1);
-  ParseNode *piece_id = NULL;
-  malloc_terminal_node(piece_id, result->malloc_pool_, T_INT);
-  piece_id->value_ = 0;
-
-  ParseNode *backup_all = NULL;
-  malloc_terminal_node(backup_all, result->malloc_pool_, T_INT);
-  backup_all->value_ = 1;
-
-  ParseNode *backup_times = NULL;
-  malloc_terminal_node(backup_times, result->malloc_pool_, T_INT);
-  backup_times->value_ = -1;
-
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 0;
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_BACKUP_BACKUPPIECE, 7, piece_id, backup_all, backup_times, $6, $7, $8, type);
-}
-|
-alter_with_opt_hint SYSTEM BACKUP BACKUPPIECE opt_equal_mark INTNUM opt_with_active_piece opt_tenant_info opt_backup_backup_dest
-{
-  (void)($1);
-  ParseNode *piece_id = NULL;
-  malloc_terminal_node(piece_id, result->malloc_pool_, T_INT);
-  piece_id->value_ = $6->value_;
-
-  ParseNode *backup_all = NULL;
-  malloc_terminal_node(backup_all, result->malloc_pool_, T_INT);
-  backup_all->value_ = 0;
-
-  ParseNode *backup_times = NULL;
-  malloc_terminal_node(backup_times, result->malloc_pool_, T_INT);
-  backup_times->value_ = -1;
-
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 1;
-
-  (void)($5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_BACKUP_BACKUPPIECE, 7, piece_id, backup_all, backup_times, $7, $8, $9, type);
-}
-|
-alter_with_opt_hint SYSTEM BACKUP BACKUPPIECE ALL NOT BACKED UP INTNUM TIMES opt_with_active_piece opt_tenant_info opt_backup_backup_dest
-{
-  (void)($1);
-  ParseNode *piece_id = NULL;
-  malloc_terminal_node(piece_id, result->malloc_pool_, T_INT);
-  piece_id->value_ = 0;
-
-  ParseNode *backup_all = NULL;
-  malloc_terminal_node(backup_all, result->malloc_pool_, T_INT);
-  backup_all->value_ = 1;
-
-  ParseNode *backup_times = NULL;
-  malloc_terminal_node(backup_times, result->malloc_pool_, T_INT);
-  backup_times->value_ = $9->value_;
-
-  ParseNode *type = NULL;
-  malloc_terminal_node(type, result->malloc_pool_, T_INT);
-  type->value_ = 2;
-
-  malloc_non_terminal_node($$, result->malloc_pool_, T_BACKUP_BACKUPPIECE, 7, piece_id, backup_all, backup_times, $11, $12, $13, type);
-}
-|
 alter_with_opt_hint SYSTEM info_type MODULE DATA module_name tenant_name opt_infile
 {
   (void)($1);
@@ -19853,31 +19786,6 @@ STRING_VALUE
 }
 ;
 
-opt_backup_backup_dest:
-/*empty*/
-{
-  $$ = NULL;
-}
-| BACKUP_BACKUP_DEST opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  result->contain_sensitive_data_ = true;
-  $$ = $3;
-}
-;
-
-opt_with_active_piece:
-/*empty*/
-{
-  $$ = NULL;
-}
-| WITH ACTIVE
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_BOOL);
-  $$->value_ = 1;
-}
-;
-
 opt_server_list:
 /*empty*/
 {
@@ -20239,21 +20147,6 @@ opt_server_or_zone opt_tenant_name
   make_name_node(rootservice_list, result->malloc_pool_, "rootservice_list");
   malloc_non_terminal_node($$, result->malloc_pool_, T_SYSTEM_ACTION, 5,
                            rootservice_list,    /* param_name */
-                           $3,    /* param_value */
-                           $4,    /* comment */
-                           $6,    /* zone or server */
-                           $7     /* tenant */
-                           );
-  $$->value_ = $5[0];                /* scope */
-}
-|
-BACKUP_BACKUP_DEST COMP_EQ STRING_VALUE opt_comment opt_config_scope
-opt_server_or_zone opt_tenant_name
-{
-  ParseNode *backup_backup_dest = NULL;
-  make_name_node(backup_backup_dest, result->malloc_pool_, "backup_backup_dest");
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SYSTEM_ACTION, 5,
-                           backup_backup_dest,    /* param_name */
                            $3,    /* param_value */
                            $4,    /* comment */
                            $6,    /* zone or server */
@@ -23084,8 +22977,6 @@ ACCESS_INFO
 |       ARRAY_SORTBY
 |       ARRAY_FILTER
 |       BACKUP
-|       BACKUPSET
-|       BACKUP_COPIES
 |       BADFILE
 |       BASE
 |       BASELINE
@@ -23900,13 +23791,7 @@ ACCESS_INFO
 |       HIDDEN
 |       INDEXED
 |       SKEWONLY
-|       BACKUPPIECE
 |       PREVIEW
-|       BACKUP_BACKUP_DEST
-|       BACKUPROUND
-|       UP
-|       TIMES
-|       BACKED
 |       NAMESPACE
 |       LIB
 |       LINK %prec LOWER_PARENS

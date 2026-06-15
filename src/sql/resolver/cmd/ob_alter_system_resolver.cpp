@@ -2886,61 +2886,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObAlterSystemResolverUtil::get_tenant_ids(const ParseNode &t_node, ObIArray<uint64_t> &tenant_ids)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  hash::ObHashSet<uint64_t> tenant_id_set;
-  const int64_t MAX_TENANT_BUCKET = 256;
-  if (T_TENANT_LIST != t_node.type_ || NULL == t_node.children_) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid argument", K(ret), K(t_node.type_), KP(t_node.children_));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid argument", K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-             OB_SYS_TENANT_ID, schema_guard))) {
-    SERVER_LOG(WARN, "get_schema_guard failed", K(ret));
-  } else if (OB_FAIL(tenant_id_set.create(MAX_TENANT_BUCKET))) {
-    SERVER_LOG(WARN, "failed to create tenant id set", K(ret));
-  } else {
-    uint64_t tenant_id = 0;
-    ObString tenant_name;
-    const char *const ALL_TENANT = "ALL";
-    for (int64_t i = 0; OB_SUCC(ret) && i < t_node.num_child_; ++i) {
-      if (OB_ISNULL(t_node.children_[i])) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid argument", KP(t_node.children_[i]), K(ret));
-      } else {
-        tenant_name.assign_ptr(t_node.children_[i]->str_value_,
-                               static_cast<ObString::obstr_size_t>(t_node.children_[i]->str_len_));
-        if (OB_FAIL(schema_guard.get_tenant_id(tenant_name, tenant_id))) {
-          SERVER_LOG(WARN, "tenant not exist", K(tenant_name), K(ret), K(i), K(t_node.num_child_));
-        } else if (OB_SYS_TENANT_ID == tenant_id) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tenant id list is unexpected", K(ret), K(tenant_id));
-        } else {
-          int hash_ret = tenant_id_set.exist_refactored(tenant_id);
-          if (OB_HASH_EXIST == hash_ret) {
-            //do nothing
-          } else if (OB_HASH_NOT_EXIST == hash_ret) {
-            if (OB_FAIL(tenant_ids.push_back(tenant_id))) {
-              SERVER_LOG(WARN, "failed to push tenant id into array", K(ret));
-            } else if (OB_FAIL(tenant_id_set.set_refactored(tenant_id))) {
-              SERVER_LOG(WARN, "failed to push tenant id into set", K(ret));
-            }
-          } else {
-            ret = hash_ret == OB_SUCCESS ? OB_ERR_UNEXPECTED : hash_ret;
-            SERVER_LOG(WARN, "failed to check tenant exist", K(ret));
-          }
-        }
-      }
-      tenant_name.reset();
-    } //for tenant end
-  }
-  return ret;
-}
-
 int ObTableTTLResolver::resolve(const ParseNode& parse_tree)
 {
   int ret = OB_SUCCESS;
