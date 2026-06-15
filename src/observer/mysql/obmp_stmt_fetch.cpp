@@ -155,7 +155,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         OZ(response_result(*cursor, session, fetch_limit, true_row_num));
         if (OB_READ_NOTHING == ret) {
           LOG_WARN("nothing to read", K(ret));
-          // oracle return success when read nothing
           ret = OB_SUCCESS;
         }
         OX(need_response_error = true);
@@ -301,11 +300,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
             OX (fields = &(cursor.get_spi_cursor()->fields_));
           } else {
             fields = &static_cast<pl::ObDbmsCursorInfo&>(cursor).get_field_columns();
-          }
-          if (false) {
-            // oracle mode always needs to return head packet
-            // mysql mode compatible with mysql protocol, do not return headpacket
-            OZ (response_query_header(session, fields));
           }
           if (OB_SUCC(ret)) {
             // offset type

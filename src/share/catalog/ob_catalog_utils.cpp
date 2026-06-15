@@ -28,8 +28,9 @@ namespace share
 bool ObCatalogUtils::is_internal_catalog_name(const common::ObString &name_from_sql, const ObNameCaseMode &case_mode)
 {
   bool is_internal = false;
-  is_internal = (name_from_sql.compare(OB_INTERNAL_CATALOG_NAME_UPPER) == 0);
-  if (!is_internal && OB_ORIGIN_AND_SENSITIVE != case_mode) {
+  if (OB_ORIGIN_AND_SENSITIVE == case_mode) {
+    is_internal = (name_from_sql.compare(OB_INTERNAL_CATALOG_NAME) == 0);
+  } else {
     is_internal = (name_from_sql.case_compare(OB_INTERNAL_CATALOG_NAME) == 0);
   }
   return is_internal;
@@ -37,8 +38,7 @@ bool ObCatalogUtils::is_internal_catalog_name(const common::ObString &name_from_
 
 bool ObCatalogUtils::is_internal_catalog_name(const common::ObString &name_from_meta)
 {
-  return (name_from_meta.compare(OB_INTERNAL_CATALOG_NAME_UPPER) == 0)
-         || (name_from_meta.compare(OB_INTERNAL_CATALOG_NAME) == 0);
+  return (name_from_meta.compare(OB_INTERNAL_CATALOG_NAME) == 0);
 }
 
 int ObSwitchCatalogHelper::set(uint64_t catalog_id,
