@@ -752,6 +752,17 @@ public:
                                   const char *resignal_sql_state,
                                   bool is_signal);
 
+  // Populate the current thread-local warning buffer with a pre-formatted
+  // user error message captured at PL resolve time. Used by deferred
+  // OB_ERR_BAD_TABLE (and similar) signals emitted from trigger/SP bodies so
+  // that the runtime error text matches the resolver-time text (which
+  // contains object names) instead of the bare error template.
+  static int spi_pl_set_user_error_msg(pl::ObPLExecCtx *ctx,
+                                       int64_t err_code,
+                                       const char *sql_state,
+                                       const char *msg,
+                                       int64_t msg_len);
+
   static int acquire_spi_conn(ObMySQLProxy &sql_proxy,
                               ObSQLSessionInfo &session_info,
                               observer::ObInnerSQLConnection *&spi_conn);
