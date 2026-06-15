@@ -721,17 +721,6 @@ int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
   return ret;
 }
 
-int ObChangeExternalStorageDestExecutor::execute(ObExecContext &ctx, ObChangeExternalStorageDestStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ex_rpc::sync_call([&]{
-    return GCTX.ob_service_->change_external_storage_dest(stmt.get_rpc_arg());
-  }))) {
-    LOG_WARN("change external storage dest failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
-  }
-  return ret;
-}
-
 int ObSetTPExecutor::execute(ObExecContext &ctx, ObSetTPStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -1089,15 +1078,6 @@ int ObCheckpointSlogExecutor::execute(ObExecContext &ctx, ObCheckpointSlogStmt &
   return ret;
 }
 
-int ObRecoverTableExecutor::execute(ObExecContext &ctx, ObRecoverTableStmt &stmt)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(ctx);
-  UNUSED(stmt);
-  LOG_WARN("recover table is not supported", K(ret));
-  return ret;
-}
-
 int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -1112,12 +1092,6 @@ int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)
       LOG_WARN("failed to switch_tenant", KR(ret), K(arg));
     }
   }
-  return ret;
-}
-
-int ObCancelRestoreExecutor::execute(ObExecContext &ctx, ObCancelRestoreStmt &stmt)
-{
-  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

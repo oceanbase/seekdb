@@ -2447,13 +2447,5 @@ int ObService::init_tenant_config(
   return OB_SUCCESS;
 }
 
-int ObService::change_external_storage_dest(obcall::ObAdminSetConfigArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(arg);
-  LOG_WARN("change_external_storage_dest is not supported", K(ret));
-  return ret;
-}
-
 }// end namespace observer
 }// end namespace oceanbase

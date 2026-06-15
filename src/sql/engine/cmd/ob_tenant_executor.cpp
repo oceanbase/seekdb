@@ -22,8 +22,6 @@
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
-#include "sql/resolver/cmd/ob_create_restore_point_stmt.h"
-#include "sql/resolver/cmd/ob_drop_restore_point_stmt.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 #include "rootserver/ob_tenant_ddl_service.h"
 namespace oceanbase
@@ -79,40 +77,6 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
                K(total_purge_count), K(purge_recyclebin_arg), K(affected_rows), K(is_tenant_finish));
     }
     LOG_INFO("purge recyclebin success", KR(ret), K(purge_recyclebin_arg), K(total_purge_count));
-  }
-  return ret;
-}
-
-int ObCreateRestorePointExecutor::execute(ObExecContext &ctx, ObCreateRestorePointStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const int64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
-  stmt.set_tenant_id(tenant_id);
-  const obcall::ObCreateRestorePointArg &create_restore_point_arg = stmt.get_create_restore_point_arg();
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_restore_point(create_restore_point_arg); }))) {
-    LOG_WARN("rpc proxy create restore point failed", K(ret));
-  }
-  return ret;
-}
-int ObDropRestorePointExecutor::execute(ObExecContext &ctx, ObDropRestorePointStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const int64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
-  stmt.set_tenant_id(tenant_id);
-
-  const obcall::ObDropRestorePointArg &drop_restore_point_arg = stmt.get_drop_restore_point_arg();
-
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_restore_point(drop_restore_point_arg); }))) {
-    LOG_WARN("rpc proxy drop restore point failed", K(ret));
   }
   return ret;
 }

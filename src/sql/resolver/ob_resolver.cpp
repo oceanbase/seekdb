@@ -113,8 +113,6 @@
 #include "sql/resolver/xa/ob_xa_prepare_resolver.h"
 #include "sql/resolver/xa/ob_xa_commit_resolver.h"
 #include "sql/resolver/xa/ob_xa_rollback_resolver.h"
-#include "sql/resolver/cmd/ob_create_restore_point_resolver.h"
-#include "sql/resolver/cmd/ob_drop_restore_point_resolver.h"
 #include "sql/resolver/cmd/ob_get_diagnostics_resolver.h"
 #include "sql/resolver/cmd/ob_mock_resolver.h"
 #include "sql/resolver/cmd/ob_event_resolver.h"
@@ -405,10 +403,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_ALTER_SYSTEM_SET_PARAMETER: {
         REGISTER_STMT_RESOLVER(SetConfig);
-        break;
-      }
-      case T_CHANGE_EXTERNAL_STORAGE_DEST: {
-        REGISTER_STMT_RESOLVER(ChangeExternalStorageDest);
         break;
       }
       case T_ALTER_SYSTEM_SETTP: {
@@ -873,20 +867,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         ret = OB_NOT_SUPPORTED;
         break;
       }
-      case T_CANCEL_RESTORE: {
-        REGISTER_STMT_RESOLVER(CancelRestore);
-        break;
-      }
       case T_CANCEL_RECOVER_TABLE: {
         REGISTER_STMT_RESOLVER(CancelRecoverTable);
         break;
       }
       case T_BACKUP_CLUSTER_PARAMETERS: {
         ret = OB_NOT_SUPPORTED;
-        break;
-      }
-      case T_RECOVER_TABLE: {
-        REGISTER_STMT_RESOLVER(RecoverTable);
         break;
       }
       case T_ACTIVATE_STANDBY: {
@@ -910,14 +896,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_ADD_RESTORE_SOURCE:
       case T_CLEAR_RESTORE_SOURCE: {
         ret = OB_NOT_SUPPORTED;
-        break;
-      }
-      case T_CREATE_RESTORE_POINT: {
-        REGISTER_STMT_RESOLVER(CreateRestorePoint);
-        break;
-      }
-      case T_DROP_RESTORE_POINT: {
-        REGISTER_STMT_RESOLVER(DropRestorePoint);
         break;
       }
       case T_CREATE_DIRECTORY: {

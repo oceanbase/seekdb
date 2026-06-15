@@ -280,19 +280,6 @@ private:
   obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
-class ObChangeExternalStorageDestStmt : public ObSystemCmdStmt
-{
-public:
-  ObChangeExternalStorageDestStmt() : ObSystemCmdStmt(stmt::T_CHANGE_EXTERNAL_STORAGE_DEST) {}
-  virtual ~ObChangeExternalStorageDestStmt() {}
-
-  obcall::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obcall::ObAdminSetConfigArg rpc_arg_;
-};
-
 class ObSetTPStmt : public ObSystemCmdStmt
 {
 public:
@@ -507,19 +494,6 @@ public:
   ObDisableSqlThrottleStmt()
     : ObSystemCmdStmt(stmt::T_DISABLE_SQL_THROTTLE)
     {}
-};
-
-class ObCancelRestoreStmt : public ObSystemCmdStmt
-{
-public:
-  ObCancelRestoreStmt()
-    : ObSystemCmdStmt(stmt::T_CANCEL_RESTORE),
-      drop_tenant_arg_() {}
-  virtual ~ObCancelRestoreStmt() {}
-  obcall::ObDropTenantArg &get_drop_tenant_arg() { return drop_tenant_arg_; }
-	TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(drop_tenant_arg));
-private:
-  obcall::ObDropTenantArg drop_tenant_arg_;
 };
 
 class ObTableTTLStmt : public ObSystemCmdStmt {

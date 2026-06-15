@@ -76,8 +76,6 @@
 #include "sql/resolver/ddl/ob_drop_func_stmt.h"
 #include "src/sql/resolver/ddl/ob_sequence_stmt.h"
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
-#include "sql/resolver/cmd/ob_create_restore_point_stmt.h"
-#include "sql/resolver/cmd/ob_drop_restore_point_stmt.h"
 #include "sql/resolver/ddl/ob_create_directory_stmt.h"
 #include "sql/resolver/ddl/ob_drop_directory_stmt.h"
 #include "sql/resolver/ddl/ob_create_location_stmt.h"
@@ -756,14 +754,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         ret = OB_NOT_SUPPORTED;
         break;
       }
-      case stmt::T_CANCEL_RESTORE: {
-        DEFINE_EXECUTE_CMD(ObCancelRestoreStmt, ObCancelRestoreExecutor);
-        break;
-      }
-      case stmt::T_RECOVER_TABLE: {
-        DEFINE_EXECUTE_CMD(ObRecoverTableStmt, ObRecoverTableExecutor);
-        break;
-      }
       case stmt::T_ACTIVATE_STANDBY: {
         DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
         break;
@@ -793,14 +783,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_DISABLE_SQL_THROTTLE: {
         DEFINE_EXECUTE_CMD(ObDisableSqlThrottleStmt, ObDisableSqlThrottleExecutor);
-        break;
-      }
-      case stmt::T_CREATE_RESTORE_POINT: {
-        DEFINE_EXECUTE_CMD(ObCreateRestorePointStmt, ObCreateRestorePointExecutor);
-        break;
-      }
-      case stmt::T_DROP_RESTORE_POINT: {
-        DEFINE_EXECUTE_CMD(ObDropRestorePointStmt, ObDropRestorePointExecutor);
         break;
       }
       case stmt::T_CREATE_DIRECTORY: {
@@ -854,10 +836,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_ALTER_SYSTEM_RESET_PARAMETER: {
         DEFINE_EXECUTE_CMD(ObResetConfigStmt, ObResetConfigExecutor);
-        break;
-      }
-      case stmt::T_CHANGE_EXTERNAL_STORAGE_DEST: {
-        DEFINE_EXECUTE_CMD(ObChangeExternalStorageDestStmt, ObChangeExternalStorageDestExecutor);
         break;
       }
       case stmt::T_OLAP_ASYNC_JOB_CANCEL: {

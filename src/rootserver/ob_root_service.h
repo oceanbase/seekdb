@@ -252,8 +252,6 @@ public:
   int purge_database(const obcall::ObPurgeDatabaseArg &arg);
   int flashback_database(const obcall::ObFlashBackDatabaseArg &arg);
 
-  int create_restore_point(const obcall::ObCreateRestorePointArg &arg);
-  int drop_restore_point(const obcall::ObDropRestorePointArg &arg);
   int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
 
   //for inner table monitor, purge in fixed time
@@ -414,7 +412,6 @@ public:
   int get_recycle_schema_versions(
       const obcall::ObGetRecycleSchemaVersionsArg &arg,
       obcall::ObGetRecycleSchemaVersionsResult &result);
-  int handle_recover_table(const obcall::ObRecoverTableArg &arg);
   int standby_upgrade_virtual_schema(const obcall::ObDDLNopOpreatorArg &arg);
   int check_backup_scheduler_working(obcall::Bool &is_working);
   int purge_recyclebin_objects(int64_t purge_each_time);

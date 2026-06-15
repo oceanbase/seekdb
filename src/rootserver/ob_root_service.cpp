@@ -5061,22 +5061,6 @@ void ObRootService::update_fail_count(int ret)
                KR(ret), "fail_cnt", count);
 }
 
-int ObRootService::create_restore_point(const obcall::ObCreateRestorePointArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(arg);
-  LOG_WARN("craete restpre point is not supported now", K(ret));
-  return ret;
-}
-
-int ObRootService::drop_restore_point(const obcall::ObDropRestorePointArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(arg);
-  LOG_WARN("drop restpre point is not supported now", K(ret));
-  return ret;
-}
-
 int ObRootService::build_ddl_single_replica_response(const obcall::ObDDLBuildSingleReplicaResponseArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -5269,12 +5253,6 @@ int ObRootService::set_config_after_bootstrap_()
       }
     }
   }
-  return ret;
-}
-
-int ObRootService::handle_recover_table(const obcall::ObRecoverTableArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

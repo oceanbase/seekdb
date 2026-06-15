@@ -39,16 +39,10 @@ namespace sql
 class ObExecContext;
 class ObFlashBackTenantStmt;
 class ObPurgeRecycleBinStmt;
-class ObCreateRestorePointStmt;
-class ObDropRestorePointStmt;
 
 DEF_SIMPLE_EXECUTOR(ObFlashBackTenant);
 
 DEF_SIMPLE_EXECUTOR(ObPurgeRecycleBin);
-
-DEF_SIMPLE_EXECUTOR(ObCreateRestorePoint);
-
-DEF_SIMPLE_EXECUTOR(ObDropRestorePoint);
 
 #undef DEF_SIMPLE_EXECUTOR
 }

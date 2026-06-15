@@ -203,7 +203,6 @@ public:
       const obcall::ObInitTenantConfigArg &arg,
       obcall::ObInitTenantConfigRes &result);
   int check_server_empty(bool &server_empty);
-  int change_external_storage_dest(obcall::ObAdminSetConfigArg &arg);
 
 private:
   int bootstrap();
