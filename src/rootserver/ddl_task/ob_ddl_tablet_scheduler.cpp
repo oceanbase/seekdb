@@ -157,7 +157,7 @@ int ObDDLTabletScheduler::init(const uint64_t tenant_id,
         }
         for (int64_t j = 0; j < running_sql_info.count() && OB_SUCC(ret); j++) {
           is_running_status = false;
-          if (OB_FAIL(ObDDLUtil::check_target_partition_is_running(running_sql_info.at(j), partition_names.at(0), is_oracle_mode, arena, is_running_status))) {
+          if (OB_FAIL(ObDDLUtil::check_target_partition_is_running(running_sql_info.at(j), partition_names.at(0), arena, is_running_status))) {
             LOG_WARN("fail to check target partition is running", K(ret), K(running_sql_info.at(j)), K(partition_names.at(0)), K(is_running_status));
           } else if (is_running_status) {
             break;
@@ -727,7 +727,7 @@ int ObDDLTabletScheduler::get_session_running_lsid(ObIArray<share::ObLSID> &runn
         for (int64_t i = 0; i < partition_names.count() && OB_SUCC(ret); i++) {
           is_running_status = false;
           for (int64_t j = 0; j < running_sql_info.count() && OB_SUCC(ret); j++) {
-            if (OB_FAIL(ObDDLUtil::check_target_partition_is_running(running_sql_info.at(j), partition_names.at(i), is_oracle_mode, arena, is_running_status))) {
+            if (OB_FAIL(ObDDLUtil::check_target_partition_is_running(running_sql_info.at(j), partition_names.at(i), arena, is_running_status))) {
               LOG_WARN("fail to check target partition is running", K(ret), K(running_sql_info.at(j)), K(partition_names.at(i)), K(is_running_status));
             } else if (is_running_status) {
               break;

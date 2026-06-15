@@ -2297,7 +2297,7 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
 
       if (OB_SUCC(ret)) {
         ObSqlString query_column_sql_string;
-        if (OB_FAIL(ObDDLUtil::generate_column_name_str(column_names_, false/*is_oracle_mode*/, true, true, false/*use_heap_table_ddl_plan*/, query_column_sql_string))) {
+        if (OB_FAIL(ObDDLUtil::generate_column_name_str(column_names_, true, true, false/*use_heap_table_ddl_plan*/, query_column_sql_string))) {
           LOG_WARN("fail to generate column name str", K(ret));
         } else {
           ObString orig_database_name_with_escape;
@@ -2431,7 +2431,6 @@ int ObRemoteScan::generate_range_condition(
     }
 
     if (FAILEDx(ObDDLUtil::generate_column_name_str(rowkey_cols_names,
-                                                    is_oracle_mode,
                                                     true,
                                                     false,
                                                     false/*use_heap_table_ddl_plan*/,

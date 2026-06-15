@@ -1361,7 +1361,6 @@ int ObStaticEngineExprCG::cg_expr_basic_funcs(const ObIArray<ObRawExpr *> &raw_e
       rt_expr->basic_funcs_ = ObDatumFuncs::get_basic_func(rt_expr->datum_meta_.type_,
                                                         rt_expr->datum_meta_.cs_type_,
                                                         rt_expr->datum_meta_.scale_,
-                                                        false,
                                                         rt_expr->obj_meta_.has_lob_header(),
                                                         rt_expr->datum_meta_.precision_);
       CK(NULL != rt_expr->basic_funcs_);

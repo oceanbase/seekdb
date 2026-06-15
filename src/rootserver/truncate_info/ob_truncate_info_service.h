@@ -71,7 +71,6 @@ struct ObTruncatePartKeyInfo final
 private:
   int create_tmp_session(
       const uint64_t tenant_id,
-      const bool is_oracle_mode,
       share::schema::ObSchemaGetterGuard &schema_guard,
       sql::ObFreeSessionCtx &free_session_ctx,
       sql::ObSQLSessionInfo *&session);

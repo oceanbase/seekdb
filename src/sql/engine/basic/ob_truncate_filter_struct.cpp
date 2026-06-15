@@ -390,7 +390,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_list_value(const ObStorageLi
                                                                         node.obj_meta_.get_collation_type(),
                                                                         node.obj_meta_.get_scale(),
                                                                         false,
-                                                                        false,
                                                                         precision);
       param_set_.set_hash_and_cmp_func(basic_funcs->murmur_hash_v2_, basic_funcs->null_first_cmp_);
     }

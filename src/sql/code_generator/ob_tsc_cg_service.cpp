@@ -5139,7 +5139,6 @@ int ObTscCgService::generate_das_sort_ctdef(
           field_collation.null_pos_,
           field_collation.cs_type_,
           expr->datum_meta_.scale_,
-          false,
           expr->obj_meta_.has_lob_header(),
           expr->datum_meta_.precision_,
           expr->datum_meta_.precision_);
@@ -5215,7 +5214,6 @@ int ObTscCgService::generate_das_sort_ctdef(
         field_collation.null_pos_,
         field_collation.cs_type_,
         expr->datum_meta_.scale_,
-        false,
         expr->obj_meta_.has_lob_header(),
         expr->datum_meta_.precision_,
         expr->datum_meta_.precision_);

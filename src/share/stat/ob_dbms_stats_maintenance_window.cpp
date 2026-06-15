@@ -66,8 +66,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(start_usec), K(job_action));
         } else {
-          if (OB_FAIL(get_stat_window_job_info(false,
-                                                    tenant_id,
+          if (OB_FAIL(get_stat_window_job_info(tenant_id,
                                                     job_id,
                                                     windows_name[i],
                                                     exec_env,
@@ -84,7 +83,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
       }
       if (OB_SUCC(ret)) {
         //set stats history manager job
-        if (OB_FAIL(get_stats_history_manager_job_info(false, tenant_id,
+        if (OB_FAIL(get_stats_history_manager_job_info(tenant_id,
                                                       job_id, exec_env, job_info))) {
           LOG_WARN("failed to get stats history manager job sql", K(ret));
         } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
@@ -95,7 +94,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
 
         //set async gather stats job
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(get_async_gather_stats_job_info(false, tenant_id,
+        } else if (OB_FAIL(get_async_gather_stats_job_info(tenant_id,
                                                   job_id, exec_env, job_info))) {
           LOG_WARN("failed to get async gather stats job sql", K(ret));
         } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
@@ -109,8 +108,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const bool /*is_oracle_mode*/,
-                                                          const uint64_t tenant_id,
+int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const uint64_t tenant_id,
                                                           const int64_t job_id,
                                                           const char *job_name,
                                                           const ObString &exec_env,
@@ -144,8 +142,7 @@ int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const bool /*is_oracl
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const bool /*is_oracle_mode*/,
-                                                                    const uint64_t tenant_id,
+int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const uint64_t tenant_id,
                                                                     const int64_t job_id,
                                                                     const ObString &exec_env,
                                                                     dbms_scheduler::ObDBMSSchedJobInfo &job_info)
@@ -176,8 +173,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const bool 
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const bool /*is_oracle_mode*/,
-                                                                 const uint64_t tenant_id,
+int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const uint64_t tenant_id,
                                                                  const int64_t job_id,
                                                                  const ObString &exec_env,
                                                                  dbms_scheduler::ObDBMSSchedJobInfo &job_info)
@@ -504,8 +500,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
   } else {
     compat_mode = lib::Worker::CompatMode::MYSQL;
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-      if (OB_FAIL(get_async_gather_stats_job_info(false,
-                                                        tenant_id, job_id, exec_env, job_info))) {
+      if (OB_FAIL(get_async_gather_stats_job_info(tenant_id, job_id, exec_env, job_info))) {
         LOG_WARN("failed to get async gather stats job info", K(ret), K(job_info));
       } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(*sql_proxy, tenant_id, job_id, job_info))) {
         LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));

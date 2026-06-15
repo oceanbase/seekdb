@@ -5398,8 +5398,7 @@ int ObDDLOperator::init_tenant_database(const ObTenantSchema &tenant_schema,
                                         const ObString &db_name,
                                         const uint64_t pure_db_id,
                                         const ObString &db_comment,
-                                        ObMySQLTransaction &trans,
-                                        const bool is_oracle_mode)
+                                        ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   int64_t start = ObTimeUtility::current_time();
@@ -5440,7 +5439,7 @@ int ObDDLOperator::init_tenant_database(const ObTenantSchema &tenant_schema,
     const uint64_t tenant_id = tenant_schema.get_tenant_id();
     ObOriginalDBKey db_key;
     db_key.tenant_id_ = tenant_id;
-    db_key.user_id_ = is_oracle_mode ? OB_ORA_SYS_USER_ID : OB_SYS_USER_ID;
+    db_key.user_id_ = OB_SYS_USER_ID;
     db_key.db_ = db_name;
 
     ObSchemaService *schema_service = schema_service_.get_schema_service();
@@ -5454,7 +5453,7 @@ int ObDDLOperator::init_tenant_database(const ObTenantSchema &tenant_schema,
       need_priv.db_ = db_name;
       need_priv.priv_set_ = OB_PRIV_DB_ACC;//is collect?
       need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      if (OB_FAIL(ObDDLSqlGenerator::gen_db_priv_sql(ObAccountArg(is_oracle_mode ? OB_ORA_SYS_USER_NAME : OB_SYS_USER_NAME,
+      if (OB_FAIL(ObDDLSqlGenerator::gen_db_priv_sql(ObAccountArg(OB_SYS_USER_NAME,
                                                      OB_SYS_HOST_NAME),
                                                      need_priv,
                                                      true, /*is_grant*/
@@ -5489,36 +5488,31 @@ int ObDDLOperator::init_tenant_databases(const ObTenantSchema &tenant_schema,
   ObString recyclebin_schema(OB_RECYCLEBIN_SCHEMA_NAME);
   ObString public_schema(OB_PUBLIC_SCHEMA_NAME);
   ObString test_schema(OB_TEST_SCHEMA_NAME);
-  bool is_oracle_mode = false;
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret));
-  } else if (OB_FAIL(init_tenant_database(tenant_schema, oceanbase_schema,
+  if (OB_FAIL(init_tenant_database(tenant_schema, oceanbase_schema,
                                    OB_SYS_DATABASE_ID, "system database",
-                                   trans, is_oracle_mode))) {
+                                   trans))) {
     RS_LOG(WARN, "insert default database failed", K(tenant_id), K(ret));
   } else if (OB_FAIL(init_tenant_database(tenant_schema, recyclebin_schema,
                                           OB_RECYCLEBIN_SCHEMA_ID, "recyclebin schema",
-                                          trans, is_oracle_mode))) {
+                                          trans))) {
     RS_LOG(WARN, "insert recyclebin schema failed", K(tenant_id), K(ret));
   } else if (OB_FAIL(init_tenant_database(tenant_schema, public_schema,
                                           OB_PUBLIC_SCHEMA_ID, "public schema",
-                                          trans, is_oracle_mode))) {
+                                          trans))) {
     RS_LOG(WARN, "insert public schema failed", K(tenant_id), K(ret));
   } else {
-    if (!is_oracle_mode) {
-      if (OB_FAIL(init_tenant_database(tenant_schema, mysql_schema,
-                                       OB_MYSQL_SCHEMA_ID, "MySql schema",
-                                       trans, false))) {
-        RS_LOG(WARN, "insert information_schema failed", K(tenant_id), K(ret));
-      } else if (OB_FAIL(init_tenant_database(tenant_schema, information_schema,
-                                              OB_INFORMATION_SCHEMA_ID, "information_schema",
-                                              trans, false))) {
-        RS_LOG(WARN, "insert mysql schema failed", K(tenant_id), K(ret));
-      } else if (OB_FAIL(init_tenant_database(tenant_schema, test_schema,
-                                              OB_INITIAL_TEST_DATABASE_ID, "test schema",
-                                              trans, is_oracle_mode))) {
-        RS_LOG(WARN, "insert test schema failed", K(tenant_id), K(ret));
-      }
+    if (OB_FAIL(init_tenant_database(tenant_schema, mysql_schema,
+                                     OB_MYSQL_SCHEMA_ID, "MySql schema",
+                                     trans))) {
+      RS_LOG(WARN, "insert information_schema failed", K(tenant_id), K(ret));
+    } else if (OB_FAIL(init_tenant_database(tenant_schema, information_schema,
+                                            OB_INFORMATION_SCHEMA_ID, "information_schema",
+                                            trans))) {
+      RS_LOG(WARN, "insert mysql schema failed", K(tenant_id), K(ret));
+    } else if (OB_FAIL(init_tenant_database(tenant_schema, test_schema,
+                                            OB_INITIAL_TEST_DATABASE_ID, "test schema",
+                                            trans))) {
+      RS_LOG(WARN, "insert test schema failed", K(tenant_id), K(ret));
     }
   }
 
@@ -5605,8 +5599,7 @@ RESOURCE CREATE SEQUENCE                          NO  YES YES*/
 int ObDDLOperator::init_inner_user_privs(
     const uint64_t tenant_id,
     ObUserInfo &user,
-    ObMySQLTransaction &trans,
-    const bool is_oracle_mode)
+    ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   int64_t new_schema_version = OB_INVALID_VERSION;
@@ -5629,8 +5622,7 @@ int ObDDLOperator::init_tenant_user(const uint64_t tenant_id,
                                     const ObString &user_comment,
                                     ObMySQLTransaction &trans,
                                     const bool set_locked,
-                                    const bool is_user,
-                                    const bool is_oracle_mode)
+                                    const bool is_user)
 {
   int ret = OB_SUCCESS;
   ObString pwd_enc;
@@ -5657,7 +5649,7 @@ int ObDDLOperator::init_tenant_user(const uint64_t tenant_id,
   } else {
     user.set_is_locked(set_locked);
     user.set_user_id(pure_user_id);
-    if ((!is_oracle_mode || is_user) &&
+    if (is_user &&
         pure_user_id != OB_ORA_LBACSYS_USER_ID &&
         pure_user_id != OB_ORA_AUDITOR_USER_ID) {
       user.set_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_ENCRYPT | OB_PRIV_DECRYPT);
@@ -5681,7 +5673,7 @@ int ObDDLOperator::init_tenant_user(const uint64_t tenant_id,
                        user, new_schema_version, &ddl_sql, trans))) {
       LOG_WARN("insert user failed", K(user), K(ret));
     } else if ((!is_user || is_ora_sys_user(user.get_user_id()))
-               && OB_FAIL(init_inner_user_privs(tenant_id, user, trans, is_oracle_mode))) {
+               && OB_FAIL(init_inner_user_privs(tenant_id, user, trans))) {
       LOG_WARN("init user privs failed", K(user), K(ret));
     }
   }

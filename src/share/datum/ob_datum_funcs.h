@@ -37,7 +37,6 @@ public:
                                                   const ObCmpNullPos null_pos,
                                                   const ObCollationType cs_type,
                                                   const ObScale max_scale,
-                                                  const bool is_oracle_mode,
                                                   const bool has_lob_header,
                                                   const ObPrecision prec1 = PRECISION_UNKNOWN_YET,
                                                   const ObPrecision prec2 = PRECISION_UNKNOWN_YET);
@@ -62,7 +61,6 @@ public:
   static sql::ObExprBasicFuncs* get_basic_func(const ObObjType type,
                                                const ObCollationType cs_type,
                                                const ObScale scale = SCALE_UNKNOWN_YET,
-                                               const bool is_oracle_mode = false,
                                                const bool is_lob_locator = true,
                                                const ObPrecision prec = PRECISION_UNKNOWN_YET);
 };

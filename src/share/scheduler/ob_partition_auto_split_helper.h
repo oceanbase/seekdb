@@ -219,11 +219,9 @@ public:
                 const int64_t used_disk_space,
                 obcall::ObAlterTableArg &arg);                                            
   static int print_identifier(ObIAllocator &allocator,
-                              const bool is_oracle_mode,
                               const ObString &name,
                               ObString &ident);
   static int convert_rowkey_to_sql_literal(const ObRowkey &rowkey,
-                                           const bool is_oracle_mode,
                                            const ObTimeZoneInfo *tz_info,
                                            ObIAllocator &allocator,
                                            ObString &rowkey_str);
@@ -391,7 +389,6 @@ private:
                     const ObIArray<ObNewRange> &column_ranges,
                     const int64_t range_num, const int64_t used_disk_space,
                     const bool query_index,
-                    const bool is_oracle_mode,
                     common::ObRowkey &low_bound_val,
                     common::ObRowkey &high_bound_val,
                     common::ObArenaAllocator &range_allocator,
@@ -400,7 +397,6 @@ private:
                         const ObIArray<ObString> &column_names,
                         const ObIArray<ObNewRange> &column_ranges,
                         const int range_num, const double sample_pct,
-                        const bool is_oracle_mode,
                         ObSqlString &sql);
   int add_sample_condition_sqls_(const ObIArray<ObString> &columns,
                                  const ObIArray<ObNewRange> &column_ranges,
@@ -411,7 +407,6 @@ private:
   int acquire_partition_meta_(const share::schema::ObTableSchema &table_schema, const ObTabletID &tablet_id, PartitionMeta &meta);
   int acquire_partition_key_name_(const share::schema::ObTableSchema &table_schema, ObIArray<ObString> &column_names);
   int gen_column_alias_(const ObIArray<ObString> &columns,
-                        const bool is_oracle_mode,
                         ObSqlString &col_alias_str,
                         ObSqlString &col_name_alias_str);
   int fill_query_range_bounder(const PartitionMeta& part_meta,

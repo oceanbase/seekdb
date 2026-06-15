@@ -741,7 +741,6 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
                             NULL_LAST,//Here null last or first does not matter
                             expr->datum_meta_.cs_type_,
                             expr->datum_meta_.scale_,
-                            false,
                             expr->obj_meta_.has_lob_header(),
                             expr->datum_meta_.precision_,
                             expr->datum_meta_.precision_);

@@ -60,13 +60,11 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(
                                                          base_table_schema,
                                                          inc_table_schema,
                                                          base_table_tablet_ids,
-                                                         inc_table_tablet_ids,
-                                                         false/*is_oracle_mode*/))) {
+                                                         inc_table_tablet_ids))) {
     LOG_WARN("failed to check multipart exchange conditions", KR(ret), K(base_table_schema),
         K(inc_table_schema), K(base_table_tablet_ids), K(inc_table_tablet_ids));
   } else if (OB_FAIL(inner_init(base_table_schema,
                                 inc_table_schema,
-                                false/*is_oracle_mode*/,
                                 schema_guard))) {
     LOG_WARN("failed to inner init", KR(ret), K(base_table_schema), K(inc_table_schema));
   } else if (OB_FAIL(exchange_data_table_partitions(tenant_id,
@@ -74,7 +72,6 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(
                                                     inc_table_schema,
                                                     base_table_tablet_ids,
                                                     inc_table_tablet_ids,
-                                                    false/*is_oracle_mode*/,
                                                     part_exchange_type,
                                                     ddl_operator,
                                                     trans,
@@ -87,7 +84,6 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(
                                                          inc_table_schema,
                                                          base_table_tablet_ids,
                                                          inc_table_tablet_ids,
-                                                         false/*is_oracle_mode*/,
                                                          part_exchange_type,
                                                          ddl_operator,
                                                          trans,
@@ -125,8 +121,7 @@ int ObDirectLoadPartitionExchange::check_multipart_exchange_conditions(
     const ObTableSchema &base_table_schema,
     const ObTableSchema &inc_table_schema,
     const ObIArray<ObTabletID> &base_tablet_ids,
-    const ObIArray<ObTabletID> &inc_tablet_ids,
-    const bool is_oracle_mode)
+    const ObIArray<ObTabletID> &inc_tablet_ids)
 {
   int ret = OB_SUCCESS;
   const ObPartitionLevel exchange_part_level = base_table_schema.get_part_level();
@@ -144,17 +139,16 @@ int ObDirectLoadPartitionExchange::check_multipart_exchange_conditions(
     LOG_WARN("the count of base_tablet_ids and inc_tablet_ids should be equal",
         KR(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else if (OB_FAIL(check_data_table_partition_exchange_conditions_(
-      base_table_schema, inc_table_schema, base_tablet_ids, inc_tablet_ids, is_oracle_mode))) {
+      base_table_schema, inc_table_schema, base_tablet_ids, inc_tablet_ids))) {
     LOG_WARN("failed to check data table partition exchange conditions",
-        KR(ret), K(base_table_schema), K(inc_table_schema), K(part_name), K(is_oracle_mode));
+        KR(ret), K(base_table_schema), K(inc_table_schema), K(part_name));
   }
   return ret;
 }
 
 int ObDirectLoadPartitionExchange::check_table_conditions_in_common_(
     const ObTableSchema &base_table_schema,
-    const ObTableSchema &inc_table_schema,
-    const bool is_oracle_mode)
+    const ObTableSchema &inc_table_schema)
 {
   int ret = OB_SUCCESS;
   HEAP_VARS_2((ObTableSchema, new_base_table_schema),
@@ -169,10 +163,9 @@ int ObDirectLoadPartitionExchange::check_table_conditions_in_common_(
       // hidden table has different table mode
     } else if (OB_FAIL(ObPartitionExchange::check_table_conditions_in_common_(
         new_base_table_schema,
-        new_inc_table_schema,
-        is_oracle_mode))) {
+        new_inc_table_schema))) {
       LOG_WARN("failed to check table conditions in common", KR(ret),
-          K(new_base_table_schema), K(new_inc_table_schema), K(is_oracle_mode));
+          K(new_base_table_schema), K(new_inc_table_schema));
     }
   }
   return ret;

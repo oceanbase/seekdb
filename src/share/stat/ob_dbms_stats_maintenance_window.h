@@ -81,8 +81,7 @@ private:
                                  int64_t &start_usec,
                                  ObSqlString &job_action);
 
-  static int get_stat_window_job_info(const bool is_oracle_mode,
-                                     const uint64_t tenant_id,
+  static int get_stat_window_job_info(const uint64_t tenant_id,
                                      const int64_t job_id,
                                      const char *job_name,
                                      const ObString &exec_env,
@@ -90,8 +89,7 @@ private:
                                      ObSqlString &job_action,
                                      dbms_scheduler::ObDBMSSchedJobInfo &job_info);
 
-  static int get_stats_history_manager_job_info(const bool is_oracle_mode,
-                                               const uint64_t tenant_id,
+  static int get_stats_history_manager_job_info(const uint64_t tenant_id,
                                                const int64_t job_id,
                                                const ObString &exec_env,
                                                dbms_scheduler::ObDBMSSchedJobInfo &job_info);
@@ -100,8 +98,7 @@ private:
                                  const int64_t specify_time,
                                  const int64_t current_time,
                                  bool &is_valid);
-  static int get_async_gather_stats_job_info(const bool is_oracle_mode,
-                                            const uint64_t tenant_id,
+  static int get_async_gather_stats_job_info(const uint64_t tenant_id,
                                             const int64_t job_id,
                                             const ObString &exec_env,
                                             dbms_scheduler::ObDBMSSchedJobInfo &job_info);

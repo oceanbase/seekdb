@@ -483,7 +483,6 @@ int ObDDLRedefinitionTask::obtain_snapshot(const ObDDLTaskStatus next_task_statu
 
 // list the column type modifications that support to validate the checksum.
 bool ObDDLRedefinitionTask::check_can_validate_column_checksum(
-    const bool is_oracle_mode,
     const ObColumnSchemaV2 &src_column_schema,
     const ObColumnSchemaV2 &dest_column_schema)
 {
@@ -579,7 +578,7 @@ int ObDDLRedefinitionTask::get_validate_checksum_columns_id(const ObTableSchema 
           (cur_column_schema->get_encoding_type() != dest_column_schema->get_encoding_type() ||
           cur_column_schema->get_collation_type() != dest_column_schema->get_collation_type())) {
             // do not validate the column checksum if encoding type and collation type change;
-        } else if (is_strict_mode(sql_mode) && check_can_validate_column_checksum(false, *cur_column_schema, *dest_column_schema)) {
+        } else if (is_strict_mode(sql_mode) && check_can_validate_column_checksum(*cur_column_schema, *dest_column_schema)) {
           if (OB_FAIL(validate_checksum_columns_id.set_refactored(cur_column_id, dest_column_schema->get_column_id()))) {
             LOG_WARN("fail to append the column to validate the checksum", K(ret), K(is_strict_mode(sql_mode)),
             K(cur_column_schema->get_data_type()), K(dest_column_schema->get_data_type()),

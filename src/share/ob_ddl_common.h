@@ -1163,7 +1163,6 @@ public:
   static int generate_ddl_schema_hint_str(
       const ObString &table_name,
       const int64_t schema_version,
-      const bool is_oracle_mode,
       ObSqlString &sql_string);
 
   static int generate_mview_ddl_schema_hint_str(
@@ -1171,7 +1170,6 @@ public:
       const uint64_t mview_table_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<share::schema::ObBasedSchemaObjectInfo> &based_schema_object_infos,
-      const bool is_oracle_mode,
       ObSqlString &sql_string);
 
   static int generate_order_by_str_for_mview(const schema::ObTableSchema &container_table_schema,
@@ -1253,13 +1251,11 @@ public:
     uint64_t &left_space_size);
   static int generate_partition_names(
     const ObIArray<ObString> &partition_names_array,
-    const bool is_oracle_mode,
     common::ObIAllocator &allocator,
     ObString &partition_names);
   static int check_target_partition_is_running(
    const ObString &running_sql_info,
    const ObString &partition_name,
-   const bool is_oracle_mode,
    common::ObIAllocator &allocator,
    bool &is_running_status);
   static int check_table_exist(
@@ -1308,14 +1304,12 @@ public:
 
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
-    const bool is_oracle_mode,
     const bool with_origin_name,
     const bool with_alias_name,
     const bool use_heap_table_ddl_plan,
     ObSqlString &column_name_str);
   static int generate_column_name_str(
       const ObColumnNameInfo &column_name_info,
-      const bool is_oracle_mode,
       const bool with_origin_name,
       const bool with_alias_name,
       const bool with_comma,

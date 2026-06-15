@@ -170,7 +170,7 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
     }
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
         col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type(),
-        col_desc.col_type_.get_scale(), false, has_lob_header, precision);
+        col_desc.col_type_.get_scale(), has_lob_header, precision);
     ObHashFunc hash_func;
     hash_func.hash_func_ = basic_funcs->murmur_hash_v2_;
     hash_func.batch_hash_func_ = basic_funcs->murmur_hash_v2_batch_;

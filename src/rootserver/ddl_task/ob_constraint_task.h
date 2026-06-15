@@ -78,8 +78,7 @@ private:
       const share::schema::ObDatabaseSchema &child_database_schema,
       const share::schema::ObTableSchema &parent_table_schema,
       const share::schema::ObDatabaseSchema &parent_database_schema,
-      const share::schema::ObForeignKeyInfo &fk_info,
-      const bool is_oracle_mode) const;
+      const share::schema::ObForeignKeyInfo &fk_info) const;
 private:
   uint64_t tenant_id_;
   int64_t data_table_id_;

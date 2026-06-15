@@ -1218,7 +1218,6 @@ int ObStaticEngineCG::generate_spec(
                                 NULL_LAST,//Here null last or first does not matter
                                 expr->datum_meta_.cs_type_,
                                 expr->datum_meta_.scale_,
-                                false,
                                 expr->obj_meta_.has_lob_header(),
                                 expr->datum_meta_.precision_,
                                 expr->datum_meta_.precision_);
@@ -1665,7 +1664,6 @@ int ObStaticEngineCG::generate_hash_set_spec(ObLogSet &op, ObHashSetSpec &spec)
                                                                 field_collation.null_pos_,
                                                                 field_collation.cs_type_,
                                                                 expr->datum_meta_.scale_,
-                                                                false,
                                                                 expr->obj_meta_.has_lob_header(),
                                                                 expr->datum_meta_.precision_,
                                                                 expr->datum_meta_.precision_);
@@ -1800,7 +1798,6 @@ int ObStaticEngineCG::generate_merge_set_spec(ObLogSet &op, ObMergeSetVecSpec &s
                                                                   field_collation.null_pos_,
                                                                   field_collation.cs_type_,
                                                                   expr->datum_meta_.scale_,
-                                                                  false,
                                                                   expr->obj_meta_.has_lob_header(),
                                                                   expr->datum_meta_.precision_,
                                                                   expr->datum_meta_.precision_);
@@ -1883,7 +1880,6 @@ int ObStaticEngineCG::generate_merge_set_spec(ObLogSet &op, ObMergeSetSpec &spec
                                                                   field_collation.null_pos_,
                                                                   field_collation.cs_type_,
                                                                   expr->datum_meta_.scale_,
-                                                                  false,
                                                                   expr->obj_meta_.has_lob_header(),
                                                                   expr->datum_meta_.precision_,
                                                                   expr->datum_meta_.precision_);
@@ -2075,7 +2071,6 @@ int ObStaticEngineCG::fill_sort_funcs(
                                                                 sort_collation.null_pos_,
                                                                 sort_collation.cs_type_,
                                                                 expr->datum_meta_.scale_,
-                                                                false,
                                                                 expr->obj_meta_.has_lob_header(),
                                                                 expr->datum_meta_.precision_,
                                                                 expr->datum_meta_.precision_);
@@ -6032,11 +6027,11 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
           if (OB_SUCC(ret)) {
            if (equal_cond_info.is_opposite_) {
              equal_cond_info.ns_cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(r.type_,
-                               l.type_, default_null_pos(), r.cs_type_, scale, false,
+                               l.type_, default_null_pos(), r.cs_type_, scale,
                                has_lob_header, l.precision_, r.precision_);
            } else {
              equal_cond_info.ns_cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(l.type_,
-                               r.type_, default_null_pos(), l.cs_type_, scale, false,
+                               r.type_, default_null_pos(), l.cs_type_, scale,
                                has_lob_header, l.precision_, r.precision_);
            }
           }
@@ -7107,7 +7102,6 @@ int ObStaticEngineCG::fill_aggr_info(ObAggFunRawExpr &raw_expr,
                                                                     field_collation.null_pos_,
                                                                     field_collation.cs_type_,
                                                                     expr->datum_meta_.scale_,
-                                                                    false,
                                                                     expr->obj_meta_.has_lob_header(),
                                                                     expr->datum_meta_.precision_,
                                                                     expr->datum_meta_.precision_);
@@ -7780,7 +7774,6 @@ int ObStaticEngineCG::fil_sort_info(const ObIArray<OrderItem> &sort_keys,
                                                                  field_collation.null_pos_,
                                                                  field_collation.cs_type_,
                                                                  expr->datum_meta_.scale_,
-                                                                 false,
                                                                  expr->obj_meta_.has_lob_header(),
                                                                  expr->datum_meta_.precision_,
                                                                  expr->datum_meta_.precision_);

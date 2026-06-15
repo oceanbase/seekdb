@@ -537,13 +537,11 @@ public:
    * generated to replace the old.
   */
   int check_and_replace_default_index_name_on_demand(
-      const bool is_oracle_mode,
       common::ObIAllocator &allocator,
       const ObTableSchema &hidden_data_schema,
       const ObString &target_data_table_name,
       ObTableSchema &new_index_schema);
   int check_and_replace_dup_constraint_name_on_demand(
-      const bool is_oracle_mode,
       ObSchemaGetterGuard &tenant_schema_guard,
       ObTableSchema &hidden_data_schema,
       common::ObIAllocator &allocator,
@@ -774,8 +772,7 @@ public:
   int exists_role_grant_cycle(share::schema::ObSchemaGetterGuard &schema_guard,
                               const uint64_t tenant_id,
                               const ObUserInfo &role_info,
-                              const share::schema::ObUserInfo *user_info,
-                              const bool is_oracle_mode);
+                              const share::schema::ObUserInfo *user_info);
   virtual int grant(const obcall::ObGrantArg &arg);
   int revoke(const obcall::ObRevokeUserArg &arg);
   virtual int grant_priv_to_user(const uint64_t tenant_id,
@@ -1146,14 +1143,12 @@ int check_will_be_having_domain_index_operation(
     const obcall::ObAlterTableArg &arg,
     const uint64_t tenant_id,
     const uint64_t tenant_data_version,
-    const bool is_oracle_mode,
     const share::schema::ObTableSchema &orig_table_schema,
     const ObIArray<ObAuxTableMetaInfo> &simple_index_infos,
     ObSchemaGetterGuard &schema_guard,
     ObTruncateInfoService &truncate_service,
     UpdateGlobalIndexOpType &op_type);
   int decide_global_index_op_type_by_index_(
-    const bool is_oracle_mode,
     const share::schema::ObTableSchema &new_index_table_schema,
     ObTruncateInfoService &truncate_service,
     const UpdateGlobalIndexOpType &suggest_op_type,
@@ -1480,21 +1475,17 @@ int check_will_be_having_domain_index_operation(
                                   const share::schema::ObTableSchema &table_schema,
                                   const share::schema::AlterColumnSchema &alter_column_schema,
                                   const obcall::ObAlterTableArg::AlterAlgorithm &algorithm,
-                                  const bool is_oracle_mode,
                                   share::ObDDLType &tmp_ddl_type);
   // except add column instant with modify column, add column instant with other ddl will be DDL_TABLE_REDEFINITION
   int check_can_add_column_instant_(const ObTableSchema &orig_table_schema,
                                     const AlterTableSchema &alter_table_schema,
                                     const obcall::ObAlterTableArg::AlterAlgorithm &algorithm,
-                                    const bool is_oracle_mode,
                                     ObSchemaGetterGuard &schema_guard,
                                     ObDDLType &ddl_type);
   int check_can_drop_column_instant_(const ObTableSchema &orig_table_schema,
                                     const AlterTableSchema &alter_table_schema,
-                                    const bool is_oracle_mode,
                                     obcall::ObAlterTableArg &alter_table_arg);
-  int check_can_add_column_use_instant_(const bool is_oracle_mode,
-                                        bool &add_column_instant);
+  int check_can_add_column_use_instant_(bool &add_column_instant);
   int check_is_modify_partition_key(const ObTableSchema &orig_table_schema,
                                     const AlterTableSchema &alter_table_schema,
                                     bool &is_modify_partition_key);
@@ -1510,10 +1501,8 @@ int check_will_be_having_domain_index_operation(
   int check_mysql_drop_column_with_index_(obcall::ObAlterTableArg &alter_table_arg,
                                           share::schema::ObSchemaGetterGuard &schema_guard,
                                           const share::schema::ObTableSchema &orig_table_schema,
-                                          const bool is_oracle_mode,
                                           ObDDLType &ddl_type);
-  int check_need_table_redifinition_for_ddl_(const bool is_oracle_mode,
-                                             const ObTableSchema &orig_table_schema,
+  int check_need_table_redifinition_for_ddl_(const ObTableSchema &orig_table_schema,
                                              const AlterTableSchema &alter_table_schema,
                                              const ObDDLType &ddl_type,
                                              bool &need_table_redefinition);
@@ -1524,12 +1513,10 @@ int check_will_be_having_domain_index_operation(
   int check_alter_table_column(obcall::ObAlterTableArg &alter_table_arg,
                                const share::schema::ObTableSchema &orig_table_schema,
                                share::schema::ObSchemaGetterGuard &schema_guard,
-                               const bool is_oracle_mode,
                                share::ObDDLType &ddl_type,
                                bool &ddl_need_retry_at_executor);
   int check_alter_table_partition(const obcall::ObAlterTableArg &alter_table_arg,
                                   const share::schema::ObTableSchema &orig_table_schema,
-                                  const bool is_oracle_mode,
                                   share::ObDDLType &ddl_type);
   int check_convert_to_character(obcall::ObAlterTableArg &alter_table_arg,
                                  const share::schema::ObTableSchema &orig_table_schema,
@@ -1681,7 +1668,6 @@ int check_will_be_having_domain_index_operation(
   int check_index_table_need_rebuild(
       const share::schema::ObTableSchema &index_table_schema,
       const common::ObIArray<uint64_t> &drop_cols_id_arr,
-      const bool is_oracle_mode,
       bool &need_rebuild);
   int reconstruct_index_schema(
       obcall::ObAlterTableArg &alter_table_arg,
@@ -1703,7 +1689,6 @@ int check_will_be_having_domain_index_operation(
       ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<uint64_t> &drop_cols_id_arr,
       const share::ObColumnNameMap &col_name_map,
-      const bool is_oracle_mode,
       share::schema::ObTableSchema &new_table_schema,
       share::schema::ObTableSchema &index_schema,
       const ObIArray<obcall::ObColumnSortItem> &vec_index_columns,
@@ -1743,7 +1728,6 @@ int check_will_be_having_domain_index_operation(
       share::schema::ObSchemaGetterGuard &schema_guard);
   int fill_column_collation(
       const ObSQLMode sql_mode,
-      const bool is_oracle_mode,
       const share::schema::ObTableSchema &table_schema,
       common::ObIAllocator &allocator,
       share::schema::ObColumnSchemaV2 &alter_column_schema);
@@ -1765,8 +1749,7 @@ int check_will_be_having_domain_index_operation(
       common::hash::ObHashSet<ObColumnNameHashWrapper> &update_column_name_set);
   int check_generated_column_modify_authority(
       const share::schema::ObColumnSchemaV2 &old_column_schema,
-      const share::schema::AlterColumnSchema &alter_column_schema,
-      bool is_oracle_mode);
+      const share::schema::AlterColumnSchema &alter_column_schema);
   int update_generated_column_schema(
       const share::schema::AlterColumnSchema &alter_column_schema,
       const share::schema::ObColumnSchemaV2 &orig_column_schema,
@@ -1828,7 +1811,6 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObColumnSchemaV2 &alter_column,
       share::schema::ObTableSchema &table_schema,
       obcall::ObAlterTableArg &alter_table_arg,
-      const bool is_oracle_mode,
       const common::ObTimeZoneInfo &tz_info,
       common::ObIAllocator &allocator,
       ObDDLOperator *ddl_operator,
@@ -1842,7 +1824,6 @@ int check_will_be_having_domain_index_operation(
     const share::schema::ObTableSchema &orig_table_schema,
     const share::schema::ObTableSchema &alter_table_schema,
     const share::schema::ObColumnSchemaV2 &alter_column_schema,
-    const bool is_oracle_mode,
     common::ObIAllocator &allocator);
   int refill_column_id_array_for_constraint(
     const obcall::ObAlterTableArg::AlterConstraintType op_type,
@@ -1867,8 +1848,7 @@ int check_will_be_having_domain_index_operation(
   int check_can_alter_column_type(
       const share::schema::ObColumnSchemaV2 &src_column,
       const share::schema::ObColumnSchemaV2 &dst_column,
-      const share::schema::ObTableSchema &table_schema,
-      const bool is_oracle_mode);
+      const share::schema::ObTableSchema &table_schema);
   int check_is_change_column_type(
       const share::schema::ObColumnSchemaV2 &src_column,
       const share::schema::ObColumnSchemaV2 &dst_column,
@@ -2052,7 +2032,6 @@ public:
     const obcall::ObDDLArg &arg);
   int construct_drop_sql(const obcall::ObTableItem &table_item,
                          const share::schema::ObTableType table_type,
-                         const bool is_oracle_mode,
                          const bool is_cascade_constraints,
                          common::ObSqlString &sql);
 
@@ -2094,9 +2073,8 @@ private:
                                    const ObTableSchema &orig_table_schema,
                                    obcall::ObIndexArg *index_arg);
   int validate_rename_table_args(const ObTableSchema *table_schema);
-  int construct_rename_table_items_for_mview(uint64_t tenant_id,  
+  int construct_rename_table_items_for_mview(uint64_t tenant_id,
                                              const ObTableSchema *table_schema,
-                                             bool is_oracle_mode,
                                              share::schema::ObSchemaGetterGuard &schema_guard,
                                              const obcall::ObRenameTableItem &rename_item,
                                              common::ObArenaAllocator &allocator,
@@ -2348,10 +2326,10 @@ public:
       const ObString &ddl_stmt_str,
       ObDDLTaskRecord &task_record);
   //not check belong to the same table
-  int check_same_partition(const bool is_oracle_mode, const ObPartition &l, const ObPartition &r,
+  int check_same_partition(const ObPartition &l, const ObPartition &r,
                            const ObPartitionFuncType part_type, bool &is_matched) const;
   //not check belong to the same table
-  int check_same_subpartition(const bool is_oracle_mode, const ObSubPartition &l, const ObSubPartition &r,
+  int check_same_subpartition(const ObSubPartition &l, const ObSubPartition &r,
                               const ObPartitionFuncType part_type, bool &is_matched) const;
 private:
   //After renaming a partition/subpartition, the consistency of the partition name between the data table and aux table is no longer guaranteed.
@@ -2457,7 +2435,6 @@ private:
 
   int pre_rename_mysql_columns_online(const ObTableSchema &origin_table_schema,
                           const AlterTableSchema &alter_table_schema,
-                          const bool is_oracle_mode,
                           ObTableSchema &new_table_schema,
                           obcall::ObAlterTableArg &alter_table_arg,
                           sql::ObSchemaChecker &schema_checker,
@@ -2485,7 +2462,6 @@ private:
   int prepare_change_modify_column_online(AlterColumnSchema &alter_col,
                            const ObTableSchema &origin_table_schema,
                            const AlterTableSchema &alter_table_schema,
-                           const bool is_oracle_mode,
                            obcall::ObAlterTableArg &alter_table_arg,
                            ObTableSchema &new_table_schema,
                            sql::ObSchemaChecker &schema_checker,
@@ -2499,7 +2475,6 @@ private:
   int prepare_change_modify_column_offline(AlterColumnSchema &alter_col,
                            const ObTableSchema &origin_table_schema,
                            const AlterTableSchema &alter_table_schema,
-                           const bool is_oracle_mode,
                            obcall::ObAlterTableArg &alter_table_arg,
                            ObTableSchema &new_table_schema,
                            sql::ObSchemaChecker &schema_checker,
@@ -2509,7 +2484,7 @@ private:
                            bool &is_contain_part_key);
   int pre_rename_mysql_columns_offline(
     const ObTableSchema &origin_table_schema, AlterTableSchema &alter_table_schema,
-    bool is_oracle_mode, obcall::ObAlterTableArg &alter_table_arg, ObTableSchema &new_table_schema,
+    obcall::ObAlterTableArg &alter_table_arg, ObTableSchema &new_table_schema,
     sql::ObSchemaChecker &schema_checker,
     ObSchemaGetterGuard &schema_guard,
     common::hash::ObHashSet<ObColumnNameHashWrapper> &update_column_name_set,
@@ -2522,7 +2497,6 @@ private:
 
   int check_rename_first(const AlterTableSchema &alter_table_schema,
                          const ObTableSchema &table_schema,
-                         const bool is_oracle_mode,
                          bool &is_rename_first);
 
   inline bool is_rename_column(const AlterColumnSchema &alter_column_schema)

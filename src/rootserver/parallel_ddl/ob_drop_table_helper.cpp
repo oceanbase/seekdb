@@ -1372,7 +1372,7 @@ int ObDropTableHelper::construct_drop_table_sql_(const ObTableSchema &table_sche
     if (use_drop_table_stmt_in_arg) {
       ddl_stmt_str_.append(arg_.ddl_stmt_str_);
     } else {
-      if (OB_FAIL(ddl_service_->construct_drop_sql(table_item, table_type, is_oracle_mode, is_cascade_constraints, ddl_stmt_str_))) {
+      if (OB_FAIL(ddl_service_->construct_drop_sql(table_item, table_type, is_cascade_constraints, ddl_stmt_str_))) {
         LOG_WARN("fail to construct drop sql", KR(ret));
       }
     }

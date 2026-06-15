@@ -100,7 +100,7 @@ int ObCheckConstraintValidationTask::process()
         LOG_WARN("set trx timeout failed", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         LOG_WARN("set timeout failed", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema->get_schema_version(), false/*is_oracle_mode*/, ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema->get_schema_version(), ddl_schema_hint_str))) {
         LOG_WARN("failed to generate ddl schema hint str", K(ret));
       } else if (OB_FAIL(ddl_schema_hint_str.append_fmt(
                   " INDEX(`%.*s`.`%.*s` PRIMARY)",
@@ -281,7 +281,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_by_send_sql() const
   } else if (OB_ISNULL(parent_database_schema)) {
     ret = OB_ERR_SYS;
     LOG_WARN("get database schema failed", K(ret));
-  } else if (OB_FAIL(check_fk_constraint_data_valid(*child_table_schema, *child_database_schema, *parent_table_schema, *parent_database_schema, fk_info, false/*is_oracle_mode*/))) {
+  } else if (OB_FAIL(check_fk_constraint_data_valid(*child_table_schema, *child_database_schema, *parent_table_schema, *parent_database_schema, fk_info))) {
     LOG_WARN("check fk constraint data valid failed", K(ret));
   }
   return ret;
@@ -338,8 +338,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
     const ObDatabaseSchema &child_database_schema,
     const ObTableSchema &parent_table_schema,
     const ObDatabaseSchema &parent_database_schema,
-    const ObForeignKeyInfo &fk_info,
-    const bool is_oracle_mode) const
+    const ObForeignKeyInfo &fk_info) const
 {
   int ret = OB_SUCCESS;
   ObArray<ObString> child_column_names;
@@ -373,19 +372,17 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         LOG_WARN("set trx timeout failed", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         LOG_WARN("set timeout failed", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(child_table_schema.get_table_name_str(), child_table_schema.get_schema_version(), is_oracle_mode, child_ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(child_table_schema.get_table_name_str(), child_table_schema.get_schema_version(), child_ddl_schema_hint_str))) {
         LOG_WARN("failed to generate ddl schema hint", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(parent_table_schema.get_table_name_str(), parent_table_schema.get_schema_version(), is_oracle_mode, parent_ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(parent_table_schema.get_table_name_str(), parent_table_schema.get_schema_version(), parent_ddl_schema_hint_str))) {
         LOG_WARN("failed to generate ddl schema hint", K(ret));
-      } else if (OB_FAIL(child_ddl_schema_hint_str.append_fmt(is_oracle_mode ?
-                  " INDEX(\"%.*s\".\"%.*s\" PRIMARY)" : " INDEX(`%.*s`.`%.*s` PRIMARY)",
+      } else if (OB_FAIL(child_ddl_schema_hint_str.append_fmt(" INDEX(`%.*s`.`%.*s` PRIMARY)",
             static_cast<int>(child_database_schema.get_database_name_str().length()),
             child_database_schema.get_database_name_str().ptr(),
             static_cast<int>(child_table_schema.get_table_name_str().length()),
             child_table_schema.get_table_name_str().ptr()))) {
         LOG_WARN("fail to assign index hint", K(ret));
-      } else if (OB_FAIL(parent_ddl_schema_hint_str.append_fmt(is_oracle_mode ?
-                  " INDEX(\"%.*s\".\"%.*s\" PRIMARY)" : " INDEX(`%.*s`.`%.*s` PRIMARY)",
+      } else if (OB_FAIL(parent_ddl_schema_hint_str.append_fmt(" INDEX(`%.*s`.`%.*s` PRIMARY)",
             static_cast<int>(parent_database_schema.get_database_name_str().length()),
             parent_database_schema.get_database_name_str().ptr(),
             static_cast<int>(parent_table_schema.get_table_name_str().length()),
@@ -400,7 +397,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c1, "
         for (i = 0; OB_SUCC(ret) && i < child_column_names.count() - 1; ++i) {
-          if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ? "\"%.*s\", " : "`%.*s`, ",
+          if (OB_FAIL(sql_string.append_fmt("`%.*s`, ",
                   static_cast<int>(child_column_names.at(i).length()),
                   child_column_names.at(i).ptr()))) {
             LOG_WARN("fail to append format", K(ret));
@@ -408,8 +405,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c2 from db.t2 where "
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ?
-                  "\"%.*s\" FROM \"%.*s\".\"%.*s\" WHERE " : "`%.*s` FROM `%.*s`.`%.*s` WHERE ",
+          if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s` WHERE ",
                   static_cast<int>(child_column_names.at(i).length()),
                   child_column_names.at(i).ptr(),
                   static_cast<int>(child_database_schema.get_database_name_str().length()),
@@ -421,8 +417,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c1 is not null and "
         for (i = 0; OB_SUCC(ret) && i < child_column_names.count() - 1; ++i) {
-          if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ?
-                  "\"%.*s\" IS NOT NULL AND " : "`%.*s` IS NOT NULL AND ",
+          if (OB_FAIL(sql_string.append_fmt("`%.*s` IS NOT NULL AND ",
                   static_cast<int>(child_column_names.at(i).length()),
                   child_column_names.at(i).ptr()))) {
             LOG_WARN("fail to append format", K(ret));
@@ -430,8 +425,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c2 is not null minus select "
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ?
-                  "\"%.*s\" IS NOT NULL MINUS SELECT /*+ %.*s */ " : "`%.*s` IS NOT NULL MINUS SELECT /*+ %.*s */ ",
+          if (OB_FAIL(sql_string.append_fmt("`%.*s` IS NOT NULL MINUS SELECT /*+ %.*s */ ",
                   static_cast<int>(child_column_names.at(i).length()), child_column_names.at(i).ptr(),
                   static_cast<int>(parent_ddl_schema_hint_str.length()), parent_ddl_schema_hint_str.ptr()))) {
             LOG_WARN("fail to append format", K(ret));
@@ -439,7 +433,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c3, "
         for (i = 0; OB_SUCC(ret) && i < parent_column_names.count() - 1; ++i) {
-          if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ? "\"%.*s\", " : "`%.*s`, ",
+          if (OB_FAIL(sql_string.append_fmt("`%.*s`, ",
                   static_cast<int>(parent_column_names.at(i).length()),
                   parent_column_names.at(i).ptr()))) {
             LOG_WARN("fail to append format", K(ret));
@@ -447,8 +441,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c4 from db.t1"
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ?
-                  "\"%.*s\" FROM \"%.*s\".\"%.*s\"" : "`%.*s` FROM `%.*s`.`%.*s`",
+          if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s`",
                   static_cast<int>(parent_column_names.at(i).length()),
                   parent_column_names.at(i).ptr(),
                   static_cast<int>(parent_database_schema.get_database_name_str().length()),
@@ -462,11 +455,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
       // check data valid
       if (OB_SUCC(ret)) {
         ObCommonSqlProxy *sql_proxy = nullptr;
-        if (is_oracle_mode) {
-          sql_proxy = GCTX.ddl_oracle_sql_proxy_;
-        } else {
-          sql_proxy = GCTX.sql_proxy_;
-        }
+        sql_proxy = GCTX.sql_proxy_;
 
         DEBUG_SYNC(BEFORE_CHECK_FK_DATA_VALID_SEND_SQL);
 

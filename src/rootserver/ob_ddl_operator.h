@@ -840,8 +840,7 @@ private:
                                    const common::ObString &db_name,
                                    const uint64_t pure_db_id,
                                    const common::ObString &db_comment,
-                                   common::ObMySQLTransaction &trans,
-                                   const bool is_oracle_mode = false);
+                                   common::ObMySQLTransaction &trans);
   virtual int init_tenant_databases(const share::schema::ObTenantSchema &tenant_schema,
                                     const share::schema::ObSysVariableSchema &sys_variable,
                                     common::ObMySQLTransaction &trans);
@@ -852,8 +851,7 @@ private:
                                const common::ObString &user_comment,
                                common::ObMySQLTransaction &trans,
                                const bool set_locked = false,
-                               const bool is_user = true,
-                               const bool is_oracle_mode = false);
+                               const bool is_user = true);
   virtual int init_tenant_users(const share::schema::ObTenantSchema &tenant_schema,
                                 const share::schema::ObSysVariableSchema &sys_variable,
                                 common::ObMySQLTransaction &trans);
@@ -974,8 +972,7 @@ private:
   int init_inner_user_privs(
       const uint64_t tenant_id,
       share::schema::ObUserInfo &user,
-      common::ObMySQLTransaction &trans,
-      const bool is_oracle_mode);
+      common::ObMySQLTransaction &trans);
   int init_tenant_optimizer_stats_info(const share::schema::ObSysVariableSchema &sys_variable,
                                        uint64_t tenant_id,
                                        ObMySQLTransaction &trans);

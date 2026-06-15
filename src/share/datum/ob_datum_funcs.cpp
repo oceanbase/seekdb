@@ -88,7 +88,7 @@ bool g_decint_cmp_array_inited =
 
 ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
     const ObObjType type1, const ObObjType type2, const ObCmpNullPos null_pos,
-    const ObCollationType cs_type, const ObScale max_scale, const bool is_oracle_mode,
+    const ObCollationType cs_type, const ObScale max_scale,
     const bool has_lob_header, const ObPrecision prec1, const ObPrecision prec2) {
   OB_ASSERT(type1 >= ObNullType && type1 < ObMaxType);
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
@@ -99,7 +99,7 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
   int null_pos_idx = NULL_LAST == null_pos ? 0 : 1;
   if (is_string_type(type1) && is_string_type(type2)) {
     int64_t calc_with_end_space_idx =
-        (is_calc_with_end_space(type1, type2, is_oracle_mode, cs_type, cs_type) ? 1 : 0);
+        (is_calc_with_end_space(type1, type2, false, cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
         func_ptr = NULLSAFE_TEXT_CMP_FUNCS[cs_type][calc_with_end_space_idx][null_pos_idx];
@@ -113,7 +113,7 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
     }
   } else if (is_json(type1) && is_json(type2)) {
     func_ptr = NULLSAFE_JSON_CMP_FUNCS[null_pos_idx][has_lob_header];
-  } else if (!is_oracle_mode && ob_is_double_type(type1) && ob_is_double_type(type1)
+  } else if (ob_is_double_type(type1) && ob_is_double_type(type1)
        && max_scale > SCALE_UNKNOWN_YET && max_scale < OB_NOT_FIXED_SCALE) {
     func_ptr = FIXED_DOUBLE_CMP_FUNCS[max_scale][null_pos_idx];
   } else if (is_geometry(type1) && is_geometry(type2)) {
@@ -191,7 +191,6 @@ bool g_all_str_funcs_intied = init_all_str_funcs();
 ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
                                                const ObCollationType cs_type,
                                                const ObScale scale,
-                                               const bool is_oracle_mode,
                                                const bool has_lob_locator,
                                                const ObPrecision precision)
 {
@@ -199,7 +198,7 @@ ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
   if ((type >= ObNullType && type < ObMaxType)) {
     if (is_string_type(type)) {
       OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-      bool calc_end_space = is_varying_len_char_type(type, cs_type) && is_oracle_mode;
+      bool calc_end_space = false;
       if (ob_is_large_text(type)) {
         res = &EXPR_BASIC_STR_FUNCS[cs_type][calc_end_space][has_lob_locator];
       } else {
@@ -214,7 +213,7 @@ ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
       res = &EXPR_BASIC_COLLECTION_FUNCS[has_lob_locator];
     } else if (ob_is_roaringbitmap(type)) {
       res = &EXPR_BASIC_ROARINGBITMAP_FUNCS[has_lob_locator];
-    } else if (!is_oracle_mode && ob_is_double_type(type) &&
+    } else if (ob_is_double_type(type) &&
                 scale > SCALE_UNKNOWN_YET && scale < OB_NOT_FIXED_SCALE) {
       res = &FIXED_DOUBLE_BASIC_FUNCS[scale];
     } else if (ob_is_decimal_int(type) && precision != PRECISION_UNKNOWN_YET) {

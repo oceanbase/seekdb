@@ -246,7 +246,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
       sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
                                                                         col_desc.col_type_.get_collation_type(),
                                                                         col_desc.col_type_.get_scale(),
-                                                                        false,
                                                                         has_lob_header,
                                                                         precision);
       if (OB_UNLIKELY(nullptr == basic_funcs || nullptr == basic_funcs->null_last_cmp_)) {

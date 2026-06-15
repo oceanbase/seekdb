@@ -170,7 +170,6 @@ protected:
   int send_build_single_replica_request();
   int check_build_single_replica(bool &is_end);
   bool check_can_validate_column_checksum(
-      const bool is_oracle_mode,
       const share::schema::ObColumnSchemaV2 &src_column_schema,
       const share::schema::ObColumnSchemaV2 &dest_column_schema);
   int get_validate_checksum_columns_id(
