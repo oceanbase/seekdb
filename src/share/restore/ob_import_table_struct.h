@@ -20,6 +20,7 @@
 #include "lib/ob_define.h"
 #include "share/ob_inner_table_operator.h"
 #include "share/restore/ob_import_arg.h"
+#include "share/backup/ob_backup_struct.h" // OB_COMMENT_LENGTH, share::SCN, ObTaskId
 
 namespace oceanbase
 {
