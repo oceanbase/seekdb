@@ -5720,9 +5720,7 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info(
     // mysql: min < null < other < max
     // oracle: min < other < null < max
     // To make sorted result stable, compat guard should be used.
-    lib::CompatModeGuard g(is_oracle_mode ?
-                      lib::Worker::CompatMode::ORACLE :
-                      lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(try_mock_partition_array(table_schema))) {
       LOG_WARN("fail to mock partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
@@ -5793,9 +5791,7 @@ int ObSchemaServiceSQLImpl::sort_tablegroup_partition_info(ObTablegroupSchema &t
     // mysql: min < null < other < max
     // oracle: min < other < null < max
     // To make sorted result stable, compat guard should be used.
-    lib::CompatModeGuard g(is_oracle_mode ?
-                      lib::Worker::CompatMode::ORACLE :
-                      lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(tablegroup_schema))) {
       LOG_WARN("failed to sort partition array", KR(ret), K(tablegroup_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(tablegroup_schema))) {
@@ -7560,9 +7556,7 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info_v2(
     // mysql: min < null < other < max
     // oracle: min < other < null < max
     // To make sorted result stable, compat guard should be used.
-    lib::CompatModeGuard g(is_oracle_mode ?
-                      lib::Worker::CompatMode::ORACLE :
-                      lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
       LOG_WARN("failed to sort partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(table_schema))) {

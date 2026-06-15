@@ -749,11 +749,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
   ObString real_db_name;
   int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   if (OB_SYS_TENANT_ID != tenant_id) {
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    {
-      compatible_mode = (lib::Worker::CompatMode::ORACLE == compat_mode) ?
-                        COMPATIBLE_ORACLE_MODE : COMPATIBLE_MYSQL_MODE;
-    }
+    compatible_mode = COMPATIBLE_MYSQL_MODE;
   } else {
     compatible_mode = COMPATIBLE_MYSQL_MODE;
   }

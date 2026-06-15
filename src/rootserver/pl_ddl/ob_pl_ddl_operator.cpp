@@ -999,9 +999,6 @@ int ObPLDDLOperator::update_routine_info(share::schema::ObRoutineInfo &routine_i
   } else {
     compat_mode = lib::Worker::CompatMode::MYSQL;
     routine_info.set_database_id(database_id);
-    if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-      routine_info.set_owner_id(owner_id);
-    }
     routine_info.set_package_id(parent_id);
     routine_info.set_routine_id(new_routine_id);
     routine_info.set_schema_version(new_schema_version);

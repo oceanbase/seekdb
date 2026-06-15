@@ -5457,8 +5457,7 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
     ddl_info.set_ddl_check_default_value(true);
     empty_session.set_ddl_info(ddl_info);
     empty_session.set_nls_formats(nls_formats);
-    empty_session.set_compatibility_mode(
-      is_oracle_compat_mode ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE);
+    empty_session.set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
     empty_session.set_sql_mode(sql_mode);
     empty_session.set_default_database(db_schema->get_database_name_str());
     empty_session.set_database_id(table_schema.get_database_id());

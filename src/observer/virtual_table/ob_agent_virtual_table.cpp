@@ -97,7 +97,7 @@ static int longtext2longtext(const ObObj &src, ObObj &dst, ObIAllocator &)
 }
 
 ObAgentVirtualTable::ObAgentVirtualTable() : general_tenant_id_(OB_INVALID_TENANT_ID), 
-                                             mode_(lib::Worker::CompatMode::ORACLE)
+                                             mode_(lib::Worker::CompatMode::MYSQL)
 {
 }
 

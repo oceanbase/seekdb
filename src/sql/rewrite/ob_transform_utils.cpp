@@ -3979,15 +3979,6 @@ int ObTransformUtils::is_foreign_key_rely(ObSQLSessionInfo* session_info,
   if (OB_ISNULL(session_info) || OB_ISNULL(foreign_key_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param has null", K(ret), K(session_info), K(foreign_key_info));
-  } else if (SMO_IS_ORACLE_MODE(session_info->get_sql_mode())) {
-    // In oracle mode, primary foreign key constraint check currently uses validate_flag_, to ensure rely_flag_ takes effect later, you can first determine rely_flag_
-    if (foreign_key_info->rely_flag_) {
-      is_rely = true;
-    } else if (foreign_key_info->is_validated()) {
-      is_rely = true;
-    } else {
-      is_rely = false;
-    }
   } else if (!foreign_key_info->is_parent_table_mock_
              && OB_FAIL(session_info->get_foreign_key_checks(foreign_key_checks))) {
     LOG_WARN("get var foreign_key_checks failed", K(ret));

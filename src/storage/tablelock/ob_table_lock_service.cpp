@@ -1461,8 +1461,6 @@ int ObTableLockService::deal_with_deadlock_(ObTableLockCtx &ctx)
     LOG_WARN("session guard invalid", K(ret), K(sess_id));
   } else if (ObCompatibilityMode::MYSQL_MODE == session_guard->get_compatibility_mode()) {
     ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id);
-  } else if (ObCompatibilityMode::ORACLE_MODE == session_guard->get_compatibility_mode()) {
-    ret = ObTransDeadlockDetectorAdapter::kill_stmt(sess_id);
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unknown mode", K(ret), K(session_guard->get_compatibility_mode()));

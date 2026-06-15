@@ -179,12 +179,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           } else if (OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()) {
             // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
             // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
-            if (common::ORACLE_MODE == compa_mode) {
-              if (OB_FAIL(package_info.set_exec_env(ObString("2151677954,45,46,46,")))) {
-                LOG_WARN("failed to set system package exec env",
-                          K(ret), K(session_info_->get_effective_tenant_id()), K(package_info));
-              }
-            } else {
+            {
               OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));
             }
           } else {
@@ -718,9 +713,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
         if (OB_UNLIKELY(OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id())) {
           // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
           // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
-          if (common::ORACLE_MODE == compa_mode) {
-            OZ (package_info.set_exec_env(ObString("2151677954,45,46,46,")));
-          } else {
+          {
             OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));
           }
         } else {

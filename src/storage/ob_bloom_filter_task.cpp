@@ -184,7 +184,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
         ObDatumRowkey rowkey;
         if (OB_FAIL(datum_utils.init(macro_bare_iter->get_rowkey_column_descs(),
                                      macro_header.fixed_header_.rowkey_column_count_,
-                                     compat_mode == lib::Worker::CompatMode::ORACLE,
+                                     false,
                                      allocator_))) {
           STORAGE_LOG(WARN, "Failed to init datum utils", K(ret), K(macro_header));
         }

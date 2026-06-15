@@ -337,7 +337,7 @@ int ObColDataStoreDesc::get_compat_mode_from_schema(
     }
   }
   if (OB_SUCC(ret)) {
-    is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode;
+    is_oracle_mode = false;
   }
   return ret;
 }

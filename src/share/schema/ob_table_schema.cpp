@@ -4038,9 +4038,7 @@ int ObTableSchema::add_col_to_name_hash_array(
   } else {
     // In some scenarios, the tenant id is not initialized when add_column, 4002 will be reported here,
     // and the error code will not be processed temporarily.
-    lib::CompatModeGuard g(is_oracle_mode ?
-                      lib::Worker::CompatMode::ORACLE :
-                      lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     ObColumnSchemaHashWrapper column_name_key(column->get_column_name_str());
     if (NULL == name_hash_array_) {
       name_hash_array_mem_size = get_name_hash_array_mem_size(get_column_count());
@@ -4115,9 +4113,7 @@ int ObTableSchema::remove_col_from_name_hash_array(
     LOG_WARN("name hash array is NULL", K(ret));
   } else {
     // Tenant id is not initialized when add_column in some scenarios
-    lib::CompatModeGuard g(is_oracle_mode ?
-                      lib::Worker::CompatMode::ORACLE :
-                      lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     ObColumnSchemaHashWrapper column_name_key(column->get_column_name());
     if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column_tmp)) {
       ret = OB_ERR_BAD_FIELD_ERROR;

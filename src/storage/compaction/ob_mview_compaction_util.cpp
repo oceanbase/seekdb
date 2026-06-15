@@ -312,7 +312,7 @@ int ObMviewCompactionHelper::create_inner_session(
     LOG_WARN("Failed to set params to session", K(ret));
   } else {
     session->set_inner_session();
-    session->set_compatibility_mode(is_oracle_mode ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE);
+    session->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
     session->get_ddl_info().set_major_refreshing_mview(true);
     session->get_ddl_info().set_refreshing_mview(true);
     session->set_database_id(database_id);
@@ -370,7 +370,7 @@ int ObMviewCompactionHelper::set_params_to_session(const bool is_oracle_mode, sq
     OZ(session->update_sys_variable(SYS_VAR_OB_READ_CONSISTENCY, param_val));
   }
   if (OB_SUCC(ret)) {
-    param_val.set_int(is_oracle_mode ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE);
+    param_val.set_int(ObCompatibilityMode::MYSQL_MODE);
     OZ(session->update_sys_variable(SYS_VAR_OB_COMPATIBILITY_MODE, param_val));
   }
   if (OB_SUCC(ret)) {

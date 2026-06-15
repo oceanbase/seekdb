@@ -330,7 +330,7 @@ int ObTruncatePartKeyInfo::create_tmp_session(
      LOG_WARN("Failed to init tenant in session", K(ret), K(tenant_id));
   } else {
     session->set_inner_session();
-    session->set_compatibility_mode(is_oracle_mode ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE);
+    session->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
   }
   if (OB_FAIL(ret)) {
     release_tmp_session(free_session_ctx, session);

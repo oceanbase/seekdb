@@ -473,7 +473,7 @@ int ObSplitPartitionHelper::prepare_dst_tablet_creator_(
     } else if (OB_FAIL(data_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
       LOG_WARN("fail to check oracle mode", KR(ret), K(data_table_schema.get_table_id()));
     } else {
-      const lib::Worker::CompatMode compat_mode = is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
+      const lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
       ObArray<ObTabletID> tablet_ids;
       ObArray<bool> need_create_empty_majors;
       for (int64_t i = 0; OB_SUCC(ret) && i < split_cnt; i++) {

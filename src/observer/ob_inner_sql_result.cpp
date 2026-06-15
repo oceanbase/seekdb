@@ -52,7 +52,7 @@ ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_sess
       opened_(false), session_(session),
       result_set_(nullptr), row_(NULL),
       execute_start_ts_(0), execute_end_ts_(0),
-      compat_mode_(ORACLE_MODE == session.get_compatibility_mode() ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL),
+      compat_mode_(lib::Worker::CompatMode::MYSQL),
       is_inited_(false),
       store_first_row_(false),
       iter_end_(false),

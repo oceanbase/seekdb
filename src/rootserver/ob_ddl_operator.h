@@ -1012,7 +1012,7 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
     }
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(ddl_id_str)) {
-        ret = new_object_name.append_fmt((lib::Worker::CompatMode::ORACLE == compat_mode) ? "RECYCLE_$_%lu_%ld" : "__recycle_$_%lu_%ld",
+        ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",
             GCONF.cluster_id.get_value(),
             schema.get_schema_version());
       } else if (is_aux_object(schema)) {
@@ -1023,19 +1023,19 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
             RS_LOG(WARN, "failed to get index_name", K(ret));
           } else {
             // Specify ddl id, use ddl id
-            ret = new_object_name.append_fmt((lib::Worker::CompatMode::ORACLE == compat_mode) ? "RECYCLE_$_%.*s_%.*s" : "__recycle_$_%.*s_%.*s",
+            ret = new_object_name.append_fmt("__recycle_$_%.*s_%.*s",
                 ddl_id_str->length(), ddl_id_str->ptr(),
                 index_name.length(), index_name.ptr());
           }
         } else {
           // indexes or VP tables only need the current schema version
-          ret = new_object_name.append_fmt((lib::Worker::CompatMode::ORACLE == compat_mode) ? "RECYCLE_$_%lu_%ld" : "__recycle_$_%lu_%ld",
+          ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",
               GCONF.cluster_id.get_value(),
               schema.get_schema_version());
         }
       } else {
         // Specify ddl id, then use ddl id to generate object name.
-        ret = new_object_name.append_fmt((lib::Worker::CompatMode::ORACLE == compat_mode) ? "RECYCLE_$_%.*s" : "__recycle_$_%.*s",
+        ret = new_object_name.append_fmt("__recycle_$_%.*s",
             ddl_id_str->length(),
             ddl_id_str->ptr());
       }

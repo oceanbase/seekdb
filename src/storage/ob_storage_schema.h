@@ -252,7 +252,7 @@ public:
   int assign(common::ObIAllocator &allocator, const ObStorageSchema &other);
 
   //TODO @lixia use compact mode in storage schema to compaction
-  inline bool is_oracle_mode() const { return compat_mode_ == static_cast<uint32_t>(lib::Worker::CompatMode::ORACLE); }
+  inline bool is_oracle_mode() const { return false; }
   inline lib::Worker::CompatMode get_compat_mode() const { return static_cast<lib::Worker::CompatMode>(compat_mode_);}
   /* merge related function*/
   virtual inline int64_t get_tablet_size() const override { return tablet_size_; }

@@ -3102,7 +3102,7 @@ int ObServer::clean_up_invalid_tables_by_tenant(
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;
-          drop_table_arg.compat_mode_ = is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
+          drop_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
           table_item.table_name_ = table_schema->get_table_name_str();
           table_item.mode_ = table_schema->get_name_case_mode();
           if (OB_FAIL(schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), database_schema))) {

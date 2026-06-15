@@ -90,8 +90,6 @@ public:
     /* The current comp_flag column defaults to 0, to maintain consistency, we perform an inversion operation here based on the mode, ensuring that in mysql mode comp_flag&0x3 is 1, and in oracle mode comp_flag&0x3 is 0*/
     if(common::MYSQL_MODE == compa_mode) {
       comp_flag_ |= COMPATIBLE_MYSQL_MODE;
-    } else if (common::ORACLE_MODE == compa_mode) {
-      comp_flag_ |= COMPATIBLE_ORACLE_MODE;
     } else {
       /*do nothing*/
     }

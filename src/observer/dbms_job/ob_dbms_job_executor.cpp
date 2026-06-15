@@ -61,22 +61,22 @@ int ObDBMSJobExecutor::init_session(
   ObExecEnv &exec_env)
 {
   int ret = OB_SUCCESS;
-  ObObj oracle_sql_mode;
+  ObObj mysql_sql_mode;
   ObArenaAllocator *allocator = NULL;
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   ObPCMemPctConf pc_mem_conf;
-  ObObj oracle_mode;
-  oracle_mode.set_int(1);
-  oracle_sql_mode.set_uint(ObUInt64Type, DEFAULT_ORACLE_MODE);
+  ObObj mysql_mode;
+  mysql_mode.set_int(0);
+  mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   OZ (session.init(1, 1, allocator));
   OX (session.set_inner_session());
   OZ (session.load_default_sys_variable(print_info_log, is_sys_tenant));
   OZ (session.update_max_packet_size());
   OZ (session.init_tenant(tenant_name.ptr(), tenant_id));
   OZ (session.load_all_sys_vars(schema_guard));
-  OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, oracle_sql_mode));
-  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, oracle_mode));
+  OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, mysql_sql_mode));
+  OZ (session.update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode));
   OZ (session.update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
                                   ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
   OZ (session.update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,

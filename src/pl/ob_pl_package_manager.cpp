@@ -465,10 +465,7 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
     }                                                                                       \
   } while (0)
 
-  if (ObCompatibilityMode::ORACLE_MODE == compa_mode) {
-    SEARCH_SYSPACK_FILE_BY_NAME(oracle_syspack_file_list);
-    SEARCH_SYSPACK_FILE_BY_NAME(oracle_special_syspack_file_list);
-  } else if (ObCompatibilityMode::MYSQL_MODE == compa_mode) {
+  {
     SEARCH_SYSPACK_FILE_BY_NAME(mysql_syspack_file_list);
     SEARCH_SYSPACK_FILE_BY_NAME(mysql_special_syspack_file_list);
   }
@@ -515,11 +512,6 @@ int ObPLPackageManager::load_all_common_sys_package(
     OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,
                               SIZE_OF_SYSPACK_LST(mysql_syspack_file_list),
                               ObCompatibilityMode::MYSQL_MODE,
-                              from_file));
-  } else if (compa_mode == ObCompatibilityMode::ORACLE_MODE) {
-    OZ (load_sys_package_list(sql_proxy, oracle_syspack_file_list,
-                              SIZE_OF_SYSPACK_LST(oracle_syspack_file_list),
-                              ObCompatibilityMode::ORACLE_MODE,
                               from_file));
   } else if (compa_mode == ObCompatibilityMode::MYSQL_MODE) {
     OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,

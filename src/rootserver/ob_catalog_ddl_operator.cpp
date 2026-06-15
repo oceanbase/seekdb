@@ -169,11 +169,6 @@ int ObCatalogDDLOperator::grant_or_revoke_after_ddl(ObCatalogSchema &schema,
     }
   }
   if (OB_SUCC(ret) && ddl_type == OB_DDL_DROP_CATALOG) {
-    if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-      OZ(ddl_operator.drop_obj_privs(tenant_id, schema.get_catalog_id(),
-                                     static_cast<uint64_t>(ObObjectType::CATALOG), trans,
-                                     schema_service_, schema_guard));
-    }
   }
   return ret;
 }

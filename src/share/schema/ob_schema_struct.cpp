@@ -55,11 +55,7 @@ bool check_hidden_partition(const ObCheckPartitionMode check_partition_mode)
 
 lib::Worker::CompatMode get_worker_compat_mode(const ObCompatibilityMode &mode)
 {
-  lib::Worker::CompatMode worker_mode = lib::Worker::CompatMode::MYSQL;
-  if (ObCompatibilityMode::ORACLE_MODE == mode) {
-    worker_mode = lib::Worker::CompatMode::ORACLE;
-  }
-  return worker_mode;
+  return lib::Worker::CompatMode::MYSQL;
 }
 
 int ObIndexSchemaInfo::init(
@@ -471,7 +467,7 @@ int ObSysTableChecker::check_inner_table_exist(
     exist = is_sys_tenant(tenant_id);
   } else {
     compat_mode = lib::Worker::CompatMode::MYSQL;
-    const bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode;
+    const bool is_oracle_mode = false;
     // case 2: sys table in tenant space
     if (is_oceanbase_sys_database_id(database_id)) {
       if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {

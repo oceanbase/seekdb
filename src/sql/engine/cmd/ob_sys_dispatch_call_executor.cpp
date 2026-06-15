@@ -47,9 +47,7 @@ int ObSysDispatchCallExecutor::execute(ObExecContext &ctx, ObSysDispatchCallStmt
   ObInnerSQLConnection *conn = nullptr;
   int64_t affected_rows = 0;
 
-  CompatModeGuard worker_guard(ObCompatibilityMode::MYSQL_MODE == stmt.get_tenant_compat_mode()
-                                   ? Worker::CompatMode::MYSQL
-                                   : Worker::CompatMode::ORACLE);
+  CompatModeGuard worker_guard(Worker::CompatMode::MYSQL);
 
   OZ (create_session(stmt.get_designated_tenant_id(), free_session_ctx, session));
   CK (OB_NOT_NULL(session));
@@ -121,10 +119,7 @@ int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
 
   CK (OB_NOT_NULL(GCTX.schema_service_));
   OZ (GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard));
-  if (ObCompatibilityMode::ORACLE_MODE == compat_mode) {
-    compatibility_mode.set_int(1);
-    sql_mode.set_uint(ObUInt64Type, DEFAULT_ORACLE_MODE);
-  } else {
+  {
     compatibility_mode.set_int(0);
     sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   }
@@ -144,11 +139,7 @@ int ObSysDispatchCallExecutor::init_session(sql::ObSQLSessionInfo &session,
   OZ (session.get_pc_mem_conf(pc_mem_conf));
   CK (OB_NOT_NULL(GCTX.sql_engine_));
 
-  if (ObCompatibilityMode::ORACLE_MODE == compat_mode) {
-    OX (session.set_database_id(OB_ORA_SYS_DATABASE_ID));
-    OZ (session.set_default_database(OB_ORA_SYS_SCHEMA_NAME));
-    OZ (schema_guard.get_user_info(tenant_id, OB_ORA_SYS_USER_NAME, user_infos));
-  } else {
+  {
     OX (session.set_database_id(OB_SYS_DATABASE_ID));
     OZ (session.set_default_database(OB_SYS_DATABASE_NAME));
     OZ (schema_guard.get_user_info(tenant_id, OB_SYS_USER_NAME, user_infos));

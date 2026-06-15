@@ -304,9 +304,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
     } else {
       int64_t ls_idx = 0;
       ObPartitionLevel part_level = table_schema.get_part_level();
-      lib::Worker::CompatMode compat_mode = is_oracle_mode ?
-                                         lib::Worker::CompatMode::ORACLE :
-                                         lib::Worker::CompatMode::MYSQL;
+      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
       if (part_level >= PARTITION_LEVEL_MAX) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("part level is unexpected", K(table_schema), KR(ret));

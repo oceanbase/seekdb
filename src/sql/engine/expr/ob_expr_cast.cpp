@@ -436,13 +436,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             len = len > OB_LITERAL_MAX_INT_LEN ? OB_LITERAL_MAX_INT_LEN : len;
             type.set_precision(static_cast<int16_t>(len));
           }
-        } else if (ORACLE_MODE == compatibility_mode && ObDoubleType == dst_type.get_type()) {
-          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][dst_type.get_type()];
-          type.set_accuracy(acc);
-          if (type1.is_decimal_int()) {
-            acc = type1.get_accuracy();
-          }
-          type1.set_accuracy(acc);
         } else if (ObYearType == dst_type.get_type()) {
           ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][dst_type.get_type()];
           type.set_accuracy(acc);

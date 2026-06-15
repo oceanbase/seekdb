@@ -214,7 +214,7 @@ int ObIndexSSTableBuildTask::process()
         } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, CREATE_INDEX_BUILD_SSTABLE_FAILED))) {
           LOG_WARN("ddl sim failure: create index build sstable failed", K(ret), K(tenant_id_), K(task_id_));
         } else if (OB_FAIL(user_sql_proxy->write(tenant_id_, sql_string.ptr(), affected_rows,
-                    oracle_mode ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE, &session_param, sql_exec_addr))) {
+                    ObCompatibilityMode::MYSQL_MODE, &session_param, sql_exec_addr))) {
           LOG_WARN("fail to execute build replica sql", K(ret), K(tenant_id_));
         }
 

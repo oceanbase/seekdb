@@ -4007,7 +4007,7 @@ int ObTableLocation::send_add_interval_partition_rpc(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(table_schema->get_tenant_id(), sql.ptr(), affected_rows, ORACLE_MODE));
+      OZ (sql_proxy->write(table_schema->get_tenant_id(), sql.ptr(), affected_rows, MYSQL_MODE));
     }
   }
   return ret;
@@ -4090,7 +4090,7 @@ int ObTableLocation::send_add_interval_partition_rpc_new_engine(
                               ));
       OX (sql_proxy = GCTX.sql_proxy_);
       CK (OB_NOT_NULL(sql_proxy));
-      OZ (sql_proxy->write(table_schema->get_tenant_id(), sql.ptr(), affected_rows, ORACLE_MODE));
+      OZ (sql_proxy->write(table_schema->get_tenant_id(), sql.ptr(), affected_rows, MYSQL_MODE));
     }
   }
   return ret;

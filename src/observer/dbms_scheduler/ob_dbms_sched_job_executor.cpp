@@ -79,10 +79,7 @@ int ObDBMSSchedJobExecutor::init_session(
   ObPCMemPctConf pc_mem_conf;
   ObObj compatibility_mode;
   ObObj sql_mode;
-  if (job_info.is_oracle_tenant_) {
-    compatibility_mode.set_int(1);
-    sql_mode.set_uint(ObUInt64Type, DEFAULT_ORACLE_MODE);
-  } else {
+  {
     compatibility_mode.set_int(0);
     sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
   }

@@ -756,8 +756,7 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
   ObPartitionFuncType part_type = calc_part_info->part_type_;
   ObDASTabletMapper tablet_mapper;
   const ObExpr *part_expr = expr.args_[0];
-  const bool is_oracle_mode = NULL != ctx.exec_ctx_.get_my_session() &&
-                            ORACLE_MODE == ctx.exec_ctx_.get_my_session()->get_compatibility_mode();
+  const bool is_oracle_mode = false;
   if (OB_FAIL(ctx.exec_ctx_.get_das_ctx().get_das_tablet_mapper(calc_part_info->ref_table_id_,
                                                                 tablet_mapper,
                                                                 &calc_part_info->related_table_ids_))) {
@@ -841,8 +840,7 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
       ObIVector *res_vec = expr.get_vector(ctx);
       res_vec->reset_has_null();
       ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-      const bool is_oracle_mode = NULL != ctx.exec_ctx_.get_my_session() &&
-                            ORACLE_MODE == ctx.exec_ctx_.get_my_session()->get_compatibility_mode();
+      const bool is_oracle_mode = false;
       for (int64_t row_idx = bound.start(); row_idx < bound.end() && OB_SUCC(ret); row_idx++) {
         if (skip.contain(row_idx) || eval_flags.at(row_idx)) {
           continue;
@@ -1232,13 +1230,7 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
                                                partition_id))) {
         LOG_WARN("Failed to get part id", K(ret), K(row));
       } else {
-        if ((OB_INVALID_ID == partition_id) &&
-            PARTITION_LEVEL_ONE == part_level &&
-            NULL != ctx.exec_ctx_.get_my_session() &&
-            ORACLE_MODE == ctx.exec_ctx_.get_my_session()->get_compatibility_mode()) {
-          OZ (add_interval_part(ctx.exec_ctx_, calc_part_info, allocator, row),
-                                                 calc_part_info, first_part_id);
-        }
+        // interval partition only in oracle mode (dead code removed)
       }
     }
   } else { // not list/range columns
@@ -1283,16 +1275,6 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid partition cnt", K(ret), K(part_expr), K(partition_ids), K(range), K(rowkey));
         } else {
-          if (0 == partition_ids.count() &&
-             PARTITION_LEVEL_ONE == part_level &&
-             NULL != ctx.exec_ctx_.get_my_session() &&
-             ORACLE_MODE == ctx.exec_ctx_.get_my_session()->get_compatibility_mode()) {
-            ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-            ObIAllocator &allocator = alloc_guard.get_allocator();
-            ObNewRow row(const_cast<ObObj*>(&result), 1);
-            OZ (add_interval_part(ctx.exec_ctx_, calc_part_info, allocator, row),
-                                           calc_part_info, first_part_id);
-          }
           if (OB_SUCC(ret) && 1 == partition_ids.count()) {
             partition_id = partition_ids.at(0);
             if (1 == tablet_ids.count()) {

@@ -173,8 +173,7 @@ int ObSysTenantLoadSysPackageTask::wait_sys_package_ready(
       LOG_WARN("wait sys package ready failed", KR(ret), K(mode));
     } else {
       inprogress_job_count = 0;
-      if (mode != ObCompatibilityMode::ORACLE_MODE
-          && OB_ENTRY_NOT_EXIST != (tmp_ret = RS_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
+      if (OB_ENTRY_NOT_EXIST != (tmp_ret = RS_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
         inprogress_job_count++;
       }
       if (inprogress_job_count == 0) {

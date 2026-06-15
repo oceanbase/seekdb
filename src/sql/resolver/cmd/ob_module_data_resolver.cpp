@@ -93,12 +93,6 @@ int ObModuleDataResolver::resolve_target_tenant_id(const ParseNode *node,
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation from meta tenant");
     LOG_WARN("operation from meta tenant not allowed", K(ret), K(target_tenant_id), K(login_tenant_id));
   } else if (FALSE_IT(mode = lib::Worker::CompatMode::MYSQL)) {
-  } else if (lib::Worker::CompatMode::ORACLE == mode &&
-            mod != table::ObModuleDataArg::ObExecModule::TIMEZONE &&
-            mod != table::ObModuleDataArg::ObExecModule::GIS) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation from oracle tenant");
-    LOG_WARN("operation from oracle tenant not allowed", K(ret), K(target_tenant_id), K(login_tenant_id));
   }
   return ret;
 }

@@ -3618,9 +3618,7 @@ int ObDDLService::check_is_add_column_online_(const AlterTableSchema &alter_tabl
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("*it_begin is NULL", K(ret));
         } else if (ObSchemaOperationType::OB_DDL_DROP_COLUMN == column_schema->alter_type_) {
-          lib::Worker::CompatMode compat_mode = (is_oracle_mode ?
-          lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
-          lib::CompatModeGuard guard(compat_mode);
+          lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
           const ObString &drop_column_name = column_schema->get_origin_column_name();
           const ObString &add_column_name = alter_column_schema.get_column_name();
           if (ObColumnNameHashWrapper(drop_column_name) == ObColumnNameHashWrapper(add_column_name)) {
@@ -8768,7 +8766,7 @@ int ObDDLService::fill_column_collation(
   ObCollationType collation_type = table_schema.get_collation_type();
   ObCharsetType charset_type = table_schema.get_charset_type();
   const ObCollationType cur_extended_type_info_collation = ObCharset::get_system_collation();
-  lib::CompatModeGuard compat_mode_guard(is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
+  lib::CompatModeGuard compat_mode_guard(lib::Worker::CompatMode::MYSQL);
 
   if (ObStringTC == col_tc) {
     if (OB_FAIL(ObDDLResolver::check_and_fill_column_charset_info(
@@ -10901,9 +10899,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
     ObTableSchema::const_column_iterator it_begin = alter_table_schema.column_begin();
     ObTableSchema::const_column_iterator it_end = alter_table_schema.column_end();
     common::hash::ObHashSet<ObColumnNameHashWrapper> update_column_name_set;
-    lib::Worker::CompatMode compat_mode = (is_oracle_mode ?
-    lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
-    lib::CompatModeGuard tmpCompatModeGuard(compat_mode);
+    lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
     ObSEArray<ObString, 4> gen_col_expr_arr;
     if (OB_FAIL(update_column_name_set.create(32))) {
       LOG_WARN("failed to create update column name set", K(ret));
@@ -11385,9 +11381,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
     AlterColumnSchema *alter_column_schema;
     ObTableSchema::const_column_iterator it_begin = alter_table_schema.column_begin();
     ObTableSchema::const_column_iterator it_end = alter_table_schema.column_end();
-    lib::Worker::CompatMode compat_mode = (is_oracle_mode ?
-    lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
-    lib::CompatModeGuard tmpCompatModeGuard(compat_mode);
+    lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
     ObArray<ObTableSchema> idx_schema_array;
     common::hash::ObHashSet<ObColumnNameHashWrapper> update_column_name_set;
     ObSEArray<ObString, 4> gen_col_expr_arr;
@@ -18638,16 +18632,7 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
         is_oracle_mode = false;
       } else {
         compat_mode = lib::Worker::CompatMode::MYSQL;
-        if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-          is_oracle_mode = true;
-        } else {
-          is_oracle_mode = false;
-        }
-        if (is_oracle_mode && rename_table_arg.rename_table_items_.size() > 1) {
-          ret = OB_ERR_ALTER_TABLE_RENAME_WITH_OPTION;
-          LOG_WARN("alter table rename can't be combined with other operations in oracle mode",
-                   K(ret), K(rename_table_arg));
-        }
+        is_oracle_mode = false;
       }
       ObDDLSQLTransaction trans(schema_service_);
       int64_t refreshed_schema_version = 0;
@@ -20981,9 +20966,7 @@ int ObDDLService::reconstruct_index_schema(obcall::ObAlterTableArg &alter_table_
     } else if (OB_FAIL(orig_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
       LOG_WARN("failed to check if oralce compat mode", K(ret));
     }
-    lib::Worker::CompatMode compat_mode = (is_oracle_mode ?
-    lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
-    lib::CompatModeGuard tmpCompatModeGuard(compat_mode);
+    lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
     /**
      * For recover restore table ddl that src_tenant_id does not equal to the dest,
      * any index rebuild error can be ignored. And to avoid building a invalid index which has duplicated index name,
@@ -24082,8 +24065,7 @@ int ObDDLService::check_db_and_table_is_exist(const obcall::ObTruncateTableArg &
   ObString table_name = arg.table_name_;
   uint64_t tmp_session_id = OB_INVALID_ID;
   uint64_t session_id = arg.session_id_;
-  bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == arg.compat_mode_
-                        ? true : false;
+  bool is_oracle_mode = false;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     common::sqlclient::ObMySQLResult *result = NULL;
     bool skip_escape = false;
@@ -26294,20 +26276,6 @@ int ObDDLService::flashback_table_from_recyclebin(const ObFlashBackTableFromRecy
         ret = OB_OP_NOT_ALLOW;
         LOG_WARN("flashback table to recyclebin db is not allowed", K(ret), K(arg));
       }
-      if (OB_SUCC(ret) && lib::Worker::CompatMode::ORACLE == compat_mode) {
-        ObArray<ObSchemaType> conflict_schema_types;
-        if (OB_FAIL(schema_guard.check_oracle_object_exist(arg.tenant_id_,
-            new_db_schema->get_database_id(), arg.new_table_name_, OB_MAX_SCHEMA,
-            INVALID_ROUTINE_TYPE, false, conflict_schema_types))) {
-          LOG_WARN("fail to check oracle_object exist", K(ret), K(table_schema));
-        } else if (conflict_schema_types.count() > 0) {
-          ret = OB_ERR_EXIST_OBJECT;
-          LOG_WARN("Name is already used by an existing object", K(ret), K(table_schema),
-              K(conflict_schema_types));
-        } else {
-          new_db_id = new_db_schema->get_database_id();
-        }
-      }
       if (OB_SUCC(ret) && lib::Worker::CompatMode::MYSQL == compat_mode) {
         if (OB_FAIL(schema_guard.check_table_exist(arg.tenant_id_,
                                                           new_db_schema->get_database_id(),
@@ -26326,17 +26294,6 @@ int ObDDLService::flashback_table_from_recyclebin(const ObFlashBackTableFromRecy
         }
       }
     } else {
-      if (OB_SUCC(ret) && lib::Worker::CompatMode::ORACLE == compat_mode) {
-        ObArray<ObSchemaType> conflict_schema_types;
-        if (OB_FAIL(schema_guard.check_oracle_object_exist(arg.tenant_id_, database_id,
-            arg.new_table_name_.empty() ? arg.origin_table_name_ : arg.new_table_name_,
-            OB_MAX_SCHEMA, INVALID_ROUTINE_TYPE, false, conflict_schema_types))) {
-          LOG_WARN("fail to check oracle_object exist", K(ret), K(table_schema));
-        } else if (conflict_schema_types.count() > 0) {
-          ret = OB_ERR_EXIST_OBJECT;
-          LOG_WARN("Name is already used by an existing object", K(ret), K(table_schema));
-        }
-      }
     }
     if (OB_SUCC(ret)) {
       if (table_schema->is_index_table()
@@ -27434,7 +27391,7 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
             ddl_stmt_str = drop_table_arg.ddl_stmt_str_;
           } else if (OB_FAIL(construct_drop_sql(table_item,
                                                 drop_table_arg.table_type_,
-                                                lib::Worker::CompatMode::ORACLE == compat_mode,
+                                                false,
                                                 is_cascade_constrains,
                                                 drop_sql))) {
             LOG_WARN("construct_drop_sql failed", K(ret));
@@ -30468,8 +30425,8 @@ int ObDDLService::grant(const ObGrantArg &arg)
           ObArray<uint64_t> role_ids;
           ObArray<ObUserInfo> roles_info;
           // Resolve each role id and role info
-          bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode;
-          int64_t step = is_oracle_mode ? 1 : 2;
+          bool is_oracle_mode = false;
+          int64_t step = 2;
           for (int64_t i = GRANT_ROLE_MIN_ROLE_NUM - 1; OB_SUCC(ret) && i + step <= roles.count(); i+=step) {
             // Oracle currently does not support specifying hostname to create a role
             const ObString host_name = is_oracle_mode ? ObString(OB_DEFAULT_HOST_NAME) : roles.at(i+1);
@@ -30627,10 +30584,7 @@ int ObDDLService::grant(const ObGrantArg &arg)
                 }
               }
             } else {
-              if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-                tmp_ret = OB_ERR_USER_OR_ROLE_DOES_NOT_EXIST;
-                LOG_USER_ERROR(OB_ERR_USER_OR_ROLE_DOES_NOT_EXIST, user_name.length(), user_name.ptr());
-              } else {
+              {
                 tmp_ret = OB_PASSWORD_WRONG;
                 LOG_USER_ERROR(OB_PASSWORD_WRONG,
                                user_name.length(), user_name.ptr(), host_name.length(), host_name.ptr(), "NO");
@@ -30644,14 +30598,6 @@ int ObDDLService::grant(const ObGrantArg &arg)
             bool is_owner = false;
             // In oracle mode, if it is oracle syntax, it need to determine grantee is obj owner,
             // if yes, return success directly
-            if (lib::Worker::CompatMode::ORACLE == compat_mode
-                && (arg.priv_level_ == OB_PRIV_SYS_ORACLE_LEVEL
-                 || (arg.ins_col_ids_.count() +
-                     arg.upd_col_ids_.count() +
-                     arg.ref_col_ids_.count() +
-                     arg.obj_priv_array_.count() > 0))) {
-              is_owner = share::ObOraPrivCheck::user_is_owner(user_name, arg.db_);
-            }
             if (!is_owner) {
               /* No column level permissions */
               if (arg.column_names_priv_.count() == 0 &&

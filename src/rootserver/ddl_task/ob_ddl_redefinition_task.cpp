@@ -218,9 +218,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         LOG_WARN("set timeout failed", K(ret));
       } else {
-        ObCompatibilityMode compat_mode = oracle_mode ?
-                                          ObCompatibilityMode::ORACLE_MODE :
-                                          ObCompatibilityMode::MYSQL_MODE;
+        ObCompatibilityMode compat_mode = ObCompatibilityMode::MYSQL_MODE;
         ObMySQLTransaction trans;
         if (is_mview_complete_refresh_) {
           ObMViewOpArg arg;

@@ -2901,11 +2901,6 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
                 table_item.table_name_.length(), table_item.table_name_.ptr()))) {
               LOG_WARN("fail to assign sql stmt", K(ret));
             }
-          } else if (lib::Worker::CompatMode::ORACLE == mode) {
-            if (OB_FAIL(sql.append_fmt("ALTER TABLE \"%.*s\" SHRINK SPACE",
-                table_item.table_name_.length(), table_item.table_name_.ptr()))) {
-              LOG_WARN("fail to append fmt", K(ret));
-            }
           } else {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("error unexpected, unknown mode", K(ret), K(mode));
@@ -3604,20 +3599,6 @@ int ObRootService::revoke_table(const ObRevokeTableArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (FALSE_IT(mode = lib::Worker::CompatMode::MYSQL)) {
-  } else if (lib::Worker::CompatMode::ORACLE == mode) {
-    ObTablePrivSortKey table_priv_key(arg.tenant_id_, arg.user_id_, arg.db_, arg.table_);
-    ObObjPrivSortKey obj_priv_key(arg.tenant_id_,
-                                  arg.obj_id_,
-                                  arg.obj_type_,
-                                  OBJ_LEVEL_FOR_TAB_PRIV,
-                                  arg.grantor_id_,
-                                  arg.user_id_);
-    OZ (ddl_service_.revoke_table(arg,
-                                  table_priv_key,
-                                  arg.priv_set_,
-                                  obj_priv_key,
-                                  arg.obj_priv_array_,
-                                  arg.revoke_all_ora_));
   } else if (lib::Worker::CompatMode::MYSQL == mode) {
     if (OB_FAIL(ddl_service_.revoke_table_and_column_mysql(arg))) {
       LOG_WARN("revoke table and col failed", K(ret));

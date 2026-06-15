@@ -879,10 +879,6 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
                 }
               }
             }
-          } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-            const ObColumnRefRawExpr *ref_expr = static_cast<const ObColumnRefRawExpr*>(expr);
-            new_sort_item.column_name_ = ref_expr->get_column_name();
-            new_sort_item.is_func_index_ = false;
           } else {
             ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
             LOG_WARN("Functional index on a column is not supported.", K(ret), K(*expr));

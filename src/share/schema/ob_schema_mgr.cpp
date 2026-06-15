@@ -3429,8 +3429,7 @@ int ObSchemaMgr::get_index_schema(
         LOG_WARN("fail to get index name", K(ret));
       } else {
         // Notice that, operation on mysql_db table when compat_mode equals to lib::Worker::CompatMode::ORACLE is mysql mode.
-        const bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode
-                                     && !is_mysql_sys_database_id(database_id);
+        const bool is_oracle_mode = false;
         const ObIndexSchemaHashWrapper cutted_index_name_wrapper(tenant_id, database_id,
             is_oracle_mode ? common::OB_INVALID_ID : data_table_id, cutted_index_name);
         int hash_ret = index_name_map.get_refactored(cutted_index_name_wrapper, tmp_schema);
@@ -4712,27 +4711,11 @@ int ObSchemaMgr::get_idx_schema_by_origin_idx_name(const uint64_t tenant_id,
              || ori_index_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(database_id), K(ori_index_name));
-  } else if (lib::Worker::CompatMode::ORACLE != compat_mode
-             || is_mysql_sys_database_id(database_id)) {
+  } else {
+    // Oracle mode only - always returns error in MySQL-only mode
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("compat_mode is not oracle mode",
-             KR(ret), K(tenant_id), K(database_id), K(compat_mode));
-  } else {
-    ObSimpleTableSchemaV2 *tmp_schema = NULL;
-    const ObIndexSchemaHashWrapper index_name_wrapper(
-        tenant_id, database_id, common::OB_INVALID_ID, ori_index_name);
-    lib::CompatModeGuard g(lib::Worker::CompatMode::ORACLE);
-    int hash_ret = normal_index_name_map_.get_refactored(index_name_wrapper, tmp_schema);
-    if (OB_SUCCESS == hash_ret) {
-      if (OB_ISNULL(tmp_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret), K(tmp_schema));
-      } else {
-        table_schema = tmp_schema;
-      }
-    } else if (OB_HASH_NOT_EXIST == hash_ret) {
-      // do nothing
-    }
+             KR(ret), K(tenant_id), K(database_id));
   }
   return ret;
 }

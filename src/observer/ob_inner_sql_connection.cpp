@@ -295,7 +295,7 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
     if (NULL != client_addr) {
       oracle_mode_ = client_addr->is_oracle_mode();
     } else if (NULL != extern_session) {
-      oracle_mode_ = ORACLE_MODE == extern_session->get_compatibility_mode();
+      oracle_mode_ = false;
     } else {
       oracle_mode_ = is_oracle_mode;
     }
@@ -2119,13 +2119,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
 
 lib::Worker::CompatMode ObInnerSQLConnection::get_compat_mode() const
 {
-  lib::Worker::CompatMode mode;
-  if (is_oracle_compat_mode()) {
-    mode = lib::Worker::CompatMode::ORACLE;
-  } else {
-    mode = lib::Worker::CompatMode::MYSQL;
-  }
-  return mode;
+  return lib::Worker::CompatMode::MYSQL;
 }
 
 // nested session and sql execute for foreign key.

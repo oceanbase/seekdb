@@ -110,8 +110,7 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       }
     }
     if (OB_SUCC(ret)) {
-      lib::Worker::CompatMode compat_mode = is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
-      lib::CompatModeGuard guard(compat_mode);
+      lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
       if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator,
           root_expr_type, columns_names))) {
         LOG_WARN("get generated column expr failed", K(ret));
@@ -852,10 +851,7 @@ int ObSchemaUtils::build_column_group(
     column_group.set_block_size(table_schema.get_block_size());
     column_group.set_compressor_type(table_schema.get_compressor_type());
     const ObStoreFormatType store_format = table_schema.get_store_format();
-    bool is_flat = lib::Worker::CompatMode::ORACLE == mode ? ((OB_STORE_FORMAT_NOCOMPRESS_ORACLE == store_format)
-                                            || (OB_STORE_FORMAT_BASIC_ORACLE == store_format)
-                                            || (OB_STORE_FORMAT_OLTP_ORACLE == store_format))
-                                         : ((OB_STORE_FORMAT_REDUNDANT_MYSQL == store_format)
+    bool is_flat = ((OB_STORE_FORMAT_REDUNDANT_MYSQL == store_format)
                                             || (OB_STORE_FORMAT_COMPACT_MYSQL == store_format));
     if (is_flat) {
       // use the encoding type according to the row format

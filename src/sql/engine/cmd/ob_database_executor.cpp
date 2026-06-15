@@ -204,8 +204,7 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
   } else {
     obcall::UInt64 affected_row(0);
     obcall::ObDropDatabaseRes drop_database_res;
-    const_cast<obcall::ObDropDatabaseArg&>(drop_database_arg).compat_mode_ = ORACLE_MODE == ctx.get_my_session()->get_compatibility_mode()
-        ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
+    const_cast<obcall::ObDropDatabaseArg&>(drop_database_arg).compat_mode_ = lib::Worker::CompatMode::MYSQL;
     if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_database(drop_database_arg, drop_database_res); }))) {
       SQL_ENG_LOG(WARN, "rpc proxy drop table failed",
                   "timeout", THIS_WORKER.get_timeout_remain(), K(ret));

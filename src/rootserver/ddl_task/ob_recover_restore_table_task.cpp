@@ -231,7 +231,7 @@ int ObRecoverRestoreTableTask::fail()
       drop_table_arg.table_type_         = table_schema->get_table_type();
       drop_table_arg.foreign_key_checks_ = false;
       drop_table_arg.force_drop_         = true;
-      drop_table_arg.compat_mode_        = is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
+      drop_table_arg.compat_mode_        = lib::Worker::CompatMode::MYSQL;
     }
   }
 

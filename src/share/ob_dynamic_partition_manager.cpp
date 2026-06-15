@@ -180,7 +180,7 @@ int ObDynamicPartitionManager::write_ddl_(const ObSqlString &ddl)
     } else if (OB_FAIL(GCTX.sql_proxy_->write(tenant_id_,
                                               ddl.ptr(),
                                               affected_rows,
-                                              is_oracle_mode_ ? ObCompatibilityMode::ORACLE_MODE : ObCompatibilityMode::MYSQL_MODE,
+                                              ObCompatibilityMode::MYSQL_MODE,
                                               &session_param))) {
       LOG_WARN("fail to execute dynamic partition ddl", KR(ret), K_(tenant_id), K(ddl));
     }

@@ -452,8 +452,7 @@ int ObSchemaGetterGuard::get_user_id(uint64_t tenant_id,
     const ObSimpleUserSchema *simple_user = NULL;
     lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (0 == user_name.case_compare(OB_SYS_USER_NAME)
-               && 0 == host_name.case_compare(OB_SYS_HOST_NAME)
-               && (lib::Worker::CompatMode::ORACLE != compat_mode)) {
+               && 0 == host_name.case_compare(OB_SYS_HOST_NAME)) {
       // root is not an inner user in oracle mode.
       user_id = OB_SYS_USER_ID;
     } else if (OB_FAIL(mgr->get_user_schema(tenant_id,
@@ -1979,11 +1978,6 @@ int ObSchemaGetterGuard::is_user_empty_passwd(const ObUserLoginInfo &login_info,
         if (NULL == user_info) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user info is null", K(login_info), KR(ret));
-        } else if (user_info->is_role() && lib::Worker::CompatMode::ORACLE == compat_mode) {
-          ret = OB_PASSWORD_WRONG;
-          LOG_INFO("password error", "tenant_name", login_info.tenant_name_,
-              "user_name", login_info.user_name_,
-              "client_ip_", login_info.client_ip_, KR(ret));
         } else if (!obsys::ObNetUtil::is_match(login_info.client_ip_, user_info->get_host_name_str())) {
           LOG_TRACE("account not matched, try next", KPC(user_info), K(login_info));
         } else {
@@ -2033,11 +2027,6 @@ int ObSchemaGetterGuard::check_user_access(
         if (NULL == user_info) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user info is null", K(login_info), KR(ret));
-        } else if (user_info->is_role() && lib::Worker::CompatMode::ORACLE == compat_mode) {
-          ret = OB_PASSWORD_WRONG;
-          LOG_INFO("password error", "tenant_name", login_info.tenant_name_,
-              "user_name", login_info.user_name_,
-              "client_ip_", login_info.client_ip_, KR(ret));
         } else if (!obsys::ObNetUtil::is_match(login_info.client_ip_, user_info->get_host_name_str())) {
           LOG_TRACE("account not matched, try next", KPC(user_info), K(login_info));
         } else {
@@ -2136,27 +2125,12 @@ int ObSchemaGetterGuard::check_user_access(
             } else if (NULL == role_info) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("role info is null", KR(ret), K(role_id_array.at(i)));
-            } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-              s_priv.user_priv_set_ |= role_info->get_priv_set();
-              if (user_info->get_disable_option(
-                             user_info->get_role_id_option_array().at(i)) == 0) {
-                OZ (add_role_id_recursively(user_info->get_tenant_id(),
-                                            role_id_array.at(i),
-                                            s_priv,
-                                            enable_role_id_array));
-              }
             } else {
               if (activate_all_role
                   || user_info->get_disable_option(user_info->get_role_id_option_array().at(i)) == 0) {
                 OZ (enable_role_id_array.push_back(role_id_array.at(i)));
               }
             }
-          }
-          if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-            OZ (add_role_id_recursively(user_info->get_tenant_id(),
-                                        OB_ORA_PUBLIC_ROLE_ID,
-                                        s_priv,
-                                        enable_role_id_array));
           }
         }
 
@@ -2425,7 +2399,7 @@ int ObSchemaGetterGuard::check_db_access(
   } else if (OB_FAIL(get_tenant_compat_mode(tenant_id, compat_mode))) {
     LOG_WARN("fail to get compat mode", K(ret));
   } else {
-    bool is_oracle_mode = compat_mode == lib::Worker::CompatMode::ORACLE;
+    bool is_oracle_mode = false;
     const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
     ObOriginalDBKey db_priv_key(session_priv.tenant_id_,
                                 session_priv.user_id_,
@@ -5274,73 +5248,6 @@ int ObSchemaGetterGuard::check_oracle_object_exist(const uint64_t tenant_id, con
 
   if (OB_FAIL(get_tenant_compat_mode(tenant_id, compat_mode))) {
     LOG_WARN("fail to get tenant compat mode", KR(ret), K(tenant_id), K(compat_mode));
-  } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-
-    // table
-    const ObSimpleTableSchemaV2 *table_schema = NULL;
-    if (FAILEDx(get_simple_table_schema(
-                tenant_id, db_id, object_name, false, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(db_id), K(object_name));
-    } else if (NULL != table_schema) {
-      if (TABLE_SCHEMA == schema_type && table_schema->is_view_table() && is_or_replace) {
-        // create or replace view
-      } else if (OB_FAIL(conflict_schema_types.push_back(TABLE_SCHEMA))) {
-        LOG_WARN("fail to push back to conflict_schema_types", KR(ret));
-      }
-    }
-
-    // sequence
-    is_exist = false;
-    uint64_t sequence_id = OB_INVALID_ID;
-    bool is_system_generated = false;
-    if (FAILEDx(check_sequence_exist_with_name(
-                tenant_id, db_id, object_name, is_exist, sequence_id, is_system_generated))) {
-      LOG_WARN("fail to check sequence exist", KR(ret), K(tenant_id), K(db_id), K(object_name));
-    } else if (is_exist && OB_FAIL(conflict_schema_types.push_back(SEQUENCE_SCHEMA))) {
-      LOG_WARN("fail to push back to conflict_schema_types", KR(ret));
-    }
-
-    // package
-    const ObPackageInfo *package_info = NULL;
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(get_package_info(tenant_id, db_id, object_name, PACKAGE_TYPE, COMPATIBLE_ORACLE_MODE, package_info))) {
-        LOG_WARN("failed to get package info",
-                 KR(ret), K(tenant_id), K(db_id), K(object_name));
-      } else if (NULL != package_info) {
-        if (PACKAGE_SCHEMA == schema_type && is_or_replace) {
-          // create or replace package
-        } else if (OB_FAIL(conflict_schema_types.push_back(PACKAGE_SCHEMA))) {
-          LOG_WARN("fail to push back to conflict_schema_types", KR(ret));
-        }
-      }
-    }
-
-    // standalone procedure
-    is_exist = false;
-    if (FAILEDx(check_standalone_procedure_exist(tenant_id, db_id, object_name, is_exist))) {
-      LOG_WARN("failed to check procedure exist", KR(ret), K(tenant_id), K(db_id), K(object_name));
-    } else if (is_exist) {
-      if (ROUTINE_SCHEMA == schema_type
-          && ROUTINE_PROCEDURE_TYPE == routine_type && is_or_replace) {
-        // create or replace standalone procedure
-      } else if (OB_FAIL(conflict_schema_types.push_back(ROUTINE_SCHEMA))) {
-        LOG_WARN("fail to push back to conflict_schema_types", KR(ret));
-      }
-    }
-
-    // standalone function
-    is_exist = false;
-    if (FAILEDx(check_standalone_function_exist(tenant_id, db_id, object_name, is_exist))) {
-      LOG_WARN("failed to check procedure exist", KR(ret), K(tenant_id), K(db_id), K(object_name));
-    } else if (is_exist) {
-      if (ROUTINE_SCHEMA == schema_type
-          && ROUTINE_PROCEDURE_TYPE != routine_type && is_or_replace) {
-        // create or replace standalone function
-      } else if (OB_FAIL(conflict_schema_types.push_back(ROUTINE_SCHEMA))) {
-        LOG_WARN("fail to push back to conflict_schema_types", KR(ret));
-      }
-    }
-
   }
 
   return ret;

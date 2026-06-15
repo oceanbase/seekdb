@@ -378,9 +378,6 @@ int ObDropTableHelper::generate_schemas_()
                                                                     mock_fk_parent_table_schemas))) { 
                   LOG_WARN("fail to gen mock fk parent table schema", KR(ret));
                 }
-              } else if (lib::Worker::CompatMode::ORACLE == compat_mode && is_cascade_constraints) {
-                // delete fk later, overwrite ret
-                ret = OB_SUCCESS;
               } else {
                 // return OB_ERR_TABLE_IS_REFERENCED
                 const ObTableSchema *child_table_schema = NULL;
@@ -1369,8 +1366,8 @@ int ObDropTableHelper::construct_drop_table_sql_(const ObTableSchema &table_sche
   } else {
     bool is_offline_ddl_hidden_data_table = ObTableStateFlag::TABLE_STATE_HIDDEN_OFFLINE_DDL == table_schema.get_table_state_flag();
     bool use_drop_table_stmt_in_arg = (USER_INDEX == arg_.table_type_) || is_offline_ddl_hidden_data_table;
-    bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode;
-    bool is_cascade_constraints = is_oracle_mode && arg_.if_exist_;
+    bool is_oracle_mode = false;
+    bool is_cascade_constraints = false;
     const ObTableType table_type = table_schema.get_table_type();
     if (use_drop_table_stmt_in_arg) {
       ddl_stmt_str_.append(arg_.ddl_stmt_str_);

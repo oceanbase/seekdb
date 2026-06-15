@@ -1728,9 +1728,6 @@ int ObJsonExprHelper::set_dest_type(ObExprResType &type1,
             len = len > OB_LITERAL_MAX_INT_LEN ? OB_LITERAL_MAX_INT_LEN : len;
             type.set_precision(static_cast<int16_t>(len));
           }
-        } else if (ORACLE_MODE == compatibility_mode && ObDoubleType == dst_type.get_type()) {
-          ObAccuracy acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[compatibility_mode][dst_type.get_type()];
-          type.set_accuracy(acc);
         } else {
           type.set_precision(dst_type.get_precision());
         }

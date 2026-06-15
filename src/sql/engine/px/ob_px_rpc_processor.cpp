@@ -228,8 +228,7 @@ int ObInitSqcP::after_process(int error_code)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Session can't be null", K(ret));
   } else {
-    lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
-        lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
 
     sqc_handler->set_tenant_id(sqc_handler->get_exec_ctx().get_my_session()->get_effective_tenant_id());
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
@@ -411,8 +410,7 @@ int ObInitFastSqcP::process()
     if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
       LOG_WARN("fast sqc failed to SET_INTERRUPTABLE");
     } else {
-      lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
-      lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
+      lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
       sqc_handler->set_tenant_id(session->get_effective_tenant_id());
       LOG_TRACE("process dfo",
                 K(arg),
@@ -432,25 +430,11 @@ int ObInitFastSqcP::process()
   GET_DIAGNOSTIC_INFO->get_ash_stat().in_sql_execution_ = false;
   if (OB_NOT_NULL(sqc_handler)) {
     // link channel before or during the link process may fail.
-    // If sqc and qc ARE linked, the qc learns the outcome via the dtl
-    // FINISH_SQC_RESULT report (sent in destroy_sqc), so force ret=OB_SUCCESS.
-    // If sqc and qc are NOT linked, there is no dtl report; and under async
-    // in-process dispatch (ObSerialDfoScheduler::dispatch_sqcs uses async_call)
-    // no synchronous return code reaches the qc either, so the launcher itself
-    // must wake the qc -- interrupt it with this ret, mirroring the old
-    // ObFastInitSqcCB::process error path. Do this BEFORE release_handler frees
-    // the handler (avoid use-after-free); interrupt_qc only reads the sqc meta
-    // and posts to the global interrupt manager, it does not retain the pointer.
+    // If sqc and qc do not have a link, the response will notify px of ret.
+    // If sqc and qc are already linked, notify px by dtl msg report.
     sqc_handler->set_end_ret(ret);
     if (sqc_handler->has_flag(OB_SQC_HANDLER_QC_SQC_LINKED)) {
       ret = OB_SUCCESS;
-    } else if (OB_SUCCESS != ret) {
-      ObPxRpcInitSqcArgs &sqc_arg = sqc_handler->get_sqc_init_arg();
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = ObInterruptUtil::interrupt_qc(
-              sqc_arg.sqc_, ret, &sqc_handler->get_exec_ctx()))) {
-        LOG_WARN("fail to interrupt qc for pre-link sqc init failure", K(tmp_ret), K(ret));
-      }
     }
     sqc_handler->reset_reference_count();
     int report_ret = OB_SUCCESS;

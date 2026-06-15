@@ -1925,7 +1925,7 @@ int ObTabletLobSplitUtil::open_snapshot_scan_iters(ObLobSplitParam *param,
   } else {
     HEAP_VAR(ObTableSchema, aux_lob_meta_schema) {
     LOG_INFO("open one sstable rowscan", K(last_major_table_handle));
-    const bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == param->compat_mode_;
+    const bool is_oracle_mode = false;
     ObArray<ObColDesc> col_descs;
     ObTabletLobWriteSSTableCtx write_sstable_ctx;
     ObSSTable *sst = static_cast<ObSSTable*>(last_major_table_handle.get_table());

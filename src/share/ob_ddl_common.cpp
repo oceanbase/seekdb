@@ -4993,8 +4993,7 @@ int ObDDLUtil::convert_to_storage_schema(
     Worker::CompatMode compat_mode;
     if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
       LOG_WARN("fail to check if oracle compat mode", K(ret), KPC(table_schema));
-    } else if (FALSE_IT(compat_mode = is_oracle_mode ? Worker::CompatMode::ORACLE
-                                                     : Worker::CompatMode::MYSQL)) {
+    } else if (FALSE_IT(compat_mode = Worker::CompatMode::MYSQL)) {
     } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, storage_schema))) {
       LOG_WARN("alloc and new failed", K(ret));
     } else if (OB_FAIL(storage_schema->init(allocator, *table_schema, compat_mode))) {

@@ -198,8 +198,7 @@ int ObAllVirtualProxySchema::gen_column_value(char *&buf, int64_t len,
                                               const ObString &str, const bool is_oracle_mode)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard guard(is_oracle_mode ? lib::Worker::CompatMode::ORACLE :
-                             lib::Worker::CompatMode::MYSQL);
+  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   ObObj col_obj;
   col_obj.set_varchar(str);
   int64_t pos = 0;
@@ -672,22 +671,10 @@ int ObAllVirtualProxySchema::get_view_decoded_schema_(
     } else if (OB_FAIL(empty_session.init_tenant(tenant_name, tenant_id))) {
       LOG_WARN("fail to set tenant", KR(ret), K(tenant_name), K(tenant_id));
     } else {
-      lib::Worker::CompatMode compat_mode = is_oracle_mode ?
-                                         lib::Worker::CompatMode::ORACLE :
-                                         lib::Worker::CompatMode::MYSQL;
+      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
       empty_session.set_compatibility_mode(static_cast<ObCompatibilityMode>(compat_mode));
       empty_session.set_sql_mode(ob_compatibility_mode_to_sql_mode(static_cast<ObCompatibilityMode>(compat_mode)));
       empty_session.set_inner_session();
-      if (is_oracle_mode) {
-        uint64_t database_id = OB_INVALID_ID;
-        if (OB_FAIL(schema_guard_.get_database_id(tenant_id, database_name, database_id))) {
-          LOG_WARN("failed to get database id", K(ret));
-        } else if (OB_FAIL(empty_session.set_default_database(database_name))) {
-          LOG_WARN("failed to set default database name", K(ret));
-        } else {
-          empty_session.set_database_id(database_id);
-        }
-      }
       ParseResult parse_result;
       sql::ObParser parser(*allocator_, empty_session.get_sql_mode());
       sql::ObSchemaChecker schema_checker;

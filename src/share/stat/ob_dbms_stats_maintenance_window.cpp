@@ -504,7 +504,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
   } else {
     compat_mode = lib::Worker::CompatMode::MYSQL;
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-      if (OB_FAIL(get_async_gather_stats_job_info(lib::Worker::CompatMode::ORACLE == compat_mode,
+      if (OB_FAIL(get_async_gather_stats_job_info(false,
                                                         tenant_id, job_id, exec_env, job_info))) {
         LOG_WARN("failed to get async gather stats job info", K(ret), K(job_info));
       } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(*sql_proxy, tenant_id, job_id, job_info))) {

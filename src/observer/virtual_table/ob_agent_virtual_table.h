@@ -38,7 +38,7 @@ public:
       const share::schema::ObTableSchema *index_table,
       const ObVTableScanParam &scan_param,
       const bool only_sys_data,
-      const lib::Worker::CompatMode &mode = lib::Worker::CompatMode::ORACLE);
+      const lib::Worker::CompatMode &mode = lib::Worker::CompatMode::MYSQL);
 
   virtual int do_open() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;

@@ -200,8 +200,6 @@ int ObTransOnDetectOperation::operator()(
     ret = OB_ERR_UNEXPECTED;
   } else if (++step && ObCompatibilityMode::MYSQL_MODE == session_guard->get_compatibility_mode()) {
     ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id_);
-  } else if (++step && ObCompatibilityMode::ORACLE_MODE == session_guard->get_compatibility_mode()) {
-    ret = ObTransDeadlockDetectorAdapter::kill_stmt(sess_id_);
   } else {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "unknown mode", KR(ret), K(step), K(session_guard.get_session()), K(*this));
