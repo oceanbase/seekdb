@@ -276,10 +276,7 @@ int ObDDLTabletContext::init(
     ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     bucket_count_ = ddl_thread_count * 2;
-    if (GCTX.is_shared_storage_mode() && OB_ISNULL(macro_meta_store_mgr_ = OB_NEW(ObMacroMetaStoreManager, ObMemAttr(MTL_ID(), "mb_meta_mgr")))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory for macro meta manager failed", K(ret));
-    } else if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr(MTL_ID(), "tblt_slice_map")))) {
+    if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr(MTL_ID(), "tblt_slice_map")))) {
       LOG_WARN("create slice map failed", K(ret), K(bucket_count_));
     } else if (OB_FAIL(bucket_lock_.init(bucket_count_))) {
       LOG_WARN("init bucket lock failed", K(ret), K(bucket_count_));

@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/utility/ob_unify_serialize.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "common/row/ob_row_store.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/session/ob_session_val_map.h"
@@ -194,7 +194,7 @@ protected:
   common::ObSEArray<sql::ObTableRowCount, 4> table_row_counts_;
   common::ObFixedArray<sql::ObImplicitCursorInfo, common::ObIAllocator> implicit_cursors_;
   sql::ObChunkDatumStore datum_store_;
-  obrpc::ObRpcResultCode rcode_;
+  rpc::frame::ObResultCode rcode_;
   sql::ObExecFeedbackInfo fb_info_;
   int64_t memstore_read_row_count_;
   int64_t ssstore_read_row_count_;

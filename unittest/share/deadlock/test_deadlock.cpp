@@ -23,7 +23,7 @@
 #include "share/deadlock/test/test_key.h"
 #include "share/deadlock/mock_deadlock_rpc.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace std;
 
 namespace oceanbase {

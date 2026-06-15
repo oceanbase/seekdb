@@ -37,14 +37,14 @@ public:
   bool get_if_exists() const { return if_exists_; };
   uint64_t get_tenant_id() const { return tenant_id_; };
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_user_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_user_arg_; }
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
   common::ObStrings users_;//user1,host1; usr2,host2;...
   uint64_t tenant_id_;
   bool if_exists_;
-  obrpc::ObDropUserArg drop_user_arg_; // used to return exec_tenant_id_
+  obcall::ObDropUserArg drop_user_arg_; // used to return exec_tenant_id_
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropUserStmt);
 };

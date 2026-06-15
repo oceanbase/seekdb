@@ -112,8 +112,7 @@ private:
       const bool force_renew,
       const bool by_src_tablet,
       common::hash::ObHashMap<share::ObLSID, common::ObSEArray<share::ObMigrateTabletAutoincSeqParam, 1>> &map);
-  template<typename P, typename A>
-  int call_and_process_all_tablet_autoinc_seqs(P &proxy, A &arg, const bool is_get);
+  int call_and_process_all_tablet_autoinc_seqs(const bool is_get);
   bool is_error_need_retry(const int ret_code) const
   {
     return common::OB_TIMEOUT == ret_code || common::OB_TABLET_NOT_EXIST == ret_code || common::OB_NOT_MASTER == ret_code ||
@@ -273,7 +272,7 @@ protected:
   int generate_rebuild_index_arg_list(const int64_t tenant_id, 
                                       const int64_t table_id, 
                                       ObSchemaGetterGuard &schema_guard, 
-                                      obrpc::ObAlterTableArg &alter_table_arg);
+                                      obcall::ObAlterTableArg &alter_table_arg);
   int64_t get_build_replica_request_time();
 private:
   int add_table_tablets_for_snapshot_(const uint64_t table_id, ObSchemaGetterGuard &schema_guard,
@@ -302,7 +301,7 @@ protected:
   ObSyncTabletAutoincSeqCtx sync_tablet_autoinc_seq_ctx_;
   int64_t build_replica_request_time_;
   int64_t complete_sstable_job_ret_code_;
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   common::hash::ObHashMap<uint64_t, DependTaskStatus> dependent_task_result_map_;
   bool has_synced_autoincrement_;
   bool has_synced_stats_info_;

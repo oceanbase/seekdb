@@ -508,7 +508,7 @@ int ObStorageHAUtils::build_major_sstable_reuse_info(
     // (i.e. will scan all sstables' macro block again when tablet restore dag retry)
     // when migrate, we will keep the major sstable already been copied to dest server, so we need to build reuse info for lastest major sstable
     // that already been copied to dest server
-    if (OB_SUCC(ret) && !GCTX.is_shared_storage_mode() && !is_restore) {
+    if (OB_SUCC(ret) && !is_restore) {
       common::ObArray<ObSSTableWrapper> major_sstables;
       int64_t reuse_info_count = 0;
       ObTableStoreIterator major_sstable_iter;
@@ -676,8 +676,8 @@ int ObStorageHAUtils::build_tablets_sstable_info_with_helper(
     const common::ObIArray<ObTabletHandle> &tablet_handle_array)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCopyTabletSSTableInfo sstable_info;
-  obrpc::ObCopyTabletSSTableHeader copy_header;
+  obcall::ObCopyTabletSSTableInfo sstable_info;
+  obcall::ObCopyTabletSSTableHeader copy_header;
 
   if (OB_ISNULL(helper) || OB_ISNULL(ha_table_info_mgr) || OB_ISNULL(dag_net)) {
     ret = OB_INVALID_ARGUMENT;

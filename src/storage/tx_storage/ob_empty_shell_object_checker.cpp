@@ -104,9 +104,7 @@ int ObDDLEmptyShellChecker::check_disk_space_exceeds(
     bool &can_become_empty_shell)
 {
   int ret = OB_SUCCESS;
-  if (GCTX.is_shared_storage_mode()) {
-    can_become_empty_shell = false;
-  } else {
+  {
     const int64_t required_size = LOCAL_DEVICE_INSTANCE.get_total_block_size() * 0.1;
     if (OB_FAIL(LOCAL_DEVICE_INSTANCE.check_space_full(required_size, false/*alarm_if_space_full*/))) {
       if (OB_SERVER_OUTOF_DISK_SPACE == ret) {

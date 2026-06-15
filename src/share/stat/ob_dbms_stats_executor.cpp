@@ -1,3 +1,4 @@
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -1788,16 +1789,16 @@ int ObDbmsStatsExecutor::cancel_gather_stats(ObExecContext &ctx, ObString &task_
         } else {/*do nothing*/}
       } else {//remote
         int64_t timeout = std::min(static_cast<int64_t>(10000000L), THIS_WORKER.get_timeout_remain());
-        obrpc::ObCancelGatherStatsArg arg;
+        obcall::ObCancelGatherStatsArg arg;
         arg.tenant_id_ = tenant_id;
         arg.task_id_ = task_id;
         if (OB_UNLIKELY(0 >= timeout)) {
           ret = OB_TIMEOUT;
           LOG_WARN("query timeout is reached", K(ret), K(timeout));
-        } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(rpc_addr)
-                                                  .timeout(timeout)
-                                                  .by(tenant_id)
-                                                  .cancel_gather_stats(arg))) {
+        } else if (OB_FAIL(ex_rpc::sync_call([&]{
+          if (!arg.is_valid()) return OB_INVALID_ARGUMENT;
+          return ObOptStatGatherStatList::instance().cancel_gather_stats(arg.tenant_id_, arg.task_id_);
+        }))) {
           LOG_WARN("failed to cancel gather stats",  K(ret), K(rpc_addr), K(arg));
         } else {/*do nothing*/}
       }

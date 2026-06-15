@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_tablet_split_task.h"
+#include "rootserver/ob_root_service.h"
 #include "logservice/ob_log_service.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
@@ -109,7 +110,7 @@ int ObTabletSplitParam::init(
   return ret;
 }
 
-int ObTabletSplitParam::init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg)
+int ObTabletSplitParam::init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -138,7 +139,7 @@ int ObTabletSplitParam::init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg
   return ret;
 }
 
-int ObTabletSplitParam::init(const obrpc::ObTabletSplitArg &arg)
+int ObTabletSplitParam::init(const obcall::ObTabletSplitArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -267,7 +268,7 @@ int ObTabletSplitCtx::prepare_index_builder(
   } else if (OB_FAIL(split_data.get_storage_schema(storage_schema))) {
     LOG_WARN("failed to get storage schema", K(ret));
   } else {
-    compaction::ObExecMode exec_mode = GCTX.is_shared_storage_mode() ? ObExecMode::EXEC_MODE_OUTPUT : ObExecMode::EXEC_MODE_LOCAL;
+    compaction::ObExecMode exec_mode = ObExecMode::EXEC_MODE_LOCAL;
     for (int64_t i = 0; OB_SUCC(ret) && i < sstables.count(); i++) {
       blocksstable::ObSSTable *sstable = static_cast<blocksstable::ObSSTable *>(sstables.at(i));
       for (int64_t j = 0; OB_SUCC(ret) && j < param.dest_tablets_id_.count(); j++) {
@@ -557,7 +558,7 @@ int ObTabletSplitDag::fill_dag_key(char *buf, const int64_t buf_len) const
 int ObTabletSplitDag::report_replica_build_status()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObDDLBuildSingleReplicaResponseArg arg;
+  obcall::ObDDLBuildSingleReplicaResponseArg arg;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletSplitDag has not been inited", K(ret));
@@ -589,10 +590,7 @@ int ObTabletSplitDag::report_replica_build_status()
     arg.row_inserted_     = context_.row_inserted_;
     arg.physical_row_count_  = context_.physical_row_count_;
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("inner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
+    } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
     }
     SERVER_EVENT_ADD("ddl", "replica_split_resp",
@@ -916,7 +914,7 @@ int ObTabletSplitWriteTask::prepare_macro_block_writer(
     macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
     macro_seq_param.start_ = macro_start_seq.macro_data_seq_;
     const bool micro_index_clustered = context_->tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_;
-    compaction::ObExecMode exec_mode = GCTX.is_shared_storage_mode() ? ObExecMode::EXEC_MODE_OUTPUT : ObExecMode::EXEC_MODE_LOCAL;
+    compaction::ObExecMode exec_mode = ObExecMode::EXEC_MODE_LOCAL;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < param_->dest_tablets_id_.count(); i++) {
       ObPreWarmerParam pre_warm_param;
@@ -2634,8 +2632,8 @@ int ObTabletSplitUtil::get_split_dest_tablets_info(
 }
 
 int ObTabletSplitUtil::check_medium_compaction_info_list_cnt(
-    const obrpc::ObCheckMediumCompactionInfoListArg &arg,
-    obrpc::ObCheckMediumCompactionInfoListResult &result)
+    const obcall::ObCheckMediumCompactionInfoListArg &arg,
+    obcall::ObCheckMediumCompactionInfoListResult &result)
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;

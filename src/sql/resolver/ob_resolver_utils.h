@@ -412,11 +412,11 @@ public:
 
   //check unique indx cover partition column
   static int check_unique_index_cover_partition_column(const share::schema::ObTableSchema &table_schema,
-                                                       const obrpc::ObCreateIndexArg &arg);
+                                                       const obcall::ObCreateIndexArg &arg);
 
   //Get index columns ids from array of ObColumnSortItem
   static int get_index_column_ids(const share::schema::ObTableSchema &table_schema,
-                                  const common::ObIArray<obrpc::ObColumnSortItem> &columns,
+                                  const common::ObIArray<obcall::ObColumnSortItem> &columns,
                                   common::ObIArray<uint64_t> &column_ids);
 
   //unique idx need cover partition columns
@@ -613,15 +613,15 @@ public:
   static int foreign_key_column_match_index_column(const share::schema::ObTableSchema &parent_table_schema,
                                                    ObSchemaChecker &schema_checker,
                                                    const common::ObIArray<common::ObString> &parent_columns,
-                                                   const common::ObSArray<obrpc::ObCreateIndexArg> &index_arg_list,
+                                                   const common::ObSArray<obcall::ObCreateIndexArg> &index_arg_list,
                                                    const bool is_oracle_mode,
                                                    share::schema::ObForeignKeyRefType &fk_ref_type,
                                                    uint64_t &ref_cst_id,
                                                    bool &is_match);
   static int check_self_reference_fk_columns_satisfy(
-        const obrpc::ObCreateForeignKeyArg &arg);
+        const obcall::ObCreateForeignKeyArg &arg);
   static int check_foreign_key_set_null_satisfy(
-        const obrpc::ObCreateForeignKeyArg &arg,
+        const obcall::ObCreateForeignKeyArg &arg,
         const share::schema::ObTableSchema &child_table_schema,
         const bool is_mysql_compat_mode);
   static int check_match_columns(const common::ObIArray<ObString> &parent_columns,
@@ -634,7 +634,7 @@ public:
                                         const ObIArray<ObString> &columns_array_2,
                                         bool &is_match);
   static int check_match_columns_strict_with_order(const share::schema::ObTableSchema *index_table_schema,
-                                                   const obrpc::ObCreateIndexArg &create_index_arg,
+                                                   const obcall::ObCreateIndexArg &create_index_arg,
                                                    bool &is_match);
   static int check_partial_match_columns(const ObIArray<ObString> &parent_columns,
                                          const ObIArray<ObString> &key_columns,
@@ -872,7 +872,7 @@ public:
                             ObObjParam &obj_param,
                             bool &is_param,
                             const bool enable_decimal_int);
-  static int check_allowed_alter_operations_for_mlog(const obrpc::ObAlterTableArg &arg,
+  static int check_allowed_alter_operations_for_mlog(const obcall::ObAlterTableArg &arg,
                                                   const share::schema::ObTableSchema &table_schema);
   static int fast_get_param_type(const ParseNode &parse_node,
                                  const ParamStore *param_store,

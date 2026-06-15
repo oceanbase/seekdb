@@ -36,7 +36,7 @@ ObDropPrimaryKeyTask::~ObDropPrimaryKeyTask()
 int ObDropPrimaryKeyTask::init(const ObTableSchema* src_table_schema, const ObTableSchema* dst_table_schema,
                                const int64_t task_id, const share::ObDDLType &ddl_type, const int64_t parallelism,
                                const int64_t consumer_group_id, const int32_t sub_task_trace_id, 
-                               const obrpc::ObAlterTableArg &alter_table_arg, const uint64_t tenant_data_version,
+                               const obcall::ObAlterTableArg &alter_table_arg, const uint64_t tenant_data_version,
                                const int64_t task_status,const int64_t snapshot_version )
 {
   int ret = OB_SUCCESS;

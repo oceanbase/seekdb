@@ -928,7 +928,7 @@ int ObPxSubCoord::start_ddl()
     } else {
       const int64_t px_thread_count = sqc_arg_.sqc_.get_task_count();
       ObColumnClusteredDagInitParam ddl_dag_param;
-      ddl_dag_param.direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(GCTX.is_shared_storage_mode(), tenant_data_version);
+      ddl_dag_param.direct_load_type_ = ObDirectLoadMgrUtil::ddl_get_direct_load_type(tenant_data_version);
       ddl_dag_param.ddl_thread_count_ = px_thread_count;
       ddl_dag_param.px_thread_count_ = px_thread_count;
       ddl_dag_param.ddl_task_param_.ddl_task_id_ = ddl_task_id;

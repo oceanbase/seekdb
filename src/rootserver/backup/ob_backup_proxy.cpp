@@ -21,33 +21,33 @@
 
 using namespace oceanbase;
 using namespace rootserver;
-using namespace obrpc;
+using namespace obcall;
 
-int ObBackupServiceProxy::handle_backup_database(const obrpc::ObBackupDatabaseArg &arg)
+int ObBackupServiceProxy::handle_backup_database(const obcall::ObBackupDatabaseArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObBackupServiceProxy::handle_backup_database_cancel(const obrpc::ObBackupManageArg &arg)
+int ObBackupServiceProxy::handle_backup_database_cancel(const obcall::ObBackupManageArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObBackupServiceProxy::handle_backup_delete(const obrpc::ObBackupCleanArg &arg)
+int ObBackupServiceProxy::handle_backup_delete(const obcall::ObBackupCleanArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObBackupServiceProxy::handle_delete_policy(const obrpc::ObDeletePolicyArg &arg)
+int ObBackupServiceProxy::handle_delete_policy(const obcall::ObDeletePolicyArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObBackupServiceProxy::handle_archive_log(const obrpc::ObArchiveLogArg &arg)
+int ObBackupServiceProxy::handle_archive_log(const obcall::ObArchiveLogArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;

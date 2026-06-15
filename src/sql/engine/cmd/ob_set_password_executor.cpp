@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_set_password_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_set_password_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -25,7 +26,7 @@ namespace oceanbase
 {
 
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace sql
@@ -44,7 +45,6 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const uint64_t tenant_id = stmt.get_tenant_id();
   const common::ObStrings *user_passwd = NULL;
   const int64_t FIX_MEMBER_CNT = 7;
@@ -60,9 +60,6 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("task_exec_ctx is null", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("common_rpc_proxy is null", K(ret));
   } else if (OB_UNLIKELY(FIX_MEMBER_CNT != user_passwd->count())) {
     ret = OB_ERR_UNEXPECTED;;
     LOG_WARN("invalid set pwd stmt, wrong user passwd count", K(ret));
@@ -114,7 +111,7 @@ int ObSetPasswordExecutor::execute(ObExecContext &ctx, ObSetPasswordStmt &stmt)
       } else {
         arg.passwd_ = passwd;
       }
-      if (OB_SUCC(ret) && OB_FAIL(common_rpc_proxy->set_passwd(arg))) {
+      if (OB_SUCC(ret) && OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->set_passwd(arg); }))) {
           LOG_WARN("Set password failed", K(ret));
       } else if (0 == user_name.case_compare(session->get_user_name())) {
         session->set_password_expired(false);

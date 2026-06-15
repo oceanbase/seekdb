@@ -22,7 +22,7 @@
 
 namespace oceanbase
 {
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace transaction::tablelock;
@@ -388,8 +388,8 @@ int ObMLogBuilder::init()
 }
 
 int ObMLogBuilder::create_or_replace_mlog(share::schema::ObSchemaGetterGuard &schema_guard,
-                                          const obrpc::ObCreateMLogArg &create_mlog_arg,
-                                          obrpc::ObCreateMLogRes &create_mlog_res)
+                                          const obcall::ObCreateMLogArg &create_mlog_arg,
+                                          obcall::ObCreateMLogRes &create_mlog_res)
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_id = create_mlog_arg.tenant_id_;
@@ -516,7 +516,7 @@ int ObMLogBuilder::do_create_mlog(
   int ret = OB_SUCCESS;
   HEAP_VARS_3((ObTableSchema, mlog_schema),
               (ObTableSchema, src_table_schema),
-              (obrpc::ObCreateIndexArg, create_index_arg)) {
+              (obcall::ObCreateIndexArg, create_index_arg)) {
     ObDDLTaskRecord task_record;
     ObArenaAllocator allocator("DdlTaskTmp");
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
@@ -656,7 +656,7 @@ int ObMLogBuilder::replace_mlog(ObSchemaGetterGuard &schema_guard,
     ObRebuildIndexArg rebuild_index_arg;
     rebuild_index_arg.database_name_ = database_schema->get_database_name_str();
     rebuild_index_arg.create_mlog_arg_.assign(create_mlog_arg);
-    rebuild_index_arg.rebuild_index_type_ = obrpc::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_MLOG;
+    rebuild_index_arg.rebuild_index_type_ = obcall::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_MLOG;
     ObCreateDDLTaskParam param(orig_mlog_schema->get_tenant_id(), 
                                ObDDLType::DDL_REPLACE_MLOG,
                                orig_mlog_schema, 

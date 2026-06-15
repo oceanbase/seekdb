@@ -25,7 +25,6 @@
 #include "share/rc/ob_tenant_base.h"
 #include "share/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "share/vector_index/ob_plugin_vector_index_scheduler.h"
-#include "observer/table/ttl/ob_tenant_ttl_manager.h"
 #include "share/vector_index/ob_plugin_vector_index_util.h"
 #include "share/vector_type/ob_vector_common_util.h"
 #include "share/vector_index/ob_tenant_vector_index_async_task.h"
@@ -232,7 +231,7 @@ public:
   // for debug
   void dump_all_inst();
   // for virtual table
-  int get_snapshot_tablet_ids(ObIArray<obrpc::ObLSTabletPair> &complete_tablet_ids,  ObIArray<obrpc::ObLSTabletPair> &partial_tablet_ids);
+  int get_snapshot_tablet_ids(ObIArray<obcall::ObLSTabletPair> &complete_tablet_ids,  ObIArray<obcall::ObLSTabletPair> &partial_tablet_ids);
   int get_cache_tablet_ids(ObLSID &ls_id, ObIArray<ObLSTabletPair> &cache_tablet_ids);
 
   TO_STRING_KV(K_(is_inited), K_(need_check), K_(ls_id), K_(ls_tablet_task_ctx));
@@ -428,7 +427,7 @@ public:
   // for debug
   int dump_all_inst();
   // for virtual table
-  int get_snapshot_ids(ObIArray<obrpc::ObLSTabletPair> &complete_tablet_ids,  ObIArray<obrpc::ObLSTabletPair> &partial_tablet_ids);
+  int get_snapshot_ids(ObIArray<obcall::ObLSTabletPair> &complete_tablet_ids,  ObIArray<obcall::ObLSTabletPair> &partial_tablet_ids);
   int get_cache_ids(ObIArray<ObLSTabletPair> &cache_tablet_ids);
   // for ivf
   // ivfflat index needs center ids

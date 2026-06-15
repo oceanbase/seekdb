@@ -17,7 +17,6 @@
 
 #include "sql/plan_cache/ob_pcv_set.h"
 #include "pl/ob_pl_package.h"
-#include "src/observer/table/ob_table_cache.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 
 using namespace oceanbase::common;

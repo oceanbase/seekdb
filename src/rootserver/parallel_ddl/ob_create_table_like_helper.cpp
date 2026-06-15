@@ -32,8 +32,8 @@ using namespace oceanbase::rootserver;
 ObCreateTableLikeHelper::ObCreateTableLikeHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObCreateTableLikeArg &arg,
-    obrpc::ObCreateTableRes &res,
+    const obcall::ObCreateTableLikeArg &arg,
+    obcall::ObCreateTableRes &res,
     bool enable_ddl_parallel,
     ObDDLSQLTransaction *external_trans):
     ObDDLHelper(schema_service, tenant_id, "[create table like]", external_trans, enable_ddl_parallel),

@@ -27,7 +27,7 @@ namespace oceanbase
 namespace transaction
 {
 
-int ObStandbyTimestampService::init(rpc::frame::ObReqTransport *req_transport)
+int ObStandbyTimestampService::init()
 {
   int ret = OB_SUCCESS;
 
@@ -36,9 +36,7 @@ int ObStandbyTimestampService::init(rpc::frame::ObReqTransport *req_transport)
   } else {
     tenant_id_ = MTL_ID();
     self_ = GCTX.self_addr();
-    if (OB_FAIL(rpc_.init(req_transport, self_))) {
-      TRANS_LOG(WARN, "rpc init fail", K(ret), K_(self), K_(tenant_id));
-    } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::StandbyTimestampService, tg_id_))) {
+    if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::StandbyTimestampService, tg_id_))) {
       TRANS_LOG(ERROR, "create tg failed", K(ret));
     } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
       TRANS_LOG(ERROR, "start standby timestamp service thread pool fail", K(ret), K_(tenant_id));
@@ -57,13 +55,7 @@ int ObStandbyTimestampService::mtl_init(ObStandbyTimestampService *&sts)
   if (lib::is_embed_mode()) {
     TRANS_LOG(INFO, "ObStandbyTimestampService skip init in embed mode");
   } else {
-    rpc::frame::ObReqTransport *req_transport = GCTX.net_frame_->get_req_transport();
-    if (OB_ISNULL(req_transport)) {
-      ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", KP(req_transport));
-    } else {
-      ret = sts->init(req_transport);
-    }
+    ret = sts->init();
   }
   return ret;
 }
@@ -78,8 +70,6 @@ int ObStandbyTimestampService::start()
     TRANS_LOG(WARN, "ObStandbyTimestampService not init", K(ret), K_(tenant_id));
   } else if (OB_FAIL(TG_START(tg_id_))) {
     TRANS_LOG(WARN, "ObStandbyTimestampService start error", K(ret), K_(tenant_id));
-  } else if (OB_FAIL(rpc_.start())) {
-    TRANS_LOG(WARN, "ObStandbyTimestampService rpc start error", K(ret), K_(tenant_id));
   } else {
     // do nothing
   }
@@ -90,13 +80,11 @@ int ObStandbyTimestampService::start()
 void ObStandbyTimestampService::stop()
 {
   TG_STOP(tg_id_);
-  rpc_.stop();
 }
 
 void ObStandbyTimestampService::wait()
 {
   TG_WAIT(tg_id_);
-  rpc_.wait();
 }
 
 void ObStandbyTimestampService::destroy()
@@ -109,7 +97,6 @@ void ObStandbyTimestampService::destroy()
     epoch_ = OB_INVALID_TIMESTAMP;
     switch_to_leader_ts_ = OB_INVALID_TIMESTAMP;
     TG_DESTROY(tg_id_);
-    rpc_.destroy();
     TRANS_LOG(INFO, "standby timestamp service destroy", K_(tenant_id));
   }
 }
@@ -223,7 +210,7 @@ int ObStandbyTimestampService::switch_to_leader()
   return ret;
 }
 
-int ObStandbyTimestampService::handle_request(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result)
+int ObStandbyTimestampService::handle_request(const ObGtsRequest &request, obcall::ObGtsRpcResult &result)
 {
   int ret = OB_SUCCESS;
 
@@ -241,17 +228,11 @@ int ObStandbyTimestampService::handle_request(const ObGtsRequest &request, obrpc
      TRANS_LOG(DEBUG, "handle local gts request", K(requester));
      ret = handle_local_request_(request, result);
     } else if (OB_FAIL(get_number(gts))) {
+      // single-replica: remote requester path is dead; only local requests occur
       TRANS_LOG(WARN, "get timestamp failed", KR(ret));
       int tmp_ret = OB_SUCCESS;
-      ObGtsErrResponse response;
       if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
         TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
-      } else if (OB_SUCCESS != (tmp_ret = response.init(tenant_id, srr, ret, self_))) {
-        TRANS_LOG(WARN, "gts err response init failed", K(tmp_ret), K(request));
-      } else if (OB_SUCCESS != (tmp_ret = rpc_.post(tenant_id, requester, response))) {
-        TRANS_LOG(WARN, "post gts err response failed", K(tmp_ret), K(response));
-      } else {
-        TRANS_LOG(DEBUG, "post gts err response success", K(response));
       }
     } else {
       if (OB_FAIL(result.init(tenant_id, ret, srr, gts, gts))) {
@@ -262,7 +243,7 @@ int ObStandbyTimestampService::handle_request(const ObGtsRequest &request, obrpc
   return ret;
 }
 
-int ObStandbyTimestampService::handle_local_request_(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result)
+int ObStandbyTimestampService::handle_local_request_(const ObGtsRequest &request, obcall::ObGtsRpcResult &result)
 {
   int ret = OB_SUCCESS;
   int64_t gts = 0;

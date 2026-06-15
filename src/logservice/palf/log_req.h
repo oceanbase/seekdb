@@ -79,7 +79,7 @@ public:
   LogWriteBuf write_buf_;
 };
 
-struct LogBatchPushReq : public LogPushReq, public obrpc::ObIFill {
+struct LogBatchPushReq : public LogPushReq, public obcall::ObIFill {
   LogBatchPushReq(const PushLogType push_log_type,
                   const int64_t &msg_proposal_id,
                   const int64_t &prev_log_proposal_id,
@@ -113,7 +113,7 @@ public:
   LSN lsn_;
 };
 
-struct LogBatchPushResp : public LogPushResp, public obrpc::ObIFill {
+struct LogBatchPushResp : public LogPushResp, public obcall::ObIFill {
   LogBatchPushResp(const int64_t &msg_proposal_id,
                   const LSN &lsn)
       : LogPushResp(msg_proposal_id, lsn), ObIFill() {}

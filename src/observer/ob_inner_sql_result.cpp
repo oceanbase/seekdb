@@ -50,7 +50,7 @@ ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_sess
       mem_context_destroy_guard_(mem_context_),
       sql_ctx_(), schema_guard_(share::schema::ObSchemaMgrItem::MOD_INNER_SQL_RESULT),
       opened_(false), session_(session),
-      result_set_(nullptr), remote_result_set_(nullptr), row_(NULL),
+      result_set_(nullptr), row_(NULL),
       execute_start_ts_(0), execute_end_ts_(0),
       compat_mode_(ORACLE_MODE == session.get_compatibility_mode() ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL),
       is_inited_(false),
@@ -89,12 +89,8 @@ int ObInnerSQLResult::init(bool has_tenant_resource)
   }
   if (OB_SUCC(ret)) {
     set_has_tenant_resource(has_tenant_resource);
-    if (!has_tenant_resource) {
-      remote_result_set_ = new (buf_) ObRemoteResultSet(mem_context_->get_arena_allocator());
-      remote_result_set_->reset_and_init_remote_resp_handler();
-    } else {
-      // The constructor of some members depends on MTL_ID, such as `temp_ctx_`(ObTMArray)
-      // of `exec_ctx_, so here need to switch to the corresponding tenant to new object.
+    {
+      // single-replica: inner sql always executes locally (resource RPC removed).
       MTL_SWITCH(session_.get_effective_tenant_id()) {
         result_set_ = new (buf_) ObResultSet(session_, mem_context_->get_arena_allocator());
         result_set_->set_is_inner_result_set(true);
@@ -122,9 +118,6 @@ ObInnerSQLResult::~ObInnerSQLResult()
       result_set_->~ObResultSet();
     }
   }
-  if (remote_result_set_ != nullptr) {
-    remote_result_set_->~ObRemoteResultSet();
-  }
   if (tenant_ != nullptr) {
     tenant_->unlock();
     tenant_ = nullptr;
@@ -151,9 +144,7 @@ int ObInnerSQLResult::open()
     lib::CompatModeGuard g(compat_mode_);
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
-    bool is_select = has_tenant_resource() ?
-           ObStmt::is_select_stmt(result_set_->get_stmt_type())
-           : ObStmt::is_select_stmt(remote_result_set_->get_stmt_type());
+    bool is_select = ObStmt::is_select_stmt(result_set_->get_stmt_type());
     WITH_CONTEXT(mem_context_) {
       if (opened_) {
         ret = OB_INIT_TWICE;
@@ -166,8 +157,7 @@ int ObInnerSQLResult::open()
       } else if (is_read_&& is_select) {
         //prefetch 1 row for throwing error code and retry
         opened_ = true;
-        if ((has_tenant_resource() && OB_FAIL(result_set_->get_next_row(row_)))
-            || (!has_tenant_resource() && OB_FAIL(remote_result_set_->get_next_row(row_)))) {
+        if (OB_FAIL(result_set_->get_next_row(row_))) {
           if (OB_ITER_END == ret) {
             iter_end_ = true;
             ret = OB_SUCCESS;
@@ -231,8 +221,6 @@ int ObInnerSQLResult::inner_close()
       if (has_tenant_resource() && OB_FAIL(result_set_->close())) {
         result_set_->refresh_location_cache_by_errno(true, ret);
         LOG_WARN("result set close failed", K(ret));
-      } else if(!has_tenant_resource() && OB_FAIL(remote_result_set_->close())) {
-        LOG_WARN("remote_result_set close failed", K(ret));
       }
     }
   }
@@ -270,11 +258,6 @@ int ObInnerSQLResult::next()
           result_set_->refresh_location_cache_by_errno(true, ret);
           LOG_WARN("get next row failed", K(ret));
         }
-      } else if (!has_tenant_resource() && OB_FAIL(remote_result_set_->get_next_row(row_))) {
-        if (OB_ITER_END != ret) {
-          LOG_WARN("get next row failed",
-                   K(ret), K(remote_result_set_->get_field_columns()->count()));
-        }
       }
 
     }
@@ -298,9 +281,7 @@ int ObInnerSQLResult::build_column_map() const
   }
   if (OB_SUCC(ret)) {
     column_map_.clear();
-    const ColumnsFieldIArray *fields = has_tenant_resource()
-                                       ? result_set_->get_field_columns()
-                                           : remote_result_set_->get_field_columns();
+    const ColumnsFieldIArray *fields = result_set_->get_field_columns();
     if (OB_ISNULL(fields)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(fields));

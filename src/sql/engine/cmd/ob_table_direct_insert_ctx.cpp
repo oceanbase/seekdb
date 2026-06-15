@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_table_direct_insert_ctx.h"
+#include "observer/table_load/ob_table_load_struct.h"
 #include "observer/table_load/ob_table_load_instance.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "sql/engine/ob_physical_plan.h"

@@ -81,7 +81,9 @@ typedef common::ObVector<uint64_t> TenantIdList;
 class ObMultiTenant : public common::ObTimerTask
 {
 public:
-  const     static int64_t TIME_SLICE_PERIOD        = 1000000;
+  // 100ms: bounds packet-retry requeue latency (retry_queue_ is only drained
+  // by timeup); heavy work in timeup is gated to 1s internally.
+  const     static int64_t TIME_SLICE_PERIOD        = 100000;
 
 public:
   explicit ObMultiTenant();
@@ -114,10 +116,6 @@ public:
                                   const int64_t old_log_disk_size,
                                   const int64_t new_log_disk_size,
                                   int64_t &allowed_log_disk_size);
-#ifdef OB_BUILD_SHARED_STORAGE
-  int update_tenant_data_disk_size(const uint64_t tenant_id,
-                                    const int64_t new_data_disk_size);
-#endif
   int modify_tenant_io(const uint64_t tenant_id, const share::ObUnitConfig &unit_config);
   int update_tenant_config(uint64_t tenant_id);
   int update_palf_config();

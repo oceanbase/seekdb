@@ -78,14 +78,6 @@
 #include "share/scheduler/ob_partition_auto_split_helper.h"
 #include "observer/mysql/ob_query_response_time.h" //ObTenantQueryRespTimeCollector
 #include "lib/stat/ob_diagnostic_info_container.h"
-#ifndef BUILD_EMBED_MODE
-#include "observer/table/ttl/ob_ttl_service.h"
-#include "observer/table/group/ob_table_tenant_group.h"
-#include "observer/table/ob_table_client_info_mgr.h"
-#include "observer/table/common/ob_table_query_session_mgr.h"
-#include "observer/table/ob_table_query_async_processor.h"
-#include "observer/table/ob_htable_rowkey_mgr.h"
-#endif
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
@@ -344,15 +336,6 @@ int ObMultiTenant::init(ObAddr myaddr,
     MTL_BIND2(mtl_new_default, ObTenantErrsimEventMgr::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
 #endif
     MTL_BIND2(mtl_new_default, rootserver::ObDBMSSchedService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
-#ifndef BUILD_EMBED_MODE
-    MTL_BIND2(mtl_new_default, table::ObTTLService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
-    MTL_BIND2(mtl_new_default, table::ObHTableLockMgr::mtl_init, nullptr, nullptr, nullptr, table::ObHTableLockMgr::mtl_destroy);
-    MTL_BIND2(mtl_new_default, table::ObTableObjectPoolMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
-    MTL_BIND2(mtl_new_default, table::ObTableGroupCommitMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
-    MTL_BIND2(mtl_new_default, table::ObHTableRowkeyMgr::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
-    MTL_BIND2(mtl_new_default, table::ObTableClientInfoMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
-    MTL_BIND2(mtl_new_default, observer::ObTableQueryASyncMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
-#endif
     MTL_BIND2(mtl_new_default, ObSharedTimer::mtl_init, ObSharedTimer::mtl_start, ObSharedTimer::mtl_stop, ObSharedTimer::mtl_wait, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObOptStatMonitorManager::mtl_init, ObOptStatMonitorManager::mtl_start, ObOptStatMonitorManager::mtl_stop, ObOptStatMonitorManager::mtl_wait, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObTenantSrs::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
@@ -1009,14 +992,6 @@ int ObMultiTenant::update_tenant_log_disk_size(const uint64_t tenant_id,
   return ret;
 }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObMultiTenant::update_tenant_data_disk_size(const uint64_t tenant_id,
-                                                 const int64_t new_data_disk_size)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-#endif
 
 int ObMultiTenant::update_tenant_config(uint64_t tenant_id)
 {
@@ -1527,7 +1502,7 @@ int ObMultiTenant::convert_real_to_hidden_sys_tenant()
       } else if (FALSE_IT(lock_succ = true)) {
       } else if (OB_FAIL(update_tenant_unit_no_lock(tenant_meta.unit_))) {
         LOG_WARN("fail to update_tenant_unit_no_lock", K(ret), K(tenant_meta));
-      } else if (!GCTX.is_shared_storage_mode()) {
+      } else {
         ObTenantSwitchGuard guard(tenant);
         if (OB_FAIL(MTL(ObTenantStorageMetaService *)->get_active_cursor(tenant_meta.super_block_.replay_start_point_))) {
           LOG_WARN("get slog current cursor fail", K(ret));

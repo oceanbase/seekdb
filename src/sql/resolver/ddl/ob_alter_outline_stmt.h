@@ -48,13 +48,13 @@ public:
   const common::ObString &get_target_sql() const { return alter_outline_arg_.alter_outline_info_.get_outline_target_str(); }
   common::ObString &get_target_sql() { return alter_outline_arg_.alter_outline_info_.get_outline_target_str(); }
   ObStmt *&get_outline_stmt() { return outline_stmt_; }
-  obrpc::ObAlterOutlineArg &get_alter_outline_arg() { return alter_outline_arg_; }
-  const obrpc::ObAlterOutlineArg &get_alter_outline_arg() const { return alter_outline_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_outline_arg_; }
+  obcall::ObAlterOutlineArg &get_alter_outline_arg() { return alter_outline_arg_; }
+  const obcall::ObAlterOutlineArg &get_alter_outline_arg() const { return alter_outline_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_outline_arg_; }
   TO_STRING_KV(K_(alter_outline_arg),
                K_(outline_stmt));
 private:
-  obrpc::ObAlterOutlineArg alter_outline_arg_;
+  obcall::ObAlterOutlineArg alter_outline_arg_;
   ObStmt *outline_stmt_;//the stmt for outline
   DISALLOW_COPY_AND_ASSIGN(ObAlterOutlineStmt);
 };

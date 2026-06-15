@@ -22,6 +22,7 @@
 #include "share/location_cache/ob_location_service.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "ob_wr_collector.h"
+#include "observer/ob_ex_rpc.h"
 
 using namespace oceanbase::common::sqlclient;
 
@@ -33,8 +34,7 @@ namespace share
 #define WR_SNAP_ID_SEQNENCE_NAME "OB_WORKLOAD_REPOSITORY_SNAP_ID_SEQNENCE"
 
 WorkloadRepositoryTask::WorkloadRepositoryTask()
-    : wr_proxy_(),
-      tg_id_(-1),
+    : tg_id_(-1),
       timeout_ts_(0),
       is_running_task_(false),
       is_inited_(false),
@@ -88,9 +88,7 @@ int WorkloadRepositoryTask::modify_snapshot_interval(int64_t minutes)
 int WorkloadRepositoryTask::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(wr_proxy_.init(GCTX.net_frame_->get_req_transport()))) {
-    LOG_WARN("failed to init wr proxy", K(ret));
-  }
+  // RPC removed: no wr proxy to initialize.
   return ret;
 }
 
@@ -165,7 +163,7 @@ void WorkloadRepositoryTask::runTimerTask()
   LOG_INFO("start to take wr snapshot", KPC(this));
 
   // take one snapshot
-  if (OB_SUCC(ret) && OB_FAIL(do_snapshot(false /*is_user_submit*/, wr_proxy_, snap_id))) {
+  if (OB_SUCC(ret) && OB_FAIL(do_snapshot(false /*is_user_submit*/, snap_id))) {
     LOG_WARN("failed to take wr snapshot", KR(ret), KPC(this));
   }
   // delete expired snapshot
@@ -192,7 +190,7 @@ void WorkloadRepositoryTask::runTimerTask()
 constexpr int64_t WR_SNAPSHOT_CONTROLLER_TIME_GUARD = 1 * 60 * 1000 * 1000;
 
 int WorkloadRepositoryTask::do_snapshot(
-    const bool is_user_submit, obrpc::ObWrRpcProxy &wr_proxy, int64_t &snap_id)
+    const bool is_user_submit, int64_t &snap_id)
 {
   int ret = OB_SUCCESS;
   int save_ret = OB_SUCCESS;
@@ -245,11 +243,13 @@ int WorkloadRepositoryTask::do_snapshot(
                         is_user_submit ? ObWrSnapshotFlag::MANUAL : ObWrSnapshotFlag::SCHEDULE))) {
             LOG_WARN(
                 "failed to setup snapshot info", KR(ret), K(snap_id), K(cur_tenant_id), K(leader));
-          } else if (OB_FAIL(wr_proxy.to(leader)
-                                .by(cur_tenant_id)
-                                .timeout(timeout)
-                                .group_id(share::OBCG_WR)
-                                .wr_async_take_snapshot(arg, nullptr))) {
+          } else if (OB_FAIL(ex_rpc::async_call<void>(arg, [](ObWrCreateSnapshotArg &a) -> int {
+                       int ret = OB_SUCCESS;
+                       MTL_SWITCH(a.get_tenant_id()) {
+                         ret = ObWrSnapshotTaskExecutor::do_async_snapshot(a);
+                       }
+                       return ret;
+                     })->wait())) {
             LOG_WARN("failed to send async snapshot task", KR(ret), K(cur_tenant_id));
             int tmp_ret = OB_SUCCESS;
             if (OB_TMP_FAIL(modify_tenant_snapshot_status_and_startup_time(snap_id, cur_tenant_id,
@@ -309,7 +309,7 @@ int WorkloadRepositoryTask::do_delete_snapshot()
     for (int i = 0; OB_SUCC(ret) && i < all_tenant_ids.size(); i++) {
       const uint64_t tenant_id = all_tenant_ids.at(i);
       if (OB_FAIL(do_delete_single_tenant_snapshot(
-              tenant_id, cluster_id, end_ts_of_retention, task_timeout_ts, timeout, wr_proxy_))) {
+              tenant_id, cluster_id, end_ts_of_retention, task_timeout_ts, timeout))) {
         LOG_WARN("failed to do delete single tenant snapshot", K(ret), K(tenant_id), K(cluster_id),
             K(task_timeout_ts), K(end_ts_of_retention), K(timeout));
         save_ret = ret;
@@ -799,7 +799,7 @@ int WorkloadRepositoryTask::get_last_snap_id(int64_t &snap_id)
 
 int WorkloadRepositoryTask::do_delete_single_tenant_snapshot(const uint64_t tenant_id,
     const int64_t cluster_id, const int64_t end_ts_of_retention, const int64_t task_timeout_ts,
-    const int64_t rpc_timeout, const obrpc::ObWrRpcProxy &wr_proxy)
+    const int64_t rpc_timeout)
 {
   int ret = OB_SUCCESS;
   if (is_sys_tenant(tenant_id) || is_user_tenant(tenant_id)) {
@@ -816,11 +816,13 @@ int WorkloadRepositoryTask::do_delete_single_tenant_snapshot(const uint64_t tena
       } else if (OB_UNLIKELY(arg.get_to_delete_snap_ids().empty())) {
         LOG_INFO("there are currently no snapshots to delete", K(ret), K(end_ts_of_retention),
             K(tenant_id), K(cluster_id), K(leader));
-      } else if (OB_FAIL(wr_proxy.to(leader)
-                            .by(tenant_id)
-                            .group_id(share::OBCG_WR)
-                            .timeout(rpc_timeout)
-                            .wr_async_purge_snapshot(arg, nullptr))) {
+      } else if (OB_FAIL(ex_rpc::async_call<void>(arg, [](ObWrPurgeSnapshotArg &a) -> int {
+                   int ret = OB_SUCCESS;
+                   MTL_SWITCH(a.get_tenant_id()) {
+                     ret = ObWrSnapshotTaskExecutor::do_async_purge_snapshot(a);
+                   }
+                   return ret;
+                 })->wait())) {
         LOG_WARN("failed to send async snapshot task", KR(ret), K(tenant_id), K(arg));
       }
     }
@@ -832,7 +834,7 @@ int WorkloadRepositoryTask::do_delete_single_tenant_snapshot(const uint64_t tena
 
 int WorkloadRepositoryTask::do_delete_single_tenant_snapshot(const uint64_t tenant_id,
     const int64_t cluster_id, const int64_t low_snap_id, const int64_t high_snap_id,
-    const int64_t task_timeout_ts, const int64_t rpc_timeout, const obrpc::ObWrRpcProxy &wr_proxy)
+    const int64_t task_timeout_ts, const int64_t rpc_timeout)
 {
   int ret = OB_SUCCESS;
   if (is_sys_tenant(tenant_id) || is_user_tenant(tenant_id)) {
@@ -849,11 +851,13 @@ int WorkloadRepositoryTask::do_delete_single_tenant_snapshot(const uint64_t tena
       } else if (OB_UNLIKELY(arg.get_to_delete_snap_ids().empty())) {
         LOG_INFO("there are currently no snapshots to delete", K(ret), K(low_snap_id),
             K(high_snap_id), K(tenant_id), K(cluster_id), K(leader));
-      } else if (OB_FAIL(wr_proxy.to(leader)
-                            .by(tenant_id)
-                            .group_id(share::OBCG_WR)
-                            .timeout(rpc_timeout)
-                            .wr_async_purge_snapshot(arg, nullptr))) {
+      } else if (OB_FAIL(ex_rpc::async_call<void>(arg, [](ObWrPurgeSnapshotArg &a) -> int {
+                   int ret = OB_SUCCESS;
+                   MTL_SWITCH(a.get_tenant_id()) {
+                     ret = ObWrSnapshotTaskExecutor::do_async_purge_snapshot(a);
+                   }
+                   return ret;
+                 })->wait())) {
         LOG_WARN("failed to send async snapshot task", KR(ret), K(tenant_id), K(arg));
       }
     }

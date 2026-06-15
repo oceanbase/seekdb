@@ -23,7 +23,7 @@ namespace oceanbase
 namespace transaction
 {
 
-int ObTimestampAccess::handle_request(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result)
+int ObTimestampAccess::handle_request(const ObGtsRequest &request, obcall::ObGtsRpcResult &result)
 {
   int ret = OB_SUCCESS;
   if (GTS_LEADER == service_type_) {

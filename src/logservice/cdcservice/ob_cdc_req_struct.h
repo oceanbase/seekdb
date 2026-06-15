@@ -25,7 +25,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 
 enum class FeedbackType

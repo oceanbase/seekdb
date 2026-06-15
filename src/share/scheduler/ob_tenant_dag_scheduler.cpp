@@ -24,11 +24,6 @@
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 #include "share/compaction/ob_batch_exec_dag.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_tablet_refresh_dag.h"
-#include "storage/compaction/ob_verify_ckm_dag.h"
-#include "storage/compaction/ob_update_skip_major_tablet_dag.h"
-#endif
 
 
 namespace oceanbase
@@ -46,13 +41,6 @@ namespace share
 {
 ERRSIM_POINT_DEF(EN_SKIP_LOOP_BLOCKING_DAG);
 ERRSIM_POINT_DEF(EN_FINISH_DAG_FAILURE);
-
-static inline bool is_ha_priority(const int64_t prio)
-{
-  return ObDagPrio::DAG_PRIO_HA_HIGH == prio
-      || ObDagPrio::DAG_PRIO_HA_MID  == prio
-      || ObDagPrio::DAG_PRIO_HA_LOW  == prio;
-}
 
 #define DEFINE_TASK_ADD_KV(n)                                                               \
   template <LOG_TYPENAME_TN##n>                                                                  \
@@ -619,12 +607,6 @@ int ObITask::add_child(ObITask &child, const bool check_child_task_status /* = t
     COMMON_LOG(WARN, "can not add self loop", K(ret));
   } else {
     if (check_child_task_status && ObITask::TASK_STATUS_INITING != OB_UNLIKELY(child.get_status())) {
-#ifdef OB_BUILD_SHARED_STORAGE
-      // TASK_STATUS_INITING means child has not been added into dag, which promise child can't be scheduled before this action.
-      // If you add a child task into dag before its parent call ObITask::add_child, the child may be scheduled if its indegree is 0. It is memory dangerous.
-      // Unfortunatly, there are many misuses in the sequence of ObITask::add_child and ObIDag::add_task, and many cases in the core-test will fail, so here do not return error code.
-      // Please check it. If you can make sure the child will not be scheduled(like copy children of other task), you can skip this check.
-#endif
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(ERROR, "ATTENTION!!! child task status is not valid, please check it", K(ret), K(child));
     } else {
@@ -3312,17 +3294,6 @@ int ObDagPrioScheduler::check_ls_compaction_dag_exist_with_cancel(
         // do nothing
       } else if (ObDagType::DAG_TYPE_BATCH_FREEZE_TABLETS == cur->get_type()) {
         cancel_flag = (ls_id == static_cast<compaction::ObBatchFreezeTabletsDag *>(cur)->get_param().ls_id_);
-#ifdef OB_BUILD_SHARED_STORAGE
-      } else if (GCTX.is_shared_storage_mode()
-              && ObDagType::DAG_TYPE_VERIFY_CKM == cur->get_type()) {
-        cancel_flag = ls_id == static_cast<compaction::ObVerifyCkmDag *>(cur)->get_param().ls_id_;
-      } else if (GCTX.is_shared_storage_mode()
-              && ObDagType::DAG_TYPE_REFRESH_SSTABLES == cur->get_type()) {
-        cancel_flag = ls_id == static_cast<compaction::ObTabletsRefreshSSTableDag *>(cur)->get_param().ls_id_;
-      } else if (GCTX.is_shared_storage_mode()
-              && ObDagType::DAG_TYPE_UPDATE_SKIP_MAJOR == cur->get_type()) {
-        cancel_flag = ls_id == static_cast<compaction::ObUpdateSkipMajorTabletDag *>(cur)->get_param().ls_id_;
-#endif
       } else {
         cancel_flag = (ls_id == static_cast<compaction::ObTabletMergeDag *>(cur)->get_ls_id());
       }
@@ -3519,25 +3490,6 @@ int ObDagPrioScheduler::diagnose_compaction_dags()
           tmp_ret = OB_ERR_UNEXPECTED;
           COMMON_LOG(WARN, "get unexpected dag", K(tmp_ret), "dag_type", dag->get_type());
         } else if (!is_compaction_dag(dag->get_type())) {
-#ifdef OB_BUILD_SHARED_STORAGE
-          if (!GCTX.is_shared_storage_mode()) {
-            // do nothing
-          } else if (ObDagType::DAG_TYPE_REFRESH_SSTABLES == dag->get_type()) {
-            ObTabletsRefreshSSTableDag *refresh_dag = nullptr;
-            if (OB_ISNULL(refresh_dag = static_cast<ObTabletsRefreshSSTableDag *>(dag))) {
-              tmp_ret = OB_ERR_UNEXPECTED;
-              COMMON_LOG(WARN, "get unexpected null stored dag", K(tmp_ret), KPC(dag));
-            } else if (OB_TMP_FAIL(MTL(ObDiagnoseTabletMgr *)->add_diagnose_tablet(refresh_dag->get_param().ls_id_,
-                                                                                  refresh_dag->get_param().tablet_id_,
-                                                                                  ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
-              COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret), "dag_param", refresh_dag->get_param());
-            } else {
-              COMMON_LOG(TRACE, "dag maybe abormal", KPC(refresh_dag));
-            }
-          } else if (ObDagType::DAG_TYPE_VERIFY_CKM == dag->get_type()) {
-            // TODO(@DanLing) impl diagnose interface for verifying ckm
-          }
-#endif
         } else if (OB_ISNULL(merge_dag = static_cast<ObTabletMergeDag *>(dag))) {
           tmp_ret = OB_ERR_UNEXPECTED;
           COMMON_LOG(WARN, "get unexpected null stored dag", K(tmp_ret), KPC(dag));
@@ -4379,6 +4331,10 @@ void ObTenantDagScheduler::reload_config()
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_HIGH, tenant_config->compaction_high_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, tenant_config->compaction_mid_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_LOW, tenant_config->compaction_low_thread_score);
+    // HA_MID / HA_LOW are aliases of HA_HIGH (see ObDagPrio). Setting only
+    // HA_HIGH here; setting all three would write the same scheduler slot three
+    // times and let ha_low_thread_score clobber ha_high_thread_score.
+    set_thread_score(ObDagPrio::DAG_PRIO_HA_HIGH, tenant_config->ha_high_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_DDL, tenant_config->ddl_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_TTL, tenant_config->ttl_thread_score);
     set_compaction_dag_limit(tenant_config->compaction_dag_cnt_limit);
@@ -4446,15 +4402,13 @@ int ObTenantDagScheduler::init(
   }
 
   // init prio schedulers
+  // NOTE: HA-priority schedulers must be initialized unconditionally. seekdb
+  // standby relies on RESTORE-class HA dags (INITIAL_LS_RESTORE /
+  // INITIAL_COMPLETE_RESTORE, scheduled by ObRestoreDagNet) to build a standby
+  // LS. Whether HA dags are scheduled depends on the operation (a replica that
+  // must rebuild from a remote source), not on whether this tenant is currently
+  // primary or standby -- and the role is unknown at tenant-start time.
   for (int64_t i = 0; OB_SUCC(ret) && i < ObDagPrio::DAG_PRIO_MAX; ++i) {
-    if (is_ha_priority(i)) {
-      // HA dags are not scheduled in observer-lite. Skip the heavy init
-      // (hashmap + workers) but still record the priority so that
-      // OB_DAG_PRIOS[priority_] derefs in dump / virtual-table paths stay
-      // in-range. add_dag/check_dag_exist/cancel_dag reject HA dags defensively.
-      prio_sche_[i].set_priority_only(i);
-      continue;
-    }
     if (OB_FAIL(prio_sche_[i].init(
         tenant_id, dag_limit, i, get_allocator(false/*is_ha*/), get_allocator(true/*is_ha*/), *this))) {
       COMMON_LOG(WARN, "failed to init prio_sche_", K(ret), K(dag_limit));
@@ -4623,9 +4577,6 @@ int ObTenantDagScheduler::add_dag(
   } else if (OB_UNLIKELY(!dag->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(ret), KPC(dag));
-  } else if (is_ha_priority(dag->get_priority())) {
-    ret = OB_NOT_SUPPORTED;
-    COMMON_LOG(WARN, "HA dag is not supported in observer lite", K(ret), KPC(dag));
   } else if (FALSE_IT(dag->set_dag_emergency(emergency))) {
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].inner_add_dag(check_size_overflow, dag))) {
     if (OB_EAGAIN != ret) {
@@ -5465,8 +5416,6 @@ int ObTenantDagScheduler::check_dag_exist(const ObIDag *dag, bool &exist)
   } else if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arugment", KP(dag));
-  } else if (is_ha_priority(dag->get_priority())) {
-    exist = false;
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].check_dag_exist(*dag, exist))) {
     COMMON_LOG(WARN, "fail to check dag exist", K(ret));
   }
@@ -5486,8 +5435,6 @@ int ObTenantDagScheduler::cancel_dag(const ObIDag *dag, const bool force_cancel)
   } else if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arugment", KP(dag));
-  } else if (is_ha_priority(dag->get_priority())) {
-    // No-op: HA scheduler is not initialized.
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].cancel_dag(*dag, force_cancel))) {
     COMMON_LOG(WARN, "fail to cancel dag", K(ret), KPC(dag));
   }

@@ -1885,7 +1885,7 @@ int ObRawExprUtils::check_deterministic_single(const ObRawExpr *expr,
  * @param resolved_cols Default null. Only use in 'alter table'. Columns which have been resolved in alter table.
  * @return ret
  */
-int ObRawExprUtils::build_generated_column_expr(const obrpc::ObCreateIndexArg *arg,
+int ObRawExprUtils::build_generated_column_expr(const obcall::ObCreateIndexArg *arg,
                                                 const ObString &expr_str,
                                                 ObRawExprFactory &expr_factory,
                                                 const ObSQLSessionInfo &session_info,
@@ -2210,7 +2210,7 @@ int ObRawExprUtils::build_generated_column_expr(ObRawExprFactory &expr_factory,
  * @return ret
  */
 int ObRawExprUtils::try_modify_expr_for_gen_col_recursively(const ObSQLSessionInfo &session,
-                                                           const obrpc::ObCreateIndexArg *arg,
+                                                           const obcall::ObCreateIndexArg *arg,
                                                            ObRawExprFactory &expr_factory,
                                                            ObRawExpr *expr,
                                                            bool &expr_changed)
@@ -2254,7 +2254,7 @@ int ObRawExprUtils::try_modify_expr_for_gen_col_recursively(const ObSQLSessionIn
  * @return
  */
 int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
-                                            const obrpc::ObCreateIndexArg *arg,
+                                            const obcall::ObCreateIndexArg *arg,
                                             ObRawExprFactory &expr_factory,
                                             ObRawExpr *expr,
                                             bool &expr_changed)
@@ -2305,7 +2305,7 @@ int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
  * @return
  */
 int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
-                                               const obrpc::ObCreateIndexArg *arg,
+                                               const obcall::ObCreateIndexArg *arg,
                                                ObRawExprFactory &expr_factory,
                                                ObRawExpr &src_expr,
                                                const ObObjType &data_type,
@@ -2379,7 +2379,7 @@ int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
  * @return ret
  */
 int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &session,
-                                                    const obrpc::ObCreateIndexArg *arg,
+                                                    const obcall::ObCreateIndexArg *arg,
                                                     ObRawExprFactory &expr_factory,
                                                     ObRawExpr *expr,
                                                     bool &expr_changed)
@@ -2424,7 +2424,7 @@ int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &sess
  * @return
  */
 int ObRawExprUtils::actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& session,
-                                                       const obrpc::ObCreateIndexArg *arg,
+                                                       const obcall::ObCreateIndexArg *arg,
                                                        ObRawExprFactory &expr_factory,
                                                        const ObObjType &data_type,
                                                        ObSysFunRawExpr *to_char_expr)

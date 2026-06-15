@@ -37,7 +37,7 @@ public:
       const int64_t schema_version,
       const int64_t parent_task_id,
       const int64_t consumer_group_id,
-      const obrpc::ObDDLArg &ddl_arg);
+      const obcall::ObDDLArg &ddl_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual bool is_valid() const override;
@@ -55,8 +55,8 @@ private:
   int succ();
   int fail();
   int deep_copy_ddl_arg(common::ObIAllocator &allocator,
-                        const obrpc::ObDDLArg &src_ddl_arg,
-                        obrpc::ObDDLArg &dst_ddl_arg);
+                        const obcall::ObDDLArg &src_ddl_arg,
+                        obcall::ObDDLArg &dst_ddl_arg);
   virtual bool is_error_need_retry(const int ret_code) override
   {
     UNUSED(ret_code);
@@ -67,7 +67,7 @@ private:
   static const int64_t OB_DROP_LOB_TASK_VERSION = 1;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   ObRootService *root_service_;
-  obrpc::ObDDLArg ddl_arg_;
+  obcall::ObDDLArg ddl_arg_;
 };
 
 }  // end namespace rootserver

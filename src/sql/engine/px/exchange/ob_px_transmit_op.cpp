@@ -1236,7 +1236,8 @@ int ObPxTransmitOp::send_row(int64_t slice_idx,
         update_row(spec.tablet_id_expr_, tablet_id);
       }
       ObDtlBasicChannel *channel = static_cast<ObDtlBasicChannel *> (task_channels_.at(slice_idx));
-      bool is_rpc_channel = channel->get_channel_type() == ObDtlChannel::DtlChannelType::RPC_CHANNEL;
+      // single-replica: only local (in-process) channels exist, never an rpc channel.
+      const bool is_rpc_channel = false;
       switch (data_msg_type_) {
         case dtl::ObDtlMsgType::PX_VECTOR_FIXED: {
           ObDtlVectorFixedMsgWriter &fixed_writer = channel->get_vector_fixed_msg_writer();
@@ -1406,7 +1407,7 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
   dtl::ObDtlChannelInfo ci;
   int64_t hash_val = 0;
   int64_t offset = 0;
-  const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlRpcChannel) > sizeof(ObDtlLocalChannel) ? sizeof(ObDtlRpcChannel) : sizeof(ObDtlLocalChannel);
+  const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlLocalChannel);
   if (OB_FAIL(channels.reserve(ch_set.count()))) {
     LOG_WARN("fail reserve channels", K(ret), K(ch_set.count()));
   } else if (OB_FAIL(dfc->reserve(ch_set.count()))) {
@@ -1443,7 +1444,9 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
         } else if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {
           ch = new((char*)buf + offset) ObDtlLocalChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
         } else {
-          ch = new((char*)buf + offset) ObDtlRpcChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, ObDtlChannel::DtlChannelType::RPC_CHANNEL);
+          // single-replica: only local (in-process) channels are supported.
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("only local dtl channel is supported", K(ret), K(ci.type_));
         }
         if (OB_FAIL(ret)) {
         } else if (nullptr == ch) {

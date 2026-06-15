@@ -230,7 +230,6 @@ ObCompactionParam::ObCompactionParam()
 {
 }
 
-
 void ObCompactionParam::estimate_concurrent_count(const compaction::ObMergeType merge_type)
 {
   int ret = OB_SUCCESS;
@@ -249,7 +248,6 @@ void ObCompactionParam::estimate_concurrent_count(const compaction::ObMergeType 
     estimate_concurrent_cnt_ = MAX((avg_sstable_size + tablet_size - 1) / tablet_size, 1);
   }
 }
-
 
 /*
  *  ----------------------------------------------ObTabletMergeDagParam--------------------------------------------------
@@ -796,14 +794,6 @@ int ObTabletMergeDag::alloc_merge_ctx()
   } else if (is_major_merge_type(merge_type)) {
     if (is_local_exec_mode(param_.exec_mode_)) {
       ctx_ = NEW_CTX(ObTabletMajorMergeCtx);
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (is_output_exec_mode(param_.exec_mode_)) {
-      ctx_ = NEW_CTX(ObTabletMajorOutputMergeCtx);
-    } else if (is_calc_ckm_exec_mode(param_.exec_mode_)) {
-      ctx_ = NEW_CTX(ObTabletMajorCalcCkmMergeCtx);
-    } else if (is_validate_exec_mode(param_.exec_mode_)) {
-      ctx_ = NEW_CTX(ObTabletMajorValidateMergeCtx);
-#endif
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid exec mode", KR(ret), K_(param));
@@ -1279,7 +1269,6 @@ void prepare_allocator(
                            ? (is_global_mem ? "MajorMemCtx" : "MajorMemMerger")
                            : (is_mini_merge(merge_type) ? (is_global_mem ? "MiniMemCtx" : "MiniMemMerger")
                                                         : (is_global_mem ? "MinorMemCtx" : "MinorMemMerger"));
-
 
   const int64_t ctx_id = is_reserve_mode && is_mini_merge(merge_type)
                        ? ObCtxIds::MERGE_RESERVE_CTX_ID

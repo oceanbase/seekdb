@@ -32,32 +32,6 @@ using namespace oceanbase::share;
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
-ObPxRpcWorker::ObPxRpcWorker(const observer::ObGlobalContext &gctx,
-                             obrpc::ObPxRpcProxy &rpc_proxy,
-                             common::ObIAllocator &alloc)
-  : gctx_(gctx),
-    rpc_proxy_(rpc_proxy),
-    alloc_(alloc)
-{
-}
-
-ObPxRpcWorker::~ObPxRpcWorker()
-{
-}
-
-int ObPxRpcWorker::run(ObPxRpcInitTaskArgs &arg)
-{
-  int ret = OB_SUCCESS;
-  // Within 50ms a task thread must be allocated, if the queue time exceeds 50ms, it fails and falls back to 1 thread
-  int64_t timeout_us = 50 * 1000;
-  ret = rpc_proxy_
-      .to(arg.task_.get_exec_addr())
-      .by(THIS_WORKER.get_rpc_tenant())
-      .timeout(timeout_us)
-      .init_task(arg, resp_);
-  return ret;
-}
-
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -377,20 +351,6 @@ int ObPxLocalWorker::run(ObPxRpcInitTaskArgs &task_arg)
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
-
-
-void ObPxRpcWorkerFactory::destroy()
-{
-  for (int64_t i = 0; i < workers_.count(); ++i) {
-    workers_.at(i)->~ObPxRpcWorker();
-  }
-  workers_.reset();
-}
-
-ObPxRpcWorkerFactory::~ObPxRpcWorkerFactory()
-{
-  destroy();
-}
 
 
 //////////////////////////////////////////////////////////////////////////////

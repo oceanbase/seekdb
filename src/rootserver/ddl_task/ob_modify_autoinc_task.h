@@ -64,7 +64,7 @@ public:
            const int64_t schema_version,
            const int64_t consumer_group_id,
            const int32_t sub_task_trace_id,
-           const obrpc::ObAlterTableArg &alter_table_arg,
+           const obcall::ObAlterTableArg &alter_table_arg,
            const int64_t task_status = share::ObDDLTaskStatus::MODIFY_AUTOINC,
            const int64_t snapshot_version = 0);
   int init(const ObDDLTaskRecord &task_record);
@@ -87,7 +87,7 @@ private:
 private:
   static const int64_t OB_MODIFY_AUTOINC_TASK_VERSION = 1L; 
   common::TCRWLock lock_;
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   int64_t update_autoinc_job_ret_code_;
   int64_t update_autoinc_job_time_;
 };

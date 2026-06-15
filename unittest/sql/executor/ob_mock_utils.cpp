@@ -26,7 +26,7 @@
 #include "rpc/obrpc/ob_rpc_packet.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::storage;
 using namespace oceanbase::share;
 

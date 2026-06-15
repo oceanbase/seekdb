@@ -20,7 +20,6 @@
 #include "lib/container/ob_array.h"                   //ObArray
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
-#include "logrpc/ob_log_rpc_proxy.h"
 #include "logrpc/ob_log_rpc_req.h"
 #include "palf/log_define.h"
 #include "ob_location_adapter.h"
@@ -48,7 +47,6 @@ public:
 public:
   int init(const common::ObAddr &self,
            logservice::ObLocationAdapter *location_adapter,
-           obrpc::ObLogServiceRpcProxy *rpc_proxy,
            common::ObMySQLProxy *sql_proxy);
   // @desc: flashback all log_stream's redo log of tenant 'tenant_id'
   // @params [in] const uint64_t tenant_id: id of tenant which should be flashbacked
@@ -73,21 +71,18 @@ private:
           leader_(),
           flashback_scn_(),
           location_adapter_(NULL),
-          rpc_proxy_(NULL),
           ret_(OB_NOT_INIT) { }
     BaseLSOperator(const uint64_t tenant_id,
                    const share::ObLSID &ls_id,
                    const common::ObAddr &self,
                    const share::SCN &flashback_scn,
-                   logservice::ObLocationAdapter *location_adapter,
-                   obrpc::ObLogServiceRpcProxy *rpc_proxy)
+                   logservice::ObLocationAdapter *location_adapter)
         : tenant_id_(tenant_id),
           ls_id_(ls_id),
           self_(self),
           leader_(),
           flashback_scn_(flashback_scn),
-          location_adapter_(location_adapter),
-          rpc_proxy_(rpc_proxy) { }
+          location_adapter_(location_adapter) { }
     virtual ~BaseLSOperator() { reset(); }
     void reset()
     {
@@ -97,7 +92,6 @@ private:
       leader_.reset();
       flashback_scn_.reset();
       location_adapter_ = NULL;
-      rpc_proxy_ = NULL;
       ret_ = OB_NOT_INIT;
     }
     bool is_valid() const {
@@ -106,8 +100,7 @@ private:
              ls_id_.is_valid() &&
              self_.is_valid() &&
              flashback_scn_.is_valid() &&
-             OB_NOT_NULL(location_adapter_) &&
-             OB_NOT_NULL(rpc_proxy_);
+             OB_NOT_NULL(location_adapter_);
     }
     virtual int switch_state() = 0;
     TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(leader), K_(flashback_scn), "inner_ret", ret_);
@@ -116,6 +109,10 @@ private:
     int get_leader_palf_stat_(palf::PalfStat &palf_stat);
     int get_leader_list_(common::ObMemberList &member_list,
                          common::GlobalLearnerList &learner_list);
+    // single-replica: leader is always self, dispatch to local LogRequestHandler in-process
+    int get_palf_stat_in_process_(const LogGetPalfStatReq &req, LogGetPalfStatResp &resp);
+    int change_access_mode_in_process_(const LogChangeAccessModeCmd &cmd);
+    int send_flashback_msg_in_process_(const LogFlashbackMsg &msg);
   public:
     uint64_t tenant_id_;
     share::ObLSID ls_id_;
@@ -123,7 +120,6 @@ private:
     common::ObAddr leader_;
     share::SCN flashback_scn_;
     logservice::ObLocationAdapter *location_adapter_;
-    obrpc::ObLogServiceRpcProxy *rpc_proxy_;
     int ret_;
   };
   
@@ -142,10 +138,9 @@ private:
         const share::ObLSID &ls_id,
         const common::ObAddr &self,
         const share::SCN &flashback_scn,
-        logservice::ObLocationAdapter *location_adapter,
-        obrpc::ObLogServiceRpcProxy *rpc_proxy)
+        logservice::ObLocationAdapter *location_adapter)
         : BaseLSOperator(tenant_id, ls_id, self, flashback_scn,
-          location_adapter, rpc_proxy),
+          location_adapter),
           has_get_member_list_(false),
           member_list_(),
           log_sync_memberlist_(),
@@ -176,7 +171,6 @@ private:
                             int64_t &unsync_member_cnt)
     {
       int ret = OB_SUCCESS;
-      const int64_t CONN_TIMEOUT_US = GCONF.rpc_timeout;
       for (int i = 0; i < list.get_member_number(); i++) {
         common::ObAddr server;
         int tmp_ret = OB_SUCCESS;
@@ -185,10 +179,7 @@ private:
         if (OB_SUCCESS != (tmp_ret = list.get_server_by_index(i, server))) {
         } else if (sync_list.contains(server)) {
           // has sync, do not need check
-        } else if (OB_SUCCESS != (tmp_ret = rpc_proxy_->to(server).
-            timeout(CONN_TIMEOUT_US).trace_time(true).
-            max_process_handler_time(static_cast<int32_t>(CONN_TIMEOUT_US)).by(tenant_id_).
-            get_palf_stat(get_ts_req, get_ts_resp))) {
+        } else if (OB_SUCCESS != (tmp_ret = get_palf_stat_in_process_(get_ts_req, get_ts_resp))) {
           CLOG_LOG(WARN, "get_palf_stat failed", K(tmp_ret), KPC(this), K(get_ts_req));
           ret = OB_EAGAIN;
           // some replicas may has been removed, try get member_list again
@@ -222,10 +213,9 @@ private:
         const share::ObLSID &ls_id,
         const common::ObAddr &self,
         const share::SCN &flashback_scn,
-        logservice::ObLocationAdapter *location_adapter,
-        obrpc::ObLogServiceRpcProxy *rpc_proxy)
+        logservice::ObLocationAdapter *location_adapter)
       : BaseLSOperator(tenant_id, ls_id, self, flashback_scn,
-        location_adapter, rpc_proxy),
+        location_adapter),
         mode_version_(palf::INVALID_PROPOSAL_ID),
         dst_mode_(palf::AccessMode::INVALID_ACCESS_MODE) { }
     virtual ~ChangeAccessModeOperator()
@@ -254,7 +244,7 @@ private:
           flashbacked_learnerlist_() { }
     ExecuteFlashbackOperator(const ChangeAccessModeOperator &op)
       : BaseLSOperator(op.tenant_id_, op.ls_id_, op.self_, op.flashback_scn_,
-        op.location_adapter_, op.rpc_proxy_),
+        op.location_adapter_),
         mode_version_(op.mode_version_),
         has_get_member_list_(false),
         member_list_(),
@@ -269,7 +259,6 @@ private:
       leader_ = op.leader_;
       flashback_scn_ = op.flashback_scn_;
       location_adapter_ = op.location_adapter_;
-      rpc_proxy_ = op.rpc_proxy_;
       mode_version_ = op.mode_version_;
       has_get_member_list_ = op.has_get_member_list_;
       member_list_ = op.member_list_;
@@ -309,7 +298,6 @@ private:
     int flashback_list_(const LIST &list, LIST &flashbacked_list)
     {
       int ret = OB_SUCCESS;
-      const int64_t CONN_TIMEOUT_US = GCONF.rpc_timeout;
       const bool is_flashback_req = true;
       LogFlashbackMsg flashback_msg(MTL_ID(), self_, ls_id_.id(), mode_version_,
           flashback_scn_, is_flashback_req);
@@ -319,10 +307,7 @@ private:
         if (OB_SUCCESS != (tmp_ret = list.get_server_by_index(i, server))) {
         } else if (flashbacked_list.contains(server)) {
           // has been flashbacked, skip
-        } else if (OB_SUCCESS != (tmp_ret = rpc_proxy_->to(server).
-            timeout(CONN_TIMEOUT_US).trace_time(true).
-            max_process_handler_time(static_cast<int32_t>(CONN_TIMEOUT_US)).by(tenant_id_).
-            send_log_flashback_msg(flashback_msg, NULL))) {
+        } else if (OB_SUCCESS != (tmp_ret = send_flashback_msg_in_process_(flashback_msg))) {
           CLOG_LOG(WARN, "send_log_flashback_msg failed", K(tmp_ret), KPC(this), K(flashback_msg));
           ret = OB_EAGAIN;
         } else {
@@ -375,7 +360,6 @@ private:
   common::ObAddr self_;
   FlashbackOpArray flashback_op_array_;
   logservice::ObLocationAdapter *location_adapter_;
-  obrpc::ObLogServiceRpcProxy *rpc_proxy_;
   common::ObMySQLProxy *sql_proxy_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogFlashbackService);

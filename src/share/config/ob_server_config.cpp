@@ -66,9 +66,9 @@ bool ObServerConfig::in_upgrade_mode() const
   if (enable_upgrade_mode) {
     bret = true;
   } else {
-    obrpc::ObUpgradeStage stage = GCTX.get_upgrade_stage();
-    bret = (stage >= obrpc::OB_UPGRADE_STAGE_PREUPGRADE
-            && stage <= obrpc::OB_UPGRADE_STAGE_POSTUPGRADE);
+    obcall::ObUpgradeStage stage = GCTX.get_upgrade_stage();
+    bret = (stage >= obcall::OB_UPGRADE_STAGE_PREUPGRADE
+            && stage <= obcall::OB_UPGRADE_STAGE_POSTUPGRADE);
   }
   return bret;
 }
@@ -212,7 +212,7 @@ int ObServerConfig::publish_special_config_after_dump()
 
 
 } // end of namespace common
-namespace obrpc {
+namespace obcall {
 int64_t get_max_rpc_packet_size()
 {
   return GCONF._max_rpc_packet_size;
@@ -220,7 +220,7 @@ int64_t get_max_rpc_packet_size()
 
 int64_t get_stream_rpc_max_wait_timeout(int64_t tenant_id)
 {
-  int64_t stream_rpc_max_wait_timeout = ObRpcProcessorBase::DEFAULT_WAIT_NEXT_PACKET_TIMEOUT;
+  int64_t stream_rpc_max_wait_timeout = 30 * 1000 * 1000L;  // was ObCallProcessorBase::DEFAULT_WAIT_NEXT_PACKET_TIMEOUT
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
   if (OB_LIKELY(tenant_config.is_valid())) {
     stream_rpc_max_wait_timeout = tenant_config->_stream_rpc_max_wait_timeout;
@@ -233,7 +233,7 @@ bool stream_rpc_update_timeout()
   return true;
 }
 
-} // end of namespace obrpc
+} // end of namespace obcall
 namespace obgrpc {
 bool ob_grpc_is_rpc_tls_enabled()
 {

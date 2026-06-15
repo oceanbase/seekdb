@@ -32,7 +32,7 @@ public:
   ObCreateMLogStmt();
   virtual ~ObCreateMLogStmt();
 
-  obrpc::ObCreateMLogArg &get_create_mlog_arg() { return create_mlog_arg_; }
+  obcall::ObCreateMLogArg &get_create_mlog_arg() { return create_mlog_arg_; }
   inline void set_database_name(const common::ObString &database_name)
   {
     create_mlog_arg_.database_name_ = database_name;
@@ -99,10 +99,10 @@ public:
   inline bool get_replace_if_exists() const { return create_mlog_arg_.replace_if_exists_; }
   inline void set_replace_if_exists(bool replace_if_exists) { create_mlog_arg_.replace_if_exists_ = replace_if_exists; }
   
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_mlog_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_mlog_arg_; }
 
 private:
-  obrpc::ObCreateMLogArg create_mlog_arg_;
+  obcall::ObCreateMLogArg create_mlog_arg_;
 };
 } // sql
 } // oceanbase

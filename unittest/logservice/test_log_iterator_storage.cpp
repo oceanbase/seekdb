@@ -16,9 +16,6 @@
 
 #include "unittest/logservice/test_shared_log_common.h"
 #define private public
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "log/ob_log_iterator_storage.h"
-#endif
 #undef private
 
 namespace oceanbase

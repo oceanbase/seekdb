@@ -74,11 +74,11 @@ public:
     arg_.set_ignore_exists_error(ignore_error);
   }
   share::ObSequenceOption &option() { return arg_.option(); }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return arg_; }
-  obrpc::ObSequenceDDLArg &get_arg() { return arg_; }
-  const obrpc::ObSequenceDDLArg &get_arg() const { return arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
+  obcall::ObSequenceDDLArg &get_arg() { return arg_; }
+  const obcall::ObSequenceDDLArg &get_arg() const { return arg_; }
 private:
-  obrpc::ObSequenceDDLArg arg_;
+  obcall::ObSequenceDDLArg arg_;
   DISALLOW_COPY_AND_ASSIGN(ObSequenceDDLStmt);
 };
 

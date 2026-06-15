@@ -20,9 +20,6 @@
 #include "share/ob_server_struct.h"
 #include "share/io/ob_io_manager.h"
 #include "share/ob_local_device.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_local_cache_device.h"
-#endif
 
 namespace oceanbase
 {
@@ -212,12 +209,6 @@ int parse_storage_info(common::ObString storage_type_prefix, ObIODevice*& device
     device_type = OB_STORAGE_LOCAL;
     mem = allocator.alloc(sizeof(share::ObLocalDevice));
     if (NULL != mem) {new(mem)share::ObLocalDevice();}
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (storage_type_prefix.prefix_match(OB_LOCAL_CACHE_PREFIX)) {
-    device_type = OB_STORAGE_LOCAL_CACHE;
-    mem = allocator.alloc(sizeof(storage::ObLocalCacheDevice));
-    if (NULL != mem) {new(mem)storage::ObLocalCacheDevice();}
-#endif
   } else if (storage_type_prefix.prefix_match(OB_FILE_PREFIX)) {
     device_type = OB_STORAGE_FILE;
     mem = allocator.alloc(sizeof(ObObjectDevice));

@@ -51,7 +51,7 @@ public:
 
   void SetUp();
   void TearDown();
-  void get_write_clog_buf(const obrpc::ObBatchCreateTabletArg &arg,
+  void get_write_clog_buf(const obcall::ObBatchCreateTabletArg &arg,
                           char *&buffer,
                           int64_t &buffer_size);
 };
@@ -67,7 +67,7 @@ void TestCreateTabletClog::TearDown()
 }
 
 void TestCreateTabletClog::get_write_clog_buf(
-    const obrpc::ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     char *&buffer,
     int64_t &buffer_size)
 {
@@ -99,8 +99,8 @@ TEST_F(TestCreateTabletClog, replay_create_tablet_clog_test)
   ObLSHandle handle;
   ObTablet *tablet =NULL;
 
-  obrpc::ObCreateTabletBatchRes res;
-  obrpc::ObBatchCreateTabletArg create_tablet_arg;
+  obcall::ObCreateTabletBatchRes res;
+  obcall::ObBatchCreateTabletArg create_tablet_arg;
 
   LOG_INFO("replay_create_tablet_clog_test begin");
   // 1. prepare ls

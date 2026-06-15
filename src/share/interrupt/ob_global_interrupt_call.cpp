@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "share/interrupt/ob_global_interrupt_call.h"
+#include "observer/ob_ex_rpc.h"
 
 namespace oceanbase {
 namespace common {
@@ -93,14 +94,11 @@ ObGlobalInterruptManager *ObGlobalInterruptManager::getInstance()
   return instance_;
 }
 
-int ObGlobalInterruptManager::init(const common::ObAddr &local, ObInterruptRpcProxy *rpc_proxy)
+int ObGlobalInterruptManager::init(const common::ObAddr &local)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "rpc_proxy must not null");
   } else if (OB_FAIL(map_.create(!lib::is_mini_mode() ? DEFAULT_HASH_MAP_BUCKETS_COUNT :
                                  MINI_MODE_HASH_MAP_BUCKETS_COUNT,
                                  ObModIds::OB_HASH_BUCKET_INTERRUPT_CHECKER,
@@ -109,7 +107,6 @@ int ObGlobalInterruptManager::init(const common::ObAddr &local, ObInterruptRpcPr
     LIB_LOG(WARN, "create hash table failed", K(ret));
   } else {
     local_ = local;
-    rpc_proxy_ = rpc_proxy;
     is_inited_ = true;
   }
   return ret;
@@ -229,17 +226,20 @@ int ObGlobalInterruptManager::interrupt(const ObAddr &dst, const ObInterruptible
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LIB_LOG(ERROR, "interrupt manager not inited", K(dst), K(tid), K(interrupt_code), K(ret));
-  } else if (dst == local_) {
-    ObInterruptCheckerUpdateCall updatecall(interrupt_code);
-    //Consider that in the remote call, the execution time of the suspend command is later than the completion time of the remote execution. At this time, it should not be handled according to the sending failure.
-    ret = map_.atomic_refactored(tid, updatecall);
-    ret = ret == OB_HASH_NOT_EXIST ? OB_SUCCESS : ret;
   } else {
-    ObInterruptMessage message(tid.first_, tid.last_, interrupt_code);
-    ret = rpc_proxy_->to(dst).remote_interrupt_call(message, NULL);
-    if (OB_UNLIKELY(OB_SUCCESS != ret)) {
-      LIB_LOG(WARN, "fail to send remote interrupt call", K(dst), K(tid), K(interrupt_code), K(ret));
-    }
+    // single-replica: dst is always local; deliver async in-process (ex-RPC),
+    // restoring the original async remote_interrupt_call(msg, NULL) fire-and-forget.
+    // tid/interrupt_code are copied by value; the map update runs on a worker thread.
+    UNUSED(dst);
+    const ObInterruptibleTaskID tid_copy = tid;
+    ObInterruptCode code_copy = interrupt_code;
+    (void)ex_rpc::async_call([this, tid_copy, code_copy]() mutable {
+      ObInterruptCheckerUpdateCall updatecall(code_copy);
+      //Consider that in the remote call, the execution time of the suspend command is later than the completion time of the remote execution. At this time, it should not be handled according to the sending failure.
+      int tmp_ret = map_.atomic_refactored(tid_copy, updatecall);
+      tmp_ret = tmp_ret == OB_HASH_NOT_EXIST ? OB_SUCCESS : tmp_ret;
+      (void)tmp_ret;
+    });
   }
   return ret;
 }

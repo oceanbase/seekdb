@@ -26,12 +26,9 @@
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "share/ash/ob_active_sess_hist_list.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_tenant_ls_merge_scheduler.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
 #include "lib/stat/ob_diagnostic_info_container.h"
-#include "rpc/obrpc/ob_rpc_net_handler.h"
+#include "rpc/frame/ob_net_consts.h"
+#include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -47,12 +44,12 @@ namespace observer
 int set_cluster_name_hash(const ObString &cluster_name)
 {
   int ret = OB_SUCCESS;
-  uint64_t cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
+  uint64_t cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
 
   if (OB_FAIL(calc_cluster_name_hash(cluster_name, cluster_name_hash))) {
     LOG_WARN("failed to calc_cluster_name_hash", KR(ret), K(cluster_name));
   } else {
-    obrpc::ObRpcNetHandler::CLUSTER_NAME_HASH = cluster_name_hash;
+    rpc::frame::ObNetConsts::CLUSTER_NAME_HASH = cluster_name_hash;
     LOG_INFO("set cluster_name_hash", KR(ret), K(cluster_name), K(cluster_name_hash));
   }
   return ret;
@@ -61,10 +58,10 @@ int set_cluster_name_hash(const ObString &cluster_name)
 int calc_cluster_name_hash(const ObString &cluster_name, uint64_t &cluster_name_hash)
 {
   int ret = OB_SUCCESS;
-  cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
+  cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
 
   if (0 == cluster_name.length()) {
-    cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
+    cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
     LOG_INFO("set cluster_name_hash to invalid", K(cluster_name));
   } else {
     cluster_name_hash = common::murmurhash(cluster_name.ptr(), cluster_name.length(), 0);
@@ -125,13 +122,6 @@ int ObServerReloadConfig::operator()()
         GCONF._enable_di_experimental_feature_flags);
   }
   {
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      OB_SERVER_DISK_SPACE_MGR.reload_hidden_sys_data_disk_config(GCONF);
-      OB_SERVER_DISK_SPACE_MGR.reload_ss_cache_max_percentage_config(GCONF);
-      OB_SERVER_DISK_SPACE_MGR.reload_ss_cache_maxsize_percpu_config(GCONF);
-    }
-#endif
     enable_malloc_v2(GCONF._enable_malloc_v2);
     GMEMCONF.reload_config(GCONF);
     OB_LOGGER.set_info_as_wdiag(false);
@@ -242,17 +232,17 @@ int ObServerReloadConfig::operator()()
   }
 
   {
-    auto new_level = obrpc::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
-    auto orig_level = obrpc::get_rpc_checksum_check_level();
+    auto new_level = rpc::frame::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
+    auto orig_level = rpc::frame::get_rpc_checksum_check_level();
     if (new_level != orig_level) {
       LOG_INFO("rpc_checksum_check_level changed",
                "orig", orig_level,
                "new", new_level);
     }
-    obrpc::set_rpc_checksum_check_level(new_level);
+    rpc::frame::set_rpc_checksum_check_level(new_level);
   }
 
-    auto new_upgrade_stage = obrpc::get_upgrade_stage(GCONF._upgrade_stage.str());
+    auto new_upgrade_stage = obcall::get_upgrade_stage(GCONF._upgrade_stage.str());
     auto orig_upgrade_stage = GCTX.get_upgrade_stage();
     if (new_upgrade_stage != orig_upgrade_stage) {
       LOG_INFO("_upgrade_stage changed", K(new_upgrade_stage), K(orig_upgrade_stage));
@@ -313,11 +303,6 @@ void ObServerReloadConfig::reload_tenant_scheduler_config_()
     auto f = [] () {
       (void) MTL(ObTenantDagScheduler *)->reload_config();
       (void) MTL(compaction::ObTenantTabletScheduler *)->reload_tenant_config();
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      (void) MTL(compaction::ObTenantLSMergeScheduler *)->reload_tenant_config();
-    }
-#endif
 
       return OB_SUCCESS;
     };

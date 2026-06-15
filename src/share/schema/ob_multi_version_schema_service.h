@@ -31,7 +31,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 class ObPurgeRecycleBinArg;
 }
@@ -346,7 +346,7 @@ public:
       int64_t timestamp,
       int64_t &schema_version);
   int cal_purge_need_timeout(
-      const obrpc::ObPurgeRecycleBinArg &purge_recyclebin_arg,
+      const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg,
       int64_t &cal_timeout);
   ObDDLTransController &get_ddl_trans_controller() { return ddl_trans_controller_; }
   ObDDLEpochMgr &get_ddl_epoch_mgr() { return ddl_epoch_mgr_; }

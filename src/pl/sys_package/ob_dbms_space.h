@@ -135,7 +135,7 @@ private:
                                     IndexCostInfo &info);
 
   static int get_index_column_ids(const share::schema::ObTableSchema *table_schema,
-                                   const obrpc::ObCreateIndexArg &arg,
+                                   const obcall::ObCreateIndexArg &arg,
                                    IndexCostInfo &info);
   
   static int get_optimizer_stats(const IndexCostInfo &info,

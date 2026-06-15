@@ -368,7 +368,7 @@ int TestCGMicroMacroWriteOp::create_ls(
   ObLSService *ls_svr = MTL(ObLSService*);
   bool b_exist = false;
   ObLS *ls = nullptr;
-  obrpc::ObCreateLSArg create_ls_arg;
+  obcall::ObCreateLSArg create_ls_arg;
 
   if (OB_FAIL(gen_create_ls_arg(tenant_id, ls_id, create_ls_arg))) {
     STORAGE_LOG(WARN, "failed to build create ls arg", K(ret), K(tenant_id), K(ls_id));

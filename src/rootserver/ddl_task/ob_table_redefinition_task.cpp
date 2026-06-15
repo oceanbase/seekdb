@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_table_redefinition_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -27,7 +28,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 ObTableRedefinitionTask::ObTableRedefinitionTask()
   : ObDDLRedefinitionTask(ObDDLType::DDL_TABLE_REDEFINITION),
@@ -536,11 +537,8 @@ int ObTableRedefinitionTask::copy_table_indexes()
             LOG_WARN("get all tablet count failed", K(ret));
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout failed", K(ret));
-          } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-          } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(ddl_rpc_timeout).
-                execute_ddl_task(alter_table_arg_, index_ids))) {
+          } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
             LOG_WARN("rebuild hidden table index failed", K(ret), K(ddl_rpc_timeout));
           }
         }
@@ -696,11 +694,8 @@ int ObTableRedefinitionTask::copy_table_constraints()
         int64_t ddl_rpc_timeout = 0;
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(dst_tenant_id_, target_object_id_, ddl_rpc_timeout))) {
           LOG_WARN("get ddl rpc timeout fail", K(ret));
-        } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-        } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(ddl_rpc_timeout).
-              execute_ddl_task(alter_table_arg_, constraint_ids))) {
+        } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
           LOG_WARN("rebuild hidden table constraint failed", K(ret), K(ddl_rpc_timeout));
         }
       } else {
@@ -772,11 +767,8 @@ int ObTableRedefinitionTask::copy_table_foreign_keys()
           int64_t ddl_rpc_timeout = 0;
           if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(dst_tenant_id_, target_object_id_, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
-          } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-          } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(ddl_rpc_timeout).
-                execute_ddl_task(alter_table_arg_, fk_ids))) {
+          } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->                execute_ddl_task(alter_table_arg_, fk_ids); }))) {
             LOG_WARN("rebuild hidden table constraint failed", K(ret), K(ddl_rpc_timeout));
           }
         }
@@ -903,9 +895,7 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
   } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(dst_tenant_id_, schema_guard))) {
@@ -940,8 +930,7 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     LOG_WARN("fail to convert scn", K(ret), K(snapshot_version_));
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(dst_tenant_id_, target_object_id_, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
-  } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(ddl_rpc_timeout).
-      execute_ddl_task(alter_table_arg_, objs))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->      execute_ddl_task(alter_table_arg_, objs); }))) {
     int tmp_ret = OB_SUCCESS;
     bool has_took_effect_succ = false;
     if (OB_TMP_FAIL(check_take_effect_succ(has_took_effect_succ))) {
@@ -1212,7 +1201,7 @@ int ObTableRedefinitionTask::deserialize_params_from_message(const uint64_t tena
   int8_t copy_foreign_keys = 0;
   int8_t ignore_errors = 0;
   int8_t do_finish = 0;
-  obrpc::ObAlterTableArg tmp_arg;
+  obcall::ObAlterTableArg tmp_arg;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(data_len));

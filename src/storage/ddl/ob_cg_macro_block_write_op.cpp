@@ -44,16 +44,6 @@ int ObDAGCGMacroBlockWriter::open(const ObWriteMacroParam &param)
   } else if (OB_UNLIKELY(nullptr == writer_args_.object_cleaner_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("object cleaner is null", K(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(cg_macro_block_writer_.open_for_ss_ddl(writer_args_.data_desc_.get_desc(),
-                                                       writer_args_.parallel_idx_,
-                                                       writer_args_.macro_seq_param_,
-                                                       *writer_args_.object_cleaner_,
-                                                       writer_args_.ddl_redo_callback_))) {
-      LOG_WARN("fail to open macro block writer in ss mode", K(ret), K(writer_args_));
-    }
-#endif
   } else if (OB_FAIL(cg_macro_block_writer_.open(writer_args_.data_desc_.get_desc(),
                                                   writer_args_.parallel_idx_,
                                                   writer_args_.macro_seq_param_,
@@ -368,4 +358,3 @@ int ObDAGCGMacroBlockWriteOp::set_remain_block(ObDDLSlice *ddl_slice)
 
 } // end namespace storage
 } // end namespace oceanbase
-

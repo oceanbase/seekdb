@@ -235,16 +235,6 @@ public:
       common::ObArenaAllocator &allocator,
       const ObUpdateTableStoreParam &param,
       const ObTablet &old_tablet);
-#ifdef OB_BUILD_SHARED_STORAGE
-  int init_for_shared_merge(
-      common::ObArenaAllocator &allocator,
-      const ObUpdateTableStoreParam &param,
-      const ObTablet &old_tablet,
-      int64_t &start_macro_seq);
-  bool get_gc_occupy_flag() { return gc_occupy_flag_; }
-  void set_gc_occupy_flag_true() { gc_occupy_flag_ = true; }  // only allow from false to true
-  share::SCN get_min_ss_tablet_version() const { return tablet_meta_.min_ss_tablet_version_; }
-#endif
   bool is_external_tablet() const { return is_external_tablet_; }
   // transfer build new tablet
   int init_with_migrate_param(

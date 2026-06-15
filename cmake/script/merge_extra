@@ -272,23 +272,13 @@ def merge_parameter_file(var):
         if 'standalone' in parameter_extra_file:
             standalone_extra_params = load_json(parameter_extra_file, var)
             standalone_output_file = os.path.join(GLOBAL_CONF.origin_parameter_path, 'standalone_default_parameter.json')
-        elif 'storage' in parameter_extra_file:
-            storage_extra_params = load_json(parameter_extra_file, var)
-            storage_output_file = os.path.join(GLOBAL_CONF.origin_parameter_path, 'shared_storage_default_parameter.json')
 
     # 使用 default_params 的拷贝来创建最终的合并结果
     if standalone_extra_params:
         standalone_merged_params = merge_configs(default_params, standalone_extra_params, var)
-        # 写入到输出文件
         standalone_merged_params = format_json(standalone_merged_params)
         with open(standalone_output_file, 'w') as f:
             f.write(standalone_merged_params)
-    if storage_extra_params:
-        storage_merged_params = merge_configs(default_params, storage_extra_params, var)
-        # 写入到输出文件
-        storage_merged_params = format_json(storage_merged_params)
-        with open(storage_output_file, 'w') as f:
-            f.write(storage_merged_params)
 
     return True
 
@@ -309,23 +299,13 @@ def merge_variable_file(var):
         if 'standalone' in variable_extra_file:
             standalone_extra_variable = load_json(variable_extra_file, var)
             standalone_output_file = os.path.join(GLOBAL_CONF.origin_variable_path, 'standalone_default_system_variable.json')
-        elif 'storage' in variable_extra_file:
-            storage_extra_variable = load_json(variable_extra_file, var)
-            storage_output_file = os.path.join(GLOBAL_CONF.origin_variable_path, 'shared_storage_default_system_variable.json')
 
     # 使用 default_variable 的拷贝来创建最终的合并结果
     if standalone_extra_variable:
         standalone_merged_variable = merge_configs(default_variable, standalone_extra_variable, var)
-        # 写入到输出文件
         standalone_merged_variable = format_json(standalone_merged_variable)
         with open(standalone_output_file, 'w') as f:
             f.write(standalone_merged_variable)
-    if storage_extra_variable:
-        storage_merged_variable = merge_configs(default_variable, storage_extra_variable, var)
-        # 写入到输出文件
-        storage_merged_variable = format_json(storage_merged_variable)
-        with open(storage_output_file, 'w') as f:
-            f.write(storage_merged_variable)
 
     return True
 

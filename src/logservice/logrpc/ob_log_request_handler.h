@@ -29,7 +29,7 @@ namespace palf
 class PalfEnv;
 }
 
-namespace obrpc
+namespace obcall
 {
 class ObLogServiceRpcProxy;
 }
@@ -52,16 +52,12 @@ public:
 private:
   int get_palf_handle_guard_(const int64_t palf_id, palf::PalfHandleGuard &palf_handle_guard) const;
   int get_self_addr_(common::ObAddr &self) const;
-  int get_rpc_proxy_(obrpc::ObLogServiceRpcProxy *&rpc_proxy) const;
   int get_flashback_service_(ObLogFlashbackService *&flashback_srv) const;
   int get_replay_service_(ObLogReplayService *&replay_srv) const;
   int get_log_handler_(const int64_t palf_id,
                        storage::ObLSHandle &ls_handle,
                        logservice::ObLogHandler *&log_handler) const;
   int change_access_mode_(const LogChangeAccessModeCmd &req);
-#ifdef OB_BUILD_SHARED_STORAGE
-  int handle_acquire_log_rebuild_info_msg_(const LogAcquireRebuildInfoMsg &req);
-#endif
 };
 
 class ConfigChangeCmdHandler{

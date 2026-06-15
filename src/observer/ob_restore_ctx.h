@@ -18,14 +18,9 @@
 #define OCEANBASE_OBSERVER_OB_RESTORE_CTX_H_
 
 #include "observer/ob_restore_sql_modifier.h"
-#include "share/ob_common_rpc_proxy.h"
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
 namespace common
 {
 class ObServerConfig;
@@ -54,8 +49,7 @@ public:
       sql_client_(NULL),
       ob_sql_(NULL),
       vt_iter_creator_(NULL),
-      server_config_(NULL),
-      rs_rpc_proxy_(NULL)
+      server_config_(NULL)
   {}
   ~ObRestoreCtx() {}
   bool is_valid()
@@ -64,15 +58,13 @@ public:
         && NULL != sql_client_
         && NULL != ob_sql_
         && NULL != vt_iter_creator_
-        && NULL != server_config_
-        && NULL != rs_rpc_proxy_;
+        && NULL != server_config_;
   }
   share::schema::ObMultiVersionSchemaService *schema_service_;
   common::ObMySQLProxy *sql_client_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;
   common::ObServerConfig *server_config_;
-  obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRestoreCtx);
 };

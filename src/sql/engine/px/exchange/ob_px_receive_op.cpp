@@ -18,8 +18,6 @@
 
 #include "ob_px_receive_op.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
-#include "sql/dtl/ob_dtl_rpc_channel.h"
-#include "share/ob_rpc_share.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 
@@ -261,7 +259,7 @@ int ObPxReceiveOp::link_ch_sets(ObPxTaskChSet &ch_set,
   dtl::ObDtlChannelInfo ci;
   int64_t hash_val = 0;
   int64_t offset = 0;
-  const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlRpcChannel) > sizeof(ObDtlLocalChannel) ? sizeof(ObDtlRpcChannel) : sizeof(ObDtlLocalChannel);
+  const int64_t DTL_CHANNEL_SIZE = sizeof(ObDtlLocalChannel);
   CK (OB_NOT_NULL(ctx_.get_physical_plan_ctx()) && OB_NOT_NULL(ctx_.get_physical_plan_ctx()->get_phy_plan()));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(channels.reserve(ch_set.count()))) {
@@ -297,10 +295,12 @@ int ObPxReceiveOp::link_ch_sets(ObPxTaskChSet &ch_set,
 #endif
         if (OB_FAIL(ch_set.get_channel_info(idx, ci))) {
           LOG_WARN("fail get channel info", K(idx), K(ret));
-        } else if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {
-          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, dtl::ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
+        } else if (OB_UNLIKELY(ci.type_ != DTL_CT_LOCAL)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("only local dtl channel is supported", K(ret), K(ci.type_));
         } else {
-          ch = new((char*)buf + offset) ObDtlRpcChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, dtl::ObDtlChannel::DtlChannelType::RPC_CHANNEL);
+          // single-replica: only local (in-process) channels are supported.
+          ch = new((char*)buf + offset) ObDtlLocalChannel(ci.tenant_id_, ci.chid_, ci.peer_, hash_val, dtl::ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
         }
         if (OB_FAIL(ret)) {
         } else if (nullptr == ch) {

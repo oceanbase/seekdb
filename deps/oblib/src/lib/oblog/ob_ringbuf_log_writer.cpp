@@ -20,7 +20,7 @@
 
 using namespace oceanbase::lib;
 extern "C" {
-int ob_pthread_create(void **ptr, void *(*start_routine)(void *), void *arg);
+int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg);
 void ob_pthread_join(void *ptr);
 }
 
@@ -97,6 +97,9 @@ int64_t ObRingBuf::alloc(int64_t total_len)
     real->total_len_ = total_len;
     real->busy_ = 1;
 
+    // Publish header (busy_/total_len_) before advancing push_, so a consumer
+    // that observes the new push_ (acquire) is guaranteed to see the header.
+    WEAK_BARRIER();
     push_ = cur_push + needed;
     ret_pos = cur_push + pad_len;
   } else {
@@ -104,6 +107,9 @@ int64_t ObRingBuf::alloc(int64_t total_len)
     entry->total_len_ = total_len;
     entry->busy_ = 1;
 
+    // Publish header (busy_/total_len_) before advancing push_, so a consumer
+    // that observes the new push_ (acquire) is guaranteed to see the header.
+    WEAK_BARRIER();
     push_ = cur_push + needed;
     ret_pos = cur_push;
   }
@@ -152,7 +158,7 @@ int64_t ObRingBuf::get_pop() const
 
 int64_t ObRingBuf::get_push() const
 {
-  return ATOMIC_LOAD(&push_);
+  return ATOMIC_LOAD_ACQ(&push_);
 }
 
 // ==================== ObRingBufLogWriter ====================
@@ -202,7 +208,8 @@ int ObRingBufLogWriter::init(int64_t group_commit_max_wait_us, const char *threa
       thread_name_[MAX_THREAD_NAME_LEN] = '\0';
       has_stopped_ = false;
       is_inited_ = true;
-      if (0 != ob_pthread_create(&flush_tid_, ObRingBufLogWriter::flush_thread, this)) {
+      if (0 != ob_pthread_create(&flush_tid_,
+                                 ObRingBufLogWriter::flush_thread, this)) {
         ret = OB_ERR_SYS;
         LOG_STDERR("Fail to create flush thread.\n");
         has_stopped_ = true;
@@ -284,8 +291,10 @@ void *ObRingBufLogWriter::flush_thread(void *arg)
 void ObRingBufLogWriter::flush_loop()
 {
   while (!has_stopped_) {
+    // Snapshot key BEFORE do_flush: if a commit() fires between do_flush
+    // returning false and wait(), the key bump ensures we don't miss it.
+    const uint32_t key = flush_cond_->get_key();
     if (!do_flush()) {
-      const uint32_t key = flush_cond_->get_key();
       if (!has_stopped_) {
         flush_cond_->wait(key, group_commit_max_wait_us_);
       }

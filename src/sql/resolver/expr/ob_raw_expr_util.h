@@ -325,7 +325,7 @@ public:
                                          const ObResolverUtils::PureFunctionCheckStatus
                                            check_status = ObResolverUtils::DISABLE_CHECK,
                                          const bool need_check_simple_column = true);
-  static int build_generated_column_expr(const obrpc::ObCreateIndexArg *arg,
+  static int build_generated_column_expr(const obcall::ObCreateIndexArg *arg,
                                          const common::ObString &expr_str,
                                          ObRawExprFactory &expr_factory,
                                          const ObSQLSessionInfo &session_info,
@@ -1113,28 +1113,28 @@ public:
 
 
   static int try_modify_expr_for_gen_col_recursively(const ObSQLSessionInfo &session,
-                                                 const obrpc::ObCreateIndexArg *arg,
+                                                 const obcall::ObCreateIndexArg *arg,
                                                  ObRawExprFactory &expr_factory,
                                                  ObRawExpr *expr,
                                                  bool &expr_changed);
   static int try_add_to_char_on_expr(const ObSQLSessionInfo &session,
-                                     const obrpc::ObCreateIndexArg *arg,
+                                     const obcall::ObCreateIndexArg *arg,
                                      ObRawExprFactory &expr_factory,
                                      ObRawExpr *expr,
                                      bool &expr_changed);
   static int actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
-                                        const obrpc::ObCreateIndexArg *arg,
+                                        const obcall::ObCreateIndexArg *arg,
                                         ObRawExprFactory &expr_factory,
                                         ObRawExpr &src_expr,
                                         const common::ObObjType &data_type,
                                         ObSysFunRawExpr *&to_char_expr);
   static int try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &session,
-                                             const obrpc::ObCreateIndexArg *arg,
+                                             const obcall::ObCreateIndexArg *arg,
                                              ObRawExprFactory &expr_factory,
                                              ObRawExpr *expr,
                                              bool &expr_changed);
   static int actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& session,
-                                                const obrpc::ObCreateIndexArg *arg,
+                                                const obcall::ObCreateIndexArg *arg,
                                                 ObRawExprFactory &expr_factory,
                                                 const ObObjType &data_type,
                                                 ObSysFunRawExpr *to_char_expr);

@@ -85,11 +85,11 @@ private:
                                   common::ObISQLClient &sql_client,
                                   ObIAllocator &allocator);
   int clean_sequence_cache(uint64_t tenant_id, uint64_t sequence_id, ObNumber &inner_next_value,
-                           obrpc::ObSeqCleanCacheRes &cache_res, ObIAllocator &allocator);
+                           obcall::ObSeqCleanCacheRes &cache_res, ObIAllocator &allocator);
 
   int get_lastest_local_cache(ObFixedArray<SequenceCacheNode, common::ObIAllocator> &prefetch_nodes,
                              const SequenceCacheNode &target_cache_node, const ObNumber &inner_next_value,
-                             obrpc::ObSeqCleanCacheRes &cache_res, ObIAllocator &allocator);
+                             obcall::ObSeqCleanCacheRes &cache_res, ObIAllocator &allocator);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSequenceSqlService);

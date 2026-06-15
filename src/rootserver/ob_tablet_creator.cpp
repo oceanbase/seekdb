@@ -173,7 +173,7 @@ int ObBatchCreateTabletHelper::add_arg_to_batch_arg(
       }
     }
     if (OB_SUCC(ret)) {
-      obrpc::ObCreateTabletInfo info;
+      obcall::ObCreateTabletInfo info;
       if (OB_FAIL(info.init(tablet_arg.tablet_ids_,
                             tablet_arg.data_tablet_id_,
                             index_array,
@@ -227,7 +227,7 @@ int ObBatchCreateTabletHelper::add_table_schema_(
     index = batch_arg_.create_tablet_schemas_.count();
     ObCreateTabletSchema *create_tablet_schema = NULL;
     void *create_tablet_schema_ptr = batch_arg_.allocator_.alloc(sizeof(ObCreateTabletSchema));
-    obrpc::ObCreateTabletExtraInfo create_tablet_extr_info;
+    obcall::ObCreateTabletExtraInfo create_tablet_extr_info;
     ObTabletID split_src_tablet_id;
     if (OB_ISNULL(create_tablet_schema_ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

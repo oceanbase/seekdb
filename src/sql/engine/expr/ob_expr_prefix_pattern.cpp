@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "ob_expr_prefix_pattern.h"
-#include "src/share/interrupt/ob_interrupt_rpc_proxy.h"
+#include "share/interrupt/ob_interrupt_message.h"
 #include "sql/engine/expr/ob_expr_substr.h"
 
 namespace oceanbase

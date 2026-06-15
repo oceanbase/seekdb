@@ -182,7 +182,7 @@ public:
       const ObTabletCreateSSTableParam &param,
       common::ObArenaAllocator &allocator,
       T &sstable);
-  static bool is_pure_hidden_tablets(const obrpc::ObCreateTabletInfo &info);
+  static bool is_pure_hidden_tablets(const obcall::ObCreateTabletInfo &info);
 
   template<typename Arg, typename Helper>
   static int process_for_old_mds(
@@ -190,9 +190,6 @@ public:
              const int64_t len,
              const transaction::ObMulSourceDataNotifyArg &notify_arg);
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  static int try_get_current_version_tablet_(const ObTabletMapKey &key, ObLS *ls, ObTabletHandle &handle);
-#endif
 
 private:
   class ReadMdsFunctor

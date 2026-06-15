@@ -30,7 +30,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObBatchCreateTabletArg;
 struct ObBatchGetTabletSplitArg;
@@ -95,7 +95,7 @@ public:
     const ObIArray<ObTabletID> &src_tablet_ids,
     const ObIArray<ObArray<ObTabletID>> &dst_tablet_ids,
     const ObIArray<ObRowkey> &dst_high_bound_vals);
-  int set_autoinc_seq_arg(const obrpc::ObBatchSetTabletAutoincSeqArg &arg);
+  int set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg);
   int init_split_end_src(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
@@ -135,7 +135,7 @@ public:
   ObTabletStatus tablet_status_;
   ObTabletMdsUserDataType tablet_status_data_type_;
   ObSArray<ObTabletID> set_freeze_flag_tablet_ids_; // set transfer freeze flag on replay
-  obrpc::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
+  obcall::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTabletSplitMdsArg);
 };
@@ -186,7 +186,7 @@ public:
 
   static int set_auto_part_size_for_create(
     const uint64_t tenant_id,
-    const obrpc::ObBatchCreateTabletArg &create_arg,
+    const obcall::ObBatchCreateTabletArg &create_arg,
     const ObIArray<int64_t> &auto_part_size_arr,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
@@ -199,8 +199,8 @@ public:
 
   static int batch_get_tablet_split(
     const int64_t abs_timeout_us,
-    const obrpc::ObBatchGetTabletSplitArg &arg,
-    obrpc::ObBatchGetTabletSplitRes &res);
+    const obcall::ObBatchGetTabletSplitArg &arg,
+    obcall::ObBatchGetTabletSplitRes &res);
   static int get_tablet_split_mds_by_rpc(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,

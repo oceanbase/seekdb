@@ -30,7 +30,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 class ObAccountArg;
 class ObSplitPartitionArg;
@@ -80,9 +80,8 @@ class ObDependencyInfo;
 }
 }
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
 class ObDropIndexArg;
 class ObAlterIndexArg;
 class ObRenameIndexArg;
@@ -261,7 +260,7 @@ public:
   int create_sequence_in_create_table(share::schema::ObTableSchema &table_schema,
                                       common::ObMySQLTransaction &trans,
                                       share::schema::ObSchemaGetterGuard &schema_guard,
-                                      const obrpc::ObSequenceDDLArg *sequence_ddl_arg);
+                                      const obcall::ObSequenceDDLArg *sequence_ddl_arg);
   int drop_sequence_in_drop_table(const share::schema::ObTableSchema &table_schema,
                                   common::ObMySQLTransaction &trans,
                                   share::schema::ObSchemaGetterGuard &schema_guard);
@@ -269,7 +268,7 @@ public:
                                     share::schema::ObColumnSchemaV2 &column_schema,
                                     common::ObMySQLTransaction &trans,
                                     share::schema::ObSchemaGetterGuard &schema_guard,
-                                    obrpc::ObSequenceDDLArg &sequence_ddl_arg);
+                                    obcall::ObSequenceDDLArg &sequence_ddl_arg);
 
   int drop_sequence_in_drop_column(const share::schema::ObColumnSchemaV2 &column_schema,
                                    common::ObMySQLTransaction &trans,
@@ -285,10 +284,10 @@ public:
   virtual int alter_table_alter_index(const uint64_t tenant_id,
                                       const uint64_t data_table_id,
                                       const uint64_t database_id,
-                                      const obrpc::ObAlterIndexArg &alter_index_arg,
+                                      const obcall::ObAlterIndexArg &alter_index_arg,
                                       common::ObMySQLTransaction &trans);
   virtual int alter_table_drop_foreign_key(const share::schema::ObTableSchema &table_schema,
-                                           const obrpc::ObDropForeignKeyArg &drop_foreign_key_arg,
+                                           const obcall::ObDropForeignKeyArg &drop_foreign_key_arg,
                                            common::ObMySQLTransaction &trans,
                                            const share::schema::ObForeignKeyInfo *&parent_table_mock_foreign_key_info,
                                            const bool parent_table_in_offline_ddl_white_list);
@@ -299,7 +298,7 @@ public:
   virtual int alter_table_rename_index(const uint64_t tenant_id,
                                        const uint64_t data_table_id,
                                        const uint64_t database_id,
-                                       const obrpc::ObRenameIndexArg &rename_index_arg,
+                                       const obcall::ObRenameIndexArg &rename_index_arg,
                                        const share::schema::ObIndexStatus *new_index_status,
                                        const bool is_in_deleting,
                                        common::ObMySQLTransaction &trans,
@@ -316,7 +315,7 @@ public:
   virtual int alter_index_table_parallel(const uint64_t tenant_id,
                                          const uint64_t data_table_id,
                                          const uint64_t database_id,
-                                         const obrpc::ObAlterIndexParallelArg &alter_parallel_arg,
+                                         const obcall::ObAlterIndexParallelArg &alter_parallel_arg,
                                          common::ObMySQLTransaction &trans);
 
   virtual int alter_table_options(
@@ -521,7 +520,7 @@ public:
   int get_drop_db_table_privs_count(const int64_t tenant_id, const int64_t user_id, int64_t &ddl_count);
   virtual int rename_user(const uint64_t tenant_id,
                           const uint64_t user_id,
-                          const obrpc::ObAccountArg &new_account,
+                          const obcall::ObAccountArg &new_account,
                           const common::ObString *ddl_stmt_str,
                           common::ObMySQLTransaction &trans);
   virtual int set_passwd(const uint64_t tenant_id,
@@ -542,7 +541,7 @@ public:
                          common::ObMySQLTransaction &trans);
   virtual int alter_user_require(const uint64_t tenant_id,
                                  const uint64_t user_id,
-                                 const obrpc::ObSetPasswdArg &arg,
+                                 const obcall::ObSetPasswdArg &arg,
                                  const common::ObString *ddl_stmt_str,
                                  common::ObMySQLTransaction &trans);
   virtual int grant_revoke_user(const uint64_t tenant_id,
@@ -659,10 +658,10 @@ public:
 
   //----Functions for managing schema revise
   int revise_constraint_column_info(
-      obrpc::ObSchemaReviseArg arg, common::ObMySQLTransaction &trans);
+      obcall::ObSchemaReviseArg arg, common::ObMySQLTransaction &trans);
 
   int revise_not_null_constraint_info(
-      obrpc::ObSchemaReviseArg arg,
+      obcall::ObSchemaReviseArg arg,
       share::schema::ObSchemaGetterGuard &schema_guard,
       common::ObMySQLTransaction &trans);
   //----End of functions for managing schema revise
@@ -931,7 +930,7 @@ private:
       const common::ObString &grantee_name,
       const common::ObString &db_name,
       const common::ObString &tab_name,
-      common::ObIArray<obrpc::ObDropForeignKeyArg> &drop_fk_array,
+      common::ObIArray<obcall::ObDropForeignKeyArg> &drop_fk_array,
       common::ObIArray<uint64_t> &ref_tab_id_array);
 
   int build_next_level_revoke_obj(

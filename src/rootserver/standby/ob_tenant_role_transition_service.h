@@ -28,7 +28,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObLSAccessModeInfo;
 }
@@ -145,14 +145,14 @@ class ObTenantRoleTransitionService
 public:
   ObTenantRoleTransitionService()
     :
-    switch_optype_(obrpc::ObSwitchRoleArg::OpType::INVALID),
+    switch_optype_(obcall::ObSwitchRoleArg::OpType::INVALID),
     so_scn_(),
     cost_detail_(NULL),
     has_restore_source_(false),
     is_verify_(false) {}
   virtual ~ObTenantRoleTransitionService() {}
   int init(
-      const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+      const obcall::ObSwitchRoleArg::OpType &switch_optype,
       const bool is_verify,
       ObTenantRoleTransCostDetail *cost_detail);
   int failover_to_primary();
@@ -205,7 +205,7 @@ public:
   static int get_checkpoint(
       const share::ObLSStatusInfo &status_info,
       const bool get_latest_scn,
-      obrpc::ObCheckpoint &checkpoint
+      obcall::ObCheckpoint &checkpoint
   );
   share::SCN get_so_scn() const { return so_scn_; }
 
@@ -225,8 +225,8 @@ private:
       const share::SCN &sys_ls_sync_scn);
   int get_ls_access_mode_(
       const share::ObLSStatusInfo &status_info,
-      obrpc::ObLSAccessModeInfo &ls_access_info);
-  int do_change_ls_access_mode_(const obrpc::ObLSAccessModeInfo &ls_access_info,
+      obcall::ObLSAccessModeInfo &ls_access_info);
+  int do_change_ls_access_mode_(const obcall::ObLSAccessModeInfo &ls_access_info,
                                 const palf::AccessMode target_access_mode,
                                 const share::SCN &ref_scn,
                                 const share::SCN &sys_ls_sync_scn);
@@ -242,7 +242,7 @@ private:
     share::SCN &sys_ls_sync_scn,
     bool &is_sync_to_latest);
   int get_sys_ls_sync_scn_(
-      obrpc::ObCheckpoint &checkpoints,
+      obcall::ObCheckpoint &checkpoints,
       share::SCN &sys_ls_sync_scn,
       bool &is_sync_to_latest);
   /**
@@ -281,7 +281,7 @@ private:
   const static int64_t PRINT_INTERVAL = 1000L * 1000L;
 
 private:
-  obrpc::ObSwitchRoleArg::OpType switch_optype_;
+  obcall::ObSwitchRoleArg::OpType switch_optype_;
   share::SCN so_scn_;
   ObTenantRoleTransCostDetail *cost_detail_;
   bool has_restore_source_;

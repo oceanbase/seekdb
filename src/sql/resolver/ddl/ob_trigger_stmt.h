@@ -38,11 +38,11 @@ public:
   {}
   virtual ~ObCreateTriggerStmt()
   {}
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return trigger_arg_; }
-  obrpc::ObCreateTriggerArg &get_trigger_arg() { return trigger_arg_; }
-  const obrpc::ObCreateTriggerArg &get_trigger_arg() const { return trigger_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return trigger_arg_; }
+  obcall::ObCreateTriggerArg &get_trigger_arg() { return trigger_arg_; }
+  const obcall::ObCreateTriggerArg &get_trigger_arg() const { return trigger_arg_; }
 private:
-  obrpc::ObCreateTriggerArg trigger_arg_;
+  obcall::ObCreateTriggerArg trigger_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObCreateTriggerStmt);
 };
 
@@ -63,13 +63,13 @@ public:
   {}
   virtual ~ObDropTriggerStmt()
   {}
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return trigger_arg_; }
-  obrpc::ObDropTriggerArg &get_trigger_arg() { return trigger_arg_; }
-  const obrpc::ObDropTriggerArg &get_trigger_arg() const { return trigger_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return trigger_arg_; }
+  obcall::ObDropTriggerArg &get_trigger_arg() { return trigger_arg_; }
+  const obcall::ObDropTriggerArg &get_trigger_arg() const { return trigger_arg_; }
   common::ObString trigger_table_name_;
   bool is_exist;
 private:
-  obrpc::ObDropTriggerArg trigger_arg_;
+  obcall::ObDropTriggerArg trigger_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObDropTriggerStmt);
 };
 
@@ -86,16 +86,16 @@ public:
   {}
   virtual ~ObAlterTriggerStmt()
   {}
-  virtual obrpc::ObDDLArg& get_ddl_arg()
+  virtual obcall::ObDDLArg& get_ddl_arg()
   {
     return trigger_arg_;
   }
-  obrpc::ObAlterTriggerArg& get_trigger_arg()
+  obcall::ObAlterTriggerArg& get_trigger_arg()
   {
     return trigger_arg_;
   }
 private:
-  obrpc::ObAlterTriggerArg trigger_arg_;DISALLOW_COPY_AND_ASSIGN(ObAlterTriggerStmt);
+  obcall::ObAlterTriggerArg trigger_arg_;DISALLOW_COPY_AND_ASSIGN(ObAlterTriggerStmt);
 };
 
 } // namespace sql

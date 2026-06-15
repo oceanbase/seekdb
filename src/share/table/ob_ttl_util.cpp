@@ -20,7 +20,6 @@
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/location_cache/ob_location_service.h"
 #include "share/table/ob_table_config_util.h"
-#include "observer/table/utils/ob_htable_utils.h"
 #include "share/schema/ob_dependency_info.h"
 
 using namespace oceanbase::share;
@@ -725,42 +724,6 @@ int ObTTLUtil::parse_kv_attributes_redis(json::Value *ast, ObKVAttr &kv_attr)
           LOG_WARN("repeatedly setting isTTL not supported", K(ret), K(is_ttl_appeared));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "repeatedly setting isTTL");
         }
-      } else if (elem->name_.case_compare("Model") == 0) {
-        if (!model_appeared) {
-          model_appeared = true;
-          json::Value *model_val = elem->value_;
-          if (NULL == model_val) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Model value node is null", K(ret), KP(model_val));
-          } else {
-            if (model_val->get_type() == json::JT_STRING) {
-              ObString model_str = model_val->get_string();
-              if (model_str.case_compare("HASH") == 0) {
-                kv_attr.redis_model_ = table::ObRedisDataModel::HASH;
-              } else if (model_str.case_compare("LIST") == 0) {
-                kv_attr.redis_model_ = table::ObRedisDataModel::LIST;
-              } else if (model_str.case_compare("SET") == 0) {
-                kv_attr.redis_model_ = table::ObRedisDataModel::SET;
-              } else if (model_str.case_compare("ZSET") == 0) {
-                kv_attr.redis_model_ = table::ObRedisDataModel::ZSET;
-              } else if (model_str.case_compare("STRING") == 0) {
-                kv_attr.redis_model_ = table::ObRedisDataModel::STRING;
-              } else {
-                ret = OB_NOT_SUPPORTED;
-                LOG_WARN("Model value with wrong format", K(ret), K(model_str));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "Model value with wrong format");
-              }
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("Model value must be string", K(ret), K(model_val->get_type()));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "Model value not string");
-            } 
-          }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("repeatedly setting Model not supported", K(ret), K(model_appeared));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "repeatedly setting Model");
-        }
       } else {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not supported kv attribute", K(ret), K(elem->name_));
@@ -883,7 +846,7 @@ int ObTTLUtil::dispatch_ttl_cmd(const ObTTLParam &param)
     const int64_t ttl_info_count = ttl_info_array.count();
     for (int i = 0; i < ttl_info_count && OB_SUCC(ret); ++i) {
       const uint64_t tenant_id = ttl_info_array.at(i).tenant_id_;
-      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, *param.transport_, ttl_info_array.at(i)))) {
+      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, ttl_info_array.at(i)))) {
         LOG_WARN("fail dispatch one tenant ttl", KR(ret), K(ttl_info_count), "ttl_info", ttl_info_array.at(i));
       }
     }
@@ -1141,78 +1104,14 @@ int ObTTLUtil::get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &
   return ret;
 }
 
-int ObTTLUtil::dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType type,
-                                       const rpc::frame::ObReqTransport &transport,
+int ObTTLUtil::dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
                                        const ObSimpleTTLInfo &ttl_info)
 {
-  int ret = OB_SUCCESS;
-  if (!ttl_info.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ttl_info));
-  } else {
-    const int64_t launch_start_time = ObTimeUtility::current_time();
-    obrpc::ObSrvRpcProxy proxy;
-    ObAddr leader;
-    obrpc::ObTTLRequestArg req;
-    obrpc::ObTTLResponseArg resp;
-    uint64_t tenant_id = ttl_info.tenant_id_;
-    req.tenant_id_ = tenant_id;
-    req.cmd_code_ = type;
-    req.trigger_type_ = TRIGGER_TYPE::USER_TRIGGER;
-    if (OB_ISNULL(GCTX.location_service_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid GCTX", KR(ret));
-    } else if (OB_FAIL(proxy.init(&transport))) {
-      LOG_WARN("fail to init", KR(ret));
-    } else {
-      const int64_t MAX_RETRY_COUNT = 5;
-      bool ttl_done = false;
-      static const int64_t MAX_PROCESS_TIME_US = 10 * 1000 * 1000L;
-      for (int64_t i = 0; OB_SUCC(ret) && (!ttl_done) && (i < MAX_RETRY_COUNT); ++i) {
-        if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(GCONF.cluster_id, 
-                    tenant_id, share::SYS_LS, leader))) {
-          LOG_WARN("fail to get ls locaiton leader", KR(ret), K(tenant_id));
-        } else if (OB_FAIL(proxy.to(leader)
-                                .trace_time(true)
-                                .max_process_handler_time(MAX_PROCESS_TIME_US)
-                                .by(tenant_id)
-                                .dst_cluster_id(GCONF.cluster_id)
-                                .dispatch_ttl(req, resp))) {
-          LOG_WARN("tenant ttl rpc failed", KR(ret), K(tenant_id), K(leader), K(ttl_info));
-        } else {
-          ret = resp.err_code_;
-        }
-        
-        if (OB_FAIL(ret)) {
-          if (OB_LEADER_NOT_EXIST == ret || OB_EAGAIN == ret) {
-            const int64_t RESERVED_TIME_US = 600 * 1000; // 600 ms
-            const int64_t timeout_remain_us = THIS_WORKER.get_timeout_remain();
-            const int64_t idle_time_us = 200 * 1000 * (i + 1);
-            if (timeout_remain_us - idle_time_us > RESERVED_TIME_US) {
-              LOG_WARN("leader may switch or ddl confilict, will retry", KR(ret), K(tenant_id), K(ttl_info),
-                "ori_leader", leader, K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
-              ob_throttle_usleep((const useconds_t)idle_time_us, ret, (int64_t)tenant_id);
-              ret = OB_SUCCESS;
-            } else {
-              LOG_WARN("leader may switch or ddl confilict, will not retry cuz timeout_remain is "
-                "not enough", KR(ret), K(tenant_id), K(ttl_info), "ori_leader", leader,
-                K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
-            }
-          }
-        } else {
-          ttl_done = true;
-        }
-      }
-
-      if (OB_SUCC(ret) && !ttl_done) {
-        ret = OB_EAGAIN;
-        LOG_WARN("fail to retry ttl cuz switching role", KR(ret), K(MAX_RETRY_COUNT));
-      }
-    }
-    
-    const int64_t launch_cost_time = ObTimeUtility::current_time() - launch_start_time;
-    LOG_INFO("do tenant ttl", KR(ret), K(tenant_id), K(leader), K(ttl_info), K(launch_cost_time));
-  }
+  // Table-API TTL service removed (feature decommissioned); no backend to dispatch to.
+  int ret = OB_NOT_SUPPORTED;
+  UNUSEDx(type, ttl_info);
+  LOG_WARN("tenant ttl is not supported", KR(ret), K(ttl_info));
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant ttl");
   return ret;
 }
 
@@ -1260,8 +1159,6 @@ int ObTTLUtil::check_is_normal_ttl_table(const ObTableSchema &table_schema, bool
   if (table_schema.is_user_table() && !table_schema.is_in_recyclebin()) {
     if (!table_schema.get_ttl_definition().empty()) {
       is_ttl_table = true;
-    } else if (OB_FAIL(check_is_htable_ttl_(table_schema, true/*allow_timeseries_table*/, is_ttl_table))) {
-      LOG_WARN("fail to check is htable ttl", K(ret));
     } else if (!is_ttl_table && !table_schema.get_kv_attributes().empty()) {
       ObKVAttr kv_attr;  // for check validity
       if (OB_FAIL(parse_kv_attributes(table_schema.get_kv_attributes(), kv_attr))) {
@@ -1276,40 +1173,9 @@ int ObTTLUtil::check_is_normal_ttl_table(const ObTableSchema &table_schema, bool
 
 int ObTTLUtil::check_is_rowkey_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table)
 {
-  int ret = OB_SUCCESS;
-  is_ttl_table = false; 
-  if (table_schema.is_user_table() && !table_schema.is_in_recyclebin()) {
-    if (OB_FAIL(check_is_htable_ttl_(table_schema, false/*allow_timeseries_table*/, is_ttl_table))) {
-      LOG_WARN("fail to check is htable ttl", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObTTLUtil::check_is_htable_ttl_(const ObTableSchema &table_schema, bool allow_timeseries_table, bool &is_ttl_table)
-{
-  int ret = OB_SUCCESS;
+  UNUSED(table_schema);
   is_ttl_table = false;
-  const ObColumnSchemaV2 *ttl_column = nullptr;
-  table::ObHbaseModeType mode_type = table::ObHbaseModeType::OB_INVALID_MODE_TYPE;
-  if (OB_FAIL(table::ObHTableUtils::get_mode_type(table_schema, mode_type))) {
-    LOG_WARN("fail to get mode type", KR(ret));
-  } else if (mode_type == table::ObHbaseModeType::OB_INVALID_MODE_TYPE ||
-            (!allow_timeseries_table && mode_type == table::ObHbaseModeType::OB_HBASE_SERIES_TYPE)) {
-    // do nothing
-  } else if (OB_NOT_NULL(ttl_column = table_schema.get_column_schema_by_idx(ObHTableConstants::COL_IDX_TTL)) &&
-             table::ObHTableConstants::TTL_CNAME_STR.case_compare(ttl_column->get_column_name()) == 0) {
-    is_ttl_table = true;
-  } else if (!table_schema.get_kv_attributes().empty()) {
-    // htable ttl table should have at least one of max_version and time_to_live
-    ObKVAttr kv_attr;
-    if (OB_FAIL(parse_kv_attributes(table_schema.get_kv_attributes(), kv_attr))) {
-      LOG_WARN("fail to parse kv attributes", KR(ret), "kv_attributes", table_schema.get_kv_attributes());
-    } else if (kv_attr.ttl_ > 0 || kv_attr.max_version_ > 0) {
-      is_ttl_table = true;
-    }
-  }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObTTLUtil::check_task_status_from_sys_table(uint64_t tenant_id, common::ObISQLClient& proxy,
@@ -1399,109 +1265,6 @@ bool ObTTLUtil::is_ttl_column(const ObString &orig_column_name, const ObIArray<O
   }
   return bret;
 }
-
-int ObTTLUtil::check_kv_attributes(const schema::ObTableSchema &table_schema, bool by_admin)
-{
-  return ObTTLUtil::check_kv_attributes(table_schema.get_kv_attributes(), table_schema,
-    table_schema.ObPartitionSchema::get_part_level(), by_admin);
-}
-
-int ObTTLUtil::check_kv_attributes(const ObString &kv_attributes,
-                                   const schema::ObTableSchema &table_schema,
-                                   ObPartitionLevel part_level,
-                                   bool by_admin)
-{
-  int ret = OB_SUCCESS;
-  ObKVAttr attr;
-  if (OB_FAIL(ObTTLUtil::parse_kv_attributes(kv_attributes, attr))) {
-    LOG_WARN("fail to parse kv attributes", K(ret));
-  } else if (OB_FAIL(check_htable_ddl_supported_(attr, by_admin))) {
-    LOG_WARN("fail to check htable ddl supported", K(ret), K(attr), K(by_admin));
-  } else if (attr.is_max_versions_valid()) {
-    ObHbaseModeType mode_type = ObHbaseModeType::OB_INVALID_MODE_TYPE;
-    if (OB_FAIL(ObHTableUtils::get_mode_type(table_schema, mode_type))) {
-      LOG_WARN("fail to get hbase mode type", K(ret));
-    } else if (mode_type == ObHbaseModeType::OB_HBASE_SERIES_TYPE) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("timeseries hbase table with max versions is not supported",
-                  K(ret), K(kv_attributes));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "timeseries hbase table with max versions");
-    } else if (mode_type== ObHbaseModeType::OB_HBASE_NORMAL_TYPE &&
-        PARTITION_LEVEL_TWO == part_level) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("secondary partitioned hbase table with max versions is not supported",
-                  K(ret), K(kv_attributes));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "secondary partitioned hbase table with max versions");
-    }
-  }
-  return ret;
-}
-
-int ObTTLUtil::check_htable_ddl_supported_(const ObKVAttr &attr, bool by_admin)
-{
-  int ret = OB_SUCCESS;
-  if (!by_admin && attr.is_created_by_admin()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table kv_attribute with '\"CreateBy\": \"Admin\"' is not supported", K(ret), K(attr), K(by_admin));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "table kv_attribute with '\"CreateBy\": \"Admin\"'");
-  } else if (by_admin && !attr.is_created_by_admin()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table kv_attribute without '\"CreateBy\": \"Admin\"' is not supported", K(ret), K(attr), K(by_admin));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "table kv_attribute without '\"CreateBy\": \"Admin\"'");
-  }
-  return ret;
-}
-
-int ObTTLUtil::check_htable_ddl_supported(const schema::ObTableSchema &table_schema,
-                                          bool by_admin,
-                                          obrpc::ObHTableDDLType ddl_type,
-                                          const ObString &table_name)
-{
-  int ret = OB_SUCCESS;
-  const ObString &kv_attributes = table_schema.get_kv_attributes();
-  ObKVAttr attr;
-  if (OB_FAIL(ObTTLUtil::parse_kv_attributes(kv_attributes, attr))) {
-    LOG_WARN("failed to parse kv attributes", K(ret));
-  } else if (OB_FAIL(check_htable_ddl_supported_(attr, by_admin))) {
-    LOG_WARN("failed to check htable ddl supported", K(ret));
-  } else {
-    if (ddl_type == obrpc::ObHTableDDLType::DROP_TABLE) {
-      if (!attr.is_disable_) {
-        ret = OB_KV_TABLE_NOT_DISABLED;
-        LOG_WARN("table is not disabled, can't drop", K(ret), K(attr));
-        LOG_USER_ERROR(OB_KV_TABLE_NOT_DISABLED,  table_name.length(), table_name.ptr());
-      }
-    }
-  }
-  return ret;
-}
-
-// cannot create view dependent on hbase admin table
-int ObTTLUtil::check_htable_ddl_supported(share::schema::ObSchemaGetterGuard &schema_guard,
-                                          const uint64_t tenant_id,
-                                          const common::ObIArray<share::schema::ObDependencyInfo> &dep_infos)
-{
-  int ret = OB_SUCCESS;
-  for (int i = 0; OB_SUCC(ret) && i < dep_infos.count(); i++) {
-    const ObDependencyInfo &dep_info = dep_infos.at(i);
-    if (dep_info.get_ref_obj_type() == ObObjectType::TABLE) {
-      const uint64_t table_id = dep_info.get_ref_obj_id();
-      const ObTableSchema *table_schema = NULL;
-      if (is_cte_table(table_id) || is_external_object_id(table_id)) {
-        // skip, cte table and external table has not table schema and will not be hbase admin table
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-        LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
-      } else if (OB_ISNULL(table_schema)) {
-        ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table schema is null, table not exists", K(ret), K(tenant_id), K(table_id));
-      } else if (OB_FAIL(check_htable_ddl_supported(*table_schema, false))) {
-        LOG_WARN("failed to check htable ddl supported", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 
 } // end namespace rootserver
 } // end namespace oceanbase

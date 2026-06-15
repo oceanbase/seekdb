@@ -35,7 +35,7 @@ using ::testing::SetArgReferee;
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace rootserver

@@ -69,7 +69,6 @@ class ObSql
 public:
   /// init SQL module
   int init(common::ObOptStatManager *opt_stat_mgr,
-           rpc::frame::ObReqTransport *transport,
            common::ObITabletScan *vt_partition_service,
            common::ObAddr &addr);
   void destroy();
@@ -210,7 +209,6 @@ public:
   ObSql()
   : inited_(false),
     opt_stat_mgr_(NULL),
-    transport_(NULL),
     vt_partition_service_(NULL),
     execution_id_(0),
     px_sequence_id_(0)
@@ -483,7 +481,6 @@ private:
   bool inited_;
   // BEGIN global singleton dependency interface
   common::ObOptStatManager *opt_stat_mgr_;
-  rpc::frame::ObReqTransport *transport_;
   common::ObITabletScan *vt_partition_service_;
   // END global singleton dependency interface
 

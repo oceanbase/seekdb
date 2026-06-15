@@ -18,10 +18,6 @@
 
 #include "storage/blocksstable/ob_macro_seq_generator.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#include "share/ob_server_struct.h"
-#endif
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -56,11 +52,7 @@ int ObMacroIncSeqGenerator::init(const ObMacroSeqParam &seq_param)
   } else {
     start_ = seq_param.start_;
     current_ = -1;
-#ifdef OB_BUILD_SHARED_STORAGE
-    seq_threshold_ = start_ + (GCTX.is_shared_storage_mode() ? compaction::MACRO_STEP_SIZE : blocksstable::ObMacroDataSeq::MAX_MACRO_SEQ);
-#else
     seq_threshold_ = start_ + blocksstable::ObMacroDataSeq::MAX_MACRO_SEQ;
-#endif
     is_inited_ = true;
   }
   return ret;

@@ -49,7 +49,7 @@ bool ExpiredArchiveClientLSFunctor::operator()(const ClientLSKey &key, ClientLSC
   } else {
     const FetchMode fetch_mode = value->get_fetch_mode();
     if (FetchMode::FETCHMODE_ARCHIVE == fetch_mode) {
-      const obrpc::ObCdcFetchLogProtocolType proto = value->get_proto_type();
+      const obcall::ObCdcFetchLogProtocolType proto = value->get_proto_type();
       if (is_v1_fetch_log_protocol(proto)) {
         valid_client_ls_cnt_v1_++;
       } else if (is_v2_fetch_log_protocol(proto)) {
@@ -110,7 +110,7 @@ bool CtxSnapshotFunctor::operator()(const ClientLSKey &key, ClientLSCtx *value)
   if (OB_ISNULL(value)) {
     bret = false;
     EXTLOG_LOG_RET(WARN, OB_ERR_UNEXPECTED, "get null ctx when snapshot ctx", KP(value), K(key));
-  } else if (obrpc::ObCdcFetchLogProtocolType::UnknownProto != value->get_proto_type()) {
+  } else if (obcall::ObCdcFetchLogProtocolType::UnknownProto != value->get_proto_type()) {
     value->snapshot_for_traffic_stat();
   } else {
     // ignore those non-inited ctx
@@ -300,8 +300,8 @@ void ObCdcService::destroy()
   tenant_id_ = OB_INVALID_TENANT_ID;
 }
 
-int ObCdcService::req_start_lsn_by_ts_ns(const obrpc::ObCdcReqStartLSNByTsReq &req,
-    obrpc::ObCdcReqStartLSNByTsResp &resp)
+int ObCdcService::req_start_lsn_by_ts_ns(const obcall::ObCdcReqStartLSNByTsReq &req,
+    obcall::ObCdcReqStartLSNByTsResp &resp)
 {
   int ret = OB_SUCCESS;
 
@@ -322,8 +322,8 @@ int ObCdcService::req_start_lsn_by_ts_ns(const obrpc::ObCdcReqStartLSNByTsReq &r
   return ret;
 }
 
-int ObCdcService::fetch_log(const obrpc::ObCdcLSFetchLogReq &req,
-    obrpc::ObCdcLSFetchLogResp &resp,
+int ObCdcService::fetch_log(const obcall::ObCdcLSFetchLogReq &req,
+    obcall::ObCdcLSFetchLogResp &resp,
     const int64_t send_ts,
     const int64_t recv_ts)
 {
@@ -349,7 +349,7 @@ int ObCdcService::fetch_log(const obrpc::ObCdcLSFetchLogReq &req,
     const int64_t start_ts = ObTimeUtility::current_time();
     ctx->set_progress(req.get_progress());
     ctx->set_req_lsn(req.get_start_lsn());
-    ctx->set_proto_type(obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto);
+    ctx->set_proto_type(obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto);
     ctx->update_touch_ts();
     ret = fetcher_.fetch_log(req, resp, *ctx, fetch_log_time_stat);
     const int64_t end_ts = ObTimeUtility::current_time();
@@ -413,8 +413,8 @@ int ObCdcService::get_archive_dest_snapshot(const ObLSID &ls_id, ObBackupDest &a
   return ret;
 }
 
-int ObCdcService::fetch_missing_log(const obrpc::ObCdcLSFetchMissLogReq &req,
-    obrpc::ObCdcLSFetchLogResp &resp,
+int ObCdcService::fetch_missing_log(const obcall::ObCdcLSFetchMissLogReq &req,
+    obcall::ObCdcLSFetchLogResp &resp,
     const int64_t send_ts,
     const int64_t recv_ts)
 {
@@ -445,8 +445,8 @@ int ObCdcService::fetch_missing_log(const obrpc::ObCdcLSFetchMissLogReq &req,
   return ret;
 }
 
-int ObCdcService::fetch_raw_log(const obrpc::ObCdcFetchRawLogReq &req,
-    obrpc::ObCdcFetchRawLogResp &resp,
+int ObCdcService::fetch_raw_log(const obcall::ObCdcFetchRawLogReq &req,
+    obcall::ObCdcFetchRawLogResp &resp,
     const int64_t send_ts,
     const int64_t recv_ts)
 {
@@ -471,7 +471,7 @@ int ObCdcService::fetch_raw_log(const obrpc::ObCdcFetchRawLogReq &req,
     ctx->update_touch_ts();
     ctx->set_progress(req.get_progress());
     ctx->set_req_lsn(req.get_start_lsn());
-    ctx->set_proto_type(obrpc::ObCdcFetchLogProtocolType::RawLogDataProto);
+    ctx->set_proto_type(obcall::ObCdcFetchLogProtocolType::RawLogDataProto);
     ObCdcFetchRawStatus &status = resp.get_fetch_status();
     ret = fetcher_.fetch_raw_log(req, resp, *ctx);
     const int64_t end_ts = ObTimeUtility::current_time();
@@ -513,13 +513,13 @@ int ObCdcService::fetch_raw_log(const obrpc::ObCdcFetchRawLogReq &req,
   return ret;
 }
 
-int ObCdcService::get_or_create_client_ls_ctx(const obrpc::ObCdcRpcId &client_id,
+int ObCdcService::get_or_create_client_ls_ctx(const obcall::ObCdcRpcId &client_id,
     const uint64_t client_tenant_id,
     const ObLSID &ls_id,
     const int8_t flag,
     const int64_t client_progress,
     const ObCdcFetchLogProtocolType proto_type,
-    const obrpc::ObCdcClientType client_type,
+    const obcall::ObCdcClientType client_type,
     ClientLSCtx *&ctx)
 {
   int ret = OB_SUCCESS;

@@ -21,7 +21,6 @@
 
 #include "ob_weak_read_service_rpc.h"                           // ObIWrsRpc
 #include "ob_weak_read_util.h"                                  // ObWeakReadUtil
-#include "rpc/obrpc/ob_rpc_net_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "lib/ash/ob_active_session_guard.h"
 
@@ -40,7 +39,7 @@
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::storage;
 
 namespace oceanbase
@@ -379,7 +378,7 @@ int ObTenantWeakReadService::process_get_cluster_version_rpc(SCN &version)
 }
 
 void ObTenantWeakReadService::process_cluster_heartbeat_rpc_cb(
-    const obrpc::ObRpcResultCode &rcode,
+    const rpc::frame::ObResultCode &rcode,
     const common::ObAddr &dst)
 {
   const int err_code = rcode.rcode_;
@@ -865,7 +864,7 @@ int ObTenantWeakReadService::post_cluster_heartbeat_rpc_(const SCN version,
   if (OB_SUCCESS != ret) {
     // call the RPC processing fucntion directly in case of sending failure,
     // to facilitate the unified processing of the failure
-    obrpc::ObRpcResultCode rcode;
+    rpc::frame::ObResultCode rcode;
     rcode.rcode_ = ret;
     (void)snprintf(rcode.msg_, sizeof(rcode.msg_), "post cluster heartbeat rpc failed, "
         "tenant_id=%lu", tenant_id_);

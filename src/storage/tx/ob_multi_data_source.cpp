@@ -418,7 +418,7 @@ ObMulSourceTxDataDump::dump_buf(
       break;
     }
     case ObTxDataSourceType::CREATE_TABLET_NEW_MDS: {
-      obrpc::ObBatchCreateTabletArg create_arg;
+      obcall::ObBatchCreateTabletArg create_arg;
       if (OB_FAIL(create_arg.deserialize(buf, len, pos))) {
         TRANS_LOG(WARN, "deserialize failed for ls_member trans", KR(ret));
       } else if (pos > len) {
@@ -430,7 +430,7 @@ ObMulSourceTxDataDump::dump_buf(
       break;
     }
     case ObTxDataSourceType::DELETE_TABLET_NEW_MDS: {
-      obrpc::ObBatchRemoveTabletArg remove_arg;
+      obcall::ObBatchRemoveTabletArg remove_arg;
       if (OB_FAIL(remove_arg.deserialize(buf, len, pos))) {
         TRANS_LOG(WARN, "deserialize failed for ls_member trans", KR(ret));
       } else if (pos > len) {

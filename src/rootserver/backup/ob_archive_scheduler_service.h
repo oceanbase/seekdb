@@ -26,8 +26,7 @@
 namespace oceanbase
 {
 
-namespace obrpc {
-  class ObSrvRpcProxy;
+namespace obcall {
 }
 
 namespace common {
@@ -89,7 +88,6 @@ private:
 
   bool is_inited_;
   uint64_t tenant_id_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
 

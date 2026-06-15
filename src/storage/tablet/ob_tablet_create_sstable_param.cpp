@@ -16,16 +16,11 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-
 #include "ob_tablet_create_sstable_param.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
-
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
 
 namespace oceanbase
 {
@@ -91,7 +86,6 @@ ObTabletCreateSSTableParam::ObTabletCreateSSTableParam()
 bool ObTabletCreateSSTableParam::is_valid() const
 {
   bool ret = true;
-  const bool is_shared_storage = GCTX.is_shared_storage_mode();
   if (OB_UNLIKELY(!table_key_.is_valid())) {
     ret = false;
     LOG_WARN("invalid table key", K(table_key_));
@@ -137,9 +131,6 @@ bool ObTabletCreateSSTableParam::is_valid() const
     if (!ddl_scn_.is_valid_and_not_min()) {
       ret = false;
       LOG_WARN("ddl log ts is invalid", K(ddl_scn_), K(table_key_));
-    } else if (is_shared_storage && table_key_.is_ddl_dump_sstable() && !table_shared_flag_.is_shared_macro_blocks()) {
-      ret = false;
-      LOG_ERROR("invalid ddl dump sstable table flag", K(is_shared_storage), K(table_key_), K(table_shared_flag_));
     }
   } else if (!is_block_meta_valid(root_block_addr_, root_block_data_)) {
     ret = false;
@@ -568,8 +559,6 @@ int ObTabletCreateSSTableParam::init_for_merge(const compaction::ObBasicTabletMe
     } else if (is_major_or_meta_merge_type(static_param.get_merge_type())) {
       if (OB_FAIL(column_checksums_.assign(res.data_column_checksums_))) {
         LOG_WARN("fail to fill column checksum", K(ret), K(res.data_column_checksums_));
-      } else if (GCTX.is_shared_storage_mode() && is_major_merge_type(static_param.get_merge_type())) {
-        table_shared_flag_.set_shared_sstable();
       }
     }
 
@@ -711,23 +700,9 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
         }
       }
       if (OB_SUCC(ret)) {
-        if (GCTX.is_shared_storage_mode()) {
-          // in shared storage mode:
-          // if the ddl kv is from inc direct load, then the other_block_ids_ contains the index block of sstables and macro_id_array is empty
-          // else the ddl kv is from the ddl or full direct load, then the other_block_ids_ is empty and macro_id_array contains the shared blocks.
-          if (other_block_ids_.count() > 0 && macro_id_array.count() > 0) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("other block id not empty", K(ret), K(other_block_ids_), K(macro_id_array));
-          } else if (other_block_ids_.empty() && OB_FAIL(other_block_ids_.assign(macro_id_array))) {
-            LOG_WARN("assign macro block id array to other block id array failed", K(ret), K(macro_id_array.count()));
-          } else if (macro_id_array.count() > 0) {
-            table_shared_flag_.set_share_macro_blocks();
-          }
-        } else {
-          if (macro_id_array.count() > 0) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("other_block_ids should be empty in share nothing mode", K(ret), K(macro_id_array.count()));
-          }
+        if (macro_id_array.count() > 0) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("other_block_ids should be empty in share nothing mode", K(ret), K(macro_id_array.count()));
         }
       }
       if (OB_FAIL(ret)) {
@@ -758,7 +733,6 @@ int ObTabletCreateSSTableParam::init_for_ddl(blocksstable::ObSSTableIndexBuilder
   }
   return ret;
 }
-
 
 int ObTabletCreateSSTableParam::init_for_ddl_mem(const ObITable::TableKey &table_key,
                                                  const share::SCN &ddl_start_scn,
@@ -983,7 +957,6 @@ int ObTabletCreateSSTableParam::init_for_ss_ddl(blocksstable::ObSSTableMergeRes 
   return ret;
 }
 
-
 int ObTabletCreateSSTableParam::init_for_split(const ObTabletID &dst_tablet_id,
                                                const ObITable::TableKey &src_table_key,
                                                const blocksstable::ObSSTableBasicMeta &basic_meta,
@@ -1132,9 +1105,6 @@ int ObTabletCreateSSTableParam::init_for_ha(
     LOG_WARN("failed to fix filled tx scn value for compact", K(ret), K(table_key_), K(sstable_param));
   } else {
     root_macro_seq_ = MAX(root_macro_seq_, sstable_param.basic_meta_.root_macro_seq_);
-#ifdef OB_BUILD_SHARED_STORAGE
-    root_macro_seq_ += oceanbase::compaction::MACRO_STEP_SIZE;
-#endif
     if (!is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("init for ha sstable get invalid argument", K(ret), K(sstable_param), KPC(this),
@@ -1372,7 +1342,6 @@ int ObTabletCreateSSTableParam::init_for_mds(
   table_key_ = table_key;
   sstable_logic_seq_ = static_param.sstable_logic_seq_;
   filled_tx_scn_ = ctx.get_merge_scn();
-
 
   table_mode_ = mds_schema.get_table_mode_struct();
   index_type_ = mds_schema.get_index_type();

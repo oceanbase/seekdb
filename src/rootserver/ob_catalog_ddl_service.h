@@ -33,7 +33,7 @@ public:
     : ddl_service_(ddl_service)
   {}
   virtual ~ObCatalogDDLService() {}
-  int handle_catalog_ddl(const obrpc::ObCatalogDDLArg &arg);
+  int handle_catalog_ddl(const obcall::ObCatalogDDLArg &arg);
   int grant_revoke_catalog(const ObCatalogPrivSortKey &catalog_priv_key,
                            const ObString &user_name,
                            const ObString &host_name,

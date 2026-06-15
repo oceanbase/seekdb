@@ -45,7 +45,7 @@ void FetchStreamContainer::reset()
   free_fs_list_();
 
   stype_ = FETCH_STREAM_TYPE_UNKNOWN;
-  proto_type_ = obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto;
+  proto_type_ = obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto;
   self_tenant_id_ = OB_INVALID_TENANT_ID;
 
   rpc_ = NULL;
@@ -114,7 +114,7 @@ void FetchStreamContainer::do_stat(int64_t &traffic)
   }
 }
 
-void FetchStreamContainer::update_fetch_stream_proto(const obrpc::ObCdcFetchLogProtocolType proto)
+void FetchStreamContainer::update_fetch_stream_proto(const obcall::ObCdcFetchLogProtocolType proto)
 {
   SpinRLockGuard guard(lock_);
   proto_type_ = proto;

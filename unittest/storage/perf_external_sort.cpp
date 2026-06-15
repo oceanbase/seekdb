@@ -330,9 +330,7 @@ int TestExternalSort::init_tenant_mgr()
   int ret = OB_SUCCESS;
   ObTenantManager &tm = ObTenantManager::get_instance();
   ObAddr self;
-  obrpc::ObSrvRpcProxy rpc_proxy;
   self.set_ip_addr("127.0.0.1", 8086);
-  rpc::frame::ObReqTransport req_transport(NULL, NULL);
   ret = tm.init(self,
                 rpc_proxy,
                 &req_transport,

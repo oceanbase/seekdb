@@ -37,7 +37,7 @@
 
 #include "sql/optimizer/ob_join_order.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 namespace test
 {
 const char* SQL_DIR = "sql";

@@ -82,7 +82,7 @@ public:
   static const int64_t META_TENANT_MIN_LOG_DISK_SIZE = 512LL * MB;
   static const int64_t USER_TENANT_MIN_LOG_DISK_SIZE = 3LL * 512LL * MB;   // 1.5G
   // unit_min_log_disk_size and mem_to_log_disk_default_factor are different in SS and SN mode,
-  //   check GCTX.is_shared_storage_mode() and decide which to use.
+  //   decide which to use.
   // default factor of mapping MEMORY_SIZE to LOG_DISK_SIZE
   //   MEMORY_SIZE * FACTOR = LOG_DISK_SIZE
   // shared-nothing mode:
@@ -268,7 +268,6 @@ public:
   bool is_data_disk_size_valid_for_unit() const;
   bool is_data_disk_size_valid_for_meta_tenant() const;
   bool is_data_disk_size_valid_for_user_tenant() const;
-  int check_data_disk_size_supported() const;
 
   int64_t max_iops() const { return max_iops_; }
   bool is_max_iops_valid() const { return max_iops_ > 0; }

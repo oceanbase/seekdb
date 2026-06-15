@@ -24,7 +24,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::json;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 namespace test
 {

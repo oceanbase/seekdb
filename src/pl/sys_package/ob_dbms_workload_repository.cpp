@@ -18,6 +18,7 @@
 
 #include "ob_dbms_workload_repository.h"
 #include "observer/ob_srv_network_frame.h"  // ObSrvNetworkFrame
+#include "observer/ob_ex_rpc.h"
 #include "share/wr/ob_wr_task.h"
 #include "share/wr/ob_wr_stat_guard.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -32,7 +33,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 using namespace common::sqlclient;
 class ObSrvNetworkFrame;
@@ -68,10 +69,7 @@ int ObDbmsWorkloadRepository::create_snapshot(
   WR_STAT_GUARD(WR_USER_SUBMIT_SNAPSHOT);
   UNUSED(params);
   UNUSED(result);
-  ObAddr leader;
   int64_t snap_id = 0;
-  obrpc::ObWrRpcProxy wr_proxy;
-  int64_t cluster_id = GCONF.cluster_id;
   static const int64_t SLEEP_INTERVAL_US = 1 * 1000L * 1000L;  // 1s
   int64_t timeout_ts =
       common::ObTimeUtility::current_time() + WorkloadRepositoryTask::WR_MIN_SNAPSHOT_INTERVAL;
@@ -85,23 +83,20 @@ int ObDbmsWorkloadRepository::create_snapshot(
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("only sys tenant can create snapshot", K(ret));
     LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "sys tenant");
-  } else if (OB_FAIL(GCTX.location_service_->get_leader(
-                 cluster_id, OB_SYS_TENANT_ID, share::SYS_LS, false /*force_renew*/, leader))) {
-    LOG_WARN("fail to get ls locaiton leader", KR(ret), K(OB_SYS_TENANT_ID));
-  } else if (OB_FAIL(wr_proxy.init(GCTX.net_frame_->get_req_transport()))) {
-    LOG_WARN("failed to init wr proxy", K(ret));
   } else {
     int tmp_ret = OB_SUCCESS;
     do {
       if (OB_UNLIKELY(common::ObTimeUtility::current_time() >= timeout_ts)) {
         ret = OB_TIMEOUT;
         LOG_WARN("wr snapshot task already timeout", K(ret));
-      } else if (OB_FAIL(wr_proxy.to(leader)
-                             .by(OB_SYS_TENANT_ID)
-                             .group_id(share::OBCG_WR)
-                             .timeout(WorkloadRepositoryTask::WR_MIN_SNAPSHOT_INTERVAL)
-                             .wr_sync_user_submit_snapshot_task(
-                                 user_submit_snap_arg, user_submit_snapshot_resp))) {
+      } else if (OB_FAIL(ex_rpc::sync_call(timeout_ts - common::ObTimeUtility::current_time(), [&]() -> int {
+                   int ret = OB_SUCCESS;
+                   MTL_SWITCH(OB_SYS_TENANT_ID) {
+                     ret = ObWrSnapshotTaskExecutor::do_user_submit_snapshot(
+                         user_submit_snap_arg, user_submit_snapshot_resp);
+                   }
+                   return ret;
+                 }))) {
         if (OB_NEED_RETRY == ret) {
           ob_usleep(SLEEP_INTERVAL_US);
         } else {
@@ -213,7 +208,6 @@ int ObDbmsWorkloadRepository::drop_snapshot_range(
     LOG_WARN("only sys tenant can drop snapshot range", K(ret));
     LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "sys tenant");
   } else {
-    obrpc::ObWrRpcProxy wr_proxy;
     uint64_t tenant_id = OB_SYS_TENANT_ID;
     int64_t low_snap_id = params.at(0).get_int();
     int64_t high_snap_id = params.at(1).get_int();
@@ -228,8 +222,6 @@ int ObDbmsWorkloadRepository::drop_snapshot_range(
       LOG_WARN("schema_service is nullptr", K(ret));
     } else if (OB_FAIL(schema_service->get_tenant_ids(all_tenant_ids))) {
       LOG_WARN("failed to get all tenant_ids", KR(ret));
-    } else if (OB_FAIL(wr_proxy.init(GCTX.net_frame_->get_req_transport()))) {
-      LOG_WARN("failed to init wr proxy", K(ret));
     } else {
       int save_ret = OB_SUCCESS;
       for (int i = 0; OB_SUCC(ret) && i < all_tenant_ids.size(); i++) {
@@ -239,7 +231,7 @@ int ObDbmsWorkloadRepository::drop_snapshot_range(
           LOG_WARN("wr purge timeout", KR(ret), K(task_timeout_ts));
         } else if (OB_FAIL(share::WorkloadRepositoryTask::do_delete_single_tenant_snapshot(
                        tenant_id, cluster_id, low_snap_id, high_snap_id, task_timeout_ts,
-                       WorkloadRepositoryTask::WR_USER_DEL_TASK_TIMEOUT, wr_proxy))) {
+                       WorkloadRepositoryTask::WR_USER_DEL_TASK_TIMEOUT))) {
           LOG_WARN("failed to do delete single tenant snapshot", K(ret), K(tenant_id),
               K(cluster_id), K(task_timeout_ts), K(low_snap_id), K(high_snap_id));
           save_ret = ret;
@@ -317,7 +309,6 @@ int ObDbmsWorkloadRepository::modify_snapshot_settings(
 {
   int ret = OB_SUCCESS;
   ObAddr leader;
-  obrpc::ObWrRpcProxy wr_proxy;
   int64_t cluster_id = GCONF.cluster_id;
 
   if (OB_ISNULL(GCTX.location_service_)) {
@@ -333,8 +324,6 @@ int ObDbmsWorkloadRepository::modify_snapshot_settings(
   } else if (OB_FAIL(GCTX.location_service_->get_leader(
                  cluster_id, OB_SYS_TENANT_ID, share::SYS_LS, false /*force_renew*/, leader))) {
     LOG_WARN("fail to get ls locaiton leader", KR(ret), K(OB_SYS_TENANT_ID));
-  } else if (OB_FAIL(wr_proxy.init(GCTX.net_frame_->get_req_transport()))) {
-    LOG_WARN("failed to init wr proxy", K(ret));
   } else {
     int64_t retention = 0;
     if (OB_SUCC(ret)) {
@@ -387,11 +376,13 @@ int ObDbmsWorkloadRepository::modify_snapshot_settings(
     if (OB_SUCC(ret)) {
       ObWrUserModifySettingsArg wr_user_modify_settings_arg(
           ctx.exec_ctx_->get_my_session()->get_effective_tenant_id(), retention, interval, topnsql);
-      if (OB_FAIL(wr_proxy.to(leader)
-                      .by(OB_SYS_TENANT_ID)
-                      .group_id(share::OBCG_WR)
-                      .timeout(WR_USER_CREATE_SNAP_RPC_TIMEOUT)
-                      .wr_sync_user_modify_settings_task(wr_user_modify_settings_arg))) {
+      if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+                    int ret = OB_SUCCESS;
+                    MTL_SWITCH(OB_SYS_TENANT_ID) {
+                      ret = ObWrSnapshotTaskExecutor::do_user_modify_settings(wr_user_modify_settings_arg);
+                    }
+                    return ret;
+                  }))) {
         LOG_WARN("failed to send sync modify settings task", KR(ret), K(OB_SYS_TENANT_ID));
       }
     }

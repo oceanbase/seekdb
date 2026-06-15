@@ -100,15 +100,6 @@ class ObTenantMdsService;
   class ObTenantDirectLoadMgr;
   class ObEmptyReadBucket;
   class ObTabletMemtableMgrPool;
-#ifdef OB_BUILD_SHARED_STORAGE
-  class ObTenantDiskSpaceManager;
-  class ObTenantFileManager;
-  class ObSSMicroCachePrewarmService;
-  class ObSSMicroCache;
-  class ObPublicBlockGCService;
-  class ObStorageCachePolicyService;
-#else
-#endif
 
   class ObGlobalIteratorPool;
 } // namespace storage
@@ -236,17 +227,6 @@ namespace detector
 #define TenantErrsimEvent
 #endif
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#define TenantDiskSpaceManager storage::ObTenantDiskSpaceManager*,
-#define TenantFileManager storage::ObTenantFileManager*,
-#define SSMicroCachePrewarmService storage::ObSSMicroCachePrewarmService*,
-#define SSMicroCache storage::ObSSMicroCache*,
-#define TenantCompactionObjMgr compaction::ObTenantCompactionObjMgr*,
-#define TenantLSMergeScheduler compaction::ObTenantLSMergeScheduler*,
-#define TenantLSMergeChecker compaction::ObTenantLSMergeChecker*,
-#define PublicBlockGCService storage::ObPublicBlockGCService*,
-#define StorageCachePolicyService storage::ObStorageCachePolicyService*,
-#else
 #define TenantDiskSpaceManager
 #define TenantFileManager
 #define SSMicroCachePrewarmService
@@ -256,7 +236,6 @@ namespace detector
 #define TenantLSMergeChecker
 #define PublicBlockGCService
 #define StorageCachePolicyService
-#endif
 // List the types of tenant-local variables that need to be added here, the tenant will create an instance for each type.
 // The initialization and destruction logic of the instance is specified by the MTL_BIND interface.
 // Use the MTL interface to obtain an instance.
@@ -720,7 +699,7 @@ extern int get_tenant_base_with_lock(uint64_t tenant_id, ObTenantBase *&ctx, Rel
 // g_tenant_ctx is a dummy to avoid nullptr deref before create_tenant_module().
 // Once g_tenant_ptr = this (after create_mtl_module), all MTL reads go directly
 // to the real ObTenant — no copies, no dual objects.
-inline ObTenantBase g_tenant_ctx(OB_INVALID_TENANT_ID, 0);
+extern ObTenantBase g_tenant_ctx;
 inline ObTenantBase *g_tenant_ptr = &g_tenant_ctx;
 
 class ObTenantEnv

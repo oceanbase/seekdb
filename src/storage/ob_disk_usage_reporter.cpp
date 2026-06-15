@@ -127,21 +127,12 @@ int ObDiskUsageReportTask::count_tenant_data(const uint64_t tenant_id)
           meta_size += tablet_info.get_tablet_meta_size();
           backup_size += tablet_info.get_backup_size();
           tablet_local_required_size += tablet_info.get_required_size() + tablet_info.get_tablet_meta_size();
-          #ifdef OB_BUILD_SHARED_STORAGE
-            if (common::ObRole::LEADER == ls_role) {
-              tablet_shared_occupy_size += tablet_info.get_ss_public_sstable_occupy_size();
-            }
-            tablet_local_required_size -= tablet_info.get_ss_public_sstable_occupy_size();
-          #endif
         }
         pointer_handle.reset();
       }
       if (OB_ITER_END == ret || OB_SUCCESS == ret) {
         ret = OB_SUCCESS;
-        if (GCTX.is_shared_storage_mode()) {
-        } else {
-          meta_size += block_list.count() * OB_DEFAULT_MACRO_BLOCK_SIZE;
-        }
+        meta_size += block_list.count() * OB_DEFAULT_MACRO_BLOCK_SIZE;
       }
     }
   }
@@ -166,11 +157,6 @@ int ObDiskUsageReportTask::count_tenant_data(const uint64_t tenant_id)
     } else if (OB_FAIL(result_map_.set_refactored(quick_restore_remote_key, std::make_pair(backup_size, backup_size), 1 /* whether allowed to override */))) {
       STORAGE_LOG(WARN, "failed to insert backup_size info result_map_", K(ret), K(data_key), K(backup_size));
     }
-    #ifdef OB_BUILD_SHARED_STORAGE
-    else if (OB_FAIL(result_map_.set_refactored(major_data_key,std::make_pair(tablet_shared_occupy_size, tablet_shared_occupy_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert data info result_map_", K(ret), K(major_data_key), K(tablet_shared_occupy_size));
-    } 
-    #endif
   }
   return ret;
 }

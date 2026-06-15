@@ -37,7 +37,6 @@ const char * MEMORY_LABEL = "DeadLock";
 ObDeadLockDetectorMgr::ObDeadLockDetectorMgr()
 : is_inited_(false),
 stop_ts_(0),
-proxy_(nullptr),
 rpc_(nullptr),
 sender_thread_(this) {}
 
@@ -161,23 +160,17 @@ int ObDeadLockDetectorMgr::init()
   
   if (OB_FAIL(ObDeadLockInnerTableService::init())) {
     DETECT_LOG(WARN, "failed to init deadlock inner table service", K(ret));
-  } else if (nullptr != proxy_ || nullptr != rpc_) {
+  } else if (nullptr != rpc_) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "proxy_ or rpc_ is not null", PRINT_WRAPPER);
+    DETECT_LOG(ERROR, "rpc_ is not null", PRINT_WRAPPER);
   } else {
     ObMemAttr attr(OB_SERVER_TENANT_ID, MEMORY_LABEL);
     SET_USE_500(attr);
-    if (nullptr ==
-       (proxy_ =
-       (obrpc::ObDetectorRpcProxy *)ob_malloc(sizeof(obrpc::ObDetectorRpcProxy), attr))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      DETECT_LOG(WARN, "alloc proxy_ memory failed", KR(ret));
-    } else if (nullptr == (rpc_ = (ObDeadLockDetectorRpc *)ob_malloc(sizeof(ObDeadLockDetectorRpc),
-                                                                     attr))) {
+    if (nullptr == (rpc_ = (ObDeadLockDetectorRpc *)ob_malloc(sizeof(ObDeadLockDetectorRpc),
+                                                              attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DETECT_LOG(WARN, "alloc rpc_ memory failed", KR(ret));
     } else {
-      proxy_ = new (proxy_) obrpc::ObDetectorRpcProxy();
       rpc_ = new (rpc_) ObDeadLockDetectorRpc();
     }
     if (OB_FAIL(ret)) {
@@ -185,9 +178,7 @@ int ObDeadLockDetectorMgr::init()
                                  TIMER_THREAD_COUNT,
                                  DETECTOR_TIMER_NAME))) {
       DETECT_LOG(WARN, "time_wheel_ init failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(proxy_->init(GCTX.net_frame_->get_req_transport(), GCTX.self_addr()))) {
-      DETECT_LOG(WARN, "req_transport init failed", PRINT_WRAPPER);
-    } else if (OB_FAIL(rpc_->init(proxy_, GCTX.self_addr()))) {
+    } else if (OB_FAIL(rpc_->init(GCTX.self_addr()))) {
       DETECT_LOG(WARN, "rpc_ init faile", PRINT_WRAPPER);
     } else if (OB_FAIL(detector_map_.init(attr))) {
       DETECT_LOG(WARN, "detector_map_ init failed", PRINT_WRAPPER);
@@ -201,11 +192,6 @@ int ObDeadLockDetectorMgr::init()
   }
 
   if (OB_FAIL(ret)) {
-    if (nullptr != proxy_) {
-      proxy_->destroy();
-      ob_free(proxy_);
-      proxy_ = nullptr;
-    }
     if (nullptr != rpc_) {
       rpc_->destroy();
       ob_free(rpc_);
@@ -267,11 +253,6 @@ void ObDeadLockDetectorMgr::destroy()
   } else {
     sender_thread_.destroy();
     detector_map_.destroy();
-    if (nullptr != proxy_) {
-      proxy_->destroy();
-      ob_free(proxy_);
-      proxy_ = nullptr;
-    }
     if (nullptr != rpc_) {
       rpc_->destroy();
       ob_free(rpc_);

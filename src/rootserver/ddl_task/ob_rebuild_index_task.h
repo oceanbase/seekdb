@@ -42,7 +42,7 @@ public:
       const int64_t parallelism,
       const uint64_t tenant_data_version,
       const ObTableSchema &index_schema,
-      const obrpc::ObRebuildIndexArg &rebuild_index_arg);
+      const obcall::ObRebuildIndexArg &rebuild_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual bool is_valid() const override;
@@ -78,7 +78,7 @@ private:
                              const ObTableSchema *index_schema,
                              const ObDatabaseSchema *database_schema,
                              const ObTableSchema *data_table_schema,
-                             obrpc::ObDropIndexArg &drop_index_arg);
+                             obcall::ObDropIndexArg &drop_index_arg);
   int purge_old_mlog(const share::ObDDLTaskStatus next_task_status);
   int switch_index_name(const share::ObDDLTaskStatus next_task_status);
   int get_switch_index_name_task_type(share::ObDDLTaskType &ddl_task_type);
@@ -92,8 +92,8 @@ private:
       bool &is_finished);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator, 
-      const obrpc::ObRebuildIndexArg &src_index_arg, 
-      obrpc::ObRebuildIndexArg &dst_index_arg);
+      const obcall::ObRebuildIndexArg &src_index_arg, 
+      obcall::ObRebuildIndexArg &dst_index_arg);
   virtual bool is_error_need_retry(const int ret_code) override
   {
     bool retry = false;
@@ -107,7 +107,7 @@ private:
 private:
   static const int64_t OB_REBUILD_INDEX_TASK_VERSION = 1;
   ObRootService *root_service_;
-  obrpc::ObRebuildIndexArg rebuild_index_arg_;
+  obcall::ObRebuildIndexArg rebuild_index_arg_;
   int64_t index_build_task_id_;
   int64_t index_drop_task_id_;
   uint64_t new_index_id_;

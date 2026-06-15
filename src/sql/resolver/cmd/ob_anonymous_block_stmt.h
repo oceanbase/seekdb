@@ -68,7 +68,7 @@ public:
   inline void set_params(ParamStore *params) { params_ = params; }
   inline ParamStore *get_params() { return params_; }
   int add_param(const common::ObObjParam& param);
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
 
   int resolve_inout_param(ParseNode &block_node, ObAnonymousBlockStmt &stmt);
   const ObBitSet<>& get_out_idx() const { return out_idx_; }
@@ -85,7 +85,7 @@ private:
   uint64_t statement_id_;
   bool is_prepare_protocol_;
   ParamStore *params_;//for ps param
-  obrpc::ObDDLArg ddl_arg_; // used to return exec_tenant_id_
+  obcall::ObDDLArg ddl_arg_; // used to return exec_tenant_id_
   ObBitSet<> out_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObAnonymousBlockStmt);
 };

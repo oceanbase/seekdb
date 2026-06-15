@@ -22,9 +22,8 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
-class ObCommonRpcProxy;
 struct ObCreateRoleArg;
 class ObDropUserArg;
 struct ObAlterRoleArg;
@@ -46,11 +45,6 @@ public:
                             char *enc_buf,
                             int64_t buf_len);
 private:
-  int create_role(obrpc::ObCommonRpcProxy *rpc_proxy,
-                  const obrpc::ObCreateRoleArg &arg) const;
-  int drop_role(obrpc::ObCommonRpcProxy *rpc_proxy,
-                  const obrpc::ObDropUserArg &arg) const;
-private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateRoleExecutor);
 };
 
@@ -65,9 +59,6 @@ public:
                             char *enc_buf,
                             int64_t buf_len);
 private:
-  int drop_role(obrpc::ObCommonRpcProxy *rpc_proxy,
-                  const obrpc::ObDropUserArg &arg) const;
-private:
   DISALLOW_COPY_AND_ASSIGN(ObDropRoleExecutor);
 };
 
@@ -81,9 +72,6 @@ public:
                             common::ObString& encrypted_passwd,
                             char *enc_buf,
                             int64_t buf_len);
-private:
-  int alter_role(obrpc::ObCommonRpcProxy *rpc_proxy,
-                 const obrpc::ObAlterRoleArg &arg) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAlterRoleExecutor);
 };

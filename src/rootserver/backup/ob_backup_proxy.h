@@ -19,7 +19,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObBackupDatabaseArg;
 struct ObBackupCleanArg;
@@ -36,12 +36,12 @@ namespace rootserver
 class ObBackupServiceProxy
 {
 public:
-  static int handle_backup_database(const obrpc::ObBackupDatabaseArg &arg);
-  static int handle_backup_database_cancel(const obrpc::ObBackupManageArg &arg);
-  static int handle_backup_delete(const obrpc::ObBackupCleanArg &arg);
-  static int handle_delete_policy(const obrpc::ObDeletePolicyArg &arg);
-  static int handle_backup_delete_obsolete(const obrpc::ObBackupCleanArg &arg);
-  static int handle_archive_log(const obrpc::ObArchiveLogArg &arg);
+  static int handle_backup_database(const obcall::ObBackupDatabaseArg &arg);
+  static int handle_backup_database_cancel(const obcall::ObBackupManageArg &arg);
+  static int handle_backup_delete(const obcall::ObBackupCleanArg &arg);
+  static int handle_delete_policy(const obcall::ObDeletePolicyArg &arg);
+  static int handle_backup_delete_obsolete(const obcall::ObBackupCleanArg &arg);
+  static int handle_archive_log(const obcall::ObArchiveLogArg &arg);
 };
 
 }

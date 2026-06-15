@@ -39,8 +39,8 @@ private:
 public:
   ObSetKvAttributeHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const obrpc::ObHTableDDLArg &arg,
-    obrpc::ObParallelDDLRes &res);
+    const obcall::ObHTableDDLArg &arg,
+    obcall::ObParallelDDLRes &res);
   virtual ~ObSetKvAttributeHelper();
 private:
   virtual int check_inner_stat_() override;
@@ -66,8 +66,8 @@ private:
                          ObString &ddl_stmt_str);
   const table::ObSetKvAttributeParam& get_params_() const { return static_cast<table::ObSetKvAttributeParam&>(*arg_.ddl_param_); }
 private:
-  const obrpc::ObHTableDDLArg &arg_;
-  obrpc::ObParallelDDLRes &res_;
+  const obcall::ObHTableDDLArg &arg_;
+  obcall::ObParallelDDLRes &res_;
   uint64_t database_id_;
   common::ObSArray<ObString> table_names_;
   common::ObSArray<uint64_t> table_ids_;

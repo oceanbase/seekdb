@@ -21,9 +21,6 @@
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
 #include "observer/ob_server_struct.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
 namespace oceanbase
 {
 namespace share
@@ -448,16 +445,10 @@ void ObTabletReplicaChecksumItem::reset()
 
 bool ObTabletReplicaChecksumItem::is_key_valid() const
 {
-#ifdef OB_BUILD_SHARED_STORAGE
-  return OB_INVALID_ID != tenant_id_
-      && ls_id_.is_valid_with_tenant(tenant_id_)
-      && tablet_id_.is_valid_with_tenant(tenant_id_);
-#else
   return OB_INVALID_ID != tenant_id_
       && ls_id_.is_valid_with_tenant(tenant_id_)
       && tablet_id_.is_valid_with_tenant(tenant_id_)
       && server_.is_valid();
-#endif
 }
 
 bool ObTabletReplicaChecksumItem::is_valid() const

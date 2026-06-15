@@ -37,7 +37,7 @@
 #include "ob_log_fetch_log_rpc_result.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
@@ -136,8 +136,8 @@ int FetchLogSRpc::build_request_(
   return ret;
 }
 
-int FetchLogSRpc::set_resp(const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcLSFetchLogResp *resp)
+int FetchLogSRpc::set_resp(const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcLSFetchLogResp *resp)
 {
   int ret = OB_SUCCESS;
 
@@ -189,7 +189,7 @@ int FetchLogSRpc::RpcCB::process()
 {
   int ret = OB_SUCCESS;
   ObCdcLSFetchLogResp &result = RpcCBBase::result_;
-  ObRpcResultCode &rcode = RpcCBBase::rcode_;
+  rpc::frame::ObResultCode &rcode = RpcCBBase::rcode_;
   const common::ObAddr &svr = RpcCBBase::dst_;
 
   if (OB_FAIL(do_process_(rcode, &result))) {
@@ -205,7 +205,7 @@ int FetchLogSRpc::RpcCB::process()
 void FetchLogSRpc::RpcCB::on_timeout()
 {
   int ret = OB_SUCCESS;
-  ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   const common::ObAddr &svr = RpcCBBase::dst_;
 
   rcode.rcode_ = OB_TIMEOUT;
@@ -221,7 +221,7 @@ void FetchLogSRpc::RpcCB::on_timeout()
 void FetchLogSRpc::RpcCB::on_invalid()
 {
   int ret = OB_SUCCESS;
-  ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   const common::ObAddr &svr = RpcCBBase::dst_;
 
   // Encountered invalid packet, decode failed
@@ -236,7 +236,7 @@ void FetchLogSRpc::RpcCB::on_invalid()
   }
 }
 
-int FetchLogSRpc::RpcCB::do_process_(const ObRpcResultCode &rcode, const ObCdcLSFetchLogResp *resp)
+int FetchLogSRpc::RpcCB::do_process_(const rpc::frame::ObResultCode &rcode, const ObCdcLSFetchLogResp *resp)
 {
   int ret = OB_SUCCESS;
 
@@ -284,7 +284,7 @@ FetchLogARpc::FetchLogARpc(FetchStream &host) :
     cur_req_(NULL),
     flying_req_list_(),
     res_queue_(),
-    proto_type_(obrpc::ObCdcFetchLogProtocolType::UnknownProto),
+    proto_type_(obcall::ObCdcFetchLogProtocolType::UnknownProto),
     splitter_(NULL),
     lock_(ObLatchIds::OBCDC_FETCHLOG_ARPC_LOCK)
 {
@@ -316,7 +316,7 @@ void FetchLogARpc::reset()
   cur_req_ = NULL;
   flying_req_list_.reset();
   (void)res_queue_.reset();
-  proto_type_ = obrpc::ObCdcFetchLogProtocolType::UnknownProto;
+  proto_type_ = obcall::ObCdcFetchLogProtocolType::UnknownProto;
   if (NULL != splitter_) {
     OB_DELETE(IFetchLogRpcSplitter, "FetcherRpcSplit", splitter_);
     splitter_ = NULL;
@@ -347,7 +347,7 @@ int FetchLogARpc::init(
     stream_worker_ = &stream_worker;
     result_pool_ = &result_pool;
     log_file_pool_ = &log_file_pool;
-    proto_type_ = obrpc::ObCdcFetchLogProtocolType::RawLogDataProto;
+    proto_type_ = obcall::ObCdcFetchLogProtocolType::RawLogDataProto;
   }
 
   return ret;
@@ -659,8 +659,8 @@ int FetchLogARpc::mark_request_stop()
 }
 
 int FetchLogARpc::handle_rpc_response(LogGroupEntryRpcRequest &rpc_req,
-    const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcLSFetchLogResp *resp)
+    const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcLSFetchLogResp *resp)
 {
   int ret = OB_SUCCESS;
   int64_t start_proc_time = get_timestamp();
@@ -902,8 +902,8 @@ void FetchLogARpc::free_rpc_request_(FetchLogRpcReq *request)
 }
 
 int FetchLogARpc::generate_rpc_result_(LogGroupEntryRpcRequest &rpc_req,
-    const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcLSFetchLogResp *resp,
+    const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcLSFetchLogResp *resp,
     const int64_t rpc_callback_start_time,
     const bool need_stop_rpc,
     const RpcStopReason rpc_stop_reason,
@@ -1034,7 +1034,7 @@ int FetchLogARpc::handle_rpc_response_no_lock_(RawLogFileRpcRequest &request)
 }
 
 void FetchLogARpc::print_handle_info_(LogGroupEntryRpcRequest &rpc_req,
-    const obrpc::ObCdcLSFetchLogResp *resp,
+    const obcall::ObCdcLSFetchLogResp *resp,
     const int64_t next_upper_limit,
     const bool need_stop_rpc,
     const RpcStopReason rpc_stop_reason,
@@ -1094,7 +1094,7 @@ int FetchLogARpc::launch_async_raw_file_rpc_(RawLogFileRpcRequest &request,
   } else {
     ObLogTraceIdGuard guard(request.get_trace_id());
     ObSEArray<RawLogDataRpcRequest* , RawLogFileRpcRequest::MAX_SEND_REQ_CNT> failed_list;
-    obrpc::ObRpcResultCode first_fail_rcode;
+    rpc::frame::ObResultCode first_fail_rcode;
     ObCStringHelper helper;
     _LOG_TRACE("launch async fetch log rpc by %s, request=%s",
         launch_by_cb ? "callback" : "fetch stream", helper.convert(request));
@@ -1208,7 +1208,7 @@ int FetchLogARpc::launch_async_rpc_(LogGroupEntryRpcRequest &rpc_req,
       rpc_req.mark_flying_state(false);
 
       // Set error code
-      ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = err_code;
       (void)snprintf(rcode.msg_, sizeof(rcode.msg_), "send async stream fetch log rpc fail");
 
@@ -1392,8 +1392,8 @@ int FetchLogARpc::generate_rpc_result_(RawLogFileRpcRequest &rpc_req,
 }
 
 int FetchLogARpc::analyze_result_(LogGroupEntryRpcRequest &rpc_req,
-    const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcLSFetchLogResp *resp,
+    const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcLSFetchLogResp *resp,
     bool &need_stop_rpc,
     RpcStopReason &rpc_stop_reason,
     int64_t &next_upper_limit)

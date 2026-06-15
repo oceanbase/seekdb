@@ -146,8 +146,6 @@ int ObSharedMacroBlockMgr::start()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObSharedMacroBlockMgr hasn't been inited", K(ret));
-  } else if (GCTX.is_shared_storage_mode()) {
-    // no need to do small sstable optimization under shared-storage
   } else if (OB_FAIL(TG_START(tg_id_))) {
     LOG_WARN("fail to start sstable defragmentation thread", K(ret), K(tg_id_));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id_, defragmentation_task_, DEFRAGMENT_DELAY_US, true/*repeat*/))) {
@@ -284,7 +282,7 @@ int ObSharedMacroBlockMgr::write_block(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(read_info.size_));
   } else {
-    if (!GCTX.is_shared_storage_mode() && OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+    if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
       LOG_WARN("fail to fsync_block", K(ret));
     } else if (OB_FAIL(ObBlockManager::async_read_block(read_info, read_handle))) {
       LOG_WARN("fail to async read macro block", K(ret), K(read_info));

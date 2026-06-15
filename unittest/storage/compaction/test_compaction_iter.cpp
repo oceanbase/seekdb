@@ -461,7 +461,7 @@ TEST_F(TestCompactionIter, test_iter_with_tablet_cnt_list)
 int main(int argc, char **argv)
 {
   system("rm -rf test_compaction_iter.log*");
-  OB_LOGGER.set_file_name("test_compaction_iter.log");
+  OB_LOGGER.set_file_name("test_compaction_iter.log", true);
   oceanbase::common::ObLogger::get_logger().set_log_level("TRACE");
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

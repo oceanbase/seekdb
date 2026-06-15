@@ -171,7 +171,7 @@ int ObTabletAutoincSeqRpcHandler::fetch_tablet_autoinc_seq_cache(
         LOG_WARN("follower received FetchTabletsSeq rpc", K(ret), K(ls_id));
       } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
         LOG_WARN("get ls failed", K(ret), K(ls_id));
-      } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle, THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : obrpc::ObRpcProxy::MAX_RPC_TIMEOUT))) {
+      } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle, THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : OB_DEFAULT_RPC_TIMEOUT))) {
         LOG_WARN("failed to get tablet", KR(ret), K(arg));
       } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
         LOG_WARN("fail to get latest tablet status", K(ret), K(arg));
@@ -191,8 +191,8 @@ int ObTabletAutoincSeqRpcHandler::fetch_tablet_autoinc_seq_cache(
 }
 
 int ObTabletAutoincSeqRpcHandler::batch_get_tablet_autoinc_seq(
-    const obrpc::ObBatchGetTabletAutoincSeqArg &arg,
-    obrpc::ObBatchGetTabletAutoincSeqRes &res)
+    const obcall::ObBatchGetTabletAutoincSeqArg &arg,
+    obcall::ObBatchGetTabletAutoincSeqRes &res)
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_id = arg.tenant_id_;
@@ -249,8 +249,8 @@ int ObTabletAutoincSeqRpcHandler::batch_get_tablet_autoinc_seq(
 }
 
 int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq(
-    const obrpc::ObBatchSetTabletAutoincSeqArg &arg,
-    obrpc::ObBatchSetTabletAutoincSeqRes &res)
+    const obcall::ObBatchSetTabletAutoincSeqArg &arg,
+    obcall::ObBatchSetTabletAutoincSeqRes &res)
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_id = arg.tenant_id_;
@@ -338,7 +338,7 @@ int ObTabletAutoincSeqRpcHandler::replay_update_tablet_autoinc_seq(
 
 int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq_in_trans(
     ObLS &ls,
-    const obrpc::ObBatchSetTabletAutoincSeqArg &arg,
+    const obcall::ObBatchSetTabletAutoincSeqArg &arg,
     const share::SCN &replay_scn,
     mds::BufferCtx &ctx)
 {

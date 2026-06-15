@@ -135,7 +135,7 @@ public:
   static int batch_insert(
       ObISQLClient &sql_proxy,
       const uint64_t tenant_id,
-      const obrpc::ObPartitionSplitArg &split_arg,
+      const obcall::ObPartitionSplitArg &split_arg,
       const int64 start_time,
       const int64 finish_time);
 

@@ -22,10 +22,6 @@
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
 namespace sql
 {
 class ObExecContext;

@@ -524,7 +524,6 @@ int ObTransformLateMaterialization::evaluate_stmt_cost(ObIArray<ObParentDMLStmt>
                CURRENT_CONTEXT->get_arena_allocator(),
                &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                *ctx_->self_addr_,
-               GCTX.srv_rpc_proxy_,
                root_stmt->get_query_ctx()->get_global_hint(),
                tmp_expr_factory,
                root_stmt,

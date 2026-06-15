@@ -19,6 +19,7 @@
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
+#include "observer/ob_service.h"
 
 using namespace oceanbase::common;
 
@@ -250,7 +251,7 @@ int ObAdaptiveAutoDop::add_estimation_tasks(const ObTableScanSpec &tsc_spec,
   ObBatchEstTasks *task = nullptr;
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   common::ObIAllocator &allocator = ctx_.get_allocator();
-  obrpc::ObEstPartArgElement *index_est_arg = NULL;
+  obcall::ObEstPartArgElement *index_est_arg = NULL;
   if (OB_FAIL(get_task(tasks, tablet_loc->server_, task))) {
     LOG_WARN("failed to get task", K(ret));
   } else if (NULL != task) {
@@ -344,26 +345,22 @@ int ObAdaptiveAutoDop::do_storage_estimation(ObBatchEstTasks &tasks)
 {
   int ret = OB_SUCCESS;
   const ObAddr &addr = tasks.addr_;
-  const obrpc::ObEstPartArg &arg = tasks.arg_;
-  obrpc::ObEstPartRes &result = tasks.res_;
+  const obcall::ObEstPartArg &arg = tasks.arg_;
+  obcall::ObEstPartRes &result = tasks.res_;
   ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
   if (addr == GCTX.self_addr()) {
     if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
       LOG_WARN("failed to estimate partition rows", K(ret));
     }
   } else {
-    obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
     int64_t timeout = -1;
-    if (OB_ISNULL(sql_ctx->session_info_) || OB_ISNULL(rpc_proxy)) {
+    if (OB_ISNULL(sql_ctx->session_info_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("rpc_proxy or session is null", K(ret), K(rpc_proxy), K(sql_ctx->session_info_));
+      LOG_WARN("session is null", K(ret), K(sql_ctx->session_info_));
     } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(rpc_proxy->to(addr)
-                         .timeout(timeout)
-                         .by(sql_ctx->session_info_->get_rpc_tenant_id())
-                         .estimate_partition_rows(arg, result))) {
+    } else if (OB_FAIL(GCTX.ob_service_->estimate_partition_rows(arg, result))) {
       LOG_WARN("OPT:[REMOTE STORAGE EST FAILED]", K(ret));
     }
   }

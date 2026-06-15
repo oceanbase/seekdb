@@ -19,7 +19,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
 
 OB_SERIALIZE_MEMBER(ObCdcRpcId, client_pid_, client_addr_);

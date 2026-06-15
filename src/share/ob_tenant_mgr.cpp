@@ -24,17 +24,17 @@ namespace lib
 {
 }
 
-namespace obrpc
+namespace obcall
 {
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 using namespace oceanbase::share;
 
-} // namespace obrpc
+} // namespace obcall
 
 namespace common
 {
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 ObVirtualTenantManager::ObVirtualTenantManager()
   : tenant_map_(NULL),

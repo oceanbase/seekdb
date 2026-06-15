@@ -33,12 +33,12 @@ namespace pub
 
 template <PacketCode pcode>
 class MockP
-    : public ObRpcProcessor<pcode>
+    : public ObCallProcessor<pcode>
 {
 public:
   int process()
   {
-    return ObRpcProcessor<pcode>::response_result();
+    return ObCallProcessor<pcode>::response_result();
   }
 };
 

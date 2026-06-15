@@ -661,7 +661,7 @@ int ObTableLoadService::check_support_direct_load_for_fts_index(
     LOG_WARN("fail to check has fts index aux", KR(ret));
   } else if ((!ObDirectLoadMethod::is_full(method)
               || !ObDirectLoadMode::is_insert_into(load_mode)
-              || GCTX.is_shared_storage_mode())
+             )
              && has_fts_index) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("only share-nothing full insert into select direct-load support table has full-text search index",

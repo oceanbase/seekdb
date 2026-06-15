@@ -24,17 +24,17 @@ namespace oceanbase
 {
 using namespace common;
 using namespace storage;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 
 namespace transaction
 {
-int ObWeakReadService::init(const rpc::frame::ObReqTransport *transport)
+int ObWeakReadService::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(wrs_rpc_.init(transport, *this))) {
+  } else if (OB_FAIL(wrs_rpc_.init(*this))) {
     LOG_WARN("init tenant map fail", KR(ret));
   } else {
     inited_ = true;
@@ -184,8 +184,8 @@ int ObWeakReadService::check_tenant_can_start_service(const uint64_t tenant_id,
 }
 
 void ObWeakReadService::process_get_cluster_version_rpc(const uint64_t tenant_id,
-    const obrpc::ObWrsGetClusterVersionRequest &req,
-    obrpc::ObWrsGetClusterVersionResponse &res)
+    const obcall::ObWrsGetClusterVersionRequest &req,
+    obcall::ObWrsGetClusterVersionResponse &res)
 {
   int ret = OB_SUCCESS;
   SCN version;
@@ -211,8 +211,8 @@ void ObWeakReadService::process_get_cluster_version_rpc(const uint64_t tenant_id
 }
 
 void ObWeakReadService::process_cluster_heartbeat_rpc(const uint64_t tenant_id,
-    const obrpc::ObWrsClusterHeartbeatRequest &req,
-    obrpc::ObWrsClusterHeartbeatResponse &res)
+    const obcall::ObWrsClusterHeartbeatRequest &req,
+    obcall::ObWrsClusterHeartbeatResponse &res)
 {
   int ret = OB_SUCCESS;
 
@@ -238,8 +238,8 @@ void ObWeakReadService::process_cluster_heartbeat_rpc(const uint64_t tenant_id,
 }
 
 void ObWeakReadService::process_cluster_heartbeat_rpc_cb(const uint64_t tenant_id,
-    const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObWrsClusterHeartbeatResponse &res,
+    const rpc::frame::ObResultCode &rcode,
+    const obcall::ObWrsClusterHeartbeatResponse &res,
     const common::ObAddr &dst)
 {
   int ret = OB_SUCCESS;

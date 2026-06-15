@@ -39,7 +39,7 @@ public:
       const int64_t parent_task_id,
       const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
-      const obrpc::ObDropIndexArg &drop_index_arg);
+      const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual bool is_valid() const override;
@@ -60,8 +60,8 @@ private:
   int fail();
   virtual int cleanup_impl() override;
   int deep_copy_index_arg(common::ObIAllocator &allocator,
-                          const obrpc::ObDropIndexArg &src_index_arg,
-                          obrpc::ObDropIndexArg &dst_index_arg);
+                          const obcall::ObDropIndexArg &src_index_arg,
+                          obcall::ObDropIndexArg &dst_index_arg);
   virtual bool is_error_need_retry(const int ret_code) override
   {
     UNUSED(ret_code);
@@ -72,7 +72,7 @@ private:
   static const int64_t OB_DROP_INDEX_TASK_VERSION = 1;
 private:
   ObRootService *root_service_;
-  obrpc::ObDropIndexArg drop_index_arg_;
+  obcall::ObDropIndexArg drop_index_arg_;
 };
 
 }  // end namespace rootserver

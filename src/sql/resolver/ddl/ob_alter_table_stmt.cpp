@@ -74,7 +74,7 @@ int ObAlterTableStmt::add_column_group(const ObColumnGroupSchema &column_group)
   return ret;
 }
 
-int ObAlterTableStmt::add_index_arg(obrpc::ObIndexArg *index_arg)
+int ObAlterTableStmt::add_index_arg(obcall::ObIndexArg *index_arg)
 {
   int ret = OB_SUCCESS;
   if (index_arg == NULL) {
@@ -87,7 +87,7 @@ int ObAlterTableStmt::add_index_arg(obrpc::ObIndexArg *index_arg)
 }
 
 int ObAlterTableStmt::check_drop_fk_arg_exist(
-    obrpc::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg)
+    obcall::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg)
 {
   int ret = OB_SUCCESS;
   has_same_fk_arg = false;
@@ -102,10 +102,10 @@ int ObAlterTableStmt::check_drop_fk_arg_exist(
       if (OB_ISNULL(alter_table_arg_.index_arg_list_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "index_arg from index_arg_list_ is null", K(ret), K(i));
-      } else if (obrpc::ObIndexArg::IndexActionType::DROP_FOREIGN_KEY
+      } else if (obcall::ObIndexArg::IndexActionType::DROP_FOREIGN_KEY
                  != alter_table_arg_.index_arg_list_.at(i)->index_action_type_) {
         continue; // skip
-      } else if (0 == static_cast<obrpc::ObDropForeignKeyArg*>(alter_table_arg_.index_arg_list_.at(i))->
+      } else if (0 == static_cast<obcall::ObDropForeignKeyArg*>(alter_table_arg_.index_arg_list_.at(i))->
                         foreign_key_name_.compare(drop_fk_arg->foreign_key_name_)) {
         has_same_fk_arg = true;
       }
@@ -141,7 +141,7 @@ int ObAlterTableStmt::fill_session_vars(const ObBasicSessionInfo &session) {
   return ret;
 }
 
-int ObAlterTableStmt::set_exchange_partition_arg(const obrpc::ObExchangePartitionArg &exchange_partition_arg)
+int ObAlterTableStmt::set_exchange_partition_arg(const obcall::ObExchangePartitionArg &exchange_partition_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(exchange_partition_arg_.assign(exchange_partition_arg))) {

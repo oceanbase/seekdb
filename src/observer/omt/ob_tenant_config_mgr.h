@@ -30,7 +30,7 @@
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase {
-namespace obrpc
+namespace obcall
 {
 class ObTenantConfigArg;
 }

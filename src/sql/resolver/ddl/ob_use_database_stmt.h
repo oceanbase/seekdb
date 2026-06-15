@@ -62,7 +62,7 @@ public:
   void set_db_collation(const common::ObString &db_collation) { db_collation_ = db_collation; }
   const ObPrivSet& get_db_priv_set() const { return db_priv_set_; }
   void set_db_priv_set(const ObPrivSet &db_priv_set) { db_priv_set_ = db_priv_set; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return use_database_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return use_database_arg_; }
   virtual bool cause_implicit_commit() const { return false; }
 private:
   uint64_t catalog_id_;
@@ -71,7 +71,7 @@ private:
   common::ObString db_charset_;
   common::ObString db_collation_;
   ObPrivSet db_priv_set_;
-  obrpc::ObUseDatabaseArg use_database_arg_; // used to return exec_tenant_id_
+  obcall::ObUseDatabaseArg use_database_arg_; // used to return exec_tenant_id_
 };
 } //namespace sql
 }//namespace oceanbase

@@ -94,7 +94,7 @@ void ObClockGenerator::destroy(void)
 void ObClockGenerator::run1()
 {
   const int64_t MAX_RETRY = 3;
-  const int64_t SLEEP_US = 100000;
+  const int64_t SLEEP_US = 10000;
   const int64_t PRINT_LOG_INTERVAL_US = 100 * 1000;
   const int64_t MAX_JUMP_TIME_US = 20 * SLEEP_US;
 

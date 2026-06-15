@@ -865,11 +865,7 @@ ObDDLIdemKey::~ObDDLIdemKey()
 
 ObDDLIdemKey::ObDDLIdemKey(const ObDDLIdemKey &other)
 {
-  if (GCTX.is_shared_storage_mode()) {
-    key_.macro_block_id_ = other.key_.macro_block_id_;
-  } else {
-    key_.logic_block_id_ = other.key_.logic_block_id_;
-  }
+  key_.logic_block_id_ = other.key_.logic_block_id_;
   table_type_ = other.table_type_;
 }
 
@@ -880,20 +876,11 @@ int ObDDLIdemKey::init(const MacroBlockId &macro_block_id,
 {
   int ret = OB_SUCCESS;
   table_type_ = table_type;
-  if (GCTX.is_shared_storage_mode()) {
-    if (!macro_block_id.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid macro block id", K(ret), K(macro_block_id));
-    } else {
-      key_.macro_block_id_ = macro_block_id;
-    }
+  if (!logic_block_id.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid logic block id", K(ret), K(logic_block_id));
   } else {
-    if (!logic_block_id.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid logic block id", K(ret), K(logic_block_id));
-    } else {
-      key_.logic_block_id_ = logic_block_id;
-    }
+    key_.logic_block_id_ = logic_block_id;
   }
   return ret;
 }
@@ -902,11 +889,7 @@ uint64_t ObDDLIdemKey::hash() const
 {
   uint64_t hash_val = 0;
   uint64_t idem_type = table_type_;
-  if (GCTX.is_shared_storage_mode()) {
-    hash_val = key_.macro_block_id_.hash();
-  } else{
-    hash_val = key_.logic_block_id_.hash();
-  }
+  hash_val = key_.logic_block_id_.hash();
   hash_val = murmurhash(&idem_type, sizeof(table_type_), hash_val);
   return hash_val;
 }
@@ -921,21 +904,13 @@ int ObDDLIdemKey::hash(uint64_t &hash_val) const
 bool ObDDLIdemKey::operator==(const ObDDLIdemKey &other) const
 {
   bool ret = false;
-  if (GCTX.is_shared_storage_mode()) {
-    ret = key_.macro_block_id_ == other.key_.macro_block_id_ && table_type_ == other.table_type_;
-  } else {
-    ret = key_.logic_block_id_ == other.key_.logic_block_id_ && table_type_ == other.table_type_;
-  }
+  ret = key_.logic_block_id_ == other.key_.logic_block_id_ && table_type_ == other.table_type_;
   return ret;
 }
 
 ObDDLIdemKey& ObDDLIdemKey::operator=(const ObDDLIdemKey &other)
 {
-  if (GCTX.is_shared_storage_mode()) {
-    key_.macro_block_id_ = other.key_.macro_block_id_;
-  } else {
-    key_.logic_block_id_ = other.key_.logic_block_id_;
-  }
+  key_.logic_block_id_ = other.key_.logic_block_id_;
   table_type_ = other.table_type_;
   return *this;
 }

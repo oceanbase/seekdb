@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_rpc_processor.h"
+#include "lib/utility/serialization.h"
 #include "ob_px_sqc_handler.h"
 #include "sql/executor/ob_executor_rpc_processor.h"
 #include "sql/engine/px/ob_px_target_mgr.h"
@@ -42,9 +43,13 @@ int ObInitSqcP::init()
   return ret;
 }
 
+int ObInitSqcP::decode_arg(const char *buf, const int64_t len, int64_t &pos)
+{
+  return common::serialization::decode(buf, len, pos, arg_);
+}
+
 void ObInitSqcP::destroy()
 {
-  obrpc::ObRpcProcessor<obrpc::ObPxRpcProxy::ObRpc<obrpc::OB_PX_ASYNC_INIT_SQC> >::destroy();
   /**
    * If the after process flow has been undergone, arg_.sqc_handler_ will be set to null.
    * If arg_.sqc_handler_ is not null here, it means that the after process flow has not been
@@ -264,23 +269,7 @@ int ObInitSqcP::after_process(int error_code)
   }
   return ret;
 }
-// Already unused, to be removed later
-int ObInitTaskP::init()
-{
-  return OB_NOT_SUPPORTED;
-}
 
-int ObInitTaskP::process()
-{
-  // According to arg_ parameter to get the local thread and execute task
-  return OB_NOT_SUPPORTED;
-}
-
-int ObInitTaskP::after_process(int error_code)
-{
-  UNUSED(error_code);
-  return OB_NOT_SUPPORTED;
-}
 
 void ObFastInitSqcReportQCMessageCall::operator()(hash::HashMapPair<ObInterruptibleTaskID,
       ObInterruptCheckerNode *> &entry)
@@ -374,9 +363,13 @@ int ObInitFastSqcP::init()
   return ret;
 }
 
+int ObInitFastSqcP::decode_arg(const char *buf, const int64_t len, int64_t &pos)
+{
+  return common::serialization::decode(buf, len, pos, arg_);
+}
+
 void ObInitFastSqcP::destroy()
 {
-  obrpc::ObRpcProcessor<obrpc::ObPxRpcProxy::ObRpc<obrpc::OB_PX_FAST_INIT_SQC> >::destroy();
   /**
    * If the after process flow has been undergone, arg_.sqc_handler_ will be set to null.
    * If arg_.sqc_handler_ is not null here, it means that the after process flow has not been
@@ -482,222 +475,71 @@ int ObInitFastSqcP::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
   return ret;
 }
 
-void ObFastInitSqcCB::on_timeout()
-{
-  int ret = OB_TIMEOUT;
-  ret = deal_with_rpc_timeout_err_safely();
-  interrupt_qc(ret);
-}
 
-void ObFastInitSqcCB::log_warn_sqc_fail(int ret)
-{
-  // Do not change the follow log about px_obdiag_sqc_addr, becacue it will use in obdiag tool
-  LOG_WARN("init fast sqc cb async interrupt qc", K_(trace_id), K(timeout_ts_), K(interrupt_id_),
-           K(ret), "px_obdiag_sqc_addr", addr_);
-}
+// ============================================================================
+// In-process SQC launch drivers (replace OB_PX_ASYNC_INIT_SQC / OB_PX_FAST_INIT_SQC).
+// They reproduce the exact processor lifecycle the rpc transport used to run on
+// the receiving node (which, in single-replica seekdb, is always this node):
+//   init() -> decode serialized args into a fresh ObPxSqcHandler -> process()
+//   -> after_process(). Interrupt registration and error reporting (result_.rc_
+//   for the parallel path) are preserved by running the unchanged bodies.
+// ============================================================================
+namespace oceanbase {
+namespace sql {
 
-int ObFastInitSqcCB::process()
-{
-  // 
-  int ret = rcode_.rcode_;
-  if (OB_FAIL(ret)) {
-    int64_t cur_timestamp = ::oceanbase::common::ObTimeUtility::current_time();
-    if (timeout_ts_ - cur_timestamp > 0) {
-      interrupt_qc(ret);
-      log_warn_sqc_fail(ret);
-    } else {
-      LOG_WARN("init fast sqc cb async timeout", K_(trace_id),
-               K(addr_), K(timeout_ts_), K(cur_timestamp), K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObFastInitSqcCB::deal_with_rpc_timeout_err_safely()
-
+int px_init_sqc_async_in_proc(const char *buf, const int64_t len,
+                              ObPxRpcInitSqcResponse &resp)
 {
   int ret = OB_SUCCESS;
-  ObDealWithRpcTimeoutCall call(addr_, retry_info_, timeout_ts_, trace_id_);
-  call.ret_ = OB_TIMEOUT;
-  ObGlobalInterruptManager *manager = ObGlobalInterruptManager::getInstance();
-  if (OB_NOT_NULL(manager)) {
-    if (OB_FAIL(manager->get_map().atomic_refactored(interrupt_id_, call))) {
-      LOG_WARN("fail to deal with rpc timeout call", K(interrupt_id_));
-    }
-  }
-  return call.ret_;
-}
-
-void ObFastInitSqcCB::interrupt_qc(int err)
-{
-  int ret = OB_SUCCESS;
-  ObGlobalInterruptManager *manager = ObGlobalInterruptManager::getInstance();
-  if (OB_NOT_NULL(manager)) {
-    // if we are sure init_sqc msg is not sent to sqc successfully, we don't have to set sqc not alive.
-    bool init_sqc_not_send_out = (get_error() == EASY_TIMEOUT_NOT_SENT_OUT
-                                 || get_error() == EASY_DISCONNECT_NOT_SENT_OUT);
-    const bool need_set_not_alive = !init_sqc_not_send_out;
-    ObFastInitSqcReportQCMessageCall call(sqc_, err, timeout_ts_, need_set_not_alive);
-    if (OB_FAIL(manager->get_map().atomic_refactored(interrupt_id_, call))) {
-      LOG_WARN("fail to set need report", K(interrupt_id_));
-    } else if (!call.need_interrupt_) {
-      /* do nothing*/
-      LOG_WARN("ignore virtual table error,no need interrupt qc", K(ret));
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      ObInterruptCode int_code(err,
-                               GETTID(),
-                               GCTX.self_addr(),
-                               "RPC ABORT PX");
-      if (OB_SUCCESS != (tmp_ret = manager->interrupt(interrupt_id_, int_code))) {
-        LOG_WARN("fail to send interrupt message", K_(trace_id),
-          K(tmp_ret), K(int_code), K(interrupt_id_));
-      }
-    }
-  }
-}
-
-void ObDealWithRpcTimeoutCall::deal_with_rpc_timeout_err()
-{
-  if (OB_TIMEOUT == ret_) {
-    int64_t cur_timestamp = ::oceanbase::common::ObTimeUtility::current_time();
-    // Due to the time difference caused by inconsistent time precision, here we need to satisfy greater than 100ms to be considered not a timeout.
-    // A fault-tolerant processing.
-    if (timeout_ts_ - cur_timestamp > 100 * 1000) {
-      LOG_DEBUG("rpc return OB_TIMEOUT, but it is actually not timeout, "
-                "change error code to OB_CONNECT_ERROR", K(ret_),
-                K(timeout_ts_), K(cur_timestamp));
-      ret_ = OB_RPC_CONNECT_ERROR;
-    } else {
-      LOG_DEBUG("rpc return OB_TIMEOUT, and it is actually timeout, "
-                "do not change error code", K(ret_),
-                K(timeout_ts_), K(cur_timestamp));
-      if (NULL != retry_info_) {
-        retry_info_->set_is_rpc_timeout(true);
-      }
-    }
-  }
-}
-
-void ObDealWithRpcTimeoutCall::operator() (hash::HashMapPair<ObInterruptibleTaskID,
-      ObInterruptCheckerNode *> &entry)
-{
-  UNUSED(entry);
-  deal_with_rpc_timeout_err();
-}
-
-int ObPxTenantTargetMonitorP::init()
-{
-  return OB_SUCCESS;
-}
-
-void ObPxTenantTargetMonitorP::destroy()
-{
-
-}
-// leader receives resource reports from each follower, and returns the latest view seen by the leader as the result to the follower
-int ObPxTenantTargetMonitorP::process()
-{
-  int ret = OB_SUCCESS;
-  ObTimeGuard timeguard("px_target_request", 100000);
-  const uint64_t tenant_id = arg_.get_tenant_id();
-  const uint64_t follower_version = arg_.get_version();
-  // server id of the leader that the follower sync with previously.
-  const uint64_t prev_leader_server_index = ObPxTenantTargetMonitor::get_server_index(follower_version);
-  const uint64_t leader_server_index  = GCTX.get_server_index();
-  bool is_leader;
-  uint64_t leader_version;
-  result_.set_tenant_id(tenant_id);
-  if (OB_FAIL(OB_PX_TARGET_MGR.is_leader(tenant_id, is_leader))) {
-    LOG_ERROR("get is_leader failed", K(ret), K(tenant_id));
-  } else if (!is_leader) {
-    result_.set_status(MONITOR_NOT_MASTER);
-  } else if (arg_.need_refresh_all_ || prev_leader_server_index != leader_server_index) {
-    if (OB_FAIL(OB_PX_TARGET_MGR.reset_leader_statistics(tenant_id))) {
-      LOG_ERROR("reset leader statistics failed", K(ret));
-    } else if (OB_FAIL(OB_PX_TARGET_MGR.get_version(tenant_id, leader_version))) {
-      LOG_WARN("get master_version failed", K(ret), K(tenant_id));
-    } else {
-      result_.set_status(MONITOR_VERSION_NOT_MATCH);
-      result_.set_version(leader_version);
-      LOG_INFO("need refresh all", K(tenant_id), K(arg_.need_refresh_all_),
-               K(follower_version), K(prev_leader_server_index), K(leader_server_index));
-    }
-  } else if (OB_FAIL(OB_PX_TARGET_MGR.get_version(tenant_id, leader_version))) {
-    LOG_WARN("get master_version failed", K(ret), K(tenant_id));
+  ObInitSqcP p(GCTX);
+  int64_t pos = 0;
+  if (OB_FAIL(p.init())) {
+    // init failed: handler not set, nothing to release here (init self-cleans).
+    LOG_WARN("fail to init in-proc sqc processor", K(ret));
   } else {
-    result_.set_version(leader_version);
-    if (follower_version != leader_version) {
-      result_.set_status(MONITOR_VERSION_NOT_MATCH);
+    // From here, decode/process/after_process/destroy mirror the transport flow.
+    if (OB_FAIL(p.decode_arg(buf, len, pos))) {
+      LOG_WARN("fail to decode sqc init args", K(ret));
+      // decode populated the handler partially; destroy releases it.
     } else {
-      result_.set_status(MONITOR_READY);
-      for (int i = 0; OB_SUCC(ret) && i < arg_.addr_target_array_.count(); i++) {
-        ObAddr &server = arg_.addr_target_array_.at(i).addr_;
-        int64_t peer_used_inc = arg_.addr_target_array_.at(i).target_;
-        if (OB_FAIL(OB_PX_TARGET_MGR.update_peer_target_used(tenant_id, server, peer_used_inc, leader_version))) {
-          LOG_WARN("set thread count failed", K(ret), K(tenant_id), K(server), K(peer_used_inc));
-        }
-      }
-
-      // A simple and rude exception handling, re-statistics
-      if (OB_FAIL(ret)) {
-        int tem_ret = OB_SUCCESS;
-        if ((tem_ret = OB_PX_TARGET_MGR.reset_leader_statistics(tenant_id)) != OB_SUCCESS) {
-          LOG_ERROR("reset statistics failed", K(tem_ret), K(tenant_id), K(leader_version));
-        } else {
-          LOG_INFO("reset statistics succeed", K(tenant_id), K(leader_version));
-        }
-      } else {
-        ObPxGlobalResGather gather(result_);
-        if (OB_FAIL(OB_PX_TARGET_MGR.gather_global_target_usage(tenant_id, gather))) {
-          LOG_WARN("get global thread count failed", K(ret), K(tenant_id));
-        }
-      }
+      // process() always returns OB_SUCCESS and reports logic errors via result_.rc_.
+      (void)p.process();
+      // after_process() spawns the SQC worker threads (parallel path).
+      (void)p.after_process(OB_SUCCESS);
     }
+    // copy out the response the QC needs (reserved_thread_count_, partitions, etc.)
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = resp.partitions_info_.assign(p.get_result().partitions_info_))) {
+      LOG_WARN("fail to assign partitions info", K(tmp_ret));
+      ret = OB_SUCCESS == ret ? tmp_ret : ret;
+    }
+    resp.rc_ = p.get_result().rc_;
+    resp.reserved_thread_count_ = p.get_result().reserved_thread_count_;
+    resp.sqc_order_gi_tasks_ = p.get_result().sqc_order_gi_tasks_;
+    p.destroy();
   }
   return ret;
 }
 
-int ObPxCleanDtlIntermResP::process()
+int px_init_sqc_fast_in_proc(const char *buf, const int64_t len)
 {
   int ret = OB_SUCCESS;
-  dtl::ObDTLIntermResultKey key;
-#ifdef ERRSIM
-  int ecode = EventTable::EN_PX_SINGLE_DFO_NOT_ERASE_DTL_INTERM_RESULT;
-  if (OB_SUCCESS != ecode && OB_SUCC(ret)) {
-    LOG_WARN("rpc not erase_dtl_interm_result by design", K(ret));
-    return OB_SUCCESS;
-  }
-#endif
-  int64_t batch_size = 0 == arg_.batch_size_ ? 1 : arg_.batch_size_;
-  for (int64_t i = 0; i < arg_.info_.count(); i++) {
-    ObPxCleanDtlIntermResInfo &info = arg_.info_.at(i);
-    for (int64_t task_id = 0; task_id < info.task_count_; task_id++) {
-      ObPxTaskChSet ch_set;
-      if (OB_FAIL(ObDtlChannelUtil::get_receive_dtl_channel_set(info.sqc_id_, task_id,
-            info.ch_total_info_, ch_set))) {
-        LOG_WARN("get receive dtl channel set failed", K(ret));
-      } else {
-        LOG_TRACE("ObPxCleanDtlIntermResP process", K(i), K(arg_.batch_size_), K(info), K(task_id), K(ch_set));
-        for (int64_t ch_idx = 0; ch_idx < ch_set.count(); ch_idx++) {
-          key.channel_id_ = ch_set.get_ch_info_set().at(ch_idx).chid_;
-          for (int64_t batch_id = 0; batch_id < batch_size && OB_SUCC(ret); batch_id++) {
-            key.batch_id_= batch_id;
-            if (OB_FAIL(MTL(dtl::ObDTLIntermResultManager*)->erase_interm_result_info(key))) {
-              if (OB_HASH_NOT_EXIST == ret) {
-                // interm result is written from batch_id = 0 to batch_size,
-                // if some errors happen when batch_id = i, no interm result of batch_id > i will be written.
-                // so if erase failed, just break and continue to erase interm result of next channel.
-                ret = OB_SUCCESS;
-                break;
-              } else {
-                LOG_WARN("fail to release receive internal result", K(ret), K(ret));
-              }
-            }
-          }
-        }
-      }
+  ObInitFastSqcP p(GCTX);
+  int64_t pos = 0;
+  if (OB_FAIL(p.init())) {
+    LOG_WARN("fail to init in-proc fast sqc processor", K(ret));
+  } else {
+    if (OB_FAIL(p.decode_arg(buf, len, pos))) {
+      LOG_WARN("fail to decode fast sqc init args", K(ret));
+    } else {
+      // process() runs the single task inline and reports to the QC via the
+      // qc-sqc dtl channel (or returns ret if the channel was never linked).
+      ret = p.process();
     }
+    p.destroy();
   }
   return ret;
 }
+
+}  // namespace sql
+}  // namespace oceanbase

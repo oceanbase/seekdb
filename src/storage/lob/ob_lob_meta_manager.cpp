@@ -198,45 +198,12 @@ int ObLobMetaManager::getlength_remote(ObLobAccessParam &param, uint64_t &char_l
 {
   int ret = OB_SUCCESS;
   ObLobRemoteQueryCtx *remote_ctx = nullptr;
+  // cross-tenant LOB obcall RPC removed: GET_LENGTH is computed in-process (single bounded
+  // value) by ObLobRemoteUtil::query, so just read the cached length here.
   if (OB_FAIL(ObLobRemoteUtil::query(param, ObLobQueryArg::QueryType::GET_LENGTH, param.addr_, remote_ctx))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   } else {
-    ObLobQueryBlock header;
-    int64_t cur_position = remote_ctx->rpc_buffer_.get_position();
-    while (OB_SUCC(ret) && remote_ctx->handle_.has_more()) {
-      cur_position = remote_ctx->rpc_buffer_.get_position();
-      if (OB_FAIL(remote_ctx->handle_.get_more(remote_ctx->rpc_buffer_))) {
-        ret = OB_DATA_SOURCE_TIMEOUT;
-      } else if (remote_ctx->rpc_buffer_.get_position() < 0) {
-        ret = OB_ERR_SYS;
-      } else if (cur_position == remote_ctx->rpc_buffer_.get_position()) {
-        if (!remote_ctx->handle_.has_more()) {
-          ret = OB_ITER_END;
-          LOG_DEBUG("empty rpc buffer, no more data", K(remote_ctx->rpc_buffer_));
-        } else {
-          ret = OB_ERR_SYS;
-          LOG_ERROR("rpc buffer has no data", K(ret), K(remote_ctx->rpc_buffer_));
-        }
-      } else {
-        LOG_DEBUG("get more data", K(remote_ctx->rpc_buffer_));
-      }
-    }
-    if (ret == OB_ITER_END) {
-      ret = OB_SUCCESS;
-    }
-    // do header decode
-    if (OB_SUCC(ret)) {
-      int64_t rpc_buffer_pos = 0;
-      if (OB_FAIL(serialization::decode(remote_ctx->rpc_buffer_.get_data(),
-        remote_ctx->rpc_buffer_.get_position(), rpc_buffer_pos, header))) {
-        LOG_WARN("failed to decode lob query block", K(ret), K(remote_ctx->rpc_buffer_));
-      } else if (!header.is_valid()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid header", K(ret), K(header));
-      } else {
-        char_len = static_cast<uint64_t>(header.size_);
-      }
-    }
+    char_len = remote_ctx->length_;
   }
 
   if (OB_NOT_NULL(remote_ctx)) {

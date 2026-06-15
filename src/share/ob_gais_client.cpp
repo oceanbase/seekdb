@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;

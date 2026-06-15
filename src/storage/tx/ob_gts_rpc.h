@@ -21,10 +21,7 @@
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/utility.h"
 #include "share/ob_define.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "share/ob_rpc_struct.h"
 #include "storage/tx/ob_gts_msg.h"
 #include "storage/tx/ob_ts_worker.h"
@@ -42,7 +39,7 @@ class ObTsMgr;
 class ObTsWorker;
 }
 
-namespace obrpc
+namespace obcall
 {
 class ObGtsRpcResult
 {
@@ -70,45 +67,11 @@ private:
   int64_t gts_end_;
 };
 
-class ObGtsRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObGtsRpcProxy);
-
-  RPC_AP(PR1 post, OB_GET_GTS_REQUEST, (transaction::ObGtsRequest), ObGtsRpcResult);
-  RPC_AP(PR1 post, OB_GET_GTS_ERR_RESPONSE, (transaction::ObGtsErrResponse), ObGtsRpcResult);
-};
-
-class ObGtsP : public ObRpcProcessor< obrpc::ObGtsRpcProxy::ObRpc<OB_GET_GTS_REQUEST> >
-{
-public:
-  ObGtsP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGtsP);
-};
-
-class ObGtsErrRespP : public ObRpcProcessor< obrpc::ObGtsRpcProxy::ObRpc<OB_GET_GTS_ERR_RESPONSE> >
-{
-public:
-  ObGtsErrRespP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGtsErrRespP);
-};
-
-template<ObRpcPacketCode PC>
-class ObGtsRPCCB : public ObGtsRpcProxy::AsyncCB<PC>
+class ObGtsRPCCB
 {
 public:
   ObGtsRPCCB() : is_inited_(false), tenant_id_(0), ts_mgr_(NULL), ts_worker_(NULL) {}
   ~ObGtsRPCCB() {}
-  void set_args(const typename ObGtsRpcProxy::AsyncCB<PC>::Request &args)
-  {
-    tenant_id_ = args.get_tenant_id();
-  }
   int init(transaction::ObTsMgr *ts_mgr,
            transaction::ObTsWorker *ts_worker)
   {
@@ -126,59 +89,15 @@ public:
     }
     return ret;
   }
-  oceanbase::rpc::frame::ObReqTransport::AsyncCB *clone(
-      const oceanbase::rpc::frame::SPAlloc &alloc) const {
-    ObGtsRPCCB<PC> *newcb = NULL;
-    void *buf = alloc(sizeof (*this));
-    if (NULL != buf) {
-      newcb = new (buf) ObGtsRPCCB<PC>();
-      if (newcb) {
-        newcb->is_inited_ = is_inited_;
-        newcb->tenant_id_ = tenant_id_;
-        newcb->ts_mgr_ = ts_mgr_;
-        newcb->ts_worker_ = ts_worker_;
-      }
-    }
-    return newcb;
-  }
-public:
-  int process()
-  {
-    const ObGtsRpcResult &result = ObGtsRpcProxy::AsyncCB<PC>::result_;
-    const ObAddr &dst = ObGtsRpcProxy::AsyncCB<PC>::dst_;
-    ObRpcResultCode &rcode = ObGtsRpcProxy::AsyncCB<PC>::rcode_;
-
-    return process_(result, dst, rcode);
-  }
-  int process(const obrpc::ObGtsRpcResult &result, const common::ObAddr &dst,
-              obrpc::ObRpcResultCode &rcode)
+  int process(const obcall::ObGtsRpcResult &result, const common::ObAddr &dst,
+              rpc::frame::ObResultCode &rcode)
   {
     return process_(result, dst, rcode);
   }
   void set_tenant_id(uint64_t tenant_id) {tenant_id_ = tenant_id;}
-  void on_timeout()
-  {
-    int ret = OB_SUCCESS;
-    const common::ObAddr &dst = ObGtsRpcProxy::AsyncCB<PC>::dst_;
-    if (!is_inited_) {
-      TRANS_LOG(WARN, "ObGtsRPCCB not inited");
-    } else {
-      if (EXECUTE_COUNT_PER_SEC(16)) {
-        TRANS_LOG(WARN, "gts rpc timeout", K(dst), K_(tenant_id));
-      }
-      if (NULL == ts_mgr_) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "gts local cache mgr is NULL", K(ret));
-      } else if (OB_FAIL(ts_mgr_->refresh_gts_location(tenant_id_))) {
-        TRANS_LOG(WARN, "refresh gts location fail", K(ret));
-      } else {
-        // do nothing
-      }
-    }
-  }
 private:
-  int process_(const obrpc::ObGtsRpcResult &result, const common::ObAddr &dst,
-               obrpc::ObRpcResultCode &rcode)
+  int process_(const obcall::ObGtsRpcResult &result, const common::ObAddr &dst,
+               rpc::frame::ObResultCode &rcode)
   {
     int ret = OB_SUCCESS;
     int status = OB_SUCCESS;
@@ -254,7 +173,7 @@ private:
   transaction::ObTsWorker *ts_worker_;
 };
 
-} // obrpc
+} // obcall
 
 namespace transaction
 {
@@ -276,9 +195,9 @@ public:
 class ObGtsRequestRpc : public ObIGtsRequestRpc
 {
 public:
-  ObGtsRequestRpc() : is_inited_(false), is_running_(false), rpc_proxy_(NULL), ts_mgr_(NULL) {}
+  ObGtsRequestRpc() : is_inited_(false), is_running_(false), ts_mgr_(NULL) {}
   ~ObGtsRequestRpc() { destroy(); }
-  int init(obrpc::ObGtsRpcProxy *rpc_proxy, const common::ObAddr &self,
+  int init(const common::ObAddr &self,
            transaction::ObTsMgr *ts_mgr,
            transaction::ObTsWorker *ts_worker);
   int start();
@@ -290,40 +209,9 @@ public:
 private:
   bool is_inited_;
   bool is_running_;
-  obrpc::ObGtsRpcProxy *rpc_proxy_;
-  obrpc::ObGtsRPCCB<obrpc::OB_GET_GTS_REQUEST> gts_request_cb_;
+  obcall::ObGtsRPCCB gts_request_cb_;
   common::ObAddr self_;
   transaction::ObTsMgr *ts_mgr_;
-};
-
-class ObIGtsResponseRpc
-{
-public:
-  ObIGtsResponseRpc() {}
-  virtual ~ObIGtsResponseRpc() {}
-public:
-  virtual int post(const uint64_t tenant_id, const common::ObAddr &server,
-      const ObGtsErrResponse &msg) = 0;
-};
-
-class ObGtsResponseRpc : public ObIGtsResponseRpc
-{
-public:
-  ObGtsResponseRpc() : is_inited_(false), is_running_(false) {}
-  ~ObGtsResponseRpc() { destroy(); }
-  int init(oceanbase::rpc::frame::ObReqTransport *req_transport, const common::ObAddr &self);
-  int start();
-  int stop();
-  int wait();
-  void destroy();
-public:
-  int post(const uint64_t tenant_id, const common::ObAddr &server,
-      const ObGtsErrResponse &msg);
-private:
-  bool is_inited_;
-  bool is_running_;
-  obrpc::ObGtsRpcProxy rpc_proxy_;
-  common::ObAddr self_;
 };
 
 } // transaction

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_SESSION
 
 #include "ob_sql_session_info.h"
-#include "rpc/ob_rpc_define.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "pl/ob_pl_package.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "observer/ob_server.h"
@@ -775,7 +775,6 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
   int ret = OB_SUCCESS;
   bool ac = false;
   bool is_sess_disconn = is_disconn;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   if (OB_FAIL(get_autocommit(ac))) {
     LOG_WARN("get autocommit error", K(ret), K(ac));
   } else if (!(is_inner() && !is_user_session())
@@ -797,21 +796,15 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
                K(get_login_tenant_id()),
                K(get_effective_tenant_id()),
                K(lbt()));
-      obrpc::ObDDLRes res;
-      obrpc::ObDropTableArg drop_table_arg;
+      obcall::ObDDLRes res;
+      obcall::ObDropTableArg drop_table_arg;
       drop_table_arg.if_exist_ = true;
       drop_table_arg.to_recyclebin_ = false;
       drop_table_arg.table_type_ = share::schema::TMP_TABLE;
       drop_table_arg.session_id_ = get_sessid_for_table();
       drop_table_arg.tenant_id_ = get_effective_tenant_id();
       drop_table_arg.exec_tenant_id_ = get_effective_tenant_id();
-      common_rpc_proxy = GCTX.rs_rpc_proxy_;
-      if (OB_ISNULL(common_rpc_proxy)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("rpc proxy is null", K(ret));
-      } else {
         LOG_INFO("temporary tables dropped due to connection disconnected", K(is_sess_disconn), K(drop_table_arg));
-      }
     }
   }
   if (OB_FAIL(ret)) {
@@ -831,25 +824,23 @@ void ObSQLSessionInfo::refresh_temp_tables_sess_active_time()
 {
   int ret = OB_SUCCESS;
   const int64_t REFRESH_INTERVAL = 60LL * 60 * 1000 * 1000; // 1hr
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   if (get_has_temp_table_flag() && is_obproxy_mode()) {
     int64_t now = ObTimeUtility::current_time();
-    obrpc::ObAlterTableRes res;
+    obcall::ObAlterTableRes res;
     if (now - get_last_refresh_temp_table_time() >= REFRESH_INTERVAL) {
-      SMART_VAR(obrpc::ObAlterTableArg, alter_table_arg) {
+      SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
         AlterTableSchema *alter_table_schema = &alter_table_arg.alter_table_schema_;
         alter_table_arg.session_id_ = get_sessid_for_table();
         alter_table_schema->alter_type_ = OB_DDL_ALTER_TABLE;
-        common_rpc_proxy = GCTX.rs_rpc_proxy_;
         alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_DATE] = ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT;
         alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT;
         alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
         alter_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-        if (OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obrpc::ObAlterTableArg::SESSION_ACTIVE_TIME))) {
+        if (OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::SESSION_ACTIVE_TIME))) {
           LOG_WARN("failed to add member SESSION_ACTIVE_TIME for alter table schema", K(ret));
         } else if (OB_FAIL(alter_table_arg.tz_info_wrap_.deep_copy(get_tz_info_wrap()))) {
           LOG_WARN("failed to deep copy tz_info_wrap", K(ret));
-        } else if (OB_FAIL(common_rpc_proxy->alter_table(alter_table_arg, res))) {
+        } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_table(alter_table_arg, res); }))) {
           LOG_WARN("failed to alter temporary table session active time", K(alter_table_arg), K(ret), K(is_obproxy_mode()));
         } else {
           LOG_DEBUG("session active time of temporary tables refreshed", K(ret), "last refresh time", get_last_refresh_temp_table_time());

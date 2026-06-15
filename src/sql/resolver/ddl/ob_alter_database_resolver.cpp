@@ -117,7 +117,7 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
                                                       session_info_))) {
           LOG_WARN("resolve database option failed", K(ret));
         } else {
-          if(resolver.get_alter_option_bitset().has_member(obrpc::ObAlterDatabaseArg::PRIMARY_ZONE)) {
+          if(resolver.get_alter_option_bitset().has_member(obcall::ObAlterDatabaseArg::PRIMARY_ZONE)) {
             bool is_sync_ddl_user = false;
             if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
               LOG_WARN("Failed to check sync_ddl_user", K(ret));

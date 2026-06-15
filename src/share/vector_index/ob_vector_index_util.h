@@ -703,7 +703,7 @@ public:
   static int reconstruct_ivf_index_schema_in_rebuild(
       rootserver::ObDDLSQLTransaction &trans,
       rootserver::ObDDLService &ddl_service,
-      const obrpc::ObCreateIndexArg &create_index_arg,
+      const obcall::ObCreateIndexArg &create_index_arg,
       const ObTableSchema &data_table_schema,
       ObTableSchema &new_index_schema);
   static int generate_index_schema_from_exist_table(
@@ -711,7 +711,7 @@ public:
       const int64_t tenant_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       rootserver::ObDDLService &ddl_service,
-      const obrpc::ObCreateIndexArg &create_index_arg,
+      const obcall::ObCreateIndexArg &create_index_arg,
       const ObTableSchema &data_table_schema,
       ObTableSchema &new_index_schema);
   static int get_dropping_vec_index_invisiable_table_schema(
@@ -756,7 +756,7 @@ public:
       const ObString &domain_index_name);
   static int get_rebuild_drop_index_id_and_name(
        share::schema::ObSchemaGetterGuard &schema_guard,
-       obrpc::ObDropIndexArg &arg);
+       obcall::ObDropIndexArg &arg);
   static int calc_residual_vector(
       ObIAllocator &alloc,
       int dim,

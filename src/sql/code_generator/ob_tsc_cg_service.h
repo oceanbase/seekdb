@@ -155,6 +155,9 @@ private:
                                const DASScanCGCtx &cg_ctx,
                                ObDASScanCtDef &scan_ctdef,
                                common::ObIArray<ObRawExpr*> &access_exprs);
+  int prune_scan_pushdown_filters_by_table_columns(
+      const share::schema::ObTableSchema &scan_table_schema,
+      common::ObIArray<ObRawExpr*> &scan_pushdown_filters) const;
   //extract these column exprs need by TSC operator, these column will output by DAS scan
   int extract_tsc_access_columns(const ObLogTableScan &op, common::ObIArray<ObRawExpr*> &access_exprs);
   int extract_das_column_ids(const common::ObIArray<ObRawExpr*> &column_exprs, common::ObIArray<uint64_t> &column_ids);

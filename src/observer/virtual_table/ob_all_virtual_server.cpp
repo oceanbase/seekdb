@@ -202,11 +202,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.data_disk_total_);
           break;
         case DATA_DISK_ASSIGNED:
-          if (GCTX.is_shared_storage_mode()) {
-            cur_row_.cells_[i].set_int(resource_info.report_data_disk_assigned_);
-          } else {
-            cur_row_.cells_[i].set_null();
-          }
+          cur_row_.cells_[i].set_null();
           break;
         case DATA_DISK_IN_USE:
           cur_row_.cells_[i].set_int(resource_info.data_disk_in_use_);

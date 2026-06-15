@@ -33,7 +33,6 @@ DEF_RESP_TIME_SQL_TYPE(inner_sql)
 #include "lib/string/ob_string.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "lib/lock/ob_tc_rwlock.h"
-#include "observer/table/ob_table_process_type.h"
 namespace oceanbase {
 
 namespace share {
@@ -104,7 +103,6 @@ public:
   ~ObRespTimeInfoCollector() = default;
   int setup(uint32_t base);
   int collect(const sql::stmt::StmtType sql_type, const bool is_inner_sql, const uint64_t resp_time);
-  int collect(const ObTableHistogramType table_his_type, const uint64_t resp_time);
   int flush(int64_t base = OB_INVALID_ID);
   const ObRSTUtility &utility() const {return utility_;}
   int get_count_val(const RespTimeSqlType resp_time_sql_type, const int32_t pos, int64_t &val);
@@ -129,7 +127,6 @@ public:
   static void mtl_destroy(ObTenantQueryRespTimeCollector *&t_resp_time_collector);
 
   int collect(const sql::stmt::StmtType sql_type, const bool is_inner_sql, const uint64_t resp_time);
-  int collect(const ObTableHistogramType table_his_type, const uint64_t resp_time);
   int get_sum_value(ObRespTimeInfoCollector &total_collector);
   int resize();
   int flush();

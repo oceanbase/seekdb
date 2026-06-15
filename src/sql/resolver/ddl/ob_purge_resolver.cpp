@@ -216,7 +216,7 @@ int ObPurgeRecycleBinResolver::resolve(const ParseNode &parser_tree)
     int64_t current_time = ObTimeUtility::current_time();
     purge_recyclebin_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
     purge_recyclebin_stmt->set_expire_time(current_time);
-    purge_recyclebin_stmt->set_purge_num(obrpc::ObPurgeRecycleBinArg::DEFAULT_PURGE_EACH_TIME);
+    purge_recyclebin_stmt->set_purge_num(obcall::ObPurgeRecycleBinArg::DEFAULT_PURGE_EACH_TIME);
   }
   return ret;
 }

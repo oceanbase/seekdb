@@ -56,9 +56,9 @@ public:
 public:
   int prepare_mock_start_arg(
       const bool is_split,
-      obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
+      obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int prepare_mock_finish_arg(
-      obrpc::ObTabletSplitArg &arg);
+      obcall::ObTabletSplitArg &arg);
 };
 
 void TestDataSplit::SetUp()
@@ -71,7 +71,7 @@ void TestDataSplit::TearDown()
 
 int TestDataSplit::prepare_mock_start_arg(
     const bool is_split,
-    obrpc::ObDDLBuildSingleReplicaRequestArg &arg)
+    obcall::ObDDLBuildSingleReplicaRequestArg &arg)
 {
   int ret = OB_SUCCESS;
   arg.tenant_id_           = TEST_TENANT_ID;
@@ -135,7 +135,7 @@ int TestDataSplit::prepare_mock_start_arg(
   return ret;
 }
 
-int TestDataSplit::prepare_mock_finish_arg(obrpc::ObTabletSplitArg &arg)
+int TestDataSplit::prepare_mock_finish_arg(obcall::ObTabletSplitArg &arg)
 {
   int ret = OB_SUCCESS;
   arg.ls_id_ = TEST_LS_ID;
@@ -207,13 +207,13 @@ TEST_F(TestDataSplit, test_single_replica_request_arg_serialize)
   char serialize_buf[buf_len];
   memset(serialize_buf, 0, sizeof(serialize_buf));
   // without split info, scenarios like drop column.
-  obrpc::ObDDLBuildSingleReplicaRequestArg drop_column_arg;
+  obcall::ObDDLBuildSingleReplicaRequestArg drop_column_arg;
   ret = prepare_mock_start_arg(false, drop_column_arg);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = drop_column_arg.serialize(serialize_buf, buf_len, write_pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(drop_column_arg.get_serialize_size(), write_pos);
-  obrpc::ObDDLBuildSingleReplicaRequestArg deserialize_drop_column_arg;
+  obcall::ObDDLBuildSingleReplicaRequestArg deserialize_drop_column_arg;
   ret = deserialize_drop_column_arg.deserialize(serialize_buf, write_pos, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(pos, write_pos);
@@ -221,13 +221,13 @@ TEST_F(TestDataSplit, test_single_replica_request_arg_serialize)
   // with split info, scenarios like tablet split.
   pos = write_pos = 0;
   memset(serialize_buf, 0, sizeof(serialize_buf));
-  obrpc::ObDDLBuildSingleReplicaRequestArg split_arg;
+  obcall::ObDDLBuildSingleReplicaRequestArg split_arg;
   ret = prepare_mock_start_arg(true, split_arg);
   ASSERT_EQ(OB_SUCCESS, ret);  
   ret = split_arg.serialize(serialize_buf, buf_len, write_pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(split_arg.get_serialize_size(), write_pos);
-  obrpc::ObDDLBuildSingleReplicaRequestArg deserialize_split_arg;
+  obcall::ObDDLBuildSingleReplicaRequestArg deserialize_split_arg;
   ret = deserialize_split_arg.deserialize(serialize_buf, write_pos, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(pos, write_pos);
@@ -258,14 +258,14 @@ TEST_F(TestDataSplit, test_split_finish_arg_serialize)
   const int64_t buf_len = 1 * 1024 * 1024;
   char serialize_buf[buf_len];
   memset(serialize_buf, 0, sizeof(serialize_buf));
-  obrpc::ObTabletSplitArg split_arg;
+  obcall::ObTabletSplitArg split_arg;
   ret = prepare_mock_finish_arg(split_arg);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = split_arg.serialize(serialize_buf, buf_len, write_pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(split_arg.get_serialize_size(), write_pos);
 
-  obrpc::ObTabletSplitArg deserialize_split_arg;
+  obcall::ObTabletSplitArg deserialize_split_arg;
   ret = deserialize_split_arg.deserialize(serialize_buf, write_pos, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(pos, write_pos);
@@ -295,7 +295,7 @@ TEST_F(TestDataSplit, test_convert_rowkey_to_range)
   cmp_datum.set_string("aaaaa");
   ObArray<ObDatumRange> datum_ranges_array;
   ObArenaAllocator tmp_arena("SplitCnvRange");
-  obrpc::ObDDLBuildSingleReplicaRequestArg split_arg;
+  obcall::ObDDLBuildSingleReplicaRequestArg split_arg;
   ret = prepare_mock_start_arg(true, split_arg);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = ObTabletSplitUtil::convert_rowkey_to_range(tmp_arena, split_arg.parallel_datum_rowkey_list_, datum_ranges_array);

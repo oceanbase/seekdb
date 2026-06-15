@@ -18,13 +18,22 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
 namespace observer
 {
+// Empty serializable placeholder for RPC structs without a separate Res
+// (formerly ObTableLoadRpcNoneT).
+struct ObTableLoadRpcNoneT
+{
+  int serialize(SERIAL_PARAMS) const { UNF_UNUSED_SER; return common::OB_SUCCESS; }
+  int deserialize(DESERIAL_PARAMS) { UNF_UNUSED_DES; return common::OB_SUCCESS; }
+  int64_t get_serialize_size() const { return 0; }
+  TO_STRING_EMPTY();
+};
+
 enum class ObTableLoadRpcPriority
 {
   NORMAL_PRIO = 0,
@@ -50,7 +59,7 @@ enum class ObTableLoadRpcPriority
 
 #define OB_DEFINE_TABLE_LOAD_RPC_S1(RpcType, pcode, Processor, Request, Result, Arg) \
   OB_DEFINE_TABLE_LOAD_RPC_STRUCT(RpcType, pcode, Processor, Request, Result, Arg,   \
-                                  obrpc::ObRpcProxy::NoneT)
+                                  ObTableLoadRpcNoneT)
 
 #define OB_DEFINE_TABLE_LOAD_RPC_S2(RpcType, pcode, Processor, Request, Result, Arg, Res) \
   OB_DEFINE_TABLE_LOAD_RPC_STRUCT(RpcType, pcode, Processor, Request, Result, Arg, Res)

@@ -33,9 +33,9 @@ public:
   ObCreateRoutineStmt() : ObDDLStmt(stmt::T_CREATE_ROUTINE) {}
   virtual ~ObCreateRoutineStmt() {}
 
-  obrpc::ObCreateRoutineArg &get_routine_arg() { return routine_arg_; }
-  const obrpc::ObCreateRoutineArg &get_routine_arg() const { return routine_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return routine_arg_; }
+  obcall::ObCreateRoutineArg &get_routine_arg() { return routine_arg_; }
+  const obcall::ObCreateRoutineArg &get_routine_arg() const { return routine_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return routine_arg_; }
   VIRTUAL_TO_STRING_KV(K_(routine_arg));
 
 protected:
@@ -45,7 +45,7 @@ protected:
       : ObDDLStmt(stmt_type) {}
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateRoutineStmt);
-  obrpc::ObCreateRoutineArg routine_arg_;
+  obcall::ObCreateRoutineArg routine_arg_;
 };
 
 }

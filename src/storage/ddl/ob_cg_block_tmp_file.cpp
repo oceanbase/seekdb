@@ -29,9 +29,7 @@ namespace storage
 {
 static int64_t get_tmp_file_io_timeout_ms()
 {
-  return GCTX.is_shared_storage_mode() ?
-         OB_IO_MANAGER.get_object_storage_io_timeout_ms(MTL_ID()) :
-         GCONF._data_storage_io_timeout / 1000L;
+  return GCONF._data_storage_io_timeout / 1000L;
 }
 
 /**

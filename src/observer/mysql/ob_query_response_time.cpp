@@ -175,32 +175,6 @@ int ObRespTimeInfoCollector::collect(const sql::stmt::StmtType sql_type, const b
 }
 
 
-int ObRespTimeInfoCollector::collect(const ObTableHistogramType table_his_type, const uint64_t resp_time)
-{
-  int ret = OB_SUCCESS;
-  int pos = -1;
-  for (int i = 0; i < utility_.bound_count(); i++) {
-    if(utility_.bound(i) > resp_time) {
-      pos = i;
-      break;
-    }
-  }
-  if (pos < 0 || pos >= utility_.bound_count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid pos in utility", K(ret), K(pos));
-  } else {
-    switch (table_his_type.sql_type_) {
-      default: {
-        if (OB_FAIL(other_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("other info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
-        }
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
 int ObRespTimeInfoCollector::flush(int64_t base /*=OB_INVALID_ID*/)
 {
   int ret = OB_SUCCESS;
@@ -336,20 +310,6 @@ int ObTenantQueryRespTimeCollector::collect(const sql::stmt::StmtType sql_type, 
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(multi_collector_.at(pos).collect(sql_type, is_inner_sql, resp_time))) {
     LOG_WARN("failed to collect response time",K(ret), K(pos), K(sql_type), K(resp_time), K(is_inner_sql));
-  }
-
-  return ret;
-}
-
-int ObTenantQueryRespTimeCollector::collect(const ObTableHistogramType table_his_type, const uint64_t resp_time)
-{
-  int ret = OB_SUCCESS;
-  const size_t pos = std::abs(GETTID()) % multi_ways_count_;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(multi_collector_.at(pos).collect(table_his_type, resp_time))) {
-    LOG_WARN("failed to collect response time",K(ret), K(pos), K(table_his_type));
   }
 
   return ret;

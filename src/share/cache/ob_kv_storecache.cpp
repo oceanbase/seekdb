@@ -230,7 +230,7 @@ int ObKVGlobalCache::init(
     COMMON_LOG(WARN, "Fail to init store, ", K(ret));
   } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
     COMMON_LOG(WARN, "Fail to init map, ", K(ret), K(bucket_num));
-  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter))) {
+  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter, map_.get_node_allocator()))) {
     COMMON_LOG(WARN, "Fail to init insts, ", K(ret));
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::KVCacheWash))) {
     COMMON_LOG(WARN, "Fail to init wash timer, ", K(ret));

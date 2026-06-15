@@ -20,9 +20,6 @@
 #include "storage/high_availability/ob_storage_ha_tablet_builder.h"
 #include "storage/high_availability/ob_storage_ha_utils.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
 
 namespace oceanbase
 {
@@ -180,16 +177,6 @@ int ObCopiedEmptySSTableCreator::create_sstable()
         LOG_WARN("fail to init create sstable param", K(ret));
       } else if (OB_FAIL(do_create_sstable_(param, table_handle))) {
         LOG_WARN("failed to create sstable", K(ret), K(param));
-#ifdef OB_BUILD_SHARED_STORAGE
-      } else if (src_sstable_param_->is_shared_sstable()) {
-        // empty sstable may be shared sstable.
-        int64_t last_meta_macro_seq = 1;
-        last_meta_macro_seq = MAX(src_sstable_param_->basic_meta_.root_macro_seq_,
-                finish_task_->get_max_next_copy_task_id() * oceanbase::compaction::MACRO_STEP_SIZE);
-        if (OB_FAIL(finish_task_->add_sstable(table_handle, last_meta_macro_seq))) {
-          LOG_WARN("fail to add sstable", K(ret), K(table_handle));
-        }
-#endif
       } else if (OB_FAIL(finish_task_->add_sstable(table_handle))) {
         LOG_WARN("fail to add sstable", K(ret), K(table_handle));
       }
@@ -251,171 +238,6 @@ int ObCopiedSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTab
   } else if (src_sstable_param->basic_meta_.table_shared_flag_.is_shared_macro_blocks()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sstable has shared macro blocks and it's not shared backup table", K(ret), KPC(src_sstable_param));
-  }
-
-  return ret;
-}
-
-
-#ifdef OB_BUILD_SHARED_STORAGE
-// ObRestoredSharedSSTableCreator
-int ObRestoredSharedSSTableCreator::create_sstable()
-{
-  int ret = OB_SUCCESS;
-  ObSSTableMergeRes res;
-  ObTableHandleV2 table_handle;
-  ObMacroDataSeq meta_block_seq(1);
-  meta_block_seq.macro_data_seq_ = MAX(src_sstable_param_->basic_meta_.root_macro_seq_,
-          finish_task_->get_max_next_copy_task_id() * oceanbase::compaction::MACRO_STEP_SIZE);
-  share::ObPreWarmerParam pre_warm_param;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObCopiedSSTableCreator not init", K(ret));
-  } else {
-    meta_block_seq.set_index_block();
-    pre_warm_param.init(ls_id_, tablet_id_);
-    SMART_VAR(ObTabletCreateSSTableParam, param) {
-      if (OB_FAIL(sstable_index_builder_->close_with_macro_seq(res, 
-                                                               meta_block_seq.macro_data_seq_, 
-                                                               OB_DEFAULT_MACRO_BLOCK_SIZE /*nested_size*/, 
-                                                               0 /*nested_offset*/, 
-                                                               pre_warm_param))) {
-        LOG_WARN("failed to close sstable index builder", K(ret), K(tablet_id_), KPC(src_sstable_param_));
-      } else if (OB_FAIL(init_create_sstable_param_(res, param))) {
-        LOG_WARN("fail to init create sstable param", K(ret), K(res));
-      } else if (OB_FAIL(do_create_sstable_(param, table_handle))) {
-        LOG_WARN("failed to create sstable", K(ret), K(param));
-      } else if (OB_FAIL(finish_task_->add_sstable(table_handle, meta_block_seq.macro_data_seq_))) {
-        LOG_WARN("fail to add sstable", K(ret), K(table_handle), K(meta_block_seq));
-      }
-    }
-  }
-
-  LOG_INFO("create restore shared sstable with index builder", K(ret), K(table_handle));
-
-  return ret;
-}
-
-int ObRestoredSharedSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const
-{
-  int ret = OB_SUCCESS;
-  if (!src_sstable_param->is_shared_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sstable is not shared", K(ret), KPC(src_sstable_param));
-  }
-
-  return ret;
-}
-
-
-// ObCopiedSharedMacroBlocksSSTableCreator
-int ObCopiedSharedMacroBlocksSSTableCreator::create_sstable()
-{
-  int ret = OB_SUCCESS;
-  ObSSTableMergeRes res;
-  ObTableHandleV2 table_handle;
-  ObArray<MacroBlockId> macro_block_id_array;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sstable copy finish task do not init", K(ret));
-  } else {
-    SMART_VAR(ObTabletCreateSSTableParam, param) {
-      if (OB_FAIL(get_shared_macro_id_list_(macro_block_id_array))) {
-        LOG_WARN("failed to get shared ddl sstable macro id list", K(ret));
-      } else if (OB_FAIL(sstable_index_builder_->close(res))) {
-        LOG_WARN("failed to close sstable index builder", K(ret));
-      } else if (OB_FAIL(res.other_block_ids_.assign(macro_block_id_array))) {
-        LOG_WARN("failed to assign other block id", K(ret), K(macro_block_id_array));
-      } else if (OB_FAIL(init_create_sstable_param_(res, param))) {
-        LOG_WARN("fail to init create sstable param", K(ret), K(res));
-      } else if (OB_FAIL(do_create_sstable_(param, table_handle))) {
-        LOG_WARN("failed to create sstable", K(ret), K(param));
-      } else if (OB_FAIL(finish_task_->add_sstable(table_handle))) {
-        LOG_WARN("fail to add sstable", K(ret), K(table_handle));
-      }
-    }
-  }
-
-  LOG_INFO("create shared macro blocks sstable", K(ret), K(table_handle));
-
-  return ret;
-}
-
-int ObCopiedSharedMacroBlocksSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const
-{
-  int ret = OB_SUCCESS;
-  if (!src_sstable_param->is_shared_macro_blocks_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sstable is not shared macro blocks", K(ret), KPC(src_sstable_param));
-  } else if (src_sstable_param->is_shared_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sstable is shared", K(ret), KPC(src_sstable_param));
-  } else if (!src_sstable_param->table_key_.is_ddl_dump_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sstable is not ddl dump", K(ret), KPC(src_sstable_param));
-  }
-
-  return ret;
-}
-
-
-int ObCopiedSharedMacroBlocksSSTableCreator::get_shared_macro_id_list_(common::ObIArray<MacroBlockId> &macro_block_id_array)
-{
-  int ret = OB_SUCCESS;
-  const common::ObArray<ObCopyMacroRangeInfo> *macro_range_array = NULL;
-
-  macro_block_id_array.reset();
-  if (OB_FAIL(finish_task_->get_copy_macro_range_array(macro_range_array))) {
-    LOG_WARN("failed to get macro range array", K(ret));
-  } else if (OB_ISNULL(macro_range_array)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("macro_range_array is null", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < macro_range_array->count(); ++i) {
-      const ObCopyMacroRangeInfo &macro_range_info = macro_range_array->at(i);
-      if (OB_FAIL(ObStorageHAUtils::extract_macro_id_from_datum(macro_range_info.start_macro_block_end_key_, macro_block_id_array))) {
-        LOG_WARN("failed to extract macro id from datum", K(ret), K(macro_range_info));
-      }
-    }
-  }
-
-  return ret;
-}
-#endif
-
-// ObCopiedSharedSSTableCreator
-int ObCopiedSharedSSTableCreator::create_sstable()
-{
-  int ret = OB_SUCCESS;
-  ObSSTableMergeRes res;
-  ObTableHandleV2 table_handle;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObCopiedSSTableCreator not init", K(ret));
-  } else {
-    SMART_VAR(ObTabletCreateSSTableParam, param) {
-      if (OB_FAIL(init_create_sstable_param_(param))) {
-        LOG_WARN("fail to init create sstable param", K(ret));
-      } else if (OB_FAIL(do_create_sstable_(param, table_handle))) {
-        LOG_WARN("failed to create sstable", K(ret), K(param));
-      } else if (OB_FAIL(finish_task_->add_sstable(table_handle))) {
-        LOG_WARN("fail to add sstable", K(ret), K(table_handle));
-      }
-    }
-  }
-  LOG_INFO("create shared sstable with index builder", K(ret), K(table_handle));
-  return ret;
-}
-
-int ObCopiedSharedSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const
-{
-  int ret = OB_SUCCESS;
-  if (!src_sstable_param->is_shared_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sstable is not shared", K(ret), KPC(src_sstable_param));
   }
 
   return ret;
@@ -660,9 +482,6 @@ int ObSSTableCopyFinishTask::update_major_sstable_reuse_info_()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("sstable copy finish task do not init", K(ret));
-  } else if (GCTX.is_shared_storage_mode()) {
-    // skip reuse macro block in shared storage mode
-    LOG_INFO("skip reuse macro block in shared storage mode");
   } else if (FALSE_IT(is_major_sstable = ObITable::is_major_sstable(copy_ctx_.table_key_.table_type_))) {
   } else if (!is_major_sstable) {
     // sstable is not major, skip reuse
@@ -833,15 +652,7 @@ bool ObSSTableCopyFinishTask::is_sstable_should_rebuild_index_(const ObMigration
 {
   // Non-empty SSTable whose macro blocks should be copied needs rebuild index after
   // macros are copied.
-  return !sstable_param->is_empty_sstable() 
-         && !is_shared_sstable_without_copy_(sstable_param);
-}
-
-bool ObSSTableCopyFinishTask::is_shared_sstable_without_copy_(const ObMigrationSSTableParam *sstable_param) const
-{
-  // In standby restore from primary, always treat as "need copy" to avoid skipping.
-  UNUSED(sstable_param);
-  return false;
+  return !sstable_param->is_empty_sstable();
 }
 
 int ObSSTableCopyFinishTask::prepare_sstable_index_builder_(
@@ -984,29 +795,10 @@ int ObSSTableCopyFinishTask::alloc_and_init_sstable_creator_(ObCopiedSSTableCrea
 {
   int ret = OB_SUCCESS;
   ObCopiedSSTableCreatorImpl *tmp_creator = nullptr;
-  const bool is_shared_storage = GCTX.is_shared_storage_mode();
   if (sstable_param_->is_empty_sstable()) {
     tmp_creator = MTL_NEW(ObCopiedEmptySSTableCreator, "CopySSTCreator");
-  } else if (!is_shared_storage) {
-    if (sstable_param_->is_shared_sstable() && is_shared_sstable_without_copy_(sstable_param_)) {
-      tmp_creator = MTL_NEW(ObCopiedSharedSSTableCreator, "CopySSTCreator");
-    } else {
-      tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
-    }
   } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (sstable_param_->is_shared_sstable()) {
-      if (is_shared_sstable_without_copy_(sstable_param_)) {
-        tmp_creator = MTL_NEW(ObCopiedSharedSSTableCreator, "CopySSTCreator");
-      } else {
-        tmp_creator = MTL_NEW(ObRestoredSharedSSTableCreator, "CopySSTCreator");
-      }
-    } else if (sstable_param_->is_shared_macro_blocks_sstable()) {
-      tmp_creator = MTL_NEW(ObCopiedSharedMacroBlocksSSTableCreator, "CopySSTCreator");
-    } else {
-      tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
-    }
-#endif
+    tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
   }
 
   if (OB_ISNULL(tmp_creator)) {

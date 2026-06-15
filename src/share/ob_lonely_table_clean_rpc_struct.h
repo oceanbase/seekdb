@@ -21,7 +21,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 
 struct ObForceDropLonelyLobAuxTableArg: public ObDDLArg
@@ -102,6 +102,6 @@ public:
   INHERIT_TO_STRING_KV("ObDDLArg", ObDDLArg, K_(tenant_id), K_(data_table_id), K_(aux_lob_meta_table_id), K_(aux_lob_piece_table_id));
 };
 
-}//end namespace obrpc
+}//end namespace obcall
 }//end namespace oceanbase
 #endif

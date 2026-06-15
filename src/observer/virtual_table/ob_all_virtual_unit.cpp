@@ -176,30 +176,11 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case DATA_DISK_SIZE: {
-          if (GCTX.is_shared_storage_mode()) {
-            cur_row_.cells_[i].set_int(tenant_meta.unit_.get_effective_actual_data_disk_size());
-          } else {
-            cur_row_.cells_[i].set_null();
-          }
+          cur_row_.cells_[i].set_null();
           break;
         }
         case DATA_DISK_IN_USE: {
           int64_t data_disk_in_use = 0;
-#ifdef OB_BUILD_SHARED_STORAGE
-          if (GCTX.is_shared_storage_mode()) {
-            // shared_storage mode
-            MTL_SWITCH(tenant_meta.unit_.tenant_id_) {
-              ObTenantDiskSpaceManager *disk_space_mgr = nullptr;
-              if (OB_ISNULL(disk_space_mgr = MTL(ObTenantDiskSpaceManager*))) {
-                ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "tenant disk space manager is null", KR(ret), KP(disk_space_mgr));
-              } else if (OB_FAIL(disk_space_mgr->get_used_disk_size(data_disk_in_use))) {
-                SERVER_LOG(WARN, "fail to get used disk size", KR(ret), K(data_disk_in_use));
-              }
-            }
-          } else
-            // shared_nothing mode
-#endif
           {
             if (OB_ISNULL(GCTX.disk_reporter_)) {
               ret = OB_ERR_UNEXPECTED;

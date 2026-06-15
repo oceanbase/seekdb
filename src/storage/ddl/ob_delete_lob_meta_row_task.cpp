@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_delete_lob_meta_row_task.h"
+#include "rootserver/ob_root_service.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
@@ -218,7 +219,7 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
       LOG_INFO("report replica build status errsim", K(ret));
     }
 #endif
-    obrpc::ObDDLBuildSingleReplicaResponseArg arg;
+    obcall::ObDDLBuildSingleReplicaResponseArg arg;
     ObAddr rs_addr = GCTX.self_addr();
     arg.tenant_id_ = param_.tenant_id_;
     arg.dest_tenant_id_ = param_.tenant_id_;
@@ -236,10 +237,7 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
     arg.server_addr_ = GCTX.self_addr();
     FLOG_INFO("send replica build status response to RS", K(ret), K(arg));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
+    } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
     }
   }

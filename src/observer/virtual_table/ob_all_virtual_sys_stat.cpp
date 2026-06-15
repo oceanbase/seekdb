@@ -196,20 +196,8 @@ int ObAllVirtualSysStat::update_all_stats_(const int64_t tenant_id, common::ObDi
         (OB_SYS_TENANT_ID == tenant_id) ? GMEMCONF.get_server_memory_limit() : 0;
     stat_events.get(ObStatEventIds::SYSTEM_MEMORY - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? GMEMCONF.get_reserved_server_memory() : 0;
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      stat_events.get(ObStatEventIds::HIDDEN_SYS_DATA_DISK_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_SERVER_DISK_SPACE_MGR.get_hidden_sys_data_disk_config_size() : 0;
-    }
-#endif
     stat_events.get(ObStatEventIds::UNMANAGED_MEMORY_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? get_unmanaged_memory_size() : 0;
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      stat_events.get(ObStatEventIds::HIDDEN_SYS_DATA_DISK_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_SERVER_DISK_SPACE_MGR.get_hidden_sys_data_disk_config_size() : 0;
-    }
-#endif
 
     int ret_bk = ret;
     if (NULL != GCTX.omt_) {
@@ -271,13 +259,6 @@ int ObAllVirtualSysStat::update_all_stats_(const int64_t tenant_id, common::ObDi
               = max_sess_num;
         }
       }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-      int tmp_ret = OB_SUCCESS;
-      if (GCTX.is_shared_storage_mode() && OB_TMP_FAIL(set_ss_stats(tenant_id, diag_info))) {
-        SERVER_LOG(ERROR, "fail to set ss stats", KR(ret), KR(tmp_ret), K(tenant_id));
-      }
-#endif
     }
 
     ret = ret_bk;

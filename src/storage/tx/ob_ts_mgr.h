@@ -46,9 +46,8 @@ class ObSchemaGetterGuard;
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
-class ObGtsRpcProxy;
 }
 namespace rpc
 {
@@ -284,8 +283,7 @@ public:
   ~ObTsMgr() { destroy(); }
   int init(const common::ObAddr &server,
            share::schema::ObMultiVersionSchemaService &schema_service,
-           share::ObLocationService &location_service,
-           rpc::frame::ObReqTransport *req_transport);
+           share::ObLocationService &location_service);
   void reset();
   int start();
   void stop();
@@ -347,7 +345,6 @@ private:
   bool is_inited_;
   bool is_running_;
   common::ObAddr server_;
-  obrpc::ObGtsRpcProxy *gts_request_rpc_proxy_;
   ObGtsRequestRpc *gts_request_rpc_;
   ObLocationAdapter *location_adapter_;
   ObLocationAdapter location_adapter_def_;

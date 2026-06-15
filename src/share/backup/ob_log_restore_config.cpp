@@ -55,7 +55,6 @@ int ObLogRestoreSourceLocationConfigParser::update_inner_config_table(common::Ob
 }
 
 int ObLogRestoreSourceLocationConfigParser::check_before_update_inner_config(
-    obrpc::ObSrvRpcProxy &rpc_proxy, 
     common::ObISQLClient &trans)
 {
   int ret = OB_SUCCESS;
@@ -177,7 +176,7 @@ int ObLogRestoreSourceServiceConfigParser::update_inner_config_table(common::ObI
   return ret;
 }
 
-int ObLogRestoreSourceServiceConfigParser::check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) 
+int ObLogRestoreSourceServiceConfigParser::check_before_update_inner_config(common::ObISQLClient &trans) 
 {
   int ret = OB_SUCCESS;
   ObCompatibilityMode compat_mode = ObCompatibilityMode::OCEANBASE_MODE;

@@ -43,7 +43,7 @@ public:
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_role_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_role_arg_; }
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
@@ -52,7 +52,7 @@ private:
   common::ObString password_; 
   bool need_enc_;
   common::ObString masked_sql_;
-  obrpc::ObAlterRoleArg alter_role_arg_;
+  obcall::ObAlterRoleArg alter_role_arg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAlterRoleStmt);
 };

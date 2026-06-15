@@ -187,8 +187,6 @@ int PalfEnvImpl::init(
     const char *base_dir, const ObAddr &self,
     const int64_t cluster_id,
     const int64_t tenant_id,
-    rpc::frame::ObReqTransport *transport,
-    obrpc::ObBatchRpc *batch_rpc,
     common::ObILogAllocator *log_alloc_mgr,
     ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
@@ -202,11 +200,11 @@ int PalfEnvImpl::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     PALF_LOG(ERROR, "PalfEnvImpl is inited twiced", K(ret));
-  } else if (OB_ISNULL(base_dir) || !self.is_valid() || NULL == transport || NULL == batch_rpc
+  } else if (OB_ISNULL(base_dir) || !self.is_valid()
              || OB_ISNULL(log_alloc_mgr) || OB_ISNULL(log_block_pool) || OB_ISNULL(monitor) 
              || OB_ISNULL(log_local_device) || OB_ISNULL(resource_manager) || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid arguments", K(ret), KP(transport), KP(batch_rpc), K(base_dir), K(self), KP(transport),
+    PALF_LOG(ERROR, "invalid arguments", K(ret), K(base_dir), K(self),
              KP(log_alloc_mgr), KP(log_block_pool), KP(monitor), KP(log_local_device), KP(resource_manager), KP(io_manager));
   } else if (OB_FAIL(init_log_io_worker_config_(options.disk_options_.log_writer_parallelism_,
                                                 tenant_id,
@@ -214,7 +212,7 @@ int PalfEnvImpl::init(
     PALF_LOG(WARN, "init_log_io_worker_config_ failed", K(options));
   } else if (!lib::is_embed_mode() && OB_FAIL(fetch_log_engine_.init(this, log_alloc_mgr))) {
     PALF_LOG(ERROR, "FetchLogEngine init failed", K(ret));
-  } else if (OB_FAIL(log_rpc_.init(self, cluster_id, tenant_id, transport, batch_rpc))) {
+  } else if (OB_FAIL(log_rpc_.init(self, cluster_id, tenant_id))) {
     PALF_LOG(ERROR, "LogRpc init failed", K(ret));
   } else if (OB_FAIL(cb_thread_pool_.init(io_cb_num, this))) {
     PALF_LOG(ERROR, "LogIOTaskThreadPool init failed", K(ret));

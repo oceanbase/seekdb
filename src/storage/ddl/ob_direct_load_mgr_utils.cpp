@@ -236,46 +236,28 @@ int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const uint64_t tenan
 }
 
 // TODO @zhuoran.zzr: is_column_store is set becacuese column store is not supported yet, wait to remove it later
-ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type(const bool is_shared_storage_mode, const uint64_t data_format_version)
+ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type(const uint64_t data_format_version)
 {
   ObDirectLoadType direct_load_type = ObDirectLoadType::DIRECT_LOAD_INVALID;
-  if (is_shared_storage_mode) {
-    if (data_format_version < DDL_IDEM_DATA_FORMAT_VERSION) {
-      direct_load_type =  ObDirectLoadType::DIRECT_LOAD_DDL_V2;
-    } else {
-      direct_load_type = ObDirectLoadType::SS_IDEM_DIRECT_LOAD_DDL;
-    }
+  if (data_format_version < DDL_IDEM_DATA_FORMAT_VERSION) {
+    direct_load_type = ObDirectLoadType::DIRECT_LOAD_DDL;
   } else {
-    if (data_format_version < DDL_IDEM_DATA_FORMAT_VERSION) {
-      direct_load_type = ObDirectLoadType::DIRECT_LOAD_DDL;
-    } else {
-      direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
-    }
+    direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL;
   }
   return direct_load_type;
 }
 
 ObDirectLoadType ObDirectLoadMgrUtil::load_data_get_direct_load_type(const bool is_incremental,
-                                                                     const uint64_t data_format_version,
-                                                                     const bool is_shared_storage_mode)
+                                                                     const uint64_t data_format_version)
 {
   ObDirectLoadType direct_load_type = ObDirectLoadType::DIRECT_LOAD_INVALID;
   if (is_incremental)  {
-    /* not supported yet, wait to replace with new type */
     direct_load_type = ObDirectLoadType::DIRECT_LOAD_INCREMENTAL;
   } else {
-    if (!is_shared_storage_mode) {
-      if (data_format_version >= DDL_IDEM_DATA_FORMAT_VERSION) {
-        direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA;
-      } else {
-        direct_load_type = ObDirectLoadType::DIRECT_LOAD_LOAD_DATA;
-      }
+    if (data_format_version >= DDL_IDEM_DATA_FORMAT_VERSION) {
+      direct_load_type = ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA;
     } else {
-      if (data_format_version < DDL_IDEM_DATA_FORMAT_VERSION) {
-        direct_load_type =  ObDirectLoadType::DIRECT_LOAD_LOAD_DATA_V2;
-      } else {
-        direct_load_type = ObDirectLoadType::SS_IDEM_DIRECT_LOAD_DATA;
-      }
+      direct_load_type = ObDirectLoadType::DIRECT_LOAD_LOAD_DATA;
     }
   }
   return direct_load_type;

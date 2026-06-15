@@ -151,7 +151,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         } else {
           common::ObCompatibilityMode compa_mode = lib::is_mysql_mode() ? common::MYSQL_MODE
                                                                         : common::ORACLE_MODE;
-          obrpc::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
+          obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
           ObPackageInfo &package_info = create_package_arg.package_info_;
           ObString package_block(static_cast<int32_t>(package_block_node->str_len_), package_block_node->str_value_);
           create_package_arg.is_replace_ = static_cast<bool>(parse_tree.int32_values_[0]);
@@ -258,7 +258,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
                                          package_body_ast,
                                          false));
             if (OB_SUCC(ret)) {
-              obrpc::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
+              obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
               ObIArray<ObRoutineInfo> &routine_list = create_package_arg.public_routine_infos_;
               ObArray<ObRoutineInfo> routines;
               ObArray<const ObRoutineInfo*> routine_infos;
@@ -636,7 +636,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
           }
           // update route sql of routine info
           if (OB_SUCC(ret)) {
-            obrpc::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
+            obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
             ObIArray<ObRoutineInfo> &routine_list = create_package_arg.public_routine_infos_;
             const ObPLRoutineTable &spec_routine_table = package_spec_ast.get_routine_table();
             const ObPLRoutineTable &body_routine_table = package_body_ast.get_routine_table();
@@ -692,7 +692,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       common::ObCompatibilityMode compa_mode = lib::is_mysql_mode() ? common::MYSQL_MODE
                                                                     : common::ORACLE_MODE;
-      obrpc::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
+      obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
       ObPackageInfo &package_info = create_package_arg.package_info_;
       ObString package_body_block(static_cast<int32_t>(package_body_block_node->str_len_),
                                       package_body_block_node->str_value_);

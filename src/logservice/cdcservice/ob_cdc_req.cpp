@@ -18,7 +18,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 /*
  *
@@ -519,5 +519,5 @@ int ObCdcLSFetchMissLogReq::append_miss_log(const MissLogParam &param)
   return ret;
 }
 
-} // obrpc
+} // obcall
 } // namespace oceanbase

@@ -122,11 +122,11 @@ int ObFlashBackTableToScnResolver::resolve(const ParseNode &parse_tree)
   } else {
     uint64_t tenant_id = session_info_->get_effective_tenant_id();
     stmt->set_tenant_id(tenant_id);
-    obrpc::ObFlashBackTableToScnArg &arg = stmt->flashback_table_to_scn_arg_;
+    obcall::ObFlashBackTableToScnArg &arg = stmt->flashback_table_to_scn_arg_;
     ParseNode *table_node = parse_tree.children_[TABLE_NODES];
     ObString db_name;
     ObString table_name;
-    obrpc::ObTableItem table_item;
+    obcall::ObTableItem table_item;
     if (nullptr == table_node) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table_node is null", K(ret));

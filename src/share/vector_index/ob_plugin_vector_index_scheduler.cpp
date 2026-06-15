@@ -1521,19 +1521,23 @@ int ObPluginVectorIndexLoadScheduler::safe_to_destroy(bool &is_safe)
   return ret;
 }
 
-void ObPluginVectorIndexLoadScheduler::stop() 
-{ 
+void ObPluginVectorIndexLoadScheduler::stop()
+{
   int ret = OB_SUCCESS;
-  is_stopped_= true; 
+  is_stopped_= true;
   ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
-  if (OB_NOT_NULL(vector_index_service_)) {
+  if (OB_NOT_NULL(vector_index_service_) && OB_NOT_NULL(ls_)) {
     if (OB_FAIL(vector_index_service_->get_ls_index_mgr_map().get_refactored(ls_->get_ls_id(), index_ls_mgr))) {
       LOG_WARN("fail to get vector index ls mgr", KR(ret), K(tenant_id_), K(ls_->get_ls_id()));
     } else if (OB_NOT_NULL(index_ls_mgr)) {
       index_ls_mgr->get_async_task_opt().set_stop();
     }
   }
-  FLOG_INFO("vector index task scheduler stop", K(ls_->get_ls_id()), KP(index_ls_mgr));
+  if (OB_NOT_NULL(ls_)) {
+    FLOG_INFO("vector index task scheduler stop", K(ls_->get_ls_id()), KP(index_ls_mgr));
+  } else {
+    FLOG_INFO("vector index task scheduler stop, ls is null", KP(index_ls_mgr));
+  }
 };
 
 void ObPluginVectorIndexLoadScheduler::destroy()

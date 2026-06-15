@@ -18,29 +18,18 @@
 
 #include "ob_gais_rpc.h"
 #include "share/ob_global_autoinc_service.h"
+#include "observer/ob_ex_rpc.h"
 
 namespace oceanbase
 {
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
 
-namespace obrpc
+namespace obcall
 {
-
-#define GAIS_WITH_RPC_SERVICE                                        \
-  int ret = OB_SUCCESS;                                              \
-  ObGlobalAutoIncService *gais = nullptr;                            \
-  const uint64_t tenant_id = arg_.autoinc_key_.tenant_id_;           \
-  if (tenant_id != MTL_ID()) {                                       \
-    ret = OB_ERR_UNEXPECTED;                                         \
-    LOG_ERROR("tenant is not match", K(ret), K(tenant_id));          \
-  } else if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {      \
-    ret = OB_ERR_UNEXPECTED;                                         \
-    LOG_WARN("global autoinc service is null", K(ret));              \
-  } else                                                             \
 
 OB_SERIALIZE_MEMBER(ObGAISNextValRpcResult, start_inclusive_, end_inclusive_, sync_value_);
 
@@ -101,93 +90,20 @@ int ObGAISCurrValRpcResult::init(const uint64_t sequence_value, const uint64_t s
   return ret;
 }
 
-int ObGAISNextAutoIncP::process()
-{
-  GAIS_WITH_RPC_SERVICE {
-    if (OB_FAIL(gais->handle_next_autoinc_request(arg_, result_))) {
-      LOG_WARN("handle next autoinc request failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObGAISCurrAutoIncP::process()
-{
-  GAIS_WITH_RPC_SERVICE {
-    if (OB_FAIL(gais->handle_curr_autoinc_request(arg_, result_))) {
-      LOG_WARN("handle curr autoinc request failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObGAISPushAutoIncP::process()
-{
-  GAIS_WITH_RPC_SERVICE {
-    if (OB_FAIL(gais->handle_push_autoinc_request(arg_, result_))) {
-      LOG_WARN("handle push autoinc request failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObGAISClearAutoIncCacheP::process()
-{
-  GAIS_WITH_RPC_SERVICE {
-    if (OB_FAIL(gais->handle_clear_autoinc_cache_request(arg_))) {
-      LOG_WARN("handle clear autoinc cache request failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObGAISBroadcastAutoIncCacheP::process()
-{
-  int ret = OB_SUCCESS;
-  ObGlobalAutoIncService *gais = nullptr;
-  const uint64_t tenant_id = arg_.tenant_id_;
-  if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
-    // ignore if tenant service not in this server
-  } else if (OB_FAIL(gais->receive_global_autoinc_cache(arg_))) {
-    LOG_WARN("handle clear autoinc cache request failed", K(ret));
-  }
-  return ret;
-}
-
-int ObGAISNextSequenceP::process()
-{
-  int ret = OB_SUCCESS;
-  ObGlobalAutoIncService *gais = nullptr;
-  const uint64_t tenant_id = arg_.schema_.get_tenant_id();
-  if (tenant_id != MTL_ID()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant is not match", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("global sequence service is null", K(ret));
-  } else {
-    if (OB_FAIL(gais->handle_next_sequence_request(arg_, result_))) {
-      LOG_WARN("handle next sequence request failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-} // obrpc
+} // obcall
 
 namespace share
 {
-int ObGAISRequestRpc::init(ObGAISRpcProxy *rpc_proxy, const ObAddr &self)
+int ObGAISRequestRpc::init(const ObAddr &self)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("gais request rpc inited twice", KR(ret));
-  } else if (OB_ISNULL(rpc_proxy) || !self.is_valid()) {
+  } else if (!self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(rpc_proxy), K(self));
+    LOG_WARN("invalid argument", KR(ret), K(self));
   } else {
-    rpc_proxy_ = rpc_proxy;
     self_ = self;
     is_inited_ = true;
     LOG_INFO("gais request rpc inited success", KP(this), K(self));
@@ -200,7 +116,6 @@ void ObGAISRequestRpc::destroy()
   int tmp_ret = OB_SUCCESS;
   if (is_inited_) {
     is_inited_ = false;
-    rpc_proxy_ = NULL;
     self_.reset();
     LOG_INFO("gais request rpc destroy");
   }
@@ -218,8 +133,9 @@ int ObGAISRequestRpc::next_autoinc_val(const ObAddr &server,
   } else if (!server.is_valid() || !msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
-  } else if (server == self_) {
-    // Use local calls instead of rpc
+  } else {
+    // single-replica: target is always local; dispatch in-process
+    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -236,14 +152,8 @@ int ObGAISRequestRpc::next_autoinc_val(const ObAddr &server,
         LOG_TRACE("post local require autoinc request success", K(msg), K(rpc_result));
       }
     }
-  } else if (OB_FAIL(rpc_proxy_->to(server).by(msg.autoinc_key_.tenant_id_).timeout(timeout).next_autoinc_val(msg, rpc_result))) {
-    LOG_WARN("post require autoinc request failed", KR(ret), K(server), K(msg));
-  } else if (!rpc_result.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("post remote gais require autoinc request and gais_rpc_result is invalid",
-              KR(ret), K(server), K(msg), K(rpc_result));
-  } else {
-    LOG_TRACE("post remote require autoinc request success", K(server), K(msg), K(rpc_result));
+    return ret;
+    });
   }
   return ret;
 }
@@ -260,8 +170,9 @@ int ObGAISRequestRpc::curr_autoinc_val(const ObAddr &server,
   } else if (!server.is_valid() || !msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
-  } else if (server == self_) {
-    // Use local calls instead of rpc
+  } else {
+    // single-replica: target is always local; dispatch in-process
+    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -274,10 +185,8 @@ int ObGAISRequestRpc::curr_autoinc_val(const ObAddr &server,
         LOG_TRACE("post local get autoinc request success", K(msg), K(rpc_result));
       }
     }
-  } else if (OB_FAIL(rpc_proxy_->to(server).by(msg.autoinc_key_.tenant_id_).timeout(timeout).curr_autoinc_val(msg, rpc_result))) {
-    LOG_WARN("post gais request failed", KR(ret), K(server), K(msg));
-  } else {
-    LOG_TRACE("post get autoinc request success", K(server), K(msg), K(rpc_result));
+    return ret;
+    });
   }
   return ret;
 }
@@ -294,8 +203,9 @@ int ObGAISRequestRpc::push_autoinc_val(const ObAddr &server,
   } else if (!server.is_valid() || !msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
-  } else if (server == self_) {
-    // Use local calls instead of rpc
+  } else {
+    // single-replica: target is always local; dispatch in-process
+    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -308,10 +218,8 @@ int ObGAISRequestRpc::push_autoinc_val(const ObAddr &server,
         LOG_TRACE("post local gais push global request request success", K(msg), K(sync_value));
       }
     }
-  } else if (OB_FAIL(rpc_proxy_->to(server).by(msg.autoinc_key_.tenant_id_).timeout(timeout).push_autoinc_val(msg, sync_value))) {
-    LOG_WARN("post remote push global request failed", KR(ret), K(server), K(msg));
-  } else {
-    LOG_TRACE("post remote push global request success", K(server), K(msg), K(sync_value));
+    return ret;
+    });
   }
   return ret;
 }
@@ -326,8 +234,9 @@ int ObGAISRequestRpc::clear_autoinc_cache(const ObAddr &server, const ObGAISAuto
   } else if (!server.is_valid() || !msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
-  } else if (server == self_) {
-    // Use local calls instead of rpc
+  } else {
+    // single-replica: target is always local; dispatch in-process (resource RPC removed)
+    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -340,10 +249,8 @@ int ObGAISRequestRpc::clear_autoinc_cache(const ObAddr &server, const ObGAISAuto
         LOG_TRACE("clear autoinc cache success", K(server), K(msg));
       }
     }
-  } else if (OB_FAIL(rpc_proxy_->to(server).by(msg.autoinc_key_.tenant_id_).timeout(timeout).clear_autoinc_cache(msg))) {
-    LOG_WARN("post gais request failed", KR(ret), K(server), K(msg));
-  } else {
-    LOG_TRACE("clear autoinc cache success", K(server), K(msg));
+    return ret;
+    });
   }
   return ret;
 }
@@ -358,19 +265,7 @@ int ObGAISRequestRpc::broadcast_global_autoinc_cache(const ObGAISBroadcastAutoIn
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(msg));
   } else {
-    ObZone null_zone;
-    const uint64_t tenant_id = msg.tenant_id_;
-    const static int64_t BROADCAST_OP_TIMEOUT = 1000 * 1000; // 1s
-    ObAddr dest = GCTX.self_addr();
-    if (dest == self_) {
-      // ignore broadcast to self
-    } else if (OB_FAIL(rpc_proxy_->to(dest).by(tenant_id).timeout(BROADCAST_OP_TIMEOUT)
-                                             .broadcast_autoinc_cache(msg, NULL))) {
-      LOG_WARN("fail to broadcast autoinc cache to server", K(ret), K(msg), K(dest));
-      ret = OB_SUCCESS;
-    } else {
-      LOG_DEBUG("broadcast autoinc cache success", K(dest), K(msg));
-    }
+    // single-replica: broadcast target is always self; nothing to do
   }
   return ret;
 }
@@ -387,8 +282,9 @@ int ObGAISRequestRpc::next_sequence_val(const common::ObAddr &server,
   } else if (!server.is_valid() || !msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
-  } else if (server == self_) {
-    // Use local calls instead of rpc
+  } else {
+    // single-replica: target is always local; dispatch in-process
+    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.schema_.get_tenant_id();
     MTL_SWITCH(tenant_id) {
@@ -401,13 +297,8 @@ int ObGAISRequestRpc::next_sequence_val(const common::ObAddr &server,
         LOG_TRACE("post local require autoinc request success", K(msg), K(rpc_result));
       }
     }
-  } else if (OB_UNLIKELY(OB_ISNULL(rpc_proxy_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc proxy is null", K(ret));
-  }else if (OB_FAIL(rpc_proxy_->to(server).by(msg.schema_.get_tenant_id()).timeout(timeout).next_sequence_val(msg, rpc_result))) {
-    LOG_WARN("post require autoinc request failed", KR(ret), K(server), K(msg));
-  } else {
-    LOG_TRACE("post remote require autoinc request success", K(server), K(msg), K(rpc_result));
+    return ret;
+    });
   }
   return ret;
 }

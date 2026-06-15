@@ -222,7 +222,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
                    common::ObIAllocator &allocator,
                    const ParamStore *params,
                    const common::ObAddr &addr,
-                   obrpc::ObSrvRpcProxy *srv_proxy,
                    const ObGlobalHint &global_hint,
                    ObRawExprFactory &expr_factory,
                    ObDMLStmt *root_stmt,
@@ -236,7 +235,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     allocator_(allocator),
     table_location_list_(), // declared as auto free
     server_(addr),
-    srv_proxy_(srv_proxy), // for `estimate storage` only
     params_(params),
     global_hint_(global_hint),
     expr_factory_(expr_factory),
@@ -353,8 +351,6 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   const common::ObAddr &get_local_server_addr() const { return server_;}
   common::ObAddr &get_local_server_addr() { return server_; }
   void set_local_server_addr(const char *ip, const int32_t port) { server_.set_ip_addr(ip, port); }
-  obrpc::ObSrvRpcProxy* get_srv_proxy() { return srv_proxy_; }
-  void set_srv_proxy(obrpc::ObSrvRpcProxy *srv_proxy) { srv_proxy_ = srv_proxy; }
   common::ObIArray<ObTablePartitionInfo *> & get_table_partition_info() { return table_partition_infos_; }
   ObTablePartitionInfo *get_table_part_info_by_id(uint64_t table_loc_id, uint64_t ref_table_id)
   {
@@ -819,7 +815,6 @@ private:
   common::ObArray<ObTableLocation, common::ModulePageAllocator, true> table_location_list_;
   common::ObSEArray<ObTablePartitionInfo *, 1, common::ModulePageAllocator, true> table_partition_infos_;
   common::ObAddr server_;
-  obrpc::ObSrvRpcProxy *srv_proxy_;
   const ParamStore *params_;
   ObDirectLoadOptimizerCtx direct_load_optimizer_ctx_; // for direct load
   const ObGlobalHint &global_hint_;

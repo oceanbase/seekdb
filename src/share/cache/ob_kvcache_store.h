@@ -121,8 +121,8 @@ private:
       const enum ObKVCachePolicy policy);
 
   static const int64_t SYNC_WASH_MB_TIMEOUT_US = 100 * 1000; // 100ms
-  static const int64_t RETIRE_LIMIT = 8;
-  static const int64_t WASH_THREAD_RETIRE_LIMIT = 1024;
+  static const int64_t RETIRE_LIMIT = 2;
+  static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
   static const int64_t SAFE_COUNT = 5;
   static const int64_t MAX_SKIP_REFRESH_TIMES = 100; // max skip refresh_score times during free time
@@ -186,21 +186,6 @@ struct StoreMBHandleCmp {
     int64_t heap_size_;
     int64_t mb_cnt_;
   };
-  class MBHandlePointerWashPool {
-  public:
-    MBHandlePointerWashPool();
-    int init(const int64_t count, const char *label);
-    int alloc(const int64_t count, ObKVMemBlockHandle **&heap);
-    void reuse();
-    int destroy();
-  private:
-    bool inited_;
-    int64_t total_count_;
-    int64_t free_count_;
-    ObKVMemBlockHandle **buf_;
-    common::ObArenaAllocator allocator_;
-
-  };
 private:
   int alloc_mbhandle(
     const enum ObKVCachePolicy policy,
@@ -214,7 +199,6 @@ private:
   int do_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size);
   int init_wash_heap(WashHeap &heap, const int64_t heap_size);
   int prepare_wash_structs();
-  void reuse_wash_structs();
   void destroy_wash_structs();
 
   void *alloc_mb(lib::ObTenantResourceMgrHandle &resource_handle,
@@ -253,9 +237,10 @@ private:
   ObKVCacheStatus global_status_; // TODO rename me to status_
   ObTenantMBList mb_list_;
 
+  static constexpr int64_t WASH_HEAP_SIZE = 64;
   //data structures for wash
+  WashHeap wash_heap_;
   lib::ObMutex wash_out_lock_;
-  MBHandlePointerWashPool mb_ptr_pool_;
   ObArenaAllocator washable_size_allocator_;
   ObWashableSizeInfo washbale_size_info_;
   ObWashableSizeInfo tmp_washbale_size_info_;

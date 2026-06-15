@@ -49,8 +49,7 @@ public:
                                            ObTabletDirectLoadMgrHandle &data_mgr_handle,
                                            ObTabletDirectLoadMgrHandle &lob_mgr_handle);
   static ObDirectLoadType load_data_get_direct_load_type(const bool is_incremental,
-                                                         const uint64_t data_format_version,
-                                                         const bool shared_storage_mode);
+                                                         const uint64_t data_format_version);
 public:
   int init(
       const int64_t context_id,

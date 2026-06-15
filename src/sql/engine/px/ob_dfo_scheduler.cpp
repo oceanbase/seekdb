@@ -18,8 +18,10 @@
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/ob_px_rpc_processor.h"
-#include "sql/engine/px/ob_px_sqc_async_proxy.h"
 #include "ob_px_coord_op.h"
+#include "sql/engine/px/ob_px_util.h"
+#include "sql/dtl/ob_dtl_interm_result_manager.h"
+#include "observer/ob_ex_rpc.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -429,7 +431,6 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
   ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc = sqcs.at(idx);
     const ObAddr &addr = sqc.get_exec_addr();
-    auto proxy = coord_info_.rpc_proxy_.to(addr);
     if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(addr, session->get_process_query_time()))) {
       if (!ignore_vtable_error) {
         ret = OB_RPC_CONNECT_ERROR;
@@ -443,12 +444,6 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
     } else {
       SMART_VAR(ObPxRpcInitSqcArgs, args) {
         int64_t timeout_us = phy_plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time();
-        ObFastInitSqcCB sqc_cb(addr,
-                              *cur_thread_id,
-                              &session->get_retry_info_for_update(),
-                              phy_plan_ctx->get_timeout_timestamp(),
-                              coord_info_.interrupt_id_,
-                              &sqc);
         args.set_serialize_param(exec_ctx, const_cast<ObOpSpec &>(*dfo.get_root_op_spec()), *phy_plan);
         if ((NULL != dfo.parent() && !dfo.parent()->is_root_dfo()) ||
           coord_info_.enable_px_batch_rescan()) {
@@ -483,20 +478,34 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
             ret = OB_SUCCESS;
             sqc.set_server_not_alive(true);
           }
-        } else if (OB_FAIL(proxy
-                          .by(THIS_WORKER.get_rpc_tenant()?: session->get_effective_tenant_id())
-                          .timeout(timeout_us)
-                          .fast_init_sqc(args, &sqc_cb))) {
-          if (ignore_vtable_error && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(ret)) {
-            LOG_WARN("ignore error when init sqc with virtual table failed", K(ret), K(sqc));
-            ObFastInitSqcReportQCMessageCall call(&sqc, ret, phy_plan_ctx->get_timeout_timestamp(), true);
-            call.mock_sqc_finish_msg();
-            ret = OB_SUCCESS;
-          } else {
-            LOG_WARN("fail to init sqc", K(ret), K(sqc));
+        } else {
+          // single-replica: QC and SQC are on the same node. Serialize the args
+          // exactly as the old fast_init_sqc rpc would, then run the SQC launch
+          // in-process synchronously (the fast path executes the task inline).
+          int64_t ser_len = args.get_serialize_size();
+          char *ser_buf = static_cast<char *>(exec_ctx.get_allocator().alloc(ser_len));
+          int64_t ser_pos = 0;
+          if (OB_ISNULL(ser_buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc serialize buffer", K(ret), K(ser_len));
+          } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
+            LOG_WARN("fail to serialize sqc init args", K(ret));
+          } else if (OB_FAIL(ex_rpc::sync_call([&]() {
+                       return px_init_sqc_fast_in_proc(ser_buf, ser_pos); }))) {
+            // mirror the old ObFastInitSqcCB error path: if the sqc-qc channel
+            // was never linked, the in-proc launch returns ret here and the QC
+            // must be told this sqc will not report.
+            if (ignore_vtable_error && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(ret)) {
+              LOG_WARN("ignore error when init sqc with virtual table failed", K(ret), K(sqc));
+              ObFastInitSqcReportQCMessageCall call(&sqc, ret, phy_plan_ctx->get_timeout_timestamp(), true);
+              call.mock_sqc_finish_msg();
+              ret = OB_SUCCESS;
+            } else {
+              LOG_WARN("fail to init sqc", K(ret), K(sqc));
+            }
+            sqc.set_need_report(false);
+            sqc.set_server_not_alive(true);
           }
-          sqc.set_need_report(false);
-          sqc.set_server_not_alive(true);
         }
       }
     }
@@ -583,17 +592,72 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
   return ret;
 }
 
+// in-process implementation of the old ObPxCleanDtlIntermResP::process().
+// Single-replica seekdb: target is always self, so erase DTL interm results
+// locally in the arg's tenant context.
+int ObSerialDfoScheduler::clean_dtl_interm_result_local(ObPxCleanDtlIntermResArgs &arg)
+{
+  int ret = OB_SUCCESS;
+  dtl::ObDTLIntermResultKey key;
+#ifdef ERRSIM
+  int ecode = EventTable::EN_PX_SINGLE_DFO_NOT_ERASE_DTL_INTERM_RESULT;
+  if (OB_SUCCESS != ecode && OB_SUCC(ret)) {
+    LOG_WARN("not erase_dtl_interm_result by design", K(ret));
+    return OB_SUCCESS;
+  }
+#endif
+  int64_t batch_size = 0 == arg.batch_size_ ? 1 : arg.batch_size_;
+  for (int64_t i = 0; i < arg.info_.count(); i++) {
+    ObPxCleanDtlIntermResInfo &info = arg.info_.at(i);
+    for (int64_t task_id = 0; task_id < info.task_count_; task_id++) {
+      ObPxTaskChSet ch_set;
+      if (OB_FAIL(ObDtlChannelUtil::get_receive_dtl_channel_set(info.sqc_id_, task_id,
+            info.ch_total_info_, ch_set))) {
+        LOG_WARN("get receive dtl channel set failed", K(ret));
+      } else {
+        LOG_TRACE("clean_dtl_interm_result_local process", K(i), K(arg.batch_size_), K(info), K(task_id), K(ch_set));
+        for (int64_t ch_idx = 0; ch_idx < ch_set.count(); ch_idx++) {
+          key.channel_id_ = ch_set.get_ch_info_set().at(ch_idx).chid_;
+          for (int64_t batch_id = 0; batch_id < batch_size && OB_SUCC(ret); batch_id++) {
+            key.batch_id_= batch_id;
+            if (OB_FAIL(MTL(dtl::ObDTLIntermResultManager*)->erase_interm_result_info(key))) {
+              if (OB_HASH_NOT_EXIST == ret) {
+                ret = OB_SUCCESS;
+                break;
+              } else {
+                LOG_WARN("fail to release receive internal result", K(ret));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 bool ObSerialDfoScheduler::CleanDtlIntermRes::operator()(const ObAddr &attr,
                                                          ObPxCleanDtlIntermResArgs *arg)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(coord_info_.rpc_proxy_.to(attr).by(tenant_id_).clean_dtl_interm_result(*arg, NULL))) {
-    LOG_WARN("send clean dtl interm result rpc failed", K(ret), K(attr), KPC(arg));
-  }
-  LOG_TRACE("clean dtl res map", K(attr), K(*arg));
+  const uint64_t tenant_id = tenant_id_;
+  // single-replica: target is always self; dispatch in-process synchronously.
+  // arg is owned by the query exec_ctx allocator and is destructed here just
+  // like the old NULL-cb rpc path, so a synchronous local erase avoids any
+  // use-after-free that a deferred async run could cause.
+  ex_rpc::sync_call([&]() {
+    int ret = OB_SUCCESS;
+    MTL_SWITCH(tenant_id) {
+      if (OB_FAIL(ObSerialDfoScheduler::clean_dtl_interm_result_local(*arg))) {
+        LOG_WARN("clean dtl interm result failed", K(ret), KPC(arg));
+      }
+    }
+    return ret;
+  });
+  LOG_TRACE("clean dtl res map", K(attr), KPC(arg));
   arg->~ObPxCleanDtlIntermResArgs();
   arg = NULL;
-
+  UNUSED(ret);
   return true;
 }
 
@@ -1153,50 +1217,95 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
   // Distribute sqc may need retry,
   // Distribute sqc's rpc successfully, but the minimum number of worker threads cannot be allocated on sqc, `dispatch_sqc` retries internally,
   // If multiple retries (reaching the timeout) are unsuccessful, there is no need to retry the entire DFO (because it has already timed out)
-  ObPxSqcAsyncProxy proxy(coord_info_.rpc_proxy_, dfo, exec_ctx, phy_plan_ctx, session, phy_plan, sqcs);
-  auto process_failed_proxy = [&]() {
+  // single-replica: QC and every SQC are on the same node. Replace the old
+  // async OB_PX_ASYNC_INIT_SQC rpc fan-out (ObPxSqcAsyncProxy / ObSqcAsyncCB)
+  // with per-sqc in-process launches: serialize the args exactly as the proxy
+  // did, run px_init_sqc_async_in_proc (which deserializes into a fresh
+  // ObPxSqcHandler, registers the SQC interrupt, and spawns the worker threads),
+  // and feed the response into on_sqc_init_msg. Errors are reported the same way
+  // (deal_with_init_sqc_error for data-not-readable/server-down, set_need_report
+  // / set_server_not_alive otherwise) so QC waiting/retry semantics are kept.
+  ObSEArray<ObPxRpcInitSqcResponse, 8> responses;
+  ObSEArray<int, 8> resp_rets;
+  int64_t error_index = 0;
+  if (OB_SUCC(ret) && sqcs.count() > 0) {
+    SMART_VAR(ObPxRpcInitSqcArgs, args) {
+      if (sqcs.count() > 1) {
+        args.enable_serialize_cache();
+      }
+      args.set_serialize_param(exec_ctx, const_cast<ObOpSpec &>(*dfo.get_root_op_spec()), *phy_plan);
+      ARRAY_FOREACH_X(sqcs, idx, count, OB_SUCC(ret)) {
+        ObPxSqcMeta &sqc = sqcs.at(idx);
+        ObPxRpcInitSqcResponse resp;
+        int launch_ret = OB_SUCCESS;
+        int64_t timeout_us = phy_plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time();
+        if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(sqc.get_exec_addr(),
+                        session->get_process_query_time()))) {
+          ret = OB_RPC_CONNECT_ERROR;
+          LOG_WARN("peer no in communication, maybe crashed", K(ret), K(sqc));
+        } else if (timeout_us < 0) {
+          ret = OB_TIMEOUT;
+        } else if (OB_FAIL(args.sqc_.assign(sqc))) {
+          LOG_WARN("fail assign sqc", K(ret));
+        } else {
+          int64_t ser_len = args.get_serialize_size();
+          char *ser_buf = static_cast<char *>(exec_ctx.get_allocator().alloc(ser_len));
+          int64_t ser_pos = 0;
+          if (OB_ISNULL(ser_buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc serialize buffer", K(ret), K(ser_len));
+          } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
+            LOG_WARN("fail to serialize sqc init args", K(ret));
+          } else {
+            launch_ret = ex_rpc::sync_call([&]() {
+              return px_init_sqc_async_in_proc(ser_buf, ser_pos, resp); });
+            if (OB_SUCCESS != launch_ret) {
+              error_index = idx;
+              ret = launch_ret;
+              LOG_WARN("fail to launch in-proc sqc", K(ret), K(sqc));
+            }
+          }
+        }
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = responses.push_back(resp))) {
+          ret = OB_SUCCESS == ret ? tmp_ret : ret;
+        }
+        if (OB_SUCCESS != (tmp_ret = resp_rets.push_back(launch_ret))) {
+          ret = OB_SUCCESS == ret ? tmp_ret : ret;
+        }
+        if (OB_FAIL(ret)) {
+          error_index = idx;
+          break;
+        }
+      }
+    }
+  }
+
+  if (OB_FAIL(ret)) {
     if (is_data_not_readable_err(ret) || is_server_down_error(ret)) {
-      ObPxSqcMeta &sqc = sqcs.at(proxy.get_error_index());
-      LOG_WARN("fail to init sqc with proxy", K(ret), K(sqc), K(exec_ctx));
+      ObPxSqcMeta &sqc = sqcs.at(error_index);
+      LOG_WARN("fail to init sqc in-process", K(ret), K(sqc), K(exec_ctx));
       int temp_ret = deal_with_init_sqc_error(exec_ctx, sqc, ret);
       if (temp_ret != OB_SUCCESS) {
         LOG_WARN("fail to deal with init sqc error", K(exec_ctx), K(sqc), K(temp_ret));
       }
     }
-    // For correctly processed sqc, sqc report is required, otherwise in the subsequent wait_running_dfo logic it will not wait for this sqc to end
-    const ObSqcAsyncCB *cb = NULL;
-    const ObArray<ObSqcAsyncCB *> &callbacks = proxy.get_callbacks();
-    for (int i = 0; i < callbacks.count(); ++i) {
-      cb = callbacks.at(i);
+    // mark which sqcs need report / are not alive, like the old process_failed_proxy.
+    for (int64_t i = 0; i < sqcs.count(); ++i) {
       ObPxSqcMeta &sqc = sqcs.at(i);
-      if (OB_NOT_NULL(cb) && cb->is_processed() &&
-          OB_SUCCESS == cb->get_ret_code().rcode_ &&
-          OB_SUCCESS == cb->get_result().rc_) {
+      if (i < responses.count() && i < resp_rets.count()
+          && OB_SUCCESS == resp_rets.at(i)
+          && OB_SUCCESS == responses.at(i).rc_) {
         sqc.set_need_report(true);
       } else {
-        // if init_sqc_msg is not processed and the msg may be sent successfully, set server not alive.
-        // then when qc waiting_all_dfo_exit, it will push sqc.access_table_locations into trans_result,
-        // and the query can be retried.
         sqc.set_server_not_alive(true);
       }
     }
-  };
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(proxy.launch_all_rpc_request())) {
-    process_failed_proxy();
-    LOG_WARN("fail to send all init async sqc", K(exec_ctx), K(ret));
-  } else if (OB_FAIL(proxy.wait_all())) {
-    // ret could be is_data_not_readable_err error type, needs to be handled through `deal_with_init_sqc_error`
-    process_failed_proxy();
-    LOG_WARN("fail to wait all async init sqc", K(ret), K(exec_ctx));
   } else {
-    const ObArray<ObSqcAsyncCB *> &callbacks = proxy.get_callbacks();
-    ARRAY_FOREACH(callbacks, idx) {
-      const ObSqcAsyncCB *cb = callbacks.at(idx);
-      const ObPxRpcInitSqcResponse &resp = (*cb).get_result();
+    ARRAY_FOREACH(responses, idx) {
+      ObPxRpcInitSqcResponse &resp = responses.at(idx);
       ObPxSqcMeta &sqc = sqcs.at(idx);
       sqc.set_need_report(true);
-
       if (!fast_sqc) {
         ObPxInitSqcResultMsg pkt;
         pkt.dfo_id_ = sqc.get_dfo_id();

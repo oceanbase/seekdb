@@ -21,10 +21,8 @@ LIB_CACHE_OBJ_DEF(NS_SFC, "SFC", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLF
 LIB_CACHE_OBJ_DEF(NS_ANON, "ANON", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLFunction, ObNewModIds::OB_SQL_PHY_PL_OBJ)  // anonymous cache
 LIB_CACHE_OBJ_DEF(NS_TRGR, "TRGR", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLPackage, ObNewModIds::OB_SQL_PHY_PL_OBJ)   // trigger cache
 LIB_CACHE_OBJ_DEF(NS_PKG, "PKG", pl::ObPLObjectKey, pl::ObPLObjectSet, pl::ObPLPackage, ObNewModIds::OB_SQL_PHY_PL_OBJ)    // package cache
-LIB_CACHE_OBJ_DEF(NS_TABLEAPI, "TABLEAPI", table::ObTableApiCacheKey, table::ObTableApiCacheNode, table::ObTableApiCacheObj, "OB_TABLEAPI_OBJ")    // tableapi cache
 LIB_CACHE_OBJ_DEF(NS_CALLSTMT, "CALLSTMT", pl::ObPLObjectKey, pl::ObPLObjectSet, ObCallProcedureInfo, ObNewModIds::OB_SQL_PHY_PL_OBJ)  // call stmt cache
 LIB_CACHE_OBJ_DEF(NS_SQLSTAT, "SQLSTAT", sql::ObSqlStatRecordKey, sql::ObSqlStatRecordNode, sql::ObSqlStatRecordObj, "OB_SQLSTAT_OBJ")  // sql stat cache
-LIB_CACHE_OBJ_DEF(NS_KV_SCHEMA, "KV_SCHEMA_INFO", table::ObKvSchemaCacheKey, table::ObTableApiCacheNode, table::ObKvSchemaCacheObj, "OB_KVSCHEMA_OBJ")    // OBKV schema cache
 #endif /*LIB_CACHE_OBJ_DEF*/
 
 #ifndef OCEANBASE_SQL_PLAN_CACHE_OB_LIB_CACHE_REGISTER_

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "rpc/obrpc/ob_rpc_proxy.h"
 #include "lib/ob_define.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_allocator.h"

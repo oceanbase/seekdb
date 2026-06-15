@@ -101,7 +101,7 @@ void ObOptStatManager::destroy()
   refresh_stat_task_queue_.destroy();
 }
 
-int ObOptStatManager::add_refresh_stat_task(const obrpc::ObUpdateStatCacheArg &analyze_arg)
+int ObOptStatManager::add_refresh_stat_task(const obcall::ObUpdateStatCacheArg &analyze_arg)
 {
   int ret = OB_SUCCESS;
   if (analyze_arg.update_system_stats_only_) {
@@ -437,7 +437,7 @@ int ObOptStatManager::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
 }
 
 
-int ObOptStatManager::handle_refresh_stat_task(const obrpc::ObUpdateStatCacheArg &arg)
+int ObOptStatManager::handle_refresh_stat_task(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = arg.table_id_;
@@ -466,7 +466,7 @@ int ObOptStatManager::handle_refresh_stat_task(const obrpc::ObUpdateStatCacheArg
   return ret;
 }
 
-int ObOptStatManager::handle_refresh_system_stat_task(const obrpc::ObUpdateStatCacheArg &arg)
+int ObOptStatManager::handle_refresh_system_stat_task(const obcall::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   ObOptSystemStat::Key key(arg.tenant_id_);

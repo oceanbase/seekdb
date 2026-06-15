@@ -71,7 +71,7 @@ namespace transaction
       TX_FREE_ROUTE_CHECK_ALIVE_RESP = 82,
     };
 
-    struct ObTxMsg : public obrpc::ObIFill
+    struct ObTxMsg : public obcall::ObIFill
     {
       explicit ObTxMsg(const int16_t msg_type = TX_UNKNOWN) :
                     type_(msg_type),

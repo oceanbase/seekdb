@@ -26,25 +26,20 @@ using namespace share;
 namespace transaction
 {
 
-int ObGtiSource::init(const ObAddr &server, rpc::frame::ObReqTransport *req_transport)
+int ObGtiSource::init(const ObAddr &server)
 {
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "init twice", KR(ret));
-  } else if (OB_UNLIKELY(!server.is_valid() || OB_ISNULL(req_transport))) {
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server), KP(req_transport));
+  } else if (OB_UNLIKELY(!server.is_valid())) {
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(gti_request_rpc_proxy_ = ObGtiRpcProxyFactory::alloc())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    TRANS_LOG(WARN, "alloc gti_reqeust_rpc_proxy fail", KR(ret));
   } else if (OB_ISNULL(gti_request_rpc_ = ObGtiRequestRpcFactory::alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc gti_reqeust_rpc fail", KR(ret));
-  } else if (OB_FAIL(gti_request_rpc_proxy_->init(req_transport, server))) {
-    TRANS_LOG(WARN, "rpc proxy init failed", KR(ret), KP(req_transport), K(server));
-  } else if (OB_FAIL(gti_request_rpc_->init(gti_request_rpc_proxy_, server, this))) {
+  } else if (OB_FAIL(gti_request_rpc_->init(server, this))) {
     TRANS_LOG(WARN, "response rpc init failed", KR(ret), K(server));
   } else {
     server_ = server;
@@ -52,10 +47,6 @@ int ObGtiSource::init(const ObAddr &server, rpc::frame::ObReqTransport *req_tran
     TRANS_LOG(INFO, "gti source init success", K(server), KP(this));
   }
   if (OB_FAIL(ret)) {
-    if (NULL != gti_request_rpc_proxy_) {
-      ObGtiRpcProxyFactory::release(gti_request_rpc_proxy_);
-      gti_request_rpc_proxy_ = NULL;
-    }
     if (NULL != gti_request_rpc_) {
       ObGtiRequestRpcFactory::release(gti_request_rpc_);
       gti_request_rpc_ = NULL;
@@ -125,10 +116,6 @@ void ObGtiSource::destroy()
     }
     is_inited_ = false;
   }
-  if (NULL != gti_request_rpc_proxy_) {
-    ObGtiRpcProxyFactory::release(gti_request_rpc_proxy_);
-    gti_request_rpc_proxy_ = NULL;
-  }
   if (NULL != gti_request_rpc_) {
     ObGtiRequestRpcFactory::release(gti_request_rpc_);
     gti_request_rpc_ = NULL;
@@ -149,7 +136,6 @@ void ObGtiSource::reset()
   cache_idx_ = 0;
   server_.reset();
   gti_request_rpc_ = NULL;
-  gti_request_rpc_proxy_ = NULL;
   gti_cache_leader_.reset();
   retry_request_cnt_ = 0;
   last_request_ts_ = 0;

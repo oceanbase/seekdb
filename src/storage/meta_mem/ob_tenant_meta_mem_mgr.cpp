@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_meta_mem_mgr.h"
@@ -403,7 +402,6 @@ void ObTenantMetaMemMgr::destroy()
 
   is_inited_ = false;
 }
-
 
 int ObTenantMetaMemMgr::print_old_chain(
     const ObTabletMapKey &key,
@@ -839,10 +837,6 @@ int ObTenantMetaMemMgr::gc_tablets_in_queue(bool &all_tablet_cleaned)
       if (OB_ISNULL(tablet = tablet_gc_queue_.pop())) {
         break; // tablet gc queue is empty.
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-      const ObLSID &ls_id = tablet->get_ls_id();
-      const ObTabletID &tablet_id = tablet->get_tablet_id();
-#endif
       if (OB_UNLIKELY(tablet->get_ref() != 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected tablet in gc queue", K(ret), KPC(tablet));
@@ -857,11 +851,6 @@ int ObTenantMetaMemMgr::gc_tablets_in_queue(bool &all_tablet_cleaned)
         }
         ret = OB_SUCCESS; // continue to gc other tablet
       } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-        if (GCTX.is_shared_storage_mode()) {
-          MTL(ObLSService *)->report_tablet_id_for_tablet_version_gc(ls_id, tablet_id);
-        }
-#endif
         ++gc_tablets_cnt;
         FLOG_INFO("succeed to gc tablet", K(ret), KP(tablet));
       }
@@ -1825,7 +1814,6 @@ int ObTenantMetaMemMgr::build_tablet_handle_for_mds_scan(
   return ret;
 }
 
-
 int ObTenantMetaMemMgr::get_tablet_buffer_infos(ObIArray<ObTabletBufferInfo> &buffer_infos)
 {
   int ret = OB_SUCCESS;
@@ -2045,7 +2033,6 @@ int ObTenantMetaMemMgr::dec_ref_in_leak_checker(const int32_t index)
 
   return ret;
 }
-
 
 int ObTenantMetaMemMgr::inc_external_tablet_cnt(const uint64_t tablet_id, const int64_t tablet_transfer_seq)
 {
@@ -2619,10 +2606,6 @@ int ObTenantMetaMemMgr::try_wash_tablet_from_gc_queue(
       && OB_ISNULL(free_obj)
       && OB_SUCC(ret)
       && OB_NOT_NULL(tablet = tablet_gc_queue_.pop())) {
-#ifdef OB_BUILD_SHARED_STORAGE
-    const ObLSID &ls_id = tablet->get_ls_id();
-    const ObTabletID &tablet_id = tablet->get_tablet_id();
-#endif
     if (OB_UNLIKELY(tablet->get_ref() != 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected tablet in gc queue", K(ret), KPC(tablet));
@@ -2641,11 +2624,6 @@ int ObTenantMetaMemMgr::try_wash_tablet_from_gc_queue(
       }
       tablet = nullptr;
     } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (GCTX.is_shared_storage_mode()) {
-        MTL(ObLSService *)->report_tablet_id_for_tablet_version_gc(ls_id, tablet_id);
-      }
-#endif
     }
     ++loop_cnt;
   }

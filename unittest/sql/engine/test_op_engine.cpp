@@ -174,7 +174,7 @@ int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     LOG_WARN("fail to init storage meta service", K(ret));
   } else if (FALSE_IT(SERVER_STORAGE_META_SERVICE.get_slogger_manager().need_reserved_ = false)) {
-  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(false, storage_env_.default_block_size_))) {
+  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(storage_env_.default_block_size_))) {
     LOG_WARN("init block manager fail", K(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().start())) {
     LOG_WARN("fail to start io manager", K(ret));
@@ -241,7 +241,7 @@ int TestOpEngine::do_optimize(ObStmt *stmt, ObLogPlan *&plan, ObPhyPlanType dist
     &sql_schema_guard_,
     //&stat_manager_, // statistics manager
     NULL, // statistics manager
-    static_cast<ObIAllocator &>(allocator_), &param_store_, addr_, NULL, dml_stmt->get_query_ctx()->get_global_hint(),
+    static_cast<ObIAllocator &>(allocator_), &param_store_, addr_, dml_stmt->get_query_ctx()->get_global_hint(),
     expr_factory_, dml_stmt, false, stmt_factory_.get_query_ctx());
   opt_ctx->set_opt_stat_manager(&opt_stat_manager_);
   opt_ctx->disable_batch_rpc();

@@ -171,7 +171,7 @@ public:
   virtual ~ObSetConfigResolver() {}
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  int convert_param_value(obrpc::ObAdminSetConfigItem &item);
+  int convert_param_value(obcall::ObAdminSetConfigItem &item);
 };
 class ObFreezeResolver : public ObSystemCmdResolver {
 public:
@@ -226,7 +226,7 @@ public:
 private:
   int resolve_tenant_(const ParseNode *node, uint64_t &tenant_id, common::ObString &tenant_name,
       lib::Worker::CompatMode &compat_mode, ObNameCaseMode &case_mode);
-  int resolve_scn_(const ParseNode *node, obrpc::ObPhysicalRestoreTenantArg &arg);
+  int resolve_scn_(const ParseNode *node, obcall::ObPhysicalRestoreTenantArg &arg);
   int resolve_recover_tables_(
       const ParseNode *node, const lib::Worker::CompatMode &compat_mode, const ObNameCaseMode &case_mode,
       share::ObImportTableArg &import_arg);
@@ -241,7 +241,7 @@ private:
       const ParseNode *node, share::ObImportRemapArg &remap_arg);
   int resolve_backup_set_pwd_(common::ObString &pwd);
   int resolve_restore_source_(common::ObString &restore_source);
-  int resolve_restore_with_config_item_(const ParseNode *node, obrpc::ObRecoverTableArg &arg);
+  int resolve_restore_with_config_item_(const ParseNode *node, obcall::ObRecoverTableArg &arg);
 };
 
 

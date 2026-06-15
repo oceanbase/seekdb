@@ -28,8 +28,8 @@ using namespace oceanbase::rootserver;
 ObUpdateIndexStatusHelper::ObUpdateIndexStatusHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObUpdateIndexStatusArg &arg,
-    obrpc::ObParallelDDLRes &res)
+    const obcall::ObUpdateIndexStatusArg &arg,
+    obcall::ObParallelDDLRes &res)
   : ObDDLHelper(schema_service, tenant_id, "[parallel update index status]"),
     arg_(arg),
     res_(res),

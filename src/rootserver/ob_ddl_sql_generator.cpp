@@ -22,7 +22,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 
 namespace rootserver
 {
@@ -399,8 +399,8 @@ int ObDDLSqlGenerator::gen_set_max_connections_sql(const ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_alter_user_require_sql(const obrpc::ObAccountArg &account,
-    const obrpc::ObSetPasswdArg &arg, common::ObSqlString &sql_string)
+int ObDDLSqlGenerator::gen_alter_user_require_sql(const obcall::ObAccountArg &account,
+    const obcall::ObSetPasswdArg &arg, common::ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
   const share::schema::ObSSLType ssl_type = arg.ssl_type_;
@@ -469,7 +469,7 @@ int ObDDLSqlGenerator::gen_drop_user_sql(const ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_lock_user_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_lock_user_sql(const obcall::ObAccountArg &account,
                                          const bool locked,
                                          ObSqlString &sql_string)
 {
@@ -602,7 +602,7 @@ int ObDDLSqlGenerator::raw_privs_to_name_ora(const share::ObRawObjPrivArray &obj
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_table_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_table_priv_sql(const obcall::ObAccountArg &account,
                                           const ObNeedPriv &need_priv,
                                           const bool is_grant,
                                           ObSqlString &sql_string)
@@ -677,7 +677,7 @@ int ObDDLSqlGenerator::gen_table_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_column_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_column_priv_sql(const obcall::ObAccountArg &account,
                                           const ObNeedPriv &need_priv,
                                           const bool is_grant,
                                           ObSqlString &sql_string)
@@ -765,7 +765,7 @@ int ObDDLSqlGenerator::gen_column_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obcall::ObAccountArg &account,
                                               const ObTablePrivSortKey &table_priv_key,
                                               const bool revoke_all_flag,
                                               const share::ObRawObjPrivArray &obj_priv_array,
@@ -825,7 +825,7 @@ int ObDDLSqlGenerator::gen_table_priv_sql_ora(const obrpc::ObAccountArg &account
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_routine_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_routine_priv_sql(const obcall::ObAccountArg &account,
                                           const ObNeedPriv &need_priv,
                                           const bool is_grant,
                                           ObSqlString &sql_string)
@@ -896,7 +896,7 @@ int ObDDLSqlGenerator::gen_routine_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_catalog_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_catalog_priv_sql(const obcall::ObAccountArg &account,
                                             const ObNeedPriv &need_priv,
                                             const bool is_grant,
                                             ObSqlString &sql_string)
@@ -967,7 +967,7 @@ int ObDDLSqlGenerator::gen_catalog_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_db_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_db_priv_sql(const obcall::ObAccountArg &account,
                                        const ObNeedPriv &need_priv,
                                        const bool is_grant,
                                        ObSqlString &sql_string)
@@ -1036,7 +1036,7 @@ int ObDDLSqlGenerator::gen_db_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_revoke_all_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_revoke_all_sql(const obcall::ObAccountArg &account,
                                           ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
@@ -1067,7 +1067,7 @@ int ObDDLSqlGenerator::gen_revoke_all_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_user_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_user_priv_sql(const obcall::ObAccountArg &account,
                                          const ObNeedPriv &need_priv,
                                          const bool is_grant,
                                          ObSqlString &sql_string)
@@ -1134,7 +1134,7 @@ int ObDDLSqlGenerator::gen_user_priv_sql(const obrpc::ObAccountArg &account,
   return ret;
 }
 
-int ObDDLSqlGenerator::gen_object_priv_sql(const obrpc::ObAccountArg &account,
+int ObDDLSqlGenerator::gen_object_priv_sql(const obcall::ObAccountArg &account,
   const ObNeedPriv &need_priv,
   const bool is_grant,
   ObSqlString &sql_string)

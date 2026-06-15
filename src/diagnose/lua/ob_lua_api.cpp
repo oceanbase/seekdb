@@ -48,7 +48,7 @@ using namespace common;
 using namespace diagnose;
 using namespace oceanbase::observer;
 using namespace oceanbase::rpc::frame;
-using namespace obrpc;
+using namespace obcall;
 using namespace rpc;
 using namespace sql;
 using namespace transaction;
@@ -1776,9 +1776,7 @@ int dump_thread_info(lua_State *L)
         }
         // status
         {
-          GET_OTHER_TSI_ADDR(sleep_us, &Thread::sleep_us_);
-          const char* status_str = (0 != sleep_us) ? "Sleep" : "Run";
-          gen.next_column(status_str);
+          gen.next_column("Run");
         }
         // wait_event
         {

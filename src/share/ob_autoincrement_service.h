@@ -24,7 +24,6 @@
 #include "lib/allocator/ob_small_allocator.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "common/ob_timeout_ctx.h"
-#include "share/ob_srv_rpc_proxy.h"
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_gais_client.h"
 #include "share/ob_i_global_autoincrement_service.h"
@@ -296,14 +295,13 @@ private:
   ObAutoIncInnerTableProxy inner_table_proxy_;
 };
 
-class ObRpcGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
+class ObCallGlobalAutoIncrementService : public ObIGlobalAutoIncrementService
 {
 public:
-  ObRpcGlobalAutoIncrementService() : is_inited_(false), gais_request_rpc_proxy_(nullptr) {}
-  virtual ~ObRpcGlobalAutoIncrementService() = default;
+  ObCallGlobalAutoIncrementService() : is_inited_(false) {}
+  virtual ~ObCallGlobalAutoIncrementService() = default;
 
-  int init(const common::ObAddr &addr,
-           rpc::frame::ObReqTransport *req_transport);
+  int init(const common::ObAddr &addr);
 
   virtual int get_value(
       const AutoincKey &key,
@@ -351,7 +349,6 @@ public:
 private:
   bool is_inited_;
   ObGAISClient gais_client_;
-  obrpc::ObGAISRpcProxy gais_request_rpc_proxy_;
   ObGAISRequestRpc gais_request_rpc_;
 };
 
@@ -367,9 +364,7 @@ public:
   static ObAutoincrementService &get_instance();
   int init(common::ObAddr &addr,
            common::ObMySQLProxy *mysql_proxy,
-           obrpc::ObSrvRpcProxy *srv_proxy,
-           share::schema::ObMultiVersionSchemaService *schema_service,
-           rpc::frame::ObReqTransport *req_transport);
+           share::schema::ObMultiVersionSchemaService *schema_service);
   int get_handle(AutoincParam &param, CacheHandle *&handle);
   int get_handle(const ObSequenceSchema &schema, ObSequenceValue &nextval);
   void release_handle(CacheHandle *&handle);
@@ -386,14 +381,14 @@ public:
   //     uint64_t tenant_id,
   //     AutoincKey &key,
   //     uint64_t auto_increment);
-  int refresh_sync_value(const obrpc::ObAutoincSyncArg &arg);
+  int refresh_sync_value(const obcall::ObAutoincSyncArg &arg);
 
   int clear_autoinc_cache_all(const uint64_t tenant_id,
                               const uint64_t table_id,
                               const uint64_t column_id,
                               const bool autoinc_mode_is_order,
                               const bool ignore_rpc_errors = true);
-  int clear_autoinc_cache(const obrpc::ObAutoincSyncArg &arg);
+  int clear_autoinc_cache(const obcall::ObAutoincSyncArg &arg);
 
   int get_sequence_value(const uint64_t tenant_id,
                          const uint64_t table_id,
@@ -494,9 +489,8 @@ private:
   common::ObSmallAllocator handle_allocator_;
   common::ObAddr           my_addr_;
   common::ObMySQLProxy     *mysql_proxy_;
-  obrpc::ObSrvRpcProxy     *srv_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  ObRpcGlobalAutoIncrementService global_autoinc_service_;             // for order increment mode
+  ObCallGlobalAutoIncrementService global_autoinc_service_;             // for order increment mode
   ObInnerTableGlobalAutoIncrementService distributed_autoinc_service_; // for noorder increment mode
   lib::ObMutex             map_mutex_;
   //common::hash::ObHashMap<AutoincKey, TableNode*> node_map_;

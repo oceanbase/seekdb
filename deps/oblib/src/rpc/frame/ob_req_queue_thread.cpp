@@ -89,34 +89,9 @@ int ObReqQueue::process_task(ObLink *task)
       ObRequest *req = static_cast<ObRequest *>(task);
 
       // init trace id
-      if (ObRequest::OB_RPC == req->get_type()) {
-        // internal RPC request
-        const obrpc::ObRpcPacket &packet
-            = static_cast<const obrpc::ObRpcPacket&>(req->get_packet());
-        const uint64_t *trace_id = packet.get_trace_id();
-        if (0 == trace_id[0]) {
-          // new trace id
-          ObCurTraceId::init(host_);
-        } else {
-          ObCurTraceId::set(trace_id);
-        }
-
-#ifdef ERRSIM
-        THIS_WORKER.set_module_type(packet.get_module_type());
-#endif
-        // Do not set thread local log level while log level upgrading (OB_LOGGER.is_info_as_wdiag)
-        if (OB_LOGGER.is_info_as_wdiag()) {
-          ObThreadLogLevelUtils::clear();
-        } else {
-          int8_t log_level = packet.get_log_level();
-          if (OB_LOG_LEVEL_NONE != log_level) {
-            ObThreadLogLevelUtils::init(log_level);
-          }
-        }
-      } else {
-        // mysql command request
-        ObCurTraceId::init(host_);
-      }
+      // obcall RPC transport removed (single-replica): OB_RPC requests are never
+      // queued here, so only the mysql-style init path remains.
+      ObCurTraceId::init(host_);
       //Set the chid of the source package to the thread
       // int64_t st = ::oceanbase::common::ObTimeUtility::current_time();
       // PROFILE_LOG(DEBUG, HANDLE_PACKET_START_TIME PCODE, st, packet->get_pcode());

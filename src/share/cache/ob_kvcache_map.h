@@ -18,6 +18,7 @@
 #define OCEANBASE_CACHE_OB_KVCACHE_MAP_H_
 
 #include "lib/allocator/ob_malloc.h"
+#include "lib/allocator/ob_lf_fifo_allocator.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "share/cache/ob_kvcache_struct.h"
 #include "share/cache/ob_kvcache_store.h"
@@ -67,6 +68,7 @@ public:
   int erase(const int64_t cache_id, const ObIKVCacheKey &key);
   int get_batch_data_block_cache_key(const int bucket_count, ObIArray<blocksstable::ObMicroBlockCacheKey> &keys);
   OB_INLINE int64_t get_bucket_num() const { return bucket_num_; }
+  OB_INLINE ObLfFIFOAllocator *get_node_allocator() { return &node_allocator_; }
   void print_hazard_version_info();
 private:
   friend class ObKVCacheIterator;
@@ -122,6 +124,7 @@ private:
 
   bool is_inited_;
   ObMalloc bucket_allocator_;
+  ObLfFIFOAllocator node_allocator_;
   int64_t bucket_start_pos_;
   int64_t bucket_num_;
   int64_t bucket_size_;

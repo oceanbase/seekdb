@@ -234,7 +234,6 @@ int TestOptimizerUtils::generate_logical_plan(ObResultSet &result, //ObIAllocato
                     static_cast<ObIAllocator &>(allocator_),
                     &param_store,
                     addr,
-                    NULL,
                     stmt->get_query_ctx()->get_global_hint(),
                     expr_factory_,
                     sql_stmt,

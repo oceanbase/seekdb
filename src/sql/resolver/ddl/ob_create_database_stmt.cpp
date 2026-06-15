@@ -101,7 +101,7 @@ common::ObCollationType ObCreateDatabaseStmt::get_collation_type() const
   return create_database_arg_.database_schema_.get_collation_type();
 }
 
-obrpc::ObCreateDatabaseArg& ObCreateDatabaseStmt::get_create_database_arg()
+obcall::ObCreateDatabaseArg& ObCreateDatabaseStmt::get_create_database_arg()
 {
   return create_database_arg_;
 }

@@ -147,20 +147,6 @@ int ObCgMacroBlockWriter::init(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("object cleaner is nullptr", KR(ret));
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    else if (GCTX.is_shared_storage_mode()) {
-      if (OB_FAIL(object_cleaner->mark_succeed())) {
-        LOG_WARN("fail to mark succeed", KR(ret), K(is_inc_major));
-      } else if (OB_FAIL(macro_block_writer_.open_for_ss_ddl(data_desc_.get_desc(),
-                                                             parallel_idx,
-                                                             macro_seq_param,
-                                                             pre_warm_param,
-                                                             *object_cleaner,
-                                                             ddl_redo_callback_))) {
-        LOG_WARN("fail to open for ss ddl", KR(ret));
-      }
-    }
-#endif
     else if (OB_FAIL(macro_block_writer_.open(data_desc_.get_desc(),
                                                 parallel_idx,
                                                 macro_seq_param,
@@ -188,12 +174,8 @@ int ObCgMacroBlockWriter::init(
     ObPreWarmerParam pre_warm_param;
     ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
     ObDDLRedoLogWriterCallback *ddl_redo_callback = nullptr;
-    compaction::ObExecMode exec_mode = GCTX.is_shared_storage_mode() ?
-                                       compaction::ObExecMode::EXEC_MODE_OUTPUT :
-                                       compaction::ObExecMode::EXEC_MODE_LOCAL;
-    ObSSTableIndexBuilder::ObSpaceOptimizationMode space_opt_mode = GCTX.is_shared_storage_mode() ?
-                                                                    ObSSTableIndexBuilder::DISABLE :
-                                                                    ObSSTableIndexBuilder::ENABLE;
+    compaction::ObExecMode exec_mode = compaction::ObExecMode::EXEC_MODE_LOCAL;
+    ObSSTableIndexBuilder::ObSpaceOptimizationMode space_opt_mode = ObSSTableIndexBuilder::ENABLE;
     blocksstable::ObMacroMetaTempStore *macro_meta_store = nullptr;
     ObDDLWriteStat *ddl_write_stat = nullptr;
     const int64_t parallel_idx = param.slice_idx_;
@@ -226,19 +208,6 @@ int ObCgMacroBlockWriter::init(
       data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
     }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
-      ObMacroMetaStoreManager *macro_meta_store_mgr = const_cast<ObMacroMetaStoreManager *>(param.macro_meta_store_mgr_);
-      if (OB_ISNULL(macro_meta_store_mgr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("macro meta store manager in shared storage mode is null", K(ret), KP(macro_meta_store_mgr), K(param));
-      } else if (OB_FAIL(macro_meta_store_mgr->add_macro_meta_store(table_key.tablet_id_, cg_idx, parallel_idx, lob_start_seq, macro_meta_store))) {
-        LOG_WARN("fail to add macro meta store", K(ret), K(cg_idx), K(parallel_idx));
-      } else {
-        data_desc_.get_static_desc().schema_version_ = param.schema_version_;
-      }
-    }
-#endif
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDDLUtil::get_ddl_write_stat(param, table_key, ddl_write_stat))) {
       LOG_WARN("get ddl write stat failed", K(ret), K(table_key), K(with_cs_replica), K(param), KPC(ddl_write_stat));
@@ -272,18 +241,6 @@ int ObCgMacroBlockWriter::init(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(data_desc_.get_desc(), object_cleaner))) {
       LOG_WARN("fail to get cleaner from data store desc", K(ret), K(data_desc_.get_desc()));
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (GCTX.is_shared_storage_mode()) {
-      if (OB_FAIL(macro_block_writer_.open_for_ss_ddl(data_desc_.get_desc(),
-                                                      parallel_idx,
-                                                      macro_seq_param,
-                                                      pre_warm_param,
-                                                      *object_cleaner,
-                                                      ddl_redo_callback_))) {
-        LOG_WARN("fail to open macro block writer in ss mode",
-            K(ret), K(ls_id), K(table_key), K(data_desc_), K(start_sequence), KPC(object_cleaner));
-      }
-#endif
     } else {
       if (OB_FAIL(macro_block_writer_.open(data_desc_.get_desc(),
                                            parallel_idx,
@@ -346,4 +303,3 @@ void ObCgMacroBlockWriter::reset()
   OB_DELETE(ObIMacroBlockFlushCallback, ObMemAttr(MTL_ID(), "ddl_redo_cb"), ddl_redo_callback_);
   macro_block_writer_.reset();
 }
-

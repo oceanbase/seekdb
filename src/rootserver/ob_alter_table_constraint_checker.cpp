@@ -28,12 +28,12 @@ namespace oceanbase
 {
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 
 namespace rootserver
 {
 int ObAlterTableConstraintChecker::check_can_change_cst_column_name(
-    const obrpc::ObAlterTableArg &alter_table_arg,
+    const obcall::ObAlterTableArg &alter_table_arg,
     const ObTableSchema &orig_table_schema,
     bool &can_change_cst_column_name)
 {
@@ -71,7 +71,7 @@ int ObAlterTableConstraintChecker::check_can_change_cst_column_name(
 }
 
 int ObAlterTableConstraintChecker::check_can_add_cst_on_multi_column(
-    const obrpc::ObAlterTableArg &alter_table_arg,
+    const obcall::ObAlterTableArg &alter_table_arg,
     bool &can_add_cst_on_multi_column) {
   int ret = OB_SUCCESS;
   can_add_cst_on_multi_column = false;
@@ -126,7 +126,7 @@ int ObAlterTableConstraintChecker::check_is_change_cst_column_name(const ObTable
 
 int ObAlterTableConstraintChecker::check_alter_table_constraint(
     rootserver::ObDDLService &ddl_service,
-    const obrpc::ObAlterTableArg &alter_table_arg,
+    const obcall::ObAlterTableArg &alter_table_arg,
     const ObTableSchema &orig_table_schema,
     share::ObDDLType &ddl_type)
 {
@@ -139,8 +139,8 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
   bool can_change_cst_column_name = false;
   bool can_add_cst_on_multi_column = false;
   switch(type) {
-    case obrpc::ObAlterTableArg::ADD_CONSTRAINT:
-    case obrpc::ObAlterTableArg::ALTER_CONSTRAINT_STATE: {
+    case obcall::ObAlterTableArg::ADD_CONSTRAINT:
+    case obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE: {
       if (OB_FAIL(check_is_change_cst_column_name(orig_table_schema,
                                                   alter_table_arg.alter_table_schema_,
                                                   change_cst_column_name))) {
@@ -169,7 +169,7 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
       break;
     }
     // to avoid ddl type being modified from DROP_COLUMN to NORMAL_TYPE
-    case obrpc::ObAlterTableArg::DROP_CONSTRAINT: {
+    case obcall::ObAlterTableArg::DROP_CONSTRAINT: {
       bool is_drop_col_only = false;
       if (share::ObDDLType::DDL_DROP_COLUMN == ddl_type) {
         // In oracle mode, we support to drop constraint implicitly caused by drop column.
@@ -208,7 +208,7 @@ int ObAlterTableConstraintChecker::check_alter_table_constraint(
 // check whether it's modify column not null or modify constraint state, which need send two rpc.
 int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
   rootserver::ObDDLService &ddl_service, 
-  const obrpc::ObAlterTableArg &alter_table_arg,
+  const obcall::ObAlterTableArg &alter_table_arg,
   bool &is_add_not_null_col,
   bool &need_modify)
 {
@@ -226,8 +226,8 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
   if (!ddl_service.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (obrpc::ObAlterTableArg::ADD_CONSTRAINT != alter_table_arg.alter_constraint_type_
-             && obrpc::ObAlterTableArg::ALTER_CONSTRAINT_STATE != alter_table_arg.alter_constraint_type_) {
+  } else if (obcall::ObAlterTableArg::ADD_CONSTRAINT != alter_table_arg.alter_constraint_type_
+             && obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE != alter_table_arg.alter_constraint_type_) {
     // skip
   } else if (OB_FAIL(ddl_service.get_schema_service().get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
@@ -292,7 +292,7 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
 }
 
 int ObAlterTableConstraintChecker::modify_not_null_constraint_validate(
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       AlterTableSchema &alter_table_schema)
 {
   int ret = OB_SUCCESS;

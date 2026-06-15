@@ -49,7 +49,7 @@ using namespace omt;
 
 #define TABLE_LOAD_CONTROL_RPC_CALL(name, addr, arg, ...)                         \
   ({                                                                              \
-    ObTableLoadControlRpcProxy proxy(*GCTX.srv_rpc_proxy_);                       \
+    ObTableLoadControlRpcProxy proxy;                       \
     ObTimeoutCtx ctx;                                                             \
     if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) { \
       LOG_WARN("fail to set default timeout ctx", KR(ret));                       \

@@ -416,7 +416,7 @@ int ObSequenceCache::get_item(CacheItemKey &key, ObSequenceCacheItem *&item)
   return ret;
 }
 
-int ObSequenceCache::del_item(uint64_t tenant_id, CacheItemKey &key, obrpc::ObSeqCleanCacheRes &cache_res)
+int ObSequenceCache::del_item(uint64_t tenant_id, CacheItemKey &key, obcall::ObSeqCleanCacheRes &cache_res)
 {
   int ret = OB_SUCCESS;
 
@@ -567,7 +567,7 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
   return ret;
 }
 
-int ObSequenceCache::remove(uint64_t tenant_id, uint64_t sequence_id, obrpc::ObSeqCleanCacheRes &cache_res)
+int ObSequenceCache::remove(uint64_t tenant_id, uint64_t sequence_id, obcall::ObSeqCleanCacheRes &cache_res)
 {
   CacheItemKey key(tenant_id, sequence_id);
   return del_item(tenant_id, key, cache_res);

@@ -160,8 +160,8 @@ public:
   int destroy();
   int check_stop();
   int get_recycle_schema_versions(
-      const obrpc::ObGetRecycleSchemaVersionsArg &arg,
-      obrpc::ObGetRecycleSchemaVersionsResult &result);
+      const obcall::ObGetRecycleSchemaVersionsArg &arg,
+      obcall::ObGetRecycleSchemaVersionsResult &result);
 private:
   int check_inner_stat();
   int64_t get_recycle_interval_us() const;

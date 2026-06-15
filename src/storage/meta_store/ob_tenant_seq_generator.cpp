@@ -33,31 +33,15 @@ namespace storage
 OB_SERIALIZE_MEMBER(ObTenantMonotonicIncSeqs, object_seq_, tmp_file_seq_, write_seq_);
 
 
-int ObTenantSeqGenerator::init(const bool is_shared_storage, ObTenantStorageMetaPersister &persister)
+int ObTenantSeqGenerator::init(ObTenantStorageMetaPersister &persister)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", K(ret));
   } else {
-    is_shared_storage_ = is_shared_storage;
     persister_ = &persister;
-    if (is_shared_storage_) {
-      omt::ObTenant *tenant = static_cast<omt::ObTenant*>(MTL_CTX());
-      curr_seqs_ = tenant->get_super_block().preallocated_seqs_;
-      preallocated_seqs_.set(
-          curr_seqs_.object_seq_ + BATCH_PREALLOCATE_NUM,
-          curr_seqs_.tmp_file_seq_ + BATCH_PREALLOCATE_NUM,
-          curr_seqs_.write_seq_ + BATCH_PREALLOCATE_NUM);
-      if (OB_FAIL(persister.update_tenant_preallocated_seqs(preallocated_seqs_))) {
-        LOG_WARN("fail to update tenant prealloacated seqs", K(ret), K_(preallocated_seqs));
-      } else {
-        is_inited_ = true;
-        LOG_INFO("succeed to init ObTenantSeqGenerator", K_(curr_seqs), K_(preallocated_seqs));
-      }
-    } else {
-      is_inited_ = true;
-    }
+    is_inited_ = true;
   }
   return ret;
 }
@@ -68,14 +52,8 @@ int ObTenantSeqGenerator::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (!is_shared_storage_) {
+  } else {
     // do nothing
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::WriteCkpt, tg_id_))) {
-    LOG_WARN("fail to tg create tenant", K(ret));
-  } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("TG_START failed", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, TRY_PREALLOACTE_INTERVAL, true))) {
-    LOG_WARN("TG_SCHEDULE failed", K(ret));
   }
   return ret;
 }
@@ -106,7 +84,7 @@ int ObTenantSeqGenerator::get_private_object_seq(uint64_t &seq)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!is_shared_storage_)) {
+  } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support for shared-nothing", K(ret));
   }
@@ -130,7 +108,7 @@ int ObTenantSeqGenerator::get_tmp_file_seq(uint64_t &seq)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!is_shared_storage_)) {
+  } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support for shared-nothing", K(ret));
   }
@@ -154,7 +132,7 @@ int ObTenantSeqGenerator::get_write_seq(uint64_t &seq)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!is_shared_storage_)) {
+  } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support for shared-nothing", K(ret));
   }

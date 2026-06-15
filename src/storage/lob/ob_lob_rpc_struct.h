@@ -18,10 +18,7 @@
 #define OCEANBASE_OB_LOB_RPC_STRUCT_
 
 #include "share/ob_define.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "share/ob_rpc_struct.h"
 #include "share/config/ob_server_config.h"
 #include "observer/ob_server_struct.h"
@@ -29,7 +26,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
 
 struct ObLobQueryBlock
@@ -71,7 +68,7 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObLobQueryArg);
 };
 
-} // obrpc
+} // obcall
 
 } // oceanbase
 

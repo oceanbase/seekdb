@@ -36,8 +36,8 @@ rpc::frame::ObReqTransport::AsyncCB *LogGroupEntryRpcCB::clone(const rpc::frame:
 int LogGroupEntryRpcCB::process()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCdcLSFetchLogResp &result = LogGroupEntryRpcCBBase::result_;
-  obrpc::ObRpcResultCode rcode = LogGroupEntryRpcCBBase::rcode_;
+  obcall::ObCdcLSFetchLogResp &result = LogGroupEntryRpcCBBase::result_;
+  rpc::frame::ObResultCode rcode = LogGroupEntryRpcCBBase::rcode_;
   const common::ObAddr svr = LogGroupEntryRpcCBBase::dst_;
 
   if (OB_FAIL(do_process_(rcode, &result))) {
@@ -50,7 +50,7 @@ int LogGroupEntryRpcCB::process()
 void LogGroupEntryRpcCB::on_timeout()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   const common::ObAddr svr = LogGroupEntryRpcCBBase::dst_;
 
   ObCStringHelper helper;
@@ -66,7 +66,7 @@ void LogGroupEntryRpcCB::on_timeout()
 void LogGroupEntryRpcCB::on_invalid()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   const common::ObAddr svr = LogGroupEntryRpcCBBase::dst_;
 
   ObCStringHelper helper;
@@ -81,7 +81,7 @@ void LogGroupEntryRpcCB::on_invalid()
   }
 }
 
-int LogGroupEntryRpcCB::do_process_(const obrpc::ObRpcResultCode &rcode, const obrpc::ObCdcLSFetchLogResp *resp)
+int LogGroupEntryRpcCB::do_process_(const rpc::frame::ObResultCode &rcode, const obcall::ObCdcLSFetchLogResp *resp)
 {
   int ret = OB_SUCCESS;
   LogGroupEntryRpcRequest &rpc_req = host_;
@@ -100,7 +100,7 @@ int LogGroupEntryRpcCB::do_process_(const obrpc::ObRpcResultCode &rcode, const o
 LogGroupEntryRpcRequest::LogGroupEntryRpcRequest(FetchLogARpc &host,
     const share::ObLSID &ls_id,
     const int64_t rpc_timeout) :
-    FetchLogRpcReq(obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto, host, rpc_timeout),
+    FetchLogRpcReq(obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto, host, rpc_timeout),
     cb_(*this),
     req_()
 {
@@ -204,8 +204,8 @@ int RawLogFileRpcRequest::prepare(const uint64_t self_tenant_id,
 }
 
 int RawLogFileRpcRequest::handle_sub_rpc_response(RawLogDataRpcRequest &rpc_req,
-    const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcFetchRawLogResp *resp,
+    const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcFetchRawLogResp *resp,
     const bool need_lock)
 {
   int ret = OB_SUCCESS;
@@ -234,15 +234,15 @@ int RawLogFileRpcRequest::handle_sub_rpc_response(RawLogDataRpcRequest &rpc_req,
     LOG_ERROR("get null buffer, unexpected", K(buffer_), K(rpc_req));
   } else if (OB_FAIL(ret) || (OB_SUCCESS != rcode.rcode_)) {
     if (OB_TMP_FAIL(buffer_->write_data(seq_no, nullptr, 0, data_start_lsn, next_req_lsn, share::SCN::invalid_scn(),
-        obrpc::ObCdcFetchRawStatus(), obrpc::FeedbackType::INVALID_FEEDBACK, ret, rcode, sub_rpc_cb_start_ts,
+        obcall::ObCdcFetchRawStatus(), obcall::FeedbackType::INVALID_FEEDBACK, ret, rcode, sub_rpc_cb_start_ts,
         sub_rpc_send_time))) {
       LOG_ERROR_RET(tmp_ret, "failed to write failed state into buffer", KR(ret), K(rcode),
           K(seq_no), K(data_start_lsn));
     }
   } else {
     const int rpc_err = resp->get_err();
-    const obrpc::FeedbackType feed_back = resp->get_feedback();
-    const obrpc::ObCdcFetchRawStatus &status = resp->get_fetch_status();
+    const obcall::FeedbackType feed_back = resp->get_feedback();
+    const obcall::ObCdcFetchRawStatus &status = resp->get_fetch_status();
     const int64_t read_size = resp->get_read_size();
     const int64_t buffer_len = resp->get_buffer_len();
     const share::SCN replayable_point = resp->get_replayable_point_scn();
@@ -394,8 +394,8 @@ rpc::frame::ObReqTransport::AsyncCB *RawLogDataRpcCB::clone(const rpc::frame::SP
 int RawLogDataRpcCB::process()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCdcFetchRawLogResp &result = RawLogDataRpcCB::result_;
-  obrpc::ObRpcResultCode rcode = RawLogDataRpcCB::rcode_;
+  obcall::ObCdcFetchRawLogResp &result = RawLogDataRpcCB::result_;
+  rpc::frame::ObResultCode rcode = RawLogDataRpcCB::rcode_;
   const common::ObAddr svr = RawLogDataRpcCB::dst_;
 
   if (OB_FAIL(do_process_(rcode, &result))) {
@@ -408,7 +408,7 @@ int RawLogDataRpcCB::process()
 void RawLogDataRpcCB::on_timeout()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   const common::ObAddr svr = RawLogDataRpcCB::dst_;
 
   ObCStringHelper helper;
@@ -425,7 +425,7 @@ void RawLogDataRpcCB::on_timeout()
 void RawLogDataRpcCB::on_invalid()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   const common::ObAddr svr = RawLogDataRpcCB::dst_;
 
   ObCStringHelper helper;
@@ -440,7 +440,7 @@ void RawLogDataRpcCB::on_invalid()
   }
 }
 
-int RawLogDataRpcCB::do_process_(const obrpc::ObRpcResultCode &rcode, const obrpc::ObCdcFetchRawLogResp *resp)
+int RawLogDataRpcCB::do_process_(const rpc::frame::ObResultCode &rcode, const obcall::ObCdcFetchRawLogResp *resp)
 {
   int ret = OB_SUCCESS;
   RawLogDataRpcRequest &rpc_req = host_;

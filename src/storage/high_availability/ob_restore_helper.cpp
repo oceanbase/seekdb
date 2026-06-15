@@ -188,7 +188,7 @@ int ObStandbyRestoreHelper::check_restore_precondition()
     ret = OB_NOT_INIT;
     LOG_WARN("standby restore helper not init", K(ret), KPC(this));
   } else {
-    obrpc::ObCheckRestorePreconditionResult result;
+    obcall::ObCheckRestorePreconditionResult result;
     ObStorageGrpcClient grpc_client;
     if (OB_FAIL(grpc_client.init(src_, RPC_TIMEOUT_US))) {
       LOG_WARN("failed to init grpc client", K(ret), K_(src));
@@ -296,7 +296,7 @@ int ObStandbyRestoreHelper::fetch_ls_meta(ObLSMetaPackage &ls_meta)
   return ret;
 }
 
-int ObStandbyRestoreHelper::fetch_next_tablet_info(obrpc::ObCopyTabletInfo &tablet_info)
+int ObStandbyRestoreHelper::fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
@@ -352,7 +352,7 @@ int ObStandbyRestoreHelper::init_for_fetch_tablet_meta(const common::ObIArray<co
   } else {
     ObRestoreHelperTabletInfoCtx *tablet_info_ctx = static_cast<ObRestoreHelperTabletInfoCtx *>(ctx_);
     share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-    obrpc::ObCopyTabletInfoArg arg;
+    obcall::ObCopyTabletInfoArg arg;
     arg.tenant_id_ = OB_SYS_TENANT_ID;
     arg.ls_id_ = ls_id;
     if (OB_FAIL(arg.tablet_id_list_.assign(tablet_id_array))) {
@@ -366,7 +366,7 @@ int ObStandbyRestoreHelper::init_for_fetch_tablet_meta(const common::ObIArray<co
 }
 
 
-int ObStandbyRestoreHelper::fetch_tablet_meta(obrpc::ObCopyTabletInfo &tablet_info)
+int ObStandbyRestoreHelper::fetch_tablet_meta(obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
@@ -403,7 +403,7 @@ int ObStandbyRestoreHelper::fetch_tablet_meta(obrpc::ObCopyTabletInfo &tablet_in
 
 int ObStandbyRestoreHelper::build_copy_tablet_sstable_info_arg_for_restore_(
     const ObTabletHandle &tablet_handle,
-    obrpc::ObCopyTabletSSTableInfoArg &arg)
+    obcall::ObCopyTabletSSTableInfoArg &arg)
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
@@ -528,7 +528,7 @@ int ObStandbyRestoreHelper::init_for_build_tablets_sstable_info(
     LOG_WARN("failed to init sstable info ctx", K(ret), KPC(this));
   } else {
     ObRestoreHelperSSTableInfoCtx *sstable_info_ctx = static_cast<ObRestoreHelperSSTableInfoCtx *>(ctx_);
-    obrpc::ObCopyTabletsSSTableInfoArg arg;
+    obcall::ObCopyTabletsSSTableInfoArg arg;
     const uint64_t tenant_id = MTL_ID();
     share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
     // TODO(xingzhi): remove ls_rebuild_seq_ need_check_seq_ ls_id_ tenant_id_ of ObCopyTabletsSSTableInfoArg
@@ -539,7 +539,7 @@ int ObStandbyRestoreHelper::init_for_build_tablets_sstable_info(
     arg.is_only_copy_major_ = false;
     arg.version_ = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_handle_array.count(); ++i) {
-      obrpc::ObCopyTabletSSTableInfoArg tablet_arg;
+      obcall::ObCopyTabletSSTableInfoArg tablet_arg;
       if (OB_FAIL(build_copy_tablet_sstable_info_arg_for_restore_(tablet_handle_array.at(i), tablet_arg))) {
         LOG_WARN("failed to build copy tablet sstable info arg", K(ret), K(i), K(tablet_handle_array.at(i)));
       } else if (OB_FAIL(arg.tablet_sstable_info_arg_list_.push_back(tablet_arg))) {
@@ -572,7 +572,7 @@ int ObStandbyRestoreHelper::init_for_build_tablets_sstable_info(
   return ret;
 }
 
-int ObStandbyRestoreHelper::fetch_next_tablet_sstable_header(obrpc::ObCopyTabletSSTableHeader &copy_header)
+int ObStandbyRestoreHelper::fetch_next_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   copy_header.reset();
@@ -613,7 +613,7 @@ int ObStandbyRestoreHelper::fetch_next_tablet_sstable_header(obrpc::ObCopyTablet
   return ret;
 }
 
-int ObStandbyRestoreHelper::fetch_next_sstable_meta(obrpc::ObCopyTabletSSTableInfo &sstable_info)
+int ObStandbyRestoreHelper::fetch_next_sstable_meta(obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   sstable_info.reset();
@@ -671,7 +671,7 @@ int ObStandbyRestoreHelper::init_for_sstable_macro_range(const common::ObIArray<
     LOG_WARN("failed to init sstable macro range ctx", K(ret), KPC(this));
   } else {
     ObRestoreHelperSSTableMacroRangeCtx *macro_range_ctx = static_cast<ObRestoreHelperSSTableMacroRangeCtx *>(ctx_);
-    obrpc::ObCopySSTableMacroRangeInfoArg arg;
+    obcall::ObCopySSTableMacroRangeInfoArg arg;
     share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
     arg.tenant_id_ = OB_SYS_TENANT_ID;  
     arg.ls_id_ = ls_id; 
@@ -724,7 +724,7 @@ int ObStandbyRestoreHelper::fetch_next_sstable_macro_range_info(storage::ObCopyS
       LOG_WARN("sstable macro info stream is not initialized", K(ret));
     } else {
       storageservice::FetchSSTableMacroInfoRes response;
-      obrpc::ObCopySSTableMacroRangeInfoHeader header;
+      obcall::ObCopySSTableMacroRangeInfoHeader header;
       if (!macro_range_ctx->macro_info_reader_->Read(&response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                         macro_range_ctx->macro_info_reader_, macro_range_ctx->grpc_client_))) {
@@ -781,7 +781,7 @@ int ObStandbyRestoreHelper::init_for_macro_block_copy(
     LOG_WARN("failed to init macro block ctx", K(ret), KPC(this));
   } else {
     ObRestoreHelperMacroBlockCtx *macro_block_ctx = static_cast<ObRestoreHelperMacroBlockCtx *>(ctx_);
-    obrpc::ObCopyMacroBlockRangeArg arg;
+    obcall::ObCopyMacroBlockRangeArg arg;
     share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
     arg.tenant_id_ = OB_SYS_TENANT_ID;
     arg.ls_id_ = ls_id;
@@ -833,7 +833,7 @@ int ObStandbyRestoreHelper::fetch_next_macro_block(storage::ObICopyMacroBlockRea
     LOG_WARN("ctx type mismatch", K(ret), "cur_ctx_type", ctx_->get_type(), KPC(this));
   } else {
     ObRestoreHelperMacroBlockCtx *macro_block_ctx = static_cast<ObRestoreHelperMacroBlockCtx *>(ctx_);
-    obrpc::ObCopyMacroBlockHeader header;
+    obcall::ObCopyMacroBlockHeader header;
     blocksstable::ObBufferReader data_reader;
     if (OB_ISNULL(macro_block_ctx->grpc_client_) || !macro_block_ctx->macro_block_reader_) {
       ret = OB_ERR_UNEXPECTED;
@@ -844,11 +844,11 @@ int ObStandbyRestoreHelper::fetch_next_macro_block(storage::ObICopyMacroBlockRea
       }
     } else if (OB_FAIL(fetch_macro_block_data_(macro_block_ctx, header, data_reader))) {
       LOG_WARN("failed to fetch macro block data", K(ret), K(header));
-    } else if (obrpc::ObCopyMacroBlockDataType::MACRO_DATA == header.data_type_) {
+    } else if (obcall::ObCopyMacroBlockDataType::MACRO_DATA == header.data_type_) {
       if (OB_FAIL(read_data.set_macro_data(data_reader, header.is_reuse_macro_block_))) {
         LOG_WARN("failed to set macro data", K(ret), K(header));
       }
-    } else if (obrpc::ObCopyMacroBlockDataType::MACRO_META_ROW == header.data_type_) {
+    } else if (obcall::ObCopyMacroBlockDataType::MACRO_META_ROW == header.data_type_) {
       ObDatumRow macro_meta_row;
       blocksstable::ObDataMacroBlockMeta macro_meta;
       blocksstable::MacroBlockId macro_id;
@@ -890,7 +890,7 @@ int ObStandbyRestoreHelper::fetch_next_macro_block(storage::ObICopyMacroBlockRea
 
 int ObStandbyRestoreHelper::fetch_macro_block_header_(
     ObRestoreHelperMacroBlockCtx *macro_block_ctx,
-    obrpc::ObCopyMacroBlockHeader &header)
+    obcall::ObCopyMacroBlockHeader &header)
 {
   int ret = OB_SUCCESS;
   
@@ -916,7 +916,7 @@ int ObStandbyRestoreHelper::fetch_macro_block_header_(
 
 int ObStandbyRestoreHelper::fetch_macro_block_data_(
     ObRestoreHelperMacroBlockCtx *macro_block_ctx,
-    const obrpc::ObCopyMacroBlockHeader &header,
+    const obcall::ObCopyMacroBlockHeader &header,
     blocksstable::ObBufferReader &data_reader)
 {
   int ret = OB_SUCCESS;

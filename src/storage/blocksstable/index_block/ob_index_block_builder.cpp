@@ -20,10 +20,6 @@
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/ob_io_device_helper.h"
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
-
 namespace oceanbase
 {
 ERRSIM_POINT_DEF(EN_COMPACTION_DISABLE_SHARED_MACRO);
@@ -536,13 +532,8 @@ int ObSSTableIndexBuilder::init(const ObDataStoreDesc &data_desc,
     STORAGE_LOG(WARN, "fail to assign container_store_desc", K(ret),
                 K(index_store_desc_));
   } else {
-    if (GCTX.is_shared_storage_mode()) {
-      optimization_mode_ = DISABLE;
-      enable_dump_disk_ = false;
-    } else {
-      optimization_mode_ = mode;
-      enable_dump_disk_ = true;
-    }
+    optimization_mode_ = mode;
+    enable_dump_disk_ = true;
     index_store_desc_.get_desc().sstable_index_builder_ = this;
     index_store_desc_.get_desc().need_pre_warm_ = true;
     index_store_desc_.get_desc().need_build_hash_index_for_micro_block_ = false;
@@ -1201,7 +1192,6 @@ int ObSSTableIndexBuilder::merge_index_tree_from_index_row(ObSSTableMergeRes &re
   return ret;
 }
 
-
 int ObSSTableIndexBuilder::build_cg_meta_tree()
 {
   // cg need rewrite
@@ -1257,7 +1247,6 @@ int ObSSTableIndexBuilder::build_cg_meta_tree()
   }
   return ret;
 }
-
 
 int ObSSTableIndexBuilder::build_meta_tree_from_all_mem_meta_block()
 {
@@ -1366,8 +1355,6 @@ int ObSSTableIndexBuilder::build_meta_tree_from_meta_block(ObSSTableMergeRes &re
   return ret;
 }
 
-
-
 int ObSSTableIndexBuilder::build_meta_tree_from_backup_meta_block(ObSSTableMergeRes &res)
 {
   int ret = OB_SUCCESS;
@@ -1403,7 +1390,6 @@ int ObSSTableIndexBuilder::build_meta_tree_from_backup_meta_block(ObSSTableMerge
   }
   return ret;
 }
-
 
 int ObSSTableIndexBuilder::build_meta_tree(
     const share::ObPreWarmerParam &pre_warm_param,
@@ -1696,7 +1682,7 @@ int ObSSTableIndexBuilder::close_with_macro_seq_inner(
   }
   if (OB_FAIL(ret) || roots_.empty() || is_closed_) {
     // do nothing
-  } else if (!GCTX.is_shared_storage_mode() && OB_FAIL(fsync_block())) {
+  } else if (OB_FAIL(fsync_block())) {
     STORAGE_LOG(WARN, "fail to fsync_block", K(ret));
   } else if (OB_FAIL(merge_index_tree(pre_warm_param, res, macro_seq, callback))) {
     STORAGE_LOG(WARN, "fail to merge index tree", K(ret), KP(callback));
@@ -1829,7 +1815,7 @@ int ObSSTableIndexBuilder::rewrite_small_sstable(ObSSTableMergeRes &res)
           container_store_desc_, roots_, macro_meta))) {
         STORAGE_LOG(WARN, "fail to get single macro meta", K(ret));
     } else if (FALSE_IT(read_info.macro_block_id_ = macro_meta.val_.macro_id_)) {
-    } else if (!GCTX.is_shared_storage_mode() && OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
       LOG_WARN("fail to fsync_block", K(ret));
     } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, read_handle))) {
       STORAGE_LOG(WARN, "fail to async read macro block", K(ret), K(read_info), K(macro_meta), K(roots_[0]->last_macro_size_));
@@ -1943,7 +1929,7 @@ int ObSSTableIndexBuilder::load_single_macro_block(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret),
                 K(read_info.size_));
-  } else if (!GCTX.is_shared_storage_mode() && OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
+  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
     LOG_WARN("fail to fsync_block", K(ret));
   } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, read_handle))) {
     STORAGE_LOG(WARN, "fail to async read macro block", K(ret), K(read_info), K(macro_meta));
@@ -3901,11 +3887,6 @@ int ObIndexBlockRebuilder::init(ObSSTableIndexBuilder &sstable_builder,
       LOG_WARN("Unexpected task idx value", K(ret), K(task_idx));
     } else {
       parallel_task_idx = *task_idx;
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (GCTX.is_shared_storage_mode()) {
-        macro_seq_param.start_ = parallel_task_idx * oceanbase::compaction::MACRO_STEP_SIZE;
-      }
-#endif
     }
   }
 

@@ -77,8 +77,6 @@ ob_set_subtarget(ob_share ALONE
   ob_tenant_mgr.cpp
   parameter/ob_parameter_attr.cpp
   schema/ob_schema_service_sql_impl.cpp
-  ob_srv_rpc_proxy.cpp
-  ob_common_rpc_proxy.cpp
   ob_ddl_args.cpp
   ob_mview_args.cpp
   ob_lonely_table_clean_rpc_struct.cpp
@@ -210,7 +208,6 @@ ob_set_subtarget(ob_share common
   ob_proposal_id.cpp
   ob_plugin_helper.cpp
   ob_resource_limit.cpp
-  ob_rpc_share.cpp
   ob_scanner.cpp
   ob_schema_status_proxy.cpp
   ob_server_blacklist.cpp
@@ -281,7 +278,7 @@ ob_set_subtarget(ob_share common_mixed
   diagnosis/ob_sql_monitor_statname.cpp
   diagnosis/ob_sql_plan_monitor_node_list.cpp
   interrupt/ob_global_interrupt_call.cpp
-  interrupt/ob_interrupt_rpc_proxy.cpp
+  interrupt/ob_interrupt_message.cpp
   location_cache/ob_location_service.cpp
   location_cache/ob_location_struct.cpp
   inner_table/ob_inner_table_schema.vt.cpp
@@ -323,8 +320,6 @@ ob_set_subtarget(ob_share common_mixed
   system_variable/ob_system_variable_init.cpp
   ob_lob_access_utils.cpp
   ob_json_access_utils.cpp
-  table/ob_table.cpp
-  table/ob_table_rpc_struct.cpp
   table/ob_table_ddl_struct.cpp
   table/ob_table_load_define.cpp
   table/ob_table_load_dml_stat.cpp
@@ -337,7 +332,6 @@ ob_set_subtarget(ob_share common_mixed
   index_usage/ob_index_usage_info_mgr.cpp
   index_usage/ob_index_usage_report_task.cpp
   table/ob_table_util.cpp
-  table/ob_table_object.cpp
   scheduler/ob_tenant_dag_scheduler.cpp
   scheduler/ob_independent_dag.cpp
   scheduler/ob_sys_task_stat.cpp
@@ -374,10 +368,6 @@ ob_set_subtarget(ob_share common_mixed
   throttle/ob_share_throttle_define.cpp
   throttle/ob_throttle_common.cpp
   restore/ob_restore_data_mode.cpp
-  table/redis/ob_redis_parser.cpp
-  table/redis/ob_redis_common.cpp
-  table/redis/ob_redis_util.cpp
-  table/redis/ob_redis_error.cpp
   table/ob_redis_importer.cpp
   restore/ob_restore_progress_display_mode.cpp
 )
@@ -428,12 +418,7 @@ ob_set_subtarget(ob_share redolog
 )
 
 ob_set_subtarget(ob_share rpc
-  rpc/ob_batch_processor.cpp
-  rpc/ob_batch_proxy.cpp
-  rpc/ob_batch_rpc.cpp
   rpc/ob_blacklist_proxy.cpp
-  rpc/ob_blacklist_req_processor.cpp
-  rpc/ob_blacklist_resp_processor.cpp
 )
 
 ob_set_subtarget(ob_share resource_manager
@@ -474,7 +459,6 @@ ob_set_subtarget(ob_share schema
   schema/ob_schema_printer_external_table.cpp
   schema/ob_schema_retrieve_utils.ipp
   schema/ob_schema_service.cpp
-  schema/ob_schema_service_rpc_proxy.cpp
   schema/ob_schema_store.cpp
   schema/ob_schema_utils.cpp
   schema/ob_sequence_mgr.cpp
@@ -571,7 +555,6 @@ ob_set_subtarget(ob_share stat
 
 ob_set_subtarget(ob_share external_table
   external_table/ob_external_table_file_mgr.cpp
-  external_table/ob_external_table_file_rpc_processor.cpp
   external_table/ob_external_table_file_task.cpp
   external_table/ob_external_table_utils.cpp
   external_table/ob_external_table_part_info.cpp

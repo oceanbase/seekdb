@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -81,7 +82,7 @@ int ObVecIVFIndexBuildTask::init(
     const int64_t parallelism,
     const int64_t consumer_group_id,
     const ObDDLType task_type,
-    const obrpc::ObCreateIndexArg &create_index_arg,
+    const obcall::ObCreateIndexArg &create_index_arg,
     const uint64_t tenant_data_version,
     const int64_t parent_task_id /* = 0 */,
     const int64_t task_status /* PREPARE */,
@@ -320,8 +321,8 @@ bool ObVecIVFIndexBuildTask::is_valid() const
 
 int ObVecIVFIndexBuildTask::deep_copy_index_arg(
     common::ObIAllocator &allocator,
-    const obrpc::ObCreateIndexArg &source_arg,
-    obrpc::ObCreateIndexArg &dest_arg)
+    const obcall::ObCreateIndexArg &source_arg,
+    obcall::ObCreateIndexArg &dest_arg)
 {
   int ret = OB_SUCCESS;
   const int64_t serialize_size = source_arg.get_serialize_size();
@@ -687,7 +688,7 @@ int ObVecIVFIndexBuildTask::prepare_aux_table(
     int64_t &res_task_id)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(obrpc::ObCreateIndexArg, index_arg) {
+  SMART_VAR(obcall::ObCreateIndexArg, index_arg) {
     if (OB_FAIL(construct_create_index_arg(index_type, index_arg))) {
       LOG_WARN("failed to construct rowkey doc id arg", K(ret));
     } else if (OB_FAIL(ObDomainIndexBuilderUtil::prepare_aux_table(task_submitted,
@@ -700,7 +701,7 @@ int ObVecIVFIndexBuildTask::prepare_aux_table(
                                                                    index_arg,
                                                                    root_service_,
                                                                    dependent_task_result_map_,
-                                                                   obrpc::ObRpcProxy::myaddr_,
+                                                                   GCTX.self_addr(),
                                                                    OB_VEC_IVF_MAX_BUILD_CHILD_TASK_NUM,
                                                                    snapshot_version_))) {
       LOG_WARN("fail to prepare_aux_table", K(ret), K(index_type));
@@ -833,7 +834,7 @@ int ObVecIVFIndexBuildTask::prepare_aux_index_tables()
 
 int ObVecIVFIndexBuildTask::construct_create_index_arg(
     const ObIndexType index_type,
-    obrpc::ObCreateIndexArg &arg)
+    obcall::ObCreateIndexArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!share::schema::is_vec_ivf_index(index_type)) {
@@ -1256,7 +1257,7 @@ int ObVecIVFIndexBuildTask::deserialize_params_from_message(
   int8_t drop_index_submitted = 0;
   int8_t is_rebuild_index = 0;
   int64_t child_task_num = 0;
-  HEAP_VAR(obrpc::ObCreateIndexArg, tmp_arg) {
+  HEAP_VAR(obcall::ObCreateIndexArg, tmp_arg) {
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf ||  data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(data_len));
@@ -1777,8 +1778,8 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
   const ObDatabaseSchema *database_schema = nullptr;
   const ObTableSchema *data_table_schema = nullptr;
 
-  obrpc::ObDropIndexArg drop_index_arg;
-  obrpc::ObDropIndexRes drop_index_res;
+  obcall::ObDropIndexArg drop_index_arg;
+  obcall::ObDropIndexRes drop_index_res;
   ObString index_name;
   ObSqlString drop_index_sql;
   bool is_index_exist = true;
@@ -1833,7 +1834,7 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
     drop_index_arg.exec_tenant_id_    = tenant_id_;
     drop_index_arg.index_table_id_    = index_table_id_; 
     drop_index_arg.index_name_        = data_table_schema->get_table_name();  // not in used
-    drop_index_arg.index_action_type_ = obrpc::ObIndexArg::DROP_INDEX;
+    drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;
     drop_index_arg.is_add_to_scheduler_ = true;
     drop_index_arg.task_id_           = task_id_; // parent task
     drop_index_arg.session_id_        = data_table_schema->get_session_id();
@@ -1845,10 +1846,7 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", KR(ret), K(tenant_id_), K(task_id_));
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->timeout(ddl_rpc_timeout).drop_index_on_failed(drop_index_arg, drop_index_res))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       drop_index_task_submitted_ = true;

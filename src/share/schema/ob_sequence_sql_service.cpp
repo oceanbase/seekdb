@@ -18,6 +18,7 @@
 #include "ob_sequence_sql_service.h"
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_sql_client_decorator.h"
+#include "share/sequence/ob_sequence_cache.h"
 
 namespace oceanbase
 {
@@ -180,17 +181,14 @@ int ObSequenceSqlService::clean_sequence_cache(uint64_t tenant_id, uint64_t sequ
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAddr, 8> server_list;
-  ObSrvRpcProxy srv_rpc_proxy;
   ObUnitInfoGetter ui_getter;
-  if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.net_frame_) || OB_ISNULL(GCTX.net_frame_->get_req_transport())) {
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy or net_frame in GCTX is null", K(GCTX.sql_proxy_), K(GCTX.net_frame_));
+    LOG_WARN("sql_proxy in GCTX is null", K(GCTX.sql_proxy_));
   } else if (OB_FAIL(ui_getter.init(*GCTX.sql_proxy_, &GCONF))) {
     LOG_WARN("init unit info getter failed", K(ret));
   } else if (OB_FAIL(ui_getter.get_tenant_servers(tenant_id, server_list))) {
     LOG_WARN("get tenant servers failed", K(ret));
-  } else if (OB_FAIL(srv_rpc_proxy.init(GCTX.net_frame_->get_req_transport(), GCTX.self_addr()))) {
-    LOG_WARN("fail to init srv rpc proxy", KR(ret));
   } else {
     ObSeqCleanCacheRes temp_cache_res;
     ObNumber min_diff;
@@ -205,11 +203,7 @@ int ObSequenceSqlService::clean_sequence_cache(uint64_t tenant_id, uint64_t sequ
     for (int i = 0; OB_SUCC(ret) && i < server_list.count(); ++i) {
       temp_cache_res.inited_ = false;
       const uint64_t timeout = THIS_WORKER.get_timeout_remain();
-      if (OB_FAIL(srv_rpc_proxy
-                  .to(server_list.at(i))
-                  .by(tenant_id)
-                  .timeout(timeout)
-                  .clean_sequence_cache(sequence_id, temp_cache_res))) {
+      if (OB_FAIL(share::ObSequenceCache::get_instance().remove(tenant_id, sequence_id, temp_cache_res))) {
         if (is_timeout_err(ret) || is_server_down_error(ret)) {
           LOG_WARN("rpc call time out, ignore the error", "server", server_list.at(i),
                     K(tenant_id), K(sequence_id), K(ret));

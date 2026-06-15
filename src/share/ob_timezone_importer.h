@@ -17,9 +17,7 @@
 #ifndef OCEANBASE_SHARE_TABLE_OB_TIMEZONE_IMPORTER_H_
 #define OCEANBASE_SHARE_TABLE_OB_TIMEZONE_IMPORTER_H_
 
-#include "share/table/redis/ob_redis_common.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "observer/table/ob_table_mode_control.h"
 #include "share/table/ob_redis_importer.h"
 
 namespace oceanbase

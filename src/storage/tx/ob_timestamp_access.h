@@ -23,7 +23,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
 class ObGtsRpcResult;
 }
@@ -51,7 +51,7 @@ public:
   };
   void set_service_type(const ServiceType service_type) { service_type_ = service_type; }
   ServiceType get_service_type() const { return service_type_; }
-  int handle_request(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result);
+  int handle_request(const ObGtsRequest &request, obcall::ObGtsRpcResult &result);
   int get_number(int64_t &gts);
   void get_virtual_info(int64_t &ts_value,
                         ServiceType &service_type,

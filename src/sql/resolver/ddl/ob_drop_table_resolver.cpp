@@ -19,7 +19,7 @@ namespace oceanbase
 {
 using namespace common;
 using common::hash::ObPlacementHashSet;
-using obrpc::ObTableItem;
+using obcall::ObTableItem;
 namespace sql
 {
 ObDropTableResolver::ObDropTableResolver(ObResolverParams &params)
@@ -48,7 +48,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     drop_table_stmt->set_is_view_stmt(T_DROP_VIEW == parse_tree.type_);
   }
   if (OB_SUCC(ret)) {
-    obrpc::ObDropTableArg &drop_table_arg = drop_table_stmt->get_drop_table_arg();
+    obcall::ObDropTableArg &drop_table_arg = drop_table_stmt->get_drop_table_arg();
     ObObj is_recyclebin_open;
     if (OB_ISNULL(parse_tree.children_[TABLE_LIST_NODE]) ||
         parse_tree.children_[TABLE_LIST_NODE]->num_child_ <= 0){
@@ -92,7 +92,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       table_item_set = new(tmp_ptr) ObPlacementHashSet<ObTableItem>();
       ObString db_name;
       ObString table_name;
-      obrpc::ObTableItem table_item;
+      obcall::ObTableItem table_item;
       ParseNode *table_node = NULL;
       int64_t i = 0;
       int64_t max_table_num = 0;

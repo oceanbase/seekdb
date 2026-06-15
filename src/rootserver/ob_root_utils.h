@@ -23,7 +23,6 @@
 #include "lib/container/ob_array_iterator.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/ob_define.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "rootserver/ob_replica_addr.h"
 #include "share/ob_cluster_role.h"
 #include "share/ob_rpc_struct.h"

@@ -26,7 +26,7 @@ using namespace share;
 using namespace share::schema;
 namespace sql
 {
-void ObDASUtils::log_user_error_and_warn(const obrpc::ObRpcResultCode &rcode)
+void ObDASUtils::log_user_error_and_warn(const rpc::frame::ObResultCode &rcode)
 {
   if (OB_UNLIKELY(OB_SUCCESS != rcode.rcode_)) {
     FORWARD_USER_ERROR(rcode.rcode_, rcode.msg_);

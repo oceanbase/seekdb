@@ -46,16 +46,16 @@ public:
   inline const common::ObString &get_table_name() const;
   inline const common::ObString &get_index_name() const;
   inline common::ObString &get_table_name();
-  obrpc::ObDropIndexArg &get_drop_index_arg();
-  const obrpc::ObDropIndexArg &get_drop_index_arg() const;
+  obcall::ObDropIndexArg &get_drop_index_arg();
+  const obcall::ObDropIndexArg &get_drop_index_arg() const;
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
   TO_STRING_KV(K_(stmt_type), K_(drop_index_arg));
 protected:
   common::ObIAllocator *name_pool_;
 
 private:
-  obrpc::ObDropIndexArg drop_index_arg_;
+  obcall::ObDropIndexArg drop_index_arg_;
   uint64_t table_id_;
   DISALLOW_COPY_AND_ASSIGN(ObDropIndexStmt);
 };
@@ -65,12 +65,12 @@ inline void ObDropIndexStmt::set_name_pool(common::ObIAllocator *name_pool)
   name_pool_ = name_pool;
 }
 
-inline const obrpc::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg() const
+inline const obcall::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg() const
 {
   return drop_index_arg_;
 }
 
-inline obrpc::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg()
+inline obcall::ObDropIndexArg &ObDropIndexStmt::get_drop_index_arg()
 {
   return drop_index_arg_;
 }

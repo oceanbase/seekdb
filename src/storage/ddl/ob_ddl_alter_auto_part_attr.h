@@ -34,25 +34,25 @@ public:
   virtual ~ObAlterAutoPartAttrOp() = default;
 
   int alter_table_auto_part_attr_if_need(
-      const obrpc::ObAlterTableArg &alter_table_arg, 
+      const obcall::ObAlterTableArg &alter_table_arg, 
       const share::ObDDLType ddl_type,
       share::schema::ObSchemaGetterGuard &schema_guard,
       ObTableSchema &table_schema,
       rootserver::ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans);
   int alter_global_indexes_auto_part_attribute_offline(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       ObTableSchema &new_index_schema);
   void switch_ddl_type_if_need(
-      const obrpc::ObAlterTableArg &alter_table_arg, 
+      const obcall::ObAlterTableArg &alter_table_arg, 
       share::ObDDLType &ddl_type);
   int check_alter_table_partition_attr(
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
       const bool is_oracle_mode,
       share::ObDDLType &ddl_type);
   int alter_table_partition_attr(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
       share::schema::ObTableSchema &new_table_schema);
 private:

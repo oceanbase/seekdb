@@ -182,8 +182,7 @@ public:
 
   int init(
       schema::ObMultiVersionSchemaService &schema_service,
-      common::ObMySQLProxy &sql_proxy,
-      obrpc::ObSrvRpcProxy &srv_rpc_proxy);
+      common::ObMySQLProxy &sql_proxy);
   int start();
   void stop();
   void wait();

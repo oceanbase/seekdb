@@ -517,35 +517,9 @@ int ObSimpleLogServer::simple_start(const bool is_bootstrap = false)
     SERVER_LOG(ERROR, "deliver_ start failed", K(ret));
   } else if (OB_FAIL(log_service_.arb_service_.start())) {
     SERVER_LOG(ERROR, "arb_service start failed", K(ret));
-  #ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode() && OB_FAIL(omt::ObSharedTimer::mtl_start(shared_timer))) {
-    SERVER_LOG(ERROR, "shared_log_service start failed", K(ret));
-  } else if (GCTX.is_shared_storage_mode() && OB_FAIL(log_service_.shared_log_service_.start())) {
-    SERVER_LOG(ERROR, "shared_log_service start failed", K(ret));
-  #endif
   } else if (OB_FAIL(looper_.start())) {
     SERVER_LOG(ERROR, "ObLooper start failed", K(ret));
   }
-  #ifdef OB_BUILD_SHARED_STORAGE
-  if (OB_SUCC(ret) && GCTX.is_shared_storage_mode())
-  {
-    //add ls to shared_log_service
-    common::ObFunction<int(const palf::PalfHandle&)> add_ls = [&](const palf::PalfHandle &palf_handle) {
-    int ret = OB_SUCCESS;
-    int64_t palf_id = -1;
-    palf_handle.get_palf_id(palf_id);
-    if (OB_FAIL(log_service_.shared_log_service_.add_ls(ObLSID(palf_id)))) {
-      SERVER_LOG(WARN, "ls_array push_back failed", K(palf_id));
-    } else {
-      SERVER_LOG(INFO, "add ls to shared_log_service success", K(palf_id));
-    }
-    return ret;
-    };
-    if (OB_FAIL(log_service_.iterate_palf(add_ls))) {
-      SERVER_LOG(ERROR, "iterate_palf failed");
-    }
-  }
-  #endif
   // do not start entire log_service_ for now, it will
   // slow down cases running
   return ret;

@@ -212,7 +212,7 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
 {
   int ret = OB_SUCCESS;
   ObDirectLoadType direct_load_type = ObDirectLoadMgrAgent::load_data_get_direct_load_type(
-    false /*is_incremental*/, ddl_param.data_version_, GCTX.is_shared_storage_mode());
+    false /*is_incremental*/, ddl_param.data_version_);
   ObTableLoadEmptyInsertDagInitParam dag_init_param;
   dag_init_param.direct_load_type_ = direct_load_type;
   dag_init_param.ddl_thread_count_ = 1;

@@ -29,8 +29,8 @@ public:
   ObCreateMaterializedViewHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObCreateTableArg &arg,
-    obrpc::ObCreateTableRes &res,
+    const obcall::ObCreateTableArg &arg,
+    obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans = nullptr,
     bool enable_ddl_parallel = true)
     : ObDDLHelper(schema_service, tenant_id, "[parallel create materialized view]", external_trans, enable_ddl_parallel),

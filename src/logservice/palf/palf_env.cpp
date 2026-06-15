@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX PALF
 #include "palf_env.h"
-#include "rpc/obrpc/ob_rpc_net_handler.h"
 #include "palf_handle.h"
 #include "log_io_adapter.h"
 #include "share/ob_local_device.h"                            // ObLocalDevice
@@ -42,8 +41,6 @@ int PalfEnv::create_palf_env(
     const PalfOptions &options,
     const char *base_dir,
     const common::ObAddr &self,
-    rpc::frame::ObReqTransport *transport,
-    obrpc::ObBatchRpc *batch_rpc,
     common::ObILogAllocator *log_alloc_mgr,
     ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
@@ -58,8 +55,8 @@ int PalfEnv::create_palf_env(
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
     CLOG_LOG(WARN, "delete_tmp_file_or_directory_at failed", K(ret), K(base_dir));
-  } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, base_dir, self, obrpc::ObRpcNetHandler::CLUSTER_ID,
-                                                   MTL_ID(), transport, batch_rpc,
+  } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, base_dir, self, 1L /* obcall CLUSTER_ID inlined */,
+                                                   MTL_ID(),
                                                    log_alloc_mgr, log_block_pool, monitor, 
                                                    log_local_device, resource_manager, io_manager))) {
     PALF_LOG(WARN, "PalfEnvImpl init failed", K(ret), K(base_dir));

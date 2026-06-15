@@ -24,14 +24,5 @@ namespace oceanbase
 namespace observer
 {
 
-int ObDirectLoadResourceP::process()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObTableLoadService::direct_load_resource(arg_, result_, allocator_))) {
-    LOG_WARN("fail to direct load resource", KR(ret), K(arg_));
-  }
-  return ret;
-}
-
 } // namespace observer
 } // namespace oceanbase

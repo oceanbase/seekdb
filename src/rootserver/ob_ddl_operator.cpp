@@ -45,7 +45,7 @@ namespace oceanbase
 using namespace common;
 using namespace share;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 using namespace sql;
 using namespace storage;
 
@@ -1010,7 +1010,7 @@ int ObDDLOperator::sync_version_for_cascade_table(
 int ObDDLOperator::create_sequence_in_create_table(ObTableSchema &table_schema,
                                                    common::ObMySQLTransaction &trans,
                                                    share::schema::ObSchemaGetterGuard &schema_guard,
-                                                   const obrpc::ObSequenceDDLArg *sequence_ddl_arg)
+                                                   const obcall::ObSequenceDDLArg *sequence_ddl_arg)
 {
   int ret = OB_SUCCESS;
   if (!(table_schema.is_user_table())) {
@@ -2956,7 +2956,7 @@ int ObDDLOperator::alter_table_rename_index(
     const uint64_t tenant_id,
     const uint64_t data_table_id,
     const uint64_t database_id,
-    const obrpc::ObRenameIndexArg &rename_index_arg,
+    const obcall::ObRenameIndexArg &rename_index_arg,
     const ObIndexStatus *new_index_status,
     const bool is_in_deleting,
     common::ObMySQLTransaction &trans,
@@ -3219,8 +3219,8 @@ int ObDDLOperator::alter_table_rename_built_in_index_(
 {
   int ret = OB_SUCCESS;
   SMART_VARS_3((ObTableSchema, new_table_schema),
-               (obrpc::ObCreateIndexArg, origin_index_arg),
-               (obrpc::ObCreateIndexArg, new_index_arg)) {
+               (obcall::ObCreateIndexArg, origin_index_arg),
+               (obcall::ObCreateIndexArg, new_index_arg)) {
     const ObTableSchema *origin_table_schema = NULL;
     origin_index_arg.index_name_ = index_name;
     origin_index_arg.index_type_ = index_type;
@@ -3379,7 +3379,7 @@ int ObDDLOperator::alter_index_table_parallel(
     const uint64_t tenant_id,
     const uint64_t data_table_id,
     const uint64_t database_id,
-    const obrpc::ObAlterIndexParallelArg &alter_parallel_arg,
+    const obcall::ObAlterIndexParallelArg &alter_parallel_arg,
     common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -4380,10 +4380,7 @@ int ObDDLOperator::drop_tablet_of_table(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("global variable is null", KR(ret), K(GCTX.srv_rpc_proxy_));
-  } else {
+  {
     const uint64_t tenant_id = table_schema.get_tenant_id();
     int64_t new_schema_version = OB_INVALID_VERSION;
     ObSEArray<const ObTableSchema*, 1> schemas;
@@ -6279,7 +6276,7 @@ int ObDDLOperator::alter_user_default_role(const ObString &ddl_str,
 
 int ObDDLOperator::alter_user_require(const uint64_t tenant_id,
     const uint64_t user_id,
-    const obrpc::ObSetPasswdArg &arg,
+    const obcall::ObSetPasswdArg &arg,
     const common::ObString *ddl_stmt_str,
     common::ObMySQLTransaction &trans)
 {
@@ -8080,7 +8077,7 @@ int ObDDLOperator::drop_inner_generated_domain_extra_column(
 
 // revise column info of check constraints
 int ObDDLOperator::revise_constraint_column_info(
-    obrpc::ObSchemaReviseArg arg,
+    obcall::ObSchemaReviseArg arg,
     common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -8120,7 +8117,7 @@ int ObDDLOperator::revise_constraint_column_info(
 
 // revise info of not null constraints
 int ObDDLOperator::revise_not_null_constraint_info(
-    obrpc::ObSchemaReviseArg arg,
+    obcall::ObSchemaReviseArg arg,
     share::schema::ObSchemaGetterGuard &schema_guard,
     common::ObMySQLTransaction &trans)
 {

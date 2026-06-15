@@ -64,8 +64,8 @@ public:
                                   const uint64_t table_id, const share::ObScnRange &scn_range,
                                   int64_t &num_rows_ins, int64_t &num_rows_upd,
                                   int64_t &num_rows_del);
-  static int sync_post_nested_mview_rpc(obrpc::ObCheckNestedMViewMdsArg &arg,
-                                        obrpc::ObCheckNestedMViewMdsRes &res);
+  static int sync_post_nested_mview_rpc(obcall::ObCheckNestedMViewMdsArg &arg,
+                                        obcall::ObCheckNestedMViewMdsRes &res);
   static int check_dep_mviews_satisfy_target_scn(const uint64_t tenant_id,
                                                  const share::SCN &target_data_sync_scn,
                                                  const share::SCN &read_snapshot,

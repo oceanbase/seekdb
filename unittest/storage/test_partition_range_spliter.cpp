@@ -94,7 +94,7 @@ void TestRangeSpliter::SetUpTestCase()
   ASSERT_EQ(OB_SUCCESS, ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD));
 
   // create tablet
-  obrpc::ObBatchCreateTabletArg create_tablet_arg;
+  obcall::ObBatchCreateTabletArg create_tablet_arg;
   share::schema::ObTableSchema table_schema;
   ASSERT_EQ(OB_SUCCESS, gen_create_tablet_arg(tenant_id_, ls_id, tablet_id, create_tablet_arg, 1, &table_schema));
 

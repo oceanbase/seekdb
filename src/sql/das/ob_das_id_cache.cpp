@@ -25,39 +25,28 @@ using namespace common;
 using namespace share;
 namespace sql
 {
-int ObDASIDCache::init(const common::ObAddr &server, rpc::frame::ObReqTransport *req_transport)
+int ObDASIDCache::init(const common::ObAddr &server)
 {
   int ret = OB_SUCCESS;
-  void *proxy_buf = nullptr;
   void *request_buf = nullptr;
   alloc_.set_attr(ObMemAttr(MTL_ID(), "DASIDCache"));
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_UNLIKELY(!server.is_valid() || OB_ISNULL(req_transport))) {
+  } else if (OB_UNLIKELY(!server.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(server), KP(req_transport));
-  } else if (OB_ISNULL(proxy_buf = alloc_.alloc(sizeof(obrpc::ObDASIDRpcProxy)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc rpc proxy failed", KR(ret));
+    LOG_WARN("invalid argument", KR(ret), K(server));
   } else if (OB_ISNULL(request_buf = alloc_.alloc(sizeof(ObDASIDRequestRpc)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc request rpc failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
-    id_rpc_proxy_ = new(proxy_buf) obrpc::ObDASIDRpcProxy();
     id_request_rpc_ = new(request_buf) ObDASIDRequestRpc();
-    if (OB_FAIL(id_rpc_proxy_->init(req_transport, server))) {
-      LOG_WARN("init rpc proxy failed", KR(ret), K(server));
-    } else if (OB_FAIL(id_request_rpc_->init(id_rpc_proxy_, server, this))) {
+    if (OB_FAIL(id_request_rpc_->init(server, this))) {
       LOG_WARN("init response rpc failed", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
-    if (NULL != id_rpc_proxy_) {
-      alloc_.free(id_rpc_proxy_);
-      id_rpc_proxy_ = NULL;
-    }
     if (NULL != id_request_rpc_) {
       alloc_.free(id_request_rpc_);
       id_request_rpc_ = NULL;
@@ -71,10 +60,6 @@ int ObDASIDCache::init(const common::ObAddr &server, rpc::frame::ObReqTransport 
 
 void ObDASIDCache::destroy()
 {
-  if (NULL != id_rpc_proxy_) {
-    alloc_.free(id_rpc_proxy_);
-    id_rpc_proxy_ = NULL;
-  }
   if (NULL != id_request_rpc_) {
     alloc_.free(id_request_rpc_);
     id_request_rpc_ = NULL;
@@ -94,7 +79,6 @@ void ObDASIDCache::reset()
   cur_idx_ = 0;
   cache_idx_ = 0;
   server_.reset();
-  id_rpc_proxy_ = NULL;
   id_request_rpc_ = NULL;
   id_service_leader_.reset();
   retry_request_cnt_ = 0;
@@ -153,7 +137,7 @@ int ObDASIDCache::get_das_id(int64_t &das_id, const bool force_renew)
                                       OB_DAS_ID_RPC_TIMEOUT_MAX);
     if (ATOMIC_BCAS(&is_requesting_, false, true)) {
       ObDASIDRequest req;
-      obrpc::ObDASIDRpcResult res;
+      obcall::ObDASIDRpcResult res;
       retry_request_cnt_++;
       if (OB_FAIL(req.init(MTL_ID(), get_preallocate_count_()))) {
         LOG_WARN("ObDASIDRequest init fail", KR(ret), K(MTL_ID()));

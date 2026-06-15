@@ -210,8 +210,8 @@ private:
   int generate_tablets_restore_dag_();
   int inner_build_ls_();
   int create_all_tablets_();
-  int fetch_next_tablet_info_(obrpc::ObCopyTabletInfo &tablet_info);
-  int create_tablet_(const obrpc::ObCopyTabletInfo &tablet_info, ObLS *ls);
+  int fetch_next_tablet_info_(obcall::ObCopyTabletInfo &tablet_info);
+  int create_tablet_(const obcall::ObCopyTabletInfo &tablet_info, ObLS *ls);
   int inner_create_all_tablets_(ObLS *ls);
   int record_server_event_();
 private:
@@ -555,7 +555,7 @@ public:
       share::ObIDagNet *dag_net,
       ObLS *ls);
   static int create_or_update_tablet(
-      const obrpc::ObCopyTabletInfo &tablet_info, 
+      const obcall::ObCopyTabletInfo &tablet_info, 
       const bool need_check_tablet_limit, 
       ObLS *ls);
 private:
@@ -563,7 +563,7 @@ private:
       const common::ObIArray<ObTabletID> &tablet_id_array,
       ObLS *ls,
       common::ObIArray<ObTabletHandle> &tablet_handle_array);
-  static int modified_tablet_info_(obrpc::ObCopyTabletInfo &tablet_info);
+  static int modified_tablet_info_(obcall::ObCopyTabletInfo &tablet_info);
   static int remove_uncomplete_tablet_(const common::ObTabletID &tablet_id, ObLS *ls);
   static int hold_local_complete_tablet_major_sstables_(ObTablet *tablet, ObTablesHandleArray &tables_handle);
   static int hold_local_reuse_major_sstables_(

@@ -198,5 +198,6 @@ int ObMiniTaskResult::assign(const ObMiniTaskResult &other)
 
 OB_SERIALIZE_MEMBER(ObMiniTaskResult, task_result_, extend_result_);
 OB_SERIALIZE_MEMBER(ObRemoteResult, task_id_, result_, has_more_);
+OB_SERIALIZE_MEMBER(ObEraseDtlIntermResultArg, interm_result_ids_);
 }/* ns sql*/
 }/* ns oceanbase */

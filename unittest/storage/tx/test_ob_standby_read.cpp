@@ -24,7 +24,7 @@ namespace oceanbase
 using namespace common;
 using namespace share;
 using namespace transaction;
-using namespace obrpc;
+using namespace obcall;
 namespace unittest
 {
 

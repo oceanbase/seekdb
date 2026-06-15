@@ -151,7 +151,7 @@ int ObBatchFreezeTabletsTask::inner_process()
       LOG_WARN_RET(tmp_ret, "failed to force freeze tablet", K(param), K(cur_pair));
       ++cnt_.failure_cnt_;
     } else if (FALSE_IT(++cnt_.success_cnt_)) {
-    } else if (!GCTX.is_shared_storage_mode() && OB_TMP_FAIL(schedule_tablet_major_after_freeze(*ls, cur_pair))) {
+    } else if (OB_TMP_FAIL(schedule_tablet_major_after_freeze(*ls, cur_pair))) {
       if (OB_SIZE_OVERFLOW != tmp_ret && OB_EAGAIN != tmp_ret) {
         LOG_WARN_RET(tmp_ret, "failed to schedule medium merge dag", K(param), K(cur_pair));
       }

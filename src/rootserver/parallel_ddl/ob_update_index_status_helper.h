@@ -28,7 +28,7 @@ namespace schema
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObUpdateIndexStatusArg;
 }
@@ -40,8 +40,8 @@ public:
   ObUpdateIndexStatusHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObUpdateIndexStatusArg &arg,
-    obrpc::ObParallelDDLRes &res);
+    const obcall::ObUpdateIndexStatusArg &arg,
+    obcall::ObParallelDDLRes &res);
   virtual ~ObUpdateIndexStatusHelper();
 private:
   virtual int lock_objects_() override;
@@ -54,8 +54,8 @@ private:
   virtual int clean_on_fail_commit_() override;
   virtual int construct_and_adjust_result_(int &return_ret) override;
 private:
-  const obrpc::ObUpdateIndexStatusArg &arg_;
-  obrpc::ObParallelDDLRes &res_;
+  const obcall::ObUpdateIndexStatusArg &arg_;
+  obcall::ObParallelDDLRes &res_;
   const ObTableSchema *orig_index_table_schema_;
   ObTableSchema* new_data_table_schema_;
   share::schema::ObIndexStatus new_status_;

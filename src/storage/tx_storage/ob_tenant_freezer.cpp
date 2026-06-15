@@ -19,6 +19,8 @@
 #include "ob_tenant_freezer.h"
 #include "lib/ob_running_mode.h"
 #include "observer/ob_srv_network_frame.h"
+#include "observer/ob_ex_rpc.h"
+#include "storage/tx_storage/ob_tenant_freezer_rpc.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -39,8 +41,6 @@ double ObTenantFreezer::MDS_TABLE_FREEZE_TRIGGER_TENANT_PERCENTAGE = 2;
 ObTenantFreezer::ObTenantFreezer()
 	: is_inited_(false),
     is_freezing_tx_data_(false),
-    svr_rpc_proxy_(nullptr),
-    common_rpc_proxy_(nullptr),
     freeze_trigger_tg_id_(-1),
     freeze_trigger_timer_task_(*this),
     freeze_thread_pool_(),
@@ -63,8 +63,6 @@ void ObTenantFreezer::destroy()
   TG_DESTROY(freeze_trigger_tg_id_);
   is_freezing_tx_data_ = false;
   self_.reset();
-  svr_rpc_proxy_ = nullptr;
-  common_rpc_proxy_ = nullptr;
   freezer_stat_.reset();
   freezer_history_.reset();
   throttle_is_skipping_cache_.reset();
@@ -85,29 +83,21 @@ int ObTenantFreezer::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("[TenantFreezer] tenant freezer init twice.", KR(ret));
   } else if (OB_UNLIKELY(!GCONF.self_addr_.is_valid()) ||
-             OB_ISNULL(GCTX.net_frame_) ||
-             OB_ISNULL(GCTX.srv_rpc_proxy_) ||
-             OB_ISNULL(GCTX.rs_rpc_proxy_)) {
+             OB_ISNULL(GCTX.net_frame_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[TenantFreezer] invalid argument", KR(ret), KP(GCTX.srv_rpc_proxy_),
-             KP(GCTX.rs_rpc_proxy_), K(GCONF.self_addr_));
+    LOG_WARN("[TenantFreezer] invalid argument", KR(ret), K(GCONF.self_addr_));
   } else if (OB_FAIL(freeze_thread_pool_.init_and_start(FREEZE_THREAD_NUM, 10, "FrzAsync"))) {
     LOG_WARN("[TenantFreezer] fail to initialize freeze thread pool", KR(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantFreezer, freeze_trigger_tg_id_))) {
-    LOG_WARN("[TenantFreezer] fail to create TenantFreezer", KR(ret));
+    LOG_WARN("[TenantFreezer] fail to create TenantFreezer timer tg", KR(ret));
   } else if (OB_FAIL(TG_START(freeze_trigger_tg_id_))) {
     LOG_WARN("[TenantFreezer] fail to start TenantFreezer timer", K(ret));
-  } else if (OB_FAIL(rpc_proxy_.init(GCTX.net_frame_->get_req_transport(), GCONF.self_addr_))) {
-    LOG_WARN("[TenantFreezer] fail to init rpc proxy", KR(ret));
   } else {
     is_freezing_tx_data_ = false;
     self_ = GCONF.self_addr_;
-    svr_rpc_proxy_ = GCTX.srv_rpc_proxy_;
-    common_rpc_proxy_ = GCTX.rs_rpc_proxy_;
     tenant_info_.tenant_id_ = MTL_ID();
     freezer_stat_.reset();
     freezer_history_.reset();
-    LOG_INFO("[TenantFreezer] init freeze thread pool success", "mini_mode", lib::is_mini_mode());
     is_inited_ = true;
   }
   return ret;
@@ -1432,6 +1422,30 @@ int64_t ObTenantFreezer::get_memstore_limit_percentage_()
   return percent;
 }
 
+int ObTenantFreezer::async_freeze_(const ObTenantFreezeArg &arg)
+{
+  int ret = OB_SUCCESS;
+  // single-replica: the freeze used to be posted to self_ via ObTenantFreezerRpcProxy.
+  // Dispatch it to the local handler on a worker thread via async_call (fire-and-forget),
+  // switching into the target tenant's MTL context (the handler relies on MTL(...)).
+  const uint64_t tenant_id = tenant_info_.tenant_id_;
+  // arg is serialized into an owned buffer (lifecycle-safe even if ObTenantFreezeArg
+  // later gains non-POD/shallow-ref members); tenant_id is a scalar, safe to capture.
+  auto handle = ex_rpc::async_call<void>(arg, [tenant_id](const ObTenantFreezeArg &req) {
+      int ret = OB_SUCCESS;  // named 'ret' because MTL_SWITCH/OB_SUCC require it
+      MTL_SWITCH(tenant_id) {
+        if (OB_FAIL(obcall::tenant_freeze_dispatch(req))) {
+          LOG_WARN("[TenantFreezer] async tenant freeze failed", KR(ret), K(req), K(tenant_id));
+        }
+      }
+    });
+  if (OB_ISNULL(handle)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("[TenantFreezer] fail to dispatch async freeze", KR(ret), K(arg));
+  }
+  return ret;
+}
+
 int ObTenantFreezer::post_freeze_request_(
     const storage::ObFreezeType freeze_type,
     const int64_t try_frozen_scn)
@@ -1445,8 +1459,8 @@ int ObTenantFreezer::post_freeze_request_(
     arg.freeze_type_ = freeze_type;
     arg.try_frozen_scn_ = try_frozen_scn;
     LOG_INFO("[TenantFreezer] post freeze request to remote", K(arg));
-    if (OB_FAIL(rpc_proxy_.to(self_).by(tenant_info_.tenant_id_).post_freeze_request(arg, &tenant_mgr_cb_))) {
-      LOG_WARN("[TenantFreezer] fail to post freeze request", K(arg), KR(ret));
+    if (OB_FAIL(async_freeze_(arg))) {
+      LOG_WARN("[TenantFreezer] fail to post async freeze request", K(arg), KR(ret));
     }
     LOG_INFO("[TenantFreezer] after freeze at remote");
   }
@@ -1462,8 +1476,8 @@ int ObTenantFreezer::post_tx_data_freeze_request_()
   } else {
     ObTenantFreezeArg arg;
     arg.freeze_type_ = ObFreezeType::TX_DATA_TABLE_FREEZE;
-    if (OB_FAIL(rpc_proxy_.to(self_).by(tenant_info_.tenant_id_).post_freeze_request(arg, &tenant_mgr_cb_))) {
-      LOG_WARN("[TenantFreezer] fail to post freeze request", K(arg), KR(ret));
+    if (OB_FAIL(async_freeze_(arg))) {
+      LOG_WARN("[TenantFreezer] fail to post async freeze request", K(arg), KR(ret));
     }
   }
   return ret;
@@ -1478,17 +1492,10 @@ int ObTenantFreezer::post_mds_table_freeze_request_()
   } else {
     ObTenantFreezeArg arg;
     arg.freeze_type_ = ObFreezeType::MDS_TABLE_FREEZE;
-    if (OB_FAIL(rpc_proxy_.to(self_).by(tenant_info_.tenant_id_).post_freeze_request(arg, &tenant_mgr_cb_))) {
-      LOG_WARN("[TenantFreezer] fail to post freeze request", K(arg), KR(ret));
+    if (OB_FAIL(async_freeze_(arg))) {
+      LOG_WARN("[TenantFreezer] fail to post async freeze request", K(arg), KR(ret));
     }
   }
-  return ret;
-}
-
-int ObTenantFreezer::rpc_callback()
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("[TenantFreezer] call back of tenant freezer request");
   return ret;
 }
 
@@ -1743,12 +1750,9 @@ void ObTenantFreezer::halt_prewarm_if_need_(const ObTenantFreezeCtx &ctx)
   if (ctx.total_memstore_hold_ > mem_danger_limit) {
     int64_t curr_ts = ObClockGenerator::getClock();
     if (curr_ts - tenant_info_.last_halt_ts_ > 10L * 1000L * 1000L) {
-      if (OB_FAIL(svr_rpc_proxy_->to(self_).
-                  halt_all_prewarming_async(tenant_info_.tenant_id_, NULL))) {
-        LOG_WARN("[TenantFreezer] fail to halt prewarming", KR(ret), K(tenant_info_.tenant_id_));
-      } else {
-        tenant_info_.last_halt_ts_ = curr_ts;
-      }
+      // halt_all_prewarming was a no-op RPC (handler removed); prewarming halt is
+      // not supported, so only keep the rate-limit bookkeeping.
+      tenant_info_.last_halt_ts_ = curr_ts;
     }
   }
 }
@@ -1922,7 +1926,6 @@ void ObTenantFreezerStatHistory::reset()
   start_ = 0;
   length_ = 0;
 }
-
 
 
 }

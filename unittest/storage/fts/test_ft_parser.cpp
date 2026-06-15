@@ -117,13 +117,16 @@ protected:
         ret = OB_SUCCESS;
       }
     }
-    ObDictCache::get_instance().init("dict cache");
+    ASSERT_EQ(OB_SUCCESS, ret);
+    ret = ObDictCache::get_instance().init("dict cache");
+    if (OB_INIT_TWICE == ret) {
+      ret = OB_SUCCESS;
+    }
+    ASSERT_EQ(OB_SUCCESS, ret);
   }
   virtual void TearDown()
   {
     ObDictCache::get_instance().destroy();
-    ObKVGlobalCache::get_instance().destroy();
-    ObClockGenerator::destroy();
     ObTimerService::get_instance().stop();
     ObTimerService::get_instance().wait();
     ObTimerService::get_instance().destroy();

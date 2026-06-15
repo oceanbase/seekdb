@@ -24,7 +24,7 @@
 
 
 using namespace oceanbase::observer;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 namespace oceanbase
 {
 namespace transaction
@@ -87,7 +87,7 @@ int ObInnerConnectionLockUtil::process_lock_rpc(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(arg), KP(conn));
   } else {
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type = arg.get_operation_type();
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type = arg.get_operation_type();
     switch (operation_type) {
       case ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE: {
         if (OB_FAIL(process_lock_table_(operation_type,
@@ -176,7 +176,7 @@ int ObInnerConnectionLockUtil::process_lock_rpc(
 }
 
 int ObInnerConnectionLockUtil::process_lock_table_(
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     const ObInnerSQLTransmitArg &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -190,7 +190,7 @@ int ObInnerConnectionLockUtil::process_lock_table_(
 }
 
 int ObInnerConnectionLockUtil::process_lock_tablet_(
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     const ObInnerSQLTransmitArg &arg,
     observer::ObInnerSQLConnection *conn)
 {
@@ -480,7 +480,7 @@ int ObInnerConnectionLockUtil::replace_lock(
           LOG_WARN("serialize replace lock table arg failed", K(ret), K(req));
         } else {
           sql.assign_ptr(tmp_str, pos);
-          ret = conn->forward_request(tenant_id, obrpc::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCK, sql, res);
+          ret = conn->forward_request(tenant_id, obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCK, sql, res);
         }
 
         if (OB_NOT_NULL(tmp_str)) {
@@ -536,7 +536,7 @@ int ObInnerConnectionLockUtil::replace_lock(const uint64_t tenant_id,
           LOG_WARN("serialize replace lock table arg failed", K(ret), K(req));
         } else {
           sql.assign_ptr(tmp_str, pos);
-          ret = conn->forward_request(tenant_id, obrpc::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCKS, sql, res);
+          ret = conn->forward_request(tenant_id, obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_REPLACE_LOCKS, sql, res);
         }
 
         if (OB_NOT_NULL(tmp_str)) {
@@ -754,7 +754,7 @@ int ObInnerConnectionLockUtil::build_tx_param(sql::ObSQLSessionInfo *session_inf
 int ObInnerConnectionLockUtil::do_obj_lock_(
     const uint64_t tenant_id,
     const ObLockRequest &arg,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     observer::ObInnerSQLConnection *conn,
     observer::ObInnerSQLResult &res)
 {
@@ -790,7 +790,7 @@ int ObInnerConnectionLockUtil::do_obj_lock_(
 int ObInnerConnectionLockUtil::request_lock_(
     const uint64_t tenant_id,
     const ObLockRequest &arg,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
@@ -858,7 +858,7 @@ int ObInnerConnectionLockUtil::request_lock_(
     const ObTabletID tablet_id, //just used when lock_tablet
     const ObTableLockMode lock_mode,
     const int64_t timeout_us,
-    const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+    const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
     observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
@@ -975,7 +975,7 @@ int ObInnerConnectionLockUtil::handle_request_by_operation_type_(
   ObTxDesc &tx_desc,
   const ObTxParam &tx_param,
   const ObLockRequest &arg,
-  const obrpc::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type)
+  const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type)
 {
   int ret = OB_SUCCESS;
   switch (operation_type) {

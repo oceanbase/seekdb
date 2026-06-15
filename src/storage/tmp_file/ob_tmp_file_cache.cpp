@@ -301,13 +301,7 @@ int64_t ObTmpPageCacheKey::to_string(char* buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_OBJ_START();
-  if (!GCTX.is_shared_storage_mode()) {
-    J_KV(K(block_id_), K(page_id_), K(tenant_id_));
-  #ifdef OB_BUILD_SHARED_STORAGE
-  } else {
-    J_KV(K(tmp_file_id_), K(unfilled_page_length_), K(virtual_page_id_), K(tenant_id_));
-  #endif
-  }
+  J_KV(K(block_id_), K(page_id_), K(tenant_id_));
   J_OBJ_END();
   return pos;
 }
@@ -364,12 +358,8 @@ bool ObTmpPageCacheReadInfo::is_valid()
              io_desc_.is_valid() && io_timeout_ms_ > 0 &&
              OB_NOT_NULL(object_handle_);
   if(OB_UNLIKELY(!ret)) {
-  } else if (!GCTX.is_shared_storage_mode()) {
-    ret = begin_offset_ + read_size_ <= ObTmpFileGlobal::SN_BLOCK_SIZE;
-  #ifdef OB_BUILD_SHARED_STORAGE
   } else {
-    ret = begin_offset_ + read_size_ <= ObTmpFileGlobal::SS_BLOCK_SIZE;
-  #endif
+    ret = begin_offset_ + read_size_ <= ObTmpFileGlobal::SN_BLOCK_SIZE;
   }
   return ret;
 }
@@ -389,16 +379,11 @@ int ObTmpPageCacheReadInfo::init_read(const blocksstable::MacroBlockId &macro_bl
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(macro_block_id), K(read_size),
                 K(begin_offset), K(io_flag), K(io_timeout_ms), KP(handle));
-  } else if (!GCTX.is_shared_storage_mode() && begin_offset + read_size > ObTmpFileGlobal::SN_BLOCK_SIZE) {
+
+  } else if (begin_offset + read_size > ObTmpFileGlobal::SN_BLOCK_SIZE) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(macro_block_id), K(read_size),
                 K(begin_offset), K(io_flag), K(io_timeout_ms), KP(handle));
-  #ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode() && begin_offset + read_size > ObTmpFileGlobal::SS_BLOCK_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(macro_block_id), K(read_size),
-                K(begin_offset), K(io_flag), K(io_timeout_ms), KP(handle));
-  #endif
   } else {
     macro_block_id_ = macro_block_id;
     read_size_ = read_size;
@@ -518,9 +503,6 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
   } else if (OB_ISNULL(callback_allocator)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "callback_allocator is unexpected nullptr", KR(ret), K(key));
-  } else if (OB_UNLIKELY(GCTX.is_shared_storage_mode())) {
-    ret = OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "shared storage mode not support this function", KR(ret), K(key));
   } else if (OB_FAIL(alloc(key.get_tenant_id(), key.size(),
       sizeof(ObTmpPageCacheValue) + ObTmpFileGlobal::ALLOC_PAGE_SIZE,
       kvpair, p_handle.handle_, inst_handle))) {

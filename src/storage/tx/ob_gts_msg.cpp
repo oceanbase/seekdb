@@ -20,7 +20,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 
 namespace transaction
 {

@@ -21,7 +21,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObAlterTableArg;
 }
@@ -111,11 +111,11 @@ struct ObTruncateInfoService final
 {
 public:
   ObTruncateInfoService(
-    const obrpc::ObAlterTableArg &arg,
+    const obcall::ObAlterTableArg &arg,
     const share::schema::ObTableSchema &data_table_schema);
   int init(ObMySQLProxy &sql_proxy);
   int check_only_have_ref_columns(
-    const obrpc::ObAlterTableArg::AlterPartitionType &alter_type,
+    const obcall::ObAlterTableArg::AlterPartitionType &alter_type,
     bool &only_ref_columns);
   int check_stored_ref_columns_for_index(
     const share::schema::ObTableSchema &index_table_schema,
@@ -152,7 +152,7 @@ private:
 private:
   ObArenaAllocator allocator_; // for part_key_info_, only init once
   ObArenaAllocator loop_allocator_; // for loop index tablets
-  const obrpc::ObAlterTableArg &arg_;
+  const obcall::ObAlterTableArg &arg_;
   const share::schema::ObTableSchema &data_table_schema_;
   ObSEArray<ObTabletID, 8> index_tablet_array_;
   ObSEArray<share::ObLSID, 8> ls_id_array_;

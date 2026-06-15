@@ -1,3 +1,5 @@
+#include "observer/ob_service.h"
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -32,7 +34,7 @@ using namespace share;
 namespace storage
 {
 /*****************ObLSBackupCleanScheduler*******************/
-int ObLSBackupCleanScheduler::schedule_backup_clean_dag(const obrpc::ObLSBackupCleanArg &args)
+int ObLSBackupCleanScheduler::schedule_backup_clean_dag(const obcall::ObLSBackupCleanArg &args)
 {
   int ret = OB_SUCCESS;
   ObLSBackupCleanDagNetInitParam param;
@@ -87,7 +89,7 @@ bool ObLSBackupCleanDagNetInitParam::is_valid() const
       && job_id_ >0;
 }
 
-int ObLSBackupCleanDagNetInitParam::set(const obrpc::ObLSBackupCleanArg &args)
+int ObLSBackupCleanDagNetInitParam::set(const obcall::ObLSBackupCleanArg &args)
 {
   int ret = OB_SUCCESS;
   trace_id_ = args.trace_id_;
@@ -495,7 +497,7 @@ int ObLSBackupCleanTask::post_rpc_result_(const int64_t result)
 {
   int ret = OB_SUCCESS;
   common::ObAddr leader_addr;
-  obrpc::ObBackupTaskRes clean_ls_res;
+  obcall::ObBackupTaskRes clean_ls_res;
   clean_ls_res.job_id_ = job_id_; 
   clean_ls_res.task_id_ = task_id_;
   clean_ls_res.tenant_id_ = tenant_id_;
@@ -506,13 +508,13 @@ int ObLSBackupCleanTask::post_rpc_result_(const int64_t result)
   clean_ls_res.dag_id_ = get_dag()->get_dag_id();
   const int64_t cluster_id = GCONF.cluster_id;
   const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id_);
-  if (OB_ISNULL(GCTX.srv_rpc_proxy_) || OB_ISNULL(GCTX.location_service_)) {
+  if (OB_ISNULL(GCTX.location_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
+    LOG_WARN("location_service must not be NULL", K(ret), K(GCTX));
   } else if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(
         cluster_id, meta_tenant_id, ObLSID(ObLSID::SYS_LS_ID), leader_addr))) {
     LOG_WARN("failed to get leader address", K(ret));
-  } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(leader_addr).report_backup_clean_over(clean_ls_res))) {
+  } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int { return GCTX.ob_service_->report_backup_clean_over(clean_ls_res); }))) {
     LOG_WARN("failed to post backup ls data res", K(ret), K(clean_ls_res));
   } else {
     LOG_INFO("[BACKUP_CLEAN] success finish task post rpc result", K(clean_ls_res));

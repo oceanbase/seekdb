@@ -335,9 +335,9 @@ int ObLSService::init(const uint64_t tenant_id)
     LOG_WARN("fail to init iter allocator, ", K(ret));
   } else if (OB_FAIL(ls_map_.init(tenant_id, &ls_allocator_))) {
     LOG_WARN("fail to init ls map", K(ret));
-  } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.net_frame_->get_req_transport(), GCTX.self_addr()))) {
+  } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.self_addr()))) {
     LOG_WARN("failed to init storage svr rpc proxy", K(ret));
-  } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr(), GCTX.rs_rpc_proxy_))) {
+  } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr()))) {
     STORAGE_LOG(WARN, "fail to init partition service rpc", K(ret));
   } else {
     tenant_id_ = tenant_id;
@@ -944,12 +944,6 @@ void ObLSService::remove_ls_(ObLS *ls, const bool remove_from_disk, const bool w
     // creating an invalid tablet during restart.
     ret = OB_SUCCESS;
     if (success_step < 1) {
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (remove_from_disk && GCTX.is_shared_storage_mode()
-          && OB_FAIL(ls->write_tablet_id_set_to_pending_free())) {
-        LOG_WARN("failed to write_tablet_id_set_to_pending_free", KR(ret), KPC(ls));
-      }
-#endif
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ls->prepare_for_safe_destroy())) {
         LOG_WARN("prepare safe destroy failed", K(ret), KPC(ls));
@@ -1365,4 +1359,3 @@ int ObLSService::dump_ls_info()
 
 } // storage
 } // oceanbase
-

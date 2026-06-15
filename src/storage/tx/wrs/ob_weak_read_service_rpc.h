@@ -19,14 +19,14 @@
 
 #include "ob_i_weak_read_service.h"             // ObIWeakReadService
 
-#include "ob_weak_read_service_rpc_define.h"    // ObWrsRpcProxy
+#include "ob_weak_read_service_rpc_define.h"    // request/response structs
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
-struct ObRpcResultCode;
 }
+namespace rpc { namespace frame { struct ObResultCode; } }
 
 namespace transaction
 {
@@ -39,12 +39,12 @@ public:
 public:
   virtual int get_cluster_version(const common::ObAddr &server,
       const uint64_t tenant_id,
-      const obrpc::ObWrsGetClusterVersionRequest &req,
-      obrpc::ObWrsGetClusterVersionResponse &res) = 0;
+      const obcall::ObWrsGetClusterVersionRequest &req,
+      obcall::ObWrsGetClusterVersionResponse &res) = 0;
 
   virtual int post_cluster_heartbeat(const common::ObAddr &server,
       const uint64_t tenant_id,
-      const obrpc::ObWrsClusterHeartbeatRequest &req) = 0;
+      const obcall::ObWrsClusterHeartbeatRequest &req) = 0;
 };
 
 
@@ -55,41 +55,20 @@ public:
   ObWrsRpc();
   virtual ~ObWrsRpc() {}
 
-  int init(const rpc::frame::ObReqTransport *transport, ObIWeakReadService &wrs);
+  int init(ObIWeakReadService &wrs);
 
   virtual int get_cluster_version(const common::ObAddr &server,
       const uint64_t tenant_id,
-      const obrpc::ObWrsGetClusterVersionRequest &req,
-      obrpc::ObWrsGetClusterVersionResponse &res);
+      const obcall::ObWrsGetClusterVersionRequest &req,
+      obcall::ObWrsGetClusterVersionResponse &res);
 
   virtual int post_cluster_heartbeat(const common::ObAddr &server,
       const uint64_t tenant_id,
-      const obrpc::ObWrsClusterHeartbeatRequest &req);
-
-public:
-  class ClusterHeartbeatCB : public obrpc::ObWrsRpcProxy::AsyncCB<obrpc::OB_WRS_CLUSTER_HEARTBEAT>
-  {
-  public:
-    ClusterHeartbeatCB() : wrs_(NULL) {}
-    virtual ~ClusterHeartbeatCB() {}
-
-  public:
-    void init(ObIWeakReadService *wrs) { wrs_ = wrs; }
-    void set_args(const Request &args) { UNUSED(args); }
-    rpc::frame::ObReqTransport::AsyncCB *clone(const rpc::frame::SPAlloc &alloc) const;
-    int process();
-    void on_timeout();
-    void on_invalid();
-  private:
-    int do_process_(const obrpc::ObRpcResultCode &rcode);
-  private:
-    ObIWeakReadService *wrs_;
-  };
+      const obcall::ObWrsClusterHeartbeatRequest &req);
 
 private:
   bool                  inited_;
-  obrpc::ObWrsRpcProxy  proxy_;
-  ClusterHeartbeatCB    cluster_heartbeat_cb_;
+  ObIWeakReadService   *wrs_;
 };
 } // transaction
 

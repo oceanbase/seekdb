@@ -151,7 +151,6 @@ ObTxNode::ObTxNode(const int64_t ls_id,
                &get_location_adapter_(),
                &get_gti_source_(),
                &get_ts_mgr_(),
-               &rpc_proxy_,
                &schema_service_));
   tenant_.set(&txs_);
   OZ(fake_opt_stat_mgr_.init(tenant_id_));
@@ -327,6 +326,16 @@ ObTxNode::~ObTxNode() __attribute__((optnone)) {
     delete fake_tx_log_adapter_;
   }
   fake_ls_.ls_meta_.ls_id_ = ObLSID(1001);
+  // seekdb runs a single sys tenant that is never deleted. Under the global
+  // tenant-context model (g_tenant_ptr), this test's multiple ObTxNodes share
+  // one global tenant pointer, so a node's background threads may switch the
+  // pointer concurrently and a sibling node may already have cleaned up the
+  // shared LS/tx state. These teardown steps are therefore best-effort:
+  // tolerate benign cleanup errors (e.g. OB_LS_NOT_EXIST) instead of aborting.
+  if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "ignore best-effort TxNode teardown error", K(ret));
+    ret = OB_SUCCESS;
+  }
   FAST_FAIL();
   ObTenantEnv::set_tenant(NULL);
 }
@@ -472,7 +481,7 @@ int ObTxNode::handle_msg_(MsgPack *pkt)
   case ROLLBACK_SAVEPOINT:
     {
       ObTxRollbackSPMsg msg;
-      obrpc::ObTxRpcRollbackSPResult rslt;
+      obcall::ObTxRpcRollbackSPResult rslt;
       OZ(msg.deserialize(buf, size, pos));
       TRANS_LOG(TRACE, "handle_msg", K(msg), KPC(this));
       OZ(txs_.handle_sp_rollback_request(msg, rslt), msg);

@@ -20,8 +20,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/net/ob_addr.h"
 #include "rpc/frame/ob_req_transport.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_proxy_macros.h"
 #include "observer/ob_server_struct.h"
 #include "share/config/ob_server_config.h"
 #include "rootserver/freeze/ob_major_freeze_util.h"
@@ -33,9 +31,8 @@ namespace rootserver
 class ObPrimaryMajorFreezeService;
 class ObRestoreMajorFreezeService;
 }
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
 
 enum class ObTenantAdminMergeType
 {
@@ -141,52 +138,6 @@ public:
   OB_UNIS_VERSION(1);
 };
 
-class ObMajorFreezeRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObMajorFreezeRpcProxy);
-
-  RPC_S(PR1 major_freeze, OB_TENANT_MAJOR_FREEZE,
-        (ObMajorFreezeRequest), ObMajorFreezeResponse);
-};
-
-class ObTenantAdminMergeRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObTenantAdminMergeRpcProxy);
-  RPC_S(PR1 tenant_admin_merge, OB_TENANT_ADMIN_MERGE,
-        (ObTenantAdminMergeRequest), ObTenantAdminMergeResponse);
-};
-
-class ObTenantMajorFreezeP : public ObMajorFreezeRpcProxy::Processor<OB_TENANT_MAJOR_FREEZE>
-{
-public:
-  ObTenantMajorFreezeP()
-    : primary_major_freeze_service_(nullptr), restore_major_freeze_service_(nullptr) {}
-  virtual ~ObTenantMajorFreezeP() {}
-
-protected:
-  virtual int process() override;
-
-private:
-  rootserver::ObPrimaryMajorFreezeService *primary_major_freeze_service_;
-  rootserver::ObRestoreMajorFreezeService *restore_major_freeze_service_;
-};
-
-class ObTenantAdminMergeP : public ObTenantAdminMergeRpcProxy::Processor<OB_TENANT_ADMIN_MERGE>
-{
-public:
-  ObTenantAdminMergeP()
-    : primary_major_freeze_service_(nullptr), restore_major_freeze_service_(nullptr) {}
-  virtual ~ObTenantAdminMergeP() {}
-protected:
-  virtual int process() override;
-private:
-  rootserver::ObPrimaryMajorFreezeService *primary_major_freeze_service_;
-  rootserver::ObRestoreMajorFreezeService *restore_major_freeze_service_;
-};
-
-
 struct ObTabletMajorFreezeRequest
 {
 public:
@@ -209,17 +160,7 @@ public:
   OB_UNIS_VERSION(1);
 };
 
-class ObTabletMajorFreezeRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObTabletMajorFreezeRpcProxy);
-
-  RPC_S(PR1 tablet_major_freeze, OB_TABLET_MAJOR_FREEZE,
-        (ObTabletMajorFreezeRequest), ObMajorFreezeResponse);
-};
-
-
-} // namespace obrpc
+} // namespace obcall
 } // namespace oceanbase
 
 #endif // OCEANBASE_ROOTSERVER_OB_MAJOR_FREEZE_RPC_DEFINE_H_

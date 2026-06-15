@@ -4192,22 +4192,7 @@ def_table_schema(
   ]
   )
 
-all_kv_redis_table_def = dict(
-  owner = 'maochongxin.mcx',
-  table_name = '__all_kv_redis_table',
-  table_id = '527',
-  table_type = 'SYSTEM_TABLE',
-  gm_columns = ['gmt_create', 'gmt_modified'],
-  rowkey_columns = [
-    ('command_name', 'varchar:1024', 'false')
-  ],
-  in_tenant_space = True,
-  normal_columns = [
-    ('table_name', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false')
-  ]
-  )
-
-def_table_schema(**all_kv_redis_table_def)
+# 527: __all_kv_redis_table abandoned
 
 # 526: __wr_res_mgr_sysstat
 
@@ -9527,25 +9512,8 @@ def_table_schema(**gen_iterate_virtual_table_def(
   table_name = '__all_virtual_wr_sysstat',
   in_tenant_space = True,
   keywords = all_def_keywords['__wr_sysstat']))
-# 12392: __all_virtual_kv_connection
-def_table_schema(
-  owner      = 'shenyunlong.syl',
-  table_name = '__all_virtual_kv_connection',
-  table_id = '12392',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  in_tenant_space = True,
-  rowkey_columns = [
-    ('client_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
-    ('client_port', 'int')
-  ],
-  normal_columns = [
-    ('user_id', 'int'),
-    ('db_id', 'int'),
-    ('first_active_time', 'timestamp'),
-    ('last_active_time', 'timestamp')
-  ],  vtable_route_policy = 'local'
-  )
+# 12392: __all_virtual_kv_connection abandoned
+
 def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
 
 # 12394: __all_virtual_ls_transfer_member_list_lock_info (abandoned)
@@ -10298,25 +10266,8 @@ def_table_schema(
 
 # 12492: __all_virtual_ss_local_cache_info abandoned
 
-def_table_schema(
-  owner      = 'wuguangxin.wgx',
-  table_name = '__all_virtual_kv_group_commit_status',
-  table_id = '12493',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  in_tenant_space = True,
-  rowkey_columns = [
-  ],
-  normal_columns = [
-    ('group_type', 'varchar:32'),
-    ('table_id', 'int'),
-    ('schema_version', 'int'),
-    ('queue_size', 'int'),
-    ('batch_size', 'int'),
-    ('create_time', 'timestamp'),
-    ('update_time', 'timestamp')
-  ],  vtable_route_policy = 'local'
-  )
+# 12493: __all_virtual_kv_group_commit_status abandoned
+
 # 12494: __all_virtual_session_sys_variable
 # 12495: __all_virtual_spm_evo_result abandoned
 
@@ -10365,24 +10316,8 @@ def_table_schema(**gen_iterate_virtual_table_def(
   table_name = '__all_virtual_pkg_coll_type',
   keywords = all_def_keywords['__all_pkg_coll_type']))
 
-def_table_schema(
-  owner      = 'wuguangxin.wgx',
-  table_name = '__all_virtual_kv_client_info',
-  table_id = '12500',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  normal_columns = [
-    ('client_id', 'uint'),
-    ('client_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
-    ('client_port', 'int'),
-    ('user_name', 'varchar:OB_MAX_USER_NAME_LENGTH'),
-    ('first_login_ts', 'timestamp'),
-    ('last_login_ts', 'timestamp'),
-    ('client_info', 'varchar:2048')
-  ],  vtable_route_policy = 'local'
-  )
+# 12500: __all_virtual_kv_client_info abandoned
+
 def_table_schema(**gen_iterate_virtual_table_def(
   table_id = '12501',
   table_name = '__all_virtual_wr_sql_plan',
@@ -10395,10 +10330,8 @@ def_table_schema(**gen_iterate_virtual_table_def(
   in_tenant_space = True,
   keywords = all_def_keywords['__wr_res_mgr_sysstat']))
 
-def_table_schema(**gen_iterate_virtual_table_def(
-  table_id = '12503',
-  table_name = '__all_virtual_kv_redis_table',
-  keywords = all_def_keywords['__all_kv_redis_table']))
+# 12503: __all_virtual_kv_redis_table abandoned
+
 
 def_table_schema(
   owner             = 'zz412656',
@@ -10624,47 +10557,8 @@ def_table_schema(
     normal_columns = []
   )
 # 12528: __tenant_virtual_show_catalog_tables
-
-def_table_schema(
-  owner             = 'baonian.wcx',
-  table_name        = '__all_virtual_storage_cache_task',
-  table_id          = '12529',
-  table_type        = 'VIRTUAL_TABLE',
-  in_tenant_space   = True,
-  gm_columns        = [],
-  rowkey_columns    = [
-    ('tablet_id', 'int'),
-  ],
-  normal_columns    = [
-    ('status',        'varchar:64'),
-    ('speed',         'varchar:29'),
-    ('start_time',    'timestamp'),
-    ('complete_time', 'timestamp'),
-    ('result',        'int'),
-    ('comment',       'varchar:4096')
-  ],  vtable_route_policy = 'local'
-  )
-
-def_table_schema(
-  owner             = 'baonian.wcx',
-  table_name        = '__all_virtual_tablet_local_cache',
-  table_id          = '12530',
-  table_type        = 'VIRTUAL_TABLE',
-  in_tenant_space   = True,
-  gm_columns        = [],
-  rowkey_columns    = [
-    ('tablet_id', 'int'),
-  ],
-  normal_columns    = [
-    ('storage_cache_policy', 'varchar:64'),
-    ('cached_data_size',     'int'),
-    ('cache_hit_count',      'int'),
-    ('cache_miss_count',     'int'),
-    ('cache_hit_size',       'int'),
-    ('cache_miss_size',      'int'),
-    ('info',                 'varchar:4096')
-  ],  vtable_route_policy = 'local'
-  )
+# 12529: __all_virtual_storage_cache_task
+# 12530: __all_virtual_tablet_local_cache
 
 # 12531: __tenant_virtual_catalog_table_column
 # 12532: __tenant_virtual_show_create_catalog_table
@@ -22922,7 +22816,6 @@ def_table_schema(
 SELECT
     TID,
     TNAME,
-    STATUS,
     LATCH_WAIT,
     LATCH_HOLD,
     TRACE_ID,
@@ -23302,48 +23195,9 @@ def_table_schema(
     SNAP.STATUS = 0;
   """.replace("\n", " ")
 )
-# 21397: GV$OB_KV_CONNECTIONS
-# 21398: V$OB_KV_CONNECTIONS
-def_table_schema(
-  owner           = 'shenyunlong.syl',
-  table_name      = 'GV$OB_KV_CONNECTIONS',
-  table_id        = '21397',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """
-  select
-    user_id as USER_ID,
-    db_id as DB_ID,
-    client_ip as CLIENT_IP,
-    client_port as CLIENT_PORT,
-    first_active_time as FIRST_ACTIVE_TIME,
-    last_active_time as LAST_ACTIVE_TIME
-  from oceanbase.__all_virtual_kv_connection
-  order by LAST_ACTIVE_TIME desc, FIRST_ACTIVE_TIME desc
-""".replace("\n", " ")
-)
+# 21397: GV$OB_KV_CONNECTIONS abandoned
+# 21398: V$OB_KV_CONNECTIONS abandoned
 
-def_table_schema(
-  owner           = 'shenyunlong.syl',
-  table_name      = 'V$OB_KV_CONNECTIONS',
-  table_id        = '21398',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """
-  SELECT USER_ID,
-    DB_ID,
-    CLIENT_IP,
-    CLIENT_PORT,
-    FIRST_ACTIVE_TIME,
-    LAST_ACTIVE_TIME FROM oceanbase.GV$OB_KV_CONNECTIONS
-""".replace("\n", " ")
-)
 
 def_table_schema(
   owner           = 'yangyifei.yyf',
@@ -27736,45 +27590,11 @@ def_table_schema(
 # 21599: GV$OB_SS_LOCAL_CACHE abandoned
 # 21600: V$OB_SS_LOCAL_CACHE abandoned
 
-def_table_schema(
-  owner = 'wuguangxin.wgx',
-  table_name      = 'GV$OB_KV_GROUP_COMMIT_STATUS',
-  table_id        = '21601',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    table_id AS TABLE_ID,
-    schema_version AS SCHEMA_VERSION,
-    group_type AS GROUP_TYPE,
-    queue_size AS QUEUE_SIZE,
-    batch_size AS BATCH_SIZE,
-    create_time AS CREATE_TIME,
-    update_time AS UPDATE_TIME
-    FROM oceanbase.__all_virtual_kv_group_commit_status
-  """.replace("\n", " ")
-)
+# 21600: GV$OB_KV_GROUP_COMMIT_STATUS abandoned
 
-def_table_schema(
-  owner = 'wuguangxin.wgx',
-  table_name      = 'V$OB_KV_GROUP_COMMIT_STATUS',
-  table_id        = '21602',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
- TABLE_ID, SCHEMA_VERSION,
-    GROUP_TYPE, QUEUE_SIZE, BATCH_SIZE, CREATE_TIME, UPDATE_TIME
-  FROM
-     oceanbase.GV$OB_KV_GROUP_COMMIT_STATUS
-  """.replace("\n", " ")
-)
+
+# 21601: V$OB_KV_GROUP_COMMIT_STATUS abandoned
+
 
 def_table_schema(
   owner = 'zhenjiang.xzj',
@@ -27849,51 +27669,11 @@ def_table_schema(
 )
 
 # 21606: GV$OB_VARIABLES_BY_SESSION
-def_table_schema(
-  owner = 'wuguangxin.wgx',
-  table_name      = 'GV$OB_KV_CLIENT_INFO',
-  table_id        = '21607',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    client_id AS CLIENT_ID,
-    client_ip AS CLIENT_IP,
-    client_port AS CLIENT_PORT,
-    user_name AS USER_NAME,
-    first_login_ts AS FIRST_LOGIN_TS,
-    last_login_ts AS LAST_LOGIN_TS,
-    client_info AS CLIENT_INFO
-  FROM
-    oceanbase.__all_virtual_kv_client_info
-  """.replace("\n", " ")
-)
+# 21602: GV$OB_KV_CLIENT_INFO abandoned
 
-def_table_schema(
-  owner = 'wuguangxin.wgx',
-  table_name      = 'V$OB_KV_CLIENT_INFO',
-  table_id        = '21608',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    client_id AS CLIENT_ID,
-    client_ip AS CLIENT_IP,
-    client_port AS CLIENT_PORT,
-    user_name AS USER_NAME,
-    first_login_ts AS FIRST_LOGIN_TS,
-    last_login_ts AS LAST_LOGIN_TS,
-    client_info AS CLIENT_INFO
-  FROM
-     oceanbase.GV$OB_KV_CLIENT_INFO
-  """.replace("\n", " ")
-)
+
+# 21603: V$OB_KV_CLIENT_INFO abandoned
+
 # 21609: V$OB_VARIABLES_BY_SESSION
 def_table_schema(
   owner = 'roland.qk',
@@ -28121,44 +27901,11 @@ def_table_schema(
 # 21616: DBA_OB_SPM_EVO_RESULT abandoned
 # 21617: CDB_OB_SPM_EVO_RESULT abandoned
 
-def_table_schema(
-  owner = 'maochongxin.mcx',
-  table_name = 'DBA_OB_KV_REDIS_TABLE',
-  table_id = '21618',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    COMMAND_NAME,
-    TABLE_NAME,
-    GMT_CREATE,
-    GMT_MODIFIED
-FROM
-    OCEANBASE.__ALL_KV_REDIS_TABLE
-""".replace("\n", " ")
-)
+# 21618: DBA_OB_KV_REDIS_TABLE abandoned
 
-def_table_schema(
-  owner = 'maochongxin.mcx',
-  table_name = 'CDB_OB_KV_REDIS_TABLE',
-  table_id = '21619',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  view_definition = """
-SELECT
-    COMMAND_NAME,
-    TABLE_NAME,
-    GMT_CREATE,
-    GMT_MODIFIED
-FROM
-    OCEANBASE.__ALL_VIRTUAL_KV_REDIS_TABLE
-""".replace("\n", " ")
-)
+
+# 21619: CDB_OB_KV_REDIS_TABLE abandoned
+
 
 def_table_schema(
   owner           = 'zz412656',
@@ -28561,97 +28308,10 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner           = 'baonian.wcx',
-  table_name      = 'GV$OB_STORAGE_CACHE_TASKS',
-  table_id        = '21644',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    TABLET_ID,
-    STATUS,
-    SPEED,
-    START_TIME,
-    COMPLETE_TIME,
-    RESULT,
-    COMMENT
-  FROM oceanbase.__all_virtual_storage_cache_task
-  """.replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'baonian.wcx',
-  table_name      = 'V$OB_STORAGE_CACHE_TASKS',
-  table_id        = '21645',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    TABLET_ID,
-    STATUS,
-    SPEED,
-    START_TIME,
-    COMPLETE_TIME,
-    RESULT,
-    COMMENT
-  FROM oceanbase.GV$OB_STORAGE_CACHE_TASKS
-
-  """.replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'baonian.wcx',
-  table_name      = 'GV$OB_TABLET_LOCAL_CACHE',
-  table_id        = '21646',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    TABLET_ID,
-    STORAGE_CACHE_POLICY,
-    CACHED_DATA_SIZE,
-    CACHE_HIT_COUNT,
-    CACHE_MISS_COUNT,
-    CACHE_HIT_SIZE,
-    CACHE_MISS_SIZE,
-    INFO
-  FROM oceanbase.__all_virtual_tablet_local_cache
-  """.replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'baonian.wcx',
-  table_name      = 'V$OB_TABLET_LOCAL_CACHE',
-  table_id        = '21647',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    TABLET_ID,
-    STORAGE_CACHE_POLICY,
-    CACHED_DATA_SIZE,
-    CACHE_HIT_COUNT,
-    CACHE_MISS_COUNT,
-    CACHE_HIT_SIZE,
-    CACHE_MISS_SIZE,
-    INFO
-  FROM oceanbase.GV$OB_TABLET_LOCAL_CACHE
-
-  """.replace("\n", " ")
-)
+# 21644: GV$OB_STORAGE_CACHE_TASKS
+# 21645: V$OB_STORAGE_CACHE_TASKS
+# 21646: GV$OB_TABLET_LOCAL_CACHE
+# 21647: V$OB_TABLET_LOCAL_CACHE
 
 def_table_schema(
     owner = 'zhl413386',

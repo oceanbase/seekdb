@@ -37,9 +37,9 @@ public:
   virtual ~ObAlterTableStmt();
   int add_column(const share::schema::AlterColumnSchema &column_schema);
   int add_column_group(const ObColumnGroupSchema &column_group);
-  int add_index_arg(obrpc::ObIndexArg *index_arg);
-  int check_drop_fk_arg_exist(obrpc::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg);
-  obrpc::ObAlterTableArg& get_alter_table_arg(){ return alter_table_arg_; }
+  int add_index_arg(obcall::ObIndexArg *index_arg);
+  int check_drop_fk_arg_exist(obcall::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg);
+  obcall::ObAlterTableArg& get_alter_table_arg(){ return alter_table_arg_; }
   //check duplicate alter of same column in one clause
   bool is_column_modified(const common::ObString &column_name);
   bool is_comment_table() const { return is_comment_table_; }
@@ -99,24 +99,24 @@ public:
   }
   bool has_rename_action() const
   { return alter_table_arg_.has_rename_action(); }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_table_arg_; }
-  common::ObSArray<obrpc::ObCreateIndexArg*> &get_index_arg_list() { return index_arg_list_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_table_arg_; }
+  common::ObSArray<obcall::ObCreateIndexArg*> &get_index_arg_list() { return index_arg_list_; }
   void set_fts_arg_allocator(common::ObIAllocator *fts_arg_allocator) { fts_arg_allocator_ = fts_arg_allocator; }
-  common::ObSArray<obrpc::ObCreateForeignKeyArg> &get_foreign_key_arg_list()
+  common::ObSArray<obcall::ObCreateForeignKeyArg> &get_foreign_key_arg_list()
     { return alter_table_arg_.foreign_key_arg_list_; }
-  const common::ObSArray<obrpc::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
+  const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
     { return alter_table_arg_.foreign_key_arg_list_; }
-  void set_sequence_ddl_arg(const obrpc::ObSequenceDDLArg sequence_ddl_arg);
-  const obrpc::ObSequenceDDLArg &get_sequence_ddl_arg() const;
+  void set_sequence_ddl_arg(const obcall::ObSequenceDDLArg sequence_ddl_arg);
+  const obcall::ObSequenceDDLArg &get_sequence_ddl_arg() const;
   INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(alter_table_arg), K_(index_arg_list));
-  const common::ObSArray<obrpc::ObIndexArg*> &get_alter_index_arg_list() const 
+  const common::ObSArray<obcall::ObIndexArg*> &get_alter_index_arg_list() const 
     { return alter_table_arg_.index_arg_list_; }
 
-  obrpc::ObAlterTriggerArg &get_tg_arg() { return tg_arg_; }
+  obcall::ObAlterTriggerArg &get_tg_arg() { return tg_arg_; }
   const ObTableSchema &get_alter_table_schema() const { return alter_table_arg_.alter_table_schema_; }
   ObTableSchema &get_alter_table_schema() { return alter_table_arg_.alter_table_schema_; }
-  obrpc::ObExchangePartitionArg &get_exchange_partition_arg() { return exchange_partition_arg_;}
-  int set_exchange_partition_arg(const obrpc::ObExchangePartitionArg &exchange_partition_arg);
+  obcall::ObExchangePartitionArg &get_exchange_partition_arg() { return exchange_partition_arg_;}
+  int set_exchange_partition_arg(const obcall::ObExchangePartitionArg &exchange_partition_arg);
   inline void set_client_session_info(const uint32_t client_sessid,
                                       const int64_t create_ts)
   {
@@ -125,18 +125,18 @@ public:
   }
   int set_lock_priority(sql::ObSQLSessionInfo *session);
 private:
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   bool is_comment_table_;
   bool is_alter_system_;
-  common::ObSArray<obrpc::ObCreateIndexArg*> index_arg_list_;
+  common::ObSArray<obcall::ObCreateIndexArg*> index_arg_list_;
   common::ObIAllocator *fts_arg_allocator_;
   bool is_alter_triggers_;
-  obrpc::ObAlterTriggerArg tg_arg_;
+  obcall::ObAlterTriggerArg tg_arg_;
   ObRawExpr *interval_expr_;
   ObRawExpr *transition_expr_;
   uint64_t alter_table_action_count_;
   int64_t alter_external_table_type_;
-  obrpc::ObExchangePartitionArg exchange_partition_arg_;
+  obcall::ObExchangePartitionArg exchange_partition_arg_;
 };
 
 inline int ObAlterTableStmt::set_tz_info_wrap(const common::ObTimeZoneInfoWrap &tz_info_wrap)
@@ -158,12 +158,12 @@ inline int ObAlterTableStmt::set_nls_formats(const common::ObString &nls_date_fo
 }
 
 inline void ObAlterTableStmt::set_sequence_ddl_arg(
-    const obrpc::ObSequenceDDLArg sequence_ddl_arg)
+    const obcall::ObSequenceDDLArg sequence_ddl_arg)
 {
   alter_table_arg_.sequence_ddl_arg_ = sequence_ddl_arg; 
 }
 
-inline const obrpc::ObSequenceDDLArg &ObAlterTableStmt::get_sequence_ddl_arg() const
+inline const obcall::ObSequenceDDLArg &ObAlterTableStmt::get_sequence_ddl_arg() const
 {
   return alter_table_arg_.sequence_ddl_arg_; 
 }

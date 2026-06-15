@@ -19,6 +19,7 @@
 #include "src/sql/resolver/dml/ob_hint.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/monitor/ob_sql_plan.h"
+#include "sql/resolver/ddl/ob_explain_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::common;

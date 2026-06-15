@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
-#include "src/share/interrupt/ob_interrupt_rpc_proxy.h"
+#include "share/interrupt/ob_interrupt_message.h"
 #include "ob_opt_stat_service.h"
 
 namespace oceanbase {

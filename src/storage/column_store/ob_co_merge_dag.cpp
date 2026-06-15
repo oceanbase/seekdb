@@ -1734,12 +1734,6 @@ int ObCOMergeDagNet::prepare_co_merge_ctx()
     LOG_INFO("Tenant Merge has been paused", K(ret), KPC(this));
   } else if (is_local_exec_mode(basic_param_.exec_mode_)) {
     co_merge_ctx_ = NEW_CTX(ObCOTabletMergeCtx);
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (is_output_exec_mode(basic_param_.exec_mode_)) {
-    co_merge_ctx_ = NEW_CTX(ObCOTabletOutputMergeCtx);
-  } else if (is_calc_ckm_exec_mode(basic_param_.exec_mode_)) {
-    co_merge_ctx_ = NEW_CTX(ObCOTabletValidateMergeCtx);
-#endif
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid exec mode", KR(ret), K_(basic_param));

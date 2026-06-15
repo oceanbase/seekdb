@@ -21,9 +21,6 @@
 #include "observer/ob_server.h"
 #include "src/share/io/io_schedule/ob_io_schedule_v2.h"
 #include "lib/restore/ob_object_device.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/io/ob_ss_io_request.h"
-#endif
 #include "share/ob_io_device_helper.h"
 
 using namespace oceanbase::lib;
@@ -114,14 +111,14 @@ int ObTrafficControl::ObSharedDeviceIORecord::calc_usage(ObIORequest &req)
 // when use this interface input array default size shoulde be ResourceTypeCnt
 void ObTrafficControl::ObSharedDeviceIORecord::reset_total_size(ResourceUsage usages[])
 {
-  usages[obrpc::ResourceType::ibw].type_   = obrpc::ResourceType::ibw;
-  usages[obrpc::ResourceType::ibw].total_  = ibw_.clear();
-  usages[obrpc::ResourceType::obw].type_   = obrpc::ResourceType::obw;
-  usages[obrpc::ResourceType::obw].total_  = obw_.clear();
-  usages[obrpc::ResourceType::ips].type_   = obrpc::ResourceType::ips;
-  usages[obrpc::ResourceType::ips].total_  = ips_.clear();
-  usages[obrpc::ResourceType::ops].type_   = obrpc::ResourceType::ops;
-  usages[obrpc::ResourceType::ops].total_  = ops_.clear();
+  usages[obcall::ResourceType::ibw].type_   = obcall::ResourceType::ibw;
+  usages[obcall::ResourceType::ibw].total_  = ibw_.clear();
+  usages[obcall::ResourceType::obw].type_   = obcall::ResourceType::obw;
+  usages[obcall::ResourceType::obw].total_  = obw_.clear();
+  usages[obcall::ResourceType::ips].type_   = obcall::ResourceType::ips;
+  usages[obcall::ResourceType::ips].total_  = ips_.clear();
+  usages[obcall::ResourceType::ops].type_   = obcall::ResourceType::ops;
+  usages[obcall::ResourceType::ops].total_  = ops_.clear();
 }
 
 ObTrafficControl::ObSharedDeviceControlV2::ObSharedDeviceControlV2()
@@ -137,13 +134,13 @@ ObTrafficControl::ObSharedDeviceControlV2::~ObSharedDeviceControlV2()
 int ObTrafficControl::ObSharedDeviceControlV2::init()
 {
   int ret = OB_SUCCESS;
-  limits_[obrpc::ResourceType::ops] = INT64_MAX / 2;
-  limits_[obrpc::ResourceType::ips] = INT64_MAX / 2;
-  limits_[obrpc::ResourceType::iops] = INT64_MAX;
-  limits_[obrpc::ResourceType::obw] = INT64_MAX / (16 * (1<<11));
-  limits_[obrpc::ResourceType::ibw] = INT64_MAX / (16 * (1<<11));
-  limits_[obrpc::ResourceType::iobw] = INT64_MAX / (16 * (1<<10));
-  limits_[obrpc::ResourceType::tag] = INT64_MAX;
+  limits_[obcall::ResourceType::ops] = INT64_MAX / 2;
+  limits_[obcall::ResourceType::ips] = INT64_MAX / 2;
+  limits_[obcall::ResourceType::iops] = INT64_MAX;
+  limits_[obcall::ResourceType::obw] = INT64_MAX / (16 * (1<<11));
+  limits_[obcall::ResourceType::ibw] = INT64_MAX / (16 * (1<<11));
+  limits_[obcall::ResourceType::iobw] = INT64_MAX / (16 * (1<<10));
+  limits_[obcall::ResourceType::tag] = INT64_MAX;
   storage_key_  = ObStorageKey();
   return ret;
 }
@@ -181,17 +178,11 @@ int ObTrafficControl::ObSharedDeviceControlV2::is_group_key_exist(const ObIOSSGr
   return group_list_.is_group_key_exist(grp_key);
 }
 
-int64_t ObTrafficControl::ObSharedDeviceControlV2::get_limit(const obrpc::ResourceType type) const
+int64_t ObTrafficControl::ObSharedDeviceControlV2::get_limit(const obcall::ResourceType type) const
 {
   return limits_[static_cast<int>(type)];
 }
 
-int ObTrafficControl::ObSharedDeviceControlV2::update_limit(const obrpc::ObSharedDeviceResource &limit)
-{
-  int ret = OB_SUCCESS;
-  limits_[static_cast<int>(limit.type_)] = limit.value_;
-  return ret;
-}
 ObTrafficControl::ObTrafficControl()
 {
   int ret = OB_SUCCESS;
@@ -225,24 +216,6 @@ int ObTrafficControl::calc_usage(ObIORequest &req)
     }
     if (OB_SUCC(ret)) {
       record->calc_usage(req);
-    }
-    // shared_storage_ibw_ and shared_storage_storage_obw_ will accumulate regardless of whether req is succ or not.
-    if (req.io_result_ == nullptr) {
-      LOG_ERROR("io_result_ is null", K(ret));
-    } else if (req.get_mode() == ObIOMode::READ) {
-      if (req.io_result_->time_log_.return_ts_ > 0 && req.io_result_->ret_code_.io_ret_ == 0) {
-        shared_storage_ibw_.inc(io_size);
-      } else {
-        shared_storage_ibw_.inc(io_size);
-        failed_shared_storage_ibw_.inc(io_size);
-      }
-    } else {
-      if (req.io_result_->time_log_.return_ts_ > 0 && req.io_result_->ret_code_.io_ret_ == 0) {
-        shared_storage_obw_.inc(io_size);
-      } else {
-        shared_storage_obw_.inc(io_size);
-        failed_shared_storage_obw_.inc(io_size);
-      }
     }
   }
   return ret;
@@ -278,18 +251,10 @@ void ObTrafficControl::print_server_status()
   inner_calc_();
   int64_t net_bw_in =  net_ibw_.calc();
   int64_t net_bw_out = net_obw_.calc();
-  int64_t shared_storage_bw_in  = shared_storage_ibw_.calc();
-  int64_t shared_storage_bw_out = shared_storage_obw_.calc();
-  int64_t failed_shared_storage_bw_in  = failed_shared_storage_ibw_.calc();
-  int64_t failed_shared_storage_bw_out = failed_shared_storage_obw_.calc();
-  if (net_bw_in || net_bw_out || shared_storage_bw_in || shared_storage_bw_out) {
-    _LOG_INFO("[IO STATUS SERVER] net_in=%ldkB/s, net_out=%ldkB/s, bucket_in=%ldkB/s, bucket_out=%ldkB/s, failed_bucket_in=%ldkB/s, failed_bucket_out=%ldkB/s, limit=%ldkB/s",
+  if (net_bw_in || net_bw_out) {
+    _LOG_INFO("[IO STATUS SERVER] net_in=%ldkB/s, net_out=%ldkB/s, limit=%ldkB/s",
               net_bw_in / 1024,
               net_bw_out / 1024,
-              shared_storage_bw_in / 1024,
-              shared_storage_bw_out / 1024,
-              failed_shared_storage_bw_in / 1024,
-              failed_shared_storage_bw_out / 1024,
               device_bandwidth_ / 1024);
   }
 }
@@ -349,29 +314,6 @@ void ObTrafficControl::print_bucket_status_V2()
   };
   PrinterFn fn(io_record_map_);
   shared_device_map_v2_.foreach_refactored(fn);
-}
-
-int ObTrafficControl::set_limit_v2(const obrpc::ObSharedDeviceResourceArray &limit)
-{
-  int ret = OB_SUCCESS;
-  inner_calc_();
-  DRWLock::RDLockGuard guard(rw_lock_);
-  for (int i = 0; i < limit.array_.count(); ++i) {
-    ObSharedDeviceControlV2 *tc = nullptr;
-    if (ResourceType::tag == limit.array_.at(i).type_) {
-      // Tag is currently unavailable
-    } else if (ResourceType::iops == limit.array_.at(i).type_ || ResourceType::iobw == limit.array_.at(i).type_) {
-    } else if (OB_UNLIKELY(static_cast<int>(ResourceType::ResourceTypeCnt) <= static_cast<int>(limit.array_.at(i).type_))) {
-      LOG_ERROR("unexpected resource type", K(ret), K(limit));
-    } else if (OB_FAIL(shared_device_map_v2_.get_refactored(limit.array_.at(i).key_, tc))) {
-      LOG_WARN_RET(OB_HASH_NOT_EXIST, "get index from map failed", K(limit.array_.at(i).key_));
-    } else if (OB_UNLIKELY(OB_ISNULL(tc))) {
-      LOG_WARN_RET(OB_HASH_NOT_EXIST, "tc is not exist", K(limit.array_.at(i).key_));
-    } else if (OB_SUCCESS != (tc->update_limit(limit.array_.at(i)))) {
-      LOG_WARN("update shared device limit failed", K(ret), K(i), K(limit.array_.at(i)));
-    }
-  }
-  return ret;
 }
 
 void ObTrafficControl::inner_calc_()
@@ -1518,21 +1460,6 @@ int ObTenantIOManager::enqueue_callback(ObIORequest &req)
   }
   return ret;
 }
-int ObTenantIOManager::retry_io(ObIORequest &req)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
-  } else if (OB_FAIL(qsched_.schedule_request(req))) {
-    LOG_WARN("retry io request into sender failed", K(ret), K(req));
-  }
-  return ret;
-}
-
 int ObTenantIOManager::update_basic_io_unit_config(const ObTenantIOConfig::UnitConfig &io_unit_config)
 {
   int ret = OB_SUCCESS;
@@ -1667,15 +1594,6 @@ int ObTenantIOManager::alloc_io_request(ObIORequest *&req)
   int ret = OB_SUCCESS;
   req = nullptr;
   void *buf = nullptr;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (OB_ISNULL(buf = io_allocator_.alloc(sizeof(ObSSIORequest)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObSSIORequest)));
-  } else {
-    req = new (buf) ObSSIORequest;
-    req->tenant_io_mgr_ = this;
-  }
-#else
   if (OB_ISNULL(buf = io_allocator_.alloc(sizeof(ObIORequest)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObIORequest)));
@@ -1683,7 +1601,6 @@ int ObTenantIOManager::alloc_io_request(ObIORequest *&req)
     req = new (buf) ObIORequest;
     req->tenant_io_mgr_ = this;
   }
-#endif
   return ret;
 }
 

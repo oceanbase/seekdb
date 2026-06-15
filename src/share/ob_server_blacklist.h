@@ -34,7 +34,7 @@ namespace frame
 class ObReqTransport;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObBlackistReq;
 class ObBlackistResp;
@@ -102,8 +102,8 @@ public:
   bool is_clockdiff_error(const share::ObCascadMember &member) const { return false; }
   bool is_clog_disk_full(const share::ObCascadMember &member) const { return false; }
   bool is_clog_disk_error(const share::ObCascadMember &member) const { return false; }
-  int handle_req(const int64_t src_cluster_id, const obrpc::ObBlacklistReq &req);
-  int handle_resp(const obrpc::ObBlacklistResp &resp, const int64_t cluster_id);
+  int handle_req(const int64_t src_cluster_id, const obcall::ObBlacklistReq &req);
+  int handle_resp(const obcall::ObBlacklistResp &resp, const int64_t cluster_id);
   // for ob_admin
   void disable_blacklist();
   void enable_blacklist();
@@ -111,8 +111,8 @@ public:
 private:
   void run1();
   void blacklist_loop_();
-  int send_req_(const share::ObCascadMember &member, const obrpc::ObBlacklistReq &req);
-  int send_resp_(const common::ObAddr &server, const int64_t dst_cluster_id, const obrpc::ObBlacklistResp &resp);
+  int send_req_(const share::ObCascadMember &member, const obcall::ObBlacklistReq &req);
+  int send_resp_(const common::ObAddr &server, const int64_t dst_cluster_id, const obcall::ObBlacklistResp &resp);
 private:
   typedef common::ObLinearHashMap<share::ObCascadMember, ObDstServerInfo> DstInfoMap;
 
@@ -155,12 +155,12 @@ private:
   class ObMapRespFunctor
   {
   public:
-    explicit ObMapRespFunctor(const obrpc::ObBlacklistResp &resp)
+    explicit ObMapRespFunctor(const obcall::ObBlacklistResp &resp)
       : resp_(resp) {}
     ~ObMapRespFunctor() {}
     bool operator() (const share::ObCascadMember &member, ObDstServerInfo &info);
   private:
-    obrpc::ObBlacklistResp resp_;
+    obcall::ObBlacklistResp resp_;
   };
 
   class ObMapSendReqFunctor
@@ -204,7 +204,6 @@ private:
   bool is_enabled_;
   common::ObAddr self_;
   DstInfoMap dst_info_map_;
-  obrpc::ObBlacklistRpcProxy blacklist_proxy_;
   DISALLOW_COPY_AND_ASSIGN(ObServerBlacklist);
 };
 

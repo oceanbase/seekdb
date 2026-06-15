@@ -52,21 +52,12 @@ int ObCommonIDUtils::gen_unique_id(const uint64_t tenant_id, ObCommonID &id)
 int ObCommonIDUtils::gen_unique_id_by_rpc(const uint64_t tenant_id, ObCommonID &id)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
-  share::ObLocationService *location_service = nullptr;
-  ObAddr leader_addr;
-  if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)
-      || OB_ISNULL(location_service = GCTX.location_service_)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("root service or location_cache is null", KR(ret), KP(srv_rpc_proxy), KP(location_service));
-  } else if (OB_FAIL(location_service->get_leader(GCONF.cluster_id,
-                                                  tenant_id,
-                                                  SYS_LS,
-                                                  false,/*force_renew*/
-                                                  leader_addr))) {
-    LOG_WARN("get leader failed", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).by(tenant_id).gen_unique_id(tenant_id, id))) {
-    LOG_WARN("fail to send gen unique id rpc", KR(ret), K(tenant_id));
+  // seekdb single-node: all LS leaders are local, just call gen_unique_id directly.
+  // Switch tenant context so gen_unique_id's MTL_ID() check passes.
+  MTL_SWITCH(tenant_id) {
+    if (OB_FAIL(gen_unique_id(tenant_id, id))) {
+      LOG_WARN("gen_unique_id local call failed", KR(ret), K(tenant_id));
+    }
   }
   return ret;
 }

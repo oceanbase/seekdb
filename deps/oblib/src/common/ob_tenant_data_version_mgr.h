@@ -20,7 +20,7 @@
 #include "lib/ob_define.h"
 #include "lib/hash/ob_hashmap.h"
 #include "common/ob_version_def.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
+#include "rpc/frame/ob_req_packet_code.h"
 
 namespace oceanbase 
 {
@@ -82,7 +82,7 @@ public:
   {
     return ATOMIC_LOAD(&file_exists_when_loading_);
   }
-  static bool need_set_for_rpc(obrpc::ObRpcPacketCode pcode) 
+  static bool need_set_for_rpc(rpc::frame::ObReqPacketCode pcode) 
   {
     return true;
   }

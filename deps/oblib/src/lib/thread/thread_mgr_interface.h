@@ -43,6 +43,9 @@ public:
   {
     stop_ = stop;
   }
+  // Called when the TG is being destroyed, to let the runnable wake from any
+  // internal wait (e.g. cond wait) and notice the stop flag promptly.
+  virtual void signal_stop() {}
   uint64_t get_thread_idx() const
   {
     return thread_idx_;

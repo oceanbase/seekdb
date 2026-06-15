@@ -29,12 +29,12 @@
 namespace oceanbase {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 using namespace storage;
 namespace rootserver {
 
 int ObDDLService::fork_database(
-    const obrpc::ObForkDatabaseArg &fork_database_arg, obrpc::ObDDLRes &res) {
+    const obcall::ObForkDatabaseArg &fork_database_arg, obcall::ObDDLRes &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init", K(ret));

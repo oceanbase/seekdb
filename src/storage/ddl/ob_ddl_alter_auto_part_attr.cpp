@@ -30,7 +30,7 @@ ObAlterAutoPartAttrOp::ObAlterAutoPartAttrOp(rootserver::ObDDLService &ddl_servi
 }
 
 int ObAlterAutoPartAttrOp::check_alter_table_partition_attr(
-    const obrpc::ObAlterTableArg &alter_table_arg,
+    const obcall::ObAlterTableArg &alter_table_arg,
     const share::schema::ObTableSchema &orig_table_schema,
     const bool is_oracle_mode,
     share::ObDDLType &ddl_type)
@@ -45,7 +45,7 @@ int ObAlterAutoPartAttrOp::check_alter_table_partition_attr(
   if (is_long_running_ddl(ddl_type)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "There are several mutually exclusive DDL in single statement");
-  } else if (obrpc::ObAlterTableArg::REPARTITION_TABLE == alter_table_arg.alter_part_type_) {
+  } else if (obcall::ObAlterTableArg::REPARTITION_TABLE == alter_table_arg.alter_part_type_) {
     if (is_oracle_mode && PARTITION_LEVEL_ZERO != part_level && OB_NOT_NULL(alter_part_array)) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "re-partition a patitioned table");
@@ -74,7 +74,7 @@ int ObAlterAutoPartAttrOp::check_alter_table_partition_attr(
 }
 
 int ObAlterAutoPartAttrOp::alter_table_partition_attr(
-    obrpc::ObAlterTableArg &alter_table_arg,
+    obcall::ObAlterTableArg &alter_table_arg,
     const share::schema::ObTableSchema &orig_table_schema,
     share::schema::ObTableSchema &new_table_schema)
 {

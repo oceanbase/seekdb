@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_drop_index_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_root_service.h"
@@ -24,7 +25,7 @@
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
@@ -50,7 +51,7 @@ int ObDropIndexTask::init(
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObDropIndexArg &drop_index_arg)
+    const obcall::ObDropIndexArg &drop_index_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == data_table_id
@@ -133,9 +134,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
       tenant_id_, schema_guard, schema_version_))) {
     LOG_WARN("fail to get schema guard", K(ret), K(target_object_id_), K(schema_version_));
@@ -147,7 +146,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("fail to get table schema", K(ret));
   } else {
-    obrpc::ObUpdateIndexStatusArg arg;
+    obcall::ObUpdateIndexStatusArg arg;
     arg.index_table_id_ = index_schema->get_table_id();
     arg.status_ = new_status;
     arg.exec_tenant_id_ = tenant_id_;
@@ -160,7 +159,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
       LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, UPDATE_INDEX_STATUS_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(GCTX.self_addr()).timeout(ddl_rpc_timeout).update_index_status(arg))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->update_index_status(arg); }))) {
       LOG_WARN("update index status failed", K(ret), K(arg));
     } else {
       LOG_INFO("notify index status changed finish", K(new_status), K(target_object_id_));
@@ -222,10 +221,9 @@ int ObDropIndexTask::drop_index_impl()
   bool is_index_exist = false;
   ObString index_name;
   const ObTableSchema *index_schema = nullptr;
-  const bool is_mlog = (obrpc::ObIndexArg::DROP_MLOG == drop_index_arg_.index_action_type_);
-  if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.rs_rpc_proxy_)) {
+  const bool is_mlog = (obcall::ObIndexArg::DROP_MLOG == drop_index_arg_.index_action_type_);
+  if (OB_ISNULL(GCTX.schema_service_) ) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_), KP(GCTX.rs_rpc_proxy_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
     LOG_WARN("get tenant schema failed", K(ret), K(tenant_id_));
   } else if (OB_FAIL(schema_guard.check_table_exist(tenant_id_, target_object_id_, is_index_exist))) {
@@ -253,8 +251,8 @@ int ObDropIndexTask::drop_index_impl()
     LOG_WARN("assign user drop index sql failed", K(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
-    obrpc::ObDropIndexArg drop_index_arg;
-    obrpc::ObDropIndexRes drop_index_res;
+    obcall::ObDropIndexArg drop_index_arg;
+    obcall::ObDropIndexRes drop_index_res;
     drop_index_arg.is_inner_          = true;
     drop_index_arg.tenant_id_         = tenant_id_;
     drop_index_arg.exec_tenant_id_    = tenant_id_;
@@ -272,7 +270,7 @@ int ObDropIndexTask::drop_index_impl()
       LOG_WARN("failed to get ddl rpc timeout", K(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->timeout(ddl_rpc_timeout).drop_index(drop_index_arg, drop_index_res))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", K(ret), K(ddl_rpc_timeout));
     }
     LOG_INFO("drop index", K(ret), K(drop_index_sql.ptr()), K(drop_index_arg));
@@ -439,8 +437,8 @@ int ObDropIndexTask::check_switch_succ()
 }
 
 int ObDropIndexTask::deep_copy_index_arg(common::ObIAllocator &allocator,
-                                        const obrpc::ObDropIndexArg &src_index_arg,
-                                        obrpc::ObDropIndexArg &dst_index_arg)
+                                        const obcall::ObDropIndexArg &src_index_arg,
+                                        obcall::ObDropIndexArg &dst_index_arg)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
@@ -479,7 +477,7 @@ int ObDropIndexTask::serialize_params_to_message(char *buf, const int64_t buf_si
 int ObDropIndexTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObDropIndexArg tmp_drop_index_arg;
+  obcall::ObDropIndexArg tmp_drop_index_arg;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(tenant_id), KP(buf), K(buf_size));

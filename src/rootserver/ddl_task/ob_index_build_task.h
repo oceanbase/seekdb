@@ -105,7 +105,7 @@ public:
       const int64_t parallel,
       const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
-      const obrpc::ObCreateIndexArg &create_index_arg,
+      const obcall::ObCreateIndexArg &create_index_arg,
       const share::ObDDLType task_type,
       const int64_t parent_task_id /* = 0 */,
       const uint64_t tenant_data_version,
@@ -134,7 +134,7 @@ public:
   { 
     return share::ObDDLTaskStatus::REDEFINITION == task_status_ ? is_retryable_ddl_ : true;
   }
-  static int deep_copy_index_arg(common::ObIAllocator &allocator, const obrpc::ObCreateIndexArg &source_arg, obrpc::ObCreateIndexArg &dest_arg);
+  static int deep_copy_index_arg(common::ObIAllocator &allocator, const obcall::ObCreateIndexArg &source_arg, obcall::ObCreateIndexArg &dest_arg);
   bool is_offline_rebuild() const { return create_index_arg_.is_offline_rebuild_; }
   INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, K(index_table_id_), K(is_sstable_complete_task_submitted_), K(sstable_complete_request_time_),
       K(sstable_complete_ts_), K(check_unique_snapshot_), K(complete_sstable_job_ret_code_), K_(redefinition_execution_id), K(create_index_arg_), K(target_cg_cnt_));
@@ -190,7 +190,7 @@ private:
   int64_t complete_sstable_job_ret_code_;
   int64_t redefinition_execution_id_;
   ObDDLTabletScheduler tablet_scheduler_;
-  obrpc::ObCreateIndexArg create_index_arg_; // this is not a valid arg, only has nls formats for now
+  obcall::ObCreateIndexArg create_index_arg_; // this is not a valid arg, only has nls formats for now
   int64_t target_cg_cnt_; 
   bool is_retryable_ddl_;
 };

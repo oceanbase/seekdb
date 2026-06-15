@@ -654,6 +654,8 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
   ObArray<ObRawExpr *> lookup_pushdown_filters;
   ObDASScanCtDef &scan_ctdef = spec.tsc_ctdef_.scan_ctdef_;
   ObDASScanCtDef *lookup_ctdef = spec.tsc_ctdef_.get_lookup_ctdef();
+  ObSqlSchemaGuard *schema_guard = nullptr;
+  const ObTableSchema *scan_table_schema = nullptr;
   if (OB_NOT_NULL(op.get_auto_split_filter())) {
     ObRawExpr *auto_split_expr = const_cast<ObRawExpr *>(op.get_auto_split_filter());
     if (OB_FAIL(scan_pushdown_filters.push_back(auto_split_expr))) {
@@ -718,6 +720,22 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
                                        lookup_ctdef->pd_expr_spec_))) {
     LOG_WARN("generate pd storage flag for lookup ctdef failed", K(ret));
   }
+  if (OB_FAIL(ret)) {
+  } else if (scan_pushdown_filters.empty() || !op.is_vec_adaptive_scan()) {
+    // do nothing
+  } else if (OB_ISNULL(cg_.opt_ctx_) ||
+             OB_ISNULL(schema_guard = cg_.opt_ctx_->get_sql_schema_guard())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null schema guard", K(ret), KP(cg_.opt_ctx_), KP(schema_guard));
+  } else if (OB_FAIL(schema_guard->get_table_schema(scan_ctdef.ref_table_id_, scan_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(scan_ctdef.ref_table_id_));
+  } else if (OB_ISNULL(scan_table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null table schema", K(ret), K(scan_ctdef.ref_table_id_));
+  } else if (OB_FAIL(prune_scan_pushdown_filters_by_table_columns(*scan_table_schema,
+                                                                  scan_pushdown_filters))) {
+    LOG_WARN("failed to prune scan pushdown filters", K(ret), K(scan_ctdef.ref_table_id_));
+  }
   if (OB_SUCC(ret) && !scan_pushdown_filters.empty()) {
     bool pd_filter = scan_ctdef.pd_expr_spec_.pd_storage_flag_.is_filter_pushdown();
     if (OB_FAIL(cg_.generate_rt_exprs(scan_pushdown_filters, scan_ctdef.pd_expr_spec_.pushdown_filters_))) {
@@ -764,6 +782,38 @@ int ObTscCgService::generate_tsc_filter(const ObLogTableScan &op, ObTableScanSpe
   return ret;
 }
 
+int ObTscCgService::prune_scan_pushdown_filters_by_table_columns(
+    const ObTableSchema &scan_table_schema,
+    ObIArray<ObRawExpr*> &scan_pushdown_filters) const
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr*, 8> valid_filters;
+  ObSEArray<uint64_t, 8> column_ids;
+  for (int64_t i = 0; OB_SUCC(ret) && i < scan_pushdown_filters.count(); ++i) {
+    ObRawExpr *filter = scan_pushdown_filters.at(i);
+    bool can_push_to_scan = true;
+    column_ids.reuse();
+    if (OB_ISNULL(filter)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null filter", K(ret), K(i));
+    } else if (OB_FAIL(ObRawExprUtils::extract_column_ids(filter, column_ids))) {
+      LOG_WARN("failed to extract column ids", K(ret), KPC(filter));
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && can_push_to_scan && j < column_ids.count(); ++j) {
+      if (OB_ISNULL(scan_table_schema.get_column_schema(column_ids.at(j)))) {
+        can_push_to_scan = false;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (can_push_to_scan && OB_FAIL(valid_filters.push_back(filter))) {
+      LOG_WARN("failed to push back valid filter", K(ret), KPC(filter));
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(scan_pushdown_filters.assign(valid_filters))) {
+    LOG_WARN("failed to assign scan pushdown filters", K(ret));
+  }
+  return ret;
+}
 
 int ObTscCgService::generate_pd_storage_flag(const ObLogPlan *log_plan,
                                              const uint64_t ref_table_id,
@@ -956,7 +1006,18 @@ int ObTscCgService::extract_das_access_exprs(const ObLogTableScan &op,
                                            scan_ctdef.ir_scan_type_ == OB_IR_FWD_IDX_AGG ||
                                            scan_ctdef.ir_scan_type_ == OB_IR_BLOCK_MAX_SCAN);
   const bool is_doc_id_index_back = (!op.is_vec_idx_scan() || !op.get_vector_index_info().is_vec_aux_table_id(scan_table_id)) && op.need_doc_id_index_back() && scan_table_id == op.get_doc_id_index_table_id();
-  if (op.need_skip_rowkey_doc() && (scan_table_id == op.get_doc_id_index_table_id() || scan_table_id == op.get_rowkey_doc_table_id())) {
+  ObSqlSchemaGuard *schema_guard = nullptr;
+  const ObTableSchema *scan_table_schema = nullptr;
+  if (OB_ISNULL(cg_.opt_ctx_) ||
+      OB_ISNULL(schema_guard = cg_.opt_ctx_->get_sql_schema_guard())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null schema guard", K(ret), KP(cg_.opt_ctx_), KP(schema_guard));
+  } else if (OB_FAIL(schema_guard->get_table_schema(scan_table_id, scan_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(scan_table_id));
+  } else if (OB_ISNULL(scan_table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null table schema", K(ret), K(scan_table_id));
+  } else if (op.need_skip_rowkey_doc() && (scan_table_id == op.get_doc_id_index_table_id() || scan_table_id == op.get_rowkey_doc_table_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("skip rowkey doc is not supported", K(ret));
   } else if (is_func_lookup ||
@@ -1001,6 +1062,10 @@ int ObTscCgService::extract_das_access_exprs(const ObLogTableScan &op,
                                                                             scan_pushdown_filters,
                                                                             lookup_pushdown_filters))) {
         LOG_WARN("extract pushdown filters failed", K(ret));
+      } else if (op.is_vec_adaptive_scan() &&
+                 OB_FAIL(prune_scan_pushdown_filters_by_table_columns(*scan_table_schema,
+                                                                      scan_pushdown_filters))) {
+        LOG_WARN("failed to prune scan pushdown filters", K(ret), K(scan_table_id));
       } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(scan_pushdown_filters,
                                                               filter_columns))) {
         LOG_WARN("extract column exprs failed", K(ret));

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_trigger_storage_cache_executor.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "sql/resolver/cmd/ob_trigger_storage_cache_stmt.h"
 
 

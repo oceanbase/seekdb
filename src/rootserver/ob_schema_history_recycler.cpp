@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_schema_history_recycler.h"
-#include "rootserver/ob_rs_async_rpc_proxy.h"
+#include "observer/ob_ex_rpc.h"
+#include "observer/ob_service.h"
 #include "src/share/ob_freeze_info_proxy.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_zone_merge_info.h"
@@ -230,8 +231,8 @@ bool ObSchemaHistoryRecycler::is_valid_recycle_schema_version(
 }
 
 int ObSchemaHistoryRecycler::get_recycle_schema_versions(
-    const obrpc::ObGetRecycleSchemaVersionsArg &arg,
-    obrpc::ObGetRecycleSchemaVersionsResult &result)
+    const obcall::ObGetRecycleSchemaVersionsArg &arg,
+    obcall::ObGetRecycleSchemaVersionsResult &result)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -373,58 +374,35 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_server(
     common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObGetMinSSTableSchemaVersionArg arg;
+  obcall::ObGetMinSSTableSchemaVersionArg arg;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(arg.tenant_id_arg_list_.assign(tenant_ids))) {
     LOG_WARN("fail to assign arg", KR(ret));
   } else {
-    rootserver::ObGetMinSSTableSchemaVersionProxy proxy_batch(
-        *(GCTX.srv_rpc_proxy_), &obrpc::ObSrvRpcProxy::get_min_sstable_schema_version);
-    const int64_t timeout_ts = GCONF.rpc_timeout;
+    // single-server: dispatch directly to local ObService instead of going through
+    // the removed ObGetMinSSTableSchemaVersionProxy / RPC transport.
     const ObAddr &addr = GCTX.self_addr();
-    if (OB_FAIL(proxy_batch.call(addr, timeout_ts, arg))) {
-      LOG_WARN("fail to call async batch rpc", KR(ret), K(addr), K(arg));
-    }
-    ObArray<int> return_code_array;
-    int tmp_ret = OB_SUCCESS; // always wait all
-    if (OB_TMP_FAIL(proxy_batch.wait_all(return_code_array))) {
-      LOG_WARN("wait batch result failed", KR(tmp_ret), KR(ret));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
-    } else if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(proxy_batch.check_return_cnt(return_code_array.count()))) {
-      LOG_WARN("fail to check return cnt", KR(ret), "return_cnt", return_code_array.count());
+    obcall::ObGetMinSSTableSchemaVersionRes result;
+    if (OB_FAIL(ex_rpc::sync_call([&]{
+          return GCTX.ob_service_->get_min_sstable_schema_version(arg, result); }))) {
+      LOG_WARN("fail to get min sstable schema version", KR(ret), K(addr), K(arg));
+    } else if (result.ret_list_.count() != arg.tenant_id_arg_list_.count()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("cnt not match", KR(ret),
+               "tenant_cnt", arg.tenant_id_arg_list_.count(),
+               "result_cnt", result.ret_list_.count());
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < return_code_array.count(); i++) {
-        int res_ret = return_code_array.at(i);
-        const ObAddr &addr = proxy_batch.get_dests().at(i);
-        if (OB_SUCCESS != res_ret) {
-          ret = res_ret;
-          LOG_WARN("rpc execute failed", KR(ret), K(addr));
-        } else {
-          const obrpc::ObGetMinSSTableSchemaVersionRes *result = proxy_batch.get_results().at(i);
-          if (OB_ISNULL(result)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("result is null", KR(ret));
-          } else if (result->ret_list_.count() != arg.tenant_id_arg_list_.count()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("cnt not match", KR(ret),
-                     "tenant_cnt", arg.tenant_id_arg_list_.count(),
-                     "result_cnt", result->ret_list_.count());
-          } else {
-            for (int64_t j = 0; OB_SUCC(ret) && j < result->ret_list_.count(); j++) {
-              int64_t schema_version = result->ret_list_.at(j);
-              uint64_t tenant_id = arg.tenant_id_arg_list_.at(j);
-              if (FAILEDx(fill_recycle_schema_versions(
-                  tenant_id, schema_version, recycle_schema_versions))) {
-                LOG_WARN("fail to fill recycle schema versions",
-                         KR(ret), K(tenant_id), K(schema_version));
-              }
-              LOG_INFO("[SCHEMA_RECYCLE] get recycle schema version from observer",
-                       KR(ret), K(addr), K(tenant_id), K(schema_version));
-            }
-          }
+      for (int64_t j = 0; OB_SUCC(ret) && j < result.ret_list_.count(); j++) {
+        int64_t schema_version = result.ret_list_.at(j);
+        uint64_t tenant_id = arg.tenant_id_arg_list_.at(j);
+        if (FAILEDx(fill_recycle_schema_versions(
+            tenant_id, schema_version, recycle_schema_versions))) {
+          LOG_WARN("fail to fill recycle schema versions",
+                   KR(ret), K(tenant_id), K(schema_version));
         }
+        LOG_INFO("[SCHEMA_RECYCLE] get recycle schema version from observer",
+                 KR(ret), K(addr), K(tenant_id), K(schema_version));
       }
     }
   }

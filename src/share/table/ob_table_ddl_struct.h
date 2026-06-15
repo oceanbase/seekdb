@@ -51,8 +51,8 @@ public:
   virtual int assign(const ObHTableDDLParam &other) override;
   TO_STRING_KV(K_(table_group_arg), K_(cf_arg_list));
 public:
-  obrpc::ObCreateTablegroupArg table_group_arg_;
-  common::ObSArray<obrpc::ObCreateTableArg> cf_arg_list_;
+  obcall::ObCreateTablegroupArg table_group_arg_;
+  common::ObSArray<obcall::ObCreateTableArg> cf_arg_list_;
 };
 
 struct ObSetKvAttributeParam : public ObHTableDDLParam
@@ -96,7 +96,7 @@ public:
   virtual int assign(const ObHTableDDLParam &other) override;
   TO_STRING_KV(K_(table_group_arg));
 public:
-  obrpc::ObDropTablegroupArg table_group_arg_;
+  obcall::ObDropTablegroupArg table_group_arg_;
 };
 
 }  // end namespace table

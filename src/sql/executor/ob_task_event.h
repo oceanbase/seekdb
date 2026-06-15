@@ -35,6 +35,20 @@ namespace oceanbase
 namespace sql
 {
 struct ObEvalCtx;
+
+// Relocated from the deleted ob_executor_rpc_proxy.h. Used by temp-table
+// transformation ops to describe interm-result ids for erase (the remote
+// erase RPC itself is removed on single-replica seekdb).
+struct ObEraseDtlIntermResultArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObEraseDtlIntermResultArg() {}
+
+  ObSEArray<uint64_t, 4> interm_result_ids_;
+
+  TO_STRING_KV(K_(interm_result_ids));
+};
 // Due to calling the rpc asynchronous callback interface, this interface does not call the destructor of the parameters,
 // Therefore the following classes should be designed not to rely on the destructor for memory release
 
@@ -311,7 +325,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMiniTaskRetryInfo);
 };
 
-class ObRemoteResult : public obrpc::ObIFill
+class ObRemoteResult : public obcall::ObIFill
 {
   OB_UNIS_VERSION(1);
 public:

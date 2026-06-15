@@ -67,21 +67,16 @@
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
 #include "observer/ob_root_service_monitor.h"
-#include "observer/table/ob_table_service.h"
-#include "observer/dbms_job/ob_dbms_job_rpc_proxy.h"
-#include "observer/ob_inner_sql_rpc_proxy.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
 #include "storage/ob_disk_usage_reporter.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_job_rpc_proxy.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
-#include "share/table/ob_table_rpc_proxy.h"
 #include "share/wr/ob_wr_service.h"
 
 #include "sql/engine/table/ob_external_table_access_service.h"
-#include "share/external_table/ob_external_table_file_rpc_proxy.h"
 #include "share/ob_device_credential_task.h"
 #include "grpc/ob_grpc_server.h"
 #include "storage/ob_storage_grpc.h"
@@ -224,11 +219,9 @@ public:
   bool is_log_dir_empty() const { return is_log_dir_empty_; }
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
   rootserver::ObRootService &get_root_service() { return root_service_; }
-  obrpc::ObCommonRpcProxy &get_common_rpc_proxy() { return rs_rpc_proxy_; }
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
-  obrpc::ObTableRpcProxy &get_table_rpc_proxy() { return table_rpc_proxy_; }
   share::ObLocationService &get_location_service() { return location_service_; }
 private:
   int stop();
@@ -325,7 +318,6 @@ private:
 #endif
   // The network framework in OceanBase is all defined at ObServerNetworkFrame.
   ObSrvNetworkFrame net_frame_;
-  obrpc::ObBatchRpc batch_rpc_;
 
 
   ObStorageGrpcServiceImpl storage_grpc_service_impl_;
@@ -338,23 +330,13 @@ private:
   ObRestoreCtx restore_ctx_;
 
 
-  // The two proxies by which local OceanBase server has ability to
+  // The proxy by which local OceanBase server has ability to
   // communicate with other server.
-  obrpc::ObSrvRpcProxy srv_rpc_proxy_;
-  obrpc::ObStorageRpcProxy storage_rpc_proxy_;
-  obrpc::ObCommonRpcProxy rs_rpc_proxy_;
+  obcall::ObStorageRpcProxy storage_rpc_proxy_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
   common::ObOracleSqlProxy ddl_oracle_sql_proxy_;
-  obrpc::ObExecutorRpcProxy executor_proxy_;
   sql::ObExecutorRpcImpl executor_rpc_;
-  obrpc::ObDBMSJobRpcProxy dbms_job_rpc_proxy_;
-  obrpc::ObInnerSQLRpcProxy inner_sql_rpc_proxy_;
-  obrpc::ObDBMSSchedJobRpcProxy dbms_sched_job_rpc_proxy_;
-  obrpc::ObInterruptRpcProxy interrupt_proxy_; // global interrupt
-  obrpc::ObLoadDataRpcProxy load_data_proxy_;
-  obrpc::ObTableRpcProxy table_rpc_proxy_;
-  obrpc::ObExtenralTableRpcProxy external_table_proxy_;
 
   // The OceanBase configuration relating to.
   common::ObServerConfig &config_;
@@ -413,8 +395,6 @@ private:
   transaction::ObWeakReadService  weak_read_service_;
   // blacklist service
   transaction::ObBLService &bl_service_;
-  // table service
-  ObTableService table_service_;
 
   // Tenant isolation resource management
   share::ObCgroupCtrl cgroup_ctrl_;

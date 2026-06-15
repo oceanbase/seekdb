@@ -722,9 +722,6 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer to tablet is nullptr", K(ret), KP(tablet));
-  } else if ((GCTX.is_shared_storage_mode())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_DEBUG("split in shared storage mode not supported", K(ret));
   } else if (OB_FAIL(tablet->ObITabletMdsCustomizedInterface::get_latest_split_data(
       split_data, writer, trans_stat, trans_version))) {
     if (OB_EMPTY_RESULT == ret) {
@@ -830,8 +827,7 @@ int ObServerAutoSplitScheduler::push_task(const storage::ObTabletHandle &tablet_
 int ObServerAutoSplitScheduler::batch_send_split_request(const ObArray<ObArray<ObAutoSplitTask>> &tenant_task_arrays)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCommonRpcProxy *rpc_proxy = GCTX.rs_rpc_proxy_;
-  obrpc::ObAutoSplitTabletBatchArg args;
+  obcall::ObAutoSplitTabletBatchArg args;
   for (int64_t i = 0; OB_SUCC(ret) && i < tenant_task_arrays.count(); ++i) {
     const ObArray<ObAutoSplitTask> &task_array = tenant_task_arrays.at(i);
     for (int64_t j = 0; OB_SUCC(ret) && j < task_array.size(); ++j) {
@@ -841,7 +837,7 @@ int ObServerAutoSplitScheduler::batch_send_split_request(const ObArray<ObArray<O
         int tmp_ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid split task", K(tmp_ret), K(task));
       } else {
-        obrpc::ObAutoSplitTabletArg single_arg;
+        obcall::ObAutoSplitTabletArg single_arg;
         single_arg.auto_split_tablet_size_ = task.auto_split_tablet_size_;
         single_arg.ls_id_ = task.ls_id_;
         single_arg.tablet_id_ = task.tablet_id_;
@@ -852,9 +848,9 @@ int ObServerAutoSplitScheduler::batch_send_split_request(const ObArray<ObArray<O
         }
       }
     }
-    obrpc::ObAutoSplitTabletBatchRes results;
+    obcall::ObAutoSplitTabletBatchRes results;
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(rpc_proxy->timeout(GCONF._ob_ddl_timeout).send_auto_split_tablet_task_request(args, results))) {
+      if (OB_FAIL(GCTX.root_service_->send_auto_split_tablet_task_request(args, results))) {
         LOG_WARN("failed to send_auto_split_tablet_task_request", KR(ret), K(args), K(results));
       } else if (OB_UNLIKELY(results.rets_.count() != args.args_.count())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1232,7 +1228,7 @@ int ObAutoSplitArgBuilder::build_arg(const uint64_t tenant_id,
                                      const ObTabletID tablet_id,
                                      const int64_t auto_split_tablet_size,
                                      const int64_t used_disk_space,
-                                     obrpc::ObAlterTableArg &arg)
+                                     obcall::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
   const share::schema::ObTableSchema *table_schema = nullptr;
@@ -1292,7 +1288,7 @@ int ObAutoSplitArgBuilder::acquire_schema_info_of_tablet_(const uint64_t tenant_
                                                           const share::schema::ObTableSchema *&table_schema,
                                                           const share::schema::ObSimpleDatabaseSchema *&db_schema,
                                                           share::schema::ObSchemaGetterGuard &guard,
-                                                          obrpc::ObAlterTableArg &arg)
+                                                          obcall::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
   share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
@@ -1411,7 +1407,7 @@ int ObAutoSplitArgBuilder::build_arg_(const uint64_t tenant_id,
                                       const share::schema::ObTableSchema &table_schema,
                                       const ObTabletID split_source_tablet_id,
                                       const ObArray<ObNewRange> &ranges,
-                                      obrpc::ObAlterTableArg &arg)
+                                      obcall::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
   ObTZMapWrap tz_map_wrap;
@@ -1430,7 +1426,7 @@ int ObAutoSplitArgBuilder::build_arg_(const uint64_t tenant_id,
   } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_map_wrap))) {
     LOG_WARN("get tenant timezone map failed", KR(ret), K(tenant_id));
   } else {
-    arg.alter_part_type_ = obrpc::ObAlterTableArg::AlterPartitionType::AUTO_SPLIT_PARTITION;
+    arg.alter_part_type_ = obcall::ObAlterTableArg::AlterPartitionType::AUTO_SPLIT_PARTITION;
     arg.exec_tenant_id_ = tenant_id;
     arg.is_alter_partitions_ = true;
     arg.is_inner_ = true;

@@ -33,10 +33,10 @@ public:
       : ObDDLStmt(stmt::T_ALTER_PACKAGE),
         alter_package_arg_() {}
   virtual ~ObAlterPackageStmt() {}
-  obrpc::ObAlterPackageArg &get_alter_package_arg() { return alter_package_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_package_arg_; }
+  obcall::ObAlterPackageArg &get_alter_package_arg() { return alter_package_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return alter_package_arg_; }
 private:
-  obrpc::ObAlterPackageArg alter_package_arg_;
+  obcall::ObAlterPackageArg alter_package_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObAlterPackageStmt);
 };
 }

@@ -1,3 +1,4 @@
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -629,23 +630,45 @@ int ObDDLIncRedoLogWriter::remote_write_inc_commit_log(
     transaction::ObTxDesc *tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObSrvRpcProxy *srv_rpc_proxy = GCTX.srv_rpc_proxy_;
-  
-  if (OB_ISNULL(srv_rpc_proxy)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("srv rpc proxy or location service is null", K(ret), KP(srv_rpc_proxy));
-  } else {
-    obrpc::ObRpcRemoteWriteDDLIncCommitLogArg arg;
-    obrpc::ObRpcRemoteWriteDDLIncCommitLogRes res;
-    if (OB_FAIL(arg.init(MTL_ID(), leader_ls_id_, tablet_id_, lob_meta_tablet_id, tx_desc))) {
-      LOG_WARN("fail to init ObRpcRemoteWriteDDLIncCommitLogArg", K(ret));
-    } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr_).by(MTL_ID()).remote_write_ddl_inc_commit_log(arg, res))) {
-      LOG_WARN("remote write inc commit log failed", K(ret), K_(leader_ls_id), K_(leader_addr));
-    } else if (OB_FAIL(MTL(ObTransService *)->add_tx_exec_result(*arg.tx_desc_, res.tx_result_))) {
-      LOG_WARN("fail to get_tx_exec_result", K(ret), K(*arg.tx_desc_));
+  obcall::ObCallRemoteWriteDDLIncCommitLogArg arg;
+  obcall::ObCallRemoteWriteDDLIncCommitLogRes res;
+  if (OB_FAIL(arg.init(MTL_ID(), leader_ls_id_, tablet_id_, lob_meta_tablet_id, tx_desc))) {
+    LOG_WARN("fail to init ObCallRemoteWriteDDLIncCommitLogArg", K(ret));
+  } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+    if (OB_UNLIKELY(!arg.is_valid())) return OB_INVALID_ARGUMENT;
+    int r = OB_SUCCESS;
+    MTL_SWITCH(arg.tenant_id_) {
+      ObRole role = INVALID_ROLE;
+      ObDDLIncRedoLogWriter sstable_redo_writer;
+      ObLSService *ls_service = MTL(ObLSService*);
+      ObTransService *trans_service = MTL(ObTransService*);
+      ObLSHandle ls_handle;
+      ObLS *ls = nullptr;
+      if (OB_FAIL(ls_service->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+        LOG_WARN("get ls failed", K(ret), K(arg));
+      } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
+        r = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error", K(ret), K(MTL_ID()), K(arg.ls_id_));
+      } else if (OB_FAIL(ls->get_ls_role(role))) {
+        LOG_WARN("get role failed", K(ret), K(MTL_ID()), K(arg.ls_id_));
+      } else if (ObRole::LEADER != role) {
+        r = OB_NOT_MASTER;
+        LOG_INFO("not leader", K(ret), K(MTL_ID()), K(arg.ls_id_));
+      } else if (OB_FAIL(sstable_redo_writer.init(arg.ls_id_, arg.tablet_id_))) {
+        LOG_WARN("init sstable redo writer", K(ret), K(arg.tablet_id_));
+      } else if (OB_FAIL(sstable_redo_writer.write_inc_commit_log_with_retry(
+              false, arg.lob_meta_tablet_id_, arg.tx_desc_))) {
+        LOG_WARN("fail to write inc commit log", K(ret), K(arg));
+      } else if (OB_FAIL(trans_service->get_tx_exec_result(*arg.tx_desc_, res.tx_result_))) {
+        LOG_WARN("fail to get_tx_exec_result", K(ret), K(arg));
+      }
     }
+    return r;
+  }))) {
+    LOG_WARN("write inc commit log failed", K(ret), K_(leader_ls_id), K_(leader_addr));
+  } else if (OB_FAIL(MTL(ObTransService*)->add_tx_exec_result(*arg.tx_desc_, res.tx_result_))) {
+    LOG_WARN("fail to get_tx_exec_result", K(ret), K(*arg.tx_desc_));
   }
-
   return ret;
 }
 

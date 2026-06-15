@@ -40,7 +40,7 @@ public:
   }
   virtual ~ObDDLStmt() {}
   virtual int get_cmd_type() const { return get_stmt_type(); }
-  virtual obrpc::ObDDLArg &get_ddl_arg() = 0;
+  virtual obcall::ObDDLArg &get_ddl_arg() = 0;
   typedef common::ObSEArray<ObRawExpr *,
                             OB_DEFAULT_ARRAY_SIZE,
                             common::ModulePageAllocator,

@@ -18,11 +18,10 @@
 
 #include "lib/net/ob_addr.h"              // ObAddr
 #include "lib/compress/ob_compress_util.h" // ObCompressorType
-#include "rpc/obrpc/ob_net_client.h"      // ObNetClient
-#include "rpc/obrpc/ob_rpc_packet.h"      // OB_LOG_OPEN_STREAM
-#include "rpc/obrpc/ob_rpc_proxy.h"       // ObRpcProxy
+// obcall transport client/proxy removed: log pull runs over gRPC. The CDC
+// async-callback binding (ObCdcProxy) is transport-free below.
 #include "logservice/cdcservice/ob_cdc_req.h"
-#include "logservice/cdcservice/ob_cdc_rpc_proxy.h"    // ObCdcProxy
+#include "logservice/cdcservice/ob_cdc_rpc_binding.h"    // ObCdcProxy
 #include "logservice/logfetcher/ob_log_grpc_client.h"  // ObGrpcStreamAsyncCallback
 #ifdef _WIN32
 #include <winsock2.h>
@@ -69,32 +68,32 @@ public:
   // Request start LSN by timestamp
   virtual int req_start_lsn_by_tstamp(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcReqStartLSNByTsReq &req,
-      obrpc::ObCdcReqStartLSNByTsResp &resp,
+      obcall::ObCdcReqStartLSNByTsReq &req,
+      obcall::ObCdcReqStartLSNByTsResp &resp,
       const int64_t timeout) = 0;
 
   // Get logs(GroupLogEntry) based on log stream
   // Asynchronous RPC
   virtual int async_stream_fetch_log(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcLSFetchLogReq &req,
-      obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_LOG2> &cb,
+      obcall::ObCdcLSFetchLogReq &req,
+      obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_LOG2> &cb,
       const int64_t timeout) = 0;
 
   // Get missing logs(LogEntry) based on log stream
   // Asynchronous RPC
   virtual int async_stream_fetch_missing_log(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcLSFetchMissLogReq &req,
-      obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_MISSING_LOG> &cb,
+      obcall::ObCdcLSFetchMissLogReq &req,
+      obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_MISSING_LOG> &cb,
       const int64_t timeout) = 0;
 
   // Fetch raw log based on log stream
   // Asynchronous RPC
   virtual int async_stream_fetch_raw_log(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcFetchRawLogReq &req,
-      obrpc::ObCdcProxy::AsyncCB<obrpc::OB_CDC_FETCH_RAW_LOG> &cb,
+      obcall::ObCdcFetchRawLogReq &req,
+      obcall::ObCdcProxy::AsyncCB<obcall::OB_CDC_FETCH_RAW_LOG> &cb,
       const int64_t timeout) = 0;
 };
 
@@ -118,21 +117,21 @@ public:
 public:
   int req_start_lsn_by_tstamp(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcReqStartLSNByTsReq &req,
-      obrpc::ObCdcReqStartLSNByTsResp &resp,
+      obcall::ObCdcReqStartLSNByTsReq &req,
+      obcall::ObCdcReqStartLSNByTsResp &resp,
       const int64_t timeout);
 
   int async_stream_fetch_log(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcLSFetchLogReq &req,
-      obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_LOG2> &cb,
+      obcall::ObCdcLSFetchLogReq &req,
+      obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_LOG2> &cb,
       const int64_t timeout);
 
   // Legacy async RPC (old framework)
   int async_stream_fetch_missing_log(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcLSFetchMissLogReq &req,
-      obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_MISSING_LOG> &cb,
+      obcall::ObCdcLSFetchMissLogReq &req,
+      obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_MISSING_LOG> &cb,
       const int64_t timeout);
 
   // New async gRPC unary RPC (using callback object)
@@ -165,15 +164,15 @@ public:
 
   int async_stream_fetch_raw_log(const uint64_t tenant_id,
       const common::ObAddr &svr,
-      obrpc::ObCdcFetchRawLogReq &req,
-      obrpc::ObCdcProxy::AsyncCB<obrpc::OB_CDC_FETCH_RAW_LOG> &cb,
+      obcall::ObCdcFetchRawLogReq &req,
+      obcall::ObCdcProxy::AsyncCB<obcall::OB_CDC_FETCH_RAW_LOG> &cb,
       const int64_t timeout);
 
 public:
   int init(
       const int64_t cluster_id,
       const uint64_t self_tenant_id,
-      const obrpc::ObCdcClientType client_type,
+      const obcall::ObCdcClientType client_type,
       const int64_t io_thread_num,
       const ObLogFetcherConfig &cfg);
   void destroy();
@@ -186,11 +185,10 @@ private:
   bool                is_inited_;
   int64_t             cluster_id_;
   uint64_t            self_tenant_id_;
-  obrpc::ObCdcClientType client_type_;
-  obrpc::ObNetClient  net_client_;
+  obcall::ObCdcClientType client_type_;
   uint64_t            last_ssl_info_hash_;
   int64_t             ssl_key_expired_time_;
-  ObCdcRpcId          client_id_;
+  obcall::ObCdcRpcId  client_id_;
   const ObLogFetcherConfig  *cfg_;
   char external_info_val_[OB_MAX_CONFIG_VALUE_LEN];
   common::ObCompressorType compressor_type_;

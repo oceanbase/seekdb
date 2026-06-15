@@ -23,8 +23,6 @@
 #include "lib/container/ob_array.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "share/ob_task_define.h"
-#include "share/ob_common_rpc_proxy.h"
-#include "observer/ob_rpc_processor_simple.h"
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "lib/task/ob_timer.h"
 #include "storage/ob_storage_rpc.h"

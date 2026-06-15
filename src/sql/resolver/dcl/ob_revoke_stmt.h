@@ -66,15 +66,15 @@ public:
   virtual bool cause_implicit_commit() const { return true; }
   void set_has_warning() { has_warning_ = true; }
   bool get_has_warning() const { return has_warning_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() 
+  virtual obcall::ObDDLArg &get_ddl_arg() 
   { 
-    return share::schema::OB_PRIV_USER_LEVEL == grant_level_ ? static_cast<obrpc::ObDDLArg &>(user_arg_) 
-        : (share::schema::OB_PRIV_DB_LEVEL == grant_level_ ? static_cast<obrpc::ObDDLArg &>(db_arg_)
-        : (share::schema::OB_PRIV_TABLE_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(table_arg_)
-        : (share::schema::OB_PRIV_ROUTINE_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(routine_arg_)
-        : (share::schema::OB_PRIV_CATALOG_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(catalog_arg_)
-        : (share::schema::OB_PRIV_OBJECT_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(obj_mysql_arg_)
-        : static_cast<obrpc::ObDDLArg &>(syspriv_arg_)))))); 
+    return share::schema::OB_PRIV_USER_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(user_arg_) 
+        : (share::schema::OB_PRIV_DB_LEVEL == grant_level_ ? static_cast<obcall::ObDDLArg &>(db_arg_)
+        : (share::schema::OB_PRIV_TABLE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(table_arg_)
+        : (share::schema::OB_PRIV_ROUTINE_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(routine_arg_)
+        : (share::schema::OB_PRIV_CATALOG_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(catalog_arg_)
+        : (share::schema::OB_PRIV_OBJECT_LEVEL == grant_level_ ?  static_cast<obcall::ObDDLArg &>(obj_mysql_arg_)
+        : static_cast<obcall::ObDDLArg &>(syspriv_arg_)))))); 
   }
   int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
   const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }
@@ -95,12 +95,12 @@ private:
   common::ObArray<uint64_t, common::ModulePageAllocator, true> users_;
   bool revoke_all_;
   common::ObStrings grantees_;
-  obrpc::ObRevokeUserArg user_arg_;
-  obrpc::ObRevokeDBArg db_arg_;
-  obrpc::ObRevokeTableArg table_arg_;
-  obrpc::ObRevokeRoutineArg routine_arg_;
-  obrpc::ObRevokeSysPrivArg syspriv_arg_;
-  obrpc::ObRevokeObjMysqlArg obj_mysql_arg_;
+  obcall::ObRevokeUserArg user_arg_;
+  obcall::ObRevokeDBArg db_arg_;
+  obcall::ObRevokeTableArg table_arg_;
+  obcall::ObRevokeRoutineArg routine_arg_;
+  obcall::ObRevokeSysPrivArg syspriv_arg_;
+  obcall::ObRevokeObjMysqlArg obj_mysql_arg_;
   common::hash::ObPlacementHashSet<uint64_t, common::MAX_ENABLED_ROLES> role_id_set_;
   share::schema::ObObjectType object_type_;
   share::ObRawPrivArray sys_priv_array_;
@@ -112,7 +112,7 @@ private:
   bool has_warning_;
   ObSEArray<std::pair<ObString, ObPrivType>, 4, common::ModulePageAllocator, true> column_names_priv_;
   int64_t table_schema_version_;
-  obrpc::ObRevokeCatalogArg catalog_arg_;
+  obcall::ObRevokeCatalogArg catalog_arg_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRevokeStmt);
 };

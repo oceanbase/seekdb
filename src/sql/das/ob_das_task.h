@@ -18,13 +18,13 @@
 #define OBDEV_SRC_SQL_DAS_OB_DAS_TASK_H_
 #include "share/ob_define.h"
 #include "storage/tx/ob_trans_define.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "sql/das/ob_das_define.h"
 #include "storage/access/ob_dml_param.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/basic/ob_temp_row_store.h"
 #include "lib/list/ob_obj_store.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
+#include "rpc/frame/ob_req_packet_code.h"
 namespace oceanbase
 {
 namespace common
@@ -147,7 +147,7 @@ public:
 class ObIDASTaskOp
 {
   friend class ObDataAccessService;
-  template<obrpc::ObRpcPacketCode pcode>
+  template<rpc::frame::ObReqPacketCode pcode>
   friend class ObDASBaseAccessP;
   friend class ObDASRef;
   friend class ObDataAccessService;
@@ -469,7 +469,7 @@ public:
   common::ObSEArray<ObIDASTaskResult*, 2> &get_op_results() { return op_results_; };
   void set_err_code(int err_code) { rcode_.rcode_ = err_code; }
   int get_err_code() const { return rcode_.rcode_; }
-  const obrpc::ObRpcResultCode &get_rcode() const { return rcode_; }
+  const rpc::frame::ObResultCode &get_rcode() const { return rcode_; }
   void store_err_msg(const common::ObString &msg);
   const char *get_err_msg() const { return rcode_.msg_; }
   int store_warning_msg(const common::ObWarningBuffer &wb);
@@ -492,7 +492,7 @@ private:
   common::ObAddr ctrl_svr_; // DAS Task control server address
   common::ObAddr runner_svr_; // DAS Task execution endpoint address
   common::ObSEArray<ObIDASTaskResult*, 2> op_results_;  // Corresponding operation result information, this is an interface class, the specific definition is parsed by DML Service
-  obrpc::ObRpcResultCode rcode_; // returned error information
+  rpc::frame::ObResultCode rcode_; // returned error information
   transaction::ObTxExecResult trans_result_;
   ObDASTaskFactory *das_factory_;  // no need to serialize
 };

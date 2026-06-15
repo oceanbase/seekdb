@@ -17,6 +17,7 @@
 #include "ob_ts_worker.h"
 #include "ob_ts_response_handler.h"
 #include "ob_ts_mgr.h"
+#include "observer/omt/ob_tenant.h"
 
 namespace oceanbase
 {
@@ -92,10 +93,16 @@ int ObTsWorker::push_task(const uint64_t tenant_id, ObTsResponseTask *task)
     if (NULL == omt) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected error, omt is null", KR(ret), KP(omt));
-    } else if (OB_FAIL(omt->recv_request(tenant_id, *task))) {
-      TRANS_LOG(WARN, "recv request failed", KR(ret), K(tenant_id), KP(task));
     } else {
-      // do nothing
+      ObTenant *tenant = nullptr;
+      if (OB_FAIL(omt->get_tenant(tenant_id, tenant))) {
+        TRANS_LOG(WARN, "get tenant failed", KR(ret), K(tenant_id));
+      } else if (OB_ISNULL(tenant)) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(WARN, "tenant is null", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(tenant->recv_request(*task))) {
+        TRANS_LOG(WARN, "recv request failed", KR(ret), K(tenant_id), KP(task));
+      }
     }
   }
   return ret;

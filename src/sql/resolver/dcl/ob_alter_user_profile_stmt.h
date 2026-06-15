@@ -29,7 +29,7 @@ public:
   explicit ObAlterUserProfileStmt(common::ObIAllocator *name_pool);
   virtual ~ObAlterUserProfileStmt();
 
-  obrpc::ObAlterUserProfileArg &get_ddl_arg() { return arg_; }
+  obcall::ObAlterUserProfileArg &get_ddl_arg() { return arg_; }
   // function members
   TO_STRING_KV(K_(stmt_type), K_(arg));
   enum {SET_ROLE = 1 << 0, SET_DEFAULT_ROLE = 1 << 1};
@@ -38,7 +38,7 @@ public:
   virtual bool cause_implicit_commit() const { return !(lib::is_mysql_mode() && get_set_role_flag() == SET_ROLE); }
 private:
   // data members
-  obrpc::ObAlterUserProfileArg arg_;
+  obcall::ObAlterUserProfileArg arg_;
   int set_role_flag_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAlterUserProfileStmt);

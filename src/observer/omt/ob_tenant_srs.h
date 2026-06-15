@@ -22,11 +22,10 @@
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/hash/ob_pointer_hashmap.h"
 #include "lib/container/ob_vector.h"
-#include "lib/lock/ob_tc_rwlock.h"
 #include "lib/allocator/page_arena.h"
-#include "lib/task/ob_timer.h"
 #include "lib/geo/ob_srs_wkt_parser.h"
 #include "lib/geo/ob_srs_info.h"
+#include "lib/lock/ob_mutex.h"
 
 namespace oceanbase
 {
@@ -43,36 +42,25 @@ class ObMySQLResult;
 namespace omt
 {
 
-enum class ObSrsCacheType
-{
-  SYSTEM_RESERVED = 0,
-  USER_DEFINED,
-};
-
 class ObSrsCacheSnapShot
 {
 public:
   static const uint32_t SRS_ITEM_BUCKET_NUM = 6144;
-  explicit ObSrsCacheSnapShot(ObSrsCacheType srs_type)
-    : allocator_("SrsSnapShot", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), srs_type_(srs_type), srs_version_(0), ref_count_(0) {}
+  explicit ObSrsCacheSnapShot()
+    : allocator_("SrsSnapShot", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), ref_count_(0) {}
   virtual ~ObSrsCacheSnapShot() { srs_item_map_.destroy(); }
   int init() { return srs_item_map_.create(SRS_ITEM_BUCKET_NUM, "SrsSnapShot", "SrsSnapShot", MTL_ID()); }
   int add_srs_item(uint64_t srid, const common::ObSrsItem* srs_item) { return srs_item_map_.set_refactored(srid, srs_item); }
   int get_srs_item(uint64_t srid, const common::ObSrsItem *&srs_item);
-  void set_srs_version(uint64_t version) { srs_version_ = version; }
-  uint64_t get_srs_version() { return srs_version_; }
   void dec_ref_count() { ATOMIC_DEC(&ref_count_); }
   void inc_ref_count() { ATOMIC_INC(&ref_count_); }
   int64_t get_ref_count() { return ATOMIC_LOAD64(&ref_count_); }
   int64_t get_srs_count() { return srs_item_map_.size(); }
-  int parse_srs_item(common::sqlclient::ObMySQLResult *result,
-                     const common::ObSrsItem *&srs_item, uint64_t &srs_version);
+  int parse_srs_item(common::sqlclient::ObMySQLResult *result, const common::ObSrsItem *&srs_item);
   int add_pg_reserved_srs_item(const common::ObString &pg_wkt, const uint32_t srs_id);
 
 private:
   common::ObArenaAllocator allocator_;
-  ObSrsCacheType srs_type_;
-  uint64_t srs_version_;
   volatile int64_t ref_count_;
   common::hash::ObHashMap<uint64_t, const common::ObSrsItem*> srs_item_map_;
 
@@ -97,60 +85,35 @@ private:
 class ObTenantSrs
 {
 public:
-  // Async retry task: scheduled by notifier callback or self-rescheduled on failure.
-  // Stops when refresh_sys_srs() succeeds.
-  class RetryTimerTask : public common::ObTimerTask
-  {
-  public:
-    static const int64_t RETRY_INTERVAL = 1000000;
-    RetryTimerTask() : tenant_srs_(nullptr) {}
-    int init(ObTenantSrs *srs) { tenant_srs_ = srs; return OB_SUCCESS; }
-    void runTimerTask() override;
-  private:
-    ObTenantSrs *tenant_srs_;
-  };
-
-public:
-  static const int64_t DEFAULT_PAGE_SIZE = 8192L; // 8kb
+  static const int64_t DEFAULT_PAGE_SIZE = 8192L;
   static const uint32_t USER_SRID_MIN = 70000000;
   static const uint32_t USER_SRID_MAX = 2000000000;
   static const uint32_t MAX_WKT_LEN = 4096;
-  static const uint32_t RETRY_TIMES = 45;
-  static const uint32_t RETRY_INTERVAL_US = 100000;
 
   explicit ObTenantSrs()
     : alloc_("TenantSrs"), sql_proxy_(nullptr), inited_(false),
-      last_sys_snapshot_(nullptr), last_user_snapshot_(nullptr),     
+      last_sys_snapshot_(nullptr),
       srs_old_snapshots_(&mode_arena_, common::ObModIds::OB_MODULE_PAGE_ALLOCATOR),
-      remote_sys_srs_version_(0), remote_user_srs_version_(0),
-      local_sys_srs_version_(0), local_user_srs_version_(0), infinite_plane_() {}
+      srs_stale_(true), infinite_plane_() {}
   virtual ~ObTenantSrs() {};
   int init();
-  inline uint64_t tenant_id() { return MTL_ID(); }
   int get_tenant_srs_guard(ObSrsCacheGuard &srs_guard);
   int get_srs_bounds(uint64_t srid, const ObSrsItem *srs_item, const ObSrsBoundsItem *&bounds_item);
-  int get_last_snapshot(ObSrsCacheGuard &srs_guard);
-  int try_get_last_snapshot(ObSrsCacheGuard &srs_guard);
-  void recycle_old_snapshots();
-  void recycle_last_snapshots();
   static int mtl_init(ObTenantSrs* &tenant_srs);
   int start();
   void stop();
   void wait();
   void destroy();
-  int schedule_retry();
-  RetryTimerTask &get_retry_timer() { return retry_timer_; }
+  void mark_stale() { ATOMIC_STORE(&srs_stale_, true); }
 
 private:
   typedef common::PageArena<ObSrsCacheSnapShot*, common::ModulePageAllocator> ObCGeoModuleArena;
   typedef common::ObVector<ObSrsCacheSnapShot*, ObCGeoModuleArena> ObSrsSnapshotVector;
 
-  int fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot, bool is_sys_srs = true);
-  int parse_srs_item(common::sqlclient::ObMySQLResult *result, const common::ObSrsItem *&srs_item, uint64_t &srs_version);
+  int fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot);
   int refresh_sys_srs();
-  int refresh_srs(bool is_sys);
-  int get_last_sys_snapshot(ObSrsCacheSnapShot *&sys_cache);
   int generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot);
+  void recycle_old_snapshots();
 
   common::ObFIFOAllocator allocator_;
   common::ObArenaAllocator alloc_;
@@ -158,22 +121,10 @@ private:
   bool inited_;
   common::ModulePageAllocator page_allocator_;
   ObCGeoModuleArena mode_arena_;
-  common::TCRWLock lock_;
-  // local the newest system reserved srs cache snapshot
   ObSrsCacheSnapShot* last_sys_snapshot_;
-  // local the newest user defined srs cache snapshot
-  ObSrsCacheSnapShot* last_user_snapshot_;
-  // local overdue srs cache snapshot
   ObSrsSnapshotVector srs_old_snapshots_;
-  // system reserved srs cache version from other servers
-  uint64_t remote_sys_srs_version_;
-  // user defined srs cache version from other servers
-  uint64_t remote_user_srs_version_;
-  // local system reserved srs cache version
-  uint64_t local_sys_srs_version_;
-  // local user defined srs cache version
-  uint64_t local_user_srs_version_;
-  RetryTimerTask retry_timer_;
+  bool srs_stale_;
+  lib::ObMutex srs_load_lock_;
   common::ObSrsBoundsItem infinite_plane_;
   DISALLOW_COPY_AND_ASSIGN(ObTenantSrs);
 };

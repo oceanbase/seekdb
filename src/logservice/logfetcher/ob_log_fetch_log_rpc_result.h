@@ -19,7 +19,9 @@
 #include "lib/objectpool/ob_small_obj_pool.h"
 #include "logservice/cdcservice/ob_cdc_raw_log_req.h"
 #include "logservice/cdcservice/ob_cdc_req.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+// obcall transport header removed; rpc::frame::ObResultCode is provided
+// transport-free by ob_cdc_rpc_binding.h.
+#include "logservice/cdcservice/ob_cdc_rpc_binding.h"
 #include "ob_log_fetch_log_rpc_stop_reason.h"
 
 namespace oceanbase
@@ -33,7 +35,7 @@ class LogFileDataBuffer;
 
 struct FetchLogRpcResult
 {
-  FetchLogRpcResult(const obrpc::ObCdcFetchLogProtocolType type):
+  FetchLogRpcResult(const obcall::ObCdcFetchLogProtocolType type):
     type_(type),
     trace_id_(),
     rpc_time_(0),
@@ -52,7 +54,7 @@ struct FetchLogRpcResult
     rpc_stop_reason_ = RpcStopReason::INVALID_REASON;
   }
 
-  obrpc::ObCdcFetchLogProtocolType type_;
+  obcall::ObCdcFetchLogProtocolType type_;
   common::ObCurTraceId::TraceId   trace_id_;
 
   // Statistical items
@@ -70,15 +72,15 @@ struct RawLogDataRpcStatus
   RawLogDataRpcStatus():
     rcode_(),
     err_(OB_SUCCESS),
-    feed_back_(obrpc::FeedbackType::INVALID_FEEDBACK),
+    feed_back_(obcall::FeedbackType::INVALID_FEEDBACK),
     fetch_status_(),
     rpc_callback_time_(0),
     rpc_time_(0) {}
 
-  RawLogDataRpcStatus(const obrpc::ObRpcResultCode &rcode,
+  RawLogDataRpcStatus(const rpc::frame::ObResultCode &rcode,
       const int err,
-      const obrpc::FeedbackType feedback,
-      const obrpc::ObCdcFetchRawStatus &status,
+      const obcall::FeedbackType feedback,
+      const obcall::ObCdcFetchRawStatus &status,
       const int64_t rpc_callback_time,
       const int64_t rpc_time):
       rcode_(rcode),
@@ -91,16 +93,16 @@ struct RawLogDataRpcStatus
   void reset() {
     rcode_.reset();
     err_ = OB_SUCCESS;
-    feed_back_ = obrpc::FeedbackType::INVALID_FEEDBACK;
+    feed_back_ = obcall::FeedbackType::INVALID_FEEDBACK;
     fetch_status_.reset();
     rpc_callback_time_ = 0;
     rpc_time_ = 0;
   }
 
-  void reset(const obrpc::ObRpcResultCode &rcode,
+  void reset(const rpc::frame::ObResultCode &rcode,
       const int err,
-      const obrpc::FeedbackType feedback,
-      const obrpc::ObCdcFetchRawStatus &status,
+      const obcall::FeedbackType feedback,
+      const obcall::ObCdcFetchRawStatus &status,
       const int64_t rpc_callback_time,
       const int64_t rpc_time)
   {
@@ -121,10 +123,10 @@ struct RawLogDataRpcStatus
     K(rpc_time_)
   );
 
-  obrpc::ObRpcResultCode rcode_;
+  rpc::frame::ObResultCode rcode_;
   int err_;
-  obrpc::FeedbackType feed_back_;
-  obrpc::ObCdcFetchRawStatus fetch_status_;
+  obcall::FeedbackType feed_back_;
+  obcall::ObCdcFetchRawStatus fetch_status_;
   int64_t rpc_callback_time_;
   int64_t rpc_time_;
 };
@@ -132,13 +134,13 @@ struct RawLogDataRpcStatus
 struct RawLogFileRpcResult: public FetchLogRpcResult
 {
   RawLogFileRpcResult():
-      FetchLogRpcResult(obrpc::ObCdcFetchLogProtocolType::RawLogDataProto),
+      FetchLogRpcResult(obcall::ObCdcFetchLogProtocolType::RawLogDataProto),
       data_buffer_(nullptr),
       data_(nullptr),
       data_len_(0),
       is_readable_(false),
       is_active_(false),
-      data_end_source_(obrpc::ObCdcFetchRawSource::UNKNOWN),
+      data_end_source_(obcall::ObCdcFetchRawSource::UNKNOWN),
       replayable_point_(),
       sub_rpc_status_(),
       rpc_prepare_time_()
@@ -169,7 +171,7 @@ struct RawLogFileRpcResult: public FetchLogRpcResult
   int32_t valid_rpc_cnt_;
   bool is_readable_;
   bool is_active_;
-  obrpc::ObCdcFetchRawSource data_end_source_;
+  obcall::ObCdcFetchRawSource data_end_source_;
   share::SCN replayable_point_;
   ObSEArray<RawLogDataRpcStatus, 4> sub_rpc_status_;
   int64_t rpc_prepare_time_;
@@ -178,14 +180,14 @@ struct RawLogFileRpcResult: public FetchLogRpcResult
 ////////////////////////////// LogGroupEntry Request Result //////////////////////////////
 struct LogGroupEntryRpcResult: public FetchLogRpcResult
 {
-  obrpc::ObCdcLSFetchLogResp      resp_;    // Fetch log response
-  obrpc::ObRpcResultCode          rcode_;   // Fetch log result
+  obcall::ObCdcLSFetchLogResp      resp_;    // Fetch log response
+  rpc::frame::ObResultCode          rcode_;   // Fetch log result
 
-  LogGroupEntryRpcResult(): FetchLogRpcResult(obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto) { reset(); }
+  LogGroupEntryRpcResult(): FetchLogRpcResult(obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto) { reset(); }
   virtual ~LogGroupEntryRpcResult() {}
 
-  int set(const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObCdcLSFetchLogResp *resp,
+  int set(const rpc::frame::ObResultCode &rcode,
+      const obcall::ObCdcLSFetchLogResp *resp,
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t rpc_start_time,
       const int64_t rpc_callback_start_time,

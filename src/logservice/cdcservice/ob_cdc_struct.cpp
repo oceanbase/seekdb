@@ -187,12 +187,12 @@ ClientLSCtx::ClientLSCtx()
   : source_lock_(ObLatchIds::CDC_SERVICE_LS_CTX_LOCK),
     source_version_(0),
     source_(NULL),
-    proto_type_(obrpc::ObCdcFetchLogProtocolType::UnknownProto),
+    proto_type_(obcall::ObCdcFetchLogProtocolType::UnknownProto),
     fetch_mode_(FetchMode::FETCHMODE_UNKNOWN),
     last_touch_ts_(OB_INVALID_TIMESTAMP),
     client_progress_(OB_INVALID_TIMESTAMP),
     create_ts_(ObTimeUtility::current_time()),
-    client_type_(obrpc::ObCdcClientType::CLIENT_TYPE_UNKNOWN),
+    client_type_(obcall::ObCdcClientType::CLIENT_TYPE_UNKNOWN),
     client_lsn_(palf::LOG_INVALID_LSN_VAL),
     failed_rpc_info_(),
     traffic_stat_info_()
@@ -206,8 +206,8 @@ ClientLSCtx::~ClientLSCtx()
 }
 
 int ClientLSCtx::init(int64_t client_progress,
-    const obrpc::ObCdcFetchLogProtocolType type,
-    const obrpc::ObCdcClientType client_type)
+    const obcall::ObCdcFetchLogProtocolType type,
+    const obcall::ObCdcClientType client_type)
 {
   int ret = OB_SUCCESS;
   if (OB_INVALID_TIMESTAMP != client_progress) {
@@ -372,11 +372,11 @@ void ClientLSCtx::reset()
     source_ = NULL;
     source_version_ = 0;
   }
-  proto_type_ = obrpc::ObCdcFetchLogProtocolType::UnknownProto;
+  proto_type_ = obcall::ObCdcFetchLogProtocolType::UnknownProto;
   fetch_mode_ = FetchMode::FETCHMODE_UNKNOWN;
   last_touch_ts_ = OB_INVALID_TIMESTAMP;
   client_progress_ = OB_INVALID_TIMESTAMP;
-  client_type_ = obrpc::ObCdcClientType::CLIENT_TYPE_UNKNOWN;
+  client_type_ = obcall::ObCdcClientType::CLIENT_TYPE_UNKNOWN;
   client_lsn_.reset();
   failed_rpc_info_.reset();
   traffic_stat_info_.reset();

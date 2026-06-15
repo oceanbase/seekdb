@@ -44,7 +44,7 @@ int ObCreateRoutineResolver::check_dup_routine_param(const ObIArray<ObRoutinePar
   return ret;
 }
 
-int ObCreateRoutineResolver::create_routine_arg(obrpc::ObCreateRoutineArg *&crt_routine_arg)
+int ObCreateRoutineResolver::create_routine_arg(obcall::ObCreateRoutineArg *&crt_routine_arg)
 {
   int ret = OB_SUCCESS;
   ObCreateRoutineStmt *crt_routine_stmt = NULL;
@@ -87,7 +87,7 @@ int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
   return ret;
 }
 
-int ObCreateRoutineResolver::analyze_router_sql(obrpc::ObCreateRoutineArg *crt_routine_arg)
+int ObCreateRoutineResolver::analyze_router_sql(obcall::ObCreateRoutineArg *crt_routine_arg)
 {
   int ret = OB_SUCCESS;
   ObRoutineInfo &routine_info = crt_routine_arg->routine_info_;
@@ -196,7 +196,7 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
 }
 
 int ObCreateRoutineResolver::resolve_sp_name(const ParseNode *parse_node,
-                                             obrpc::ObCreateRoutineArg *crt_routine_arg)
+                                             obcall::ObCreateRoutineArg *crt_routine_arg)
 {
   int ret = OB_SUCCESS;
   CK(OB_NOT_NULL(parse_node), OB_NOT_NULL(session_info_), OB_NOT_NULL(crt_routine_arg));
@@ -238,7 +238,7 @@ int ObCreateRoutineResolver::collect_ref_obj_info(int64_t ref_obj_id, int64_t re
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(stmt_));
   if (OB_SUCC(ret)) {
-    obrpc::ObCreateRoutineArg &crt_routine_arg =
+    obcall::ObCreateRoutineArg &crt_routine_arg =
         static_cast<ObCreateRoutineStmt *>(stmt_)->get_routine_arg();
     ObObjectType dep_obj_type = crt_routine_arg.routine_info_.get_object_type();
     OV (ObObjectType::INVALID != dep_obj_type);
@@ -625,7 +625,7 @@ int ObCreateRoutineResolver::analyze_expr_type(ObRawExpr *&expr,
   return ret;
 }
 
-int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obrpc::ObCreateRoutineArg &crt_routine_arg)
+int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obcall::ObCreateRoutineArg &crt_routine_arg)
 {
   int ret = OB_SUCCESS;
   ObString param_name;
@@ -824,7 +824,7 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
                                      const ParseNode *ret_node,
                                      const ParseNode *param_node,
                                      const ParseNode *clause_list,
-                                     obrpc::ObCreateRoutineArg *crt_routine_arg,
+                                     obcall::ObCreateRoutineArg *crt_routine_arg,
                                      bool is_udt_udf)
 {
   int ret = OB_SUCCESS;
@@ -894,7 +894,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
                                      const ParseNode *ret_node,
                                      const ParseNode *param_node,
                                      const ParseNode *clause_list,
-                                     obrpc::ObCreateRoutineArg *crt_routine_arg)
+                                     obcall::ObCreateRoutineArg *crt_routine_arg)
 {
   int ret = OB_SUCCESS;
 
@@ -933,7 +933,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree,
 int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCreateRoutineArg *crt_routine_arg = nullptr;
+  obcall::ObCreateRoutineArg *crt_routine_arg = nullptr;
   if (OB_NOT_NULL(get_basic_stmt())) {
     // basic stmt would be set externally in alter routine
     OX (crt_routine_arg = &(static_cast<ObCreateRoutineStmt *>(get_basic_stmt())->get_routine_arg()));
@@ -955,7 +955,7 @@ int ObCreateRoutineResolver::resolve(const ParseNode &parse_tree)
 }
 
 int ObCreateProcedureResolver::resolve_impl(
-  const ParseNode &parse_tree, obrpc::ObCreateRoutineArg *crt_routine_arg)
+  const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg)
 {
   int ret = OB_SUCCESS;
 
@@ -982,7 +982,7 @@ int ObCreateProcedureResolver::resolve_impl(
 
 
 int ObCreateFunctionResolver::resolve_impl(
-  const ParseNode &parse_tree, obrpc::ObCreateRoutineArg *crt_routine_arg)
+  const ParseNode &parse_tree, obcall::ObCreateRoutineArg *crt_routine_arg)
 {
   int ret = OB_SUCCESS;
 

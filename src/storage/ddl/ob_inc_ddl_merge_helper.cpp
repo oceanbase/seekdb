@@ -23,12 +23,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/storage/compaction_v2/ob_ss_compact_helper.h"
-#include "storage/compaction/ob_schedule_dag_func.h"
-#endif
 
 using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
@@ -330,24 +325,6 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
       } else {
         FLOG_INFO("ddl update table store success", KPC(new_tablet_handle.get_obj()), K(table_store_param));
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
-        ObSSTableUploadRegHandle upload_register_handle;
-        if (OB_FAIL(ls_handle.get_ls()->prepare_register_sstable_upload(upload_register_handle))) {
-          LOG_WARN("fail to prepare register sstable upload", KR(ret));
-        } else {
-          SCN snapshot_version(SCN::min_scn());
-          if (OB_FAIL(new_tablet_handle.get_obj()->get_snapshot_version(snapshot_version))) {
-            LOG_WARN("get snapshot version failed", K(new_tablet_handle));
-          } else {
-            ASYNC_UPLOAD_INC_SSTABLE(SSIncSSTableType::MINI_SSTABLE,
-                                     upload_register_handle,
-                                     sstable->get_key(),
-                                     snapshot_version);
-          }
-        }
-      }
-#endif
     }
   }
 

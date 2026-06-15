@@ -60,12 +60,12 @@ int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table
 int __attribute__((weak)) gen_create_tablet_arg(const int64_t tenant_id,
     const share::ObLSID &ls_id,
     const ObTabletID &tablet_id,
-    obrpc::ObBatchCreateTabletArg &arg,
+    obcall::ObBatchCreateTabletArg &arg,
     const int64_t count = 1,
     share::schema::ObTableSchema *out_table_schema = nullptr)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCreateTabletInfo tablet_info;
+  obcall::ObCreateTabletInfo tablet_info;
   ObArray<common::ObTabletID> index_tablet_ids;
   ObArray<int64_t> index_tablet_schema_idxs;
   ObArray<int64_t> create_commit_versions;

@@ -67,7 +67,6 @@ public:
 
 private:
   share::ObLocationService location_service_;
-  obrpc::ObBatchRpc batch_rpc_;
   share::schema::ObMultiVersionSchemaService schema_service_;
   palf::PalfDiskOptions disk_options_;
   rpc::frame::ObReqTransport req_transport_;

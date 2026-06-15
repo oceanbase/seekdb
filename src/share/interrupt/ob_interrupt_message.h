@@ -1,0 +1,136 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_INTERRUPT_OB_INTERRUPT_MESSAGE_H_
+#define OCEANBASE_SHARE_INTERRUPT_OB_INTERRUPT_MESSAGE_H_
+
+#include "lib/ob_errno.h"
+#include "share/config/ob_server_config.h"
+#include "observer/ob_server_struct.h"
+
+namespace oceanbase
+{
+namespace obcall
+{
+struct ObInterruptStackInfo
+{
+  static constexpr int64_t BUF1_SIZE = 128;
+public:
+  OB_UNIS_VERSION(1);
+public:
+  ObInterruptStackInfo() : pos1_(0)
+  {
+    buf1_[0] = '\0';
+  }
+  ObInterruptStackInfo(const ObInterruptStackInfo &other)
+  {
+    *this = other;
+  }
+  ObInterruptStackInfo(int64_t from_tid, const common::ObAddr &from_svr_addr, const char *extra_msg)
+      : pos1_(0)
+  {
+    set_info(from_tid, from_svr_addr, extra_msg);
+  }
+  // As long as the buff of buf_ is enough, this interface can be continuously expanded, or a new set interface can be added
+  void set_info(int64_t from_tid, const common::ObAddr &from_svr_addr, const char *extra_msg)
+  {
+    char svr_buf[common::MAX_IP_PORT_LENGTH];
+    (void)from_svr_addr.to_string(svr_buf, common::MAX_IP_PORT_LENGTH);
+    (void) common::databuff_printf(
+        buf1_, BUF1_SIZE, pos1_,
+        "tid:%ld,from:%s,%s",
+        from_tid, svr_buf, extra_msg);
+  }
+  void reset()
+  {
+    pos1_ = 0;
+    buf1_[0] = '\0';
+  }
+  TO_STRING_KV("msg", buf1_);
+private:
+  char buf1_[BUF1_SIZE]; // Allow to piggyback text messages up to 128 letters long and end with 0
+  int64_t pos1_; // writable position of buf1_
+  // NOTE:
+  // If you need to expand this structure, please continue to add buf2_, buf3_, etc., do not modify the length of buf1_
+  // Otherwise there will be version compatibility issues
+  // char buf2_[BUF1_SIZE]; // Allow to piggyback text messages up to 128 letters long and end with 0
+  // int64_t pos2_; // actual use length of buf1_
+};
+
+};
+
+namespace common
+{
+
+// In order to make the diagnosis of interrupts simpler and clearer,
+// Need to add the interrupt number, interrupt source, and auxiliary copy in the interrupt information
+struct ObInterruptCode
+{
+public:
+  OB_UNIS_VERSION(1);
+public:
+  ObInterruptCode() : code_(0), info_()
+  {
+  }
+  ObInterruptCode(int code) : code_(code), info_()
+  {
+  }
+  ObInterruptCode(int code, const obcall::ObInterruptStackInfo &info)
+      : code_(code), info_(info)
+  {
+  }
+  ObInterruptCode(int code, int64_t from_tid, const common::ObAddr &from_svr_addr, const char *extra_msg)
+      : code_(code), info_(from_tid, from_svr_addr, extra_msg)
+  {
+  }
+  void reset()
+  {
+    code_ = 0;
+    info_.reset();
+  }
+  int code_; // Interrupt number
+  obcall::ObInterruptStackInfo info_;
+  TO_STRING_KV(K_(code), K_(info));
+};
+
+}; // ns common
+
+namespace obcall
+{
+struct ObInterruptMessage
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObInterruptMessage()
+      : first_(0), last_(0), code_(0), info_() {};
+  ObInterruptMessage(uint64_t first, uint64_t last, int code) :
+      first_(first), last_(last), code_(code), info_() {};
+  ObInterruptMessage(uint64_t first, uint64_t last, common::ObInterruptCode &code) :
+      first_(first), last_(last), code_(code.code_), info_(code.info_) {};
+  TO_STRING_KV(K_(first), K_(last), K_(code), K_(info));
+  uint64_t first_;
+  uint64_t last_;
+  // For compatibility, code_ and info_ are not combined into ObInterruptCode
+  int code_;
+  ObInterruptStackInfo info_;
+};
+
+} // namespace obcall
+
+} // namespace oceanbase
+
+#endif

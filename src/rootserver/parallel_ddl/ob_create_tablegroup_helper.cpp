@@ -26,8 +26,8 @@ using namespace oceanbase::rootserver;
 ObCreateTablegroupHelper::ObCreateTablegroupHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
   const uint64_t tenant_id,
-  const obrpc::ObCreateTablegroupArg &arg,
-  obrpc::ObCreateTableGroupRes &res,
+  const obcall::ObCreateTablegroupArg &arg,
+  obcall::ObCreateTableGroupRes &res,
   ObDDLSQLTransaction *external_trans)
   : ObDDLHelper(schema_service, tenant_id, "[paralle create tablegroup]", external_trans),
   arg_(arg),

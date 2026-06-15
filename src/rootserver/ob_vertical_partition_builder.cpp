@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace rootserver
@@ -38,7 +38,7 @@ ObVertialPartitionBuilder::~ObVertialPartitionBuilder()
 
 
 int ObVertialPartitionBuilder::generate_schema(
-    const obrpc::ObCreateVertialPartitionArg &vp_arg,
+    const obcall::ObCreateVertialPartitionArg &vp_arg,
     const int64_t frozen_version,
     share::schema::ObTableSchema &data_schema,
     share::schema::ObTableSchema &aux_vp_table_schema)
@@ -110,7 +110,7 @@ int ObVertialPartitionBuilder::set_basic_infos(
 }
 
 int ObVertialPartitionBuilder::set_aux_vp_table_columns(
-    const obrpc::ObCreateVertialPartitionArg &vp_arg,
+    const obcall::ObCreateVertialPartitionArg &vp_arg,
     share::schema::ObTableSchema &data_schema,
     share::schema::ObTableSchema &aux_vp_table_schema)
 {

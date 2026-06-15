@@ -22,7 +22,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 class ObParallelDDLRes;
 class ObCreateTableRes;
@@ -38,8 +38,8 @@ class ObHTableDDLHandler
 public:
   ObHTableDDLHandler(ObDDLService &ddl_service,
                      share::schema::ObMultiVersionSchemaService &schema_service,
-                     const obrpc::ObHTableDDLArg &arg,
-                     obrpc::ObHTableDDLRes &res)
+                     const obcall::ObHTableDDLArg &arg,
+                     obcall::ObHTableDDLRes &res)
       : is_inited_(false),
         allocator_("HTbDDLH"),
         ddl_service_(ddl_service),
@@ -104,15 +104,15 @@ protected:
     }
     return ret;
   }
-  obrpc::ObHTableDDLType get_ddl_type() const { return ddl_type_; }
+  obcall::ObHTableDDLType get_ddl_type() const { return ddl_type_; }
 protected:
   bool is_inited_;
   common::ObArenaAllocator allocator_;
   ObDDLService &ddl_service_;
   share::schema::ObMultiVersionSchemaService &schema_service_;
-  const obrpc::ObHTableDDLArg &arg_;
-  obrpc::ObHTableDDLRes &res_;
-  const obrpc::ObHTableDDLType ddl_type_;
+  const obcall::ObHTableDDLArg &arg_;
+  obcall::ObHTableDDLRes &res_;
+  const obcall::ObHTableDDLType ddl_type_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObHTableDDLHandler);
 };
@@ -162,8 +162,8 @@ class ObCreateHTableHandler : public ObHTableDDLHandler
 public:
   ObCreateHTableHandler(ObDDLService &ddl_service,
                         share::schema::ObMultiVersionSchemaService &schema_service,
-                        const obrpc::ObHTableDDLArg &arg,
-                        obrpc::ObHTableDDLRes &res)
+                        const obcall::ObHTableDDLArg &arg,
+                        obcall::ObHTableDDLRes &res)
       : ObHTableDDLHandler(ddl_service, schema_service, arg, res),
         param_(nullptr),
         schema_version_cnt_(0),
@@ -201,8 +201,8 @@ class ObDropHTableHandler : public ObHTableDDLHandler
 public:
   ObDropHTableHandler(ObDDLService &ddl_service,
                       share::schema::ObMultiVersionSchemaService &schema_service,
-                      const obrpc::ObHTableDDLArg &arg,
-                      obrpc::ObHTableDDLRes &res)
+                      const obcall::ObHTableDDLArg &arg,
+                      obcall::ObHTableDDLRes &res)
       : ObHTableDDLHandler(ddl_service, schema_service, arg, res),
         param_(nullptr),
         schema_version_cnt_(0),
@@ -244,8 +244,8 @@ class ObHTableControlHandler : public ObHTableDDLHandler
 public:
   ObHTableControlHandler(ObDDLService &ddl_service,
                          share::schema::ObMultiVersionSchemaService &schema_service,
-                         const obrpc::ObHTableDDLArg &arg,
-                         obrpc::ObHTableDDLRes &res)
+                         const obcall::ObHTableDDLArg &arg,
+                         obcall::ObHTableDDLRes &res)
       : ObHTableDDLHandler(ddl_service, schema_service, arg, res),
         kv_attribute_helper_(&schema_service, arg, res)
   {}
@@ -273,8 +273,8 @@ public:
 public:
   int get_handler(ObDDLService &ddl_service,
                   share::schema::ObMultiVersionSchemaService &schema_service,
-                  const obrpc::ObHTableDDLArg &arg,
-                  obrpc::ObHTableDDLRes &res,
+                  const obcall::ObHTableDDLArg &arg,
+                  obcall::ObHTableDDLRes &res,
                   ObHTableDDLHandler *&handler);
 private:
   ObHTableDDLHandler *handler_;

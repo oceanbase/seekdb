@@ -37,10 +37,6 @@ class ObReqTransport;
 }
 }
 
-namespace obrpc
-{
-class ObBatchRpc;
-}
 namespace share
 {
 class ObLocalDevice;
@@ -66,8 +62,6 @@ public:
   static int create_palf_env(const PalfOptions &options,
                              const char *base_dir,
                              const common::ObAddr &self,
-                             rpc::frame::ObReqTransport *transport,
-                             obrpc::ObBatchRpc *batch_rpc,
                              common::ObILogAllocator *alloc_mgr,
                              ILogBlockPool *log_block_pool,
                              PalfMonitorCb *monitor,

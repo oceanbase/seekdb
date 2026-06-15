@@ -23,9 +23,6 @@
 #include "storage/column_store/ob_co_merge_dag.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_tenant_compaction_obj_mgr.h"
-#endif
 
 namespace oceanbase
 {
@@ -700,14 +697,8 @@ int ObCompactionDiagnoseMgr::diagnose_all_tablets(const int64_t tenant_id)
     uint64_t tenant_id = all_tenants[i];
     if (!is_virtual_tenant_id(tenant_id)) { // skip virtual tenant
       MTL_SWITCH(tenant_id) {
-        if (GCTX.is_shared_storage_mode()) {
-#ifdef OB_BUILD_SHARED_STORAGE
-          (void) diagnose_tenant_merge_for_ss();
-#endif
-        } else {
-          (void) diagnose_tenant_tablet(); // storage side
-          (void) diagnose_tenant_major_merge(); // RS side
-        }
+        (void) diagnose_tenant_tablet(); // storage side
+        (void) diagnose_tenant_major_merge(); // RS side
         (void) diagnose_count_info();
         (void) diagnose_existing_report_task();
       } else {
@@ -1649,105 +1640,6 @@ int ObCompactionDiagnoseMgr::diagnose_medium_scn_table()
   }
   return ret;
 }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObCompactionDiagnoseMgr::diagnose_tenant_merge_for_ss()
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  const int64_t compaction_scn = MERGE_SCHEDULER_PTR->get_frozen_version();
-  const int64_t merged_scn = MERGE_SCHEDULER_PTR->get_inner_table_merged_scn();
-  ObSEArray<ObLSHandle, 8> ls_handle_array; // hold lifetime of ls ptr
-  common::hash::ObHashMap<ObLSID, ObLS *> ls_cache;
-  ObSEArray<ObLSID, 8> ls_ids;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObCompactionDiagnoseMgr not inited", K(ret));
-  } else if (compaction_scn == merged_scn) {
-    // do nothing
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls_ids(ls_ids))) {
-    LOG_WARN("failed to get ls ids", K(ret));
-  } else if (OB_FAIL(ls_cache.create(OB_MAX_LS_NUM_PER_TENANT_PER_SERVER, ObMemAttr(MTL_ID(), "LSDiagCache")))) {
-    LOG_WARN("failed to create ls set", K(ret));
-  } else {
-    // get common suspect info
-    (void) get_and_set_suspect_info(MAJOR_MERGE, UNKNOW_LS_ID, UNKNOW_TABLET_ID);
-
-    // get ls suspect info
-    int tmp_ret = OB_SUCCESS;
-    for (int64_t idx = 0; idx < ls_ids.count(); ++idx) {
-      const ObLSID &ls_id = ls_ids.at(idx);
-      ObLSHandle ls_handle;
-      if (OB_TMP_FAIL(get_and_set_suspect_info(MAJOR_MERGE, ls_id, UNKNOW_TABLET_ID))) {
-        if (OB_HASH_NOT_EXIST != tmp_ret) {
-          LOG_WARN_RET(tmp_ret, "failed to get ls suspect info", K(ls_id));
-        }
-      } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, storage::ObLSGetMod::STORAGE_MOD))) {
-        LOG_WARN("failed to get ls", K(ret), K(ls_id));
-      } else if (OB_UNLIKELY(!ls_handle.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls handle is invalid", K(ret), K(ls_id), K(ls_handle));
-      } else if (OB_FAIL(ls_handle_array.push_back(ls_handle))) {
-        LOG_WARN("failed to add ls handle", K(ret), K(ls_id));
-      } else if (OB_FAIL(ls_cache.set_refactored(ls_id, ls_handle.get_ls()))) {
-        LOG_WARN("failed to set ls cache", K(ret), K(ls_id));
-      }
-    }
-
-    // get diagnose tablet for mini / minor / major merge
-    DiagnoseTabletArray diagnose_tablets;
-    if (OB_TMP_FAIL(MTL(ObTenantDagScheduler*)->diagnose_all_compaction_dags())) {
-      LOG_WARN("failed to diagnose running task", K(tmp_ret));
-    }
-    if (FAILEDx(MTL(ObDiagnoseTabletMgr *)->get_diagnose_tablets(diagnose_tablets))) {
-      LOG_WARN("failed to get diagnose tablets", K(ret));
-    }
-
-    DiagnoseTabletArray tablet_array;
-    ObTablet *tablet = nullptr;
-    for (int64_t idx = 0; OB_SUCC(ret) && idx < diagnose_tablets.count(); ++idx) {
-      ObTabletStatusCache tablet_status;
-      const ObLSID &ls_id = diagnose_tablets.at(idx).ls_id_;
-      const ObTabletID &tablet_id = diagnose_tablets.at(idx).tablet_id_;
-      ObLS *ls = nullptr;
-      ObTabletHandle tablet_handle;
-      normal_ = true;
-
-      if (IS_UNKNOW_LS_ID(ls_id) || IS_UNKNOW_TABLET_ID(tablet_id)) {
-        continue;
-      } else if (OB_TMP_FAIL(ls_cache.get_refactored(ls_id, ls))) {
-        if (OB_HASH_NOT_EXIST != tmp_ret) {
-          LOG_WARN_RET(tmp_ret, "failed to get ls", K(ls_id));
-        }
-      } else if (OB_TMP_FAIL(ls->get_tablet(tablet_id, tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT))) {
-        LOG_WARN_RET(tmp_ret, "failed to get tablet handle", K(ls_id), K(tablet_id));
-      } else if (FALSE_IT(tablet = tablet_handle.get_obj())) {
-      } else if (OB_TMP_FAIL(tablet_status.init_for_diagnose(*ls, compaction_scn, *tablet))) {
-        LOG_WARN_RET(tmp_ret, "failed to init tablet status", K(ls_id), K(tablet_id));
-      } else {
-        if (can_add_diagnose_info() && OB_TMP_FAIL(diagnose_tablet_major_merge(compaction_scn, ls_id, tablet_status, *tablet))) {
-          LOG_WARN("failed to get diagnose major merge", K(tmp_ret));
-        }
-        if (can_add_diagnose_info() && OB_TMP_FAIL(diagnose_tablet_mini_merge(ls_id, *tablet))) {
-          LOG_WARN("failed to get diagnose mini merge", K(tmp_ret));
-        }
-        if (can_add_diagnose_info() && OB_TMP_FAIL(diagnose_tablet_minor_merge(ls_id, *tablet))) {
-          LOG_WARN("failed to get diagnose minor merge", K(tmp_ret));
-        }
-      }
-
-      if (normal_) {
-        (void) tablet_array.push_back(diagnose_tablets.at(idx));
-      }
-    }
-    (void) MTL(ObDiagnoseTabletMgr*)->remove_diagnose_tablets(tablet_array);
-  } // end else
-  return ret;
-}
-
-#endif
-
 
 /*
  * ObTabletCompactionProgressIterator implement

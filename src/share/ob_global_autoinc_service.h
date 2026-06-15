@@ -30,7 +30,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObGAISReqRpcResult;
 struct ObGAISGetRpcResult;
@@ -110,7 +110,7 @@ public:
    * and then consume the auto-increment in the cache.
    */
   int handle_next_autoinc_request(const ObGAISNextAutoIncValReq &request,
-                                  obrpc::ObGAISNextValRpcResult &result);
+                                  obcall::ObGAISNextValRpcResult &result);
 
   /*
    * This method handles the request for getting current auto-increment value. If it exists
@@ -118,7 +118,7 @@ public:
    * Note: the cache will not be updated during this method.
    */
   int handle_curr_autoinc_request(const ObGAISAutoIncKeyArg &request,
-                                  obrpc::ObGAISCurrValRpcResult &result);
+                                  obcall::ObGAISCurrValRpcResult &result);
 
   /*
    * This method handles the request for push local sync value to global. If the local sync
@@ -138,7 +138,7 @@ public:
    * and then consume the sequence in the cache.
    */
   int handle_next_sequence_request(const ObGAISNextSequenceValReq &request,
-                                  obrpc::ObGAISNextSequenceValRpcResult &result);
+                                  obcall::ObGAISNextSequenceValRpcResult &result);
 
 public:
   void switch_to_follower_forcedly()

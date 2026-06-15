@@ -88,7 +88,7 @@ public:
   explicit ObPartitionExchange(ObDDLService &ddl_service,
                                const bool is_part_id_exchanged = true);
   virtual ~ObPartitionExchange();
-  int check_and_exchange_partition(const obrpc::ObExchangePartitionArg &arg, obrpc::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard);
+  int check_and_exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard);
 
   // direct load promise that the two tables of partition exchange are consistent
   static int check_exchange_partition_for_direct_load(ObSchemaGetterGuard &schema_guard,
@@ -100,7 +100,7 @@ public:
       const share::schema::ObPartitionLevel exchange_part_level);
 
 protected:
-  int check_partition_exchange_conditions_(const obrpc::ObExchangePartitionArg &arg,
+  int check_partition_exchange_conditions_(const obcall::ObExchangePartitionArg &arg,
                                            const ObTableSchema &base_table_schema,
                                            const ObTableSchema &inc_table_schema,
                                            const bool is_oracle_mode,
@@ -108,8 +108,8 @@ protected:
                                            ObPartitionExchangeType &part_exchange_type,
                                            common::ObIArray<common::ObTabletID> &base_tablet_ids,
                                            common::ObIArray<common::ObTabletID> &inc_tablet_ids);
-  int do_exchange_partitions_(const obrpc::ObExchangePartitionArg &arg,
-                             obrpc::ObAlterTableRes &res,
+  int do_exchange_partitions_(const obcall::ObExchangePartitionArg &arg,
+                             obcall::ObAlterTableRes &res,
                              const ObTableSchema &base_table_schema,
                              const ObTableSchema &inc_table_schema,
                              const bool is_oracle_mode,

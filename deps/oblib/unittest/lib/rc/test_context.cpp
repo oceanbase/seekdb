@@ -220,14 +220,13 @@ TEST_F(TestContext, Basic)
   // Based on testing needs, this code is temporarily retained
   ob_malloc(10000000, ObNewModIds::OB_COMMON_ARRAY);
   ObMemoryDump::get_instance().init();
-  auto task = ObMemoryDump::get_instance().alloc_task();
-  task->type_ = DUMP_CHUNK;
-  task->dump_all_ = true;
-  ObMemoryDump::get_instance().push(task);
+  ObMemoryDumpTask task;
+  task.type_ = DUMP_CHUNK;
+  task.dump_all_ = true;
+  ObMemoryDump::get_instance().request_dump(task);
 
-  task = ObMemoryDump::get_instance().alloc_task();
-  task->type_ = STAT_LABEL;
-  ObMemoryDump::get_instance().push(task);
+  task.type_ = STAT_LABEL;
+  ObMemoryDump::get_instance().request_dump(task);
   usleep(1000000);
   ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(500, ObCtxIds::DEFAULT_CTX_ID)->print_memory_usage();
 }

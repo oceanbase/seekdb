@@ -30,7 +30,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObAdminSetConfigItem;
 }
@@ -118,7 +118,7 @@ class ObConfigFreezeTriggerIntChecker
 {
 public:
   static bool check(const uint64_t tenant_id,
-                    const obrpc::ObAdminSetConfigItem &t);
+                    const obcall::ObAdminSetConfigItem &t);
 private:
   static int64_t get_write_throttle_trigger_percentage_(const uint64_t tenant_id);
   DISALLOW_COPY_AND_ASSIGN(ObConfigFreezeTriggerIntChecker);
@@ -126,7 +126,7 @@ private:
 class ObConfigTxShareMemoryLimitChecker
 {
 public:
-  static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigTxShareMemoryLimitChecker);
@@ -134,7 +134,7 @@ private:
 class ObConfigMemstoreLimitChecker
 {
 public:
-  static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigMemstoreLimitChecker);
@@ -143,7 +143,7 @@ private:
 class ObConfigTxDataLimitChecker
 {
 public:
-  static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigTxDataLimitChecker);
@@ -151,7 +151,7 @@ private:
 class ObConfigMdsLimitChecker
 {
 public:
-  static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigMdsLimitChecker);
@@ -161,7 +161,7 @@ class ObConfigWriteThrottleTriggerIntChecker
 {
 public:
   static bool check(const uint64_t tenant_id,
-                    const obrpc::ObAdminSetConfigItem &t);
+                    const obcall::ObAdminSetConfigItem &t);
 private:
   static int64_t get_freeze_trigger_percentage_(const uint64_t tenant_id);
   DISALLOW_COPY_AND_ASSIGN(ObConfigWriteThrottleTriggerIntChecker);
@@ -172,7 +172,7 @@ class ObConfigLogDiskLimitThresholdIntChecker
 {
 public:
   static bool check(const uint64_t tenant_id,
-                    const obrpc::ObAdminSetConfigItem &t);
+                    const obcall::ObAdminSetConfigItem &t);
 private:
   static int64_t get_log_disk_throttling_percentage_(const uint64_t tenant_id);
   DISALLOW_COPY_AND_ASSIGN(ObConfigLogDiskLimitThresholdIntChecker);
@@ -183,7 +183,7 @@ class ObConfigLogDiskThrottlingPercentageIntChecker
 {
 public:
   static bool check(const uint64_t tenant_id,
-                    const obrpc::ObAdminSetConfigItem &t);
+                    const obcall::ObAdminSetConfigItem &t);
 private:
   static int64_t get_log_disk_utilization_limit_threshold_(const uint64_t tenant_id);
   DISALLOW_COPY_AND_ASSIGN(ObConfigLogDiskThrottlingPercentageIntChecker);
@@ -853,27 +853,27 @@ struct ObConfigBoolParser
   static bool get(const char *str, bool &valid);
 };
 
-class ObRpcClientAuthMethodChecker
+class ObCallClientAuthMethodChecker
   : public ObConfigChecker
 {
 public:
-  ObRpcClientAuthMethodChecker() {}
-  virtual ~ObRpcClientAuthMethodChecker() {}
+  ObCallClientAuthMethodChecker() {}
+  virtual ~ObCallClientAuthMethodChecker() {}
   bool check(const ObConfigItem &t) const;
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRpcClientAuthMethodChecker);
+  DISALLOW_COPY_AND_ASSIGN(ObCallClientAuthMethodChecker);
 };
 
-class ObRpcServerAuthMethodChecker
+class ObCallServerAuthMethodChecker
   : public ObConfigChecker
 {
 public:
-  ObRpcServerAuthMethodChecker() {}
-  virtual ~ObRpcServerAuthMethodChecker() {}
+  ObCallServerAuthMethodChecker() {}
+  virtual ~ObCallServerAuthMethodChecker() {}
   bool check(const ObConfigItem &t) const;
   bool is_valid_server_auth_method(const ObString &str) const;
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRpcServerAuthMethodChecker);
+  DISALLOW_COPY_AND_ASSIGN(ObCallServerAuthMethodChecker);
 };
 
 class ObConfigSQLTlsVersionChecker
@@ -962,7 +962,7 @@ private:
 
 class ObConfigDDLNoLoggingChecker: public ObConfigChecker {
   public:
-    static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+    static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
   private:
     DISALLOW_COPY_AND_ASSIGN(ObConfigDDLNoLoggingChecker);
 };
@@ -971,7 +971,7 @@ class ObConfigArchiveLagTargetChecker {
 public:
   ObConfigArchiveLagTargetChecker(){}
   virtual ~ObConfigArchiveLagTargetChecker(){}
-  static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigArchiveLagTargetChecker);
 };
@@ -1060,7 +1060,7 @@ typedef __ObConfigContainer<ObConfigStringKey,
 class ObConfigVectorMemoryChecker
 {
 public:
-  static bool check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigVectorMemoryChecker);
@@ -1071,7 +1071,7 @@ class ObConfigDefaultTableOrganizationChecker : public ObConfigChecker
 public:
   ObConfigDefaultTableOrganizationChecker() {}
   virtual ~ObConfigDefaultTableOrganizationChecker() {}
-  static bool check(const obrpc::ObAdminSetConfigItem &t);
+  static bool check(const obcall::ObAdminSetConfigItem &t);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigDefaultTableOrganizationChecker);
 };

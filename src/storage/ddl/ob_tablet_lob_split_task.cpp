@@ -131,7 +131,7 @@ int ObLobSplitParam::init(const ObLobSplitParam &other)
   return ret;
 }
 
-int ObLobSplitParam::init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg)
+int ObLobSplitParam::init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -162,7 +162,7 @@ int ObLobSplitParam::init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg)
   return ret;
 }
 
-int ObLobSplitParam::init(const obrpc::ObTabletSplitArg &arg)
+int ObLobSplitParam::init(const obcall::ObTabletSplitArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -559,7 +559,7 @@ int ObTabletLobSplitDag::report_lob_split_status()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), K(param_));
   } else {
-    obrpc::ObDDLBuildSingleReplicaResponseArg arg;
+    obcall::ObDDLBuildSingleReplicaResponseArg arg;
     ObAddr rs_addr = GCTX.self_addr();
     arg.tenant_id_ = param_.tenant_id_;
     arg.dest_tenant_id_ = param_.tenant_id_;
@@ -579,10 +579,7 @@ int ObTabletLobSplitDag::report_lob_split_status()
     arg.physical_row_count_ = context_.physical_row_count_;
     FLOG_INFO("send tablet split response to RS", K(ret), K(context_), K(arg), K(param_));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
+    } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build split tablet data response", K(ret), K(arg));
     }
     SERVER_EVENT_ADD("ddl", "replica_split_resp",
@@ -2035,7 +2032,7 @@ int ObTabletLobSplitUtil::process_tablet_split_request(
   } else if (is_lob_tablet) {
     if (is_start_request && OB_FAIL(lob_split_param.init(*static_cast<const ObDDLBuildSingleReplicaRequestArg *>(request_arg)))) {
       LOG_WARN("init param failed", K(ret));
-    } else if (!is_start_request && OB_FAIL(lob_split_param.init(*static_cast<const obrpc::ObTabletSplitArg *>(request_arg)))) {
+    } else if (!is_start_request && OB_FAIL(lob_split_param.init(*static_cast<const obcall::ObTabletSplitArg *>(request_arg)))) {
       LOG_WARN("init param failed", K(ret));
     } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_and_get_lob_tablet_split_dag(lob_split_param, lob_split_dag))) {
       LOG_WARN("failed to schedule dag", K(ret));
@@ -2047,7 +2044,7 @@ int ObTabletLobSplitUtil::process_tablet_split_request(
     // data tablet, index tablet.
     if (is_start_request && OB_FAIL(data_split_param.init(*static_cast<const ObDDLBuildSingleReplicaRequestArg *>(request_arg)))) {
       LOG_WARN("init param failed", K(ret));
-    } else if (!is_start_request && OB_FAIL(data_split_param.init(*static_cast<const obrpc::ObTabletSplitArg *>(request_arg)))) {
+    } else if (!is_start_request && OB_FAIL(data_split_param.init(*static_cast<const obcall::ObTabletSplitArg *>(request_arg)))) {
       LOG_WARN("init param failed", K(ret));
     } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_and_get_tablet_split_dag(data_split_param, data_split_dag))) {
       LOG_WARN("failed to schedule dag", K(ret));

@@ -5,8 +5,7 @@ ob_set_subtarget(ob_server ALONE
 
 ob_set_subtarget(ob_server common
   ob_dump_task_generator.cpp
-  ob_inner_sql_rpc_proxy.cpp
-  ob_inner_sql_rpc_processor.cpp
+  ob_inner_sql_transmit_struct.cpp
   ob_inner_sql_connection.cpp
   ob_inner_sql_connection_pool.cpp
   ob_resource_inner_sql_connection_pool.cpp
@@ -14,8 +13,6 @@ ob_set_subtarget(ob_server common
   ob_inner_sql_result.cpp
   ob_req_time_service.cpp
   ob_root_service_monitor.cpp
-  ob_rpc_extra_payload.cpp
-  ob_rpc_processor_simple.cpp
   ob_server_event_history_table_operator.cpp
   ob_server_reload_config.cpp
   ob_server_schema_updater.cpp
@@ -25,10 +22,7 @@ ob_set_subtarget(ob_server common
   ob_srv_deliver.cpp
   ob_srv_network_frame.cpp
   ob_srv_xlator.cpp
-  ob_srv_xlator_partition.cpp
-  ob_srv_xlator_primary.cpp
-  ob_srv_xlator_rootserver.cpp
-  ob_srv_xlator_storage.cpp
+  ob_ex_rpc.cpp
   ob_tenant_duty_task.cpp
   ob_sys_tenant_load_sys_package_service.cpp
   ob_sys_tenant_load_sys_package_task.cpp
@@ -44,14 +38,10 @@ ob_set_subtarget(ob_server common_mixed
 ob_set_subtarget(ob_server dbms_job
   dbms_job/ob_dbms_job_executor.cpp
   dbms_job/ob_dbms_job_master.cpp
-  dbms_job/ob_dbms_job_rpc_processor.cpp
-  dbms_job/ob_dbms_job_rpc_proxy.cpp
   dbms_job/ob_dbms_job_utils.cpp
   dbms_scheduler/ob_dbms_sched_job_utils.cpp
   dbms_scheduler/ob_dbms_sched_job_executor.cpp
   dbms_scheduler/ob_dbms_sched_job_master.cpp
-  dbms_scheduler/ob_dbms_sched_job_rpc_processor.cpp
-  dbms_scheduler/ob_dbms_sched_job_rpc_proxy.cpp
   dbms_scheduler/ob_dbms_sched_table_operator.cpp
   dbms_scheduler/ob_dbms_sched_service.cpp
  )
@@ -105,10 +95,7 @@ ob_set_subtarget(ob_server mysql
 
 ob_set_subtarget(ob_server net
   net/ob_ingress_bw_alloc_service.cpp
-  net/ob_net_endpoint_ingress_rpc_proccessor.cpp
   net/ob_net_endpoint_ingress_rpc_struct.cpp
-  net/ob_shared_storage_net_throt_rpc_struct.cpp
-  net/ob_rpc_reverse_keepalive.cpp
   net/ob_net_queue_traver.cpp
 )
 
@@ -128,132 +115,6 @@ ob_set_subtarget(ob_server omt
   omt/ob_tenant_ai_service.cpp
 )
 
-ob_set_subtarget(ob_server table
-  table/htable_filter_lex.cxx
-  table/htable_filter_tab.cxx
-  table/ob_htable_filter_operator.cpp
-  table/ob_htable_filter_parser.cpp
-  table/ob_htable_filters.cpp
-  table/ob_table_filter.cpp
-  table/ob_table_batch_execute_processor.cpp
-  table/ob_table_end_trans_cb.cpp
-  table/ob_table_execute_processor.cpp
-  table/ob_table_query_and_mutate_processor.cpp
-  table/ob_table_query_processor.cpp
-  table/ob_table_rpc_processor.cpp
-  table/ob_table_rpc_response_sender.cpp
-  table/ob_table_query_async_processor.cpp
-  table/ob_table_service.cpp
-  table/ob_htable_lock_mgr.cpp
-  table/ob_table_context.cpp
-  table/ob_table_executor.cpp
-  table/ob_table_delete_executor.cpp
-  table/ob_table_insert_executor.cpp
-  table/ob_table_insert_up_executor.cpp
-  table/ob_table_lock_executor.cpp
-  table/ob_table_modify_executor.cpp
-  table/ob_table_replace_executor.cpp
-  table/ob_table_scan_executor.cpp
-  table/ob_table_global_index_lookup_executor.cpp
-  table/ob_table_update_executor.cpp
-  table/ob_table_executor_factory.cpp
-  table/ob_table_cg_service.cpp
-  table/ob_table_cache.cpp
-  table/ob_table_schema_cache.cpp
-  table/object_pool/ob_table_object_pool.cpp
-  table/object_pool/ob_table_sess_pool.cpp
-  table/object_pool/ob_table_system_variable.cpp
-  table/ob_table_op_wrapper.cpp
-  table/ob_table_query_common.cpp
-  table/ob_table_direct_load_processor.cpp
-  table/ob_table_aggregation.cpp
-  table/ttl/ob_ttl_service.cpp
-  table/ttl/ob_tenant_ttl_manager.cpp
-  table/ttl/ob_tenant_tablet_ttl_mgr.cpp
-  table/ttl/ob_table_ttl_task.cpp
-  table/ttl/ob_table_ttl_executor.cpp
-  table/ob_table_move_response.cpp
-  table/ob_table_connection_mgr.cpp
-  table/redis/ob_redis_meta.cpp
-  table/ob_table_batch_service.cpp
-  table/group/ob_table_group_common.cpp
-  table/group/ob_table_tenant_group.cpp
-  table/group/ob_table_group_service.cpp
-  table/group/ob_table_group_execute.cpp
-  table/ob_table_ls_execute_processor.cpp
-  table/ob_table_query_and_mutate_helper.cpp
-  table/ob_redis_execute_processor.cpp
-  table/redis/ob_redis_command_factory.cpp
-  table/redis/ob_redis_service.cpp
-  table/redis/ob_redis_context.cpp
-  table/redis/cmd/ob_redis_list_cmd.cpp
-  table/redis/operator/ob_redis_list_operator.cpp
-  table/redis/operator/ob_redis_operator.cpp
-  table/redis/cmd/ob_redis_set_cmd.cpp
-  table/redis/cmd/ob_redis_cmd.cpp
-  table/redis/operator/ob_redis_set_operator.cpp
-  table/redis/cmd/ob_redis_zset_cmd.cpp
-  table/redis/operator/ob_redis_zset_operator.cpp
-  table/redis/cmd/ob_redis_hash_cmd.cpp
-  table/redis/operator/ob_redis_hash_operator.cpp
-  table/redis/cmd/ob_redis_string_cmd.cpp
-  table/redis/operator/ob_redis_string_operator.cpp
-  table/ob_table_audit.cpp
-  table/redis/ob_redis_iterator.cpp
-  table/redis/ob_redis_meta.cpp
-  table/redis/cmd/ob_redis_generic_cmd.cpp
-  table/redis/operator/ob_redis_generic_operator.cpp
-  table/redis/ob_redis_ttl.cpp
-  table/redis/ob_redis_rkey.cpp
-  table/ob_table_mode_control.cpp
-  table/ob_htable_rowkey_mgr.cpp
-  table/ob_table_client_info_mgr.cpp
-  table/group/ob_i_table_struct.cpp
-  table/redis/ob_redis_context.cpp
-  table/group/ob_table_group_factory.cpp
-  table/group/ob_table_group_register.cpp
-  table/redis/group/ob_redis_group_processor.cpp
-  table/hbase/ob_hbase_group_processor.cpp
-  table/hbase/ob_hbase_group_struct.cpp
-  table/ob_table_batch_common.cpp
-  table/ob_table_multi_batch_common.cpp
-  table/ob_table_multi_batch_service.cpp
-  table/ob_redis_execute_processor_v2.cpp
-  table/fts/ob_table_fts_cg_service.cpp
-  table/adapters/ob_hbase_cell_iter.cpp
-  table/adapters/ob_normal_adapter_iter.cpp
-  table/adapters/ob_series_adapter_iter.cpp
-  table/adapters/ob_i_adapter.cpp
-  table/adapters/ob_hbase_normal_adapter.cpp
-  table/adapters/ob_hbase_series_adapter.cpp
-  table/adapters/ob_hbase_adapter_factory.cpp
-  table/cf_service/ob_hbase_column_family_service.cpp
-  table/cf_service/ob_hbase_cf_iterator.cpp
-  table/cf_service/ob_hbase_multi_cf_iterator.cpp
-  table/cf_service/ob_hbase_tablet_merge_iterator.cpp
-  table/models/ob_i_model.cpp
-  table/models/ob_hbase_model.cpp
-  table/models/ob_table_model.cpp
-  table/models/ob_redis_model.cpp
-  table/tableapi/ob_table_api_service.cpp
-  table/part_calc/ob_table_part_calc.cpp
-  table/part_calc/ob_table_part_clip.cpp
-  table/trans/ob_table_trans_ctrl.cpp
-  table/common/ob_table_sequential_grouper.cpp
-  table/async_query/ob_hbase_async_query_iter.cpp
-  table/common/ob_table_query_session.cpp
-  table/common/ob_table_query_session_mgr.cpp
-  table/common/ob_hbase_common_struct.cpp
-  table/ob_table_merge_filter.cpp
-  table/ob_table_meta_handler.cpp
-  table/ob_table_meta_processor.cpp
-  table/utils/ob_table_sql_utils.cpp
-  table/utils/ob_htable_utils.cpp
-  table/utils/ob_table_trans_utils.cpp
-  table/utils/ob_table_json_utils.cpp
-  table/utils/ob_table_convert_utils.cpp
-)
-
 ob_set_subtarget(ob_server table_load
   table_load/backup/v_1_4/ob_table_load_backup_macro_block_meta_v_1_4.cpp
   table_load/backup/v_1_4/ob_table_load_backup_macro_block_reader_v_1_4.cpp
@@ -265,11 +126,8 @@ ob_set_subtarget(ob_server table_load
   table_load/backup/v_1_4/ob_table_load_backup_util_v_1_4.cpp
   table_load/backup/ob_table_load_backup_file_util.cpp
   table_load/backup/ob_table_load_backup_table.cpp
-  table_load/client/ob_table_direct_load_rpc_executor.cpp
-  table_load/client/ob_table_direct_load_rpc_proxy.cpp
-  table_load/client/ob_table_direct_load_rpc_struct.cpp
   table_load/control/ob_table_load_control_rpc_executor.cpp
-  table_load/control/ob_table_load_control_rpc_proxy.cpp
+  table_load/control/ob_table_load_control_rpc.cpp
   table_load/control/ob_table_load_control_rpc_struct.cpp
   table_load/dag/ob_table_load_dag_compact_table_task.cpp
   table_load/dag/ob_table_load_dag_direct_write_channel.cpp
@@ -294,7 +152,7 @@ ob_set_subtarget(ob_server table_load
   table_load/resource/ob_table_load_resource_manager.cpp
   table_load/resource/ob_table_load_resource_processor.cpp
   table_load/resource/ob_table_load_resource_rpc_executor.cpp
-  table_load/resource/ob_table_load_resource_rpc_proxy.cpp
+  table_load/resource/ob_table_load_resource_rpc.cpp
   table_load/resource/ob_table_load_resource_rpc_struct.cpp
   table_load/resource/ob_table_load_resource_service.cpp
   table_load/plan/ob_table_load_data_channel.cpp
@@ -357,7 +215,6 @@ ob_set_subtarget(ob_server table_load
   table_load/ob_table_load_px_batch_rows.cpp
   table_load/ob_table_load_redef_table.cpp
   table_load/ob_table_load_row_projector.cpp
-  table_load/ob_table_load_rpc_processor.cpp
   table_load/ob_table_load_schema.cpp
   table_load/ob_table_load_service.cpp
   table_load/ob_table_load_stat.cpp
@@ -562,9 +419,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_opt_stat_gather_monitor.cpp
   virtual_table/ob_all_virtual_thread.cpp
   virtual_table/ob_all_virtual_cgroup_config.cpp
-  virtual_table/ob_all_virtual_shared_storage_quota.cpp
   virtual_table/ob_virtual_flt_config.cpp
-  virtual_table/ob_all_virtual_kv_connection.cpp
   virtual_table/ob_all_virtual_tenant_resource_limit.cpp
   virtual_table/ob_all_virtual_tenant_resource_limit_detail.cpp
   virtual_table/ob_all_virtual_activity_metrics.cpp
@@ -580,14 +435,10 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_sql_stat.cpp
   virtual_table/ob_all_virtual_tmp_file.cpp
   virtual_table/ob_all_virtual_log_transport_dest_stat.cpp
-  virtual_table/ob_all_virtual_kv_client_info.cpp
-  virtual_table/ob_all_virtual_kv_group_commit_info.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
   virtual_table/ob_all_virtual_cs_replica_tablet_stats.cpp
   virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
   virtual_table/ob_all_virtual_dynamic_partition_table.cpp
-  virtual_table/ob_all_virtual_storage_cache_task.cpp
-  virtual_table/ob_all_virtual_tablet_local_cache.cpp
   virtual_table/ob_tenant_show_catalog_databases.cpp
   virtual_table/ob_all_virtual_tenant_vector_mem_info.cpp
   virtual_table/ob_all_virtual_ccl_status.cpp

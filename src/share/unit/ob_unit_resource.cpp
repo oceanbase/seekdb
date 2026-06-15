@@ -53,8 +53,7 @@ namespace share
     result.net_bandwidth_weight_ = l.net_bandwidth_weight_ op (c); \
   } while (false)
 
-#define UNIT_MIN_LOG_DISK_SIZE (GCTX.is_shared_storage_mode() ? \
-        ObUnitResource::UNIT_MIN_LOG_DISK_SIZE_SS : ObUnitResource::UNIT_MIN_LOG_DISK_SIZE_SN)
+#define UNIT_MIN_LOG_DISK_SIZE (ObUnitResource::UNIT_MIN_LOG_DISK_SIZE_SN)
 
 ObUnitResource::ObUnitResource(
     const double max_cpu,
@@ -113,7 +112,6 @@ bool ObUnitResource::is_valid() const
       && is_log_disk_size_valid()
       // Default value of data_disk_size was -1 in version 4.3.0.1.
       // So SKIP checking validity of data_disk_size in SN mode to avoid compatibility problem.
-      && (!GCTX.is_shared_storage_mode() || is_data_disk_size_valid())
       && is_max_iops_valid()
       && is_min_iops_valid()
       && max_iops_ >= min_iops_
@@ -130,7 +128,6 @@ bool ObUnitResource::is_valid_for_unit() const
       && is_log_disk_size_valid_for_unit()
       // Default value of data_disk_size was -1 in version 4.3.0.1.
       // So SKIP checking validity of data_disk_size in SN mode to avoid compatibility problem.
-      && (!GCTX.is_shared_storage_mode() || is_data_disk_size_valid_for_unit())
       && is_max_iops_valid_for_unit()
       && is_min_iops_valid_for_unit()
       && max_iops_ >= min_iops_
@@ -139,57 +136,26 @@ bool ObUnitResource::is_valid_for_unit() const
       && is_net_bandwidth_weight_valid_for_unit();
 }
 
-int ObUnitResource::check_data_disk_size_supported() const
-{
-  int ret = OB_SUCCESS;
-  if (!GCTX.is_shared_storage_mode()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("user specifying data_disk_size in shared-nothing mode is not supported", KR(ret),
-        K(GCTX.is_shared_storage_mode()));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "DATA_DISK_SIZE in shared-nothing mode");
-  }
-  return ret;
-}
-
 bool ObUnitResource::is_data_disk_size_valid_for_unit() const
 {
   bool b_ret = false;
-  if (GCTX.is_shared_storage_mode()) {
-    b_ret = 0 == data_disk_size_ || data_disk_size_ >= UNIT_MIN_DATA_DISK_SIZE;
-  } else {
-    b_ret = DEFAULT_DATA_DISK_SIZE == data_disk_size_;
-  }
+  b_ret = DEFAULT_DATA_DISK_SIZE == data_disk_size_;
   return b_ret;
 }
 
 bool ObUnitResource::is_data_disk_size_valid_for_meta_tenant() const
 {
-  bool b_ret = false;
-  if (GCTX.is_shared_storage_mode()) {
-    b_ret = 0 == data_disk_size_ || 
-            (data_disk_size_ >= META_TENANT_MIN_DATA_DISK_SIZE
-            && data_disk_size_ <= META_TENANT_MAX_DATA_DISK_SIZE);
-  } else {
-    b_ret = DEFAULT_DATA_DISK_SIZE == data_disk_size_;
-  }
-  return b_ret;
+  return DEFAULT_DATA_DISK_SIZE == data_disk_size_;
 }
 
 bool ObUnitResource::is_data_disk_size_valid_for_user_tenant() const
 {
-  bool b_ret = false;
-  if (GCTX.is_shared_storage_mode()) {
-    b_ret = 0 == data_disk_size_ || data_disk_size_ >= USER_TENANT_MIN_DATA_DISK_SIZE;
-  } else {
-    b_ret = DEFAULT_DATA_DISK_SIZE == data_disk_size_;
-  }
-  return b_ret;
+  return DEFAULT_DATA_DISK_SIZE == data_disk_size_;
 }
 
 int64_t ObUnitResource::get_default_log_disk_size(const int64_t memory_size)
 {
-  int64_t mem_to_log_disk_factor = GCTX.is_shared_storage_mode() ?
-                                   MEMORY_TO_LOG_DISK_FACTOR_SS : MEMORY_TO_LOG_DISK_FACTOR_SN;
+  int64_t mem_to_log_disk_factor = MEMORY_TO_LOG_DISK_FACTOR_SN;
   return max(memory_size * mem_to_log_disk_factor, UNIT_MIN_LOG_DISK_SIZE);
 }
 
@@ -294,39 +260,19 @@ int ObUnitResource::init_update_and_check_data_disk_(const ObUnitResource &user_
 {
   int ret = OB_SUCCESS;
   if (0 == user_spec.data_disk_size()) {
-    if (! GCTX.is_shared_storage_mode()) {
-      // for upgrade compatability in shared-nothing mode
-      data_disk_size_ = DEFAULT_DATA_DISK_SIZE;
-    } else {
-      data_disk_size_ = user_spec.data_disk_size();
-    }
+    // for upgrade compatability in shared-nothing mode
+    data_disk_size_ = DEFAULT_DATA_DISK_SIZE;
   } else if (user_spec.data_disk_size() > 0) {
     // user specify data_disk_size
-    if (OB_FAIL(check_data_disk_size_supported())) {
-      LOG_WARN("failed to check data_disk_size supported", KR(ret), K(user_spec));
-    } else {
-      const int64_t unit_min_data_disk_size = UNIT_MIN_DATA_DISK_SIZE;
-      if (user_spec.data_disk_size() < unit_min_data_disk_size) {
-        ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-        LOG_WARN("data_disk_size is below limit", KR(ret), K(user_spec),
-            K(unit_min_data_disk_size));
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "DATA_DISK_SIZE",
-            helper.convert(unit_min_data_disk_size));
-      } else {
-        data_disk_size_ = user_spec.data_disk_size();
-      }
-    }
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("user specifying data_disk_size in shared-nothing mode is not supported", KR(ret));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "DATA_DISK_SIZE in shared-nothing mode");
   } else {// user not specify data_disk_size
     if (is_update) {
       // no need to update
     } else {
       // use the default value
-      if (GCTX.is_shared_storage_mode()) {
-        data_disk_size_ = get_default_data_disk_size(memory_size_);
-      } else {
-        data_disk_size_ = DEFAULT_DATA_DISK_SIZE;
-      }
+      data_disk_size_ = DEFAULT_DATA_DISK_SIZE;
     }
   }
 
@@ -962,10 +908,8 @@ int ObUnitResource::divide_meta_tenant(ObUnitResource &meta_resource)
     const int64_t u_log_disk_size = log_disk_size_ - m_log_disk_size;
 
     ///////////////////// DATA_DISK ///////////////////
-    const int64_t m_data_disk_size = !GCTX.is_shared_storage_mode() ? DEFAULT_DATA_DISK_SIZE :
-                                      gen_meta_tenant_data_disk_size(data_disk_size_);
-    const int64_t u_data_disk_size = !GCTX.is_shared_storage_mode() ? DEFAULT_DATA_DISK_SIZE :
-                                      (data_disk_size_ - m_data_disk_size);
+    const int64_t m_data_disk_size = DEFAULT_DATA_DISK_SIZE;
+    const int64_t u_data_disk_size = DEFAULT_DATA_DISK_SIZE;
 
     ///////////////////// IOPS ///////////////////
     // IOPS is shared by USER and META
@@ -1039,19 +983,9 @@ int ObUnitResource::gen_sys_tenant_default_unit_resource(const bool is_hidden_sy
   max_net_bandwidth_ = get_default_net_bandwidth();
   net_bandwidth_weight_ = get_default_net_bandwidth_weight(min_cpu_);
   int64_t hidden_sys_data_disk_size = 0;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(OB_SERVER_DISK_SPACE_MGR.gen_hidden_sys_data_disk_size(hidden_sys_data_disk_size))) {
-      LOG_WARN("fail to generate hidden sys data_disk_size", KR(ret), K(hidden_sys_data_disk_size));
-    }
-  }
-#endif
   if (OB_FAIL(ret)) {
   } else {
-    data_disk_size_ = !GCTX.is_shared_storage_mode() ? DEFAULT_DATA_DISK_SIZE :
-                        (is_hidden_sys ? hidden_sys_data_disk_size :
-                        max(get_default_data_disk_size(memory_size_), UNIT_MIN_DATA_DISK_SIZE));
+    data_disk_size_ = DEFAULT_DATA_DISK_SIZE;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(! is_valid_for_unit())) {

@@ -117,7 +117,7 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
                                                                false, /*is_index*/
                                                                table_schema));
       ParseNode *new_db_node = new_node->children_[0];
-      obrpc::ObRenameTableItem rename_table_item;
+      obcall::ObRenameTableItem rename_table_item;
       rename_table_item.origin_db_name_ = origin_db_name;
       rename_table_item.origin_table_name_ = origin_table_name;
       rename_table_item.new_db_name_ = new_db_name;

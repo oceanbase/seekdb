@@ -108,9 +108,6 @@ private:
   int replay_table_fork_freeze_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_start_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
   int replay_table_fork_finish_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
-  #ifdef OB_BUILD_SHARED_STORAGE
-  int replay_ddl_finish_log_(const char *log_buf, const int64_t buf_size, int64_t pos, const share::SCN &scn);
-  #endif
   void add_ddl_event(const int ret, const ObString &ddl_event_stmt);
 private:
   bool is_inited_;

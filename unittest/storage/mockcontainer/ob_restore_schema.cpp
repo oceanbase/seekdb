@@ -181,7 +181,7 @@ int ObRestoreSchema::gen_columns(ObCreateIndexStmt &stmt,
   int64_t index_rowkey_num = 0;
   uint64_t max_column_id = 0;
   const ObTableSchema *table_schema = NULL;
-  obrpc::ObCreateIndexArg &index_arg = stmt.get_create_index_arg();
+  obcall::ObCreateIndexArg &index_arg = stmt.get_create_index_arg();
 
   //bool is_index = false;
   //table_schema = schema_manager_.get_table_schema(index_arg.tenant_id_,
@@ -318,7 +318,7 @@ int ObRestoreSchema::do_create_index(ObStmt *stmt)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "not create statement", K(ret));
   } else {
-    obrpc::ObCreateIndexArg &index_arg = crt_idx_stmt->get_create_index_arg();
+    obcall::ObCreateIndexArg &index_arg = crt_idx_stmt->get_create_index_arg();
     //const bool is_index = false;
     const ObTableSchema *data_schema = NULL;
     //const ObTableSchema *data_schema = schema_manager_.get_table_schema(index_arg.tenant_id_,

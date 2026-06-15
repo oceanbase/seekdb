@@ -97,7 +97,6 @@ public:
   bool need_check_fts_;
 };
 
-
 struct ObBasicMergeProgress
 {
 public:
@@ -193,42 +192,6 @@ public:
   int64_t table_cnt_[RECORD_TABLE_TYPE_CNT];
   bool merge_finish_;
 };
-
-#ifdef OB_BUILD_SHARED_STORAGE
-struct ObLSMergeProgress : public compaction::ObBasicMergeProgress
-{
-public:
-  ObLSMergeProgress() { reset(); }
-  ~ObLSMergeProgress() { }
-  virtual bool is_merge_finished() const override
-  {
-    return ls_total_cnt_ == ls_refreshed_cnt_;
-  }
-  virtual bool is_merge_abnomal() const override
-  {
-    return ls_total_cnt_ < (ls_merging_cnt_ + ls_verified_cnt_ + ls_refreshed_cnt_);
-  }
-  bool is_verify_finished() const
-  {
-    // ls state can be IDLE when there is no tablet on ls
-    return ls_total_cnt_ == (ls_verified_cnt_ + ls_refreshed_cnt_ + ls_refreshing_cnt_);
-  }
-  void reset() {
-    ls_total_cnt_ = 0;
-    ls_merging_cnt_ = 0;
-    ls_verified_cnt_ = 0;
-    ls_refreshed_cnt_ = 0;
-    ls_refreshing_cnt_ = 0;
-  }
-  virtual int64_t to_string(char *buf, const int64_t buf_len) const override;
-public:
-  int64_t ls_total_cnt_;
-  int64_t ls_merging_cnt_;
-  int64_t ls_verified_cnt_;
-  int64_t ls_refreshed_cnt_;
-  int64_t ls_refreshing_cnt_;
-};
-#endif
 
 struct ObUnfinishTableIds
 {
@@ -346,7 +309,6 @@ public:
   common::ObSEArray<uint64_t, SKIP_VERIFY_TABLE_CNT> skip_verify_tables_; // record for print
 };
 
-
 struct ObReplicaCkmItems
 {
   ObReplicaCkmItems()
@@ -365,7 +327,6 @@ struct ObReplicaCkmItems
   ObArray<share::ObTabletReplicaChecksumItem> array_;
   int64_t tablet_cnt_;
 };
-
 
 } // namespace compaction
 } // namespace oceanbase

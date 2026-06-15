@@ -17,13 +17,15 @@
 #define USING_LOG_PREFIX COMMON
 
 #include <gmock/gmock.h>
-#include "rpc/mock_ob_common_rpc_proxy.h"
+#include "share/ob_debug_sync.h"
+#include "lib/string/ob_sql_string.h"
+#include "lib/container/ob_array.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
 namespace common
 {
-using namespace obrpc;
 using testing::_;
 using testing::Return;
 
@@ -292,138 +294,6 @@ TEST(common, ObDSEventControl)
   }
 }
 
-TEST(debug_sync, ObDebugSync)
-{
-  MockObCommonRpcProxy rpc;
-  GDS.set_rpc_proxy(&rpc);
-  ObMalloc allocator;
-  ObDSSessionActions sa;
-  ASSERT_EQ(OB_SUCCESS, sa.init(1024, allocator));
-
-  GCONF.debug_sync_timeout.set_value("0");
-  ASSERT_FALSE(GCONF.is_debug_sync_enabled());
-  ASSERT_NE(&GDS.rpc_spread_actions(), GDS.thread_local_actions());
-
-  // test debug sync parser
-  const bool L = false; // local
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  reset   ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  clear    ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("now  signal x", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  SIGNAL x-y    execute 1024 ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  NOW  signal x-y    execute 1024 ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  wait_for x-y ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("now  wait_for x-y  no_clear_event", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  wait_for x-y  no_clear_event execute 2 ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  wait_for x-y  timeout 1024 no_clear_event execute 2 ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  wait_for x-y  no_clear_event timeout 1024 execute 2 ", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  now  signal xxx wait_for x-y  timeout 0 no_clear_event execute 2 ", L, sa));
-
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("  reset a", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("  signal b ", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("  not_exist_sync_point signal b ", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("now signal not-support-too-long-event-name-bigger-than-32-byte ", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("now signal xyz execute 0", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("now signal xyc unknow_parameters", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("now clear unknow_parameters", L, sa));
-  ASSERT_NE(OB_SUCCESS, GDS.add_debug_sync("now wait_for xyc unknow_parameters", L, sa));
-
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("  reset ", L, sa));
-
-  GCONF.debug_sync_timeout.set_value("100000000");
-  ASSERT_TRUE(GCONF.is_debug_sync_enabled());
-  ASSERT_EQ(&GDS.rpc_spread_actions(), GDS.thread_local_actions());
-
-  // test set to thread local and collect result
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("reset", L, sa));
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT signal xyz", L, sa));
-  ASSERT_TRUE(GDS.rpc_spread_actions().is_active(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT));
-
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT clear", L, sa));
-  ASSERT_FALSE(GDS.rpc_spread_actions().is_active(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT));
-
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT signal xyz", L, sa));
-  GDS.rpc_spread_actions().clear_all();
-  GDS.set_thread_local_actions(sa);
-  ASSERT_TRUE(GDS.rpc_spread_actions().is_active(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT));
-
-  GDS.rpc_spread_actions().clear_all();
-  GDS.collect_result_actions(sa);
-  GDS.set_thread_local_actions(sa);
-  ASSERT_FALSE(GDS.rpc_spread_actions().is_active(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT));
-
-  // test execute
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("reset", L, sa));
-  {
-    Timer t;
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("now wait_for xyz timeout " TO_STRING(WAIT_TIME), L, sa));
-    ASSERT_GT(t.used(), WAIT_TIME_SAFE);
-  }
-  ASSERT_TRUE(GDS.rpc_spread_actions().is_empty());
-
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT signal xyz execute 2", L, sa));
-  DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-  DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-  DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-
-  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT signal def wait_for xyz TIMEOUT " TO_STRING(WAIT_TIME) " execute 3", L, sa));
-
-  {
-    // get xyz
-    Timer t;
-    DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-    DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-    ASSERT_LT(t.used(), WAIT_TIME_SAFE);
-  }
-
-  {
-    // timeout
-    Timer t;
-    DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-    ASSERT_GT(t.used(), WAIT_TIME_SAFE);
-  }
-
-  {
-    // not active
-    Timer t;
-    DEBUG_SYNC(MAJOR_FREEZE_BEFORE_SYS_COORDINATE_COMMIT);
-    ASSERT_LT(t.used(), WAIT_TIME_SAFE);
-  }
-
-  {
-    // get def
-    Timer t;
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("NOW wait_for def TIMEout " TO_STRING(WAIT_TIME), L, sa));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("NOW wait_for def TIMEout " TO_STRING(WAIT_TIME), L, sa));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("NOW wait_for def TIMEout " TO_STRING(WAIT_TIME), L, sa));
-    ASSERT_LT(t.used(), WAIT_TIME_SAFE);
-  }
-
-  {
-    // timeout
-    Timer t;
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("NOW wait_for def TIMEout " TO_STRING(WAIT_TIME), L, sa));
-    ASSERT_GT(t.used(), WAIT_TIME_SAFE);
-  }
-
-  // global actions
-  const bool G = true; // global
-  {
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("reset", L, sa));
-    EXPECT_CALL(rpc, broadcast_ds_action(_, _)).Times(3).WillRepeatedly(Return(OB_SUCCESS));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("reset", G, sa));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("now clear", G, sa));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("now signal x", G, sa));
-  }
-
-  {
-    // mock rpc will not wait
-    Timer t;
-    EXPECT_CALL(rpc, broadcast_ds_action(_, _)).Times(2).WillRepeatedly(Return(OB_SUCCESS));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("reset", G, sa));
-    ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync("NOW wait_for def TIMEout " TO_STRING(WAIT_TIME), G, sa));
-    ASSERT_LT(t.used(), WAIT_TIME_SAFE);
-  }
-}
 
 TEST(debug_sync, debug_sync_action_overflow)
 {

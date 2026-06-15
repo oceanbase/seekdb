@@ -194,7 +194,6 @@
 # 524: __all_pkg_coll_type
 # 525: __wr_sql_plan
 # 526: __wr_res_mgr_sysstat
-# 527: __all_kv_redis_table
 # 528: __all_ncomp_dll_v2
 # 530: __wr_sql_plan_aux_key2snapshot
 # 531: __ft_dict_ik_utf8
@@ -638,7 +637,6 @@
 # 12390: __wr_statname  # BASE_TABLE_NAME
 # 12391: __all_virtual_wr_sysstat
 # 12391: __wr_sysstat  # BASE_TABLE_NAME
-# 12392: __all_virtual_kv_connection
 # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
 # 12393: __all_virtual_long_ops_status  # BASE_TABLE_NAME
 # 12395: __all_virtual_timestamp_service
@@ -731,7 +729,6 @@
 # 12490: __all_virtual_spatial_reference_systems
 # 12490: __all_spatial_reference_systems  # BASE_TABLE_NAME
 # 12491: __all_virtual_log_transport_dest_stat
-# 12493: __all_virtual_kv_group_commit_status
 # 12496: __all_virtual_vector_index_info
 # 12497: __all_virtual_pkg_type
 # 12497: __all_pkg_type  # BASE_TABLE_NAME
@@ -739,13 +736,10 @@
 # 12498: __all_pkg_type_attr  # BASE_TABLE_NAME
 # 12499: __all_virtual_pkg_coll_type
 # 12499: __all_pkg_coll_type  # BASE_TABLE_NAME
-# 12500: __all_virtual_kv_client_info
 # 12501: __all_virtual_wr_sql_plan
 # 12501: __wr_sql_plan  # BASE_TABLE_NAME
 # 12502: __all_virtual_wr_res_mgr_sysstat
 # 12502: __wr_res_mgr_sysstat  # BASE_TABLE_NAME
-# 12503: __all_virtual_kv_redis_table
-# 12503: __all_kv_redis_table  # BASE_TABLE_NAME
 # 12504: __all_virtual_function_io_stat
 # 12505: __all_virtual_temp_file
 # 12506: __all_virtual_ncomp_dll_v2
@@ -1057,8 +1051,6 @@
 # 21394: CDB_WR_STATNAME
 # 21395: DBA_WR_SYSSTAT
 # 21396: CDB_WR_SYSSTAT
-# 21397: GV$OB_KV_CONNECTIONS
-# 21398: V$OB_KV_CONNECTIONS
 # 21399: GV$OB_LOCKS
 # 21400: V$OB_LOCKS
 # 21404: V$OB_TIMESTAMP_SERVICE
@@ -1178,21 +1170,15 @@
 # 21596: CDB_OB_TABLE_SPACE_USAGE
 # 21597: GV$OB_LOG_TRANSPORT_DEST_STAT
 # 21598: V$OB_LOG_TRANSPORT_DEST_STAT
-# 21601: GV$OB_KV_GROUP_COMMIT_STATUS
-# 21602: V$OB_KV_GROUP_COMMIT_STATUS
 # 21603: INNODB_SYS_FIELDS
 # 21604: INNODB_SYS_FOREIGN
 # 21605: INNODB_SYS_FOREIGN_COLS
-# 21607: GV$OB_KV_CLIENT_INFO
-# 21608: V$OB_KV_CLIENT_INFO
 # 21610: GV$OB_RES_MGR_SYSSTAT
 # 21611: V$OB_RES_MGR_SYSSTAT
 # 21612: DBA_WR_SQL_PLAN
 # 21613: CDB_WR_SQL_PLAN
 # 21614: DBA_WR_RES_MGR_SYSSTAT
 # 21615: CDB_WR_RES_MGR_SYSSTAT
-# 21618: DBA_OB_KV_REDIS_TABLE
-# 21619: CDB_OB_KV_REDIS_TABLE
 # 21620: GV$OB_FUNCTION_IO_STAT
 # 21621: V$OB_FUNCTION_IO_STAT
 # 21622: DBA_OB_TEMP_FILES

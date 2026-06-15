@@ -24,6 +24,7 @@
 #include "share/wr/ob_wr_service.h"
 #include "share/location_cache/ob_location_service.h"
 #include "observer/ob_srv_network_frame.h"
+#include "observer/ob_ex_rpc.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -57,9 +58,7 @@ int ObAshRefreshTask::start()
                                  true /* repeat */))) {
     LOG_WARN("fail define timer schedule", K(ret));
   } else {
-    if (OB_FAIL(wr_proxy_.init(GCTX.net_frame_->get_req_transport()))) {
-      LOG_WARN("failed to init wr proxy", K(ret));
-    }
+    // RPC removed: no wr proxy to initialize.
     LOG_INFO("AshRefresh init OK");
     last_scheduled_snapshot_time_ = ObTimeUtility::current_time();
     is_inited_ = true;
@@ -165,11 +164,13 @@ void ObAshRefreshTask::runTimerTask()
                 if (OB_FAIL(GCTX.location_service_->get_leader(
                       GCONF.cluster_id, tenant_id, share::SYS_LS, false /*force_renew*/, leader))) {
                   LOG_WARN("fail to get ls locaiton leader", KR(ret), K(tenant_id));
-                } else if (OB_FAIL(wr_proxy_.to(leader)
-                                    .by(tenant_id)
-                                    .timeout(timeout)
-                                    .group_id(share::OBCG_WR)
-                                    .wr_async_take_snapshot(arg, nullptr))) {
+                } else if (OB_FAIL(ex_rpc::async_call<void>(arg, [](ObWrCreateSnapshotArg &a) -> int {
+                             int ret = OB_SUCCESS;
+                             MTL_SWITCH(a.get_tenant_id()) {
+                               ret = ObWrSnapshotTaskExecutor::do_async_snapshot(a);
+                             }
+                             return ret;
+                           })->wait())) {
                   LOG_WARN("failed to send async snapshot task", KR(ret), K(tenant_id));
                 } else {
                   LOG_DEBUG("executing snapshot task for tenant", K(tenant_id), K(leader), K(timeout),

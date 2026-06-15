@@ -40,7 +40,7 @@ public:
   int add_new_macro_block_id(const MacroBlockId &macro_id);
   int mark_succeed();
   static int get_cleaner_from_data_store_desc(ObDataStoreDesc &data_store_desc, ObSSTablePrivateObjectCleaner *&cleaner);
-  TO_STRING_KV(K_(new_macro_block_ids), K_(is_ss_mode), K_(task_succeed));
+  TO_STRING_KV(K_(new_macro_block_ids), K_(task_succeed));
 
 private:
   void clean();
@@ -49,7 +49,6 @@ private:
 private:
   common::ObSEArray<MacroBlockId, CLEANER_MACRO_ID_LOCAL_ARRAY_SIZE> new_macro_block_ids_;
   SpinRWLock lock_;
-  bool is_ss_mode_;
   bool task_succeed_;
 };
 

@@ -24,9 +24,6 @@
 #include "share/object_storage/ob_device_config_mgr.h"
 #include "share/backup/ob_backup_io_adapter.h"
 #include "src/share/ob_device_manager.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "log/ob_shared_log_utils.h"
-#endif
 #undef protected
 #undef private
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager

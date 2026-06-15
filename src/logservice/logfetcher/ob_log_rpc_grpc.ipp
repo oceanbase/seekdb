@@ -26,7 +26,7 @@
 #include "lib/time/ob_time_utility.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::obgrpc;
 using namespace logservice;
 

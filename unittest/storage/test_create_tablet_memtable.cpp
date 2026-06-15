@@ -89,7 +89,6 @@ void TestTabletCreateMemtable::SetUp()
   log_file_spec_.log_create_policy_ = "normal";
   log_file_spec_.log_write_policy_ = "truncate";
   share::ObLocationService location_service;
-  obrpc::ObBatchRpc batch_rpc;
   share::schema::ObMultiVersionSchemaService schema_service;
   palf::PalfDiskOptions disk_options;
   rpc::frame::ObReqTransport req_transport(NULL, NULL);

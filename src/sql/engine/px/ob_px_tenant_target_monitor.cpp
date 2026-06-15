@@ -137,7 +137,18 @@ int ObPxTenantTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &work
       total_req += it->second;
     }
     if (total_use == 0 || total_use + total_req <= target) {
-      int64_t acquired = std::min(total_req, target);
+      // Clamp each worker_map entry to target and WRITE IT BACK, so that
+      // release_target() -- which subtracts the same worker_map values -- removes
+      // exactly what we add here. This restores the pre-refactor behavior; the
+      // single-counter refactor kept the clamp but dropped the write-back, so apply
+      // added min(total_req,target) while release subtracted the full total_req,
+      // drifting px_target_used_ negative on idle over-sized admissions.
+      int64_t acquired = 0;
+      for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
+          OB_SUCC(ret) && it != worker_map.end(); it++) {
+        it->second = std::min(it->second, target);
+        acquired += it->second;
+      }
       px_target_used_ += acquired;
       admit_count = acquired;
       admit_version = version;

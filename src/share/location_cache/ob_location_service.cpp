@@ -204,8 +204,7 @@ int ObLocationService::external_table_get(
 
 int ObLocationService::init(
     schema::ObMultiVersionSchemaService &schema_service,
-    common::ObMySQLProxy &sql_proxy,
-    obrpc::ObSrvRpcProxy &srv_rpc_proxy)
+    common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {

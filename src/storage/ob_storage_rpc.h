@@ -19,11 +19,7 @@
 
 #include "lib/net/ob_addr.h"
 #include "lib/utility/ob_unify_serialize.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
-#include "share/rpc/ob_async_rpc_proxy.h"
+#include "rpc/frame/ob_result_code.h"
 #include "common/ob_member.h"
 #include "storage/ob_storage_struct.h"
 #include "observer/ob_server_struct.h"
@@ -36,7 +32,6 @@
 #include "share/transfer/ob_transfer_info.h"
 #include "storage/lob/ob_lob_rpc_struct.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
-#include "share/rpc/ob_async_rpc_proxy.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "close_modules/shared_storage/storage/high_availability/ob_migration_warmup_struct.h"
@@ -47,13 +42,14 @@
 
 namespace oceanbase
 {
+namespace rpc { namespace frame { class ObReqTransport; } }
 namespace storage
 {
 class ObLogStreamService;
 class ObICopySSTableMacroRangeObProducer;
 }
 
-namespace obrpc
+namespace obcall
 {
 
 struct ObCopyMacroBlockArg
@@ -566,280 +562,34 @@ public:
   share::ObLSID ls_id_;
 };
 
-#ifdef OB_BUILD_SHARED_STORAGE
-// migration micro cache related
-struct ObGetMicroBlockCacheInfoArg final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObGetMicroBlockCacheInfoArg();
-  ~ObGetMicroBlockCacheInfoArg() {}
-  bool is_valid() const;
-
-  TO_STRING_KV(K_(tenant_id), K_(ls_id));
-public:
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
-};
-
-struct ObGetMicroBlockCacheInfoRes final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObGetMicroBlockCacheInfoRes();
-  ~ObGetMicroBlockCacheInfoRes() {}
-
-  TO_STRING_KV(K_(ls_cache_info));
-public:
-  ObSSLSCacheInfo ls_cache_info_;
-};
-
-struct ObGetMigrationCacheJobInfoArg final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObGetMigrationCacheJobInfoArg();
-  ~ObGetMigrationCacheJobInfoArg() {}
-  bool is_valid() const;
-  
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(task_count));
-public:
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
-  int64_t task_count_;
-};
-
-struct ObGetMigrationCacheJobInfoRes final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObGetMigrationCacheJobInfoRes();
-  ~ObGetMigrationCacheJobInfoRes() {}
-  void reset();
-  int assign(const ObGetMigrationCacheJobInfoRes &res);
-  TO_STRING_KV(K_(job_infos));
-public:
-  common::ObSArray<ObMigrationCacheJobInfo> job_infos_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGetMigrationCacheJobInfoRes);
-};
-
-struct ObGetMicroBlockKeyArg final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObGetMicroBlockKeyArg();
-  ~ObGetMicroBlockKeyArg() {}
-  bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(job_info));
-public:
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
-  ObMigrationCacheJobInfo job_info_;
-};
-
-struct ObMigrateWarmupKeySet final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObMigrateWarmupKeySet();
-  ~ObMigrateWarmupKeySet() {}
-  bool is_valid() const;
-  void reset();
-  int assign(const ObMigrateWarmupKeySet &arg);
-  TO_STRING_KV(K_(tenant_id), K_(key_sets));
-public:
-  uint64_t tenant_id_;
-  common::ObSArray<ObCopyMicroBlockKeySet> key_sets_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObMigrateWarmupKeySet);
-};
-
-struct ObCopyMicroBlockKeySetRes final
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObCopyMicroBlockKeySetRes();
-  ~ObCopyMicroBlockKeySetRes();
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(
-      K_(header),
-      K_(key_set_array));
-public:
-  ObCopyMicroBlockKeySetRpcHeader header_;
-  obrpc::ObMigrateWarmupKeySet key_set_array_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCopyMicroBlockKeySetRes);
-};
-
-struct ObSSLSFetchMicroBlockArg final
-{
-public:
-  static const int64_t OB_SS_LS_FETCH_MICRO_BLOCK_ARG_VERSION = 1;
-  OB_UNIS_VERSION(OB_SS_LS_FETCH_MICRO_BLOCK_ARG_VERSION);
-public:
-  ObSSLSFetchMicroBlockArg();
-  virtual ~ObSSLSFetchMicroBlockArg() {}
-  bool is_valid() const;
-  int assign(const ObSSLSFetchMicroBlockArg &other);
-  TO_STRING_KV(K_(tenant_id), K_(micro_metas));
-
-public:
-  uint64_t tenant_id_;
-  ObSArray<storage::ObSSMicroBlockCacheKeyMeta> micro_metas_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObSSLSFetchMicroBlockArg);
-};
-#endif
+// Legacy shared-storage migrate-warmup obcall RPC arg/result structs removed
+// (ObGetMicroBlockCacheInfo{Arg,Res}, ObGetMigrationCacheJobInfo{Arg,Res},
+//  ObGetMicroBlockKeyArg, ObMigrateWarmupKeySet, ObCopyMicroBlockKeySetRes,
+//  ObSSLSFetchMicroBlockArg) — send/recv path replaced by gRPC.
 
 //src
-class ObStorageRpcProxy : public obrpc::ObRpcProxy
+// Inert shell: all obcall RPC methods are removed/dead in seekdb (single-replica;
+// HA/migration is gRPC). Kept only as a pointer type for dead HA plumbing; no
+// longer derives from the obcall RPC framework.
+class ObStorageRpcProxy
 {
 public:
   static const int64_t STREAM_RPC_TIMEOUT = 30 * 1000 * 1000LL; // 30s
-  DEFINE_TO(ObStorageRpcProxy);
-  //stream
-  RPC_SS(PR5 lob_query, OB_LOB_QUERY, (ObLobQueryArg), common::ObDataBuffer);
-#ifdef OB_BUILD_SHARED_STORAGE
-  RPC_SS(PR5 fetch_micro_block, OB_HA_FETCH_MICRO_BLOCK, (ObMigrateWarmupKeySet), common::ObDataBuffer);
-  RPC_SS(PR5 fetch_replica_prewarm_micro_block, OB_REPLICA_PREWARM_FETCH_MICRO_BLOCK, (ObSSLSFetchMicroBlockArg), common::ObDataBuffer);
-#endif
-  //single
-  RPC_S(PR5 notify_restore_tablets, OB_HA_NOTIFY_RESTORE_TABLETS, (ObNotifyRestoreTabletsArg), ObNotifyRestoreTabletsResp);
-  RPC_S(PR5 inquire_restore, OB_HA_NOTIFY_FOLLOWER_RESTORE, (ObInquireRestoreArg), ObInquireRestoreResp);
-  RPC_S(PR5 update_ls_meta, OB_HA_UPDATE_LS_META, (ObRestoreUpdateLSMetaArg));
-#ifdef OB_BUILD_SHARED_STORAGE
-  RPC_S(PR5 fetch_micro_block_keys, OB_HA_FETCH_MICRO_BLOCK_KEYS, (ObGetMicroBlockKeyArg), ObCopyMicroBlockKeySetRes);
-  RPC_S(PR5 get_micro_block_cache_info, OB_HA_GET_MICRO_BLOCK_CACHE_INFO, (ObGetMicroBlockCacheInfoArg), ObGetMicroBlockCacheInfoRes);
-  RPC_S(PR5 get_migration_cache_job_info, OB_HA_GET_MIGRATION_CACHE_JOB_INFO, (ObGetMigrationCacheJobInfoArg), ObGetMigrationCacheJobInfoRes);
-#endif
+  int init(const common::ObAddr & = common::ObAddr())
+  { return common::OB_SUCCESS; }
+  void destroy() {}
 };
 
-template <ObRpcPacketCode RPC_CODE>
-class ObStorageStreamRpcP : public ObRpcProcessor<obrpc::ObStorageRpcProxy::ObRpc<RPC_CODE> >
-{
-public:
-  explicit ObStorageStreamRpcP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObStorageStreamRpcP() {}
-protected:
-  template <typename Data>
-  int fill_data(const Data &data);
-  int fill_buffer(blocksstable::ObBufferReader &data);
-  int flush_and_wait();
+// ObStorageStreamRpcP (obcall stream-RPC processor template) deleted — dead in seekdb.
 
-  int is_follower_ls(logservice::ObLogService *log_srv, ObLS *ls, bool &is_ls_follower);
-protected:
-  common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  int64_t last_send_time_;
-  common::ObArenaAllocator allocator_;
-  static const int64_t FLUSH_TIME_INTERVAL = ObStorageRpcProxy::STREAM_RPC_TIMEOUT / 2;
-};
 
-class ObNotifyRestoreTabletsP :
-    public ObStorageStreamRpcP<OB_HA_NOTIFY_RESTORE_TABLETS>
-{
-public:
-  explicit ObNotifyRestoreTabletsP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObNotifyRestoreTabletsP() {}
-protected:
-  int process();
-};
+// cross-tenant LOB obcall RPC removed: ObLobQueryP (OB_LOB_QUERY processor) deleted — the
+// cross-tenant LOB read now runs in-process (see ObLobRemoteUtil in storage/lob/ob_lob_remote.cpp).
+// Legacy shared-storage migrate-warmup obcall RPC processors removed
+// (ObFetchMicroBlockKeysP / ObFetchMicroBlockP / ObGetMicroBlockCacheInfoP /
+//  ObGetMigrationCacheJobInfoP / ObFetchReplicaPrewarmMicroBlockP) — replaced by gRPC.
 
-class ObInquireRestoreP :
-    public ObStorageStreamRpcP<OB_HA_NOTIFY_FOLLOWER_RESTORE>
-{
-public:
-  explicit ObInquireRestoreP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObInquireRestoreP() {}
-protected:
-  int process();
-};
-
-class ObUpdateLSMetaP :
-    public ObStorageStreamRpcP<OB_HA_UPDATE_LS_META>
-{
-public:
-  explicit ObUpdateLSMetaP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObUpdateLSMetaP() {}
-protected:
-  int process();
-};
-
-class ObLobQueryP : public ObStorageStreamRpcP<OB_LOB_QUERY>
-{
-public:
-  explicit ObLobQueryP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObLobQueryP() {}
-protected:
-  int process();
-private:
-  int process_read();
-  int process_getlength();
-  int64_t get_timeout() const;
-};
-#ifdef OB_BUILD_SHARED_STORAGE
-class ObFetchMicroBlockKeysP:
-    public ObStorageRpcProxy::Processor<OB_HA_FETCH_MICRO_BLOCK_KEYS>
-{
-public:
-  ObFetchMicroBlockKeysP() = default;
-  virtual ~ObFetchMicroBlockKeysP() {}
-protected:
-  int process();
-private:
-  int set_header_attr_(
-      const ObCopyMicroBlockKeySetRpcHeader::ConnectStatus connect_status,
-      const int64_t blk_idx,
-      const int64_t count,
-      ObCopyMicroBlockKeySetRpcHeader &header);
-};
-
-class ObFetchMicroBlockP:
-    public ObStorageStreamRpcP<OB_HA_FETCH_MICRO_BLOCK>
-{
-public:
-  explicit ObFetchMicroBlockP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObFetchMicroBlockP() {}
-protected:
-  int process();
-};
-
-class ObGetMicroBlockCacheInfoP:
-    public ObStorageRpcProxy::Processor<OB_HA_GET_MICRO_BLOCK_CACHE_INFO>
-{
-public:
-  ObGetMicroBlockCacheInfoP() = default;
-  virtual ~ObGetMicroBlockCacheInfoP() {}
-protected:
-  int process();
-};
-
-class ObGetMigrationCacheJobInfoP:
-    public ObStorageRpcProxy::Processor<OB_HA_GET_MIGRATION_CACHE_JOB_INFO>
-{
-public:
-  ObGetMigrationCacheJobInfoP() = default;
-  virtual ~ObGetMigrationCacheJobInfoP() {}
-protected:
-  int process();
-  private:
-  int convert_block_range_to_job_infos_(
-      const ObIArray<ObSSPhyBlockIdxRange> &block_ranges, ObIArray<ObMigrationCacheJobInfo> &job_infos);
-};
-
-class ObFetchReplicaPrewarmMicroBlockP:
-    public ObStorageStreamRpcP<OB_REPLICA_PREWARM_FETCH_MICRO_BLOCK>
-{
-public:
-  explicit ObFetchReplicaPrewarmMicroBlockP(common::ObInOutBandwidthThrottle *bandwidth_throttle);
-  virtual ~ObFetchReplicaPrewarmMicroBlockP() {}
-protected:
-  int process();
-};
-#endif
-
-} // obrpc
+} // obcall
 
 
 namespace storage
@@ -851,33 +601,12 @@ public:
   ObIStorageRpc() {}
   virtual ~ObIStorageRpc() {}
   virtual int init(
-      obrpc::ObStorageRpcProxy *rpc_proxy,
-      const common::ObAddr &self,
-      obrpc::ObCommonRpcProxy *rs_rpc_proxy) = 0;
+      obcall::ObStorageRpcProxy *rpc_proxy,
+      const common::ObAddr &self) = 0;
   virtual void destroy() = 0;
 public:
-  // Notify follower restore some tablets from leader.
-  virtual int notify_restore_tablets(
-      const uint64_t tenant_id,
-      const ObStorageHASrcInfo &follower_info,
-      const share::ObLSID &ls_id,
-      const int64_t &proposal_id,
-      const common::ObIArray<common::ObTabletID>& tablet_id_array,
-      const share::ObLSRestoreStatus &restore_status,
-      obrpc::ObNotifyRestoreTabletsResp &restore_resp) = 0;
 
-  // inquire restore status from src.
-  virtual int inquire_restore(
-      const uint64_t tenant_id,
-      const ObStorageHASrcInfo &src_info,
-      const share::ObLSID &ls_id,
-      const share::ObLSRestoreStatus &restore_status,
-      obrpc::ObInquireRestoreResp &restore_resp) = 0;
 
-  virtual int update_ls_meta(
-      const uint64_t tenant_id,
-      const ObStorageHASrcInfo &dest_info,
-      const storage::ObLSMetaPackage &ls_meta) = 0;
 };
 
 class ObStorageRpc: public ObIStorageRpc
@@ -885,99 +614,23 @@ class ObStorageRpc: public ObIStorageRpc
 public:
   ObStorageRpc();
   ~ObStorageRpc();
-  int init(obrpc::ObStorageRpcProxy *rpc_proxy,
-      const common::ObAddr &self, obrpc::ObCommonRpcProxy *rs_rpc_proxy);
+  int init(obcall::ObStorageRpcProxy *rpc_proxy,
+      const common::ObAddr &self);
   void destroy();
 public:
-  // Notify follower restore some tablets from leader.
-  virtual int notify_restore_tablets(
-      const uint64_t tenant_id,
-      const ObStorageHASrcInfo &follower_info,
-      const share::ObLSID &ls_id,
-      const int64_t &proposal_id,
-      const common::ObIArray<common::ObTabletID>& tablet_id_array,
-      const share::ObLSRestoreStatus &restore_status,
-      obrpc::ObNotifyRestoreTabletsResp &restore_resp);
 
-  // inquire restore status from src.
-  virtual int inquire_restore(
-      const uint64_t tenant_id,
-      const ObStorageHASrcInfo &src_info,
-      const share::ObLSID &ls_id,
-      const share::ObLSRestoreStatus &restore_status,
-      obrpc::ObInquireRestoreResp &restore_resp);
 
-  virtual int update_ls_meta(
-      const uint64_t tenant_id,
-      const ObStorageHASrcInfo &dest_info,
-      const storage::ObLSMetaPackage &ls_meta);
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  virtual int get_ls_micro_block_cache_info(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const ObStorageHASrcInfo &src_info,
-      ObSSLSCacheInfo &cache_info);
-  virtual int get_ls_migration_cache_job_info(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const ObStorageHASrcInfo &src_info,
-      const int64_t task_count,
-      obrpc::ObGetMigrationCacheJobInfoRes &res);
-  virtual int get_micro_block_key_set(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const ObStorageHASrcInfo &src_info,
-      const ObMigrationCacheJobInfo &job_info,
-      obrpc::ObCopyMicroBlockKeySetRes &res);
-#endif
+  // Legacy shared-storage migrate-warmup ObStorageRpc wrappers removed
+  // (get_ls_micro_block_cache_info / get_ls_migration_cache_job_info /
+  //  get_micro_block_key_set) — replaced by gRPC.
 private:
   bool is_inited_;
-  obrpc::ObStorageRpcProxy *rpc_proxy_;
+  obcall::ObStorageRpcProxy *rpc_proxy_;
   common::ObAddr self_;
-  obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
 };
 
-template<obrpc::ObRpcPacketCode RPC_CODE>
-class ObStorageStreamRpcReader
-{
-public:
-  ObStorageStreamRpcReader();
-  virtual ~ObStorageStreamRpcReader() {}
-  int init(
-      common::ObInOutBandwidthThrottle &bandwidth_throttle);
-  int fetch_next_buffer_if_need();
-  int check_need_fetch_next_buffer(bool &need_fetch);
-  int fetch_next_buffer();
-  template<typename Data>
-  int fetch_and_decode(Data &data);
-  template<typename Data>
-  int fetch_and_decode(common::ObIAllocator &allocator, Data &data);
-  template<typename Data>
-  int fetch_and_decode_list(common::ObIAllocator &allocator,
-                            common::ObIArray<Data> &data_list);
-  template<typename Data>
-  int fetch_and_decode_list(
-      const int64_t data_list_count,
-      common::ObIArray<Data> &data_list);
-  common::ObDataBuffer &get_rpc_buffer() { return rpc_buffer_; }
-  const common::ObAddr &get_dst_addr() const { return handle_.get_dst_addr(); }
-  obrpc::ObStorageRpcProxy::SSHandle<RPC_CODE> &get_handle() { return handle_; }
-  void reuse()
-  {
-    rpc_buffer_.get_position() = 0;
-    rpc_buffer_parse_pos_ = 0;
-  }
-private:
-  bool is_inited_;
-  obrpc::ObStorageRpcProxy::SSHandle<RPC_CODE> handle_;
-  common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  common::ObDataBuffer rpc_buffer_;
-  int64_t rpc_buffer_parse_pos_;
-  common::ObArenaAllocator allocator_;
-  int64_t last_send_time_;
-  int64_t data_size_;
-};
+// ObStorageStreamRpcReader (obcall stream-RPC reader template) deleted — dead in seekdb.
 
 class ObHasTransferTableFilterOp final : public ObITabletFilterOp
 {

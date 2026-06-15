@@ -528,57 +528,6 @@ ObSNIOInfo &ObSNIOInfo::operator=(const ObSNIOInfo &other)
 
 
 /******************             S2IOInfo              **********************/
-#ifdef OB_BUILD_SHARED_STORAGE
-ObSSIOInfo::ObSSIOInfo() : ObSNIOInfo(), phy_block_handle_(), fd_cache_handle_(), tmp_file_valid_length_(0)
-{
-}
-
-ObSSIOInfo::ObSSIOInfo(const ObSSIOInfo &other)
-{
-  *this = other;
-}
-
-ObSSIOInfo::~ObSSIOInfo()
-{
-}
-
-void ObSSIOInfo::reset()
-{
-  ObSNIOInfo::reset();
-  phy_block_handle_.reset();
-  fd_cache_handle_.reset();
-  tmp_file_valid_length_ = 0;
-}
-
-ObSSIOInfo &ObSSIOInfo::operator=(const ObSSIOInfo &other)
-{
-  int ret = OB_SUCCESS;
-  if (&other != this) {
-    reset();
-    tenant_id_ = other.tenant_id_;
-    fd_ = other.fd_;
-    offset_ = other.offset_;
-    size_ = other.size_;
-    timeout_us_ = other.timeout_us_;
-    flag_ = other.flag_;
-    callback_ = other.callback_;
-    buf_ = other.buf_;
-    user_data_buf_ = other.user_data_buf_;
-    part_id_ = other.part_id_;
-    tmp_file_valid_length_ = other.tmp_file_valid_length_;
-    // ignore ret, cuz assign fails only when other.phy_block_handle_/fd_cache_handle_ is invalid.
-    // in case when other.phy_block_handle_/fd_cache_handle_ is invalid, ret is unnecessary.
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(phy_block_handle_.assign(other.phy_block_handle_))) {
-      LOG_WARN("fail to assign phy block handle", KR(tmp_ret), KPC(this), K(other));
-    }
-    if (OB_TMP_FAIL(fd_cache_handle_.assign(other.fd_cache_handle_))) {
-      LOG_WARN("fail to assign fd cache handle", KR(tmp_ret), KPC(this), K(other));
-    }
-  }
-  return (*this);
-}
-#endif
 
 /******************             IOTimeLog              **********************/
 
@@ -1514,17 +1463,6 @@ int ObIORequest::recycle_buffer()
 }
 
 
-int ObIORequest::retry_io()
-{
-  int ret = OB_SUCCESS;
-  if(OB_ISNULL(tenant_io_mgr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant io mgr is null", K(ret), K(*this));
-  } else if (OB_FAIL(tenant_io_mgr_->retry_io(*this))) {
-    LOG_WARN("retry io failed", K(ret), K(*this));
-  }
-  return ret;
-}
 int ObIORequest::try_alloc_buf_until_timeout(char *&io_buf)
 {
   int ret = OB_SUCCESS;

@@ -321,7 +321,7 @@ int ObTabletDrop::execute()
   } else {
     FOREACH_X(iter, args_map_, OB_SUCC(ret)) {
       common::ObIArray<ObTabletID> *tablet_ids = iter->second;
-      obrpc::ObBatchRemoveTabletArg arg;
+      obcall::ObBatchRemoveTabletArg arg;
       if (OB_ISNULL(tablet_ids)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet_ids is NULL ptr", KR(ret));

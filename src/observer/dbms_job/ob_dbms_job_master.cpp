@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_dbms_job_master.h"
+#include "ob_dbms_job_executor.h"
+#include "observer/ob_ex_rpc.h"
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -31,7 +33,7 @@ using namespace share;
 using namespace share::schema;
 using namespace rootserver;
 using namespace obutil;
-using namespace obrpc;
+using namespace obcall;
 
 namespace dbms_job
 {
@@ -241,7 +243,6 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
     LOG_WARN("dbms job master already inited", K(ret), K(inited_));
   } else if (OB_ISNULL(sql_client)
           || OB_ISNULL(schema_service)
-          || OB_ISNULL(GCTX.dbms_job_rpc_proxy_)
           ) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(sql_client), K(schema_service));
@@ -262,7 +263,6 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
     trace_id_ = ObCurTraceId::get();
     self_addr_ = GCONF.self_addr_;
     schema_service_ = schema_service;
-    job_rpc_proxy_ = GCTX.dbms_job_rpc_proxy_;
     inited_ = true;
   }
   LOG_INFO("dbms job master inited!", K(ret));
@@ -383,16 +383,32 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
             ObArray<ObAddr> all_servers;
             OZ (get_all_servers(job_info.get_tenant_id(), job_info.get_zone(), all_servers), job_info);
             for (uint64_t i = 0; OB_SUCC(ret) && i < all_servers.count(); ++i) {
-              OZ (job_rpc_proxy_->run_dbms_job(
-                job_key->get_tenant_id(), job_key->get_job_id(), all_servers.at(i), self_addr_));
+              // RPC removed: target is self on single replica; run executor in-process.
+              const uint64_t run_tenant_id = job_key->get_tenant_id();
+              const uint64_t run_job_id = job_key->get_job_id();
+              ex_rpc::async_call([run_tenant_id, run_job_id]() {
+                ObDBMSJobExecutor executor;
+                if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
+                    && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
+                  (void)executor.run_dbms_job(run_tenant_id, run_job_id);
+                }
+              });
             }
           } else {
             OZ (get_execute_addr(job_info, execute_addr));
             OZ (job_utils_.update_for_start(
               job_info.get_tenant_id(), job_info,
               (job_info.next_date_ == job_key->get_execute_at())));
-            OZ (job_rpc_proxy_->run_dbms_job(
-              job_key->get_tenant_id(), job_key->get_job_id(), execute_addr, self_addr_));
+            // RPC removed: target is self on single replica; run executor in-process.
+            const uint64_t run_tenant_id = job_key->get_tenant_id();
+            const uint64_t run_job_id = job_key->get_job_id();
+            ex_rpc::async_call([run_tenant_id, run_job_id]() {
+              ObDBMSJobExecutor executor;
+              if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
+                  && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
+                (void)executor.run_dbms_job(run_tenant_id, run_job_id);
+              }
+            });
           }
         }
         ignore_nextdate = true;

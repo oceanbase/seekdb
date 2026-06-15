@@ -21,6 +21,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/mysqlclient/ob_mysql_result.h"  // ObMySQLResult
 #include "share/schema/ob_schema_getter_guard.h"  // ObSchemaGetterGuard
+#include "share/ob_schema_status_proxy.h"  // ObSchemaStatusProxy
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfo, ObAllTenantInfoProxy
 #include "observer/ob_service.h"  // ObService
 #include "lib/ob_running_mode.h"

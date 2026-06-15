@@ -58,7 +58,7 @@ int ObCreateFuncResolver::resolve(const ParseNode &parse_tree)
   } else {
     stmt_ = create_func_stmt;
     const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    obrpc::ObCreateUserDefinedFunctionArg &create_func_arg = create_func_stmt->get_create_func_arg();
+    obcall::ObCreateUserDefinedFunctionArg &create_func_arg = create_func_stmt->get_create_func_arg();
     create_func_arg.udf_.set_tenant_id(tenant_id);
     int64_t dl_c_len = create_func_node->children_[3]->str_len_;
     const char* dl_c = create_func_node->children_[3]->str_value_;

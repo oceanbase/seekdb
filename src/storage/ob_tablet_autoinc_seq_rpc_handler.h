@@ -102,14 +102,14 @@ public:
   static ObTabletAutoincSeqRpcHandler &get_instance();
   int init();
   int fetch_tablet_autoinc_seq_cache(
-      const obrpc::ObFetchTabletSeqArg &arg,
-      obrpc::ObFetchTabletSeqRes &res);
+      const obcall::ObFetchTabletSeqArg &arg,
+      obcall::ObFetchTabletSeqRes &res);
   int batch_get_tablet_autoinc_seq(
-      const obrpc::ObBatchGetTabletAutoincSeqArg &arg,
-      obrpc::ObBatchGetTabletAutoincSeqRes &res);
+      const obcall::ObBatchGetTabletAutoincSeqArg &arg,
+      obcall::ObBatchGetTabletAutoincSeqRes &res);
   int batch_set_tablet_autoinc_seq(
-      const obrpc::ObBatchSetTabletAutoincSeqArg &arg,
-      obrpc::ObBatchSetTabletAutoincSeqRes &res);
+      const obcall::ObBatchSetTabletAutoincSeqArg &arg,
+      obcall::ObBatchSetTabletAutoincSeqRes &res);
   int replay_update_tablet_autoinc_seq(
       const ObLS *ls,
       const ObTabletID &tablet_id,
@@ -118,7 +118,7 @@ public:
       const share::SCN &replay_scn);
   int batch_set_tablet_autoinc_seq_in_trans(
       ObLS &ls,
-      const obrpc::ObBatchSetTabletAutoincSeqArg &arg,
+      const obcall::ObBatchSetTabletAutoincSeqArg &arg,
       const share::SCN &replay_scn,
       mds::BufferCtx &ctx);
 private:

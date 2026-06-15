@@ -22,7 +22,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObFreezeSplitSrcTabletArg;
 struct ObFreezeSplitSrcTabletRes;
@@ -53,7 +53,7 @@ public:
 
   int execute(ObDDLTaskRecord &task_record);
   static int clean_split_src_and_dst_tablet(
-      const obrpc::ObCleanSplittedTabletArg &arg,
+      const obcall::ObCleanSplittedTabletArg &arg,
       const int64_t auto_part_size,
       const int64_t new_schema_version,
       ObMySQLTransaction &trans);
@@ -61,8 +61,8 @@ public:
       share::schema::ObSchemaGetterGuard &schema_guard,
       const share::schema::ObTableSchema &table_schema);
   static int freeze_split_src_tablet(
-      const obrpc::ObFreezeSplitSrcTabletArg &arg,
-      obrpc::ObFreezeSplitSrcTabletRes &res,
+      const obcall::ObFreezeSplitSrcTabletArg &arg,
+      obcall::ObFreezeSplitSrcTabletRes &res,
       const int64_t abs_timeout_us);
   static int get_split_src_tablet_id_if_any(const share::schema::ObTableSchema &table_schema, ObTabletID &tablet_id);
   static int check_enable_global_index_auto_split(const share::schema::ObTableSchema &data_table_schema, bool &enable_auto_split, int64_t &auto_part_size);

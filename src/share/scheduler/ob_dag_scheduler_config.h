@@ -35,9 +35,7 @@ DAG_SCHEDULER_DAG_NET_TYPE_DEF(DAG_NET_TYPE_MAX, "DAG_NET_TYPE_MAX")
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_COMPACTION_HIGH,   6, "PRIO_COMPACTION_HIGH", PRIO_COMPACTION_HIGH)
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_HA_HIGH,        8, "PRIO_HA_HIGH", PRIO_HA_HIGH)
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_COMPACTION_MID, 6, "PRIO_COMPACTION_MID", PRIO_COMPACTION_MID)
-DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_HA_MID,         5, "PRIO_HA_MID", PRIO_HA_MID)
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_COMPACTION_LOW, 6, "PRIO_COMPACTION_LOW", PRIO_COMPACTION_LOW)
-DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_HA_LOW,         2, "PRIO_HA_LOW", PRIO_HA_LOW)
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_DDL,            2, "PRIO_DDL", PRIO_DDL)
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_DDL_HIGH,       6, "PRIO_DDL_HIGH", PRIO_DDL_HIGH)
 DAG_SCHEDULER_DAG_PRIO_DEF(DAG_PRIO_TTL,            2, "PRIO_TTL", DEFAULT_FUNCTION)
@@ -281,6 +279,15 @@ struct ObDagPrio
 #define DAG_SCHEDULER_DAG_PRIO_DEF(dag_prio, score, dag_prio_str, dag_function_type) dag_prio,
 #include "ob_dag_scheduler_config.h"
 #undef DAG_SCHEDULER_DAG_PRIO_DEF
+    // HA_MID / HA_LOW are folded into HA_HIGH in observer-lite: the dag types
+    // mapped to them (FAST_MIGRATE / BACKUP_* / VALIDATE / TENANT_SNAPSHOT_*) are
+    // all runtime-stubbed (OB_NOT_SUPPORTED), so they need no dedicated scheduler.
+    // Keeping them as aliases lets those dag-type definitions and backup code
+    // compile unchanged while routing any such dag to the HA_HIGH scheduler.
+    // These aliases must NOT appear in the X-macro list above, otherwise they
+    // would add duplicate slots to OB_DAG_PRIOS[] / prio_sche_[DAG_PRIO_MAX].
+    DAG_PRIO_HA_MID = DAG_PRIO_HA_HIGH,
+    DAG_PRIO_HA_LOW = DAG_PRIO_HA_HIGH,
   };
 };
 

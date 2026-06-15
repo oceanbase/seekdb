@@ -39,12 +39,6 @@ public:
   typedef share::schema::ObReferenceObjTable::DependencyObjKeyItemPairs DepObjKeyItemList;
   ObMaintainObjDepInfoTask (
     const uint64_t tenant_id);
-  ObMaintainObjDepInfoTask (
-    uint64_t tenant_id,
-    obrpc::ObCommonRpcProxy &rs_rpc_proxy,
-    const DepObjKeyItemList &insert_dep_objs,
-    const DepObjKeyItemList &update_dep_objs,
-    const DepObjKeyItemList &delete_dep_objs);
   virtual ~ObMaintainObjDepInfoTask()
   {
     insert_dep_objs_.destroy();
@@ -64,7 +58,7 @@ public:
       bool &is_valid);
   int check_and_build_dep_info_arg(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      obrpc::ObDependencyObjDDLArg &dep_obj_info_arg,
+      obcall::ObDependencyObjDDLArg &dep_obj_info_arg,
       const common::ObIArray<DepObjKeyItem> &dep_objs,
       share::schema::ObReferenceObjTable::ObSchemaRefObjOp op);
 
@@ -79,7 +73,6 @@ public:
 private:
   uint64_t tenant_id_;
   const share::ObGlobalContext &gctx_;
-  obrpc::ObCommonRpcProxy &rs_rpc_proxy_;
   DepObjKeyItemList insert_dep_objs_;
   DepObjKeyItemList update_dep_objs_;
   DepObjKeyItemList delete_dep_objs_;

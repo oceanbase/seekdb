@@ -66,7 +66,7 @@ public:
       ILogFetcherHandler &log_handler);
   void destroy();
 
-  int update_fetch_log_protocol(const obrpc::ObCdcFetchLogProtocolType proto);
+  int update_fetch_log_protocol(const obcall::ObCdcFetchLogProtocolType proto);
 
 public:
   virtual int add_fsc(const FetchStreamType stype,
@@ -92,10 +92,10 @@ private:
 
   struct UpdateProtoFunc
   {
-    explicit UpdateProtoFunc(const obrpc::ObCdcFetchLogProtocolType proto):
+    explicit UpdateProtoFunc(const obcall::ObCdcFetchLogProtocolType proto):
         proto_type_(proto) {}
     bool operator() (const logservice::TenantLSID &key, FetchStreamContainer *value);
-    obrpc::ObCdcFetchLogProtocolType proto_type_;
+    obcall::ObCdcFetchLogProtocolType proto_type_;
   };
 
   typedef common::ObLinearHashMap<logservice::TenantLSID, FetchStreamContainer*> FscMap;
@@ -113,7 +113,7 @@ private:
   bool is_inited_;
 
   uint64_t                      self_tenant_id_;
-  obrpc::ObCdcFetchLogProtocolType proto_type_;
+  obcall::ObCdcFetchLogProtocolType proto_type_;
   // External modules
   IObLogRpc                     *rpc_;                    // RPC handler
   IObLSWorker                   *stream_worker_;          // Stream master

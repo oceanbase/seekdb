@@ -33,12 +33,12 @@ public:
   {}
   ~ObCreateFuncStmt() {}
 
-  obrpc::ObCreateUserDefinedFunctionArg &get_create_func_arg() { return create_func_arg_; }
+  obcall::ObCreateUserDefinedFunctionArg &get_create_func_arg() { return create_func_arg_; }
 
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_func_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_func_arg_; }
 
 private:
-  obrpc::ObCreateUserDefinedFunctionArg create_func_arg_;
+  obcall::ObCreateUserDefinedFunctionArg create_func_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObCreateFuncStmt);
 };
 

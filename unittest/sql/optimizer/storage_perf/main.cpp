@@ -397,8 +397,6 @@ int run_test() {
 
   if(OB_SUCC(ret)) {
     ObAddr self;
-    oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
-    obrpc::ObSrvRpcProxy rpc_proxy;
     if(!self.set_ip_addr("127.0.0.1", 8086)){
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "fail to set ipv4");

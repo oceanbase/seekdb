@@ -33,7 +33,6 @@
 #include "logservice/palf/lsn.h"                    // LSN
 #include "share/scn.h"                    // SCN
 #include "ob_remote_log_source.h"                   // Parent
-#include "ob_log_restore_rpc_define.h"              // ObRemoteFetchLogResponse
 
 namespace oceanbase
 {
@@ -185,36 +184,6 @@ protected:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(RemoteDataGenerator);
-};
-
-class ServiceDataGenerator : public RemoteDataGenerator
-{
-public:
-  ServiceDataGenerator(const uint64_t tenant_id,
-      const ObLSID &id,
-      const LSN &start_lsn,
-      const LSN &end_lsn,
-      const share::SCN &end_scn,
-      const ObAddr &server,
-      logservice::ObLogExternalStorageHandler *log_ext_handler);
-  virtual ~ServiceDataGenerator();
-
-public:
-  int next_buffer(palf::LSN &lsn, char *&buf, int64_t &buf_size);
-  int update_max_lsn(const palf::LSN &lsn) { UNUSED(lsn); return common::OB_SUCCESS; }
-  int advance_step_lsn(const palf::LSN &lsn) override { UNUSED(lsn); return common::OB_SUCCESS;}
-  INHERIT_TO_STRING_KV("RemoteDataGenerator", RemoteDataGenerator, K_(server), K_(result));
-
-private:
-  bool is_valid() const;
-  int fetch_log_from_net_();
-
-private:
-  common::ObAddr server_;
-  obrpc::ObRemoteFetchLogResponse result_;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceDataGenerator);
 };
 
 class LocationDataGenerator : public RemoteDataGenerator

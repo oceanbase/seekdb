@@ -45,33 +45,9 @@
 ///
 /// Based on the above analysis, for the caller sending the RPC, only the ret return value is of concern, and ret can completely replace the result code
 
-#define SEND_RPC(RPC, tenant_id, SVR, TIMEOUT, REQ, ARG) \
-    do { \
-      if (IS_NOT_INIT) { \
-        ret = OB_NOT_INIT; \
-        LOG_ERROR("ObLogRpc not init", KR(ret), K(tenant_id)); \
-      } else { \
-        obrpc::ObCdcProxy proxy; \
-        if (OB_FAIL(net_client_.get_proxy(proxy))) { \
-          LOG_ERROR("net client get proxy fail", KR(ret)); \
-        } else {\
-          int64_t max_rpc_proc_time = \
-                  ATOMIC_LOAD(&ObLogRpc::g_rpc_process_handler_time_upper_limit); \
-          proxy.set_server((SVR)); \
-          if (OB_FAIL(proxy.dst_cluster_id(cluster_id_).by(tenant_id).group_id(share::OBCG_CDCSERVICE) \
-                                  .compressed(ATOMIC_LOAD(&compressor_type_)) \
-                                  .trace_time(true).timeout((TIMEOUT))\
-                                  .max_process_handler_time(static_cast<int32_t>(max_rpc_proc_time))\
-                                  .RPC((REQ), (ARG)))) { \
-            LOG_ERROR("rpc fail: " #RPC, "tenant_id", tenant_id, "svr", (SVR), "rpc_ret", ret, \
-                "result_code", proxy.get_result_code().rcode_, "req", (REQ)); \
-          } \
-        } \
-      } \
-    } while(0)
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
@@ -85,8 +61,7 @@ ObLogRpc::ObLogRpc() :
     is_inited_(false),
     cluster_id_(OB_INVALID_CLUSTER_ID),
     self_tenant_id_(OB_INVALID_TENANT_ID),
-    client_type_(obrpc::ObCdcClientType::CLIENT_TYPE_UNKNOWN),
-    net_client_(),
+    client_type_(obcall::ObCdcClientType::CLIENT_TYPE_UNKNOWN),
     last_ssl_info_hash_(UINT64_MAX),
     ssl_key_expired_time_(0),
     client_id_(),
@@ -110,8 +85,8 @@ ERRSIM_POINT_DEF(ERRSIM_FETCH_LOG_TIME_OUT);
 
 int ObLogRpc::req_start_lsn_by_tstamp(const uint64_t tenant_id,
     const common::ObAddr &svr,
-    obrpc::ObCdcReqStartLSNByTsReq &req,
-    obrpc::ObCdcReqStartLSNByTsResp &resp,
+    obcall::ObCdcReqStartLSNByTsReq &req,
+    obcall::ObCdcReqStartLSNByTsResp &resp,
     const int64_t timeout)
 {
   int ret = OB_SUCCESS;
@@ -119,15 +94,19 @@ int ObLogRpc::req_start_lsn_by_tstamp(const uint64_t tenant_id,
   if (1 == cfg_->test_mode_force_fetch_archive) {
     req.set_flag(ObCdcRpcTestFlag::OBCDC_RPC_FETCH_ARCHIVE);
   }
-  SEND_RPC(req_start_lsn_by_ts, tenant_id, svr, timeout, req, resp);
+  // CDC RPC removed (feature decommissioned): obcall ObCdcProxy send path deleted.
+  ret = OB_NOT_SUPPORTED;
+  UNUSED(svr);
+  UNUSED(timeout);
+  UNUSED(resp);
   LOG_INFO("rpc: request start LSN by tstamp", KR(ret), K(tenant_id), K(svr), K(timeout), K(req), K(resp));
   return ret;
 }
 
 int ObLogRpc::async_stream_fetch_log(const uint64_t tenant_id,
     const common::ObAddr &svr,
-    obrpc::ObCdcLSFetchLogReq &req,
-    obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_LOG2> &cb,
+    obcall::ObCdcLSFetchLogReq &req,
+    obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_LOG2> &cb,
     const int64_t timeout)
 {
   int ret = OB_SUCCESS;
@@ -148,13 +127,13 @@ int ObLogRpc::async_stream_fetch_log(const uint64_t tenant_id,
   // Note: cb's lifetime is managed by caller (e.g., LogGroupEntryRpcRequest::cb_)
   class GrpcCallbackAdapter : public ObGrpcAsyncCallback<::logservice::FetchLogRes> {
   public:
-    GrpcCallbackAdapter(obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_LOG2> &old_cb)
+    GrpcCallbackAdapter(obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_LOG2> &old_cb)
       : old_cb_(old_cb) {}
 
     void on_success(const ::logservice::FetchLogRes &proto_resp) override {
       int ret = OB_SUCCESS;
       auto resp = std::make_unique<ObCdcLSFetchLogResp>();
-      obrpc::ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = OB_SUCCESS;
 
       // Deserialize proto response to OB object
@@ -175,14 +154,14 @@ int ObLogRpc::async_stream_fetch_log(const uint64_t tenant_id,
     }
 
     void on_error(const grpc::Status &status) override {
-      obrpc::ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = translate_error(status);
       old_cb_.rcode() = rcode;
       old_cb_.on_timeout();
     }
 
   private:
-    obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_LOG2> &old_cb_;
+    obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_LOG2> &old_cb_;
 
     int translate_error(const grpc::Status &status) {
       if (status.ok()) {
@@ -234,8 +213,8 @@ int ObLogRpc::async_stream_fetch_log(const uint64_t tenant_id,
 
 int ObLogRpc::async_stream_fetch_missing_log(const uint64_t tenant_id,
     const common::ObAddr &svr,
-    obrpc::ObCdcLSFetchMissLogReq &req,
-    obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_MISSING_LOG> &cb,
+    obcall::ObCdcLSFetchMissLogReq &req,
+    obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_MISSING_LOG> &cb,
     const int64_t timeout)
 {
   int ret = OB_SUCCESS;
@@ -250,14 +229,14 @@ int ObLogRpc::async_stream_fetch_missing_log(const uint64_t tenant_id,
   // Create adapter callback to convert proto response to OB object and call old callback
   class GrpcCallbackAdapter : public ObGrpcAsyncCallback<::logservice::FetchMissingLogRes> {
   public:
-    GrpcCallbackAdapter(obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_MISSING_LOG> &old_cb)
+    GrpcCallbackAdapter(obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_MISSING_LOG> &old_cb)
       : old_cb_(old_cb) {}
 
     void on_success(const ::logservice::FetchMissingLogRes &proto_resp) override {
       int ret = OB_SUCCESS;
       // Deserialize proto response to OB object
       auto resp = std::make_unique<ObCdcLSFetchLogResp>();
-      obrpc::ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = OB_SUCCESS;
 
       if (OB_FAIL(deserialize_proto_to_ob(proto_resp, *resp))) {
@@ -278,14 +257,14 @@ int ObLogRpc::async_stream_fetch_missing_log(const uint64_t tenant_id,
     }
 
     void on_error(const grpc::Status &status) override {
-      obrpc::ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = translate_error(status);
       old_cb_.rcode() = rcode;
       old_cb_.on_timeout();
     }
 
   private:
-    obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_MISSING_LOG> &old_cb_;
+    obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_MISSING_LOG> &old_cb_;
 
     int translate_error(const grpc::Status &status) {
       // Translate gRPC status to OB error code
@@ -321,8 +300,8 @@ int ObLogRpc::async_stream_fetch_missing_log(const uint64_t tenant_id,
 
 int ObLogRpc::async_stream_fetch_raw_log(const uint64_t tenant_id,
     const common::ObAddr &svr,
-    obrpc::ObCdcFetchRawLogReq &req,
-    obrpc::ObCdcProxy::AsyncCB<obrpc::OB_CDC_FETCH_RAW_LOG> &cb,
+    obcall::ObCdcFetchRawLogReq &req,
+    obcall::ObCdcProxy::AsyncCB<obcall::OB_CDC_FETCH_RAW_LOG> &cb,
     const int64_t timeout)
 {
   int ret = OB_SUCCESS;
@@ -337,13 +316,13 @@ int ObLogRpc::async_stream_fetch_raw_log(const uint64_t tenant_id,
   // Use new gRPC async unary RPC
   class GrpcCallbackAdapter : public ObGrpcAsyncCallback<::logservice::FetchRawLogRes> {
   public:
-    GrpcCallbackAdapter(obrpc::ObCdcProxy::AsyncCB<obrpc::OB_CDC_FETCH_RAW_LOG> &old_cb)
+    GrpcCallbackAdapter(obcall::ObCdcProxy::AsyncCB<obcall::OB_CDC_FETCH_RAW_LOG> &old_cb)
       : old_cb_(old_cb) {}
 
     void on_success(const ::logservice::FetchRawLogRes &proto_resp) override {
       int ret = OB_SUCCESS;
       auto resp = std::make_unique<ObCdcFetchRawLogResp>();
-      obrpc::ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = OB_SUCCESS;
 
       if (OB_FAIL(deserialize_proto_to_ob(proto_resp, *resp))) {
@@ -359,14 +338,14 @@ int ObLogRpc::async_stream_fetch_raw_log(const uint64_t tenant_id,
     }
 
     void on_error(const grpc::Status &status) override {
-      obrpc::ObRpcResultCode rcode;
+      rpc::frame::ObResultCode rcode;
       rcode.rcode_ = translate_error(status);
       old_cb_.rcode() = rcode;
       old_cb_.on_timeout();
     }
 
   private:
-    obrpc::ObCdcProxy::AsyncCB<obrpc::OB_CDC_FETCH_RAW_LOG> &old_cb_;
+    obcall::ObCdcProxy::AsyncCB<obcall::OB_CDC_FETCH_RAW_LOG> &old_cb_;
 
     int translate_error(const grpc::Status &status) {
       if (status.ok()) {
@@ -419,14 +398,12 @@ int ObLogRpc::async_stream_fetch_raw_log(const uint64_t tenant_id,
 int ObLogRpc::init(
     const int64_t cluster_id,
     const uint64_t self_tenant_id,
-    const obrpc::ObCdcClientType client_type,
+    const obcall::ObCdcClientType client_type,
     const int64_t io_thread_num,
     const ObLogFetcherConfig &cfg)
 {
   int ret = OB_SUCCESS;
-  rpc::frame::ObNetOptions opt;
-  opt.rpc_io_cnt_ = static_cast<int>(io_thread_num);
-  opt.mysql_io_cnt_ = 0;
+  // obcall net client removed (log pull runs over gRPC); ObNetOptions no longer needed.
   // First set cfg
   cfg_ = &cfg;
 
@@ -438,8 +415,6 @@ int ObLogRpc::init(
     LOG_ERROR("invalid argument", KR(ret), K(io_thread_num));
   } else if (OB_FAIL(init_client_id_())) {
     LOG_ERROR("init client identity failed", KR(ret));
-  } else if (OB_FAIL(net_client_.init(opt))) {
-    LOG_ERROR("init net client fail", KR(ret), K(io_thread_num));
   } else if (OB_FAIL(grpc_client_map_.create(64, "LogGrpcClient"))) {
     LOG_ERROR("failed to create grpc client map", KR(ret));
   } else {
@@ -458,8 +433,7 @@ void ObLogRpc::destroy()
   is_inited_ = false;
   cluster_id_ = OB_INVALID_CLUSTER_ID;
   self_tenant_id_ = OB_INVALID_TENANT_ID;
-  client_type_ = obrpc::ObCdcClientType::CLIENT_TYPE_UNKNOWN;
-  net_client_.destroy();
+  client_type_ = obcall::ObCdcClientType::CLIENT_TYPE_UNKNOWN;
   last_ssl_info_hash_ = UINT64_MAX;
   ssl_key_expired_time_ = 0;
   client_id_.reset();

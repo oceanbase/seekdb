@@ -94,7 +94,7 @@ static int check_ls_not_exist(const uint64_t tenant_id, const common::ObArray<sh
 }
 
 // Notice: this function is only used for dropping lob aux table that's main table has been dropped casued by some bugs.
-int ObDDLService::force_drop_lonely_lob_aux_table(const obrpc::ObForceDropLonelyLobAuxTableArg &arg)
+int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {

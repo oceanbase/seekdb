@@ -16,13 +16,14 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_trigger_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "pl/ob_pl_package.h"
 #include "pl/ob_pl_compile_utils.h"
 #include "sql/resolver/ddl/ob_trigger_resolver.h"
 
 namespace oceanbase
 {
-using namespace obrpc;
+using namespace obcall;
 using namespace pl;
 using namespace common;
 using namespace share::schema;
@@ -33,21 +34,18 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObCreateTriggerArg &arg = stmt.get_trigger_arg();
   uint64_t tenant_id = arg.trigger_info_.get_tenant_id();
   bool has_error = false;
   ObString first_stmt;
-  obrpc::ObCreateTriggerRes res;
+  obcall::ObCreateTriggerRes res;
   pl::ObPL *pl_engine = nullptr;
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
   CK (OB_NOT_NULL(pl_engine = ctx.get_my_session()->get_pl_engine()));
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (task_exec_ctx->get_common_rpc(common_rpc_proxy));
-  OV (OB_NOT_NULL(common_rpc_proxy));
-  OZ (common_rpc_proxy->create_trigger_with_res(arg, res), common_rpc_proxy->get_server());
+  OZ (rootserver::serial_call([&]{ return GCTX.root_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
   OZ (ObSPIService::force_refresh_schema(tenant_id));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
@@ -74,7 +72,7 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
     OZ (arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.trigger_info_.get_trigger_id(),
                                                                           TRIGGER_SCHEMA,
                                                                           res.trigger_schema_version_)));
-    OZ (common_rpc_proxy->create_trigger_with_res(arg, res), common_rpc_proxy->get_server());
+    OZ (rootserver::serial_call([&]{ return GCTX.root_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
     if (OB_ERR_PARALLEL_DDL_CONFLICT == ret) {
       LOG_WARN("trigger or base table maybe changed by other session, ignore the error", K(ret), K(res));
       ret = OB_SUCCESS;
@@ -107,15 +105,12 @@ int ObDropTriggerExecutor::execute(ObExecContext &ctx, ObDropTriggerStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObDropTriggerArg &arg = stmt.get_trigger_arg();
   ObString first_stmt;
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (task_exec_ctx->get_common_rpc(common_rpc_proxy));
-  OV (OB_NOT_NULL(common_rpc_proxy));
-  OZ (common_rpc_proxy->drop_trigger(arg), common_rpc_proxy->get_server());
+  OZ (rootserver::serial_call([&]{ return GCTX.root_service_->drop_trigger(arg); }), GCTX.self_addr());
   return ret;
 }
 
@@ -123,7 +118,6 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObAlterTriggerArg &arg = stmt.get_trigger_arg();
   ObString first_stmt;
   pl::ObPL *pl_engine = nullptr;
@@ -136,12 +130,10 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
     arg.ddl_stmt_str_ = first_stmt;
     omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
     OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-    OZ (task_exec_ctx->get_common_rpc(common_rpc_proxy));
-    OV (OB_NOT_NULL(common_rpc_proxy));
     if (OB_FAIL(ret)) {
     } else if (!arg.is_alter_compile_) {
-      obrpc::ObRoutineDDLRes res;
-      OZ (common_rpc_proxy->alter_trigger_with_res(arg, res), common_rpc_proxy->get_server());
+      obcall::ObRoutineDDLRes res;
+      OZ (rootserver::serial_call([&]{ return GCTX.root_service_->alter_trigger_with_res(arg, res); }), GCTX.self_addr());
       if (OB_SUCC(ret)) {
         OZ (ObSPIService::force_refresh_schema(trigger_info.get_tenant_id(), res.store_routine_schema_version_));
         OX (latest_schema_version = res.store_routine_schema_version_);

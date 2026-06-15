@@ -26,7 +26,7 @@ namespace oceanbase
 using namespace common;
 using namespace share::schema;
 using namespace sql;
-using namespace obrpc;
+using namespace obcall;
 namespace observer
 {
 

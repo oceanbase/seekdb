@@ -41,9 +41,6 @@ bool ObStaticDataStoreDesc::is_valid() const
          && compressor_type_ > ObCompressorType::INVALID_COMPRESSOR
          && snapshot_version_ > 0
          && schema_version_ >= 0;
-  if (GCTX.is_shared_storage_mode()) {
-    is_valid &= (tablet_transfer_seq_ != ObStorageObjectOpt::INVALID_TABLET_TRANSFER_SEQ);
-  }
   return is_valid;
 }
 
@@ -941,7 +938,7 @@ int ObWholeDataStoreDesc::init(
   uint64_t encoding_granularity = 0;
   reset();
 
-  if (is_ddl && !GCTX.is_shared_storage_mode()) {
+  if (is_ddl) {
     // for ddl and direct load, we only limit the encoding granularit for share nothing mode
     omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
     if (tenant_config.is_valid()) {

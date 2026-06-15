@@ -282,8 +282,6 @@ public:
   typedef common::hash::ObHashMap<int64_t, ObIDiagnoseInfo *> InfoMap;
   typedef common::ObDList<ObIDiagnoseInfo> InfoList;
 
-
-
 protected:
   bool is_inited_;
   int64_t page_size_;
@@ -472,9 +470,6 @@ public:
   }
 
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  int diagnose_tenant_merge_for_ss();
-#endif
   int diagnose_tablet_mini_merge(const ObLSID &ls_id, ObTablet &tablet);
   int diagnose_tablet_minor_merge(const ObLSID &ls_id, ObTablet &tablet);
   int diagnose_tablet_major_merge(

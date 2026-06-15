@@ -21,9 +21,6 @@
 #include "common/storage/ob_io_device.h"
 #include "share/ob_local_device.h"
 #include "share/config/ob_server_config.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "share/ob_ss_io_device_wrapper.h"
-#endif
 
 namespace oceanbase
 {
@@ -237,11 +234,7 @@ public:
                              BlockFileAttr &block_file_attr);
 };
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#define ObIODeviceWrapper ObSSIODeviceWrapper
-#else
 #define ObIODeviceWrapper ObSNIODeviceWrapper
-#endif
 
 #define LOCAL_DEVICE_INSTANCE ::oceanbase::share::ObIODeviceWrapper::get_instance().get_local_device()
 } // namespace share

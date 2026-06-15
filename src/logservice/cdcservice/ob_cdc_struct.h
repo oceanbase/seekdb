@@ -224,7 +224,7 @@ public:
       req_start_time_ = OB_INVALID_TIMESTAMP;
       trace_id_.reset();
       req_ret_ = OB_SUCCESS;
-      req_feed_back_ = obrpc::FeedbackType::INVALID_FEEDBACK;
+      req_feed_back_ = obcall::FeedbackType::INVALID_FEEDBACK;
     }
 
     bool is_valid() const {
@@ -235,7 +235,7 @@ public:
     void invalidate(const int64_t req_start_time,
         const ObCurTraceId::TraceId &trace_id,
         const int req_ret,
-        const obrpc::FeedbackType feed_back) {
+        const obcall::FeedbackType feed_back) {
       SpinWLockGuard guard(req_lock_);
       if (trace_id_ != trace_id) {
         reset();
@@ -245,7 +245,7 @@ public:
     void record_rpc(const int64_t req_start_time,
         const ObCurTraceId::TraceId &trace_id,
         const int req_ret,
-        const obrpc::FeedbackType feed_back)
+        const obcall::FeedbackType feed_back)
     {
       SpinWLockGuard guard(req_lock_);
       req_start_time_ = req_start_time;
@@ -257,7 +257,7 @@ public:
     void get_req_info(int64_t &req_start_time,
         ObCurTraceId::TraceId &trace_id,
         int &req_ret,
-        obrpc::FeedbackType &feed_back) const
+        obcall::FeedbackType &feed_back) const
     {
       SpinRLockGuard guard(req_lock_);
       req_start_time = req_start_time_;
@@ -277,7 +277,7 @@ public:
           "request_start_time", req_start_time_,
           "trace_id", trace_id_,
           "request_ret", req_ret_,
-          "request_feedback", obrpc::feedback_type_str(req_feed_back_)))) {
+          "request_feedback", obcall::feedback_type_str(req_feed_back_)))) {
       }
 
       return ret;
@@ -288,7 +288,7 @@ public:
     int64_t req_start_time_;
     ObCurTraceId::TraceId trace_id_;
     int req_ret_;
-    obrpc::FeedbackType req_feed_back_;
+    obcall::FeedbackType req_feed_back_;
   };
 
   class TrafficStatInfo
@@ -329,8 +329,8 @@ public:
 
 public:
   int init(const int64_t client_progress,
-      const obrpc::ObCdcFetchLogProtocolType proto,
-      const obrpc::ObCdcClientType client_type);
+      const obcall::ObCdcFetchLogProtocolType proto,
+      const obcall::ObCdcClientType client_type);
 
   // thread safe method,
   // OB_INIT_TWICE: archive source has been inited;
@@ -366,8 +366,8 @@ public:
   // make sure only one thread would call this method.
   void reset();
 
-  void set_proto_type(const obrpc::ObCdcFetchLogProtocolType type) {
-    obrpc::ObCdcFetchLogProtocolType from = proto_type_, to = type;
+  void set_proto_type(const obcall::ObCdcFetchLogProtocolType type) {
+    obcall::ObCdcFetchLogProtocolType from = proto_type_, to = type;
     ATOMIC_STORE(&proto_type_, type);
     if (from != to) {
       EXTLOG_LOG(INFO, "set fetch protocol ", K(from), K(to));
@@ -375,7 +375,7 @@ public:
   }
 
   // non-thread safe method
-  obrpc::ObCdcFetchLogProtocolType get_proto_type() const {
+  obcall::ObCdcFetchLogProtocolType get_proto_type() const {
     return ATOMIC_LOAD(&proto_type_);
   }
 
@@ -412,9 +412,9 @@ public:
   void record_rpc_info(const int64_t rpc_start_time,
       const ObCurTraceId::TraceId &trace_id,
       const int ret_code,
-      const obrpc::FeedbackType feed_back)
+      const obcall::FeedbackType feed_back)
   {
-    if (OB_SUCCESS == ret_code && feed_back == obrpc::FeedbackType::INVALID_FEEDBACK) {
+    if (OB_SUCCESS == ret_code && feed_back == obcall::FeedbackType::INVALID_FEEDBACK) {
       if (failed_rpc_info_.is_valid()) {
         failed_rpc_info_.invalidate(rpc_start_time, trace_id, ret_code, feed_back);
       }
@@ -423,11 +423,11 @@ public:
     }
   }
 
-  void set_client_type(const obrpc::ObCdcClientType client_type) {
+  void set_client_type(const obcall::ObCdcClientType client_type) {
     ATOMIC_STORE(&client_type_, client_type);
   }
 
-  obrpc::ObCdcClientType get_client_type() const {
+  obcall::ObCdcClientType get_client_type() const {
     return client_type_;
   }
 
@@ -478,7 +478,7 @@ private:
   logservice::ObRemoteLogParent *source_;
   // stat, it's ok even if it's not correct.
   // only set when init, can hardly be wrong
-  obrpc::ObCdcFetchLogProtocolType proto_type_;
+  obcall::ObCdcFetchLogProtocolType proto_type_;
   // it concerns about the thread num of log_ext_storage_handler,
   // should be eventually correct.
   FetchMode fetch_mode_;
@@ -489,7 +489,7 @@ private:
   // for fetch_raw_log protocol, it's not used.
   int64_t client_progress_;
   const int64_t create_ts_;
-  obrpc::ObCdcClientType client_type_;
+  obcall::ObCdcClientType client_type_;
 
   palf::LSN client_lsn_;
 

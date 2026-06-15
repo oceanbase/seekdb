@@ -200,11 +200,7 @@ int ObDirectLoadTmpFileIOHandle::pread(char *buf, int64_t size, int64_t offset)
     io_info_.size_ = size;
     io_info_.buf_ = buf;
     io_info_.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-    if (GCTX.is_shared_storage_mode()) {
-      io_info_.prefetch_ = true;
-    } else {
-      io_info_.disable_page_cache_ = true;
-    }
+    io_info_.disable_page_cache_ = true;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(check_status())) {
         LOG_WARN("fail to check status", KR(ret));

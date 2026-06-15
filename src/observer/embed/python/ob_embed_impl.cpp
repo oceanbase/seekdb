@@ -29,7 +29,6 @@
 #include <memory>
 #include "observer/embed/python/ob_embed_impl.h"
 #include "observer/ob_server.h"
-#include "rpc/obrpc/ob_net_client.h"
 #include "observer/ob_inner_sql_result.h"
 #include "observer/ob_server_options.h"
 #include "lib/string/ob_string.h"

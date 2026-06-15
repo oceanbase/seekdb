@@ -241,6 +241,10 @@ int ObTenantBase::start_mtl_module()
 void ObTenantBase::stop_mtl_module()
 {
   LOG_INFO("stop_mtl_module", K(id_));
+  // Single-tenant: re-assert tenant context so MTL() inside module stop()
+  // resolves to this tenant's own modules during teardown
+  // (g_tenant_ptr may point to the dummy ctx at this point).
+  ObTenantEnv::set_tenant(this);
   ObSEArray<FuncWrapper, 100> func_arr;
 #define STOP_TMP(IDX)                                                                               \
   if (ObTenantBase::stop_m##IDX##_func != nullptr) {                                                \
@@ -264,6 +268,10 @@ void ObTenantBase::stop_mtl_module()
 void ObTenantBase::wait_mtl_module()
 {
   LOG_INFO("wait_mtl_module", K(id_));
+  // Single-tenant: re-assert tenant context so MTL() inside module wait()
+  // resolves to this tenant's own modules during teardown
+  // (g_tenant_ptr may point to the dummy ctx at this point).
+  ObTenantEnv::set_tenant(this);
   ObSEArray<FuncWrapper, 100> func_arr;
 #define WAIT_TMP(IDX)                                                                             \
   if (ObTenantBase::wait_m##IDX##_func != nullptr) {                                              \
@@ -303,6 +311,10 @@ void ObTenantBase::destroy()
 void ObTenantBase::destroy_mtl_module()
 {
   LOG_INFO("destroy_mtl_module", K(id_));
+  // Single-tenant: re-assert tenant context so MTL() inside module destroy()
+  // resolves to this tenant's own modules during teardown
+  // (g_tenant_ptr may point to the dummy ctx at this point).
+  ObTenantEnv::set_tenant(this);
    ObSEArray<FuncWrapper, 100> func_arr;
 #define DESTROY_TMP(IDX)                                                                                           \
   if (ObTenantBase::destroy_m##IDX##_func != nullptr) {                                                            \
@@ -374,7 +386,6 @@ int ObTenantBase::pre_run()
 int ObTenantBase::end_run()
 {
   int ret = OB_SUCCESS;
-  ObTenantEnv::set_tenant(nullptr);
   {
     ThreadListNode *node = lib::Thread::current().get_thread_list_node();
     lib::ObMutexGuard guard(thread_list_lock_);
@@ -487,8 +498,9 @@ bool ObTenantBase::is_primary_or_invalid_tenant()
 
 void ObTenantEnv::set_tenant(ObTenantBase *ctx)
 {
-  // Single tenant: all tenant context switching is a no-op.
-  UNUSED(ctx);
+  // Single tenant: fall back to the dummy when no tenant is provided.
+  // This allows unit tests to set a mock tenant for MTL() access.
+  g_tenant_ptr = OB_NOT_NULL(ctx) ? ctx : &g_tenant_ctx;
 }
 
 ObTenantSwitchGuard::ObTenantSwitchGuard(ObTenantBase *ctx)
@@ -538,6 +550,8 @@ void ObTenantSwitchGuard::release()
   // Single tenant: no tenant switching state to restore.
   reset();
 }
+
+ObTenantBase g_tenant_ctx(OB_INVALID_TENANT_ID, 0);
 
 } // end of namespace share
 } // end of namespace oceanbase

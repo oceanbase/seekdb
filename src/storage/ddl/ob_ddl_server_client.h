@@ -36,18 +36,18 @@ public:
    * for load data.
   */
   static int create_hidden_table(
-      const obrpc::ObCreateHiddenTableArg &arg, 
-      obrpc::ObCreateHiddenTableRes &res, 
+      const obcall::ObCreateHiddenTableArg &arg, 
+      obcall::ObCreateHiddenTableRes &res, 
       int64_t &snapshot_version,
       uint64_t &data_format_version,
       sql::ObSQLSessionInfo &session);
-  static int copy_table_dependents(const obrpc::ObCopyTableDependentsArg &arg, sql::ObSQLSessionInfo &session);
-  static int finish_redef_table(const obrpc::ObFinishRedefTableArg &finish_redef_arg,
-                                const obrpc::ObDDLBuildSingleReplicaResponseArg &build_single_arg,
+  static int copy_table_dependents(const obcall::ObCopyTableDependentsArg &arg, sql::ObSQLSessionInfo &session);
+  static int finish_redef_table(const obcall::ObFinishRedefTableArg &finish_redef_arg,
+                                const obcall::ObDDLBuildSingleReplicaResponseArg &build_single_arg,
                                 sql::ObSQLSessionInfo &session);
-  static int finish_redef_table(const obrpc::ObFinishRedefTableArg &finish_redef_arg);
-  static int abort_redef_table(const obrpc::ObAbortRedefTableArg &arg, sql::ObSQLSessionInfo *session = nullptr);
-  static int build_ddl_single_replica_response(const obrpc::ObDDLBuildSingleReplicaResponseArg &arg);
+  static int finish_redef_table(const obcall::ObFinishRedefTableArg &finish_redef_arg);
+  static int abort_redef_table(const obcall::ObAbortRedefTableArg &arg, sql::ObSQLSessionInfo *session = nullptr);
+  static int build_ddl_single_replica_response(const obcall::ObDDLBuildSingleReplicaResponseArg &arg);
 private:
   static int wait_task_reach_pending(
       const uint64_t tenant_id, 

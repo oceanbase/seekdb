@@ -18,9 +18,6 @@
 
 #include "share/object_storage/ob_device_config_mgr.h"
 #include "share/ob_device_manager.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_dir_manager.h"
-#endif
 
 namespace oceanbase
 {
@@ -125,13 +122,6 @@ int ObDeviceConfigMgr::load_configs()
               LOG_WARN("fail to insert manifest config", KR(ret), KP(new_device_config));
               ob_free(new_device_config); // free memory
               new_device_config = nullptr;
-#ifdef OB_BUILD_SHARED_STORAGE
-            } else if ((ObStorageUsedType::TYPE::USED_TYPE_ALL == ObStorageUsedType::get_type(tmp_device_config.used_for_)) ||
-                       (ObStorageUsedType::TYPE::USED_TYPE_DATA == ObStorageUsedType::get_type(tmp_device_config.used_for_))) {
-              if (OB_FAIL(OB_DIR_MGR.set_object_storage_root_dir(tmp_device_config.path_))) {
-                LOG_WARN("fail to set object storage root dir", KR(ret), K(tmp_device_config.path_));
-              }
-#endif
             }
           }
         }
@@ -451,10 +441,6 @@ int ObDeviceConfigMgr::set_storage_dest(const ObStorageUsedType::TYPE used_for, 
       LOG_WARN("fail to deep copy dest", KR(ret), K(storage_dest));
     } else if (is_used_for_data && OB_FAIL(data_storage_dest_.deep_copy(storage_dest))) {
       LOG_WARN("fail to deep copy dest", KR(ret), K(storage_dest));
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (is_used_for_data && OB_FAIL(OB_DIR_MGR.set_object_storage_root_dir(storage_dest.get_root_path().ptr()))) {
-      LOG_WARN("fail to set object storage root dir", KR(ret), K(storage_dest));
-#endif
     } else {
       LOG_INFO("succ to set storage dest", K(used_for), K(storage_dest));
     }
@@ -527,13 +513,6 @@ int ObDeviceConfigMgr::modify_device_config_(
           LOG_WARN("fail to set_refactored config_map", KR(ret), K(device_config_key), K(config));
           ob_free(new_device_config); // free memory
           new_device_config = nullptr;
-#ifdef OB_BUILD_SHARED_STORAGE
-        } else if ((ObStorageUsedType::TYPE::USED_TYPE_ALL == ObStorageUsedType::get_type(config.used_for_)) ||
-                    (ObStorageUsedType::TYPE::USED_TYPE_DATA == ObStorageUsedType::get_type(config.used_for_))) {
-          if (OB_FAIL(OB_DIR_MGR.set_object_storage_root_dir(config.path_))) {
-            LOG_WARN("fail to set object storage root dir", KR(ret), K(config.path_));
-          }
-#endif
         }
       }
     } else if ((DeviceConfigModifyType::CONFIG_UPDATE_TYPE == type)

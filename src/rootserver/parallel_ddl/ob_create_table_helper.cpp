@@ -61,8 +61,8 @@ bool ObCreateTableHelper::MockFKParentTableNameWrapper::operator==(const MockFKP
 ObCreateTableHelper::ObCreateTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObCreateTableArg &arg,
-    obrpc::ObCreateTableRes &res,
+    const obcall::ObCreateTableArg &arg,
+    obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans,
     bool enable_ddl_parallel)
   : ObDDLHelper(schema_service, tenant_id, "[parallel create table]", external_trans, enable_ddl_parallel),
@@ -143,7 +143,7 @@ int ObCreateTableHelper::lock_database_by_obj_name_()
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
       const ObString &parent_database_name = foreign_key_arg.parent_database_;
        if (OB_FAIL(add_lock_object_by_database_name_(parent_database_name, transaction::tablelock::SHARE))) {
          LOG_WARN("fail to lock database by name", KR(ret), K_(tenant_id), K(parent_database_name));
@@ -238,7 +238,7 @@ int ObCreateTableHelper::lock_objects_by_name_()
     // 7. parent table/mock fk parent table
     // - here we don't distinguish between table and mocked table.
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
       const ObString &parent_database_name = foreign_key_arg.parent_database_;
       const ObString &parent_table_name = foreign_key_arg.parent_table_;
       if (OB_FAIL(add_lock_object_by_name_(parent_database_name, parent_table_name,
@@ -293,7 +293,7 @@ int ObCreateTableHelper::lock_objects_by_id_()
   }
   // 4. parent table/mock fk parent table
   for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
-    const obrpc::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
+    const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
     if (OB_INVALID_ID != foreign_key_arg.parent_table_id_) { // filled in check_and_set_parent_table_id_()
       if (OB_FAIL(add_lock_object_by_id_(foreign_key_arg.parent_table_id_,
           share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
@@ -408,7 +408,7 @@ int ObCreateTableHelper::check_ddl_conflict_()
           || TABLE_SCHEMA == info.schema_type_) {
         bool find = false;
         for (int64_t j = 0; OB_SUCC(ret) && !find && j < arg_.foreign_key_arg_list_.count(); j++) {
-          const obrpc::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(j);
+          const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(j);
           if (MOCK_FK_PARENT_TABLE_SCHEMA == info.schema_type_
               && foreign_key_arg.is_parent_table_mock_
               && info.schema_id_ == foreign_key_arg.parent_table_id_) {
@@ -644,7 +644,7 @@ int ObCreateTableHelper::check_and_set_parent_table_id_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
       const ObString &parent_database_name = foreign_key_arg.parent_database_;
       const ObString &parent_table_name = foreign_key_arg.parent_table_;
       if (0 == parent_database_name.case_compare(database_name)
@@ -710,8 +710,8 @@ int ObCreateTableHelper::check_and_set_parent_table_id_()
         // 1. foreign key is self reference.
         // 2. mock fk parent table doesn't exist.
         if (OB_SUCC(ret)) {
-          const_cast<obrpc::ObCreateForeignKeyArg&>(foreign_key_arg).parent_database_id_ = parent_database_id;
-          const_cast<obrpc::ObCreateForeignKeyArg&>(foreign_key_arg).parent_table_id_ = parent_table_id;
+          const_cast<obcall::ObCreateForeignKeyArg&>(foreign_key_arg).parent_database_id_ = parent_database_id;
+          const_cast<obcall::ObCreateForeignKeyArg&>(foreign_key_arg).parent_table_id_ = parent_table_id;
         }
       }
     } // end for
@@ -817,7 +817,7 @@ int ObCreateTableHelper::generate_foreign_keys_()
     }
     // genernate foreign keys
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
       const ObString &foreign_key_name = foreign_key_arg.foreign_key_name_;
       bool fk_exist = false;
       ObForeignKeyInfo foreign_key_info;
@@ -1001,7 +1001,7 @@ int ObCreateTableHelper::generate_foreign_keys_()
 }
 
 int ObCreateTableHelper::get_mock_fk_parent_table_info_(
-    const obrpc::ObCreateForeignKeyArg &foreign_key_arg,
+    const obcall::ObCreateForeignKeyArg &foreign_key_arg,
     ObForeignKeyInfo &foreign_key_info,
     ObMockFKParentTableSchema *&new_mock_fk_parent_table_schema)
 {
@@ -1172,7 +1172,7 @@ int ObCreateTableHelper::generate_sequence_object_()
     // 1. lock object name
     // - Sequence object name for table is encoded with table_id which is determinated in generate_schemas_() stage,
     // - so lock_objects_() stage will be delayed. And sequence_name won't be conficted for most cases since it's encoded.
-    const obrpc::ObSequenceDDLArg &sequence_ddl_arg = arg_.sequence_ddl_arg_;
+    const obcall::ObSequenceDDLArg &sequence_ddl_arg = arg_.sequence_ddl_arg_;
     const ObTableSchema &data_table = new_tables_.at(0);
     const uint64_t tenant_id = data_table.get_tenant_id();
     const uint64_t database_id = data_table.get_database_id();

@@ -25,7 +25,7 @@
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::transaction;
 
 namespace oceanbase
@@ -241,7 +241,7 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
   return ret;
 }
 
-int ObTabletCreateMdsHelper::check_create_new_tablets(const obrpc::ObBatchCreateTabletArg &arg, const bool is_replay)
+int ObTabletCreateMdsHelper::check_create_new_tablets(const obcall::ObBatchCreateTabletArg &arg, const bool is_replay)
 {
   int ret = OB_SUCCESS;
   bool skip_check = !arg.need_check_tablet_cnt_;
@@ -288,7 +288,7 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(const obrpc::ObBatchCreate
 }
 
 int ObTabletCreateMdsHelper::check_create_arg(
-    const obrpc::ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     bool &valid)
 {
   int ret = OB_SUCCESS;
@@ -332,7 +332,7 @@ int ObTabletCreateMdsHelper::check_create_arg(
 }
 
 int ObTabletCreateMdsHelper::create_tablets(
-    const obrpc::ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     const bool for_replay,
     const share::SCN &scn,
     mds::BufferCtx &ctx,
@@ -397,28 +397,28 @@ int ObTabletCreateMdsHelper::get_table_schema_index(
   return ret;
 }
 
-bool ObTabletCreateMdsHelper::is_pure_data_tablets(const obrpc::ObCreateTabletInfo &info)
+bool ObTabletCreateMdsHelper::is_pure_data_tablets(const obcall::ObCreateTabletInfo &info)
 {
   const ObTabletID &data_tablet_id = info.data_tablet_id_;
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
   return tablet_ids.count() == 1 && is_contain(tablet_ids, data_tablet_id) && !info.is_create_bind_hidden_tablets_;
 }
 
-bool ObTabletCreateMdsHelper::is_mixed_tablets(const obrpc::ObCreateTabletInfo &info)
+bool ObTabletCreateMdsHelper::is_mixed_tablets(const obcall::ObCreateTabletInfo &info)
 {
   const ObTabletID &data_tablet_id = info.data_tablet_id_;
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
   return tablet_ids.count() >= 1 && is_contain(tablet_ids, data_tablet_id) && !info.is_create_bind_hidden_tablets_;
 }
 
-bool ObTabletCreateMdsHelper::is_pure_aux_tablets(const obrpc::ObCreateTabletInfo &info)
+bool ObTabletCreateMdsHelper::is_pure_aux_tablets(const obcall::ObCreateTabletInfo &info)
 {
   const ObTabletID &data_tablet_id = info.data_tablet_id_;
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
   return tablet_ids.count() >= 1 && !is_contain(tablet_ids, data_tablet_id) && !info.is_create_bind_hidden_tablets_;
 }
 
-bool ObTabletCreateMdsHelper::is_bind_hidden_tablets(const obrpc::ObCreateTabletInfo &info)
+bool ObTabletCreateMdsHelper::is_bind_hidden_tablets(const obcall::ObCreateTabletInfo &info)
 {
   const ObTabletID &data_tablet_id = info.data_tablet_id_;
   const ObSArray<ObTabletID> &tablet_ids = info.tablet_ids_;
@@ -427,7 +427,7 @@ bool ObTabletCreateMdsHelper::is_bind_hidden_tablets(const obrpc::ObCreateTablet
 
 int ObTabletCreateMdsHelper::check_pure_data_or_mixed_tablets_info(
     const share::ObLSID &ls_id,
-    const obrpc::ObCreateTabletInfo &info,
+    const obcall::ObCreateTabletInfo &info,
     bool &valid)
 {
   int ret = OB_SUCCESS;
@@ -456,7 +456,7 @@ int ObTabletCreateMdsHelper::check_pure_data_or_mixed_tablets_info(
 
 int ObTabletCreateMdsHelper::check_pure_aux_tablets_info(
     const share::ObLSID &ls_id,
-    const obrpc::ObCreateTabletInfo &info,
+    const obcall::ObCreateTabletInfo &info,
     bool &valid)
 {
   int ret = OB_SUCCESS;
@@ -495,8 +495,8 @@ int ObTabletCreateMdsHelper::check_pure_aux_tablets_info(
 
 int ObTabletCreateMdsHelper::check_hidden_tablets_info(
     const share::ObLSID &ls_id,
-    const obrpc::ObCreateTabletInfo &hidden_info,
-    const obrpc::ObCreateTabletInfo *aux_info,
+    const obcall::ObCreateTabletInfo &hidden_info,
+    const obcall::ObCreateTabletInfo *aux_info,
     bool &valid)
 {
   int ret = OB_SUCCESS;
@@ -553,7 +553,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
 }
 
 bool ObTabletCreateMdsHelper::find_aux_info_for_hidden_tablets(
-    const obrpc::ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     const common::ObTabletID &tablet_id,
     int64_t &aux_info_idx)
 {
@@ -571,7 +571,7 @@ bool ObTabletCreateMdsHelper::find_aux_info_for_hidden_tablets(
 }
 
 int ObTabletCreateMdsHelper::convert_schemas(
-    obrpc::ObBatchCreateTabletArg &arg)
+    obcall::ObBatchCreateTabletArg &arg)
 {
   int ret = OB_SUCCESS;
   if (arg.create_tablet_schemas_.count() > 0) {
@@ -610,8 +610,8 @@ int ObTabletCreateMdsHelper::convert_schemas(
 
 int ObTabletCreateMdsHelper::check_and_get_create_tablet_schema_info(
     const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas,
-    const ObSArray<obrpc::ObCreateTabletExtraInfo> &create_tablet_extra_infos,
-    const obrpc::ObCreateTabletInfo &info,
+    const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos,
+    const obcall::ObCreateTabletInfo &info,
     const int64_t index,
     const ObCreateTabletSchema *&create_tablet_schema,
     bool &need_create_empty_major_sstable,
@@ -633,7 +633,7 @@ int ObTabletCreateMdsHelper::check_and_get_create_tablet_schema_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(index), K(info), K(create_tablet_schemas));
   } else {
-    const obrpc::ObCreateTabletExtraInfo &extra_info = create_tablet_extra_infos[info.table_schema_index_[index]];
+    const obcall::ObCreateTabletExtraInfo &extra_info = create_tablet_extra_infos[info.table_schema_index_[index]];
     micro_index_clustered = extra_info.micro_index_clustered_;
     split_src_tablet_id = extra_info.split_src_tablet_id_;
     need_create_empty_major_sstable = extra_info.need_create_empty_major_;
@@ -642,8 +642,8 @@ int ObTabletCreateMdsHelper::check_and_get_create_tablet_schema_info(
 }
 
 int ObTabletCreateMdsHelper::build_pure_data_tablet(
-    const obrpc::ObBatchCreateTabletArg &arg,
-    const obrpc::ObCreateTabletInfo &info,
+    const obcall::ObBatchCreateTabletArg &arg,
+    const obcall::ObCreateTabletInfo &info,
     const bool for_replay,
     const share::SCN &scn,
     mds::BufferCtx &ctx,
@@ -657,7 +657,7 @@ int ObTabletCreateMdsHelper::build_pure_data_tablet(
   const int64_t create_commit_version = info.create_commit_versions_.empty() ? ObTransVersion::INVALID_TRANS_VERSION
                                                                              : info.create_commit_versions_.at(0);
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
-  const ObSArray<obrpc::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
+  const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
@@ -727,8 +727,8 @@ int ObTabletCreateMdsHelper::build_pure_data_tablet(
 }
 
 int ObTabletCreateMdsHelper::build_mixed_tablets(
-    const obrpc::ObBatchCreateTabletArg &arg,
-    const obrpc::ObCreateTabletInfo &info,
+    const obcall::ObBatchCreateTabletArg &arg,
+    const obcall::ObCreateTabletInfo &info,
     const bool for_replay,
     const share::SCN &scn,
     mds::BufferCtx &ctx,
@@ -742,7 +742,7 @@ int ObTabletCreateMdsHelper::build_mixed_tablets(
   const ObIArray<int64_t> &create_commit_versions = info.create_commit_versions_;
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
   const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
-  const ObSArray<obrpc::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
+  const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
   const share::SCN &mds_checkpoint_scn = arg.mds_checkpoint_scn_;
@@ -843,8 +843,8 @@ int ObTabletCreateMdsHelper::build_mixed_tablets(
 }
 
 int ObTabletCreateMdsHelper::build_pure_aux_tablets(
-    const obrpc::ObBatchCreateTabletArg &arg,
-    const obrpc::ObCreateTabletInfo &info,
+    const obcall::ObBatchCreateTabletArg &arg,
+    const obcall::ObCreateTabletInfo &info,
     const bool for_replay,
     const share::SCN &scn,
     mds::BufferCtx &ctx,
@@ -858,7 +858,7 @@ int ObTabletCreateMdsHelper::build_pure_aux_tablets(
   const ObIArray<int64_t> &create_commit_versions = info.create_commit_versions_;
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
   const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
-  const ObSArray<obrpc::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
+  const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
   const share::SCN &mds_checkpoint_scn = arg.mds_checkpoint_scn_;
@@ -934,8 +934,8 @@ int ObTabletCreateMdsHelper::build_pure_aux_tablets(
 }
 
 int ObTabletCreateMdsHelper::build_bind_hidden_tablets(
-    const obrpc::ObBatchCreateTabletArg &arg,
-    const obrpc::ObCreateTabletInfo &info,
+    const obcall::ObBatchCreateTabletArg &arg,
+    const obcall::ObCreateTabletInfo &info,
     const bool for_replay,
     const share::SCN &scn,
     mds::BufferCtx &ctx,
@@ -949,7 +949,7 @@ int ObTabletCreateMdsHelper::build_bind_hidden_tablets(
   const ObIArray<int64_t> &create_commit_versions = info.create_commit_versions_;
   const ObSArray<ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
   const lib::Worker::CompatMode &compat_mode = info.compat_mode_;
-  const ObSArray<obrpc::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
+  const ObSArray<obcall::ObCreateTabletExtraInfo> &create_tablet_extra_infos = arg.tablet_extra_infos_;
   const int64_t snapshot_version = arg.major_frozen_scn_.get_val_for_tx();
   const share::SCN &clog_checkpoint_scn = arg.clog_checkpoint_scn_;
   const share::SCN &mds_checkpoint_scn = arg.mds_checkpoint_scn_;

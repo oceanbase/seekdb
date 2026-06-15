@@ -47,7 +47,7 @@ public:
   TxMsgCallbackMsg() {}
   TxMsgCallbackMsg(const ObTxMsg &msg,
                    const ObAddr &addr,
-                   const obrpc::ObTxRpcRollbackSPResult &r)
+                   const obcall::ObTxRpcRollbackSPResult &r)
     :TxMsgCallbackMsg(msg, addr)
   {
     type_ = MSG_TYPE::SAVEPOINT_ROLLBACK;
@@ -55,7 +55,7 @@ public:
   }
   TxMsgCallbackMsg(const ObTxMsg &msg,
                    const ObAddr &addr,
-                   const obrpc::ObTransRpcResult &r)
+                   const obcall::ObTransRpcResult &r)
     :TxMsgCallbackMsg(msg, addr)
   {
     type_ = MSG_TYPE::NORMAL;
@@ -93,7 +93,7 @@ public:
   ObTransID tx_id_;
   ObAddr receiver_addr_;
   int64_t request_id_;
-  obrpc::ObTxRpcRollbackSPResult sp_rollback_result_;
+  obcall::ObTxRpcRollbackSPResult sp_rollback_result_;
   ObTransRpcResult tx_rpc_result_;
 };
 

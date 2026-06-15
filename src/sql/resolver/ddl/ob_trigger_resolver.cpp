@@ -27,7 +27,7 @@ namespace oceanbase
 namespace sql
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 using namespace pl;
 
@@ -71,7 +71,7 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("drop trigger stmt is NULL", K(ret));
   } else {
-    const obrpc::ObDropTriggerArg &arg = stmt->get_trigger_arg();
+    const obcall::ObDropTriggerArg &arg = stmt->get_trigger_arg();
     uint64_t tenant_id = arg.tenant_id_;
     const ObString &trigger_database = arg.trigger_database_;
     const ObString &trigger_name = arg.trigger_name_;
@@ -238,9 +238,8 @@ int ObTriggerResolver::resolve_create_trigger_stmt(const ParseNode &parse_node,
                                                               table_schema));
     CK (OB_NOT_NULL(table_schema));
     OZ (trigger_arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(table_schema->get_table_id(),
-                                                                                 TABLE_SCHEMA,
-                                                                                 table_schema->get_schema_version())));
-    OZ(ObTTLUtil::check_htable_ddl_supported(*table_schema, false/*by_admin*/));
+                                                                                TABLE_SCHEMA,
+                                                                                table_schema->get_schema_version())));
   }
   if (OB_SUCC(ret)) {
     ObErrorInfo &error_info = trigger_arg.error_info_;

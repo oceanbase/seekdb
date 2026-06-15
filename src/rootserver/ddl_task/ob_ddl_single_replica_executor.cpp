@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include <vector>
+#include "observer/ob_ex_rpc.h"
 #include "ob_ddl_single_replica_executor.h"
 #include "rootserver/ob_root_service.h"
 #include "share/ob_ddl_sim_point.h"
@@ -211,20 +213,13 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
 int ObDDLReplicaBuildExecutor::schedule_task()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
-  const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("replica build executor not init", K(ret));
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(rpc_proxy));
   } else if (OB_FAIL(DDL_SIM(dest_tenant_id_, ddl_task_id_, SINGLE_REPLICA_EXECUTOR_SCHEDULE_TASK_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(dest_tenant_id_), K(ddl_task_id_));
   } else {
-    ObDDLBuildSingleReplicaRequestProxy proxy(*rpc_proxy,
-        &obrpc::ObSrvRpcProxy::build_ddl_single_replica_request);
-    ObArray<obrpc::ObDDLBuildSingleReplicaRequestArg> args;
+    ObArray<obcall::ObDDLBuildSingleReplicaRequestArg> args;
     ObArray<ObAddr> addrs;
     ObArray<ObTabletID> tablet_ids;
     { // lock scope
@@ -235,7 +230,7 @@ int ObDDLReplicaBuildExecutor::schedule_task()
         if (OB_FAIL(replica_build_ctx.check_need_schedule(need_schedule))) {
           LOG_WARN("failed to check need schedule", K(ret));
         } else if (need_schedule) {
-          obrpc::ObDDLBuildSingleReplicaRequestArg arg;
+          obcall::ObDDLBuildSingleReplicaRequestArg arg;
           if (OB_FAIL(construct_rpc_arg(replica_build_ctx, arg))) {
             LOG_WARN("failed to construct single replica request arg", K(ret));
           } else if (OB_FAIL(args.push_back(arg))) {
@@ -248,25 +243,39 @@ int ObDDLReplicaBuildExecutor::schedule_task()
         }
       }
     } // lock scope
-    // keep send rpc out of lock scope
+    // async_call preserves parallelism (replaces proxy.call + wait_all).
+    using H = std::shared_ptr<ex_rpc::AsyncHandle<obcall::ObDDLBuildSingleReplicaRequestResult>>;
+    std::vector<H> handles;
+    ObArray<int> ret_array;
+    ObArray<obcall::ObDDLBuildSingleReplicaRequestResult> results;
     for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
-      const ObAddr &addr = addrs.at(i);
-      if (OB_FAIL(proxy.call(addr, rpc_timeout, dest_tenant_id_, args.at(i)))) {
-        LOG_WARN("failed to send rpc", K(ret), K(addr), K(rpc_timeout),
-            K(args.at(i)));
+      auto h = ex_rpc::async_call<obcall::ObDDLBuildSingleReplicaRequestResult>(args.at(i),
+          [](const obcall::ObDDLBuildSingleReplicaRequestArg &req,
+             obcall::ObDDLBuildSingleReplicaRequestResult &res) -> int {
+            return GCTX.ob_service_->build_ddl_single_replica_request(req, res);
+          });
+      if (OB_ISNULL(h)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        LOG_INFO("send build single replica request", K(addr), K(args.at(i)));
+        handles.push_back(h);
       }
     }
-    int tmp_ret = OB_SUCCESS;
-    common::ObArray<int> ret_array;
-    if (OB_SUCCESS != (tmp_ret = proxy.wait_all(ret_array))) {
-      LOG_WARN("rpc_proxy wait failed", K(ret), K(tmp_ret));
-      ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
-    } else if (OB_SUCC(ret)) {
-      const ObIArray<const obrpc::ObDDLBuildSingleReplicaRequestResult *>
-        &result_array = proxy.get_results();
-      if (OB_FAIL(process_rpc_results(tablet_ids, addrs, result_array, ret_array))) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < (int64_t)handles.size(); ++i) {
+      int call_ret = handles[i]->wait();
+      if (OB_FAIL(ret_array.push_back(call_ret))) {
+        LOG_WARN("push_back ret failed", K(ret));
+      } else if (OB_FAIL(results.push_back(handles[i]->result()))) {
+        LOG_WARN("push_back result failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ObArray<const obcall::ObDDLBuildSingleReplicaRequestResult *> result_ptrs;
+      for (int64_t i = 0; OB_SUCC(ret) && i < results.count(); ++i) {
+        if (OB_FAIL(result_ptrs.push_back(&results.at(i)))) {
+          LOG_WARN("push_back result ptr failed", K(ret));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(process_rpc_results(tablet_ids, addrs, result_ptrs, ret_array))) {
         LOG_WARN("failed to process result", K(ret));
       }
     }
@@ -435,7 +444,7 @@ int ObDDLReplicaBuildExecutor::get_progress(int64_t &row_inserted, int64_t &phys
 // as caller, schedule_task() will hold lock
 int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     const ObSingleReplicaBuildCtx &replica_build_ctx,
-    obrpc::ObDDLBuildSingleReplicaRequestArg &arg) const
+    obcall::ObDDLBuildSingleReplicaRequestArg &arg) const
 {
   int ret = OB_SUCCESS;
   ObLSID ls_id;
@@ -502,7 +511,7 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
 int ObDDLReplicaBuildExecutor::process_rpc_results(
     const ObArray<ObTabletID> &tablet_ids,
     const ObArray<ObAddr> addrs,
-    const ObIArray<const obrpc::ObDDLBuildSingleReplicaRequestResult *> &result_array,
+    const ObIArray<const obcall::ObDDLBuildSingleReplicaRequestResult *> &result_array,
     const ObArray<int> &ret_array)
 {
   int ret = OB_SUCCESS;
@@ -546,7 +555,7 @@ int ObDDLReplicaBuildExecutor::process_rpc_results(
 // as caller, process_rpc_result() will hold lock
 int ObDDLReplicaBuildExecutor::update_build_ctx(
     ObSingleReplicaBuildCtx &build_ctx,
-    const oceanbase::obrpc::ObDDLBuildSingleReplicaRequestResult *result,
+    const oceanbase::obcall::ObDDLBuildSingleReplicaRequestResult *result,
     const int ret_code)
 {
   int ret = OB_SUCCESS;

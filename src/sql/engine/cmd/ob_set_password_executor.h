@@ -24,11 +24,6 @@ namespace common
 class ObString;
 class ObSqlString;
 }
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
-
 namespace sql
 {
 class ObExecContext;

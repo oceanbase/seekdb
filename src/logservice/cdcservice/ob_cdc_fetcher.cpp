@@ -21,7 +21,7 @@
 
 namespace oceanbase
 {
-using namespace obrpc;
+using namespace obcall;
 using namespace oceanbase::logservice;
 using namespace oceanbase::palf;
 
@@ -156,8 +156,8 @@ int ObCdcFetcher::fetch_raw_log(const ObCdcFetchRawLogReq &req,
   return ret;
 }
 
-int ObCdcFetcher::fetch_missing_log(const obrpc::ObCdcLSFetchMissLogReq &req,
-    obrpc::ObCdcLSFetchLogResp &resp)
+int ObCdcFetcher::fetch_missing_log(const obcall::ObCdcLSFetchMissLogReq &req,
+    obcall::ObCdcLSFetchLogResp &resp)
 {
   int ret = OB_SUCCESS;
   FetchRunTime frt;
@@ -184,7 +184,7 @@ int ObCdcFetcher::fetch_missing_log(const obrpc::ObCdcLSFetchMissLogReq &req,
     if (OB_FAIL(host_->get_or_create_client_ls_ctx(req.get_client_id(),
         req.get_tenant_id(), ls_id, req.get_flag(),
         req.get_progress(), ObCdcFetchLogProtocolType::UnknownProto, 
-        obrpc::ObCdcClientType::CLIENT_TYPE_CDC, ls_ctx))) {
+        obcall::ObCdcClientType::CLIENT_TYPE_CDC, ls_ctx))) {
       LOG_ERROR("get_or_create_client_ls_ctx failed", KR(ret), K(req));
     } else if (OB_ISNULL(ls_ctx)) {
       ret = OB_ERR_UNEXPECTED;
@@ -478,7 +478,7 @@ FetchMode ObCdcFetcher::get_fetch_mode_when_fetching_log_(const ClientLSCtx &ctx
 int ObCdcFetcher::ls_fetch_log_(const ObLSID &ls_id,
     const int64_t end_tstamp,
     const int8_t fetch_flag,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     FetchRunTime &frt,
     bool &reach_upper_limit,
     bool &reach_max_lsn,
@@ -696,7 +696,7 @@ int ObCdcFetcher::ls_fetch_log_(const ObLSID &ls_id,
 void ObCdcFetcher::check_next_group_entry_(const LSN &next_lsn,
     const LogGroupEntry &next_log_group_entry,
     const int64_t fetched_log_count,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     FetchRunTime &frt,
     bool &reach_upper_limit,
     ClientLSCtx &ctx)
@@ -736,7 +736,7 @@ void ObCdcFetcher::check_next_group_entry_(const LSN &next_lsn,
 int ObCdcFetcher::prefill_resp_with_group_entry_(const ObLSID &ls_id,
     const LSN &lsn,
     LogGroupEntry &log_group_entry,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     ObCdcFetchLogTimeStats &fetch_time_stat)
 {
   int ret = OB_SUCCESS;
@@ -775,7 +775,7 @@ void ObCdcFetcher::handle_when_buffer_full_(FetchRunTime &frt)
 }
 
 int ObCdcFetcher::handle_log_not_exist_(const ObLSID &ls_id,
-    obrpc::ObCdcLSFetchLogResp &resp)
+    obcall::ObCdcLSFetchLogResp &resp)
 {
   int ret = OB_SUCCESS;
 
@@ -867,9 +867,9 @@ int ObCdcFetcher::check_ls_sync_status_(const ObLSID &ls_id,
 
 int ObCdcFetcher::fetch_missing_logs_in_palf_(const ObLSID &ls_id,
     palf::PalfHandleGuard &palf_handle_guard,
-    const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
+    const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
     int64_t &cur_idx,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     FetchRunTime &frt)
 {
   int ret = OB_SUCCESS;
@@ -932,9 +932,9 @@ int ObCdcFetcher::fetch_missing_logs_in_palf_(const ObLSID &ls_id,
 
 int ObCdcFetcher::fetch_missing_logs_in_archive_(const ObLSID &ls_id,
     ClientLSCtx &ctx,
-    const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
+    const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
     int64_t &cur_idx,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     FetchRunTime &frt)
 {
   int ret = OB_SUCCESS;
@@ -1049,7 +1049,7 @@ int ObCdcFetcher::fetch_missing_logs_in_archive_(const ObLSID &ls_id,
   return ret;
 }
 
-int ObCdcFetcher::calc_raw_read_size_(const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
+int ObCdcFetcher::calc_raw_read_size_(const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
     const int64_t cur_idx,
     const int64_t read_buf_len,
     int64_t &read_size,
@@ -1096,14 +1096,14 @@ int ObCdcFetcher::calc_raw_read_size_(const obrpc::ObCdcLSFetchMissLogReq::MissL
   return ret;
 }
 
-int ObCdcFetcher::do_fetch_missing_log_(const obrpc::ObCdcLSFetchMissLogReq &req,
+int ObCdcFetcher::do_fetch_missing_log_(const obcall::ObCdcLSFetchMissLogReq &req,
     FetchRunTime &frt,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     ClientLSCtx &ctx)
 {
   int ret = OB_SUCCESS;
   const ObLSID &ls_id = req.get_ls_id();
-  const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array = req.get_miss_log_array();
+  const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array = req.get_miss_log_array();
   const int64_t end_tstamp = frt.rpc_deadline_ - RPC_QIT_RESERVED_TIME;
   int64_t scan_round_count = 0;        // epoch of fetching
   int64_t fetched_log_count = 0;       // count of log fetched
@@ -1135,7 +1135,7 @@ int ObCdcFetcher::do_fetch_missing_log_(const obrpc::ObCdcLSFetchMissLogReq &req
     } else {
       for (int64_t idx = 0; OB_SUCC(ret) && ! frt.is_stopped() && idx < miss_log_array.count(); ) {
         // need_init_iter should always be true, declared here to ensure need init iter be true in each loop
-        const obrpc::ObCdcLSFetchMissLogReq::MissLogParam &miss_log_info = miss_log_array[idx];
+        const obcall::ObCdcLSFetchMissLogReq::MissLogParam &miss_log_info = miss_log_array[idx];
         const LSN &missing_lsn = miss_log_info.miss_lsn_;
         resp.set_next_miss_lsn(missing_lsn);
         int64_t start_fetch_ts = ObTimeUtility::current_time();
@@ -1198,7 +1198,7 @@ int ObCdcFetcher::do_fetch_missing_log_(const obrpc::ObCdcLSFetchMissLogReq &req
 
 void ObCdcFetcher::check_next_entry_(const LSN &next_lsn,
     const LogEntry &next_log_entry,
-    obrpc::ObCdcLSFetchLogResp &resp,
+    obcall::ObCdcLSFetchLogResp &resp,
     FetchRunTime &frt)
 {
   int64_t entry_size = next_log_entry.get_serialize_size();
@@ -1215,7 +1215,7 @@ void ObCdcFetcher::check_next_entry_(const LSN &next_lsn,
 int ObCdcFetcher::prefill_resp_with_log_entry_(const ObLSID &ls_id,
     const LSN &lsn,
     LogEntry &log_entry,
-    obrpc::ObCdcLSFetchLogResp &resp)
+    obcall::ObCdcLSFetchLogResp &resp)
 {
   int ret = OB_SUCCESS;
   int64_t entry_size = log_entry.get_serialize_size();
@@ -1271,8 +1271,8 @@ int ObCdcFetcher::prepare_berfore_fetch_missing_(const ObLSID &ls_id,
   return ret;
 }
 
-int ObCdcFetcher::do_fetch_raw_log_(const obrpc::ObCdcFetchRawLogReq &req,
-    obrpc::ObCdcFetchRawLogResp &resp,
+int ObCdcFetcher::do_fetch_raw_log_(const obcall::ObCdcFetchRawLogReq &req,
+    obcall::ObCdcFetchRawLogResp &resp,
     ClientLSCtx &ctx)
 {
   int ret = OB_SUCCESS;
@@ -1423,7 +1423,7 @@ int ObCdcFetcher::do_fetch_raw_log_(const obrpc::ObCdcFetchRawLogReq &req,
 int ObCdcFetcher::fetch_raw_log_in_palf_(const ObLSID &ls_id,
     const LSN &start_lsn,
     const int64_t req_size,
-    obrpc::ObCdcFetchRawLogResp &resp,
+    obcall::ObCdcFetchRawLogResp &resp,
     bool &ls_exist_in_palf,
     bool &fetch_log_succ,
     ClientLSCtx &ctx)
@@ -1481,7 +1481,7 @@ int ObCdcFetcher::fetch_raw_log_in_archive_(const ObLSID &ls_id,
     const LSN &start_lsn,
     const int64_t req_size,
     const int64_t progress,
-    obrpc::ObCdcFetchRawLogResp &resp,
+    obcall::ObCdcFetchRawLogResp &resp,
     bool &archive_is_on,
     bool &fetch_log_succ,
     ClientLSCtx &ctx)

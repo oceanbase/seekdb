@@ -49,25 +49,22 @@ bool ObDASIDRequest::is_valid() const
 ObDASIDRequestRpc::ObDASIDRequestRpc()
   : is_inited_(false),
     is_running_(false),
-    rpc_proxy_(NULL),
     self_(),
     local_id_counter_(1)  // Start from 1 to satisfy ObDASIDRpcResult validation (start_id > 0)
 {
 }
 
-int ObDASIDRequestRpc::init(obrpc::ObDASIDRpcProxy *rpc_proxy,
-                            const common::ObAddr &self,
+int ObDASIDRequestRpc::init(const common::ObAddr &self,
                             ObDASIDCache *id_cache)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("das id request rpc inited twice", KR(ret));
-  } else if (OB_ISNULL(rpc_proxy) || !self.is_valid()) {
+  } else if (!self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(rpc_proxy), K(self));
+    LOG_WARN("invalid argument", KR(ret), K(self));
   } else {
-    rpc_proxy_ = rpc_proxy;
     self_ = self;
     is_inited_ = true;
   }
@@ -77,7 +74,6 @@ int ObDASIDRequestRpc::init(obrpc::ObDASIDRpcProxy *rpc_proxy,
 void ObDASIDRequestRpc::destroy()
 {
   if (is_inited_) {
-    rpc_proxy_ = NULL;
     self_.reset();
     local_id_counter_ = 1;  // Reset to 1 for next init
     is_inited_ = false;
@@ -85,7 +81,7 @@ void ObDASIDRequestRpc::destroy()
 }
 
 int ObDASIDRequestRpc::fetch_new_range(const ObDASIDRequest &msg,
-                                       obrpc::ObDASIDRpcResult &res,
+                                       obcall::ObDASIDRpcResult &res,
                                        const int64_t timeout,
                                        const bool force_renew)
 {
@@ -114,7 +110,7 @@ int ObDASIDRequestRpc::fetch_new_range(const ObDASIDRequest &msg,
 }
 } // namespace sql
 
-namespace obrpc
+namespace obcall
 {
 
 OB_SERIALIZE_MEMBER(ObDASIDRpcResult, tenant_id_, status_, start_id_, end_id_);
@@ -148,18 +144,5 @@ bool ObDASIDRpcResult::is_valid() const
          (OB_SUCCESS != status_ || (start_id_ > 0 && end_id_ > 0));
 }
 
-int ObDASIDP::process()
-{
-  int ret = OB_SUCCESS;
-  ObTimeGuard timeguard("das_id_request", 100000);
-  sql::ObDASIDService *das_id_service = MTL(sql::ObDASIDService *);
-  if (OB_ISNULL(das_id_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das id service is null", K(ret), KP(das_id_service));
-  } else if (OB_FAIL(das_id_service->handle_request(arg_, result_))) {
-    LOG_WARN("handle request failed", K(ret), K(arg_));
-  }
-  return ret;
-}
-} // namespace obrpc
+} // namespace obcall
 } // namespace oceanbase

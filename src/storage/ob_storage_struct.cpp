@@ -222,9 +222,6 @@ bool ObGetMergeTablesResult::is_valid() const
             && (is_simplified_ || handle_.get_count() >= 1)
             && merge_version_ >= 0
             && (!is_backfill_ || backfill_scn_.is_valid());
-  if (valid && GCTX.is_shared_storage_mode()) {
-    valid &= (ObStorageObjectOpt::INVALID_TABLET_TRANSFER_SEQ != transfer_seq_);
-  }
   return valid;
 }
 

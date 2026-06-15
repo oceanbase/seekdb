@@ -45,9 +45,6 @@ public:
   int replay_table_fork_freeze(const ObTableForkFreezeLog &log, const share::SCN &scn);
   int replay_table_fork_start(const ObTableForkStartLog &log, const share::SCN &scn);
   int replay_table_fork_finish(const ObTableForkFinishLog &log, const share::SCN &scn);
-  #ifdef OB_BUILD_SHARED_STORAGE
-  int replay_finish(const ObDDLFinishLog &log, const share::SCN &scn);
-  #endif
   int replay_inc_start(const ObDDLIncStartLog &log, const share::SCN &scn);
   int replay_inc_commit(const ObDDLIncCommitLog &log, const share::SCN &scn);
 private:
@@ -67,9 +64,7 @@ private:
   common::ObBucketLock bucket_lock_;
 };
 
-
 }  // end namespace storage
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_STORAGE_OB_DDL_REDO_LOG_REPLAYER_H
-

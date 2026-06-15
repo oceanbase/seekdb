@@ -26,8 +26,8 @@ using namespace oceanbase::rootserver;
 ObDropTablegroupHelper::ObDropTablegroupHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
   const uint64_t tenant_id,
-  const obrpc::ObDropTablegroupArg &arg,
-  obrpc::ObParallelDDLRes &res,
+  const obcall::ObDropTablegroupArg &arg,
+  obcall::ObParallelDDLRes &res,
   ObDDLSQLTransaction *external_trans)
   : ObDDLHelper(schema_service, tenant_id, "[paralle drop tablegroup]", external_trans),
   arg_(arg),

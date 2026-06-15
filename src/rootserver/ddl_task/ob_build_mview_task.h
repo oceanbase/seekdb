@@ -35,7 +35,7 @@ public:
            const int64_t schema_version,
            const int64_t parallel,
            const int64_t consumer_group_id,
-           const obrpc::ObMViewCompleteRefreshArg &mview_complete_refresh_arg,
+           const obcall::ObMViewCompleteRefreshArg &mview_complete_refresh_arg,
            const int64_t parent_task_id,
            const int64_t task_status = share::ObDDLTaskStatus::START_REFRESH_MVIEW_TASK,
            const int64_t snapshot_version = 0);
@@ -59,7 +59,7 @@ private:
   int succ();
   int clean_on_fail();
   int check_health();
-  int mview_complete_refresh(obrpc::ObMViewCompleteRefreshRes &res);
+  int mview_complete_refresh(obcall::ObMViewCompleteRefreshRes &res);
   int update_task_message();
   int set_mview_complete_refresh_task_id(const int64_t task_id);
 
@@ -67,7 +67,7 @@ private:
   static const int64_t OB_BUILD_MVIEW_TASK_VERSION = 1;
   uint64_t &mview_table_id_;
   ObRootService *root_service_;
-  obrpc::ObMViewCompleteRefreshArg arg_;
+  obcall::ObMViewCompleteRefreshArg arg_;
   int64_t mview_complete_refresh_task_id_;
 };
 } // namespace rootserver

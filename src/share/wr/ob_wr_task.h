@@ -61,7 +61,7 @@ public:
   void wait();
   void destroy();
 
-  int do_snapshot(const bool is_user_submit, obrpc::ObWrRpcProxy& wr_proxy, int64_t &snap_id);
+  int do_snapshot(const bool is_user_submit, int64_t &snap_id);
 
   static int modify_tenant_snapshot_status_and_startup_time(
     int64_t snap_id, uint64_t tenant_id,
@@ -77,15 +77,13 @@ public:
   // @end_ts_of_retention [in] the end timestamp of retention
   // @task_timeout_ts [in] the timeout of delete task 
   // @rpc_timeout [in] the timeout of rpc request
-  // @wr_proxy [in] the wr rpc proxy
   // @return the error code.
   static int do_delete_single_tenant_snapshot(
       const uint64_t tenant_id,
       const int64_t cluster_id,
       const int64_t end_ts_of_retention,
       const int64_t task_timeout_ts,
-      const int64_t rpc_timeout,
-      const obrpc::ObWrRpcProxy &wr_proxy);
+      const int64_t rpc_timeout);
 
   // do delete single tenant`s snapshot that at the range specified by the user
   //
@@ -95,7 +93,6 @@ public:
   // @high_snap_id [in] the right of range
   // @task_timeout_ts [in] the timeout of delete task 
   // @rpc_timeout [in] the timeout of rpc request
-  // @wr_proxy [in] the wr rpc proxy
   // @return the error code.
   static int do_delete_single_tenant_snapshot(
       const uint64_t tenant_id,
@@ -103,8 +100,7 @@ public:
       const int64_t low_snap_id,
       const int64_t high_snap_id,
       const int64_t task_timeout_ts,
-      const int64_t rpc_timeout,
-      const obrpc::ObWrRpcProxy &wr_proxy);
+      const int64_t rpc_timeout);
   
   // Get the snapshot ids that have survived for more than the RETENTION timestamp
   //
@@ -192,7 +188,6 @@ private:
                                         int64_t end_interval_time,
                                         ObWrSnapshotFlag snap_flag);
   static int get_last_snapshot_task_begin_ts(int64_t snap_id, int64_t &task_begin_ts);
-  obrpc::ObWrRpcProxy wr_proxy_;
   int tg_id_;
   int64_t timeout_ts_;
   bool is_running_task_;

@@ -18,9 +18,8 @@
 #define OCEANBASE_SHARE_TABLE_OB_TABLE_TTL_UTIL_
 
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "share/ob_srv_rpc_proxy.h"
-#include "rootserver/ob_rs_async_rpc_proxy.h"
-#include "share/table/redis/ob_redis_common.h"
+#include "rpc/frame/ob_req_transport.h"
+#include "share/ob_rpc_struct.h"
 
 namespace oceanbase
 {
@@ -242,29 +241,27 @@ struct ObTTLParam
 {
 public:
   ObTTLParam()
-    : ttl_info_array_(), ttl_all_(false), transport_(nullptr)
+    : ttl_info_array_(), ttl_all_(false)
   {}
 
   void reset()
   {
     ttl_info_array_.reset();
     ttl_all_ = false;
-    transport_ = nullptr;
   }
 
   bool is_valid() const
   {
-    return (nullptr != transport_);
+    return true;
   }
 
   int add_ttl_info(const uint64_t tenant_id);
 
-  TO_STRING_KV(K_(ttl_info_array), K_(ttl_all), KP_(transport));
+  TO_STRING_KV(K_(ttl_info_array), K_(ttl_all));
 
   common::ObArray<ObSimpleTTLInfo> ttl_info_array_;
   bool ttl_all_;
-  rpc::frame::ObReqTransport *transport_;
-  obrpc::ObTTLRequestArg::TTLRequestType type_;
+  obcall::ObTTLRequestArg::TTLRequestType type_;
 };
 
 class ObKVAttr
@@ -282,7 +279,6 @@ public:
       max_version_(0), 
       is_disable_(false),
       is_redis_ttl_(false), 
-      redis_model_(table::ObRedisDataModel::MODEL_MAX),
       created_by_admin_(false)
   {}
   bool is_ttl_table() const;
@@ -292,7 +288,7 @@ public:
   }
   OB_INLINE bool is_empty() const { return type_ == ObTTLTableType::INVALID; }
   OB_INLINE bool is_created_by_admin() const { return type_ == ObTTLTableType::HBASE && created_by_admin_; }
-  TO_STRING_KV(K_(type), K_(ttl), K_(max_version), K_(is_disable), K_(is_redis_ttl), K_(redis_model), K_(created_by_admin));
+  TO_STRING_KV(K_(type), K_(ttl), K_(max_version), K_(is_disable), K_(is_redis_ttl), K_(created_by_admin));
 
   ObTTLTableType type_;
 
@@ -302,7 +298,6 @@ public:
   bool     is_disable_;
   // for redis
   bool is_redis_ttl_;
-  table::ObRedisDataModel redis_model_;
   bool created_by_admin_;
 };
 
@@ -389,32 +384,19 @@ public:
 
   static int get_ttl_columns(const ObString &ttl_definition, ObIArray<ObString> &ttl_columns);
   static bool is_ttl_column(const ObString &orig_column_name, const ObIArray<ObString> &ttl_columns);
-  static int check_kv_attributes(const share::schema::ObTableSchema &table_schema, bool by_admin = false);
-  static int check_kv_attributes(const ObString &kv_attributes,
-                                 const share::schema::ObTableSchema &table_schema,
-                                 ObPartitionLevel part_level,
-                                 bool by_admin = false);
-  static int check_htable_ddl_supported(const share::schema::ObTableSchema &table_schema,
-                                        bool by_admin,
-                                        obrpc::ObHTableDDLType ddl_type = obrpc::ObHTableDDLType::INVALID,
-                                        const ObString &table_name = ObString());
-  static int check_htable_ddl_supported(share::schema::ObSchemaGetterGuard &schema_guard,
-                                        const uint64_t tenant_id,
-                                        const common::ObIArray<share::schema::ObDependencyInfo> &dep_infos);
+
   const static uint64_t TTL_TENNAT_TASK_TABLET_ID = -1;
   const static uint64_t TTL_TENNAT_TASK_TABLE_ID = -1;
   const static uint64_t TTL_ROWKEY_TASK_TABLET_ID = -2;
   const static uint64_t TTL_ROWKEY_TASK_TABLE_ID = -2;
   const static uint64_t TTL_THREAD_MAX_SCORE = 100;
-private:
-  static int check_is_htable_ttl_(const ObTableSchema &table_schema, bool allow_timeseries_table, bool &is_ttl_table);
+ private:
   static int check_htable_ddl_supported_(const ObKVAttr &attr, bool by_admin);
 private:
   static bool extract_val(const char* ptr, uint64_t len, int& val);
   static bool valid_digit(const char* ptr, uint64_t len);
   static int parse_ttl_daytime(ObString& in, ObTTLDayTime& daytime);
-  static int dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType type,
-                                     const rpc::frame::ObReqTransport &transport,
+  static int dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
                                      const ObSimpleTTLInfo &ttl_info);
   static int get_all_user_tenant_ttl(common::ObIArray<ObSimpleTTLInfo> &ttl_info_array);
   static int parse_kv_attributes_table(json::Value *ast);

@@ -862,11 +862,10 @@ struct ObBackupReportCtx final {
   ObBackupReportCtx();
   ~ObBackupReportCtx();
   bool is_valid() const;
-  TO_STRING_KV(KP_(location_service), KP_(sql_proxy), KP_(rpc_proxy));
+  TO_STRING_KV(KP_(location_service), KP_(sql_proxy));
 
   share::ObLocationService *location_service_; 
   common::ObMySQLProxy *sql_proxy_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
 };
 
 }  // namespace backup

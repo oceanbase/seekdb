@@ -46,10 +46,9 @@ class ObMaintainObjDepInfoTask;
 class ObMaintainDepInfoTaskQueue;
 }
 
-namespace obrpc
+namespace obcall
 {
 class ObDependencyObjDDLArg;
-class ObCommonRpcProxy;
 }
 
 namespace rootserver

@@ -21,7 +21,6 @@
 #include "sql/dtl/ob_dtl_msg.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"
 #include "sql/dtl/ob_dtl_local_channel.h"
-#include "sql/dtl/ob_dtl_rpc_channel.h"
 #include "lib/allocator/page_arena.h"
 #include "share/ob_cluster_version.h"
 
@@ -32,7 +31,6 @@ class ObNewRow;
 namespace sql {
 namespace dtl {
 
-class ObDtlRpcChannel;
 class ObDtlLocalChannel;
 
 class ObDtlBufEncoder
@@ -140,7 +138,7 @@ class ObDtlChanAgent
     TO_STRING_KV(K(server_addr_), K(ch_count_));
   };
 public:
-  ObDtlChanAgent() : init_(false), local_channels_(), rpc_channels_(),
+  ObDtlChanAgent() : init_(false), local_channels_(),
   bcast_channel_(nullptr), current_buffer_(nullptr), dtl_buf_encoder_(), dtl_buf_allocator_(),
   bc_services_(), dfo_key_(), sys_dtl_buf_size_(0)
     {};
@@ -168,8 +166,6 @@ private:
   common::ObArenaAllocator allocator_;
   // all local channel in this sqc.
   common::ObArray<ObDtlLocalChannel *> local_channels_;
-  // all rpc channel in this sqc.
-  common::ObArray<ObDtlRpcChannel *> rpc_channels_;
   // the represent channel use to allocate buf from data manager.
   ObDtlBasicChannel *bcast_channel_;
   // the buffer we are now write on.

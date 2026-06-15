@@ -28,7 +28,7 @@
 #include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::obgrpc;
 using namespace oceanbase::logservice;
 

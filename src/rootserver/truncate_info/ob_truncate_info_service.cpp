@@ -29,11 +29,11 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace schema;
 using namespace observer;
-using namespace obrpc;
+using namespace obcall;
 using namespace storage;
 namespace rootserver
 {
@@ -424,7 +424,7 @@ int ObTruncatePartKeyInfo::get_ref_column_id_array(
 * ObTruncateInfoService
 */
 ObTruncateInfoService::ObTruncateInfoService(
-    const obrpc::ObAlterTableArg &arg,
+    const obcall::ObAlterTableArg &arg,
     const ObTableSchema &data_table_schema)
     : allocator_("truncateInfoSer"),
       loop_allocator_(),
@@ -454,7 +454,7 @@ int ObTruncateInfoService::init(ObMySQLProxy &sql_proxy)
 }
 
 int ObTruncateInfoService::check_only_have_ref_columns(
-    const obrpc::ObAlterTableArg::AlterPartitionType &alter_type,
+    const obcall::ObAlterTableArg::AlterPartitionType &alter_type,
     bool &only_ref_columns)
 {
   int ret = OB_SUCCESS;
@@ -462,11 +462,11 @@ int ObTruncateInfoService::check_only_have_ref_columns(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTruncateInfoService is not inited", K(ret));
-  } else if (obrpc::ObAlterTableArg::DROP_PARTITION == alter_type ||
-      obrpc::ObAlterTableArg::TRUNCATE_PARTITION == alter_type) {
+  } else if (obcall::ObAlterTableArg::DROP_PARTITION == alter_type ||
+      obcall::ObAlterTableArg::TRUNCATE_PARTITION == alter_type) {
     ret = part_key_info_.check_only_have_ref_columns(data_table_schema_, ObPartitionLevel::PARTITION_LEVEL_ONE, tmp_only_ref_columns);
-  } else if (obrpc::ObAlterTableArg::DROP_SUB_PARTITION == alter_type ||
-             obrpc::ObAlterTableArg::TRUNCATE_SUB_PARTITION == alter_type) {
+  } else if (obcall::ObAlterTableArg::DROP_SUB_PARTITION == alter_type ||
+             obcall::ObAlterTableArg::TRUNCATE_SUB_PARTITION == alter_type) {
     if (OB_SUCC(part_key_info_.check_only_have_ref_columns(
             data_table_schema_, ObPartitionLevel::PARTITION_LEVEL_ONE,
             tmp_only_ref_columns)) && tmp_only_ref_columns) {

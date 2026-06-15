@@ -38,18 +38,18 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
   }
   if (OB_SUCC(ret)) {
     stmt->set_tenant_id(session_info_->get_effective_tenant_id());
-    obrpc::ObOptimizeTableArg &arg = stmt->get_optimize_table_arg();
+    obcall::ObOptimizeTableArg &arg = stmt->get_optimize_table_arg();
     arg.tenant_id_ = session_info_->get_effective_tenant_id();
     void *buf = nullptr;
-    ObPlacementHashSet<obrpc::ObTableItem> *table_item_set = nullptr;
-    if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObPlacementHashSet<obrpc::ObTableItem>)))) {
+    ObPlacementHashSet<obcall::ObTableItem> *table_item_set = nullptr;
+    if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObPlacementHashSet<obcall::ObTableItem>)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory", K(ret));
     } else {
-      table_item_set = new(buf)ObPlacementHashSet<obrpc::ObTableItem>();
+      table_item_set = new(buf)ObPlacementHashSet<obcall::ObTableItem>();
       ObString database_name;
       ObString table_name;
-      obrpc::ObTableItem table_item;
+      obcall::ObTableItem table_item;
       ParseNode *table_node = nullptr;
       int64_t max_table_num = 1;
       if (OB_UNLIKELY(!parser_tree.children_[TABLE_LIST_NODE])) {

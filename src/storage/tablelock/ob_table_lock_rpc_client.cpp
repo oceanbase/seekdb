@@ -58,14 +58,9 @@ static inline int get_ls_leader(
 
 int ObTableLockRpcClient::init()
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(table_lock_rpc_proxy_.init(GCTX.net_frame_->get_req_transport(),
-                                         GCTX.self_addr()))) {
-    LOG_WARN("failed to init rpc proxy", K(ret));
-  } else {
-    table_lock_rpc_proxy_.set_detect_session_killed(true);
-  }
-  return ret;
+  // No-op: the table-lock RPC proxy was removed (single-replica; locking goes through the
+  // local ObTableLockService). Kept so the existing init() call site stays valid.
+  return OB_SUCCESS;
 }
 
 ObTableLockRpcClient &ObTableLockRpcClient::get_instance()

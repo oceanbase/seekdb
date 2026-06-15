@@ -15,7 +15,6 @@
  */
 #define USING_LOG_PREFIX SQL
 #include "ob_external_table_file_task.h"
-#include "share/external_table/ob_external_table_file_rpc_processor.h"
 
 namespace oceanbase
 {

@@ -18,12 +18,12 @@
 #define OCEANBASE_TRANSACTION_OB_WRS_SERVICE_
 
 #include "share/ob_thread_pool.h"             // ObThreadPool
-#include "rpc/obrpc/ob_rpc_result_code.h"     // ObRpcResultCode
+#include "rpc/frame/ob_result_code.h"     // rpc::frame::ObResultCode
 #include "lib/net/ob_addr.h"                  // ObAddr
 
 #include "ob_i_weak_read_service.h"           // ObIWeakReadService
 #include "ob_tenant_weak_read_service.h"      // ObTenantWeakReadService
-#include "ob_weak_read_service_rpc_define.h"  // obrpc::
+#include "ob_weak_read_service_rpc_define.h"  // obcall::
 #include "ob_weak_read_service_rpc.h"         // ObWrsRpc
 #include "storage/ls/ob_ls.h"
 
@@ -43,7 +43,7 @@ public:
       wrs_rpc_()
   {}
   ~ObWeakReadService() { destroy(); }
-  int init(const rpc::frame::ObReqTransport *transport);
+  int init();
   void destroy();
   int start();
   void stop();
@@ -58,16 +58,16 @@ public:
 
   ///////////// RPC process functions /////////////////
   void process_get_cluster_version_rpc(const uint64_t tenant_id,
-      const obrpc::ObWrsGetClusterVersionRequest &req,
-      obrpc::ObWrsGetClusterVersionResponse &res);
+      const obcall::ObWrsGetClusterVersionRequest &req,
+      obcall::ObWrsGetClusterVersionResponse &res);
 
   void process_cluster_heartbeat_rpc(const uint64_t tenant_id,
-      const obrpc::ObWrsClusterHeartbeatRequest &req,
-      obrpc::ObWrsClusterHeartbeatResponse &res);
+      const obcall::ObWrsClusterHeartbeatRequest &req,
+      obcall::ObWrsClusterHeartbeatResponse &res);
 
   void process_cluster_heartbeat_rpc_cb(const uint64_t tenant_id,
-      const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObWrsClusterHeartbeatResponse &res,
+      const rpc::frame::ObResultCode &rcode,
+      const obcall::ObWrsClusterHeartbeatResponse &res,
       const common::ObAddr &dst);
 
   ObIWrsRpc &get_wrs_rpc() { return wrs_rpc_; }

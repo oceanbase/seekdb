@@ -30,7 +30,7 @@ namespace observer
 using namespace common;
 using namespace sql;
 using namespace table;
-using namespace obrpc;
+using namespace obcall;
 
 ObTableLoadTableCtx::ObTableLoadTableCtx()
   : coordinator_ctx_(nullptr),

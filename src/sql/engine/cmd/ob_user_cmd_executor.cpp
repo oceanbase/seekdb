@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -28,7 +29,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 namespace sql
 {
@@ -110,7 +111,6 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const uint64_t tenant_id = stmt.get_tenant_id();
   const ObStrings &users = stmt.get_users();
   const bool if_not_exist = stmt.get_if_not_exists();
@@ -124,9 +124,6 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
   } else if (OB_UNLIKELY(users.count() <= FIX_MEMBER_CNT) || OB_UNLIKELY(0 != users.count() % FIX_MEMBER_CNT)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Resolve create user error. Users should have user and pwd", "ObStrings count", users.count());
@@ -229,7 +226,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(create_user(common_rpc_proxy, arg))) {
+      if (OB_FAIL(create_user(arg))) {
         LOG_WARN("Create user rpc failed", K(ret));
       }
     }
@@ -237,16 +234,13 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
   return ret;
 }
 
-int ObCreateUserExecutor::create_user(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                      const obrpc::ObCreateUserArg& arg) const
+int ObCreateUserExecutor::create_user(const obcall::ObCreateUserArg& arg) const
 {
   int ret = OB_SUCCESS;
   ObSArray<int64_t> failed_index;
   ObSqlString fail_msg;
-  if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Input argument error", K(rpc_proxy), K(ret));
-  } else if (OB_FAIL(rpc_proxy->create_user(arg, failed_index))) {
+  obcall::ObCreateUserArg user_arg = arg;
+  if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_user(user_arg, failed_index); }))) {
     LOG_WARN("Create user error", K(ret));
   } else if (0 != failed_index.count()) {
     ObSArray<ObString> failed_users;
@@ -328,7 +322,6 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const uint64_t tenant_id = stmt.get_tenant_id();
   const ObStrings *user_names = NULL;
 
@@ -350,9 +343,6 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (NULL == (common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
@@ -379,7 +369,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(drop_user(common_rpc_proxy, arg, stmt.get_if_exists()))) {
+      if (OB_FAIL(drop_user(arg, stmt.get_if_exists()))) {
         LOG_WARN("Drop user completely failed", K(ret));
       } else {
         //do nothing
@@ -389,8 +379,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
   return ret;
 }
 
-int ObDropUserExecutor::drop_user(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                  const obrpc::ObDropUserArg &arg,
+int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
                                   bool if_exist_stmt)
 {
   int ret = OB_SUCCESS;
@@ -400,13 +389,10 @@ int ObDropUserExecutor::drop_user(obrpc::ObCommonRpcProxy *rpc_proxy,
   } else if (OB_UNLIKELY(arg.users_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user not specified", K(ret));
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rpc_proxy is null", K(ret));
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rpc_proxy->drop_user(arg, failed_index))) {
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
     }
     if (0 != failed_index.count()) {
@@ -448,7 +434,6 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const uint64_t tenant_id = stmt.get_tenant_id();
   const ObStrings *user_names = NULL;
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
@@ -463,9 +448,6 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(ret));
   } else {
     ObString user_name;
     ObString host_name;
@@ -486,7 +468,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(lock_user(common_rpc_proxy, arg))) {
+      if (OB_FAIL(lock_user(arg))) {
         LOG_WARN("Rename user completely failed", K(arg), K(ret));
       } else {
         //do nothing
@@ -496,8 +478,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
   return ret;
 }
 
-int ObLockUserExecutor::lock_user(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                  const obrpc::ObLockUserArg &arg)
+int ObLockUserExecutor::lock_user(const obcall::ObLockUserArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -506,13 +487,10 @@ int ObLockUserExecutor::lock_user(obrpc::ObCommonRpcProxy *rpc_proxy,
   } else if (OB_UNLIKELY(arg.users_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user not specified", K(ret));
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rpc_proxy is null", K(ret));
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rpc_proxy->lock_user(arg, failed_index))) {
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->lock_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.users_, arg.hosts_, fail_msg))) {
         LOG_WARN("Build fail msg error", K(arg), K(ret));
@@ -557,7 +535,7 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
     common::ObArray<uint64_t> enable_role_id_array;
     ObSchemaGetterGuard schema_guard;
 
-    obrpc::ObAlterUserProfileArg &arg = static_cast<obrpc::ObAlterUserProfileArg &>(stmt.get_ddl_arg());
+    obcall::ObAlterUserProfileArg &arg = static_cast<obcall::ObAlterUserProfileArg &>(stmt.get_ddl_arg());
     OZ (GCTX.schema_service_->get_tenant_schema_guard(
                   tenant_id,
                   schema_guard));
@@ -612,7 +590,6 @@ int ObAlterUserProfileExecutor::execute(ObExecContext &ctx, ObAlterUserProfileSt
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
 
   if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
@@ -627,7 +604,6 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const uint64_t tenant_id = stmt.get_tenant_id();
   const ObStrings *rename_infos = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -651,9 +627,6 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(ret));
   } else {
     ObString old_username;
     ObString old_hostname;
@@ -694,7 +667,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(rename_user(common_rpc_proxy, arg))) {
+      if (OB_FAIL(rename_user(arg))) {
         LOG_WARN("Rename user completely failed", K(arg), K(ret));
       }
     }
@@ -702,8 +675,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
   return ret;
 }
 
-int ObRenameUserExecutor::rename_user(obrpc::ObCommonRpcProxy *rpc_proxy,
-                                      const obrpc::ObRenameUserArg &arg)
+int ObRenameUserExecutor::rename_user(const obcall::ObRenameUserArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -712,13 +684,10 @@ int ObRenameUserExecutor::rename_user(obrpc::ObCommonRpcProxy *rpc_proxy,
   } else if (OB_UNLIKELY(arg.old_users_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("user not specified", K(arg), K(ret));
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rpc_proxy is null", K(ret));
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rpc_proxy->rename_user(arg, failed_index))) {
+    if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->rename_user(arg, failed_index); }))) {
       LOG_WARN("Rename user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.old_users_, arg.old_hosts_, fail_msg))) {
         LOG_WARN("Build fail msg error", K(arg), K(ret));

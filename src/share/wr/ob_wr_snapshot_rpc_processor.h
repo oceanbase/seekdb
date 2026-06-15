@@ -17,8 +17,11 @@
 #ifndef OCEANBASE_WR_OB_WORKLOAD_REPOSITORY_SNAPSHOT_RPC_PROCESSOR_H_
 #define OCEANBASE_WR_OB_WORKLOAD_REPOSITORY_SNAPSHOT_RPC_PROCESSOR_H_
 
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/wr/ob_wr_rpc_proxy.h"
+#include "share/ob_define.h"
+#include "lib/utility/ob_unify_serialize.h"
+#include "lib/container/ob_se_array.h"
+#include "lib/container/ob_array_serialization.h"
+#include "share/scn.h"
 #include "deps/oblib/src/lib/net/ob_addr.h"
 
 namespace oceanbase {
@@ -288,63 +291,17 @@ private:
   int64_t snap_id_;
 };
 
-template <obrpc::ObRpcPacketCode pcode>
-class ObWrBaseSnapshotTaskP : public obrpc::ObRpcProcessor<obrpc::ObWrRpcProxy::ObRpc<pcode>> {
+// RPC removed: WR snapshot tasks dispatched in-process via ex_rpc::async_call /
+// ex_rpc::sync_call. These executors carry the former processor bodies and run in
+// the target tenant's MTL context.
+class ObWrSnapshotTaskExecutor {
 public:
-  typedef obrpc::ObRpcProcessor<obrpc::ObWrRpcProxy::ObRpc<pcode>> RpcProcessor;
-  ObWrBaseSnapshotTaskP(const observer::ObGlobalContext &gctx)
-  {}
-  virtual ~ObWrBaseSnapshotTaskP()
-  {}
-  int init();
-  virtual int before_process() override final;
-  virtual int process() = 0;
-  virtual int after_process(int error_code) override final;
-  virtual void cleanup() override final;
-};
-
-class ObWrAsyncSnapshotTaskP final
-    : public ObWrBaseSnapshotTaskP<obrpc::OB_WR_ASYNC_SNAPSHOT_TASK> {
-public:
-  ObWrAsyncSnapshotTaskP(const observer::ObGlobalContext &gctx) : ObWrBaseSnapshotTaskP(gctx)
-  {}
-  virtual ~ObWrAsyncSnapshotTaskP(){};
-  virtual int process() override final;
-};
-
-class ObWrAsyncPurgeSnapshotTaskP final
-    : public ObWrBaseSnapshotTaskP<obrpc::OB_WR_ASYNC_PURGE_SNAPSHOT_TASK> {
-public:
-  ObWrAsyncPurgeSnapshotTaskP(const observer::ObGlobalContext &gctx) : ObWrBaseSnapshotTaskP(gctx)
-  {}
-  virtual ~ObWrAsyncPurgeSnapshotTaskP()
-  {}
-  virtual int process() override final;
-};
-
-class ObWrSyncUserSubmitSnapshotTaskP final
-    : public ObWrBaseSnapshotTaskP<obrpc::OB_WR_SYNC_USER_SUBMIT_SNAPSHOT_TASK> {
-public:
-  ObWrSyncUserSubmitSnapshotTaskP(const observer::ObGlobalContext &gctx)
-      : ObWrBaseSnapshotTaskP(gctx)
-  {}
-  virtual ~ObWrSyncUserSubmitSnapshotTaskP()
-  {}
-  virtual int process() override final;
-
+  static int do_async_snapshot(ObWrCreateSnapshotArg &arg);
+  static int do_async_purge_snapshot(ObWrPurgeSnapshotArg &arg);
+  static int do_user_submit_snapshot(ObWrUserSubmitSnapArg &arg, ObWrUserSubmitSnapResp &resp);
+  static int do_user_modify_settings(ObWrUserModifySettingsArg &arg);
 private:
-  int schedule_next_wr_task(int64_t next_wr_task_ts);
-};
-
-class ObWrSyncUserModifySettingsTaskP final
-    : public ObWrBaseSnapshotTaskP<obrpc::OB_WR_SYNC_USER_MODIFY_SETTINGS_TASK> {
-public:
-  ObWrSyncUserModifySettingsTaskP(const observer::ObGlobalContext &gctx)
-      : ObWrBaseSnapshotTaskP(gctx)
-  {}
-  virtual ~ObWrSyncUserModifySettingsTaskP()
-  {}
-  virtual int process() override final;
+  static int schedule_next_wr_task(int64_t next_wr_task_ts);
 };
 
 }  // end namespace share

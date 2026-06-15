@@ -26,7 +26,7 @@ namespace oceanbase
 using namespace common;
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 
@@ -56,13 +56,13 @@ int ObForkTableResolver::resolve(const ParseNode &parse_tree)
     SQL_RESV_LOG(ERROR, "create fork table stmt failed", K(ret));
   } else {
     stmt_ = fork_table_stmt;
-    obrpc::ObForkTableArg &fork_table_arg = fork_table_stmt->get_fork_table_arg();
+    obcall::ObForkTableArg &fork_table_arg = fork_table_stmt->get_fork_table_arg();
     fork_table_arg.tenant_id_ = session_info_->get_effective_tenant_id();
     fork_table_arg.if_not_exist_ = false;
   }
 
   if (OB_SUCC(ret)) {
-    obrpc::ObForkTableArg &fork_table_arg = fork_table_stmt->get_fork_table_arg();
+    obcall::ObForkTableArg &fork_table_arg = fork_table_stmt->get_fork_table_arg();
     ParseNode *dst_table_node = parse_tree.children_[DST_TABLE_NODE];
     ParseNode *src_table_node = parse_tree.children_[SRC_TABLE_NODE];
     ObString dst_database_name;

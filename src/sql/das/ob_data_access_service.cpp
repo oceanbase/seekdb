@@ -21,6 +21,7 @@
 #include "sql/das/ob_das_parallel_handler.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
 #include "observer/omt/ob_multi_tenant.h"
+#include "observer/omt/ob_tenant.h"
 #include "sql/das/ob_das_extra_data.h"
 
 namespace oceanbase
@@ -46,11 +47,9 @@ int ObDataAccessService::mtl_init(ObDataAccessService *&das)
 {
   int ret = OB_SUCCESS;
   const ObAddr &self = GCTX.self_addr();
-  observer::ObSrvNetworkFrame *net_frame = GCTX.net_frame_;
-  auto req_transport = net_frame->get_req_transport();
-  if (OB_FAIL(das->id_cache_.init(self, req_transport))) {
+  if (OB_FAIL(das->id_cache_.init(self))) {
     LOG_ERROR("init das id service failed", K(ret));
-  } else if (OB_FAIL(das->init(net_frame->get_req_transport(), self))) {
+  } else if (OB_FAIL(das->init(self))) {
     LOG_ERROR("init data access service failed", K(ret));
   }
   return ret;
@@ -65,7 +64,7 @@ void ObDataAccessService::mtl_destroy(ObDataAccessService *&das)
   }
 }
 
-int ObDataAccessService::init(rpc::frame::ObReqTransport *transport, const ObAddr &self_addr)
+int ObDataAccessService::init(const ObAddr &self_addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(task_result_mgr_.init())) {
@@ -474,10 +473,19 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
     LOG_WARN("alloc memory failed", K(ret));
   } else if (OB_FAIL(task->init(&agg_task, timeout_ts, group_id))) {
     LOG_WARN("init parallel task failed", K(ret), K(agg_task));
-  } else if (OB_FAIL(omt->recv_request(MTL_ID(), *task))) {
-    LOG_WARN("fail to push parallel_das_task", K(ret), KPC(task));
   } else {
-    LOG_TRACE("push parallel task succeed", K(agg_task));
+    const uint64_t tenant_id = MTL_ID();
+    omt::ObTenant *tenant = nullptr;
+    if (OB_FAIL(omt->get_tenant(tenant_id, tenant))) {
+      LOG_WARN("get tenant failed", K(ret), K(tenant_id));
+    } else if (OB_ISNULL(tenant)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tenant is null", K(ret), K(tenant_id));
+    } else if (OB_FAIL(tenant->recv_request(*task))) {
+      LOG_WARN("fail to push parallel_das_task", K(ret), KPC(task));
+    } else {
+      LOG_TRACE("push parallel task succeed", K(agg_task));
+    }
   }
   if (OB_FAIL(ret)) {
     ObDASParallelTaskFactory::free(task);
@@ -600,7 +608,6 @@ int ObDataAccessService::setup_extra_result(ObDASRef &das_ref,
   } else if (OB_FAIL(extra_result->init(task_op->get_task_id(),
                                         timeout_ts,
                                         task_resp.get_runner_svr(),
-                                        GCTX.net_frame_->get_req_transport(),
                                         das_ref.enable_rich_format_))) {
     LOG_WARN("init extra data failed", KR(ret));
   } else {

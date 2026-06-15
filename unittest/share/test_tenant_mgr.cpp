@@ -17,7 +17,6 @@
 #include "gtest/gtest.h"
 
 #include "share/ob_tenant_mgr.h"
-#include "share/ob_srv_rpc_proxy.h"
 
 using namespace oceanbase;
 using namespace common;
@@ -29,9 +28,7 @@ TEST(ObTenantManager, Simple1)
 
   ObAddr self;
   self.set_ip_addr("127.0.0.1", 8088);
-  rpc::frame::ObReqTransport req_transport(NULL, NULL);
-  obrpc::ObSrvRpcProxy rpc_proxy;
-  int ret = tm.init(self, rpc_proxy, &req_transport, &ObServerConfig::get_instance());
+  int ret = tm.init();
   EXPECT_EQ(OB_SUCCESS, ret);
 
   const uint64_t tenantA = 1;
@@ -67,9 +64,7 @@ int init_tenant_mgr()
   ObTenantManager &tm = ObTenantManager::get_instance();
   ObAddr self;
   self.set_ip_addr("127.0.0.1", 8086);
-  rpc::frame::ObReqTransport req_transport(NULL, NULL);
-  obrpc::ObSrvRpcProxy rpc_proxy;
-  int ret = tm.init(self, rpc_proxy, &req_transport, &ObServerConfig::get_instance());
+  int ret = tm.init();
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = tm.add_tenant(OB_SYS_TENANT_ID);
   EXPECT_EQ(OB_SUCCESS, ret);

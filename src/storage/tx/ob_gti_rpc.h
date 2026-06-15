@@ -18,8 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_GTI_RPC_
 
 #include "observer/ob_server_struct.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
+#include "rpc/frame/ob_result_code.h"
 #include "storage/tx/ob_gti_source.h"
 
 namespace oceanbase
@@ -47,7 +46,7 @@ private:
 
 } //transaction
 
-namespace obrpc
+namespace obcall
 {
 
 class ObGtiRpcResult
@@ -73,34 +72,11 @@ private:
   int64_t end_id_;
 };
 
-class ObGtiRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObGtiRpcProxy);
-
-  RPC_AP(PR1 post, OB_GET_GTI_REQUEST, (transaction::ObGtiRequest), ObGtiRpcResult);
-};
-
-class ObGtiP : public ObRpcProcessor< obrpc::ObGtiRpcProxy::ObRpc<OB_GET_GTI_REQUEST> >
-{
-public:
-  ObGtiP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGtiP);
-};
-
-template<ObRpcPacketCode PC>
-class ObGtiRPCCB : public ObGtiRpcProxy::AsyncCB<PC>
+class ObGtiRPCCB
 {
 public:
   ObGtiRPCCB() : is_inited_(false), tenant_id_(0), gti_source_(NULL) {}
   ~ObGtiRPCCB() {}
-  void set_args(const typename ObGtiRpcProxy::AsyncCB<PC>::Request &args)
-  {
-    tenant_id_ = args.get_tenant_id();
-  }
   int init(transaction::ObGtiSource *gti_source)
   {
     int ret = common::OB_SUCCESS;
@@ -116,54 +92,15 @@ public:
     }
     return ret;
   }
-  oceanbase::rpc::frame::ObReqTransport::AsyncCB *clone(
-      const oceanbase::rpc::frame::SPAlloc &alloc) const {
-    ObGtiRPCCB<PC> *newcb = NULL;
-    void *buf = alloc(sizeof (*this));
-    if (NULL != buf) {
-      newcb = new (buf) ObGtiRPCCB<PC>();
-      if (newcb) {
-        newcb->is_inited_ = is_inited_;
-        newcb->tenant_id_ = tenant_id_;
-        newcb->gti_source_ = gti_source_;
-      }
-    }
-    return newcb;
-  }
-public:
-  int process()
-  {
-    const ObGtiRpcResult &result = ObGtiRpcProxy::AsyncCB<PC>::result_;
-    const ObAddr &dst = ObGtiRpcProxy::AsyncCB<PC>::dst_;
-    ObRpcResultCode &rcode = ObGtiRpcProxy::AsyncCB<PC>::rcode_;
-
-    return process_(result, dst, rcode);
-  }
-  int process(const obrpc::ObGtiRpcResult &result, const common::ObAddr &dst,
-              obrpc::ObRpcResultCode &rcode)
+  int process(const obcall::ObGtiRpcResult &result, const common::ObAddr &dst,
+              rpc::frame::ObResultCode &rcode)
   {
     return process_(result, dst, rcode);
   }
   void set_tenant_id(uint64_t tenant_id) {tenant_id_ = tenant_id;}
-  void on_timeout()
-  {
-    int ret = OB_SUCCESS;
-    const common::ObAddr &dst = ObGtiRpcProxy::AsyncCB<PC>::dst_;
-    if (!is_inited_) {
-      TRANS_LOG(WARN, "ObGtiRPCCB not inited");
-    } else {
-      MTL_SWITCH(tenant_id_) {
-        if (OB_FAIL(gti_source_->refresh_gti_location())) {
-          TRANS_LOG(WARN, "refresh gti location fail", K(ret));
-        }
-      } else {
-        TRANS_LOG(WARN, "tenant switch fail", K_(tenant_id), K(dst));
-      }
-    }
-  }
 private:
-  int process_(const obrpc::ObGtiRpcResult &result, const common::ObAddr &dst,
-               obrpc::ObRpcResultCode &rcode)
+  int process_(const obcall::ObGtiRpcResult &result, const common::ObAddr &dst,
+               rpc::frame::ObResultCode &rcode)
   {
     int ret = OB_SUCCESS;
     int status = OB_SUCCESS;
@@ -211,7 +148,7 @@ private:
   transaction::ObGtiSource *gti_source_;
 };
 
-} // obrpc
+} // obcall
 
 namespace transaction
 {
@@ -219,9 +156,9 @@ namespace transaction
 class ObGtiRequestRpc
 {
 public:
-  ObGtiRequestRpc() : is_inited_(false), is_running_(false), rpc_proxy_(NULL) {}
+  ObGtiRequestRpc() : is_inited_(false), is_running_(false) {}
   ~ObGtiRequestRpc() { destroy(); }
-  int init(obrpc::ObGtiRpcProxy *rpc_proxy, const common::ObAddr &self, ObGtiSource *gti_source);
+  int init(const common::ObAddr &self, ObGtiSource *gti_source);
   int start();
   int stop();
   int wait();
@@ -231,8 +168,7 @@ public:
 private:
   bool is_inited_;
   bool is_running_;
-  obrpc::ObGtiRpcProxy *rpc_proxy_;
-  obrpc::ObGtiRPCCB<obrpc::OB_GET_GTI_REQUEST> gti_request_cb_;
+  obcall::ObGtiRPCCB gti_request_cb_;
   common::ObAddr self_;
 };
 

@@ -76,7 +76,6 @@ void ObPartitionMergeProgress::reset()
   is_updating_ = false;
 }
 
-
 int64_t ObPartitionMergeProgress::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
@@ -432,16 +431,8 @@ int ObCOMajorMergeProgress::finish_merge_progress()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null ctx", K(ret), KPC_(ctx));
   } else if (typeid(*ctx_) != typeid(ObCOTabletMergeCtx)) {
-    if (!GCTX.is_shared_storage_mode()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ctx has unexpected type", K(ret), KPC_(ctx));
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (typeid(*ctx_) != typeid(ObCOTabletOutputMergeCtx)
-            && typeid(*ctx_) != typeid(ObCOTabletValidateMergeCtx)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ctx has unexpected type", K(ret), KPC_(ctx));
-#endif
-    }
   }
 
   if (OB_SUCC(ret)) {

@@ -43,7 +43,7 @@ public:
   void set_masked_sql(const common::ObString &masked_sql) { masked_sql_ = masked_sql; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_role_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_role_arg_; }
   common::ObIArray<common::ObString> &get_user_names() { return user_names_; }
   common::ObIArray<common::ObString> &get_host_names() { return host_names_; }
   void set_if_not_exists() { if_not_exists_ = true; }
@@ -56,7 +56,7 @@ private:
   common::ObString password_;
   bool need_enc_;
   common::ObString masked_sql_;
-  obrpc::ObCreateRoleArg create_role_arg_;
+  obcall::ObCreateRoleArg create_role_arg_;
   //for mysql role
   bool if_not_exists_;
   ObArray<common::ObString, common::ModulePageAllocator, true /*auto_free*/> user_names_;

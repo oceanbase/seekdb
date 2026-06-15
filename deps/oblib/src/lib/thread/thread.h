@@ -22,7 +22,8 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/lock/ob_latch.h"
 #include "lib/net/ob_addr.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
+#include "io/easy_io_struct.h"   // easy_addr_t (RpcGuard); formerly via ob_call_packet.h
+#include "rpc/frame/ob_req_packet_code.h"
 
 // Windows PThreads4W: pthread_t is a struct, not an integer
 #ifdef _WIN32
@@ -112,7 +113,6 @@ public:
   }
   OB_INLINE static void set_doing_ddl(const bool v) { is_doing_ddl_ = v; }
 public:
-  static thread_local int64_t sleep_us_;
   static thread_local bool is_doing_ddl_;
 private:
   static void* __th_start(void *th);

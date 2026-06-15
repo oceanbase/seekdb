@@ -422,14 +422,14 @@ int ObBackupDestMgr::init(
   return ret;
 }
 
-int ObBackupDestMgr::check_dest_connectivity(obrpc::ObSrvRpcProxy &rpc_proxy)
+int ObBackupDestMgr::check_dest_connectivity()
 {
   int ret = OB_SUCCESS;
   ObBackupConnectivityCheckManager check_mgr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObBackupDestMgr not init", K(ret));
-  } else if (OB_FAIL(check_mgr.init(tenant_id_, rpc_proxy, *sql_proxy_))) {
+  } else if (OB_FAIL(check_mgr.init(tenant_id_, *sql_proxy_))) {
     LOG_WARN("fail to init connectivity check mgr", K(ret), K_(tenant_id));
   } else if (OB_FAIL(check_mgr.check_backup_dest_connectivity(backup_dest_))) {
     LOG_WARN("fail to check backup dest connectivity", K(ret), K_(tenant_id), K_(backup_dest));
@@ -437,7 +437,7 @@ int ObBackupDestMgr::check_dest_connectivity(obrpc::ObSrvRpcProxy &rpc_proxy)
   return ret;
 }
 
-int ObBackupDestMgr::check_dest_validity(obrpc::ObSrvRpcProxy &rpc_proxy, const bool need_format_file)
+int ObBackupDestMgr::check_dest_validity(const bool need_format_file)
 {
   int ret = OB_SUCCESS;
   share::ObBackupStore store;
@@ -451,7 +451,7 @@ int ObBackupDestMgr::check_dest_validity(obrpc::ObSrvRpcProxy &rpc_proxy, const 
     LOG_WARN("fail to init store", K(ret), K_(backup_dest));
   } else if (OB_FAIL(store.dest_is_empty_directory(is_empty))) {
     LOG_WARN("fail to check dest is empty dirctory", K(ret), K_(backup_dest));
-  } else if (OB_FAIL(check_dest_connectivity(rpc_proxy))) {
+  } else if (OB_FAIL(check_dest_connectivity())) {
     LOG_WARN("fail to check dest connectivity", K(ret), K_(backup_dest));
   } else if (!is_empty) {
     if (OB_FAIL(store.is_format_file_exist(is_exist))) {

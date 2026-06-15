@@ -24,7 +24,7 @@ using namespace common;
 using namespace storage;
 using namespace share;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 #define USE_MULTI_GET_ARRAY_BINDING 1
@@ -189,44 +189,15 @@ int ObTempTableTransformationOp::destory_interm_results()
 int ObTempTableTransformationOp::destory_remote_interm_results(ObIArray<ObAddr> &svrs,
                                                                ObIArray<ObEraseDtlIntermResultArg> &args)
 {
-  int ret = OB_SUCCESS;
-  LOG_TRACE("destory_interm_results use rpc", K(svrs));
-  ObExecContext &ctx = get_exec_ctx();
-  ObSQLSessionInfo *session = ctx.get_my_session();
-  ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
-  ObExecutorRpcImpl *rpc = NULL;
-  ObExecutorRpcProxy *proxy = NULL;
-  if (OB_ISNULL(session) || OB_ISNULL(plan_ctx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("session snap or plan ctx snap is NULL", K(ret), K(session), K(plan_ctx));
-  } else if (OB_FAIL(ObTaskExecutorCtxUtil::get_task_executor_rpc(ctx, rpc))) {
-    LOG_ERROR("fail get rpc", K(ret));
-  } else if (OB_ISNULL(rpc) || OB_ISNULL(proxy = rpc->get_proxy())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc is NULL", K(ret), K(rpc), K(proxy));
-  } else if (OB_UNLIKELY(svrs.count() != args.count())) {
-    LOG_WARN("unexpected array count", K(ret), K(svrs), K(args));
-  } else {
-    uint64_t tenant_id = THIS_WORKER.get_rpc_tenant() > 0 ? THIS_WORKER.get_rpc_tenant()
-                                                          : session->get_rpc_tenant_id();
-    for (int64_t i = 0; OB_SUCC(ret) && i < svrs.count(); ++i) {
-      int64_t timeout_timestamp = plan_ctx->get_timeout_timestamp();
-      int64_t timeout = timeout_timestamp - ::oceanbase::common::ObTimeUtility::current_time();
-      if (OB_UNLIKELY(timeout <= 0)) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("task_execute timeout before rpc", K(ret), K(svrs.at(i)), K(timeout),
-                                                    K(timeout_timestamp));
-      } else if (OB_FAIL(proxy->to(svrs.at(i))
-                                .by(tenant_id)
-                                .timeout(timeout)
-                                .erase_dtl_interm_result(args.at(i), NULL))) {
-        LOG_WARN("rpc close_result fail", K(ret), K(svrs.at(i)), K(tenant_id),
-                                          K(args.at(i)), K(timeout), K(timeout_timestamp));
-      }
-    }
-  }
+  int ret = OB_ERR_UNEXPECTED;
+  UNUSED(args);
+  // Remote interm result destruction was done via obcall RPC, which is dead on
+  // single replica: all interm results are local (see the local destroy path in
+  // destory_interm_results), so this should never be reached.
+  LOG_WARN("destory_remote_interm_results is not supported on single replica", K(ret), K(svrs));
   return ret;
 }
+
 
 int ObTempTableTransformationOp::destory_local_interm_results(ObIArray<uint64_t> &result_ids)
 {

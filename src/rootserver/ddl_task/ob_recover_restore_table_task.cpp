@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_recover_restore_table_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_root_service.h"
 
@@ -24,7 +25,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 ObRecoverRestoreTableTask::ObRecoverRestoreTableTask()
   : ObTableRedefinitionTask()
@@ -39,7 +40,7 @@ int ObRecoverRestoreTableTask::init(
     const ObTableSchema* src_table_schema, const ObTableSchema* dst_table_schema, 
     const int64_t task_id, const share::ObDDLType &ddl_type, const int64_t parallelism,
     const int64_t consumer_group_id, const int32_t sub_task_trace_id,
-    const obrpc::ObAlterTableArg &alter_table_arg, const uint64_t tenant_data_version, const int64_t task_status, const int64_t snapshot_version)
+    const obcall::ObAlterTableArg &alter_table_arg, const uint64_t tenant_data_version, const int64_t task_status, const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -183,9 +184,9 @@ int ObRecoverRestoreTableTask::fail()
   bool already_cleanuped = false;
   
   int64_t rpc_timeout = 0;
-  obrpc::ObTableItem table_item;
-  obrpc::ObDropTableArg drop_table_arg;
-  obrpc::ObDDLRes drop_table_res;
+  obcall::ObTableItem table_item;
+  obcall::ObDropTableArg drop_table_arg;
+  obcall::ObDDLRes drop_table_res;
   {
     bool is_oracle_mode = false;
     int64_t all_indexes_tablets_count = 0;
@@ -195,9 +196,7 @@ int ObRecoverRestoreTableTask::fail()
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
     } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(dst_tenant_id_, dst_tenant_schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret), K(dst_tenant_id_));
     } else if (OB_FAIL(dst_tenant_schema_guard.get_table_schema(dst_tenant_id_, target_object_id_, table_schema))) {
@@ -246,8 +245,7 @@ int ObRecoverRestoreTableTask::fail()
       }
     } else if (OB_FAIL(drop_table_arg.tables_.push_back(table_item))) {
       LOG_WARN("push back failed", K(ret), K(drop_table_arg));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(GCTX.self_addr())
-        .timeout(rpc_timeout).drop_table(drop_table_arg, drop_table_res))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(drop_table_arg, drop_table_res); }))) {
       LOG_WARN("drop table failed", K(ret), K(rpc_timeout), K(drop_table_arg));
     } else {
       already_cleanuped = true;

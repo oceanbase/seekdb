@@ -20,9 +20,6 @@
 #include "logservice/palf/palf_env.h"
 #include "share/scn.h"
 #include "logservice/ob_log_base_type.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "log/ob_log_iterator_storage.h"
-#endif
 
 #ifndef MOCK_OB_LOG_HANDLER_H_
 #define MOCK_OB_LOG_HANDLER_H_
@@ -417,7 +414,7 @@ public:
     UNUSEDx(upgrade_servers, timeout_us);
     return OB_SUCCESS;
   }
-  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const
+  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const
   {
     UNUSEDx(addr, is_valid_member, stat);
     return OB_SUCCESS;

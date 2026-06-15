@@ -26,7 +26,6 @@ namespace share
 ObBackupConnectivityCheckManager::ObBackupConnectivityCheckManager()
   : is_inited_(false),
     tenant_id_(OB_INVALID_TENANT_ID),
-    rpc_proxy_(NULL),
     sql_proxy_(NULL)
 {
 }
@@ -37,7 +36,6 @@ ObBackupConnectivityCheckManager::~ObBackupConnectivityCheckManager()
 
 int ObBackupConnectivityCheckManager::init(
     const uint64_t tenant_id,
-    obrpc::ObSrvRpcProxy &rpc_proxy,
     common::ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
@@ -50,7 +48,6 @@ int ObBackupConnectivityCheckManager::init(
   } else {
     tenant_id_ = tenant_id;
     sql_proxy_ = &sql_proxy;
-    rpc_proxy_ = &rpc_proxy;
     is_inited_ = true;
   }
   return ret;
@@ -62,7 +59,7 @@ int ObBackupConnectivityCheckManager::schedule_connectivity_check_(
 {
   int ret = OB_SUCCESS;
   // TODO(mingqiao) in 4.3, this code logic needs to be rewritten. Since server_mgr needs to be removed, first comment the code
-  // obrpc::ObCheckBackupConnectivityArg args;
+  // obcall::ObCheckBackupConnectivityArg args;
   // args.tenant_id_ = tenant_id_;
   // common::ObArray<ObAddr> server_list;
   // if (!is_inited_) {
@@ -851,12 +848,6 @@ int ObBackupStorageInfoOperator::get_restore_dest_id(
     const uint64_t tenant_id,
     const ObBackupDestType::TYPE &backup_dest_type,
     int64_t &dest_id)
-{
-  int ret = OB_NOT_SUPPORTED;
-  return ret;
-}
-
-int ObBackupStorageInfoOperator::get_restore_shared_storage_limit(const common::ObTrafficControl::ObStorageKey &storage_key, int64_t &max_iops, int64_t &max_bandwidth)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_debug_sync.h"
-#include "share/ob_common_rpc_proxy.h"
 
 namespace oceanbase
 {
@@ -877,9 +876,6 @@ int ObDebugSync::add_debug_sync(const ObString &str, const bool is_global,
   if (stop_) {
     ret = OB_CANCELED;
     LOG_WARN("is stopping", K(ret));
-  } else if (OB_ISNULL(rpc_proxy_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("rpc proxy not set", K(ret));
   } else if (str.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(str));
@@ -911,11 +907,11 @@ int ObDebugSync::add_debug_sync(const ObString &str, const bool is_global,
         DEBUG_SYNC(NOW);
       }
     } else {
-      obrpc::ObDebugSyncActionArg arg;
+      obcall::ObDebugSyncActionArg arg;
       arg.reset_ = reset;
       arg.clear_ = clear;
       arg.action_ = action;
-      if (OB_FAIL(rpc_proxy_->broadcast_ds_action(arg))) {
+      if (OB_FAIL(GCTX.root_service_->broadcast_ds_action(arg))) {
         LOG_WARN("broadcast debug sync action failed", K(ret), K(arg));
       }
     }
@@ -1071,9 +1067,9 @@ int ObDebugSync::set_global_action(const bool reset, const bool clear,
   return ret;
 }
 
-void ObDebugSync::set_rpc_proxy(obrpc::ObCommonRpcProxy *rpc_proxy)
+void ObDebugSync::set_rpc_proxy(void * /*rpc_proxy*/)
 {
-  rpc_proxy_ = rpc_proxy;
+  // no-op: direct dispatch through GCTX.root_service_
 }
 
 } // end namespace common

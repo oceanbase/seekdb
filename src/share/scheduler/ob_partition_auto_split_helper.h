@@ -25,7 +25,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObAlterTableArg;
 }
@@ -217,7 +217,7 @@ public:
                 const ObTabletID tablet_id,
                 const int64_t auto_split_tablet_size,
                 const int64_t used_disk_space,
-                obrpc::ObAlterTableArg &arg);                                            
+                obcall::ObAlterTableArg &arg);                                            
   static int print_identifier(ObIAllocator &allocator,
                               const bool is_oracle_mode,
                               const ObString &name,
@@ -237,13 +237,13 @@ private:
                                      const share::schema::ObTableSchema *&table_schema,
                                      const share::schema::ObSimpleDatabaseSchema *&db_schema,
                                      share::schema::ObSchemaGetterGuard &guard,
-                                     obrpc::ObAlterTableArg &arg);
+                                     obcall::ObAlterTableArg &arg);
   int build_arg_(const uint64_t tenant_id,
                  const ObString &db_name,
                  const share::schema::ObTableSchema &table_schema,
                  const ObTabletID split_source_tablet_id,
                  const ObArray<ObNewRange> &ranges,
-                 obrpc::ObAlterTableArg &arg);
+                 obcall::ObAlterTableArg &arg);
   int build_ddl_stmt_str_(const share::schema::ObTableSchema &orig_table_schema,
                           const share::schema::AlterTableSchema &alter_table_schema,
                           const ObTabletID &src_tablet_id,

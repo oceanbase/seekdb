@@ -23,7 +23,6 @@
 #include "mock_logservice_container/mock_election_user.h"
 #include "observer/ob_server.h"
 
-using namespace oceanbase::obrpc;
 using namespace std;
 
 #define SUCC_(stmt) ASSERT_EQ((stmt), OB_SUCCESS)

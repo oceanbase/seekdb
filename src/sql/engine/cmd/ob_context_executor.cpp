@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_context_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "sql/resolver/ddl/ob_context_stmt.h"
 
 namespace oceanbase
@@ -30,22 +31,18 @@ int name##Executor::execute(ObExecContext &ctx, name##Stmt &stmt) \
 { \
   int ret = OB_SUCCESS; \
   ObTaskExecutorCtx *task_exec_ctx = NULL; \
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL; \
-  const obrpc::ObContextDDLArg &context_arg = stmt.get_arg(); \
+  const obcall::ObContextDDLArg &context_arg = stmt.get_arg(); \
   ObString first_stmt; \
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) { \
     LOG_WARN("fail to get first stmt" , K(ret)); \
   } else { \
-    const_cast<obrpc::ObContextDDLArg&>(context_arg).ddl_stmt_str_ = first_stmt; \
+    const_cast<obcall::ObContextDDLArg&>(context_arg).ddl_stmt_str_ = first_stmt; \
   } \
   if (OB_FAIL(ret)) { \
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) { \
     ret = OB_NOT_INIT; \
     LOG_WARN("get task executor context failed"); \
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) { \
-    ret = OB_NOT_INIT; \
-    LOG_WARN("get common rpc proxy failed"); \
-  } else if (OB_FAIL(common_rpc_proxy->func(context_arg))) { \
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->func(context_arg); }))) { \
     LOG_WARN("rpc proxy failed", K(context_arg),  K(ret)); \
   } \
   return ret; \

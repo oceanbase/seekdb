@@ -19,7 +19,6 @@
 
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/ob_dfo.h"
-#include "sql/engine/px/ob_px_rpc_proxy.h"
 #include "sql/engine/px/ob_px_task_process.h"
 #include "sql/engine/ob_des_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -35,26 +34,7 @@ class ObPxWorkerRunnable
 public:
   virtual int run(ObPxRpcInitTaskArgs &arg) = 0;
 };
-// Use RPC worker thread as the execution container for Px Worker
-class ObPxRpcWorker: public ObPxWorkerRunnable
-{
-public:
-  ObPxRpcWorker(const observer::ObGlobalContext &gctx,
-                obrpc::ObPxRpcProxy &rpc_proxy,
-                common::ObIAllocator &alloc);
-  virtual ~ObPxRpcWorker();
-  int run(ObPxRpcInitTaskArgs &arg);
-  uint64_t get_task_co_id() { return resp_.task_co_id_; }
-  TO_STRING_KV(K_(resp));
-private:
-  DISABLE_WARNING_GCC_PUSH
-  DISABLE_WARNING_GCC_ATTRIBUTES
-  const observer::ObGlobalContext &gctx_ __maybe_unused;
-  obrpc::ObPxRpcProxy &rpc_proxy_;
-  common::ObIAllocator &alloc_ __maybe_unused;
-  DISABLE_WARNING_GCC_POP
-  ObPxRpcInitTaskResponse resp_;
-};
+
 // Use coroutine as Px Worker execution container
 class ObPxCoroWorker : public ObPxWorkerRunnable
 {
@@ -109,27 +89,7 @@ public:
 private:
   const observer::ObGlobalContext &gctx_;
 };
-// Worker factory, encapsulating Worker allocation, for easy resource management
-class ObPxRpcWorkerFactory
-{
-public:
-  ObPxRpcWorkerFactory(const observer::ObGlobalContext &gctx,
-                          obrpc::ObPxRpcProxy &rpc_proxy,
-                          common::ObIAllocator &alloc)
-      : gctx_(gctx),
-        rpc_proxy_(rpc_proxy),
-        alloc_(alloc)
-  {}
-  virtual ~ObPxRpcWorkerFactory();
-  int join() { return common::OB_SUCCESS; }
-private:
-  void destroy();
-private:
-  const observer::ObGlobalContext &gctx_;
-  obrpc::ObPxRpcProxy &rpc_proxy_;
-  common::ObIAllocator &alloc_;
-  common::ObSEArray<ObPxRpcWorker *, 64> workers_;
-};
+
 
 class ObPxThreadWorkerFactory
 {

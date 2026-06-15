@@ -16,7 +16,7 @@
 
 #ifndef OBDEV_SRC_EXTERNAL_TABLE_FILE_TASK_H_
 #define OBDEV_SRC_EXTERNAL_TABLE_FILE_TASK_H_
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 #include "deps/oblib/src/lib/lock/ob_thread_cond.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 namespace oceanbase
@@ -44,7 +44,7 @@ public:
   ObFlushExternalTableFileCacheRes() : rcode_() {}
   TO_STRING_KV(K_(rcode));
 public:
-  obrpc::ObRpcResultCode rcode_;
+  rpc::frame::ObResultCode rcode_;
 };
 
 class ObLoadExternalFileListReq
@@ -70,7 +70,7 @@ public:
   ObIAllocator &get_alloc() { return allocator_; }
   TO_STRING_KV(K_(rcode));
 public:
-  obrpc::ObRpcResultCode rcode_; // the returned error message
+  rpc::frame::ObResultCode rcode_; // the returned error message
   ObSEArray<ObString, 8> file_urls_;
   ObSEArray<int64_t, 8> file_sizes_;
 

@@ -19,7 +19,6 @@
 
 #include "share/backup/ob_backup_struct.h"
 #include "share/backup/ob_backup_serialize_provider.h"
-#include "share/ob_srv_rpc_proxy.h"
 
 namespace oceanbase
 {
@@ -169,8 +168,8 @@ public:
       const ObBackupDestType::TYPE &dest_type,
       const share::ObBackupPathString &backup_dest_str,
       common::ObISQLClient &sql_proxy);
-  int check_dest_connectivity(obrpc::ObSrvRpcProxy &rpc_proxy);
-  int check_dest_validity(obrpc::ObSrvRpcProxy &rpc_proxy, const bool need_format_file);
+  int check_dest_connectivity();
+  int check_dest_validity(const bool need_format_file);
   int write_format_file();
   void reset();
 private:

@@ -42,7 +42,7 @@ public:
     allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
   {}
   ~ObDeleteLobMetaRowParam() { destroy(); }
-  int init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   
   bool is_valid() const
   {
@@ -100,7 +100,7 @@ class ObDeleteLobMetaRowDag final: public share::ObIDag
 public:
   ObDeleteLobMetaRowDag();
   ~ObDeleteLobMetaRowDag();
-  int init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   virtual uint64_t hash() const override;
   bool operator==(const ObIDag& other) const override;
   bool is_inited() const { return is_inited_; }

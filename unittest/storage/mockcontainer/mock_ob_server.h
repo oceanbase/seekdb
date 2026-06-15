@@ -19,8 +19,6 @@
 
 #include "storage/tx/ob_trans_service.h"
 #include "lib/string/ob_sql_string.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "share/ob_srv_rpc_proxy.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/tx/ob_gts_rpc.h"
 #include "sql/session/ob_sql_session_mgr.h"
@@ -53,31 +51,6 @@ using namespace transaction;
 
 namespace unittest
 {
-
-class MockRootRpcProxy : public obrpc::ObCommonRpcProxy
-{
-public:
-  MockRootRpcProxy() {}
-  virtual ~MockRootRpcProxy() {}
-
-  int get_frozen_status(const obrpc::Int64 &arg,
-                        storage::ObFrozenStatus &frozen_status,
-                        const obrpc::ObRpcOpts &opts)
-  {
-    UNUSED(opts);
-    int32_t major_version = static_cast<int32_t>(arg);
-    if (0 == arg) {
-      major_version = 1;
-    }
-    frozen_status.frozen_version_.version_ = 0;
-    frozen_status.frozen_version_.major_ = major_version;
-    frozen_status.frozen_timestamp_ = major_version;
-    frozen_status.status_ = COMMIT_SUCCEED;
-    frozen_status.schema_version_ = major_version;
-
-    return common::OB_SUCCESS;
-  }
-};
 
 class MockObServer
 {
@@ -112,10 +85,7 @@ protected:
   MockSchemaService *schema_service_;
   ObGlobalContext &gctx_;
   ObSrvNetworkFrame net_frame_;
-  obrpc::ObBatchRpc batch_rpc_;
-  obrpc::ObSrvRpcProxy srv_rpc_proxy_;
   common::ObMySQLProxy sql_proxy_;
-  MockRootRpcProxy rs_rpc_proxy_;
   ObService ob_service_;
   ObSQLSessionMgr session_mgr_;
   int64_t warm_up_start_time_;
@@ -126,7 +96,6 @@ protected:
   ObReloadConfig reload_config_;
   ObConfigManager config_mgr_;
   omt::ObMultiTenant multi_tenant_;
-  transaction::ObGtsResponseRpc gts_response_rpc_;
   common::ObInOutBandwidthThrottle bandwidth_throttle_;
 };
 

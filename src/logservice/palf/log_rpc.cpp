@@ -18,11 +18,9 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
 namespace palf
 {
-LogRpc::LogRpc() : rpc_proxy_(NULL),
-                   opt_lock_(),
+LogRpc::LogRpc() : opt_lock_(),
                    options_(),
                    tenant_id_(0),
                    cluster_id_(0),
@@ -37,19 +35,14 @@ LogRpc::~LogRpc()
 
 int LogRpc::init(const ObAddr &self,
                  const int64_t cluster_id,
-                 const int64_t tenant_id,
-                 rpc::frame::ObReqTransport *transport,
-                 obrpc::ObBatchRpc *batch_rpc)
+                 const int64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(rpc_proxy_.init(transport, cluster_id))) {
-    PALF_LOG(ERROR, "LogRpcProxyV2 init failed", K(ret));
   } else {
     self_ = self;
     tenant_id_ = tenant_id;
-    batch_rpc_ = batch_rpc;
     cluster_id_ = cluster_id;
     is_inited_ = true;
     PALF_LOG(INFO, "LogRpc init success", K(tenant_id), K(self));
@@ -61,7 +54,6 @@ void LogRpc::destroy()
 {
   if (IS_INIT) {
     is_inited_ = false;
-    rpc_proxy_.destroy();
     PALF_LOG(INFO, "LogRpc destroy success");
   }
 }

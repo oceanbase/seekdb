@@ -37,12 +37,12 @@ private:
   int resolve_default_role(const ParseNode &parse_tree);
   int resolve_default_role_clause(
       const ParseNode *parse_tree, 
-      obrpc::ObAlterUserProfileArg &arg,
+      obcall::ObAlterUserProfileArg &arg,
       const ObIArray<uint64_t> &role_id_array,
       bool for_default_role_stmt);
   int resolve_role_list(
       const ParseNode *role_list, 
-      obrpc::ObAlterUserProfileArg &arg,
+      obcall::ObAlterUserProfileArg &arg,
       const ObIArray<uint64_t> &role_id_array,
       bool for_default_role_stmt);
   // disallow copy

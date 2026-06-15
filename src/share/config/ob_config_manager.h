@@ -27,7 +27,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
   class ObTenantConfigArg;
 }
@@ -65,8 +65,8 @@ public:
   int save_config(
       const char *config_name,
       const char *value);
-  int add_extra_config(const obrpc::ObTenantConfigArg &arg);
-  int init_tenant_config(const obrpc::ObTenantConfigArg &arg);
+  int add_extra_config(const obcall::ObTenantConfigArg &arg);
+  int init_tenant_config(const obcall::ObTenantConfigArg &arg);
   void enable_static_effect() { enable_static_effect_ = true; }
 private:
   // whitout lock, only used inner

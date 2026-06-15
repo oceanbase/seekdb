@@ -28,7 +28,7 @@ using namespace transaction;
 using namespace clog;
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace storage
 {
 using namespace mds;

@@ -40,12 +40,6 @@ int ObTenantTmpFileManager::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantTmpFileManager init twice", K(ret), K(is_inited_));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().init())) {
-      LOG_WARN("fail to init ss tmp file manager", KR(ret));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().init())) {
       LOG_WARN("fail to init sn tmp file manager", KR(ret));
@@ -55,7 +49,7 @@ int ObTenantTmpFileManager::init()
   if (OB_SUCC(ret)) {
     is_inited_ = true;
   }
-  LOG_INFO("ObTenantTmpFileManager init success", KR(ret), K(MTL_ID()), K(GCTX.is_shared_storage_mode()));
+  LOG_INFO("ObTenantTmpFileManager init success", KR(ret), K(MTL_ID()));
   return ret;
 }
 
@@ -65,59 +59,32 @@ int ObTenantTmpFileManager::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().start())) {
-      LOG_WARN("fail to start ss tmp file manager", KR(ret));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().start())) {
       LOG_WARN("fail to start sn tmp file manager", KR(ret));
     }
   }
-  LOG_INFO("ObTenantTmpFileManager start success", KR(ret), K(MTL_ID()), K(GCTX.is_shared_storage_mode()));
+  LOG_INFO("ObTenantTmpFileManager start success", KR(ret), K(MTL_ID()));
   return ret;
 }
 
 void ObTenantTmpFileManager::stop()
 {
-  if (!GCTX.is_shared_storage_mode()) {
-    get_sn_file_manager().stop();
-  }
-#ifdef OB_BUILD_SHARED_STORAGE
-  else {
-    get_ss_file_manager().stop();
-  }
-#endif
-  LOG_INFO("ObTenantTmpFileManager stop success", K(MTL_ID()), K(GCTX.is_shared_storage_mode()));
+  get_sn_file_manager().stop();
+  LOG_INFO("ObTenantTmpFileManager stop success", K(MTL_ID()));
 }
 
 void ObTenantTmpFileManager::wait()
 {
-  if (!GCTX.is_shared_storage_mode()) {
-    get_sn_file_manager().wait();
-  }
-#ifdef OB_BUILD_SHARED_STORAGE
-  else {
-    get_ss_file_manager().wait();
-  }
-#endif
-  LOG_INFO("ObTenantTmpFileManager wait success", K(MTL_ID()), K(GCTX.is_shared_storage_mode()));
+  get_sn_file_manager().wait();
+  LOG_INFO("ObTenantTmpFileManager wait success", K(MTL_ID()));
 }
 
 void ObTenantTmpFileManager::destroy()
 {
-  if (!GCTX.is_shared_storage_mode()) {
-    get_sn_file_manager().destroy();
-  }
-#ifdef OB_BUILD_SHARED_STORAGE
-  else {
-    get_ss_file_manager().destroy();
-  }
-#endif
+  get_sn_file_manager().destroy();
   is_inited_ = false;
-  LOG_INFO("ObTenantTmpFileManager destroy success", K(MTL_ID()), K(GCTX.is_shared_storage_mode()));
+  LOG_INFO("ObTenantTmpFileManager destroy success", K(MTL_ID()));
 }
 
 int ObTenantTmpFileManager::alloc_dir(int64_t &dir_id)
@@ -126,12 +93,6 @@ int ObTenantTmpFileManager::alloc_dir(int64_t &dir_id)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().alloc_dir(dir_id))) {
-      LOG_WARN("fail to alloc dir in ss tmp file manager", KR(ret), K(dir_id));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().alloc_dir(dir_id))) {
       LOG_WARN("fail to alloc dir in sn tmp file manager", KR(ret), K(dir_id));
@@ -146,12 +107,6 @@ int ObTenantTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char*
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().open(fd, dir_id, label))) {
-      LOG_WARN("fail to open file in ss tmp file manager", KR(ret), K(fd), K(dir_id), KP(label));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().open(fd, dir_id, label))) {
       LOG_WARN("fail to open file in sn tmp file manager", KR(ret), K(fd), K(dir_id), KP(label));
@@ -166,12 +121,6 @@ int ObTenantTmpFileManager::remove(const int64_t fd)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().remove(fd))) {
-      LOG_WARN("fail to remove file in ss tmp file manager", KR(ret), K(fd));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().remove(fd))) {
       LOG_WARN("fail to remove file in sn tmp file manager", KR(ret), K(fd));
@@ -180,7 +129,6 @@ int ObTenantTmpFileManager::remove(const int64_t fd)
   return ret;
 }
 
-
 int ObTenantTmpFileManager::aio_read(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info,
                                      ObTmpFileIOHandle &io_handle)
 {
@@ -188,12 +136,6 @@ int ObTenantTmpFileManager::aio_read(const uint64_t tenant_id, const ObTmpFileIO
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().aio_read(tenant_id, io_info, io_handle))) {
-      LOG_WARN("fail to read file in ss tmp file manager", KR(ret), K(io_info));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_read(tenant_id, io_info, io_handle))) {
       LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info));
@@ -209,12 +151,6 @@ int ObTenantTmpFileManager::aio_pread(const uint64_t tenant_id, const ObTmpFileI
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().aio_pread(tenant_id, io_info, offset, io_handle))) {
-      LOG_WARN("fail to read file in ss tmp file manager", KR(ret), K(io_info), K(offset));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_pread(tenant_id, io_info, offset, io_handle))) {
       LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info), K(offset));
@@ -230,12 +166,6 @@ int ObTenantTmpFileManager::read(const uint64_t tenant_id, const ObTmpFileIOInfo
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().read(tenant_id, io_info, io_handle))) {
-      LOG_WARN("fail to read file in ss tmp file manager", KR(ret), K(io_info));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().read(tenant_id, io_info, io_handle))) {
       LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info));
@@ -251,12 +181,6 @@ int ObTenantTmpFileManager::pread(const uint64_t tenant_id, const ObTmpFileIOInf
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().pread(tenant_id, io_info, offset, io_handle))) {
-      LOG_WARN("fail to read file in ss tmp file manager", KR(ret), K(io_info), K(offset));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().pread(tenant_id, io_info, offset, io_handle))) {
       LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info), K(offset));
@@ -272,12 +196,6 @@ int ObTenantTmpFileManager::aio_write(const uint64_t tenant_id, const ObTmpFileI
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().aio_write(tenant_id, io_info, io_handle))) {
-      LOG_WARN("fail to write file in ss tmp file manager", KR(ret), K(io_info));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_write(tenant_id, io_info, io_handle))) {
       LOG_WARN("fail to write file in sn tmp file manager", KR(ret), K(io_info));
@@ -292,12 +210,6 @@ int ObTenantTmpFileManager::write(const uint64_t tenant_id, const ObTmpFileIOInf
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().write(tenant_id, io_info))) {
-      LOG_WARN("fail to write file in ss tmp file manager", KR(ret), K(io_info));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().write(tenant_id, io_info))) {
       LOG_WARN("fail to write file in sn tmp file manager", KR(ret), K(io_info));
@@ -312,12 +224,6 @@ int ObTenantTmpFileManager::truncate(const int64_t fd, const int64_t offset)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().truncate(fd, offset))) {
-      LOG_WARN("fail to truncate file in ss tmp file manager", KR(ret), K(fd), K(offset));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().truncate(fd, offset))) {
       LOG_WARN("fail to truncate file in sn tmp file manager", KR(ret), K(fd), K(offset));
@@ -332,12 +238,6 @@ int ObTenantTmpFileManager::seal(const int64_t fd)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(ss_file_manager_.seal(fd))) {
-      LOG_WARN("fail to seal file in ss tmp file manager", KR(ret), K(fd));
-    }
-#endif
   } else {
     if (OB_FAIL(sn_file_manager_.seal(fd))) {
       LOG_WARN("fail to seal file in sn tmp file manager", KR(ret), K(fd));
@@ -352,12 +252,6 @@ int ObTenantTmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &file_si
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().get_tmp_file_size(fd, file_size))) {
-      LOG_WARN("fail to get tmp file size in ss tmp file manager", KR(ret), K(fd));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_size(fd, file_size))) {
       LOG_WARN("fail to get tmp file size in sn tmp file manager", KR(ret), K(fd));
@@ -372,12 +266,6 @@ int ObTenantTmpFileManager::get_tmp_file(const int64_t fd, ObITmpFileHandle &han
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().ObITenantTmpFileManager::get_tmp_file(fd, handle))) {
-      LOG_WARN("fail to get tmp file in ss tmp file manager", KR(ret), K(fd));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().ObITenantTmpFileManager::get_tmp_file(fd, handle))) {
       LOG_WARN("fail to get tmp file in sn tmp file manager", KR(ret), K(fd));
@@ -392,13 +280,6 @@ int ObTenantTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().get_tmp_file_disk_usage(disk_data_size, occupied_disk_size))) {
-      LOG_WARN("fail to get tmp file disk usage in ss tmp file manager",
-               KR(ret), K(disk_data_size), K(occupied_disk_size));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_disk_usage(disk_data_size, occupied_disk_size))) {
       LOG_WARN("fail to get tmp file disk usage in sn tmp file manager",
@@ -415,12 +296,6 @@ int ObTenantTmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret), K(MTL_ID()));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().get_tmp_file_fds(fd_arr))) {
-      LOG_WARN("fail to get tmp file fds in ss tmp file manager", KR(ret), K(fd_arr));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_fds(fd_arr))) {
       LOG_WARN("fail to get tmp file fds in sn tmp file manager", KR(ret), K(fd_arr));
@@ -440,12 +315,6 @@ int ObTenantTmpFileManager::get_tmp_file_info(const int64_t fd, ObTmpFileInfo *t
   } else if (OB_ISNULL(tmp_file_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd), KP(tmp_file_info));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(get_ss_file_manager().get_tmp_file_info(fd, *tmp_file_info))) {
-      LOG_WARN("fail to get tmp file info in ss tmp file manager", KR(ret), K(fd));
-    }
-#endif
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_info(fd, *tmp_file_info))) {
       LOG_WARN("fail to get tmp file info in sn tmp file manager", KR(ret), K(fd));
@@ -589,7 +458,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::aio_pread(const uint64_t tenant_id, con
   }
   return ret;
 }
-
 
 int ObTenantTmpFileManagerWithMTLSwitch::pread(const uint64_t tenant_id, const ObTmpFileIOInfo &io_info, const int64_t offset, ObTmpFileIOHandle &io_handle)
 {
@@ -740,7 +608,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::get_tmp_file_size(const uint64_t tenant
   }
   return ret;
 }
-
 
 int ObTenantTmpFileManagerWithMTLSwitch::get_tmp_file_fds(const uint64_t tenant_id, ObIArray<int64_t> &fd_arr)
 {

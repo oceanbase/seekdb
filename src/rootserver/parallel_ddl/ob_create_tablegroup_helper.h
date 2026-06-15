@@ -27,7 +27,7 @@ namespace schema
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObCreateTablegroupArg;
 }
@@ -39,8 +39,8 @@ public:
  ObCreateTablegroupHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObCreateTablegroupArg &arg,
-    obrpc::ObCreateTableGroupRes &res,
+    const obcall::ObCreateTablegroupArg &arg,
+    obcall::ObCreateTableGroupRes &res,
     ObDDLSQLTransaction *external_trans = nullptr);
   virtual ~ObCreateTablegroupHelper();
 private:
@@ -56,8 +56,8 @@ private:
 private:
   int check_tablegroup_name_();
 private:
-  const obrpc::ObCreateTablegroupArg &arg_;
-  obrpc::ObCreateTableGroupRes &res_;
+  const obcall::ObCreateTablegroupArg &arg_;
+  obcall::ObCreateTableGroupRes &res_;
   ObTablegroupSchema* tablegroup_schema_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateTablegroupHelper);

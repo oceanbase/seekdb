@@ -25,8 +25,8 @@ using namespace share;
 
 namespace sql {
 
-int ObStorageEstimator::estimate_row_count(const obrpc::ObEstPartArg &arg,
-                                           obrpc::ObEstPartRes &res)
+int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
+                                           obcall::ObEstPartRes &res)
 {
   int ret = OB_SUCCESS;
   //est path rows
@@ -39,7 +39,7 @@ int ObStorageEstimator::estimate_row_count(const obrpc::ObEstPartArg &arg,
     param.schema_version_ = arg.schema_version_;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.index_params_.count(); i++) {
-    obrpc::ObEstPartResElement est_res;
+    obcall::ObEstPartResElement est_res;
     param.index_id_ = arg.index_params_.at(i).index_id_;
     param.scan_flag_ = arg.index_params_.at(i).scan_flag_;
     param.tablet_id_ = arg.index_params_.at(i).tablet_id_;
@@ -65,12 +65,12 @@ int ObStorageEstimator::estimate_row_count(const obrpc::ObEstPartArg &arg,
   return ret;
 }
 
-int ObStorageEstimator::estimate_block_count_and_row_count(const obrpc::ObEstBlockArg &arg,
-                                                           obrpc::ObEstBlockRes &res)
+int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
+                                                           obcall::ObEstBlockRes &res)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
-    obrpc::ObEstBlockResElement est_res;
+    obcall::ObEstBlockResElement est_res;
     if (OB_FAIL(storage_estimate_block_count_and_row_count(arg.tablet_params_arg_.at(i), est_res))) {
       LOG_WARN("failed to estimate tablet block count and row count", K(ret));
     } else if (OB_FAIL(res.tablet_params_res_.push_back(est_res))) {
@@ -91,7 +91,7 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obrpc::ObEstBlo
 int ObStorageEstimator::storage_estimate_rowcount(const uint64_t tenant_id,
                                                   ObTableScanParam &param,
                                                   const ObSimpleBatch &batch,
-                                                  obrpc::ObEstPartResElement &res)
+                                                  obcall::ObEstPartResElement &res)
 {
   int ret = OB_SUCCESS;
   double rc_logical = 0;
@@ -161,8 +161,8 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(
 }
 
 int ObStorageEstimator::storage_estimate_block_count_and_row_count(
-    const obrpc::ObEstBlockArgElement &arg,
-    obrpc::ObEstBlockResElement &res)
+    const obcall::ObEstBlockArgElement &arg,
+    obcall::ObEstBlockResElement &res)
 {
   int ret = OB_SUCCESS;
   int64_t macro_block_count = 0;
@@ -224,8 +224,8 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
 }
 
 int ObStorageEstimator::storage_estimate_skip_rate(
-    const obrpc::ObEstSkipRateArgElement &arg,
-    obrpc::ObEstSkipRateResElement &res)
+    const obcall::ObEstSkipRateArgElement &arg,
+    obcall::ObEstSkipRateResElement &res)
 {
   int ret = OB_SUCCESS;
   common::ObIArray<double> &cg_skip_rate_arr = res.cg_skip_rate_arr_;
@@ -269,13 +269,13 @@ int ObStorageEstimator::storage_estimate_skip_rate(
   return ret;
 }
 
-int ObStorageEstimator::estimate_skip_rate(const obrpc::ObEstSkipRateArg &arg,
-                                           obrpc::ObEstSkipRateRes &res)
+int ObStorageEstimator::estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
+                                           obcall::ObEstSkipRateRes &res)
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time_ms();//for debug, remove later
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
-    obrpc::ObEstSkipRateResElement est_res;
+    obcall::ObEstSkipRateResElement est_res;
     if (OB_FAIL(storage_estimate_skip_rate(arg.tablet_params_arg_.at(i), est_res))) {
       LOG_WARN("failed to estimate skip rate", K(ret));
     } else if (OB_FAIL(res.tablet_params_res_.push_back(est_res))) {

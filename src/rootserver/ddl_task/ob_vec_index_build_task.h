@@ -38,7 +38,7 @@ public:
       const int64_t schema_version,
       const int64_t parallelism,
       const int64_t consumer_group_id,
-      const obrpc::ObCreateIndexArg &create_index_arg,
+      const obcall::ObCreateIndexArg &create_index_arg,
       const uint64_t tenant_data_version,
       const int64_t parent_task_id = 0,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
@@ -113,20 +113,20 @@ private:
                         uint64_t &aux_table_id,
                         int64_t &task_id);
   int construct_create_index_arg(const ObIndexType index_type,
-                                  obrpc::ObCreateIndexArg &arg);
+                                  obcall::ObCreateIndexArg &arg);
   int prepare_rowkey_vid_table();
   int prepare_aux_index_tables();
   int prepare_vid_rowkey_table();
-  int construct_rowkey_vid_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_vid_rowkey_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_delta_buffer_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_index_id_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_index_snapshot_data_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_hybrid_vector_log_table_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_hybrid_vector_embedded_vec_arg(obrpc::ObCreateIndexArg &arg);
+  int construct_rowkey_vid_arg(obcall::ObCreateIndexArg &arg);
+  int construct_vid_rowkey_arg(obcall::ObCreateIndexArg &arg);
+  int construct_delta_buffer_arg(obcall::ObCreateIndexArg &arg);
+  int construct_index_id_arg(obcall::ObCreateIndexArg &arg);
+  int construct_index_snapshot_data_arg(obcall::ObCreateIndexArg &arg);
+  int construct_hybrid_vector_log_table_arg(obcall::ObCreateIndexArg &arg);
+  int construct_hybrid_vector_embedded_vec_arg(obcall::ObCreateIndexArg &arg);
 
   int get_index_table_id(
-      const obrpc::ObCreateIndexArg *create_index_arg,
+      const obcall::ObCreateIndexArg *create_index_arg,
       uint64_t &index_table_id);
   int prepare();
   int wait_aux_table_complement();
@@ -139,8 +139,8 @@ private:
   int check_aux_table_schemas_exist(bool &is_all_exist);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator,
-      const obrpc::ObCreateIndexArg &source_arg,
-      obrpc::ObCreateIndexArg &dest_arg);
+      const obcall::ObCreateIndexArg &source_arg,
+      obcall::ObCreateIndexArg &dest_arg);
   int print_child_task_ids(char *buf, int64_t len);
 
 private:
@@ -223,7 +223,7 @@ private:
   bool is_post_create_hybrid_vector_;
   ObRootService *root_service_;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
-  obrpc::ObCreateIndexArg create_index_arg_;
+  obcall::ObCreateIndexArg create_index_arg_;
   common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
   bool use_vid_;
   bool is_retryable_ddl_;

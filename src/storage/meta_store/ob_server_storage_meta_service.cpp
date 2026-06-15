@@ -52,7 +52,7 @@ int ObServerStorageMetaService::init()
     LOG_WARN("fail to get server slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.init(server_slogger_))) {
     LOG_WARN("fail to init server checkpoint slog hander", K(ret));
-  } else if (OB_FAIL(persister_.init(false, server_slogger_))) {
+  } else if (OB_FAIL(persister_.init(server_slogger_))) {
     LOG_WARN("fail to init persister", K(ret));
   } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
     LOG_WARN("fail to init replayer", K(ret));

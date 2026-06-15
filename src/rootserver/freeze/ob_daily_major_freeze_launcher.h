@@ -29,10 +29,6 @@ namespace common
 class ObServerConfig;
 class ObMySQLProxy;
 }
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
 namespace rootserver
 {
 class ObMajorMergeInfoManager;

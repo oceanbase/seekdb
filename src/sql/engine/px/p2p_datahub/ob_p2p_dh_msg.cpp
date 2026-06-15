@@ -33,19 +33,14 @@ OB_SERIALIZE_MEMBER(ObP2PDatahubMsgBase,
     is_active_, is_empty_);
 
 int ObP2PDatahubMsgBase::broadcast(
-    ObIArray<ObAddr> &target_addrs,
-    obrpc::ObP2PDhRpcProxy &p2p_dh_proxy)
+    ObIArray<ObAddr> &target_addrs)
 {
   int ret = OB_SUCCESS;
-  ObPxP2PDatahubArg arg;
-  arg.msg_ = this;
+  // Single-replica seekdb: all targets are loopback. Deliver in-process by
+  // mirroring ObPxP2pDhMsgP::process (PX_P2P_DH.process_msg deep-copies the msg).
   for (int i = 0; i < target_addrs.count() && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(p2p_dh_proxy.
-        to(target_addrs.at(i)).
-        by(tenant_id_).
-        timeout(timeout_ts_).
-        send_p2p_dh_message(arg, nullptr))) {
-      LOG_WARN("fail to send p2p2 dh msg", K(ret));
+    if (OB_FAIL(PX_P2P_DH.process_msg(*this))) {
+      LOG_WARN("fail to process p2p dh msg locally", K(ret));
     }
   }
   return ret;

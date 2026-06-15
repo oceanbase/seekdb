@@ -29,7 +29,8 @@ void ObTenantTimezoneMgr::UpdateTenantTZTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tenant_tz_mgr_)) {
-    LOG_ERROR("update tenant task, tenant tz mgr is null", K(ret));
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("update tenant task, tenant tz mgr is null", K(ret));
   } else if (OB_FAIL(tenant_tz_mgr_->refresh_timezone_info())) {
     LOG_WARN("update tenant time zone failed, rescheduling", K(ret));
     tenant_tz_mgr_->schedule_retry();

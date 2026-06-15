@@ -46,7 +46,7 @@ int ObPhysicalRestoreWhiteList::assign(const ObPhysicalRestoreWhiteList &other)
       LOG_WARN("fail to reserve", KR(ret), K(other));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < other.table_items_.count(); i++) {
-      const obrpc::ObTableItem &item = other.table_items_.at(i);
+      const obcall::ObTableItem &item = other.table_items_.at(i);
       if (OB_FAIL(add_table_item(item))) {
         LOG_WARN("fail to add table item", KR(ret), K(item));
       }
@@ -55,10 +55,10 @@ int ObPhysicalRestoreWhiteList::assign(const ObPhysicalRestoreWhiteList &other)
   return ret;
 }
 
-int ObPhysicalRestoreWhiteList::add_table_item(const obrpc::ObTableItem &other)
+int ObPhysicalRestoreWhiteList::add_table_item(const obcall::ObTableItem &other)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObTableItem item;
+  obcall::ObTableItem item;
   if (OB_FAIL(ob_write_string(allocator_, other.table_name_, item.table_name_))) {
     LOG_WARN("fail to assign table_name", KR(ret), K(other));
   } else if (OB_FAIL(ob_write_string(allocator_, other.database_name_, item.database_name_))) {
@@ -74,7 +74,7 @@ int64_t ObPhysicalRestoreWhiteList::get_format_str_length() const
 {
   int64_t length = 0;
   for (int64_t i = 0; i < table_items_.count(); i++) {
-    const obrpc::ObTableItem &item = table_items_.at(i);
+    const obcall::ObTableItem &item = table_items_.at(i);
     length += (item.database_name_.length()
                + item.table_name_.length()
                + 5  // '`' & '.'
@@ -102,7 +102,7 @@ int ObPhysicalRestoreWhiteList::get_format_str(
   } else {
     int64_t pos = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < table_items_.count(); i++) {
-      const obrpc::ObTableItem &item = table_items_.at(i);
+      const obcall::ObTableItem &item = table_items_.at(i);
       if (OB_FAIL(databuff_printf(format_str_buf, format_str_length, pos, "%s`%.*s`.`%.*s`",
                   0 == i ? "" : ",",
                   item.database_name_.length(), item.database_name_.ptr(),

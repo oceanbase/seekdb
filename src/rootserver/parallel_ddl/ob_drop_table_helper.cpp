@@ -27,7 +27,7 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 using namespace oceanbase::rootserver;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::transaction::tablelock;
 using namespace oceanbase::common;
@@ -35,8 +35,8 @@ using namespace oceanbase::common;
 ObDropTableHelper::ObDropTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObDropTableArg &arg,
-    obrpc::ObDropTableRes &res,
+    const obcall::ObDropTableArg &arg,
+    obcall::ObDropTableRes &res,
     ObDDLSQLTransaction *external_trans)
     : ObDDLHelper(schema_service, tenant_id, "[parallel drop table]", external_trans),
       arg_(arg),
@@ -1948,7 +1948,7 @@ bool ObDropTableHelper::is_to_recyclebin_(const ObTableSchema &table_schema)
          && !is_inner_table(table_schema.get_table_id());
 }
 
-int ObDropTableHelper::log_table_not_exist_msg_(const obrpc::ObTableItem &table_item)
+int ObDropTableHelper::log_table_not_exist_msg_(const obcall::ObTableItem &table_item)
 {
   int ret = OB_SUCCESS;
   if (arg_.if_exist_) {

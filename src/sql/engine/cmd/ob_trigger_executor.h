@@ -43,7 +43,7 @@ public:
                            ObSQLSessionInfo *session_info,
                            common::ObMySQLProxy *sql_proxy,
                            ObIAllocator &allocator,
-                           obrpc::ObCreateTriggerArg &arg);
+                           obcall::ObCreateTriggerArg &arg);
 private:
   ObCreateTriggerExecutor(const ObCreateTriggerExecutor&);
   void operator=(const ObCreateTriggerExecutor&);

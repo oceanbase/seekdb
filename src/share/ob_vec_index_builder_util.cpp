@@ -24,7 +24,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 
 namespace share
@@ -56,7 +56,7 @@ const char * ObVecIndexBuilderUtil::SPIV_DIM_DOCID_VALUE_TABLE_NAME_SUFFIX = "";
 int ObVecIndexBuilderUtil::append_vec_args(
     const share::schema::ObTableSchema &data_schema,
     const sql::ObPartitionResolveResult &resolve_result,
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     bool &vec_common_aux_table_exist,
     bool &fts_common_aux_table_exist,
     ObIArray<sql::ObPartitionResolveResult> &resolve_results,
@@ -133,7 +133,7 @@ int ObVecIndexBuilderUtil::append_vec_args(
 int ObVecIndexBuilderUtil::append_vec_hnsw_args(
     const share::schema::ObTableSchema &data_schema,
     const sql::ObPartitionResolveResult &resolve_result,
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     bool &vec_common_aux_table_exist,
     ObIArray<sql::ObPartitionResolveResult> &resolve_results,
     ObIArray<ObCreateIndexArg> &index_arg_list,
@@ -196,7 +196,7 @@ int ObVecIndexBuilderUtil::append_vec_hnsw_args(
 int ObVecIndexBuilderUtil::append_vec_spiv_args(
   const share::schema::ObTableSchema &data_schema,
   const sql::ObPartitionResolveResult &resolve_result,
-  const obrpc::ObCreateIndexArg &index_arg,
+  const obcall::ObCreateIndexArg &index_arg,
   bool &common_aux_table_exist,
   ObIArray<sql::ObPartitionResolveResult> &resolve_results,
   ObIArray<ObCreateIndexArg> &index_arg_list,
@@ -241,7 +241,7 @@ int ObVecIndexBuilderUtil::append_vec_spiv_args(
 
 int ObVecIndexBuilderUtil::append_vec_ivfflat_args(
     const sql::ObPartitionResolveResult &resolve_result,
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIArray<sql::ObPartitionResolveResult> &resolve_results,
     ObIArray<ObCreateIndexArg> &index_arg_list,
     ObIAllocator *allocator)
@@ -272,7 +272,7 @@ int ObVecIndexBuilderUtil::append_vec_ivfflat_args(
 
 int ObVecIndexBuilderUtil::append_vec_ivfsq8_args(
     const sql::ObPartitionResolveResult &resolve_result,
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIArray<sql::ObPartitionResolveResult> &resolve_results,
     ObIArray<ObCreateIndexArg> &index_arg_list,
     ObIAllocator *allocator)
@@ -305,7 +305,7 @@ int ObVecIndexBuilderUtil::append_vec_ivfsq8_args(
 
 int ObVecIndexBuilderUtil::append_vec_ivfpq_args(
     const sql::ObPartitionResolveResult &resolve_result,
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIArray<sql::ObPartitionResolveResult> &resolve_results,
     ObIArray<ObCreateIndexArg> &index_arg_list,
     ObIAllocator *allocator)
@@ -339,7 +339,7 @@ int ObVecIndexBuilderUtil::append_vec_ivfpq_args(
 int ObVecIndexBuilderUtil::append_hybrid_vec_hnsw_args(
   const share::schema::ObTableSchema &data_schema,
   const sql::ObPartitionResolveResult &resolve_result,
-  const obrpc::ObCreateIndexArg &index_arg,
+  const obcall::ObCreateIndexArg &index_arg,
   bool &vec_common_aux_table_exist,
   ObIArray<sql::ObPartitionResolveResult> &resolve_results,
   ObIArray<ObCreateIndexArg> &index_arg_list,
@@ -450,9 +450,9 @@ int ObVecIndexBuilderUtil::append_vec_rowkey_vid_arg(
 }
 
 int ObVecIndexBuilderUtil::append_vec_vid_rowkey_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg vec_vid_rowkey_arg;
@@ -475,10 +475,10 @@ int ObVecIndexBuilderUtil::append_vec_vid_rowkey_arg(
 }
 
 int ObVecIndexBuilderUtil::append_vec_delta_buffer_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
     const sql::ObSQLSessionInfo *session_info,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg vec_delta_buffer_arg;
@@ -509,9 +509,9 @@ int ObVecIndexBuilderUtil::append_vec_delta_buffer_arg(
 }
 
 int ObVecIndexBuilderUtil::append_vec_dim_docid_value_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg vec_dim_docid_value_arg;
@@ -534,9 +534,9 @@ int ObVecIndexBuilderUtil::append_vec_dim_docid_value_arg(
 }
 
 int ObVecIndexBuilderUtil::append_vec_index_id_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg vec_index_id_arg;
@@ -560,9 +560,9 @@ int ObVecIndexBuilderUtil::append_vec_index_id_arg(
 
 
 int ObVecIndexBuilderUtil::append_vec_index_snapshot_data_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg vec_index_snapshot_data_arg;
@@ -585,9 +585,9 @@ int ObVecIndexBuilderUtil::append_vec_index_snapshot_data_arg(
 }
 
 int ObVecIndexBuilderUtil::append_hybrid_vec_log_table_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg hybrid_vec_log_arg;
@@ -610,9 +610,9 @@ int ObVecIndexBuilderUtil::append_hybrid_vec_log_table_arg(
 }
 
 int ObVecIndexBuilderUtil::append_hybrid_vec_index_embedded_vec_arg(
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     ObIAllocator *allocator,
-    ObIArray<obrpc::ObCreateIndexArg> &index_arg_list)
+    ObIArray<obcall::ObCreateIndexArg> &index_arg_list)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexArg hybrid_vec_index_embedded_arg;
@@ -1830,7 +1830,7 @@ int ObVecIndexBuilderUtil::set_hybrid_vec_embedded_vec_table_columns(
 }
 
 int ObVecIndexBuilderUtil::adjust_vec_args(
-    obrpc::ObCreateIndexArg &index_arg,
+    obcall::ObCreateIndexArg &index_arg,
     ObTableSchema &data_schema, // not const since will add column to data schema
     ObIAllocator &allocator,
     ObIArray<ObColumnSchemaV2 *> &gen_columns)
@@ -1904,7 +1904,7 @@ int ObVecIndexBuilderUtil::get_vec_rowkey_col(const ObTableSchema &data_schema,
  * 3. Generate the virtual generated column gen_columns for the corresponding table based on the index_id in index_arg
 */
 int ObVecIndexBuilderUtil::adjust_vec_hnsw_args(
-    obrpc::ObCreateIndexArg &index_arg,
+    obcall::ObCreateIndexArg &index_arg,
     ObTableSchema &data_schema, // not const since will add column to data schema
     ObIAllocator &allocator,
     ObIArray<ObColumnSchemaV2 *> &gen_columns)
@@ -2235,7 +2235,7 @@ int ObVecIndexBuilderUtil::adjust_vec_hnsw_args(
 }
 
 int ObVecIndexBuilderUtil::adjust_vec_spiv_args(
-  obrpc::ObCreateIndexArg &index_arg,
+  obcall::ObCreateIndexArg &index_arg,
   ObTableSchema &data_schema, // not const since will add column to data schema
   ObIAllocator &allocator,
   ObIArray<ObColumnSchemaV2 *> &gen_columns)
@@ -2332,7 +2332,7 @@ int ObVecIndexBuilderUtil::adjust_vec_spiv_args(
 }
 
 int ObVecIndexBuilderUtil::adjust_vec_ivfflat_args(
-    obrpc::ObCreateIndexArg &index_arg,
+    obcall::ObCreateIndexArg &index_arg,
     ObTableSchema &data_schema, // not const since will add column to data schema
     ObIAllocator &allocator,
     ObIArray<ObColumnSchemaV2 *> &gen_columns)
@@ -2459,7 +2459,7 @@ int ObVecIndexBuilderUtil::adjust_vec_ivfflat_args(
 }
 
 int ObVecIndexBuilderUtil::adjust_vec_ivfsq8_args(
-    obrpc::ObCreateIndexArg &index_arg,
+    obcall::ObCreateIndexArg &index_arg,
     ObTableSchema &data_schema, // not const since will add column to data schema
     ObIAllocator &allocator,
     ObIArray<ObColumnSchemaV2 *> &gen_columns)
@@ -2623,7 +2623,7 @@ int ObVecIndexBuilderUtil::adjust_vec_ivfsq8_args(
 }
 
 int ObVecIndexBuilderUtil::adjust_vec_ivfpq_args(
-    obrpc::ObCreateIndexArg &index_arg,
+    obcall::ObCreateIndexArg &index_arg,
     ObTableSchema &data_schema, // not const since will add column to data schema
     ObIAllocator &allocator,
     ObIArray<ObColumnSchemaV2 *> &gen_columns)
@@ -3165,7 +3165,7 @@ int ObVecIndexBuilderUtil::adjust_vec_arg(
 }
 
 int ObVecIndexBuilderUtil::inner_adjust_vec_arg(
-    obrpc::ObCreateIndexArg *vec_arg,
+    obcall::ObCreateIndexArg *vec_arg,
     const ObIArray<const ObColumnSchemaV2 *> &vec_cols,
     const int index_column_cnt,   // The primary key column count of the auxiliary table
     ObIAllocator *allocator)
@@ -5259,7 +5259,7 @@ int ObVecIndexBuilderUtil::check_vec_cols(
 
 int ObVecIndexBuilderUtil::get_vec_spiv_col(
   const ObTableSchema &data_schema,
-  const obrpc::ObCreateIndexArg *index_arg,
+  const obcall::ObCreateIndexArg *index_arg,
   const ObColumnSchemaV2 *&sparse_vec_col)
 {
   int ret = OB_SUCCESS;
@@ -5288,7 +5288,7 @@ int ObVecIndexBuilderUtil::get_vec_spiv_col(
 */
 int ObVecIndexBuilderUtil::get_vec_ivfflat_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&center_id_col,
     const ObColumnSchemaV2 *&center_vector_col,
     const ObColumnSchemaV2 *&data_vector_col)
@@ -5339,7 +5339,7 @@ int ObVecIndexBuilderUtil::get_vec_ivfflat_col(
 
 int ObVecIndexBuilderUtil::get_vec_ivfsq8_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&meta_id_col,
     const ObColumnSchemaV2 *&meta_vector_col,
     const ObColumnSchemaV2 *&center_id_col,
@@ -5407,7 +5407,7 @@ int ObVecIndexBuilderUtil::get_vec_ivfsq8_col(
 
 int ObVecIndexBuilderUtil::get_vec_ivfpq_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&center_id_col,
     const ObColumnSchemaV2 *&center_vector_col,
     const ObColumnSchemaV2 *&pq_center_id_col,
@@ -5503,7 +5503,7 @@ int ObVecIndexBuilderUtil::get_vec_vid_col(
 */
 int ObVecIndexBuilderUtil::get_vec_type_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&type_col)
 {
   int ret = OB_SUCCESS;
@@ -5540,7 +5540,7 @@ int ObVecIndexBuilderUtil::get_vec_type_col(
 
 int ObVecIndexBuilderUtil::get_vec_vector_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&vector_col)
 {
   int ret = OB_SUCCESS;
@@ -5577,7 +5577,7 @@ int ObVecIndexBuilderUtil::get_vec_vector_col(
 
 int ObVecIndexBuilderUtil::get_vec_scn_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&scn_col)
 {
   int ret = OB_SUCCESS;
@@ -5614,7 +5614,7 @@ int ObVecIndexBuilderUtil::get_vec_scn_col(
 
 int ObVecIndexBuilderUtil::get_vec_key_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&key_col)
 {
   int ret = OB_SUCCESS;
@@ -5651,7 +5651,7 @@ int ObVecIndexBuilderUtil::get_vec_key_col(
 
 int ObVecIndexBuilderUtil::get_vec_data_col(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg *index_arg,
+    const obcall::ObCreateIndexArg *index_arg,
     const ObColumnSchemaV2 *&data_col)
 {
   int ret = OB_SUCCESS;
@@ -5687,7 +5687,7 @@ int ObVecIndexBuilderUtil::get_vec_data_col(
 
 int ObVecIndexBuilderUtil::get_chunk_col(
   const ObTableSchema &data_schema,
-  const obrpc::ObCreateIndexArg *index_arg,
+  const obcall::ObCreateIndexArg *index_arg,
   const ObColumnSchemaV2 *&chunk_col)
 {
   int ret = OB_SUCCESS;
@@ -5723,7 +5723,7 @@ int ObVecIndexBuilderUtil::get_chunk_col(
 
 int ObVecIndexBuilderUtil::get_index_column_ids(
     const ObTableSchema &data_schema,
-    const obrpc::ObCreateIndexArg &arg,
+    const obcall::ObCreateIndexArg &arg,
     schema::ColumnReferenceSet &index_column_ids)
 {
   int ret = OB_SUCCESS;
@@ -5868,7 +5868,7 @@ int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
     common::ObIAllocator &allocator,
     oceanbase::rootserver::ObDDLOperator &ddl_operator,
     common::ObMySQLTransaction &trans,
-    ObSEArray<obrpc::ObColumnSortItem, 2> &domain_index_columns,
+    ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
     ObSEArray<ObString, 1> &domain_store_columns)
 {
   int ret = OB_SUCCESS;
@@ -5883,11 +5883,11 @@ int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
     if (!new_index_schema.is_vec_rowkey_vid_type() && !new_index_schema.is_vec_vid_rowkey_type() && OB_FAIL(ObVectorIndexUtil::get_vector_index_column_name(orig_table_schema, index_table_schema, col_names))) {
       LOG_WARN("fail to get vector index column name", K(ret), K(index_table_schema));
     } else {
-      HEAP_VAR(obrpc::ObCreateIndexArg, index_arg) {
+      HEAP_VAR(obcall::ObCreateIndexArg, index_arg) {
         index_arg.index_type_ = new_index_schema.get_index_type();
 
         FOREACH_X(it, col_names, OB_SUCC(ret)) {
-          obrpc::ObColumnSortItem sort_item;
+          obcall::ObColumnSortItem sort_item;
           sort_item.column_name_ = (*it);
           if (OB_SUCC(ret) && OB_FAIL(index_arg.index_columns_.push_back(sort_item))) {
             LOG_WARN("failed to push back sort columns", K(ret), K(sort_item));

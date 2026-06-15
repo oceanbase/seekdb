@@ -225,7 +225,6 @@ void ObFastFreezeChecker::try_update_tablet_threshold(
   }
 }
 
-
 /*******************************************ObCSReplicaChecksumHelper impl*****************************************/
 int ObCSReplicaChecksumHelper::check_column_type(
     const common::ObTabletID &tablet_id,
@@ -290,7 +289,6 @@ int ObCSReplicaChecksumHelper::check_column_type(
   }
   return ret;
 }
-
 
 /********************************************ObTenantTabletScheduler impl******************************************/
 constexpr ObMergeType ObTenantTabletScheduler::MERGE_TYPES[];
@@ -922,18 +920,6 @@ int ObTenantTabletScheduler::schedule_tablet_meta_merge(
         } else {
           has_created_dag = true;
         }
-      } else if (GCTX.is_shared_storage_mode()) {
-        ObCOMergeDagParam dag_param;
-        if (OB_FAIL(ObDagParamFunc::fill_param(
-          ls_id, *tablet, META_MAJOR_MERGE, result.merge_version_, EXEC_MODE_LOCAL, nullptr/*ObDagId*/, dag_param))) {
-          LOG_WARN("failed to fill param", KR(ret));
-        } else if (OB_FAIL(ObScheduleDagFunc::schedule_tablet_co_merge_dag_net(dag_param))) {
-          if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-            LOG_WARN("failed to schedule tablet merge dag", K(ret), K(dag_param));
-          }
-        } else {
-          has_created_dag = true;
-        }
       }
 
       if (OB_SUCC(ret) && has_created_dag) {
@@ -1311,16 +1297,6 @@ int ObTenantTabletScheduler::schedule_ddl_tablet_merge(
     } else {
       LOG_WARN("get ddl kv mgr failed", K(ret), K(ls_id), K(tablet_id));
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(ObTabletDDLUtil::schedule_ddl_minor_merge_on_demand(false/*need_freeze*/, ls_id, ddl_kv_mgr_handle))) {
-      if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("failed to schedule tablet ddl merge", K(ret), K(ls_id), K(tablet_id));
-      } else {
-        LOG_TRACE("schedule ddl minor merge failed", K(ret), K(ls_id), K(tablet_id));
-      }
-    }
-#endif
   } else {
     if (OB_FAIL(schedule_tablet_ddl_major_merge(ls_handle, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
@@ -1480,7 +1456,7 @@ int ObTenantTabletScheduler::try_schedule_adaptive_merge(
     const ObTablet *tablet = tablet_handle.get_obj();
     const ObLSID &ls_id = tablet->get_ls_id();
     const ObTabletID &tablet_id = tablet->get_tablet_id();
-    bool medium_is_cooling_down = GCTX.is_shared_storage_mode() || tablet->get_last_major_snapshot_version() + ObAdaptiveMergePolicy::MEDIUM_COOLING_TIME_THRESHOLD_NS > ObTimeUtility::current_time_ns();
+    bool medium_is_cooling_down = tablet->get_last_major_snapshot_version() + ObAdaptiveMergePolicy::MEDIUM_COOLING_TIME_THRESHOLD_NS > ObTimeUtility::current_time_ns();
     if (OB_FAIL(ObAdaptiveMergePolicy::check_adaptive_merge_reason_for_event(
         *ls_handle.get_ls(),
         *tablet,

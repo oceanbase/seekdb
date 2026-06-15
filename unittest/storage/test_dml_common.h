@@ -118,13 +118,13 @@ protected:
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const common::ObTabletID &data_tablet_id,
-      obrpc::ObBatchCreateTabletArg &arg);
+      obcall::ObBatchCreateTabletArg &arg);
   static int build_mixed_tablets_arg(
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const common::ObTabletID &data_tablet_id,
       const common::ObIArray<common::ObTabletID> &index_tablet_id_array,
-      obrpc::ObBatchCreateTabletArg &arg);
+      obcall::ObBatchCreateTabletArg &arg);
 public:
   static const uint64_t TX_EXPIRE_TIME_US = 120 * 1000 * 1000; // 120s
   static const int64_t TEST_LS_ID = 2;
@@ -200,7 +200,7 @@ int TestDmlCommon::create_data_tablet(
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  obrpc::ObBatchCreateTabletArg arg;
+  obcall::ObBatchCreateTabletArg arg;
 
   if (OB_FAIL(create_ls(tenant_id, ls_id, ls_handle))) {
     STORAGE_LOG(WARN, "failed to create ls", K(ret), K(tenant_id), K(ls_id));
@@ -222,7 +222,7 @@ int TestDmlCommon::create_data_and_index_tablets(
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  obrpc::ObBatchCreateTabletArg arg;
+  obcall::ObBatchCreateTabletArg arg;
 
   if (OB_FAIL(create_ls(tenant_id, ls_id, ls_handle))) {
     STORAGE_LOG(WARN, "failed to create ls", K(ret), K(tenant_id), K(ls_id));
@@ -547,7 +547,7 @@ int TestDmlCommon::build_pure_data_tablet_arg(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &data_tablet_id,
-    obrpc::ObBatchCreateTabletArg &arg)
+    obcall::ObBatchCreateTabletArg &arg)
 {
   int ret = OB_SUCCESS;
 
@@ -586,7 +586,7 @@ int TestDmlCommon::build_mixed_tablets_arg(
     const share::ObLSID &ls_id,
     const common::ObTabletID &data_tablet_id,
     const common::ObIArray<common::ObTabletID> &index_tablet_id_array,
-    obrpc::ObBatchCreateTabletArg &arg)
+    obcall::ObBatchCreateTabletArg &arg)
 {
   int ret = OB_SUCCESS;
 

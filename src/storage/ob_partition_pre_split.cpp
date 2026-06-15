@@ -29,7 +29,7 @@ namespace oceanbase
 using namespace share;
 using namespace rootserver;
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace pl;
 
 namespace storage

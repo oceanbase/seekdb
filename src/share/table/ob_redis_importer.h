@@ -17,9 +17,7 @@
 #ifndef OCEANBASE_SHARE_TABLE_OB_REDIS_IMPORTER_H_
 #define OCEANBASE_SHARE_TABLE_OB_REDIS_IMPORTER_H_
 
-#include "share/table/redis/ob_redis_common.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "observer/table/ob_table_mode_control.h"
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase
@@ -69,12 +67,7 @@ public:
   OB_INLINE int64_t get_affected_rows() { return affected_rows_; }
 
 private:
-  int get_kv_mode(ObKvModeType &kv_mode_type);
-  int get_tenant_memory_size(uint64_t &memory_size);
-  int check_basic_info(bool &need_import);
   int get_sql_uint_result(const char *sql, const char *col_name, uint64_t &sql_res);
-  int import_redis_info();
-  int check_redis_info();
 
   uint64_t tenant_id_;
   sql::ObExecContext& exec_ctx_;

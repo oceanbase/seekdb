@@ -44,7 +44,7 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
 using namespace oceanbase::sql::dtl;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 #define GET_OTHER_TSI_ADDR(var_name, addr) \
 const int64_t var_name##_offset = ((int64_t)addr - (int64_t)pthread_self()); \
@@ -438,9 +438,6 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_tenant_clog_dir(id_, mtl_init_ctx_->tenant_clog_dir_))) {
     LOG_ERROR("get_tenant_clog_dir failed", K(ret));
   } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-    mtl_init_ctx_->init_data_disk_size_ = meta.unit_.get_effective_actual_data_disk_size();
-#endif
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.unit_.config_.log_disk_size();
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_threshold_ = 80;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
@@ -455,9 +452,6 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
       mtl_init_ctx_->palf_options_.enable_log_cache_ = tenant_config->_enable_log_cache;
     }
     LOG_INFO("construct_mtl_init_ctx success", "palf_options", mtl_init_ctx_->palf_options_.disk_options_
-#ifdef OB_BUILD_SHARED_STORAGE
-             , "init_data_disk_size", mtl_init_ctx_->init_data_disk_size_
-#endif
              );
   }
   return ret;
@@ -556,6 +550,10 @@ int ObTenant::create_tenant_module()
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>", K(tenant_id), K(MTL_ID()));
 
+  // Point g_tenant_ptr at this before create_mtl_module() so that
+  // module constructors can access get_tenant() without nullptr deref.
+  g_tenant_ptr = this;
+
   bool mtl_init = false;
   if (OB_FAIL(ObTenantBase::create_mtl_module())) {
     LOG_ERROR("create mtl module failed", K(tenant_id), K(ret));
@@ -563,10 +561,6 @@ int ObTenant::create_tenant_module()
     ret = CREATE_MTL_MODULE_FAIL;
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(tenant_id), K(ret));
-  } else if (FALSE_IT(g_tenant_ptr = this)) {
-    // After create_mtl_module(), MTL services are on this.
-    // Point the global pointer at the real ObTenant. MTL_SWITCH's readiness
-    // check (g_tenant_ptr != &g_tenant_ctx) will now pass for all threads.
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(ObTenantBase::init_mtl_module())) {
     LOG_ERROR("init mtl module failed", K(tenant_id), K(ret));
@@ -773,47 +767,14 @@ int ObTenant::get_new_request(
       if (req->large_retry_flag()) {
         w.set_large_query();
       }
-      if (req->get_type() == ObRequest::OB_RPC) {
-        using obrpc::ObRpcPacket;
-        const ObRpcPacket &pkt
-          = static_cast<const ObRpcPacket&>(req->get_packet());
-        w.set_curr_request_level(pkt.get_request_level());
-      }
     }
   }
   return ret;
 }
 
-using oceanbase::obrpc::ObRpcPacket;
-inline bool is_high_prio(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() < 5;
-}
-
-inline bool is_normal_prio(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() == 5;
-}
-
-inline bool is_low_prio(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() > 5 && pkt.get_priority() < 10;
-}
-
-inline bool is_ddl(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() == 10;
-}
-
-inline bool is_warmup(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() == 11;
-}
-
 int ObTenant::recv_request(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  int req_level = 0;
   if (has_stopped()) {
     ret = OB_TENANT_NOT_IN_SERVER;
     LOG_WARN("receive request but tenant has already stopped", K(ret), K(id_));
@@ -829,53 +790,10 @@ int ObTenant::recv_request(ObRequest &req)
     req.set_trace_point(ObRequest::OB_EASY_REQUEST_TENANT_RECEIVED);
     switch (req.get_type()) {
       case ObRequest::OB_RPC: {
-        using obrpc::ObRpcPacket;
-        const ObRpcPacket& pkt = static_cast<const ObRpcPacket&>(req.get_packet());
-        req_level = pkt.get_request_level();
-        if (req_level < 0) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("unexpected level", K(req_level), K(id_));
-        } else {
-          // (0,5) High priority
-          //  [5,10) Normal priority
-          //  10 is the low priority used by ddl and should not appear here
-          //  11 Ultra-low priority for preheating
-          if (is_high_prio(pkt)) {  // the less number the higher priority
-            ATOMIC_INC(&recv_hp_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, QQ_HIGH, true))) {
-              if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-                LOG_WARN("push request to queue fail", K(ret), K(*this));
-              }
-            }
-          } else if (req.is_retry_on_lock())  {
-            ATOMIC_INC(&recv_retry_on_lock_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, QQ_NORMAL, true))) {
-              LOG_WARN("push request to QQ_NORMAL queue fail", K(ret), K(this));
-            }
-          } else if (pkt.is_kv_request()) {
-            // the same as sql request, kv request use q4
-            ATOMIC_INC(&recv_np_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-              LOG_WARN("push kv request to queue fail", K(ret), K(this));
-            }
-          } else if (is_normal_prio(pkt) || is_low_prio(pkt)) {
-            ATOMIC_INC(&recv_np_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, QQ_LOW, true))) {
-              LOG_WARN("push request to queue fail", K(ret), K(this));
-            }
-          } else if (is_ddl(pkt)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("priority 10 should not come here", K(ret));
-          } else if (is_warmup(pkt)) {
-            ATOMIC_INC(&recv_lp_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, RQ_LOW, true))) {
-              LOG_WARN("push request to queue fail", K(ret), K(this));
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("unexpected priority", K(ret), K(pkt.get_priority()));
-          }
-        }
+        // obcall RPC transport removed (single-replica): no OB_RPC request is
+        // ever delivered to a tenant. Treat any arrival as unexpected.
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("unexpected OB_RPC request after rpc removal", K(ret), K(id_));
         break;
       }
       case ObRequest::OB_MYSQL: {
@@ -951,7 +869,12 @@ int ObTenant::timeup()
   if (!has_stopped() && OB_SUCC(try_rdlock())) {
     // it may fail during drop tenant, try next time.
     if (!has_stopped()) {
-      check_worker_count();
+      // timeup ticks at 100ms so retry_queue_ is drained promptly
+      // (packet-retry latency is bounded by this period); the costly
+      // worker-count maintenance keeps its relaxed 1s cadence.
+      if (REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
+        check_worker_count();
+      }
       // Rescue expansion: if request completion stalls for 3s while
       // queue is non-empty and workers are at min_worker_cnt, workers
       // may be deadlocked — expand up to max_worker_cnt.

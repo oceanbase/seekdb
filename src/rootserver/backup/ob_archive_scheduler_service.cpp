@@ -1,3 +1,4 @@
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -18,19 +19,20 @@
 #include "rootserver/backup/ob_archive_scheduler_service.h"
 #include "rootserver/backup/ob_tenant_archive_scheduler.h"
 #include "share/ob_ddl_common.h"
+#include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase;
 using namespace rootserver;
 using namespace common;
 using namespace share;
 using namespace schema;
-using namespace obrpc;
+using namespace obcall;
 
 /**
  * ------------------------------ObArchiveSchedulerService---------------------
  */
 ObArchiveSchedulerService::ObArchiveSchedulerService()
-  : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID), rpc_proxy_(nullptr), sql_proxy_(nullptr), schema_service_(nullptr)
+  : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID), sql_proxy_(nullptr), schema_service_(nullptr)
 {
 }
 
@@ -38,7 +40,6 @@ int ObArchiveSchedulerService::init()
 {
   int ret = OB_SUCCESS;
   common::ObMySQLProxy *sql_proxy = nullptr;
-  obrpc::ObSrvRpcProxy *rpc_proxy = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
@@ -46,9 +47,6 @@ int ObArchiveSchedulerService::init()
   } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy should not be NULL", K(ret), KP(sql_proxy));
-  } else if (OB_ISNULL(rpc_proxy = GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc_proxy should not be NULL", K(ret), KP(rpc_proxy));
   } else if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service should not be NULL", K(ret), KP(schema_service));
@@ -56,7 +54,6 @@ int ObArchiveSchedulerService::init()
     LOG_WARN("failed to create log archive thread", K(ret));
   } else {
     schema_service_ = schema_service;
-    rpc_proxy_ = rpc_proxy;
     sql_proxy_ = sql_proxy;
     tenant_id_ = gen_user_tenant_id(MTL_ID());
     is_inited_ = true;
@@ -230,7 +227,7 @@ int ObArchiveSchedulerService::start_tenant_archive_(const uint64_t tenant_id)
   ObArchiveHandler archive_handler;
   // Only one dest is supported.
   const int64_t dest_no = 0;
-  if (OB_FAIL(archive_handler.init(tenant_id, schema_service_, *rpc_proxy_, *sql_proxy_))) {
+  if (OB_FAIL(archive_handler.init(tenant_id, schema_service_, *sql_proxy_))) {
     LOG_WARN("failed to init archive_handler", K(ret));
   } else if (OB_FAIL(archive_handler.enable_archive(dest_no))) {
     LOG_WARN("failed to enable archive tenant", K(ret), K(tenant_id), K(dest_no));
@@ -247,7 +244,7 @@ int ObArchiveSchedulerService::stop_tenant_archive_(const uint64_t tenant_id)
   ObArchiveHandler archive_handler;
   // Only one dest is supported.
   const int64_t dest_no = 0;
-  if (OB_FAIL(archive_handler.init(tenant_id, schema_service_, *rpc_proxy_, *sql_proxy_))) {
+  if (OB_FAIL(archive_handler.init(tenant_id, schema_service_, *sql_proxy_))) {
     LOG_WARN("failed to init archive_handler", K(ret), K(tenant_id));
   } else if (OB_FAIL(archive_handler.disable_archive(dest_no))) {
     LOG_WARN("failed to disable tenant archive", K(ret), K(tenant_id), K(dest_no));
@@ -274,7 +271,7 @@ int ObArchiveSchedulerService::process_(ObArchiveRoundState &round_state)
 
   ObArchiveHandler tenant_scheduler;
   const uint64_t tenant_id = tenant_id_;
-  if (OB_FAIL(tenant_scheduler.init(tenant_id, schema_service_, *rpc_proxy_, *sql_proxy_))) {
+  if (OB_FAIL(tenant_scheduler.init(tenant_id, schema_service_, *sql_proxy_))) {
     LOG_WARN("failed to init tenant archive scheduler", K(ret), K(tenant_id));
   } else if (OB_TMP_FAIL(tenant_scheduler.checkpoint())) {
     LOG_WARN("failed to checkpoint", K(tmp_ret), K(tenant_id));
@@ -493,7 +490,7 @@ int ObArchiveSchedulerService::open_tenant_archive_mode_(const uint64_t tenant_i
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(tenant_scheduler.init(tenant_id, schema_service_, *rpc_proxy_, *sql_proxy_))) {
+  } else if (OB_FAIL(tenant_scheduler.init(tenant_id, schema_service_, *sql_proxy_))) {
     LOG_WARN("failed to init tenant archive scheduler", K(ret), K(tenant_id));
   } else if (OB_FAIL(tenant_scheduler.open_archive_mode())) {
     LOG_WARN("failed to open archive mode", K(ret), K(tenant_id));
@@ -559,7 +556,7 @@ int ObArchiveSchedulerService::close_tenant_archive_mode_(const uint64_t tenant_
 {
   int ret = OB_SUCCESS;
   ObArchiveHandler tenant_scheduler;
-  if (OB_FAIL(tenant_scheduler.init(tenant_id, schema_service_, *rpc_proxy_, *sql_proxy_))) {
+  if (OB_FAIL(tenant_scheduler.init(tenant_id, schema_service_, *sql_proxy_))) {
     LOG_WARN("failed to init tenant archive scheduler", K(ret), K(tenant_id));
   } else if (OB_FAIL(tenant_scheduler.close_archive_mode())) {
     LOG_WARN("failed to close archive mode", K(ret), K(tenant_id));
@@ -569,18 +566,19 @@ int ObArchiveSchedulerService::close_tenant_archive_mode_(const uint64_t tenant_
 
 void ObArchiveSchedulerService::notify_start_archive_(const uint64_t tenant_id)
 {
-  int ret = OB_SUCCESS;
-  common::ObAddr leader_addr;
-  obrpc::ObNotifyStartArchiveArg arg;
-  arg.set_tenant_id(tenant_id);
-
-  if (OB_ISNULL(GCTX.srv_rpc_proxy_) || OB_ISNULL(GCTX.location_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc proxy or location service is null", KR(ret), KP(GCTX.srv_rpc_proxy_), KP(GCTX.location_service_));
-  } else if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(
-              GCONF.cluster_id, gen_meta_tenant_id(tenant_id), ObLSID(ObLSID::SYS_LS_ID), leader_addr))) {
-    LOG_WARN("failed to get meta tenant leader address", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(leader_addr).by(tenant_id).notify_start_archive(arg))) {
-    LOG_WARN("failed to notify tenant archive scheduler service", KR(ret), K(leader_addr), K(tenant_id), K(arg));
-  }
+  // single-replica: the meta tenant's archive scheduler is local; wake it in-process
+  // (resource RPC removed). Wrapped in ex_rpc::sync_call for greppability.
+  (void)ex_rpc::sync_call([tenant_id]() -> int {
+    int ret = OB_SUCCESS;
+    MTL_SWITCH(gen_meta_tenant_id(tenant_id)) {
+      ObArchiveSchedulerService *archive_service = MTL(ObArchiveSchedulerService *);
+      if (OB_ISNULL(archive_service)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("archive service is null", KR(ret), K(tenant_id));
+      } else {
+        archive_service->wakeup();
+      }
+    }
+    return ret;
+  });
 }

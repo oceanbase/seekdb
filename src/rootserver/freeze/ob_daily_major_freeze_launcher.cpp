@@ -27,7 +27,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 namespace rootserver
 {
@@ -183,7 +183,6 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
         const int64_t RETRY_TIME_LIMIT = 2 * 3600 * 1000 * 1000L; // 2h
         do {
           ObMajorFreezeParam param;
-          param.transport_ = GCTX.net_frame_->get_req_transport();
           param.freeze_reason_ = MF_DAILY_MERGE;
           if (OB_FAIL(param.add_freeze_info(tenant_id_))) {
             LOG_WARN("fail to push_back", KR(ret), K_(tenant_id));

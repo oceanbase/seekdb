@@ -37,7 +37,7 @@ namespace common
 class ObMySQLProxy;
 }
 
-namespace obrpc
+namespace obcall
 {
 class ObGtsRpcResult;
 }
@@ -56,7 +56,7 @@ public:
                                 print_id_log_interval_(3 * 1000 * 1000) {}
   virtual ~ObStandbyTimestampService() { destroy(); }
 
-  int init(rpc::frame::ObReqTransport *req_transport);
+  int init();
   static int mtl_init(ObStandbyTimestampService *&sts);
   int start();
   void stop();
@@ -70,21 +70,20 @@ public:
   int resume_leader();
   int switch_to_leader();
   
-  int handle_request(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result);
+  int handle_request(const ObGtsRequest &request, obcall::ObGtsRpcResult &result);
   int get_number(int64_t &gts);
   int64_t get_last_id() const { return last_id_; }
   void get_virtual_info(int64_t &ts_value, common::ObRole &role, int64_t &proposal_id);
   TO_STRING_KV(K_(inited), K_(last_id), K_(tenant_id), K_(epoch), K_(self), K_(switch_to_leader_ts));
 private:
   int query_and_update_last_id();
-  int handle_local_request_(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result);
+  int handle_local_request_(const ObGtsRequest &request, obcall::ObGtsRpcResult &result);
 private:
   bool inited_;
   int64_t last_id_;
   uint64_t tenant_id_;
   int64_t epoch_;
   int tg_id_;
-  ObGtsResponseRpc rpc_;
   common::ObAddr self_;
   int64_t switch_to_leader_ts_;
   common::ObTimeInterval print_error_log_interval_;

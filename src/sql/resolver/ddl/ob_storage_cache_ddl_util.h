@@ -30,9 +30,9 @@ public:
   static int check_alter_column_validation(const AlterColumnSchema *alter_column_schema, const ObTableSchema &orig_table_schema);
   static bool is_type_change_allow(const ObObjType &src_type, const ObObjType &dst_type);
   static int check_alter_partiton_storage_cache_policy(const share::schema::ObTableSchema &orig_table_schema,
-                                                       const obrpc::ObAlterTableArg &alter_table_arg);
+                                                       const obcall::ObAlterTableArg &alter_table_arg);
   static int check_alter_subpartiton_storage_cache_policy(const share::schema::ObTableSchema &orig_table_schema,
-                                                          const obrpc::ObAlterTableArg &alter_table_arg); 
+                                                          const obcall::ObAlterTableArg &alter_table_arg); 
   static int check_column_is_first_part_key(const ObPartitionKeyInfo &part_key_info, const uint64_t column_id);
   static int get_range_part_level(const share::schema::ObTableSchema &tbl_schema, const ObStorageCachePolicy &storage_cache_policy,
                                   int32_t &part_level);

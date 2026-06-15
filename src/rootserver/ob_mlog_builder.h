@@ -32,25 +32,25 @@ public:
   virtual ~ObMLogBuilder();
   int init();
   int create_or_replace_mlog(share::schema::ObSchemaGetterGuard &schema_guard,
-                             const obrpc::ObCreateMLogArg &create_mlog_arg,
-                             obrpc::ObCreateMLogRes &create_mlog_res);
+                             const obcall::ObCreateMLogArg &create_mlog_arg,
+                             obcall::ObCreateMLogRes &create_mlog_res);
   int create_mlog(share::schema::ObSchemaGetterGuard &schema_guard,
-                  const obrpc::ObCreateMLogArg &create_mlog_arg,
-                  obrpc::ObCreateMLogRes &create_mlog_res,
+                  const obcall::ObCreateMLogArg &create_mlog_arg,
+                  obcall::ObCreateMLogRes &create_mlog_res,
                   const ObTableSchema *base_table_schema,
                   const uint64_t data_version);
   int do_create_mlog(share::schema::ObSchemaGetterGuard &schema_guard,
-                     const obrpc::ObCreateMLogArg &create_mlog_arg,
+                     const obcall::ObCreateMLogArg &create_mlog_arg,
                      const share::schema::ObTableSchema &table_schema,
                      const uint64_t tenant_data_version,
-                     obrpc::ObCreateMLogRes &create_mlog_res);
+                     obcall::ObCreateMLogRes &create_mlog_res);
   int replace_mlog(share::schema::ObSchemaGetterGuard &schema_guard,
-                   const obrpc::ObCreateMLogArg &create_mlog_arg,
-                   obrpc::ObCreateMLogRes &create_mlog_res,
+                   const obcall::ObCreateMLogArg &create_mlog_arg,
+                   obcall::ObCreateMLogRes &create_mlog_res,
                    const ObTableSchema *base_table_schema,
                    const uint64_t data_version);
   int generate_mlog_schema(share::schema::ObSchemaGetterGuard &schema_guard,
-                           const obrpc::ObCreateMLogArg &create_mlog_arg,
+                           const obcall::ObCreateMLogArg &create_mlog_arg,
                            const share::schema::ObTableSchema &base_table_schema,
                            share::schema::ObTableSchema &mlog_schema);
 
@@ -61,7 +61,7 @@ private:
     MLogColumnUtils();
     ~MLogColumnUtils();
     int check_column_type(const ObColumnSchemaV2 &column_schema);
-    int add_base_table_columns(const obrpc::ObCreateMLogArg &create_mlog_arg,
+    int add_base_table_columns(const obcall::ObCreateMLogArg &create_mlog_arg,
                                common::ObRowDesc &row_desc,
                                const share::schema::ObTableSchema &base_table_schema);
     int add_base_table_pk_columns(common::ObRowDesc &row_desc,
@@ -89,13 +89,13 @@ private:
 
 private:
   int set_basic_infos(share::schema::ObSchemaGetterGuard &schema_guard,
-                      const obrpc::ObCreateMLogArg &create_mlog_arg,
+                      const obcall::ObCreateMLogArg &create_mlog_arg,
                       const share::schema::ObTableSchema &base_table_schema,
                       share::schema::ObTableSchema &mlog_schema);
-  int set_table_columns(const obrpc::ObCreateMLogArg &create_mlog_arg,
+  int set_table_columns(const obcall::ObCreateMLogArg &create_mlog_arg,
                         const share::schema::ObTableSchema &base_table_schema,
                         share::schema::ObTableSchema &mlog_schema);
-  int set_table_options(const obrpc::ObCreateMLogArg &create_mlog_arg,
+  int set_table_options(const obcall::ObCreateMLogArg &create_mlog_arg,
                         const share::schema::ObTableSchema &base_table_schema,
                         share::schema::ObTableSchema &mlog_schema);
 

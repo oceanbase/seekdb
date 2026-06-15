@@ -23,7 +23,7 @@
 #include "share/vector_index/ob_plugin_vector_index_adaptor.h"
 #include "share/vector_index/ob_vector_index_async_task.h"
 #include "share/vector_index/ob_hybrid_vector_refresh_task.h"
-#include "observer/table/ttl/ob_tenant_ttl_manager.h"
+#include "share/table/ob_ttl_util.h"
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_log_base_type.h"
 #include "logservice/ob_log_handler.h"

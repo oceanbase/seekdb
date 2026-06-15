@@ -524,13 +524,8 @@ int ObTableLoadStoreCtx::init_sort_param()
   basic_table_data_desc_.sstable_data_block_size_ = ObDirectLoadSSTableDataBlock::DEFAULT_DATA_BLOCK_SIZE;
   basic_table_data_desc_.extra_buf_size_ = ObDirectLoadTableDataDesc::DEFAULT_EXTRA_BUF_SIZE;
   basic_table_data_desc_.compressor_type_ = ctx_->param_.compressor_type_;
-  if (!GCTX.is_shared_storage_mode()) {
-    basic_table_data_desc_.sample_mode_ = ObDirectLoadSampleMode::ROW_SAMPLE;
-    basic_table_data_desc_.num_per_sample_ = ObDirectLoadTableDataDesc::DEFAULT_ROWS_PER_SAMPLE;
-  } else {
-    basic_table_data_desc_.sample_mode_ = ObDirectLoadSampleMode::DATA_BLOCK_SAMPLE;
-    basic_table_data_desc_.num_per_sample_ = ObDirectLoadSSTableIndexBlock::get_entries_per_block(basic_table_data_desc_.sstable_index_block_size_);
-  }
+  basic_table_data_desc_.sample_mode_ = ObDirectLoadSampleMode::ROW_SAMPLE;
+  basic_table_data_desc_.num_per_sample_ = ObDirectLoadTableDataDesc::DEFAULT_ROWS_PER_SAMPLE;
   // sort params
   int64_t wa_mem_limit = 0;
   if (ctx_->param_.exe_mode_ == ObTableLoadExeMode::MAX_TYPE) {

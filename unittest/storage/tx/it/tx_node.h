@@ -289,7 +289,6 @@ public:
   ObFakeTransRpc fake_rpc_;
   ObFakeGtiSource fake_gti_source_;
   ObFakeTsMgr fake_ts_mgr_;
-  obrpc::ObSrvRpcProxy rpc_proxy_;
   share::schema::ObMultiVersionSchemaService schema_service_;
   tablelock::ObLockMemtable lock_memtable_;
   ObLockTable fake_lock_table_;

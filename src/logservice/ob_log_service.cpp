@@ -42,7 +42,6 @@ using namespace oceanbase::common;
 ObLogService::ObLogService() :
   is_inited_(false),
   is_running_(false),
-  enable_shared_storage_(false),
   self_(),
   palf_env_(NULL),
   net_keepalive_adapter_(NULL),
@@ -80,19 +79,16 @@ int ObLogService::mtl_init(ObLogService* &logservice)
   ObServerLogBlockMgr *log_block_mgr = GCTX.log_block_mgr_;
   common::ObILogAllocator *alloc_mgr = NULL;
   common::ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-  obrpc::ObNetKeepAlive *net_keepalive = &(obrpc::ObNetKeepAlive::get_instance());
   ObNetKeepAliveAdapter *net_keepalive_adapter = NULL;
   if (OB_FAIL(TMA_MGR_INSTANCE.get_tenant_log_allocator(tenant_id, alloc_mgr))) {
     CLOG_LOG(WARN, "get_tenant_log_allocator failed", K(ret));
-  } else if (OB_ISNULL(net_keepalive_adapter = MTL_NEW(ObNetKeepAliveAdapter, "logservice", net_keepalive))) {
+  } else if (OB_ISNULL(net_keepalive_adapter = MTL_NEW(ObNetKeepAliveAdapter, "logservice"))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     CLOG_LOG(WARN, "alloc memory failed", KR(ret), KP(net_keepalive_adapter));
   } else if (OB_FAIL(logservice->init(palf_options,
                                       tenant_clog_dir,
                                       self,
                                       alloc_mgr,
-                                      net_frame->get_req_transport(),
-                                      GCTX.batch_rpc_,
                                       MTL(ObLSService*),
                                       location_service,
                                       log_block_mgr,
@@ -215,8 +211,6 @@ int ObLogService::init(const PalfOptions &options,
                        const char *base_dir,
                        const common::ObAddr &self,
                        common::ObILogAllocator *alloc_mgr,
-                       rpc::frame::ObReqTransport *transport,
-                       obrpc::ObBatchRpc *batch_rpc,
                        ObLSService *ls_service,
                        ObLocationService *location_service,
                        palf::ILogBlockPool *log_block_pool,
@@ -232,14 +226,14 @@ int ObLogService::init(const PalfOptions &options,
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
-      || OB_ISNULL(alloc_mgr) || OB_ISNULL(transport) || OB_ISNULL(batch_rpc) || OB_ISNULL(ls_service)
+      || OB_ISNULL(alloc_mgr) || OB_ISNULL(ls_service)
       || OB_ISNULL(location_service) || OB_ISNULL(log_block_pool)
       || OB_ISNULL(sql_proxy) || OB_ISNULL(net_keepalive_adapter)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
-             KP(alloc_mgr), KP(transport), KP(batch_rpc), KP(ls_service), KP(location_service),
+             KP(alloc_mgr), KP(ls_service), KP(location_service),
              KP(log_block_pool), KP(sql_proxy), KP(net_keepalive_adapter));
-  } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self, transport, batch_rpc,
+  } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self,
                                               alloc_mgr, log_block_pool, &monitor_, &LOCAL_DEVICE_INSTANCE,
                                               &G_RES_MGR, &OB_IO_MANAGER, palf_env_))) {
     CLOG_LOG(WARN, "failed to create_palf_env", K(base_dir), K(ret));
@@ -256,11 +250,11 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "failed to init role_change_service_", K(ret));
   } else if (OB_FAIL(location_adapter_.init(location_service))) {
     CLOG_LOG(WARN, "failed to init location_adapter_", K(ret));
-  } else if (OB_FAIL(rpc_proxy_.init(transport))) {
+  } else if (OB_FAIL(rpc_proxy_.init())) {
     CLOG_LOG(WARN, "LogServiceRpcProxy init failed", K(ret));
-  } else if (OB_FAIL(flashback_service_.init(self, &location_adapter_, &rpc_proxy_, sql_proxy))) {
+  } else if (OB_FAIL(flashback_service_.init(self, &location_adapter_, sql_proxy))) {
     CLOG_LOG(WARN, "failed to init flashback_service_", K(ret));
-  } else if (!lib::is_embed_mode() && OB_FAIL(restore_service_.init(transport, ls_service, this))) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(restore_service_.init(ls_service, this))) {
     CLOG_LOG(WARN, "failed to init restore_service_", K(ret));
   } else if (!lib::is_embed_mode() && OB_FAIL(cdc_service_.init(tenant_id, ls_service))) {
     // Initialize CDC service for log fetcher (standby log sync server side)
@@ -270,8 +264,8 @@ int ObLogService::init(const PalfOptions &options,
     alloc_mgr_ = alloc_mgr;
     self_ = self;
     is_inited_ = true;
-    FLOG_INFO("ObLogService init success", K(ret), K(base_dir), K(self), KP(transport), KP(batch_rpc),
-        KP(ls_service), K(tenant_id), K(enable_shared_storage_));
+    FLOG_INFO("ObLogService init success", K(ret), K(base_dir), K(self),
+        KP(ls_service), K(tenant_id));
   }
 
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
@@ -784,7 +778,7 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
   } else if (OB_FAIL(palf_env_->get_disk_usage(used_size, total_size))) {
     CLOG_LOG(WARN, "get_disk_usage failed", K(ret));
   } else {
-    const int64_t CHECKPOINT_PERCENTAGE = GCTX.is_shared_storage_mode() ? 60 : 30;
+    const int64_t CHECKPOINT_PERCENTAGE = 30;
     ObLSService *ls_service = MTL(ObLSService*);
     ObSharedGuard<ObLSIterator> iterator;
     if (OB_ISNULL(ls_service)) {

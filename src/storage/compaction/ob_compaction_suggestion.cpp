@@ -281,16 +281,17 @@ const char* ObCompactionSuggestionMgr::get_suggestion_reason(const int64_t reaso
   return str;
 }
 
+// Indexed by ObDagPrio::ObDagPrioEnum value. HA_MID/HA_LOW were removed and are
+// now aliases of HA_HIGH, so the priorities after HA_HIGH shifted down by two.
 const char *ObCompactionSuggestionMgr::ObAddWorkerThreadSuggestion[share::ObDagPrio::DAG_PRIO_MAX] =
 {
-  "increase compaction_high_thread_score",
-  "",
-  "increase compaction_mid_thread_score",
-  "",
-  "increase compaction_low_thread_score",
-  "",
-  "",
-  ""
+  "increase compaction_high_thread_score", // COMPACTION_HIGH
+  "",                                       // HA_HIGH
+  "increase compaction_mid_thread_score",  // COMPACTION_MID
+  "increase compaction_low_thread_score",  // COMPACTION_LOW
+  "",                                       // DDL
+  "",                                       // DDL_HIGH
+  ""                                        // TTL
 };
 
 const char* ObCompactionSuggestionMgr::get_add_thread_suggestion(const int64_t priority)

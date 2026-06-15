@@ -21,7 +21,7 @@
 #include "lib/ash/ob_active_session_guard.h"
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace oceanbase::common::sqlclient;
@@ -224,7 +224,6 @@ ObAutoincrementService::ObAutoincrementService()
   : node_allocator_(),
     handle_allocator_(),
     mysql_proxy_(NULL),
-    srv_proxy_(NULL),
     schema_service_(NULL),
     map_mutex_(common::ObLatchIds::AUTO_INCREMENT_INIT_LOCK)
 {
@@ -242,21 +241,18 @@ ObAutoincrementService &ObAutoincrementService::get_instance()
 
 int ObAutoincrementService::init(ObAddr &addr,
                                  ObMySQLProxy *mysql_proxy,
-                                 ObSrvRpcProxy *srv_proxy,
-                                 ObMultiVersionSchemaService *schema_service,
-                                 rpc::frame::ObReqTransport *req_transport)
+                                 ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
   my_addr_ = addr;
   mysql_proxy_ = mysql_proxy;
-  srv_proxy_ = srv_proxy;
   schema_service_ = schema_service;
 
   ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_AUTOINCREMENT);
   SET_USE_500(attr);
   if (OB_FAIL(distributed_autoinc_service_.init(mysql_proxy))) {
     LOG_WARN("fail init distributed_autoinc_service_ service", K(ret));
-  } else if (OB_FAIL(global_autoinc_service_.init(my_addr_, req_transport))) {
+  } else if (OB_FAIL(global_autoinc_service_.init(my_addr_))) {
     LOG_WARN("fail init auto inc global service", K(ret));
   } else if (OB_FAIL(node_allocator_.init(sizeof(TableNode), attr))) {
     LOG_WARN("failed to init table node allocator", K(ret));
@@ -589,7 +585,7 @@ void ObAutoincrementService::release_handle(CacheHandle *&handle)
   handle = NULL;
 }
 
-int ObAutoincrementService::refresh_sync_value(const obrpc::ObAutoincSyncArg &arg)
+int ObAutoincrementService::refresh_sync_value(const obcall::ObAutoincSyncArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_DEBUG("begin to get global sync", K(arg));
@@ -822,10 +818,7 @@ int ObAutoincrementService::clear_autoinc_cache_all(const uint64_t tenant_id,
       ObHashSet<ObAddr>::iterator iter;
       for(iter = server_set.begin(); OB_SUCC(ret) && iter != server_set.end(); ++iter) {
         LOG_INFO("send rpc call to other observers", "server", iter->first, K(tenant_id), K(table_id));
-        if (OB_FAIL(srv_proxy_->to(iter->first)
-                              .by(tenant_id)
-                              .timeout(sync_timeout)
-                              .clear_autoinc_cache(arg))) {
+        if (OB_FAIL(ObAutoincrementService::get_instance().clear_autoinc_cache(arg))) {
           if (ignore_rpc_errors && (is_rpc_error(ret) || autoinc_is_order)) {
             // ignore time out and clear ordered auto increment cache error, go on
             LOG_WARN("rpc call time out, ignore the error", "server", iter->first,
@@ -841,7 +834,7 @@ int ObAutoincrementService::clear_autoinc_cache_all(const uint64_t tenant_id,
   return ret;
 }
 
-int ObAutoincrementService::clear_autoinc_cache(const obrpc::ObAutoincSyncArg &arg)
+int ObAutoincrementService::clear_autoinc_cache(const obcall::ObAutoincSyncArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("begin to clear local auto-increment cache", K(arg));
@@ -1417,9 +1410,7 @@ int ObAutoincrementService::sync_value_to_other_servers(
           sync_us = sync_timeout;
         }
         // TODO: send sync_value to other servers
-        if (OB_FAIL(srv_proxy_->to(iter->first)
-                               .timeout(sync_us)
-                               .refresh_sync_value(arg))) {
+        if (OB_FAIL(ObAutoincrementService::get_instance().refresh_sync_value(arg))) {
           if (is_rpc_error(ret)) {
             LOG_WARN("sync rpc call time out", "server", iter->first, K(sync_us), K(param), K(ret));
             if (!THIS_WORKER.is_timeout()) {
@@ -1520,9 +1511,7 @@ int ObAutoincrementService::sync_auto_increment_all(const uint64_t tenant_id,
         ObHashSet<ObAddr>::iterator iter;
         for(iter = server_set.begin(); OB_SUCC(ret) && iter != server_set.end(); ++iter) {
           LOG_DEBUG("send rpc call to other observers", "server", iter->first);
-          if (OB_FAIL(srv_proxy_->to(iter->first)
-                                .timeout(sync_timeout)
-                                .refresh_sync_value(arg))) {
+          if (OB_FAIL(ObAutoincrementService::get_instance().refresh_sync_value(arg))) {
             if (is_rpc_error(ret)) {
               // ignore time out, go on
               LOG_WARN("rpc call time out", "server", iter->first, K(ret));
@@ -1783,20 +1772,17 @@ int ObInnerTableGlobalAutoIncrementService::local_sync_with_global_value(
   return inner_table_proxy_.get_autoinc_value(key, autoinc_version, seq_value, sync_value);
 }
 
-int ObRpcGlobalAutoIncrementService::init(
-    const common::ObAddr &addr,
-    rpc::frame::ObReqTransport *req_transport)
+int ObCallGlobalAutoIncrementService::init(
+    const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObRpcGlobalAutoIncrementService inited twice", KR(ret));
+    LOG_WARN("ObCallGlobalAutoIncrementService inited twice", KR(ret));
   } else if (!addr.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(addr));
-  } else if (OB_FAIL(gais_request_rpc_proxy_.init(req_transport, addr))) {
-    LOG_WARN("rpc proxy init failed", K(ret), K(req_transport), K(addr));
-  } else if (OB_FAIL(gais_request_rpc_.init(&gais_request_rpc_proxy_, addr))) {
+  } else if (OB_FAIL(gais_request_rpc_.init(addr))) {
     LOG_WARN("response rpc init failed", K(ret), K(addr));
   } else if (OB_FAIL(gais_client_.init(addr, &gais_request_rpc_))) {
     LOG_WARN("init client failed", K(ret));
@@ -1804,7 +1790,7 @@ int ObRpcGlobalAutoIncrementService::init(
   return ret;
 }
 
-int ObRpcGlobalAutoIncrementService::get_value(
+int ObCallGlobalAutoIncrementService::get_value(
     const AutoincKey &key,
     const uint64_t offset,
     const uint64_t increment,
@@ -1822,21 +1808,21 @@ int ObRpcGlobalAutoIncrementService::get_value(
                                 start_inclusive, end_inclusive);
 }
 
-int ObRpcGlobalAutoIncrementService::get_sequence_next_value(
+int ObCallGlobalAutoIncrementService::get_sequence_next_value(
     const ObSequenceSchema &schema,
     ObSequenceValue &nextval)
 {
   return gais_client_.get_sequence_next_value(schema, nextval);
 }
 
-int ObRpcGlobalAutoIncrementService::get_sequence_value(const AutoincKey &key,
+int ObCallGlobalAutoIncrementService::get_sequence_value(const AutoincKey &key,
                                                         const int64_t &autoinc_version,
                                                         uint64_t &sequence_value)
 {
   return gais_client_.get_sequence_value(key, autoinc_version, sequence_value);
 }
 
-int ObRpcGlobalAutoIncrementService::get_auto_increment_values(
+int ObCallGlobalAutoIncrementService::get_auto_increment_values(
     const uint64_t tenant_id,
     const common::ObIArray<AutoincKey> &autoinc_keys,
     const common::ObIArray<int64_t> &autoinc_versions,
@@ -1846,7 +1832,7 @@ int ObRpcGlobalAutoIncrementService::get_auto_increment_values(
   return gais_client_.get_auto_increment_values(autoinc_keys, autoinc_versions, seq_valuesm);
 }
 
-int ObRpcGlobalAutoIncrementService::local_push_to_global_value(
+int ObCallGlobalAutoIncrementService::local_push_to_global_value(
     const AutoincKey &key,
     const uint64_t max_value,
     const uint64_t value,
@@ -1859,7 +1845,7 @@ int ObRpcGlobalAutoIncrementService::local_push_to_global_value(
             global_sync_value);
 }
 
-int ObRpcGlobalAutoIncrementService::local_sync_with_global_value(
+int ObCallGlobalAutoIncrementService::local_sync_with_global_value(
     const AutoincKey &key,
     const int64_t &autoinc_version,
     uint64_t &value)
@@ -1867,7 +1853,7 @@ int ObRpcGlobalAutoIncrementService::local_sync_with_global_value(
   return gais_client_.local_sync_with_global_value(key, autoinc_version, value);
 }
 
-int ObRpcGlobalAutoIncrementService::clear_global_autoinc_cache(const AutoincKey &key)
+int ObCallGlobalAutoIncrementService::clear_global_autoinc_cache(const AutoincKey &key)
 {
   return gais_client_.clear_global_autoinc_cache(key);
 }

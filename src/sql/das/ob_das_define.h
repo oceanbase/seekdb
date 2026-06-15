@@ -21,7 +21,7 @@
 #include "share/location_cache/ob_location_struct.h"
 #include "common/ob_tablet_id.h"
 #include "sql/ob_phy_table_location.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 
 #define DAS_SCAN_OP(_task_op) \
     (::oceanbase::sql::DAS_OP_TABLE_SCAN != (_task_op)->get_type() && \
