@@ -560,7 +560,6 @@ int ObCreateViewHelper::print_view_expanded_definition_()
   char *buf = nullptr;
   int64_t buf_len = OB_MAX_VARCHAR_LENGTH;
   int64_t pos = 0;
-  bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(new_view_schema_))) {
@@ -575,11 +574,8 @@ int ObCreateViewHelper::print_view_expanded_definition_()
     } else if (OB_ISNULL(database_schema_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("database schema is null", KR(ret), K(arg_.schema_.get_database_id()));
-    } else if (OB_FAIL(new_view_schema_->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle mode", KR(ret));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-               is_oracle_mode ? "CREATE%s %sVIEW \"%s\".\"%s\" AS %.*s;"
-                              : "CREATE%s %sVIEW `%s`.`%s` AS %.*s;",
+               "CREATE%s %sVIEW `%s`.`%s` AS %.*s;",
                arg_.if_not_exist_ ? " OR REPLACE" : "",
                new_view_schema_->is_materialized_view() ? "MATERIALIZED " : "",
                database_schema_->get_database_name(),

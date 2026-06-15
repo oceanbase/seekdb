@@ -732,16 +732,13 @@ int ObDDLHelper::check_constraint_name_exist_(
     bool &exist)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   uint64_t constraint_id = OB_INVALID_ID;
   const uint64_t database_id = table_schema.get_database_id();
   exist = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check if oracle compat mode failed", KR(ret), K_(tenant_id));
   } else {
-    const bool check_fk = (is_oracle_mode || is_foreign_key);
+    const bool check_fk = is_foreign_key;
     if (OB_SUCC(ret) && check_fk) {
       if (OB_FAIL(schema_guard_wrapper_.get_foreign_key_id(
           database_id, constraint_name, constraint_id))) {
@@ -750,7 +747,7 @@ int ObDDLHelper::check_constraint_name_exist_(
         exist = true;
       }
     }
-    const bool check_cst = (is_oracle_mode || !is_foreign_key);
+    const bool check_cst = !is_foreign_key;
     if (OB_SUCC(ret) && !exist && check_cst) {
       if (table_schema.is_mysql_tmp_table()) {
         // tmp table in mysql mode, do nothing

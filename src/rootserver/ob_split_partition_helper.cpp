@@ -305,7 +305,6 @@ int ObSplitPartitionHelper::prepare_start_args_(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   ObLocationService *location_service = nullptr;
   ObArray<ObLSID> ls_ids;
   ObArray<ObRowkey> dst_high_bound_vals;
@@ -325,8 +324,6 @@ int ObSplitPartitionHelper::prepare_start_args_(
   } else if (OB_ISNULL(root_service)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root service must not be nullptr", K(ret));
-  } else if (OB_FAIL(upd_table_schemas.at(0)->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to check oracle mode", KR(ret), K(tenant_id), KPC(upd_table_schemas.at(0)));
   }
 
   // prepare tablet ids array for mapping between src and dst tablets later
@@ -368,7 +365,7 @@ int ObSplitPartitionHelper::prepare_start_args_(
 
   // prepare mds args
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(start_src_arg.init_split_start_src(tenant_id, is_oracle_mode, ls_id, new_table_schemas, upd_table_schemas, src_tablet_ids, dst_tablet_ids))) {
+  } else if (OB_FAIL(start_src_arg.init_split_start_src(tenant_id, false/*is_oracle_mode*/, ls_id, new_table_schemas, upd_table_schemas, src_tablet_ids, dst_tablet_ids))) {
     LOG_WARN("failed to init split start src", KR(ret));
   } else if (OB_FAIL(start_dst_arg.init_split_start_dst(tenant_id, ls_id, inc_table_schemas, src_tablet_ids, dst_tablet_ids, dst_high_bound_vals))) {
     LOG_WARN("failed to init split start dst", KR(ret));
@@ -464,14 +461,11 @@ int ObSplitPartitionHelper::prepare_dst_tablet_creator_(
     const ObTableSchema &data_table_schema = *inc_table_schemas.at(0);
     const int64_t split_cnt = dst_tablet_ids.at(0).count();
     const int64_t table_cnt = inc_table_schemas.count();
-    bool is_oracle_mode = false;
     if (OB_FAIL(check_mem_usage_for_split_(tenant_id, split_cnt))) {
       LOG_WARN("failed to check memory usage", K(ret));
     } else if (OB_UNLIKELY(create_commit_versions.count() != table_cnt || dst_tablet_ids.count() != table_cnt)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arg", K(ret), K(table_cnt), K(create_commit_versions), K(dst_tablet_ids));
-    } else if (OB_FAIL(data_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle mode", KR(ret), K(data_table_schema.get_table_id()));
     } else {
       const lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
       ObArray<ObTabletID> tablet_ids;

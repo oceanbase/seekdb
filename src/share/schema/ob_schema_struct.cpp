@@ -2457,15 +2457,12 @@ int ObPartitionSchema::try_generate_hash_part()
   } else if (OB_NOT_NULL(get_part_array())) {
     // skip
   } else if (is_hash_like_part()) {
-    bool is_oracle_mode = false;
     const int64_t BUF_SIZE = OB_MAX_PARTITION_NAME_LENGTH;
     char buf[BUF_SIZE];
     const int64_t &first_part_num = get_first_part_num();
     if (OB_UNLIKELY(first_part_num <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("part_option is invalid", KR(ret), KPC(this));
-    } else if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check if oracle mode", KR(ret), KPC(this));
     } else if (OB_FAIL(preserve_array(partition_array_, partition_array_capacity_, first_part_num))) {
       LOG_WARN("fail to preserve partition array", KR(ret), KP(partition_array_), K(partition_array_capacity_), K(first_part_num));
     } else {
@@ -2475,7 +2472,7 @@ int ObPartitionSchema::try_generate_hash_part()
         part.reset();
         MEMSET(buf, 0, BUF_SIZE);
         if (OB_FAIL(ObPartitionSchema::gen_hash_part_name(
-            i, FIRST_PART, is_oracle_mode, buf, BUF_SIZE, NULL, NULL))) {
+            i, FIRST_PART, false, buf, BUF_SIZE, NULL, NULL))) {
           LOG_WARN("fail to get part name", KR(ret), K(i));
         } else if (FALSE_IT(part_name.assign_ptr(buf, static_cast<int32_t>(strlen(buf))))) {
         } else if (OB_FAIL(part.set_part_name(part_name))) {
@@ -2495,7 +2492,6 @@ int ObPartitionSchema::try_generate_hash_part()
 int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const int64_t part_num = get_partition_num();
   ObPartition **part_array = get_part_array();
   const int64_t def_subpart_num = get_def_sub_part_num();
@@ -2517,8 +2513,6 @@ int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
   } else if (def_subpart_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("def_subpart_num is invalid", KR(ret), KPC(this));
-  } else if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check if oracle mode", KR(ret), KPC(this));
   } else {
     const int64_t BUF_SIZE = OB_MAX_PARTITION_NAME_LENGTH;
     char buf[BUF_SIZE];
@@ -2533,7 +2527,7 @@ int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
         ObString sub_part_name;
         subpart.reset();
         if (OB_FAIL(gen_hash_part_name(j, TEMPLATE_SUB_PART,
-                    is_oracle_mode, buf, BUF_SIZE, NULL, NULL))) {
+                    false, buf, BUF_SIZE, NULL, NULL))) {
           LOG_WARN("fail to get def subpart name", KR(ret), K(j));
         } else if (FALSE_IT(sub_part_name.assign_ptr(buf, static_cast<int32_t>(strlen(buf))))) {
         } else if (OB_FAIL(subpart.set_part_name(sub_part_name))) {
@@ -2556,7 +2550,6 @@ int ObPartitionSchema::try_generate_hash_subpart(bool &generated)
 int ObPartitionSchema::try_generate_subpart_by_template(bool &generated)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const int64_t part_num = get_partition_num();
   ObPartition **part_array = get_part_array();
   const int64_t def_subpart_num = get_def_subpartition_num();
@@ -2577,8 +2570,6 @@ int ObPartitionSchema::try_generate_subpart_by_template(bool &generated)
   } else if (OB_ISNULL(def_subpart_array) || def_subpart_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("def_subpart_array is null or def_subpart_num is invalid", KR(ret), KPC(this));
-  } else if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check if oracle mode", KR(ret), KPC(this));
   } else {
     const int64_t BUF_SIZE = OB_MAX_PARTITION_NAME_LENGTH;
     char buf[BUF_SIZE];
@@ -2606,7 +2597,7 @@ int ObPartitionSchema::try_generate_subpart_by_template(bool &generated)
           } else if (OB_FAIL(subpart.assign(*def_subpart_array[j]))) {
             LOG_WARN("fail to assign subpart", KR(ret));
           } else if (OB_FAIL(databuff_printf(buf, BUF_SIZE, pos, "%s%s%s",
-                     part->get_part_name().ptr(), is_oracle_mode ? "S" : "s",
+                     part->get_part_name().ptr(), "s",
                      def_subpart_array[j]->get_part_name().ptr()))) {
             LOG_WARN("part name is too long", KR(ret), KPC(part), K(subpart));
           } else if (FALSE_IT(sub_part_name.assign_ptr(buf, static_cast<int32_t>(strlen(buf))))) {
@@ -3557,7 +3548,6 @@ int ObPartitionSchema::mock_list_partition_array()
 {
   int ret = OB_SUCCESS;
   const uint64_t table_id = get_table_id();
-  bool is_oracle_mode = false;
   if (!is_virtual_table(table_id)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("only virtual table need mock partition array", KR(ret), K(table_id));
@@ -3566,17 +3556,13 @@ int ObPartitionSchema::mock_list_partition_array()
              || 1 != get_first_part_num()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("invalid part option", KR(ret), K(table_id), K_(part_option));
-  } else if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(table_id));
   } else {
     reset_partition_array();
     ObPartition partition;
     char buf[OB_MAX_PARTITION_NAME_LENGTH] = {'\0'};
     // inner table use pure schema id as part_id
     const int64_t part_id = table_id;
-    const char* part_name_str  = is_oracle_mode ?
-                                 ORACLE_NON_PARTITIONED_TABLE_PART_NAME :
-                                 MYSQL_NON_PARTITIONED_TABLE_PART_NAME;
+    const char* part_name_str  = MYSQL_NON_PARTITIONED_TABLE_PART_NAME;
     ObString part_name(strlen(part_name_str), part_name_str);
 
     partition.set_tenant_id(get_tenant_id());
@@ -4221,14 +4207,6 @@ int ObTablegroupSchema::calc_subpart_func_expr_num(int64_t &subpart_func_expr_nu
 {
   int ret = OB_SUCCESS;
   subpart_func_expr_num = sub_part_func_expr_num_;
-  return ret;
-}
-
-int ObTablegroupSchema::check_if_oracle_compat_mode(bool &is_oracle_mode) const
-
-{
-  int ret = OB_SUCCESS;
-  is_oracle_mode = true;
   return ret;
 }
 

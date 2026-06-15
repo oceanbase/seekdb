@@ -163,7 +163,6 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
   uint64_t cell_idx = 0;
 
   bool strict_mode = false;
-  bool is_oracle_mode = false;
   bool sql_quote_show_create = true;
   bool ansi_quotes = false;
   if (OB_UNLIKELY(NULL == schema_guard_
@@ -188,15 +187,11 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
   } else if (OB_ISNULL(table_def_buf)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table_def_buf is null", K(ret), K(table_def_buf_size));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    SERVER_LOG(WARN, "failed to check if oracle mode", K(ret));
   } else if (OB_FAIL(session_->get_show_ddl_in_compat_mode(strict_mode))) {
     SERVER_LOG(WARN, "failed to get _show_ddl_in_compat_mode", K(ret));
   } else if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
     SERVER_LOG(WARN, "failed to get sql quote show create", K(ret));
   } else {
-    //_show_ddl_in_compat_mode do not support oracle mode now
-    strict_mode &= !is_oracle_mode;
     IS_ANSI_QUOTES(session_->get_sql_mode(), ansi_quotes);
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       uint64_t col_id = output_column_ids_.at(i);

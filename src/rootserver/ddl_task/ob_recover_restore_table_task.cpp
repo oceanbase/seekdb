@@ -188,7 +188,6 @@ int ObRecoverRestoreTableTask::fail()
   obcall::ObDropTableArg drop_table_arg;
   obcall::ObDDLRes drop_table_res;
   {
-    bool is_oracle_mode = false;
     int64_t all_indexes_tablets_count = 0;
     const ObDatabaseSchema *db_schema = nullptr;
     const ObTableSchema *table_schema = nullptr;
@@ -210,8 +209,6 @@ int ObRecoverRestoreTableTask::fail()
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_BAD_DATABASE;
       LOG_WARN("database id is invalid", K(ret), K(dst_tenant_id_), "db_id", table_schema->get_database_id());
-    } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("failed to check if oralce compat mode", K(ret));
     } else if (OB_FAIL(ObDDLUtil::get_all_indexes_tablets_count(dst_tenant_schema_guard, dst_tenant_id_, target_object_id_, all_indexes_tablets_count))) {
       LOG_WARN("get all indexes tablets count failed", K(ret));
     } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_indexes_tablets_count + table_schema->get_all_part_num(), rpc_timeout))) {

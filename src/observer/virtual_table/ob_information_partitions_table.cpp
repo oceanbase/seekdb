@@ -162,7 +162,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
   int ret = OB_SUCCESS;
   ObPartitionLevel part_level = table_schema.get_part_level();
   ObPartitionSchemaIter::Info part_info;
-  bool is_oracle_mode = false;
   ObPartitionSchemaIter part_iter(table_schema,
                                   ObCheckPartitionMode::CHECK_PARTITION_MODE_NORMAL);
   if (OB_ISNULL(cells) || col_count > reserved_column_cnt_) {
@@ -171,8 +170,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
   } else if (PARTITION_LEVEL_MAX == part_level) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "get unexpected part level", K(ret));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    SERVER_LOG(WARN, "fail to check oracle mode", KR(ret), K(table_schema));
   }
   while (OB_SUCC(ret) && OB_SUCC(part_iter.next_partition_info(part_info))) {
     int64_t cell_idx = 0;
@@ -342,14 +339,14 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
         case PARTITION_DESCRIPTION: {
           ObString desc;
           if (table_schema.is_range_part()) {
-            if (OB_FAIL(gen_high_bound_val_str(is_oracle_mode, part_info.part_, desc))) {
+            if (OB_FAIL(gen_high_bound_val_str(false/*is_oracle_mode*/, part_info.part_, desc))) {
               SERVER_LOG(WARN, "fail to generate PARTITION_DESCRIPTION", K(ret), K(part_info));
             } else {
               cells[cell_idx].set_varchar(desc);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           } else if (table_schema.is_list_part()) {
-            if (OB_FAIL(gen_list_bound_val_str(is_oracle_mode, part_info.part_, desc))) {
+            if (OB_FAIL(gen_list_bound_val_str(false/*is_oracle_mode*/, part_info.part_, desc))) {
               SERVER_LOG(WARN, "fail to generate PARTITION_DESCRIPTION", K(ret), K(part_info));
             } else {
               cells[cell_idx].set_varchar(desc);

@@ -4670,7 +4670,6 @@ int ObDDLUtil::check_table_empty(
 {
   int ret = OB_SUCCESS;
   is_table_empty = false;
-  bool is_oracle_mode = false;
   uint64_t table_id = OB_INVALID_ID;
   if (!table_schema.is_valid() || database_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
@@ -4679,8 +4678,6 @@ int ObDDLUtil::check_table_empty(
   } else if (OB_INVALID_ID == table_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret), K(table_schema));
   } else {
     const ObString &table_name = table_schema.get_table_name_str();
     ObSqlString sql_string;
@@ -4701,12 +4698,7 @@ int ObDDLUtil::check_table_empty(
     sqlclient::ObISQLConnection *connection = nullptr;
     const ObSysVarSchema *var_schema = nullptr;
 
-    if (is_oracle_mode) {
-      format_str = "SELECT /*+ %.*s */ 1 FROM \"%.*s\".\"%.*s\" WHERE NOT 1 != 1 AND ROWNUM = 1";
-      if (OB_FAIL(single_conn_proxy.connect(tenant_id, 0/*group_id*/, &oracle_sql_proxy))) {
-        LOG_WARN("failed to get mysql connect", KR(ret), K(tenant_id));
-      }
-    } else {
+    {
       format_str = "SELECT /*+ %.*s */ 1 FROM `%.*s`.`%.*s` WHERE NOT 1 != 1 LIMIT 1";
       if (OB_FAIL(single_conn_proxy.connect(tenant_id, 0/*group_id*/, GCTX.sql_proxy_))) {
         LOG_WARN("failed to get mysql connect", KR(ret), K(tenant_id));
@@ -4736,14 +4728,14 @@ int ObDDLUtil::check_table_empty(
                   allocator,
                   database_name,
                   new_database_name,
-                  is_oracle_mode))) {
+                  false))) {
         LOG_WARN("fail to generate new name with escape character",
                   K(ret), K(database_name));
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                          allocator,
                          table_name,
                          new_table_name,
-                         is_oracle_mode))) {
+                         false))) {
         LOG_WARN("fail to generate new name with escape character",
                   K(ret), K(table_name));
       } else if (OB_FAIL(session_param.ddl_info_.init(ddl_info, table_schema.get_session_id()))) {
@@ -4983,11 +4975,8 @@ int ObDDLUtil::convert_to_storage_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(table_schema));
   } else {
-    bool is_oracle_mode = false;
     Worker::CompatMode compat_mode;
-    if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check if oracle compat mode", K(ret), KPC(table_schema));
-    } else if (FALSE_IT(compat_mode = Worker::CompatMode::MYSQL)) {
+    if (FALSE_IT(compat_mode = Worker::CompatMode::MYSQL)) {
     } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, storage_schema))) {
       LOG_WARN("alloc and new failed", K(ret));
     } else if (OB_FAIL(storage_schema->init(allocator, *table_schema, compat_mode))) {

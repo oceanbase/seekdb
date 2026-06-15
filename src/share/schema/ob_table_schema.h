@@ -1046,7 +1046,6 @@ public:
 
   static uint64_t extract_data_table_id_from_index_name(const common::ObString &index_name);
   int generate_origin_index_name();
-  virtual int check_if_oracle_compat_mode(bool &is_oracle_mode) const;
   // interface derived
   // TODO: dup code, need merge with ObTableSchema
   //

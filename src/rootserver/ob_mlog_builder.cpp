@@ -769,12 +769,9 @@ int ObMLogBuilder::set_basic_infos(
   } else {
     ObString mlog_table_name;
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-    bool is_oracle_mode = false;
     ObTableType mlog_type = MATERIALIZED_VIEW_LOG;
-    if (OB_FAIL(base_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("failed to check if oracle compat mode", KR(ret));
-    } else if (OB_FAIL(ObTableSchema::build_mlog_table_name(allocator, create_mlog_arg.table_name_,
-                                                            mlog_table_name, is_oracle_mode,
+    if (OB_FAIL(ObTableSchema::build_mlog_table_name(allocator, create_mlog_arg.table_name_,
+                                                            mlog_table_name, false/*is_oracle_mode*/,
                                                             create_mlog_arg.create_tmp_mlog_))) {
       LOG_WARN("failed to build mlog table name", KR(ret), K(create_mlog_arg.table_name_));
     } else if (OB_FAIL(mlog_schema.set_table_name(mlog_table_name))) {

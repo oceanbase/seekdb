@@ -5314,7 +5314,6 @@ int ObResolverUtils::unique_idx_covered_partition_columns(
   int ret = OB_SUCCESS;
   const ObColumnSchemaV2 *column_schema = NULL;
   const ObPartitionKeyColumn *column = NULL;
-  bool is_oracle_mode = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_info.get_size(); i++) {
     column = partition_info.get_column(i);
     if (OB_ISNULL(column)) {
@@ -5324,20 +5323,6 @@ int ObResolverUtils::unique_idx_covered_partition_columns(
       if (OB_ISNULL(column_schema = table_schema.get_column_schema(column->column_id_))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Column schema is NULL", K(ret));
-      } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("failed to check if oralce compat mode", K(ret));
-      } else if (is_oracle_mode && column_schema->is_generated_column()) {
-        ObSEArray<uint64_t, 5> cascaded_columns;
-        if (OB_FAIL(column_schema->get_cascaded_column_ids(cascaded_columns))) {
-          LOG_WARN("Failed to get cascaded column ids", K(ret));
-        } else {
-          for (int64_t idx = 0; OB_SUCC(ret) && idx < cascaded_columns.count(); ++idx) {
-            if (!has_exist_in_array(index_columns, cascaded_columns.at(idx))) {
-              ret = OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF;
-              LOG_USER_ERROR(OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF, "UNIQUE INDEX");
-            }
-          }
-        }
       } else {
         ret = OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF;
         LOG_USER_ERROR(OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF, is_heap_table_primary_key ? "PRIMARY KEY" : "UNIQUE INDEX");
@@ -6348,10 +6333,7 @@ int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *
   const ObColumnSchemaV2 *tmp_index_col = NULL;
   const ObIndexInfo &index_info = index_table_schema->get_index_info();
   is_match = false;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(index_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret));
-  } else if (index_info.get_size() == create_index_arg.index_columns_.count()
+  if (index_info.get_size() == create_index_arg.index_columns_.count()
       && create_index_arg.index_columns_.count() > 0) {
     for (int64_t idx = 0; is_tmp_match && idx < index_info.get_size(); ++idx) {
       if (OB_ISNULL(tmp_index_col = index_table_schema->get_column_schema(index_info.get_column(idx)->column_id_))) {
@@ -6362,7 +6344,7 @@ int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *
         tmp_order_type_1 = tmp_index_col->get_order_in_rowkey();
         tmp_col_name_2 = create_index_arg.index_columns_.at(idx).column_name_;
         tmp_order_type_2 = create_index_arg.index_columns_.at(idx).order_type_;
-        const bool name_eq = is_oracle_mode ? tmp_col_name_1 == tmp_col_name_2 : 0 == tmp_col_name_1.case_compare(tmp_col_name_2);
+        const bool name_eq = 0 == tmp_col_name_1.case_compare(tmp_col_name_2);
         if (!name_eq || (tmp_order_type_1 != tmp_order_type_2)) {
           is_tmp_match = false;
         }

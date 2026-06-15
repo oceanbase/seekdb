@@ -1868,7 +1868,6 @@ int ObLocalScan::construct_access_param(
   ObArray<int32_t> cols_index;
   ObArray<ObColDesc> tmp_col_ids;
   ObArray<int32_t> cg_idxs;
-  bool is_oracle_mode = false;
   bool has_all_cg = true; /* default is row store*/
   // to construct column index, i.e., cols_index.
   if (OB_FAIL(data_table_schema.get_store_column_ids(tmp_col_ids, false))) {
@@ -1912,12 +1911,10 @@ int ObLocalScan::construct_access_param(
   } else if (cols_index.count() != extended_gc_.extended_col_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), K(cols_index), K(extended_gc_));
-  } else if (OB_FAIL(data_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-      STORAGE_LOG(WARN, "Failed to check oralce mode", K(ret));
   } else if (OB_FAIL(read_info_.init(allocator_,
                                      data_table_schema.get_column_count(),
                                      data_table_schema.get_rowkey_column_num(),
-                                     is_oracle_mode,
+                                     false/*is_oracle_mode*/,
                                      extended_gc_.extended_col_ids_, // TODO @yiren, remove column id.
                                      &cols_index,
                                      &col_params_,
@@ -2183,7 +2180,6 @@ int ObRemoteScan::init(const uint64_t tenant_id,
     ObSqlString sql_string;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *hidden_table_schema = nullptr;
-    bool is_oracle_mode = false;
     const int64_t extra_rowkey_cnt = storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> time_zone; // unused
     if (OB_FAIL((ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
@@ -2196,8 +2192,6 @@ int ObRemoteScan::init(const uint64_t tenant_id,
       LOG_WARN("table not exist", K(ret), K(dest_tenant_id), K(dest_table_id));
     } else if (OB_FAIL(hidden_table_schema->get_store_column_ids(org_col_ids_))) {
       LOG_WARN("fail to get store column ids", K(ret));
-    } else if (OB_FAIL(hidden_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("Failed to check oralce mode", K(ret));
     } else if (OB_UNLIKELY(org_col_ids_.count() <= 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("org col ids count is 0", K(ret));
@@ -2222,9 +2216,7 @@ int ObRemoteScan::init(const uint64_t tenant_id,
         LOG_WARN("failed to get tenant sys time zone wrap", K(dest_tenant_id_));
       } else if (OB_FAIL(generate_build_select_sql(sql_string))) {
         LOG_WARN("fail to generate build replica sql", K(ret), K(sql_string));
-      } else if (is_oracle_mode && OB_FAIL(prepare_iter(sql_string, GCTX.ddl_oracle_sql_proxy_))) {
-        LOG_WARN("prepare iter under oracle mode failed", K(ret), K(sql_string));
-      } else if (!is_oracle_mode && OB_FAIL(prepare_iter(sql_string, GCTX.ddl_sql_proxy_))) {
+      } else if (OB_FAIL(prepare_iter(sql_string, GCTX.ddl_sql_proxy_))) {
         LOG_WARN("prepare iter under mysql mode failed", K(ret), K(sql_string));
       } else {
         schema_rowkey_cnt_ = hidden_table_schema->get_rowkey_column_num();
@@ -2246,7 +2238,6 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
   ObSchemaGetterGuard hold_buf_dst_tenant_schema_guard;
   ObSchemaGetterGuard *src_tenant_schema_guard = nullptr;
   ObSchemaGetterGuard *dst_tenant_schema_guard = nullptr;
-  bool is_oracle_mode = false;
   ObArray<ObColDesc> dest_column_ids;
   const ObDatabaseSchema *orig_db_schema = nullptr;
   const share::schema::ObTableSchema *orig_table_schema = nullptr;
@@ -2267,9 +2258,7 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
     } else if (OB_ISNULL(orig_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exist", K(ret), K(tenant_id_), K(table_id_));
-    }  else if (OB_FAIL(orig_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("Failed to check oralce mode", K(ret));
-    } else if (OB_FAIL(src_tenant_schema_guard->get_database_schema(tenant_id_, orig_table_schema->get_database_id(), orig_db_schema))) {
+    }  else if (OB_FAIL(src_tenant_schema_guard->get_database_schema(tenant_id_, orig_table_schema->get_database_id(), orig_db_schema))) {
       LOG_WARN("fail to get database schema", K(ret), K(tenant_id_));
     } else if (OB_ISNULL(orig_db_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -2308,19 +2297,19 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
 
       if (OB_SUCC(ret)) {
         ObSqlString query_column_sql_string;
-        if (OB_FAIL(ObDDLUtil::generate_column_name_str(column_names_, is_oracle_mode, true, true, false/*use_heap_table_ddl_plan*/, query_column_sql_string))) {
+        if (OB_FAIL(ObDDLUtil::generate_column_name_str(column_names_, false/*is_oracle_mode*/, true, true, false/*use_heap_table_ddl_plan*/, query_column_sql_string))) {
           LOG_WARN("fail to generate column name str", K(ret));
         } else {
           ObString orig_database_name_with_escape;
           ObString orig_table_name_with_escape;
           ObSqlString query_partition_sql;
           const bool is_part_table = orig_table_schema->is_partitioned_table();
-          const char *split_char = is_oracle_mode ? "\"" : "`";
+          const char *split_char = "`";
           if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-              allocator_, orig_db_schema->get_database_name_str(), orig_database_name_with_escape, is_oracle_mode))) {
+              allocator_, orig_db_schema->get_database_name_str(), orig_database_name_with_escape, false/*is_oracle_mode*/))) {
             LOG_WARN("generate new name failed", K(ret));
           } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-              allocator_, orig_table_schema->get_table_name_str(), orig_table_name_with_escape, is_oracle_mode))) {
+              allocator_, orig_table_schema->get_table_name_str(), orig_table_name_with_escape, false/*is_oracle_mode*/))) {
             LOG_WARN("generate new name failed", K(ret));
           } else if (is_part_table) {
             ObString partition_name_with_escape;
@@ -2328,7 +2317,7 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
             if (OB_FAIL(fetch_source_part_info(src_tablet_id_, *orig_table_schema, source_partition))) {
               LOG_WARN("fetch source part info failed", K(ret));
             } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-              allocator_, source_partition->get_part_name(), partition_name_with_escape, is_oracle_mode))) {
+              allocator_, source_partition->get_part_name(), partition_name_with_escape, false/*is_oracle_mode*/))) {
               LOG_WARN("generate new name failed", K(ret), KPC(source_partition));
             } else if (OB_FAIL(query_partition_sql.assign_fmt("%s%.*s%s.%s%.*s%s partition (%s%.*s%s)",
                 split_char, static_cast<int>(orig_database_name_with_escape.length()), orig_database_name_with_escape.ptr(), split_char,
@@ -2348,7 +2337,7 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
                             static_cast<int>(query_column_sql_string.length()), query_column_sql_string.ptr(),
                             static_cast<int>(query_partition_sql.length()), query_partition_sql.ptr()))) {
             LOG_WARN("fail to assign sql string", K(ret), K(query_column_sql_string), K(query_partition_sql));
-          } else if (OB_FAIL(generate_range_condition(*datum_range_, is_oracle_mode, sql_string))) {
+          } else if (OB_FAIL(generate_range_condition(*datum_range_, false/*is_oracle_mode*/, sql_string))) {
             LOG_WARN("fail to generate range condition sql", K(ret), KPC(datum_range_), K(query_partition_sql));
           } else if (OB_FAIL(sql_string.append(" order by "))) {
             LOG_WARN("append failed", K(ret));

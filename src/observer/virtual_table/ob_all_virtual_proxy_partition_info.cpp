@@ -567,12 +567,9 @@ int ObAllVirtualProxyPartitionInfo::gen_proxy_part_pruning_str_(
     ObString &proxy_check_partition_str)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_ISNULL(allocator_) || OB_ISNULL(column_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(allocator_), K(column_schema), KR(ret));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to get compat mode", KR(ret), K(table_schema));
   } else {
     SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], expr_str_buf) {
       MEMSET(expr_str_buf, 0, OB_MAX_DEFAULT_VALUE_LENGTH);

@@ -386,11 +386,8 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
   int64_t pos = 0;
   ObSessionPrivInfo session_priv;
   const ObDatabaseSchema *db_schema = NULL;
-  bool is_oracle_mode = false;
   const uint64_t tenant_id = table_schema.get_tenant_id();
-  if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(table_schema));
-  } else if (OB_ISNULL(cur_row_.cells_) || OB_ISNULL(allocator_)|| OB_ISNULL(session_) ||
+  if (OB_ISNULL(cur_row_.cells_) || OB_ISNULL(allocator_)|| OB_ISNULL(session_) ||
       OB_ISNULL(schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data member is not init", K(ret), K(cur_row_.cells_), K(allocator_), K(session_));
@@ -421,7 +418,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
     }
   }
   const common::ObIArray<uint64_t> &enable_role_id_array = session_->get_enable_role_array();
-  if (OB_SUCC(ret) && !is_oracle_mode) {
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_guard_->collect_all_priv_for_column(session_priv,
                                                            enable_role_id_array,
                                                            db_schema->get_database_name_str(),
@@ -456,9 +453,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           LOG_WARN("fail to get data type str",K(ret), K(column_schema.get_data_type()));
           break;
         } else {
-          if (is_oracle_mode) {
-            ObCharset::caseup(ObCollationType::CS_TYPE_UTF8MB4_BIN, type_val);
-          }
           cur_row_.cells_[cell_idx].set_varchar(type_val);
           cur_row_.cells_[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -709,28 +703,13 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
         } else if (OB_UNLIKELY(NULL == db_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("database schema is null", K(ret), KP(db_schema));
-        } else if (is_oracle_mode) {
-          ObNeedPriv need_priv(db_schema->get_database_name(), 
-                               table_schema.get_table_name(),
-                               OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
-          OZ (fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_SELECT, "SELECT,",
-                             buf, buf_len, pos));
-          OZ (fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_INSERT, "INSERT,",
-                             buf, buf_len, pos));
-          OZ (fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_UPDATE, "UPDATE,",
-                             buf, buf_len, pos));
-          OZ (fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_DELETE, "DELETE,",
-                             buf, buf_len, pos));
-          OZ (fill_col_privs(session_priv, enable_role_id_array, need_priv, OB_PRIV_REFERENCES, "REFERENCES,",
-                             buf, buf_len, pos));
-          
         } else {
-          ObNeedPriv need_priv(db_schema->get_database_name(), 
+          ObNeedPriv need_priv(db_schema->get_database_name(),
                       table_schema.get_table_name(),
                       OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
 
           need_priv.priv_set_ = OB_PRIV_SELECT;
-          if (0 != (col_priv_set & OB_PRIV_SELECT) 
+          if (0 != (col_priv_set & OB_PRIV_SELECT)
               || OB_SUCCESS == schema_guard_->check_single_table_priv(session_priv, enable_role_id_array, need_priv)) {
             ret = databuff_printf(buf, buf_len, pos, "SELECT,");
           }
@@ -1228,7 +1207,6 @@ int ObTableColumns::resolve_view_definition(
     The previous logic here was to switch tenants before resolving the view definition, however, the resolver layer already has a set of tenant switching logic, having both coexist is difficult to maintain and prone to issues,
     Now we are modifying it, constructing a select * from view statement, transferring the tenant switching logic to the resolver
   */
-  bool is_oracle_mode = false;
   const ObDatabaseSchema *db_schema = NULL;
   const uint64_t tenant_id = table_schema.get_tenant_id();
   if (OB_UNLIKELY(!table_schema.is_view_table()
@@ -1247,8 +1225,6 @@ int ObTableColumns::resolve_view_definition(
     ret = OB_ERR_BAD_DATABASE;
     LOG_WARN("db_schema is null", K(ret), K(tenant_id),
         K(session->get_effective_tenant_id()), K(table_schema.get_database_id()));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(table_schema));
   } else {
     // construct sql
     const ObString &db_name = db_schema->get_database_name_str();
@@ -1283,9 +1259,7 @@ int ObTableColumns::resolve_view_definition(
     } else {
 #endif
     ObSqlString select_sql;
-    if (OB_FAIL(select_sql.append_fmt(is_oracle_mode
-                                        ? "select * from \"%.*s\".\"%.*s\""
-                                        : "select * from `%.*s`.`%.*s`",
+    if (OB_FAIL(select_sql.append_fmt("select * from `%.*s`.`%.*s`",
                                       db_name.length(),
                                       db_name.ptr(),
                                       table_name.length(),

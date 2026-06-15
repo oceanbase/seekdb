@@ -1701,7 +1701,6 @@ int ObPLDDLService::check_and_construct_restore_trigger_info(
 {
   int ret = OB_SUCCESS;
   need_rebuild = true;
-  bool is_oracle_mode = false;
   const ObDatabaseSchema *src_db_schema = nullptr;
   const ObDatabaseSchema *dst_db_schema = nullptr;
   const uint64_t src_tenant_id = orig_table_schema.get_tenant_id();
@@ -1709,9 +1708,7 @@ int ObPLDDLService::check_and_construct_restore_trigger_info(
   if (OB_UNLIKELY(src_tenant_id == dst_tenant_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant is same", K(ret), K(src_tenant_id), K(dst_tenant_id));
-  } else if (OB_FAIL(orig_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to check if oralce compat mode", K(ret));
-  } else if (OB_FAIL(src_tenant_schema_guard.get_database_schema(src_tenant_id, 
+  } else if (OB_FAIL(src_tenant_schema_guard.get_database_schema(src_tenant_id,
       orig_table_schema.get_database_id(), src_db_schema))) {
     LOG_WARN("get db schema failed", K(ret), K(src_tenant_id), "db_id", orig_table_schema.get_database_id());
   } else if (OB_ISNULL(src_db_schema)) {

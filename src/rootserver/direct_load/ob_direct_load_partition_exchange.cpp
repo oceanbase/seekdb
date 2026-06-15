@@ -47,7 +47,6 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(
     const ObIArray<ObTabletID> &inc_table_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   int64_t schema_version = OB_INVALID_VERSION;
   const ObPartitionLevel exchange_partition_level = base_table_schema.get_part_level();
   ObPartitionExchangeType part_exchange_type = (PARTITION_LEVEL_ONE == exchange_partition_level) ?
@@ -57,47 +56,45 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(
 
   if (OB_FAIL(schema_guard.get_schema_version(tenant_id, schema_version))) {
     LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id), K(schema_version));
-  } else if (OB_FAIL(base_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check_if_oracle_compat_mode failed", KR(ret), K(is_oracle_mode));
   } else if (OB_FAIL(check_multipart_exchange_conditions(schema_guard,
                                                          base_table_schema,
                                                          inc_table_schema,
                                                          base_table_tablet_ids,
                                                          inc_table_tablet_ids,
-                                                         is_oracle_mode))) {
+                                                         false/*is_oracle_mode*/))) {
     LOG_WARN("failed to check multipart exchange conditions", KR(ret), K(base_table_schema),
-        K(inc_table_schema), K(base_table_tablet_ids), K(inc_table_tablet_ids), K(is_oracle_mode));
+        K(inc_table_schema), K(base_table_tablet_ids), K(inc_table_tablet_ids));
   } else if (OB_FAIL(inner_init(base_table_schema,
                                 inc_table_schema,
-                                is_oracle_mode,
+                                false/*is_oracle_mode*/,
                                 schema_guard))) {
-    LOG_WARN("failed to inner init", KR(ret), K(base_table_schema), K(inc_table_schema), K(is_oracle_mode));
+    LOG_WARN("failed to inner init", KR(ret), K(base_table_schema), K(inc_table_schema));
   } else if (OB_FAIL(exchange_data_table_partitions(tenant_id,
                                                     base_table_schema,
                                                     inc_table_schema,
                                                     base_table_tablet_ids,
                                                     inc_table_tablet_ids,
-                                                    is_oracle_mode,
+                                                    false/*is_oracle_mode*/,
                                                     part_exchange_type,
                                                     ddl_operator,
                                                     trans,
                                                     schema_guard))) {
     LOG_WARN("failed to exchange data table partitions",
         KR(ret), K(tenant_id), K(base_table_schema), K(inc_table_schema),
-        K(base_table_tablet_ids), K(inc_table_tablet_ids), K(is_oracle_mode), K(part_exchange_type));
+        K(base_table_tablet_ids), K(inc_table_tablet_ids), K(part_exchange_type));
   } else if (OB_FAIL(exchange_auxiliary_table_partitions(tenant_id,
                                                          base_table_schema,
                                                          inc_table_schema,
                                                          base_table_tablet_ids,
                                                          inc_table_tablet_ids,
-                                                         is_oracle_mode,
+                                                         false/*is_oracle_mode*/,
                                                          part_exchange_type,
                                                          ddl_operator,
                                                          trans,
                                                          schema_guard))) {
     LOG_WARN("failed to exchange auxiliary table partitions",
         KR(ret), K(tenant_id), K(base_table_schema), K(inc_table_schema),
-        K(base_table_tablet_ids), K(inc_table_tablet_ids), K(is_oracle_mode), K(part_exchange_type));
+        K(base_table_tablet_ids), K(inc_table_tablet_ids), K(part_exchange_type));
   } else {
     int64_t new_inc_schema_version = OB_INVALID_VERSION;
     int64_t new_base_schema_version = OB_INVALID_VERSION;

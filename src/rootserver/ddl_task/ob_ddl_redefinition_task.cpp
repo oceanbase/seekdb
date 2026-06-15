@@ -516,18 +516,11 @@ int ObDDLRedefinitionTask::get_validate_checksum_columns_id(const ObTableSchema 
   const ObTableSchema &dest_table_schema, hash::ObHashMap<uint64_t, uint64_t> &validate_checksum_columns_id)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, REDEF_TASK_GET_CHECKSUM_COLUMNS_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
-  } else if (OB_FAIL(alter_table_arg_.alter_table_schema_.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", K(ret), K(object_id_), "dest_table_id", target_object_id_);
   } else {
     ObSQLMode sql_mode = alter_table_arg_.sql_mode_;
-    if (is_oracle_mode) {
-      sql_mode = SMO_STRICT_ALL_TABLES;
-    } else {
-      sql_mode = sql_mode & (~SMO_PAD_CHAR_TO_FULL_LENGTH);
-    }
+    sql_mode = sql_mode & (~SMO_PAD_CHAR_TO_FULL_LENGTH);
     ObArray<uint64_t> column_ids;
     ObColumnNameMap col_name_map;
     if (OB_FAIL(data_table_schema.get_column_ids(column_ids))) {
@@ -586,13 +579,13 @@ int ObDDLRedefinitionTask::get_validate_checksum_columns_id(const ObTableSchema 
           (cur_column_schema->get_encoding_type() != dest_column_schema->get_encoding_type() ||
           cur_column_schema->get_collation_type() != dest_column_schema->get_collation_type())) {
             // do not validate the column checksum if encoding type and collation type change;
-        } else if (is_strict_mode(sql_mode) && check_can_validate_column_checksum(is_oracle_mode, *cur_column_schema, *dest_column_schema)) {
+        } else if (is_strict_mode(sql_mode) && check_can_validate_column_checksum(false, *cur_column_schema, *dest_column_schema)) {
           if (OB_FAIL(validate_checksum_columns_id.set_refactored(cur_column_id, dest_column_schema->get_column_id()))) {
-            LOG_WARN("fail to append the column to validate the checksum", K(ret), K(is_oracle_mode), K(is_strict_mode(sql_mode)),
+            LOG_WARN("fail to append the column to validate the checksum", K(ret), K(is_strict_mode(sql_mode)),
             K(cur_column_schema->get_data_type()), K(dest_column_schema->get_data_type()),
             K(cur_column_schema->get_data_length()), K(dest_column_schema->get_data_length()));
           } else {
-            LOG_INFO("succeed to append the column to validate the checksum", K(is_oracle_mode), K(is_strict_mode(sql_mode)),
+            LOG_INFO("succeed to append the column to validate the checksum", K(is_strict_mode(sql_mode)),
             K(cur_column_schema->get_data_type()), K(dest_column_schema->get_data_type()),
             K(cur_column_schema->get_data_length()), K(dest_column_schema->get_data_length()));
           }

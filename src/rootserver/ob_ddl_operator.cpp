@@ -1236,22 +1236,12 @@ int ObDDLOperator::reinit_autoinc_row(const ObTableSchema &table_schema,
   ObAutoincrementService &autoinc_service = share::ObAutoincrementService::get_instance();
 
   if (0 != column_id) {
-    bool is_oracle_mode = false;
-    if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check is oracle mode",
-                KR(ret), K(table_id), K(table_name), K(truncate_version), K(column_id));
-    } else if (is_oracle_mode) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("in oracle mode, autoic_column_id must be illegal",
-              KR(ret), K(table_id), K(table_name), K(truncate_version), K(column_id));
-    } else {
-      // reinit auto_increment value
-      uint64_t tenant_id = table_schema.get_tenant_id();
-      if (OB_FAIL(autoinc_service.reinit_autoinc_row(tenant_id, table_id,
-                                                     column_id, truncate_version, trans))) {
-        LOG_WARN("failed to reint auto_increment",
-                KR(ret), K(tenant_id), K(table_id), K(table_name), K(truncate_version), K(column_id));
-      }
+    // reinit auto_increment value
+    uint64_t tenant_id = table_schema.get_tenant_id();
+    if (OB_FAIL(autoinc_service.reinit_autoinc_row(tenant_id, table_id,
+                                                   column_id, truncate_version, trans))) {
+      LOG_WARN("failed to reint auto_increment",
+              KR(ret), K(tenant_id), K(table_id), K(table_name), K(truncate_version), K(column_id));
     }
   }
   int64_t finish_time = ObTimeUtility::current_time();
@@ -2667,15 +2657,9 @@ int ObDDLOperator::alter_table_drop_foreign_key(const ObTableSchema &table_schem
       }
     }
     if (OB_SUCC(ret) && OB_ISNULL(foreign_key_info)) {
-      bool is_oracle_mode = false;
-      if (is_oracle_mode) {
-       ret = OB_ERR_NONEXISTENT_CONSTRAINT;
-       LOG_WARN("Cannot drop foreign key constraint  - nonexistent constraint", K(ret), K(foreign_key_name), K(table_schema.get_table_name_str()));
-      } else {
-       ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
-       LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, foreign_key_name.length(), foreign_key_name.ptr());
-       LOG_WARN("Cannot drop foreign key constraint  - nonexistent constraint", K(ret), K(foreign_key_name), K(table_schema.get_table_name_str()));
-      }
+      ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
+      LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, foreign_key_name.length(), foreign_key_name.ptr());
+      LOG_WARN("Cannot drop foreign key constraint  - nonexistent constraint", K(ret), K(foreign_key_name), K(table_schema.get_table_name_str()));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
@@ -4792,19 +4776,7 @@ int ObDDLOperator::flashback_table_from_recyclebin(const ObTableSchema &table_sc
           new_table_schema.set_invisible_before(0);
         }
         if (OB_SUCC(ret) && new_table_schema.is_index_table()) {
-          bool is_oracle_mode = false;
-          if (OB_FAIL(new_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-            LOG_WARN("fail check if oracle mode", K(ret));
-          } else if (is_oracle_mode) {
-            ObString new_idx_name;
-            if (OB_FAIL(ObTableSchema::create_new_idx_name_after_flashback(new_table_schema,
-                                                                           new_idx_name,
-                                                                           allocator,
-                                                                           guard))) {
-            } else if (OB_FAIL(new_table_schema.set_table_name(new_idx_name))) {
-              LOG_WARN("set new table name failed", K(ret));
-            }
-          }
+          // oracle mode index rename after flashback removed (MySQL-only)
         }
       } else {
         if (!new_table_name.empty()) {
@@ -4847,19 +4819,7 @@ int ObDDLOperator::flashback_table_from_recyclebin(const ObTableSchema &table_sc
         new_table_schema.set_invisible_before(0);
       }
       if (OB_SUCC(ret) && new_table_schema.is_index_table()) {
-        bool is_oracle_mode = false;
-        if (OB_FAIL(new_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-          LOG_WARN("fail check if oracle mode", K(ret));
-        } else if (is_oracle_mode) {
-          ObString new_idx_name;
-          if (OB_FAIL(ObTableSchema::create_new_idx_name_after_flashback(new_table_schema,
-                                                                         new_idx_name,
-                                                                         allocator,
-                                                                         guard))) {
-          } else if (OB_FAIL(new_table_schema.set_table_name(new_idx_name))) {
-            LOG_WARN("set new table name failed", K(ret));
-          }
-        }
+        // oracle mode index rename after flashback removed (MySQL-only)
       }
     }
     if (OB_SUCC(ret)) {
@@ -8160,11 +8120,7 @@ int ObDDLOperator::revise_not_null_constraint_info(
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(arg.tenant_id_, new_schema_version))) {
     LOG_WARN("fail to gen new schema_version", K(ret), K(arg.tenant_id_));
   } else {
-    bool is_oracle_mode = false;
     uint64_t new_cst_id = OB_INVALID_ID;
-    if (OB_FAIL(ori_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail check if oracle mode", K(ret));
-    }
     for (int64_t i = 0; OB_SUCC(ret) && i < not_null_cols.count(); ++i) {
       ObArenaAllocator allocator("ReviseNotNulCst");
       ObString cst_name;
@@ -8189,7 +8145,7 @@ int ObDDLOperator::revise_not_null_constraint_info(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("duplicate name constraint already exists", K(ret), KPC(ori_table_schema));
       } else if (OB_FAIL(ObResolverUtils::create_not_null_expr_str(
-                  col_schema->get_column_name_str(), allocator, check_expr_str, is_oracle_mode))) {
+                  col_schema->get_column_name_str(), allocator, check_expr_str, false/*is_oracle_mode*/))) {
         LOG_WARN("create not null expr str failed", K(ret));
       } else if (OB_FAIL(schema_service->fetch_new_constraint_id(tenant_id, new_cst_id))) {
         LOG_WARN("failed to fetch new constraint id", K(ret));

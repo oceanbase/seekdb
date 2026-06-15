@@ -1503,7 +1503,6 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
   const bool from_non_partitioned_table = orig_table_schema.get_part_level() == PARTITION_LEVEL_ZERO;
   const int64_t part_num = alter_table_schema.get_partition_num();
   share::schema::ObPartition **part_array = alter_table_schema.get_part_array();
-  bool is_oracle_mode = false;
   ObSqlString sql_string;
   ObArenaAllocator tmp_allocator;
   ObString table_name; // by allocator
@@ -1512,9 +1511,7 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
 
   if (OB_FAIL(sql_string.append_fmt("/*ob_auto_split*/ "))) {
     LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(orig_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to check if oracle mode", K(ret), K(orig_table_schema.get_table_id()));
-  } else if (OB_FAIL(print_identifier(allocator, is_oracle_mode, orig_table_schema.get_table_name_str(), table_name))) {
+  } else if (OB_FAIL(print_identifier(allocator, false, orig_table_schema.get_table_name_str(), table_name))) {
     LOG_WARN("failed to generate new name with escape character", K(ret), K(orig_table_schema.get_table_name()));
   } else if (from_non_partitioned_table) {
     ObArray<uint64_t> presetting_partition_keys;
@@ -1554,7 +1551,7 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
       }
       if (OB_FAIL(ret)) {
       } else if (sql_string.append_fmt(" %s(%.*s) (",
-            is_oracle_mode ? "MODIFY PARTITION BY RANGE" : ((is_multi_partkey || part_func_type == PARTITION_FUNC_TYPE_RANGE_COLUMNS) ? "PARTITION BY RANGE COLUMNS" : "PARTITION BY RANGE"),
+            ((is_multi_partkey || part_func_type == PARTITION_FUNC_TYPE_RANGE_COLUMNS) ? "PARTITION BY RANGE COLUMNS" : "PARTITION BY RANGE"),
             part_func_expr.length(), part_func_expr.ptr())) {
         LOG_WARN("failed to append fmt", K(ret));
       }
@@ -1571,10 +1568,9 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
     } else if (OB_ISNULL(src_partition)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid partition", K(ret), K(part_idx), K(subpart_idx));
-    } else if (OB_FAIL(print_identifier(tmp_allocator, is_oracle_mode, src_partition->get_part_name(), part_name))) {
+    } else if (OB_FAIL(print_identifier(tmp_allocator, false, src_partition->get_part_name(), part_name))) {
       LOG_WARN("print partition name failed", K(ret), KPC(src_partition));
-    } else if (OB_FAIL(sql_string.append_fmt(is_oracle_mode ? "ALTER TABLE %.*s SPLIT PARTITION %.*s INTO ("
-                                                            : "ALTER TABLE %.*s REORGANIZE PARTITION %.*s INTO (",
+    } else if (OB_FAIL(sql_string.append_fmt("ALTER TABLE %.*s REORGANIZE PARTITION %.*s INTO (",
         table_name.length(), table_name.ptr(),
         part_name.length(), part_name.ptr()))) {
       LOG_WARN("failed to append fmt", K(ret));
@@ -1594,13 +1590,13 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
     if (OB_ISNULL(part_array[i])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part is null", K(ret), K(part_array[i]));
-    } else if (OB_FAIL(print_identifier(tmp_allocator, is_oracle_mode, part_array[i]->get_part_name(), part_name))) {
+    } else if (OB_FAIL(print_identifier(tmp_allocator, false, part_array[i]->get_part_name(), part_name))) {
       LOG_WARN("print partition name failed", K(ret), KPC(part_array[i]));
     } else if (OB_FAIL(sql_string.append_fmt("PARTITION %.*s", part_name.length(), part_name.ptr()))) {
       LOG_WARN("failed to append fmt", K(ret), K(part_name));
-    } else if (OB_FAIL(convert_rowkey_to_sql_literal(part_array[i]->get_high_bound_val(), is_oracle_mode, tz_info, tmp_allocator, high_bound_val_str))) {
-      LOG_WARN("failed to convert high bound val", K(ret), KPC(part_array[i]), K(is_oracle_mode));
-    } else if (!is_oracle_mode || (is_oracle_mode && (!is_last_part || from_non_partitioned_table))) {
+    } else if (OB_FAIL(convert_rowkey_to_sql_literal(part_array[i]->get_high_bound_val(), false, tz_info, tmp_allocator, high_bound_val_str))) {
+      LOG_WARN("failed to convert high bound val", K(ret), KPC(part_array[i]));
+    } else {
       if (OB_FAIL(sql_string.append_fmt(" VALUES LESS THAN (%.*s)%s",
               high_bound_val_str.length(), high_bound_val_str.ptr(),
               is_last_part ? "" : ", "))) {
@@ -1808,7 +1804,6 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
   ObArray<ObNewRange> unused_column_ranges;
   common::ObRowkey low_bound_val;
   common::ObRowkey high_bound_val;
-  bool is_oracle_mode = false;
 
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == table_id ||
                   !tablet_id.is_valid())) {
@@ -1840,15 +1835,13 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to check if oracle compat mode", K(ret), K(tenant_id), K(table_schema.get_table_id()));
   } else if (OB_FAIL(fill_query_range_bounder(part_meta, unused_column_ranges, column_names.count(), low_bound_val, high_bound_val, range_allocator))) {
     LOG_WARN("fail to fill query range bounder", K(ret));
   } else if (OB_FAIL(query_ranges_(tenant_id, db_name, table_schema.get_table_name_str(), part_meta,
                             column_names, unused_column_ranges,
                             range_num, used_disk_space,
                             table_schema.is_global_index_table(),
-                            is_oracle_mode,
+                            false,
                             low_bound_val, high_bound_val,
                             range_allocator, ranges))) {
     LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(tenant_id), K(db_name),
@@ -1880,8 +1873,6 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
   const int64_t unused_presetting_column_cnt = 0;
   common::ObRowkey low_bound_val;
   common::ObRowkey high_bound_val;
-  bool is_oracle_mode = false;
-
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
@@ -1900,8 +1891,6 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
   } else if (OB_UNLIKELY(!column_ranges.empty() && column_names.count() != column_ranges.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid array count", KR(ret), K(column_names), K(column_ranges));
-  } else if (OB_FAIL(data_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to check if oracle compat mode", K(ret), K(tenant_id), K(data_table_schema.get_table_id()));
   } else if (OB_FAIL(fill_query_range_bounder(unused_part_meta, column_ranges, unused_presetting_column_cnt, low_bound_val, high_bound_val, range_allocator))) {
     LOG_WARN("fail to fill query range bounder", K(ret), K(column_ranges));
   } else if (OB_FAIL(query_ranges_(tenant_id, db_name, data_table_schema.get_table_name_str(),
@@ -1909,7 +1898,7 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
                                    column_names, column_ranges,
                                    range_num, used_disk_space,
                                    false /*query_index*/,
-                                   is_oracle_mode,
+                                   false,
                                    low_bound_val, high_bound_val,
                                    range_allocator, ranges))) {
     LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(tenant_id), K(db_name),

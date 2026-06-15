@@ -375,12 +375,7 @@ int ObIndexBuilderUtil::set_index_table_columns(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else if (data_schema.is_valid()) {
-    bool is_oracle_mode = false;
-    if (OB_FAIL(data_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("check_if_oracle_compat_mode failed", K(ret));
-    } else {
-      use_mysql_errno = !is_oracle_mode;
-    }
+    use_mysql_errno = true;
   }
   // no matter what index col of data table is, columns of 4 aux fts table is fixed
   if (OB_FAIL(ret)) {

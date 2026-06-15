@@ -677,16 +677,13 @@ int ObAddPartInfoHelper::add_high_bound_val_column(
     //TODO:@yanhua add session timezone_info is better
     ObTimeZoneInfo tz_info;
     tz_info.set_offset(0);
-    bool is_oracle_mode = false;
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table ptr is null", KR(ret));
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table->get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", KR(ret), K(table->get_tenant_id()));
-    } else if (OB_FAIL(table->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to get compat mode", KR(ret), KPC(table));
     } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               is_oracle_mode, part_option.get_high_bound_val(), high_bound_val_,
+               false, part_option.get_high_bound_val(), high_bound_val_,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(ret));
     } else if (OB_FAIL(dml.add_column("high_bound_val",
@@ -733,10 +730,8 @@ int ObAddPartInfoHelper::add_list_val_column(
       LOG_WARN("table ptr is null", KR(ret));
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table->get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(table->get_tenant_id()));
-    } else if (OB_FAIL(table->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to get compat mode", KR(ret), KPC(table));
     } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
-               is_oracle_mode, part_option.get_list_row_values(), list_val_,
+               false, part_option.get_list_row_values(), list_val_,
                OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(ret));
     } else if (OB_FAIL(dml.add_column("list_val",
@@ -923,11 +918,9 @@ int ObAddIncSubPartDMLGenerator::extract_part_info(PartInfo &part_info)
     } else if (ObStorageCacheGlobalPolicy::is_valid(sub_part_.get_part_storage_cache_policy_type())) {
       part_info.part_storage_cache_policy_type_ = sub_part_.get_part_storage_cache_policy_type();
     }
-    bool is_oracle_mode = false;
-    if (FAILEDx(ori_table_->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle compat mode", KR(ret), KPC_(ori_table));
+    if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_subpart()) {
-      if (OB_FAIL(gen_high_bound_val_str(is_oracle_mode,
+      if (OB_FAIL(gen_high_bound_val_str(false,
                                          sub_part_.get_high_bound_val(),
                                          part_info.high_bound_val_,
                                          part_info.b_high_bound_val_,
@@ -936,7 +929,7 @@ int ObAddIncSubPartDMLGenerator::extract_part_info(PartInfo &part_info)
       }
     } else if (ori_table_->is_list_subpart()) {
       if (OB_FAIL(gen_list_val_str(
-                  is_oracle_mode,
+                  false,
                   sub_part_.get_list_row_values(),
                   part_info.list_val_,
                   part_info.b_list_val_,
@@ -1030,11 +1023,6 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
     part_info.tablet_id_ = part_.get_tablet_id();
     part_info.part_storage_cache_policy_type_ = ObStorageCacheGlobalPolicy::NONE_POLICY;
 
-    bool is_oracle_mode = false;
-    if (FAILEDx(ori_table_->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle compat mode", KR(ret), KPC_(ori_table));
-    }
-
     if (OB_FAIL(ret)) {
     } else if (!ori_table_->is_interval_part() || !part_.get_part_name().empty()) {
       part_info.part_name_ = part_.get_part_name();
@@ -1052,7 +1040,7 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
     }
     if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_part()) {
-      if (OB_FAIL(gen_high_bound_val_str(is_oracle_mode,
+      if (OB_FAIL(gen_high_bound_val_str(false,
                                          part_.get_high_bound_val(),
                                          part_info.high_bound_val_,
                                          part_info.b_high_bound_val_,
@@ -1060,7 +1048,7 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
         LOG_WARN("generate high bound val failed", K(ret));
       }
     } else if (ori_table_->is_list_part()) {
-      if (OB_FAIL(gen_list_val_str(is_oracle_mode,
+      if (OB_FAIL(gen_list_val_str(false,
                                    part_.get_list_row_values(),
                                    part_info.list_val_,
                                    part_info.b_list_val_,

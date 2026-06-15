@@ -160,13 +160,10 @@ int ObPartGetter::get_subpart_ids_in_partition(const common::ObString &part_name
 int ObPartIterator::next(const ObPartition *&part)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   part = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("iter not init", KR(ret));
-  } else if (OB_FAIL(partition_schema_->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check if oracle mode", KR(ret), KPC_(partition_schema));
   } else {
     // The partition_array of the system table is empty and needs to be processed by part_num
     int64_t part_num = check_normal_partition(check_partition_mode_) ?
@@ -183,9 +180,8 @@ int ObPartIterator::next(const ObPartition *&part)
       ObPartition **part_array = partition_schema_->get_part_array();
       const ObPartitionLevel part_level = partition_schema_->get_part_level();
       if (PARTITION_LEVEL_ZERO == part_level) {
-        ObString part_name(!is_oracle_mode ?
-                           ObPartitionSchema::MYSQL_NON_PARTITIONED_TABLE_PART_NAME:
-                           ObPartitionSchema::ORACLE_NON_PARTITIONED_TABLE_PART_NAME);
+        ObString part_name(
+                           ObPartitionSchema::MYSQL_NON_PARTITIONED_TABLE_PART_NAME);
         if (OB_FAIL(part_.set_part_name(part_name))) {
           LOG_WARN("fail to set part name", KR(ret), K(part_name));
         } else {

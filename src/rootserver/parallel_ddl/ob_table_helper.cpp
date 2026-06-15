@@ -167,11 +167,8 @@ int ObTableHelper::check_fk_columns_type_for_replacing_mock_fk_parent_table_(
     const ObMockFKParentTableSchema &mock_parent_table_schema)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(parent_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check if oracle compat mode failed", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < mock_parent_table_schema.get_foreign_key_infos().count(); ++i) {
     const ObTableSchema *child_table_schema = NULL;
@@ -208,7 +205,7 @@ int ObTableHelper::check_fk_columns_type_for_replacing_mock_fk_parent_table_(
         }
       } // end for
       if (FAILEDx(sql::ObResolverUtils::check_foreign_key_columns_type(
-          !is_oracle_mode/*is_mysql_compat_mode*/,
+          true/*is_mysql_compat_mode*/,
           *child_table_schema,
           parent_table_schema,
           child_columns,
@@ -640,7 +637,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
 {
   int ret = OB_SUCCESS;
   const uint64_t mock_table_id = OB_MIN_USER_OBJECT_ID + 1;
-  bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID != arg.schema_.get_table_id())) {
@@ -659,8 +655,6 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
   if (FALSE_IT(new_table.set_table_id(mock_table_id))) {
   } else if (FAILEDx(ddl_service_->try_format_partition_schema(new_table))) {
     LOG_WARN("fail to format partition schema", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(new_table.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get compat mode", KR(ret), K_(tenant_id));
   }
 
   const uint64_t tablegroup_id = new_table.get_tablegroup_id();
@@ -702,9 +696,7 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
       LOG_WARN("fail to check constraint name exist", KR(ret), K_(tenant_id), K(database_id), K(cst_name));
     } else if (cst_exist) {
       ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-      if (!is_oracle_mode) {
-        LOG_USER_ERROR(OB_ERR_CONSTRAINT_NAME_DUPLICATE, cst_name.length(), cst_name.ptr());
-      }
+      LOG_USER_ERROR(OB_ERR_CONSTRAINT_NAME_DUPLICATE, cst_name.length(), cst_name.ptr());
       LOG_WARN("cst name is duplicate", KR(ret), K_(tenant_id), K(database_id), K(cst_name));
     }
   } // end for

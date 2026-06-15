@@ -1695,6 +1695,8 @@ int ObIndexBuilder::do_create_index(
              K(index_count), K(OB_MAX_INDEX_PER_TABLE), K(index_aux_count), K(OB_MAX_AUX_TABLE_PER_MAIN_TABLE), K(ret));
   } else if (OB_FAIL(ddl_service_.check_fk_related_table_ddl(*table_schema, ObDDLType::DDL_CREATE_INDEX))) {
     LOG_WARN("check whether the foreign key related table is executing ddl failed", K(ret));
+  } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*table_schema, false/*by_admin*/))) {
+    LOG_WARN("failed to check htable ddl supported", K(ret));
   } else if (INDEX_TYPE_NORMAL_LOCAL == arg.index_type_
              || INDEX_TYPE_UNIQUE_LOCAL == arg.index_type_
              || INDEX_TYPE_DOMAIN_CTXCAT_DEPRECATED == arg.index_type_
@@ -1754,7 +1756,6 @@ int ObIndexBuilder::generate_schema(
     ObTableSchema &schema)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   // some items in arg may be invalid, don't check arg here(when create table with index, alter
   // table add index)
   if (OB_UNLIKELY(!ddl_service_.is_inited())) {
@@ -1763,8 +1764,6 @@ int ObIndexBuilder::generate_schema(
   } else if (OB_UNLIKELY(!data_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",  K(ret), K(data_schema));
-  } else if (OB_FAIL(data_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check_if_oracle_compat_mode failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -1836,8 +1835,8 @@ int ObIndexBuilder::generate_schema(
             LOG_WARN("index table rowkey length over max_user_row_key_length",
                 K(index_data_length), LITERAL_K(OB_MAX_USER_ROW_KEY_LENGTH), K(ret));
           }
-        } else if (FALSE_IT(is_mysql_func_index |= !is_oracle_mode && data_column->is_func_idx_column())) {
-        } else if (!is_oracle_mode && data_column->is_func_idx_column() && ob_is_text_tc(data_column->get_data_type())) {
+        } else if (FALSE_IT(is_mysql_func_index |= data_column->is_func_idx_column())) {
+        } else if (data_column->is_func_idx_column() && ob_is_text_tc(data_column->get_data_type())) {
           ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
           LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
         } else if (data_column->is_key_forbid_lob() && !data_column->is_fulltext_column()) {
@@ -1858,7 +1857,7 @@ int ObIndexBuilder::generate_schema(
           LOG_WARN("index created on udt column is not supported", K(arg.index_type_), K(ret));
         } else if (ob_is_json_tc(data_column->get_data_type())) {
           if (data_column->is_multivalue_generated_array_column()) {
-          } else if (!is_oracle_mode && data_column->is_func_idx_column()) {
+          } else if (data_column->is_func_idx_column()) {
             ret = OB_ERR_FUNCTIONAL_INDEX_ON_JSON_OR_GEOMETRY_FUNCTION;
             LOG_WARN("Cannot create a functional index on an expression that returns a JSON or GEOMETRY.",K(ret));
           } else {
@@ -1877,7 +1876,7 @@ int ObIndexBuilder::generate_schema(
             length = 0;
           } else if (share::schema::is_hybrid_vec_index(arg.index_type_)) {
             length = 0;
-          } else if (OB_FAIL(data_column->get_byte_length(length, is_oracle_mode, false))) {
+          } else if (OB_FAIL(data_column->get_byte_length(length, false/*is_oracle_mode*/, false))) {
             LOG_WARN("fail to get byte length of column", K(ret));
           } else if (length < 0 || (0 == length && !data_column->is_vec_index_column())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;

@@ -3056,7 +3056,6 @@ int ObServer::clean_up_invalid_tables_by_tenant(
     drop_table_arg.to_recyclebin_ = false;
     // only OB_ISNULL(GCTX.session_mgr_) will exit the loop
     for (int64_t i = 0; i < table_ids.count() && OB_SUCC(tmp_ret); i++) {
-      bool is_oracle_mode = false;
       const ObSimpleTableSchemaV2 *table_schema = NULL;
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
@@ -3068,8 +3067,6 @@ int ObServer::clean_up_invalid_tables_by_tenant(
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("got invalid schema", KR(ret), K(i));
-      } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check table if oracle compat mode", KR(ret));
       } else if (0 == table_schema->get_session_id()) {
         //do nothing
       } else {

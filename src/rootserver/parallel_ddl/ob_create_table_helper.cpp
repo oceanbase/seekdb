@@ -800,15 +800,12 @@ int ObCreateTableHelper::generate_foreign_keys_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid table cnt", KR(ret), "table_cnt", new_tables_.count());
   } else {
-    bool is_oracle_mode = false;
     ObTableSchema &data_table = new_tables_.at(0);
     const uint64_t session_id = data_table.get_session_id();
     ObIDGenerator id_generator; // for foreign key
     const uint64_t object_cnt = arg_.foreign_key_arg_list_.count();
     if (OB_FAIL(gen_object_ids_(object_cnt, id_generator))) {
       LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id), K(object_cnt));
-    } else if (OB_FAIL(data_table.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle mode", KR(ret));
     }
     // genernate foreign keys
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
@@ -823,15 +820,10 @@ int ObCreateTableHelper::generate_foreign_keys_()
       } else if (OB_FAIL(check_constraint_name_exist_(data_table, foreign_key_name, true /*is_foreign_key*/, fk_exist))) {
         LOG_WARN("fail to check foreign key name exist", KR(ret), K_(tenant_id), K(foreign_key_name));
       } else if (fk_exist) {
-        if (is_oracle_mode) {
-          ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-          LOG_WARN("fk name is duplicate", KR(ret), K(foreign_key_name));
-        } else { // mysql mode
-          ret = OB_ERR_DUP_KEY;
-          LOG_USER_ERROR(OB_ERR_DUP_KEY,
-                         data_table.get_table_name_str().length(),
-                         data_table.get_table_name_str().ptr());
-        }
+        ret = OB_ERR_DUP_KEY;
+        LOG_USER_ERROR(OB_ERR_DUP_KEY,
+                       data_table.get_table_name_str().length(),
+                       data_table.get_table_name_str().ptr());
       } else {
         const ObTableSchema *parent_table = NULL;
         ObMockFKParentTableSchema *new_mock_fk_parent_table = NULL;
@@ -845,19 +837,8 @@ int ObCreateTableHelper::generate_foreign_keys_()
           // check whether it belongs to self reference, if so, the parent schema is child schema.
           parent_table = &data_table;
           if (FK_REF_TYPE_PRIMARY_KEY == foreign_key_arg.fk_ref_type_) {
-            if (is_oracle_mode) {
-              ObTableSchema::const_constraint_iterator iter = parent_table->constraint_begin();
-              for ( ; iter != parent_table->constraint_end(); ++iter) {
-                if (CONSTRAINT_TYPE_PRIMARY_KEY == (*iter)->get_constraint_type()) {
-                  foreign_key_info.fk_ref_type_ = FK_REF_TYPE_PRIMARY_KEY;
-                  foreign_key_info.ref_cst_id_ = (*iter)->get_constraint_id();
-                  break;
-                }
-              } // end for
-            } else {
-              foreign_key_info.fk_ref_type_ = FK_REF_TYPE_PRIMARY_KEY;
-              foreign_key_info.ref_cst_id_ = common::OB_INVALID_ID;
-            }
+            foreign_key_info.fk_ref_type_ = FK_REF_TYPE_PRIMARY_KEY;
+            foreign_key_info.ref_cst_id_ = common::OB_INVALID_ID;
           } else if (FK_REF_TYPE_UNIQUE_KEY == foreign_key_arg.fk_ref_type_) {
             if (OB_FAIL(ddl_service_->get_uk_cst_id_for_self_ref(new_tables_, foreign_key_arg, foreign_key_info))) {
               LOG_WARN("failed to get uk cst id for self ref", KR(ret), K(foreign_key_arg));

@@ -90,7 +90,6 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
   ObItemType root_expr_type = T_INVALID;
   ObArray<ObString> columns_names;
   ObColumnSchemaV2 *col_schema = NULL;
-  bool is_oracle_mode = false;
   if (column.is_generated_column()) {
     // If the dependent column of the generated column has a change column, the current default value
     // should be used instead of orig vaule
@@ -104,11 +103,6 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       }
     }
 
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-        SHARE_SCHEMA_LOG(WARN, "failed to check if oracle mode", K(ret));
-      }
-    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator,
           root_expr_type, columns_names))) {

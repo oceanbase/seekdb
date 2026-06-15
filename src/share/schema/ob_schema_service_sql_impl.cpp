@@ -5708,13 +5708,9 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info(
     SCHEMA &table_schema)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (!table_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid table_schema", KR(ret), K(table_schema));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret),
-             "tenant_id", table_schema.get_tenant_id(), "table_id", table_schema.get_table_id());
   } else {
     if (OB_FAIL(try_mock_partition_array(table_schema))) {
       LOG_WARN("fail to mock partition array", KR(ret), K(table_schema));
@@ -5776,17 +5772,10 @@ int ObSchemaServiceSQLImpl::try_mock_default_column_group(
 int ObSchemaServiceSQLImpl::sort_tablegroup_partition_info(ObTablegroupSchema &tablegroup_schema)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(tablegroup_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret),
-             "tenant_id", tablegroup_schema.get_tenant_id(),
-             "tablegroup_id", tablegroup_schema.get_tablegroup_id());
-  } else {
-    if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(tablegroup_schema))) {
-      LOG_WARN("failed to sort partition array", KR(ret), K(tablegroup_schema));
-    } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(tablegroup_schema))) {
-      LOG_WARN("failed to sort subpartition array", KR(ret), K(tablegroup_schema));
-    }
+  if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(tablegroup_schema))) {
+    LOG_WARN("failed to sort partition array", KR(ret), K(tablegroup_schema));
+  } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(tablegroup_schema))) {
+    LOG_WARN("failed to sort subpartition array", KR(ret), K(tablegroup_schema));
   }
   LOG_TRACE("fetch partition info", KR(ret), K(tablegroup_schema));
   return ret;
@@ -7534,13 +7523,9 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info_v2(
     ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (!table_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid table_schema", KR(ret), K(table_schema));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret),
-             "tenant_id", table_schema.get_tenant_id(), "table_id", table_schema.get_table_id());
   } else {
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
       LOG_WARN("failed to sort partition array", KR(ret), K(table_schema));

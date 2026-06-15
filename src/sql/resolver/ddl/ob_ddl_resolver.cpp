@@ -5426,7 +5426,6 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = table_schema.get_tenant_id();
   const ObTenantSchema *tenant_schema = NULL;
-  bool is_oracle_compat_mode = true;
   const ObDatabaseSchema *db_schema = NULL;
   if (OB_ISNULL(schema_checker)) {
     ret = OB_ERR_UNEXPECTED;
@@ -5448,8 +5447,6 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database info is null", K(ret));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_compat_mode))) {
-    LOG_WARN("failed to get table compatibility mode", K(ret));
   } else {
     ObSessionDDLInfo ddl_info;
     ddl_info.set_ddl_check_default_value(true);
@@ -6388,7 +6385,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
 {
   int ret = OB_SUCCESS;
   const ObColumnSchemaV2 *column_schema = NULL;
-  bool is_oracle_mode = false;
   uint64_t tenant_data_version = 0;
   uint64_t tenant_id = 0;
 
@@ -6398,8 +6394,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
   } else if (OB_FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
     LOG_WARN("get tenant data version failed", K(ret));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check oracle compat mode failed", K(ret));
   } else if (is_func_index) {
     ObRawExprFactory expr_factory(*allocator_);
     ObRawExpr *expr = NULL;
@@ -6454,7 +6448,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
       }
     } else if (OB_FAIL(resolve_spatial_index_constraint(*column_schema, column_num,
-        index_keyname_value, is_oracle_mode, is_explicit_order, is_prefix_index))) {
+        index_keyname_value, false/*is_oracle_mode*/, is_explicit_order, is_prefix_index))) {
       LOG_WARN("resolve spatial index constraint fail", K(ret), K(column_num), K(index_keyname_value));
     }
   }

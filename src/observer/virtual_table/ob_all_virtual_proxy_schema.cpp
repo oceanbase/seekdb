@@ -517,13 +517,10 @@ int ObAllVirtualProxySchema::init_data_(
                 K_(level1_decoded_db_name), K_(level1_decoded_table_name), KPC(table_schema));
       const common::ObString &view_definition = table_schema->get_view_schema().get_view_definition_str();
       const ObTableSchema *new_table_schema = NULL;
-      bool is_oracle_mode = false;
-      if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check oracle mode", KR(ret), KPC(table_schema));
-      } else if (OB_FAIL(get_view_decoded_schema_(tenant_id,
+      if (OB_FAIL(get_view_decoded_schema_(tenant_id,
                                                   tenant_name,
                                                   view_definition,
-                                                  is_oracle_mode,
+                                                  false/*is_oracle_mode*/,
                                                   new_table_schema,
                                                   database_name))) {
         LOG_WARN("get_view_decoded_schema failed", KR(ret));

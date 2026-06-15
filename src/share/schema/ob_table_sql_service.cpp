@@ -1621,11 +1621,8 @@ int ObTableSqlService::rename_csts_in_inner_table(common::ObISQLClient &sql_clie
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA_OB_SCHEMA_ARENA);
   ObDMLSqlSplicer dml_for_update;
   ObDMLSqlSplicer dml_for_insert;
-  bool is_oracle_mode = false;
   if (OB_FAIL(check_ddl_allowed(table_schema))) {
     LOG_WARN("check ddl allowd failed", K(ret), K(table_schema));
-  } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
   }
   for (; OB_SUCC(ret) && iter != table_schema.constraint_end(); ++iter) {
     dml_for_update.reuse();
@@ -1633,7 +1630,7 @@ int ObTableSqlService::rename_csts_in_inner_table(common::ObISQLClient &sql_clie
     int64_t affected_rows = 0;
     // `drop table` modify constraint_name but do not modify name_generated_type
     const ObNameGeneratedType name_generated_type = (*iter)->get_name_generated_type();
-    if (OB_FAIL(ObTableSchema::create_cons_name_automatically(new_cst_name, table_schema.get_table_name_str(), allocator, (*iter)->get_constraint_type(), is_oracle_mode))) {
+    if (OB_FAIL(ObTableSchema::create_cons_name_automatically(new_cst_name, table_schema.get_table_name_str(), allocator, (*iter)->get_constraint_type(), false))) {
       SQL_RESV_LOG(WARN, "create cons name automatically failed", K(ret));
     } else if (OB_FAIL(gen_constraint_update_name_dml(exec_tenant_id, new_cst_name, name_generated_type, new_schema_version, **iter, dml_for_update))) {
       LOG_WARN("failed to delete from __all_constraint or __all_constraint_history", K(ret), K(new_cst_name), K(**iter), K(table_schema));
@@ -2216,7 +2213,6 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
                                             const common::ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const uint64_t tenant_id = table_schema.get_tenant_id();
   uint64_t table_id = table_schema.get_table_id();
   if (OB_FAIL(inner_update_table_options_(sql_client, new_table_schema))) {
@@ -3046,13 +3042,10 @@ int ObTableSqlService::add_transition_point_val(ObDMLSqlSplicer &dml,
     int64_t pos = 0;
     ObTimeZoneInfo tz_info;
     tz_info.set_offset(0);
-    bool is_oracle_mode = false;
-    if (OB_FAIL(table.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle compat mode", KR(ret), K(table));
-    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(table.get_tenant_id()));
     } else if (transition_point.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               is_oracle_mode, transition_point, transition_point_str,
+               false, transition_point, transition_point_str,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(transition_point), K(ret));
     } else if (OB_FAIL(dml.add_column("transition_point",
@@ -3087,13 +3080,10 @@ int ObTableSqlService::add_interval_range_val(ObDMLSqlSplicer &dml,
     int64_t pos = 0;
     ObTimeZoneInfo tz_info;
     tz_info.set_offset(0);
-    bool is_oracle_mode = false;
-    if (OB_FAIL(table.check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle compat mode", KR(ret), K(table));
-    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(table.get_tenant_id()));
     } else if (interval_range.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-            is_oracle_mode, interval_range, interval_range_str,
+            false, interval_range, interval_range_str,
             OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(interval_range), K(ret));
     } else if (OB_FAIL(

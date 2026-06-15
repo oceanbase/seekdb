@@ -343,11 +343,7 @@ struct GetTableKeyV2<ObIndexSchemaHashWrapper, ObSimpleTableSchemaV2 *>
   ObIndexSchemaHashWrapper operator()(const ObSimpleTableSchemaV2 *index_schema) const
   {
     if (!OB_ISNULL(index_schema)) {
-      bool is_oracle_mode = false;
-      if (OB_UNLIKELY(OB_SUCCESS != index_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-        ObIndexSchemaHashWrapper null_wrap;
-        return null_wrap;
-      } else if (index_schema->is_in_recyclebin()) { // index is in recyclebin
+      if (index_schema->is_in_recyclebin()) { // index is in recyclebin
         ObIndexSchemaHashWrapper index_schema_hash_wrapper(
             index_schema->get_tenant_id(),
             index_schema->get_database_id(),
@@ -358,7 +354,7 @@ struct GetTableKeyV2<ObIndexSchemaHashWrapper, ObSimpleTableSchemaV2 *>
         ObIndexSchemaHashWrapper index_schema_hash_wrapper(
             index_schema->get_tenant_id(),
             index_schema->get_database_id(),
-            is_oracle_mode ? common::OB_INVALID_ID : index_schema->get_data_table_id(),
+            index_schema->get_data_table_id(),
             index_schema->get_origin_index_name_str());
         return index_schema_hash_wrapper;
       }

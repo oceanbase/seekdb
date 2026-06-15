@@ -481,7 +481,6 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
 {
   int ret = OB_SUCCESS;
 
-  bool is_oracle_mode = false;
   if (OB_ISNULL(allocator_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or session_ is NULL", K(ret), K(allocator_), K(session_));
@@ -491,8 +490,6 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
       || OB_ISNULL(data_type_str_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table_schema or column_schema is NULL", K(ret));
-  } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-    SERVER_LOG(WARN, "fail to check oracle mode", KR(ret), KPC(table_schema));
   } else {
     ObObj *cells = NULL;
     const int64_t col_count = output_column_ids_.count();
@@ -687,7 +684,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         case NUMERIC_PRECISION: {
             ObPrecision precision = column_schema->get_data_precision();
             //for float(xx), precision==x, scale=-1
-            if (!is_oracle_mode && column_schema->get_data_scale() < 0) {
+            if (column_schema->get_data_scale() < 0) {
               //mysql float(xx)'s NUMERIC_PRECISION is always 12 from Field.field_length
               //mysql double(xx)'s NUMERIC_PRECISION is always 22  from Field.field_length
               //as ob does not have Field.field_length, we set hard code here for compat
@@ -796,7 +793,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               bool is_unique = false;
               bool is_multiple = false;
               bool is_first_not_null_unique = true;
-              if (!is_oracle_mode && OB_FAIL(table_schema->
+              if (OB_FAIL(table_schema->
                   is_unique_key_column(*schema_guard_, column_schema->get_column_id(),
                                         is_unique, is_first_not_null_unique))) {
                 LOG_WARN("judge unique key fail", K(ret));
@@ -809,7 +806,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                 }
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                 ObCharset::get_default_charset()));
-              } else if (!is_oracle_mode && OB_FAIL(table_schema->
+              } else if (OB_FAIL(table_schema->
                   is_multiple_key_column(*schema_guard_, column_schema->get_column_id(), is_multiple))) {
                 LOG_WARN("judge multiple key fail", K(ret));
               } else if (is_multiple) {

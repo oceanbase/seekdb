@@ -2979,7 +2979,6 @@ public:
   // may have other interval partitions.
   int get_interval_parted_range_part_num(uint64_t &part_num) const;
 
-  virtual int check_if_oracle_compat_mode(bool &is_oracle_mode) const = 0;
   // only used for virtual table
   int mock_list_partition_array();
   // only used for generate part_name
@@ -3180,7 +3179,6 @@ public:
   bool can_read_index() const { return true; }
   virtual bool is_hidden_schema() const override { return false; }
   virtual bool is_normal_schema() const override { return !is_hidden_schema(); }
-  virtual int check_if_oracle_compat_mode(bool &is_oracle_mode) const;
   inline int64_t get_truncate_version() { return 0; }
 
   DECLARE_VIRTUAL_TO_STRING;
@@ -7456,8 +7454,6 @@ public:
 
   void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   inline int64_t get_schema_version() const { return schema_version_; }
-
-  int check_if_oracle_compat_mode(bool &is_oracle_mode) const { is_oracle_mode = false; return OB_SUCCESS; };
 
   inline ObMockFKParentTableKey get_mock_parent_table_key() const
   { return ObMockFKParentTableKey(tenant_id_, mock_fk_parent_table_id_); }

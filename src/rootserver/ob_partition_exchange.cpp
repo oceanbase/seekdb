@@ -50,7 +50,6 @@ int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePa
   const uint64_t tenant_id = arg.tenant_id_;
   const ObTableSchema *base_table_schema = NULL;
   const ObTableSchema *inc_table_schema = NULL;
-  bool is_oracle_mode = false;
   bool base_has_add_column_instant = false;
   bool inc_has_add_column_instant = false;
   bool base_has_drop_column_instant = false;
@@ -74,8 +73,6 @@ int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePa
   } else if (OB_ISNULL(inc_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not found", K(ret), K(arg));
-  } else if (OB_FAIL(base_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check_if_oracle_compat_mode failed", K(ret), K(is_oracle_mode));
   } else if (OB_FAIL(base_table_schema->has_add_column_instant(base_has_add_column_instant))) {
     LOG_WARN("fail to check base table has add column instant", KR(ret), K(tenant_id), K(arg.base_table_id_));
   } else if (OB_FAIL(inc_table_schema->has_add_column_instant(inc_has_add_column_instant))) {
@@ -94,12 +91,12 @@ int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePa
     LOG_WARN("base or inc table has drop column instant, not supported to exchange partition", KR(ret),
               K(base_has_drop_column_instant), K(inc_has_drop_column_instant));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Table has drop column instant, exchange partition");
-  } else if (OB_FAIL(check_partition_exchange_conditions_(arg, *base_table_schema, *inc_table_schema, is_oracle_mode, schema_guard, part_exchange_type, base_tablet_ids, inc_tablet_ids))) {
-    LOG_WARN("fail to check partition exchange conditions", K(ret), K(arg), KPC(base_table_schema), KPC(inc_table_schema), K(is_oracle_mode));
-  } else if (OB_FAIL(inner_init(*base_table_schema, *inc_table_schema, is_oracle_mode, schema_guard))) {
-    LOG_WARN("fail to inner init", K(ret), K(arg), KPC(base_table_schema), KPC(inc_table_schema), K(is_oracle_mode));
-  } else if (OB_FAIL(do_exchange_partitions_(arg, res, *base_table_schema, *inc_table_schema, is_oracle_mode, schema_guard, part_exchange_type, base_tablet_ids, inc_tablet_ids))) {
-    LOG_WARN("fail to do exchange partitions", K(ret), K(arg), K(res), KPC(base_table_schema), KPC(inc_table_schema), K(is_oracle_mode));
+  } else if (OB_FAIL(check_partition_exchange_conditions_(arg, *base_table_schema, *inc_table_schema, false/*is_oracle_mode*/, schema_guard, part_exchange_type, base_tablet_ids, inc_tablet_ids))) {
+    LOG_WARN("fail to check partition exchange conditions", K(ret), K(arg), KPC(base_table_schema), KPC(inc_table_schema));
+  } else if (OB_FAIL(inner_init(*base_table_schema, *inc_table_schema, false/*is_oracle_mode*/, schema_guard))) {
+    LOG_WARN("fail to inner init", K(ret), K(arg), KPC(base_table_schema), KPC(inc_table_schema));
+  } else if (OB_FAIL(do_exchange_partitions_(arg, res, *base_table_schema, *inc_table_schema, false/*is_oracle_mode*/, schema_guard, part_exchange_type, base_tablet_ids, inc_tablet_ids))) {
+    LOG_WARN("fail to do exchange partitions", K(ret), K(arg), K(res), KPC(base_table_schema), KPC(inc_table_schema));
   }
   return ret;
 }
@@ -109,14 +106,11 @@ int ObPartitionExchange::check_exchange_partition_for_direct_load(
     const ObTableSchema *table_schema)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   bool has_instant_column = false;
   bool has_unused_column = false;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is nullptr", KR(ret));
-  } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret));
   } else if (OB_FAIL(table_schema->has_add_column_instant(has_instant_column))) {
     LOG_WARN("fail to get has add column instant", KR(ret), KPC(table_schema));
   } else if (OB_UNLIKELY(has_instant_column)) {
@@ -137,25 +131,10 @@ int ObPartitionExchange::check_exchange_partition_for_direct_load(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("exchange partition table is duplicate table", KR(ret), KPC(table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for duplicate table is");
-  } else if (is_oracle_mode) {
-    for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
-          OB_SUCC(ret) && iter != table_schema->column_end(); ++iter) {
-      ObColumnSchemaV2 *column_schema = *iter;
-      if (OB_ISNULL(column_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid column schema", KR(ret), KP(column_schema));
-      } else if (OB_UNLIKELY(column_schema->is_identity_column())) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("table has identity column, not supported to exchange partition", KR(ret), KPC(column_schema));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has identity column is");
-      }
-    }
-  } else {
-    if (OB_UNLIKELY(0 != table_schema->get_autoinc_column_id())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("table has auto increment column, not supported to exchange partition", KR(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has auto increment column is");
-    }
+  } else if (OB_UNLIKELY(0 != table_schema->get_autoinc_column_id())) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("table has auto increment column, not supported to exchange partition", KR(ret));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition level direct-load for table has auto increment column is");
   }
 
   if (OB_SUCC(ret)) {

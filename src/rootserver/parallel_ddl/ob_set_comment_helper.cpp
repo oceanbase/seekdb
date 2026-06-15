@@ -180,7 +180,6 @@ int ObSetCommentHelper::lock_objects_by_id_()
 int ObSetCommentHelper::check_table_legitimacy_()
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   int64_t schema_version = OB_INVALID_VERSION;
   bool is_exist = false;
   if (OB_FAIL(check_inner_stat_())) {
@@ -215,19 +214,10 @@ int ObSetCommentHelper::check_table_legitimacy_()
   } else if (OB_UNLIKELY(orig_table_schema_->is_in_splitting())) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("table is physical or logical split can not split", KR(ret), KPC(orig_table_schema_));
-  } else if (OB_FAIL(orig_table_schema_->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle compat mode", KR(ret));
-  } else if (OB_UNLIKELY(!is_oracle_mode)) {
-    // if need to support parallel comment on mysql mode,
-    // should check column name not duplicate to prevent modify the same column in one sql
+  } else {
+    // not support parallel comment on mysql mode right now
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support parallel comment on mysql mode right know", KR(ret));
-  } else if (OB_FAIL(ddl_service_->get_snapshot_mgr().check_restore_point(
-    ddl_service_->get_sql_proxy(), tenant_id_, orig_table_schema_->get_table_id(), is_exist))) {
-    LOG_WARN("failed to check restore point", KR(ret), K_(tenant_id));
-  } else if (OB_UNLIKELY(is_exist)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("restore point exist, cannot alter ", KR(ret), K_(tenant_id), K(orig_table_schema_->get_table_id()));
   }
   RS_TRACE(check_schemas);
   return ret;

@@ -241,7 +241,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
     int64_t all_part_num = table_schema.get_all_part_num();
     common::ObArray<share::ObTabletTablePair> pairs;
     ObGlobalCSReplicaMgr cs_replica_mgr;
-    bool is_oracle_mode = false;
     bool is_create_bind_hidden_tablets = false;
     if (table_schema.is_index_local_storage()
         || table_schema.is_aux_lob_table()
@@ -299,9 +298,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
       LOG_WARN("fail to init cs_replica_mgr", KR(tmp_ret));
     }
     
-    if (FAILEDx(data_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle mode", KR(ret), KPC(data_table_schema));
-    } else {
+    if (OB_SUCC(ret)) {
       int64_t ls_idx = 0;
       ObPartitionLevel part_level = table_schema.get_part_level();
       lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;

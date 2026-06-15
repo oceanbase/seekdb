@@ -52,7 +52,6 @@ int ObCheckConstraintValidationTask::process()
   int ret = OB_SUCCESS;
   ObTraceIdGuard trace_id_guard(trace_id_);
   const ObConstraint *constraint = nullptr;
-  bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   const ObDatabaseSchema *database_schema = nullptr;
@@ -72,8 +71,6 @@ int ObCheckConstraintValidationTask::process()
   } else if (!check_table_empty_ && OB_ISNULL(constraint = table_schema->get_constraint(constraint_id_))) {
     ret = OB_ERR_CONTRAINT_NOT_FOUND;
     LOG_WARN("error unexpected, can not get constraint", K(ret));
-  } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check tenant is oracle mode failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id_, table_schema->get_database_id(), database_schema))) {
     LOG_WARN("get database schema failed", K(ret), K_(tenant_id));
   } else if (OB_ISNULL(database_schema)) {
@@ -103,10 +100,10 @@ int ObCheckConstraintValidationTask::process()
         LOG_WARN("set trx timeout failed", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         LOG_WARN("set timeout failed", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema->get_schema_version(), is_oracle_mode, ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema->get_schema_version(), false/*is_oracle_mode*/, ddl_schema_hint_str))) {
         LOG_WARN("failed to generate ddl schema hint str", K(ret));
-      } else if (OB_FAIL(ddl_schema_hint_str.append_fmt(is_oracle_mode ?
-                  " INDEX(\"%.*s\".\"%.*s\" PRIMARY)" : " INDEX(`%.*s`.`%.*s` PRIMARY)",
+      } else if (OB_FAIL(ddl_schema_hint_str.append_fmt(
+                  " INDEX(`%.*s`.`%.*s` PRIMARY)",
             static_cast<int>(database_name.length()),
             database_name.ptr(),
             static_cast<int>(table_name.length()),
@@ -124,9 +121,7 @@ int ObCheckConstraintValidationTask::process()
       DEBUG_SYNC(BEFORE_CHECK_CONSTRAINT_VALID_SEND_SQL);
 
       if (OB_FAIL(ret)) {
-      } else if (is_oracle_mode && OB_FAIL(GCTX.ddl_oracle_sql_proxy_->read(res, table_schema->get_tenant_id(), sql_string.ptr(), &session_param))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql_string.ptr()));
-      } else if (!is_oracle_mode && OB_FAIL(GCTX.ddl_sql_proxy_->read(res, table_schema->get_tenant_id(), sql_string.ptr(), &session_param))) {
+      } else if (OB_FAIL(GCTX.ddl_sql_proxy_->read(res, table_schema->get_tenant_id(), sql_string.ptr(), &session_param))) {
         LOG_WARN("execute sql failed", K(ret), K(sql_string.ptr()));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -146,9 +141,9 @@ int ObCheckConstraintValidationTask::process()
         } else {
           ret = obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE == alter_constraint_type_ ?
                 OB_ERR_ADD_CHECK_CONSTRAINT_VIOLATED :
-                (is_oracle_mode ? OB_ERR_NOT_NULL_CONSTRAINT_VIOLATED : OB_ER_INVALID_USE_OF_NULL);
+                OB_ER_INVALID_USE_OF_NULL;
         }
-        if (!is_oracle_mode && OB_ERR_ADD_CHECK_CONSTRAINT_VIOLATED == ret) {
+        if (OB_ERR_ADD_CHECK_CONSTRAINT_VIOLATED == ret) {
           // in mysql mode, change errcode from OB_ERR_ADD_CHECK_CONSTRAINT_VIOLATED to OB_ERR_CHECK_CONSTRAINT_VIOLATED
           ret = OB_ERR_CHECK_CONSTRAINT_VIOLATED;
         }
@@ -240,7 +235,6 @@ int ObForeignKeyConstraintValidationTask::check_fk_by_send_sql() const
   int ret = OB_SUCCESS;
   ObTraceIdGuard trace_id_guard(trace_id_);
   const ObConstraint *constraint = nullptr;
-  bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   // notice that data_table_id_ may be parent_table_id or child_table_id,
   // for example: data_table_id will be parent_table_id when altering non-ref column type of parent table.
@@ -277,8 +271,6 @@ int ObForeignKeyConstraintValidationTask::check_fk_by_send_sql() const
   } else if (OB_ISNULL(child_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema not exist", K(ret));
-  } else if (OB_FAIL(child_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check tenant is oracle mode failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id_, child_table_schema->get_database_id(), child_database_schema))) {
     LOG_WARN("get database schema failed", K(ret), K_(tenant_id));
   } else if (OB_ISNULL(child_database_schema)) {
@@ -289,7 +281,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_by_send_sql() const
   } else if (OB_ISNULL(parent_database_schema)) {
     ret = OB_ERR_SYS;
     LOG_WARN("get database schema failed", K(ret));
-  } else if (OB_FAIL(check_fk_constraint_data_valid(*child_table_schema, *child_database_schema, *parent_table_schema, *parent_database_schema, fk_info, is_oracle_mode))) {
+  } else if (OB_FAIL(check_fk_constraint_data_valid(*child_table_schema, *child_database_schema, *parent_table_schema, *parent_database_schema, fk_info, false/*is_oracle_mode*/))) {
     LOG_WARN("check fk constraint data valid failed", K(ret));
   }
   return ret;
@@ -1081,15 +1073,12 @@ int ObConstraintTask::report_error_code()
 int ObConstraintTask::report_check_constraint_error_code()
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObConstraintTask has not been inited", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(alter_table_arg_.alter_table_schema_.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check tenant is oracle mode failed", K(ret));
   } else {
     ObTableSchema::const_constraint_iterator iter = alter_table_arg_.alter_table_schema_.constraint_begin();
     const ObString &database_name = alter_table_arg_.alter_table_schema_.get_origin_database_name();
@@ -1139,15 +1128,12 @@ int ObConstraintTask::report_check_constraint_error_code()
 int ObConstraintTask::report_foreign_key_constraint_error_code()
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObConstraintTask has not been inited", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(alter_table_arg_.alter_table_schema_.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check tenant is oracle mode failed", K(ret));
   } else {
     ObCreateForeignKeyArg &fk_arg = alter_table_arg_.foreign_key_arg_list_.at(alter_table_arg_.foreign_key_arg_list_.count() - 1);
     const ObString &database_name = alter_table_arg_.alter_table_schema_.get_origin_database_name();
@@ -1266,7 +1252,6 @@ int ObConstraintTask::set_check_constraint_validated()
 {
   int ret = OB_SUCCESS;
   obcall::ObAlterTableRes res;
-  bool is_oracle_mode = false;
   int64_t rpc_timeout = 0;
   int64_t tablet_count = 0;
   ObArenaAllocator allocator(lib::ObLabel("ConstraiTask"));
@@ -1305,14 +1290,12 @@ int ObConstraintTask::set_check_constraint_validated()
       } else if (alter_table_arg.alter_table_schema_.constraint_end_for_non_const_iter() == iter) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("constraint not found", K(ret), K(target_object_id_), K(alter_table_arg));
-      } else if (OB_FAIL(alter_table_arg.alter_table_schema_.check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("check if oracle compat mode failed", K(ret));
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_, object_id_, rpc_timeout))) {
         LOG_WARN("get ddl rpc timeout failed", K(ret));
       } else if (CONSTRAINT_TYPE_NOT_NULL == (*iter)->get_constraint_type()) {
         alter_table_arg.alter_table_schema_.set_tenant_id(tenant_id_);
         if (is_table_hidden_) {
-          if (!is_oracle_mode) {
+          {
             // no need to refresh_alter_table_arg because MODIFY_NOT_NULL_COLUMN_STATE_TASK use constraint id instead of name
             // only mysql mode support modify not null column during offline ddl, support oracle later.
             ObSArray<uint64_t> unused_ids;
@@ -1332,16 +1315,7 @@ int ObConstraintTask::set_check_constraint_validated()
                 && (*iter)->get_is_modify_validate_flag() && (*iter)->is_validated())) {
             alter_table_arg.exec_tenant_id_ = tenant_id_;
             uint64_t column_id = OB_INVALID_ID;
-            if (is_oracle_mode) {
-              if (OB_FAIL(ObDDLUtil::refresh_alter_table_arg(tenant_id_, object_id_, OB_INVALID_ID/*foreign_key_id*/, alter_table_arg))) {
-                LOG_WARN("failed to refresh name for alter table schema", K(ret));
-              } else {
-                alter_table_arg.alter_constraint_type_ = obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE;
-                (*iter)->set_is_modify_validate_flag(true);
-                (*iter)->set_validate_flag(CST_FK_VALIDATED);
-                (*iter)->set_need_validate_data(false);
-              }
-            } else {
+            {
               alter_table_arg.alter_constraint_type_ = obcall::ObAlterTableArg::DROP_CONSTRAINT;
               if (OB_ISNULL((*iter)->cst_col_begin())) {
                 ret = OB_ERR_UNEXPECTED;
@@ -1724,7 +1698,6 @@ int ObConstraintTask::set_drop_constraint_ddl_stmt_str(
   char *buf = NULL;
   int64_t buf_len = OB_MAX_SQL_LENGTH;
   int64_t pos = 0;
-  bool is_oracle_mode = false;
   bool is_check_constraint = false;
 
   if (obcall::ObAlterTableArg::ADD_CONSTRAINT == alter_table_arg.alter_constraint_type_) {
@@ -1743,12 +1716,10 @@ int ObConstraintTask::set_drop_constraint_ddl_stmt_str(
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", K(ret), K(OB_MAX_SQL_LENGTH));
-  } else if (OB_FAIL(alter_table_arg.alter_table_schema_.check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", K(ret));
   } else {
-    if (is_oracle_mode) {
+    if (is_check_constraint) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-              "ALTER TABLE \"%.*s\".\"%.*s\" DROP CONSTRAINT \"%.*s\"",
+              "ALTER TABLE `%.*s`.`%.*s` DROP CHECK (`%.*s`)",
               alter_table_schema.get_origin_database_name().length(),
               alter_table_schema.get_origin_database_name().ptr(),
               alter_table_schema.get_origin_table_name().length(),
@@ -1757,26 +1728,14 @@ int ObConstraintTask::set_drop_constraint_ddl_stmt_str(
         LOG_WARN("fail to print ddl_stmt_str for rollback", K(ret));
       }
     } else {
-      if (is_check_constraint) {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                "ALTER TABLE `%.*s`.`%.*s` DROP CHECK (`%.*s`)",
-                alter_table_schema.get_origin_database_name().length(),
-                alter_table_schema.get_origin_database_name().ptr(),
-                alter_table_schema.get_origin_table_name().length(),
-                alter_table_schema.get_origin_table_name().ptr(),
-                cst_name.length(), cst_name.ptr()))) {
-          LOG_WARN("fail to print ddl_stmt_str for rollback", K(ret));
-        }
-      } else {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                "ALTER TABLE `%.*s`.`%.*s` DROP FOREIGN KEY `%.*s`",
-                alter_table_schema.get_origin_database_name().length(),
-                alter_table_schema.get_origin_database_name().ptr(),
-                alter_table_schema.get_origin_table_name().length(),
-                alter_table_schema.get_origin_table_name().ptr(),
-                cst_name.length(), cst_name.ptr()))) {
-          LOG_WARN("fail to print ddl_stmt_str for rollback", K(ret));
-        }
+      if (OB_FAIL(databuff_printf(buf, buf_len, pos,
+              "ALTER TABLE `%.*s`.`%.*s` DROP FOREIGN KEY `%.*s`",
+              alter_table_schema.get_origin_database_name().length(),
+              alter_table_schema.get_origin_database_name().ptr(),
+              alter_table_schema.get_origin_table_name().length(),
+              alter_table_schema.get_origin_table_name().ptr(),
+              cst_name.length(), cst_name.ptr()))) {
+        LOG_WARN("fail to print ddl_stmt_str for rollback", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

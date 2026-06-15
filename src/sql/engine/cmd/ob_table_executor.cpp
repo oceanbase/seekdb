@@ -1066,7 +1066,6 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     bool need_modify_fk_validate = false;
     bool need_check = false;
     bool need_modify_notnull_validate = false;
-    bool is_oracle_mode = false;
     const int64_t tenant_id = alter_table_arg.alter_table_schema_.get_tenant_id();
     ObArenaAllocator allocator(ObModIds::OB_SQL_EXECUTOR);
     if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
@@ -1084,9 +1083,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       } else if (FALSE_IT(alter_table_arg.consumer_group_id_ = THIS_WORKER.get_group_id())) {
       } else if (OB_FAIL(check_alter_partition(ctx, stmt, alter_table_arg))) {
         LOG_WARN("check alter partition failed", K(ret));
-      } else if (OB_FAIL(alter_table_arg.alter_table_schema_.check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
-      } else if (!is_oracle_mode && OB_FAIL(check_alter_part_key(ctx, alter_table_arg))) {
+      } else if (OB_FAIL(check_alter_part_key(ctx, alter_table_arg))) {
         LOG_WARN("check alter part key failed", K(ret));
       } else if (OB_FAIL(set_index_arg_list(ctx, stmt))) {
         LOG_WARN("fail to set index_arg_list", K(ret));
@@ -1099,7 +1096,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       } else {
         int64_t foreign_key_checks = 0;
         my_session->get_foreign_key_checks(foreign_key_checks);
-        alter_table_arg.foreign_key_checks_ = is_oracle_mode || (!is_oracle_mode && foreign_key_checks);
+        alter_table_arg.foreign_key_checks_ = foreign_key_checks;
         if ((obcall::ObAlterTableArg::ADD_CONSTRAINT == alter_table_arg.alter_constraint_type_
             || (obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE == alter_table_arg.alter_constraint_type_))) {
           if (OB_FAIL(need_check_constraint_validity(alter_table_arg, need_check))) {
@@ -1693,7 +1690,6 @@ int ObAlterTableExecutor::check_alter_part_key(ObExecContext &ctx,
     const share::schema::ObTableSchema *orig_table_schema = NULL;
     AlterColumnSchema *alter_column_schema = NULL;
     const ObColumnSchemaV2 *orig_column_schema = NULL;
-    bool is_oracle_mode = false;
     CK (!origin_database_name.empty() && !origin_table_name.empty());
     CK (OB_NOT_NULL(my_session));
     OZ (ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
@@ -1707,10 +1703,6 @@ int ObAlterTableExecutor::check_alter_part_key(ObExecContext &ctx,
     } else if (OB_ISNULL(orig_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table is not exist", KR(ret), K(tenant_id), K(origin_database_name), K(origin_table_name));
-    } else if (OB_FAIL(orig_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle mode", KR(ret), KPC(orig_table_schema));
-    } else if (is_oracle_mode) {
-      // skip
     } else {
       OZ (table_schema.assign_partition_schema(*orig_table_schema));
       for(;OB_SUCC(ret) && it_begin != it_end; it_begin++) {

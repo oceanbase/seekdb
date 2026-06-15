@@ -2302,10 +2302,7 @@ int ObSchemaMgr::add_table(
       LOG_WARN("build table id hashmap failed", K(ret), K(hash_ret),
                "table_id", new_table_schema->get_table_id());
     } else {
-      bool is_oracle_mode = false;
-      if (OB_FAIL(new_table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
-      } else if (new_table_schema->is_user_hidden_table()) { // hidden table will not be added to the map
+      if (new_table_schema->is_user_hidden_table()) { // hidden table will not be added to the map
         ObTableSchemaHashWrapper table_name_wrapper(new_table_schema->get_tenant_id(),
                                                     new_table_schema->get_database_id(),
                                                     new_table_schema->get_session_id(),
@@ -2340,7 +2337,7 @@ int ObSchemaMgr::add_table(
           } else {
             ObIndexSchemaHashWrapper cutted_index_name_wrapper(new_table_schema->get_tenant_id(),
                                                                new_table_schema->get_database_id(),
-                                                               is_oracle_mode ? common::OB_INVALID_ID : new_table_schema->get_data_table_id(),
+                                                               new_table_schema->get_data_table_id(),
                                                                new_table_schema->get_origin_index_name_str());
             hash_ret = index_name_map.set_refactored(cutted_index_name_wrapper, new_table_schema, over_write);
             if (OB_SUCCESS != hash_ret && OB_HASH_EXIST != hash_ret) {
@@ -3006,10 +3003,7 @@ int ObSchemaMgr::del_table(const ObTenantTableId table)
       // and the solution is solved by rebuild logic
       ret = OB_HASH_NOT_EXIST != hash_ret ? hash_ret : ret;
     } else {
-      bool is_oracle_mode = false;
-      if (OB_FAIL(schema_to_del->check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
-      } else if (schema_to_del->is_user_hidden_table()) {
+      if (schema_to_del->is_user_hidden_table()) {
         // when delete a hidden table, need to remove it from hidden_table_name_map_
         ObTableSchemaHashWrapper table_schema_wrapper(schema_to_del->get_tenant_id(),
                                                       schema_to_del->get_database_id(),
@@ -3058,7 +3052,7 @@ int ObSchemaMgr::del_table(const ObTenantTableId table)
             int hash_ret = OB_SUCCESS;
             ObIndexSchemaHashWrapper cutted_index_name_wrapper(schema_to_del->get_tenant_id(),
                                                                schema_to_del->get_database_id(),
-                                                               is_oracle_mode ? common::OB_INVALID_ID : schema_to_del->get_data_table_id(),
+                                                               schema_to_del->get_data_table_id(),
                                                                schema_to_del->get_origin_index_name_str());
             hash_ret = index_name_map.erase_refactored(cutted_index_name_wrapper);
             if (OB_SUCCESS != hash_ret) {
@@ -3429,9 +3423,8 @@ int ObSchemaMgr::get_index_schema(
         LOG_WARN("fail to get index name", K(ret));
       } else {
         // Notice that, operation on mysql_db table when compat_mode equals to lib::Worker::CompatMode::ORACLE is mysql mode.
-        const bool is_oracle_mode = false;
         const ObIndexSchemaHashWrapper cutted_index_name_wrapper(tenant_id, database_id,
-            is_oracle_mode ? common::OB_INVALID_ID : data_table_id, cutted_index_name);
+            data_table_id, cutted_index_name);
         int hash_ret = index_name_map.get_refactored(cutted_index_name_wrapper, tmp_schema);
         if (OB_SUCCESS == hash_ret) {
           if (OB_ISNULL(tmp_schema)) {
@@ -3453,7 +3446,6 @@ int ObSchemaMgr::deep_copy_index_name_map(
     ObIndexNameMap &index_name_cache)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   {
     // index_name_cache will destory or not init, so sub_map_mem_size should be set first
     // to reduce dynamic memory allocation and avoid error.
@@ -3492,8 +3484,7 @@ int ObSchemaMgr::deep_copy_index_name_map(
         data_table_id = OB_INVALID_ID;
         index_name = index_name_info->get_index_name();
       } else {
-        data_table_id = (is_oracle_mode && !is_mysql_sys_database_id(database_id)) ?
-                        OB_INVALID_ID : index_name_info->get_data_table_id();
+        data_table_id = index_name_info->get_data_table_id();
         index_name = index_name_info->get_original_index_name();
       }
       if (OB_SUCC(ret)) {
@@ -4286,12 +4277,9 @@ int ObSchemaMgr::deal_with_change_table_state(const ObSimpleTableSchemaV2 &old_t
             && new_table_schema.is_user_hidden_table()) {
     // non-hidden table to hidden table
     if (old_table_schema.is_index_table()) {
-      bool is_oracle_mode = false;
       const bool is_built_in_index = old_table_schema.is_built_in_index();
       IndexNameMap &index_name_map = get_index_name_map_(is_built_in_index);
-      if (OB_FAIL(old_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
-      } else if (old_table_schema.is_in_recyclebin()) { // index is in recyclebin
+      if (old_table_schema.is_in_recyclebin()) { // index is in recyclebin
         ObIndexSchemaHashWrapper index_name_wrapper(old_table_schema.get_tenant_id(),
                                                     old_table_schema.get_database_id(),
                                                     common::OB_INVALID_ID,
@@ -4310,7 +4298,7 @@ int ObSchemaMgr::deal_with_change_table_state(const ObSimpleTableSchemaV2 &old_t
         } else {
           ObIndexSchemaHashWrapper cutted_index_name_wrapper(old_table_schema.get_tenant_id(),
                                                              old_table_schema.get_database_id(),
-                                                             is_oracle_mode ? common::OB_INVALID_ID : old_table_schema.get_data_table_id(),
+                                                             old_table_schema.get_data_table_id(),
                                                              cutted_index_name);
           int hash_ret = index_name_map.erase_refactored(cutted_index_name_wrapper);
           if (OB_SUCCESS != hash_ret) {
@@ -4388,11 +4376,8 @@ int ObSchemaMgr::deal_with_table_rename(
       bool is_system_table = false;
       if (old_table_schema.is_index_table()) {
         const bool is_built_in_index = old_table_schema.is_built_in_index();
-        bool is_oracle_mode = false;
         IndexNameMap &index_name_map = get_index_name_map_(is_built_in_index);
-        if (OB_FAIL(old_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
-          LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
-        } else if (old_table_schema.is_in_recyclebin()) { // index is in recyclebin
+        if (old_table_schema.is_in_recyclebin()) { // index is in recyclebin
           ObIndexSchemaHashWrapper index_name_wrapper(old_table_schema.get_tenant_id(),
                                                       old_table_schema.get_database_id(),
                                                       common::OB_INVALID_ID,
@@ -4411,7 +4396,7 @@ int ObSchemaMgr::deal_with_table_rename(
           } else {
             ObIndexSchemaHashWrapper cutted_index_name_wrapper(old_table_schema.get_tenant_id(),
                                                                old_table_schema.get_database_id(),
-                                                               is_oracle_mode ? common::OB_INVALID_ID : old_table_schema.get_data_table_id(),
+                                                               old_table_schema.get_data_table_id(),
                                                                cutted_index_name);
             int hash_ret = index_name_map.erase_refactored(cutted_index_name_wrapper);
             if (OB_SUCCESS != hash_ret) {
@@ -4570,10 +4555,7 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
                       "table_name", table_schema->get_table_name());
           }
         } else {
-          bool is_oracle_mode = false;
-          if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-            LOG_WARN("fail to check if tenant mode is oracle mode", K(ret));
-          } else if (table_schema->is_index_table()) {
+          if (table_schema->is_index_table()) {
             LOG_TRACE("index is", "table_id", table_schema->get_table_id(),
                       "database_id", table_schema->get_database_id(),
                       "table_name", table_schema->get_table_name_str());
@@ -4604,7 +4586,7 @@ int ObSchemaMgr::rebuild_table_hashmap(uint64_t &fk_cnt, uint64_t &cst_cnt)
               } else {
                 ObIndexSchemaHashWrapper cutted_index_name_wrapper(table_schema->get_tenant_id(),
                                                                    table_schema->get_database_id(),
-                                                                   is_oracle_mode ? common::OB_INVALID_ID : table_schema->get_data_table_id(),
+                                                                   table_schema->get_data_table_id(),
                                                                    table_schema->get_origin_index_name_str());
                 hash_ret = index_name_map.set_refactored(cutted_index_name_wrapper, table_schema, over_write);
                 if (OB_SUCCESS != hash_ret) {
