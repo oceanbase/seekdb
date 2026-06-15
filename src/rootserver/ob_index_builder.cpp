@@ -1876,7 +1876,7 @@ int ObIndexBuilder::generate_schema(
             length = 0;
           } else if (share::schema::is_hybrid_vec_index(arg.index_type_)) {
             length = 0;
-          } else if (OB_FAIL(data_column->get_byte_length(length, false/*is_oracle_mode*/, false))) {
+          } else if (OB_FAIL(data_column->get_byte_length(length, false))) {
             LOG_WARN("fail to get byte length of column", K(ret));
           } else if (length < 0 || (0 == length && !data_column->is_vec_index_column())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;

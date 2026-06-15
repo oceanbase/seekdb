@@ -1540,7 +1540,7 @@ int ObAlterTableResolver::resolve_drop_unused_columns(const ParseNode& node)
       || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null value", KR(ret), KP(alter_table_stmt), KP(session_info_));
-  } else if (!check_can_drop_column_instant(session_info_->get_effective_tenant_id(), false)) {
+  } else if (!check_can_drop_column_instant(session_info_->get_effective_tenant_id())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported to alter table force under this tenant_data_version", KR(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant version is illegal, alter table force");
@@ -5809,9 +5809,8 @@ int ObAlterTableResolver::resolve_drop_column(
         }
         if (OB_SUCC(ret)) {
           alter_column_schema.alter_type_ = OB_DDL_DROP_COLUMN;
-          const bool is_oracle_mode = false;
           ObAlterTableArg::AlterAlgorithm algorithm = ObAlterTableArg::AlterAlgorithm::INPLACE;
-          if (check_can_drop_column_instant(table_schema_->get_tenant_id(), is_oracle_mode)) {
+          if (check_can_drop_column_instant(table_schema_->get_tenant_id())) {
             algorithm = ObAlterTableArg::AlterAlgorithm::INSTANT;
           } else {
             algorithm = ObAlterTableArg::AlterAlgorithm::INPLACE;

@@ -8138,8 +8138,7 @@ int ObDDLOperator::revise_not_null_constraint_info(
             tenant_id,
             ori_table_schema->get_database_id(),
             10, /* retry_times */
-            cst_name_generated,
-            true))) {
+            cst_name_generated))) {
         LOG_WARN("create cons name automatically failed", K(ret));
       } else if (OB_UNLIKELY(!cst_name_generated)) {
         ret = OB_ERR_UNEXPECTED;

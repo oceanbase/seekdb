@@ -145,12 +145,11 @@ int ObTriggerSqlService::rebuild_trigger_on_rename(const ObTriggerInfo &trigger_
   ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
-  bool is_oracle_mode = false;
   ObTriggerInfo new_trigger_info(&inner_alloc);
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
   OZ (new_trigger_info.deep_copy(trigger_info));
   OZ (ObTriggerInfo::replace_table_name_in_body(new_trigger_info, inner_alloc, base_object_database,
-                                                base_object_name, is_oracle_mode));
+                                                base_object_name));
 
   // update all_trigger.
   OZ (fill_dml_sql(new_trigger_info, new_schema_version, dml));

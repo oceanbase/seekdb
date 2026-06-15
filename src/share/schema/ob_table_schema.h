@@ -1323,8 +1323,7 @@ public:
   static int create_cons_name_automatically(common::ObString &cst_name,
                                             const common::ObString &table_name,
                                             common::ObIAllocator &allocator,
-                                            ObConstraintType cst_type,
-                                            const bool is_oracle_mode);
+                                            ObConstraintType cst_type);
   static int create_cons_name_automatically_with_dup_check(common::ObString &cst_name,
                                                   const common::ObString &table_name,
                                                   common::ObIAllocator &allocator,
@@ -1333,8 +1332,7 @@ public:
                                                   const uint64_t tenant_id,
                                                   const uint64_t database_id,
                                                   const int64_t retry_times,
-                                                  bool &cst_name_generated,
-                                                  const bool is_oracle_mode);
+                                                  bool &cst_name_generated);
   static int create_new_idx_name_after_flashback(ObTableSchema &new_table_schema,
                                                  common::ObString &new_idx_name,
                                                  common::ObIAllocator &allocator,
@@ -1779,7 +1777,6 @@ public:
   static int build_mlog_table_name(Allocator &allocator,
                                    const common::ObString &base_table_name,
                                    common::ObString &mlog_table_name,
-                                   const bool is_oracle_mode,
                                    const bool is_tmp = false);
 
   //other methods
@@ -1924,12 +1921,10 @@ public:
   int check_prohibition_rules(const ObColumnSchemaV2 &src_schema,
                               const ObColumnSchemaV2 &dst_schema,
                               ObSchemaGetterGuard &schema_guard,
-                              const bool is_oracle_mode,
                               const bool is_offline) const;
   int check_ddl_type_change_rules(const ObColumnSchemaV2 &src_schema,
                                   const ObColumnSchemaV2 &dst_schema,
                                   ObSchemaGetterGuard &schema_guard,
-                                  const bool is_oracle_mode,
                                   bool &is_offline) const;
   static int check_is_exactly_same_type(const ObColumnSchemaV2 &src_column,
                                         const ObColumnSchemaV2 &dst_column,
@@ -1945,19 +1940,17 @@ public:
                                   ObColumnSchemaV2 &dst_column,
                                   const int32_t src_col_byte_len,
                                   const int32_t dst_col_byte_len,
-                                  const bool is_oracle_mode,
                                   bool &is_offline) const;
   int check_alter_column_type(const ObColumnSchemaV2 &src_column,
                               ObColumnSchemaV2 &dst_column,
                               const int32_t src_col_byte_len,
                               const int32_t dst_col_byte_len,
-                              const bool is_oracle_mode,
                               bool &is_offline) const;
 
-  int get_column_byte_length(const bool is_oracle_mode, const ObColumnSchemaV2 &col,
+  int get_column_byte_length(const ObColumnSchemaV2 &col,
                              const bool use_lob_inrow_threshold, int64_t &length) const;
   int64_t get_max_row_length() const;
-  int check_row_length(const bool is_oracle_mode) const;
+  int check_row_length() const;
 
   int get_column_schema_in_same_col_group(uint64_t column_id, uint64_t udt_set_id,
                                           common::ObIArray<ObColumnSchemaV2 *> &column_group) const;
@@ -2093,10 +2086,8 @@ public:
 protected:
   int add_col_to_id_hash_array(ObColumnSchemaV2 *column);
   int remove_col_from_id_hash_array(const ObColumnSchemaV2 *column);
-  int add_col_to_name_hash_array(const bool is_oracle_mode,
-                                 ObColumnSchemaV2 *column);
-  int remove_col_from_name_hash_array(const bool is_oracle_mode,
-                                      const ObColumnSchemaV2 *column);
+  int add_col_to_name_hash_array(ObColumnSchemaV2 *column);
+  int remove_col_from_name_hash_array(const ObColumnSchemaV2 *column);
   int add_col_to_column_array(ObColumnSchemaV2 *column);
   int remove_col_from_column_array(const ObColumnSchemaV2 *column);
   int add_column_update_prev_id(ObColumnSchemaV2 *local_column);
@@ -2128,16 +2119,13 @@ private:
   ObColumnSchemaV2 *get_column_schema_by_name_internal(const common::ObString &column_name) const;
   int check_rowkey_column_can_be_altered(const ObColumnSchemaV2 *src_schema,
                                          const ObColumnSchemaV2 *dst_schema) const;
-  int check_row_length(const bool is_oracle_mode,
-                       const ObColumnSchemaV2 *src_schema,
+  int check_row_length(const ObColumnSchemaV2 *src_schema,
                        const ObColumnSchemaV2 *dst_schema) const;
   const ObConstraint *get_constraint_internal(
       std::function<bool(const ObConstraint *val)> func) const;
   int check_alter_column_in_foreign_key(const ObColumnSchemaV2 &src_schema,
-                                        const ObColumnSchemaV2 &dst_schema,
-                                        const bool is_oracle_mode) const;
+                                        const ObColumnSchemaV2 &dst_schema) const;
   int convert_char_to_byte_semantics(const ObColumnSchemaV2 *col_schema,
-                                     const bool is_oracle_mode,
                                      int32_t &col_byte_len) const;
   int check_need_convert_id_hash_array(bool &need_convert_id_hash_array) const;
   int convert_basic_column_ids(
@@ -2764,7 +2752,6 @@ int ObTableSchema::add_column(const ColumnType &column)
   int ret = common::OB_SUCCESS;
   char *buf = NULL;
   ColumnType *local_column = NULL;
-  constexpr bool is_oracle_mode = false;
   const char* thread_name = ob_get_origin_thread_name();
   const bool in_replay_thread = OB_NOT_NULL(thread_name)
                                 && 0 == STRCMP(thread_name, REPLAY_SERVICE_THREAD_NAME);
@@ -2785,7 +2772,7 @@ int ObTableSchema::add_column(const ColumnType &column)
   if (OB_FAIL(ret)) {
   } else if (!is_view_table()
             && !is_external_object_id(table_id_)
-            && OB_FAIL(check_row_length(is_oracle_mode, NULL, &column))) {
+            && OB_FAIL(check_row_length(NULL, &column))) {
     SHARE_SCHEMA_LOG(WARN, "check row length failed", KR(ret), K(tenant_id_), K(table_id_), K(column));
   } else {
     if (NULL == (local_column = new (buf) ColumnType(allocator_))) {
@@ -2802,7 +2789,7 @@ int ObTableSchema::add_column(const ColumnType &column)
         SHARE_SCHEMA_LOG(WARN, "Fail to update previous next column id", KR(ret));
       } else if (OB_FAIL(add_col_to_id_hash_array(local_column))) {
         SHARE_SCHEMA_LOG(WARN, "Fail to add column to id_hash_array", KR(ret));
-      } else if (OB_FAIL(add_col_to_name_hash_array(is_oracle_mode, local_column))) {
+      } else if (OB_FAIL(add_col_to_name_hash_array(local_column))) {
         SHARE_SCHEMA_LOG(WARN, "Fail to add column to name_hash_array", KR(ret));
       } else if (OB_FAIL(add_col_to_column_array(local_column))) {
         SHARE_SCHEMA_LOG(WARN, "Fail to push column to array", KR(ret));
@@ -2904,11 +2891,11 @@ int ObTableSchema::add_column(const ColumnType &column)
   }
   if (OB_FAIL(ret)) {
     SHARE_SCHEMA_LOG(WARN, "add column failed", KR(ret), K(mtl_tenant_id),
-                     K(tenant_id_), K(table_id_), K(is_oracle_mode), K(in_replay_thread),
+                     K(tenant_id_), K(table_id_), K(in_replay_thread),
                      "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   } else {
     SHARE_SCHEMA_LOG(TRACE, "add column success", KR(ret), K(mtl_tenant_id),
-                     K(tenant_id_), K(table_id_), K(is_oracle_mode), K(in_replay_thread),
+                     K(tenant_id_), K(table_id_), K(in_replay_thread),
                      "thead_name", OB_NOT_NULL(thread_name) ? thread_name : "NULL", K(column));
   }
   return ret;
@@ -2988,7 +2975,6 @@ template <typename Allocator>
 int ObTableSchema::build_mlog_table_name(Allocator &allocator,
                                          const common::ObString &base_table_name,
                                          common::ObString &mlog_table_name,
-                                         const bool is_oracle_mode,
                                          const bool is_tmp)
 {
   int ret = OB_SUCCESS;

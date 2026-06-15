@@ -339,14 +339,14 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
         case PARTITION_DESCRIPTION: {
           ObString desc;
           if (table_schema.is_range_part()) {
-            if (OB_FAIL(gen_high_bound_val_str(false/*is_oracle_mode*/, part_info.part_, desc))) {
+            if (OB_FAIL(gen_high_bound_val_str(part_info.part_, desc))) {
               SERVER_LOG(WARN, "fail to generate PARTITION_DESCRIPTION", K(ret), K(part_info));
             } else {
               cells[cell_idx].set_varchar(desc);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           } else if (table_schema.is_list_part()) {
-            if (OB_FAIL(gen_list_bound_val_str(false/*is_oracle_mode*/, part_info.part_, desc))) {
+            if (OB_FAIL(gen_list_bound_val_str(part_info.part_, desc))) {
               SERVER_LOG(WARN, "fail to generate PARTITION_DESCRIPTION", K(ret), K(part_info));
             } else {
               cells[cell_idx].set_varchar(desc);
@@ -445,7 +445,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
 }
 
 int ObInfoSchemaPartitionsTable::gen_high_bound_val_str(
-    const bool is_oracle_mode,
     const share::schema::ObBasePartition *part,
     common::ObString &val_str)
 {
@@ -466,7 +465,7 @@ int ObInfoSchemaPartitionsTable::gen_high_bound_val_str(
       if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_info.get_tz_map_wrap()))) {
         SERVER_LOG(WARN, "get tenant timezone map failed", K(ret), K(tenant_id_));
       } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-          is_oracle_mode, part->get_high_bound_val(), high_bound_val,
+          part->get_high_bound_val(), high_bound_val,
           OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
         SERVER_LOG(WARN, "Failed to convert rowkey to sql text", K(tz_info), K(ret));
       } else {
@@ -477,7 +476,6 @@ int ObInfoSchemaPartitionsTable::gen_high_bound_val_str(
   return ret;
 }
 int ObInfoSchemaPartitionsTable::gen_list_bound_val_str(
-    const bool is_oracle_mode,
     const share::schema::ObBasePartition *part,
     common::ObString &val_str)
 {
@@ -498,7 +496,7 @@ int ObInfoSchemaPartitionsTable::gen_list_bound_val_str(
       if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_info.get_tz_map_wrap()))) {
         SERVER_LOG(WARN, "get tenant timezone map failed", K(ret), K(tenant_id_));
       } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
-          is_oracle_mode, part->get_list_row_values(), list_val,
+          part->get_list_row_values(), list_val,
           OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
         SERVER_LOG(WARN, "Failed to convert rowkey to sql text", K(tz_info), K(ret));
       } else {

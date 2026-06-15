@@ -275,7 +275,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObTableSchema::build_mlog_table_name(
-                     *allocator_, data_table_name, mlog_table_name, false,
+                     *allocator_, data_table_name, mlog_table_name,
                      real_table_schema->has_mlog_table()))) {
         LOG_WARN("failed to build mlog table name", KR(ret), K(data_table_name));
       } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {

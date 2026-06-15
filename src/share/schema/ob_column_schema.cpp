@@ -448,7 +448,6 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
 
 int ObColumnSchemaV2::get_byte_length(
     int64_t &length,
-    const bool is_oracle_mode,
     const bool for_check_length) const
 {
   int ret = OB_SUCCESS;
@@ -465,17 +464,12 @@ int ObColumnSchemaV2::get_byte_length(
       length = get_data_length();
     }
   } else {
-    const ObLengthSemantics length_semantic = is_oracle_mode ? get_length_semantics() : LS_CHAR;
-    if (LS_CHAR == length_semantic) {
-      int64_t mbmaxlen = 0;
-      if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(get_collation_type(), mbmaxlen))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get mbmaxlen", K(ret), K(get_collation_type()));
-      } else {
-        length = get_data_length() * mbmaxlen;
-      }
+    int64_t mbmaxlen = 0;
+    if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(get_collation_type(), mbmaxlen))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get mbmaxlen", K(ret), K(get_collation_type()));
     } else {
-      length = get_data_length();
+      length = get_data_length() * mbmaxlen;
     }
   }
   return ret;

@@ -41,7 +41,6 @@ int ObPartDMLGenerator::gen_dml(ObDMLSqlSplicer &dml)
 }
 
 int ObPartDMLGenerator::gen_high_bound_val_str(
-    const bool is_oracle_mode,
     const ObRowkey &high_bound_val,
     ObString &high_bound_val_str,
     ObString &b_high_bound_val_str,
@@ -56,7 +55,7 @@ int ObPartDMLGenerator::gen_high_bound_val_str(
   if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_info.get_tz_map_wrap()))) {
     LOG_WARN("get tenant timezone map failed", K(ret), K(tenant_id));
   } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-             is_oracle_mode, high_bound_val, high_bound_val_,
+             high_bound_val, high_bound_val_,
              OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
     LOG_WARN("Failed to convert rowkey to sql text", K(ret));
   } else {
@@ -76,7 +75,6 @@ int ObPartDMLGenerator::gen_high_bound_val_str(
   return ret;
 }
 int ObPartDMLGenerator::gen_list_val_str(
-    const bool is_oracle_mode,
     const common::ObIArray<common::ObNewRow>& list_value,
     common::ObString &list_val_str,
     common::ObString &b_list_val_str,
@@ -90,7 +88,7 @@ int ObPartDMLGenerator::gen_list_val_str(
   if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_info.get_tz_map_wrap()))) {
     LOG_WARN("get tenant timezone map failed", K(ret), K(tenant_id));
   } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
-             is_oracle_mode, list_value, list_val_,
+             list_value, list_val_,
              OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
     LOG_WARN("failed to convert row to sql test", K(ret));
   } else {
@@ -683,7 +681,7 @@ int ObAddPartInfoHelper::add_high_bound_val_column(
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table->get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", KR(ret), K(table->get_tenant_id()));
     } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               false, part_option.get_high_bound_val(), high_bound_val_,
+               part_option.get_high_bound_val(), high_bound_val_,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(ret));
     } else if (OB_FAIL(dml.add_column("high_bound_val",
@@ -723,15 +721,14 @@ int ObAddPartInfoHelper::add_list_val_column(
     int64_t pos = 0;
     //TODO:@yanhua add session timezone_info is better
     ObTimeZoneInfo tz_info;
-    tz_info.set_offset(0); 
-    bool is_oracle_mode = false;
+    tz_info.set_offset(0);
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table ptr is null", KR(ret));
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table->get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(table->get_tenant_id()));
     } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
-               false, part_option.get_list_row_values(), list_val_,
+               part_option.get_list_row_values(), list_val_,
                OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(ret));
     } else if (OB_FAIL(dml.add_column("list_val",
@@ -920,8 +917,7 @@ int ObAddIncSubPartDMLGenerator::extract_part_info(PartInfo &part_info)
     }
     if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_subpart()) {
-      if (OB_FAIL(gen_high_bound_val_str(false,
-                                         sub_part_.get_high_bound_val(),
+      if (OB_FAIL(gen_high_bound_val_str(sub_part_.get_high_bound_val(),
                                          part_info.high_bound_val_,
                                          part_info.b_high_bound_val_,
                                          part_info.tenant_id_))) {
@@ -929,7 +925,6 @@ int ObAddIncSubPartDMLGenerator::extract_part_info(PartInfo &part_info)
       }
     } else if (ori_table_->is_list_subpart()) {
       if (OB_FAIL(gen_list_val_str(
-                  false,
                   sub_part_.get_list_row_values(),
                   part_info.list_val_,
                   part_info.b_list_val_,
@@ -1040,16 +1035,14 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
     }
     if (OB_FAIL(ret)) {
     } else if (ori_table_->is_range_part()) {
-      if (OB_FAIL(gen_high_bound_val_str(false,
-                                         part_.get_high_bound_val(),
+      if (OB_FAIL(gen_high_bound_val_str(part_.get_high_bound_val(),
                                          part_info.high_bound_val_,
                                          part_info.b_high_bound_val_,
                                          part_info.tenant_id_))) {
         LOG_WARN("generate high bound val failed", K(ret));
       }
     } else if (ori_table_->is_list_part()) {
-      if (OB_FAIL(gen_list_val_str(false,
-                                   part_.get_list_row_values(),
+      if (OB_FAIL(gen_list_val_str(part_.get_list_row_values(),
                                    part_info.list_val_,
                                    part_info.b_list_val_,
                                    part_info.tenant_id_))) {

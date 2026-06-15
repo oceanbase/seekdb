@@ -538,8 +538,7 @@ public:
   static int replace_table_name_in_body(ObTriggerInfo &trigger_info,
                                         common::ObIAllocator &alloc,
                                         const common::ObString &base_object_database,
-                                        const common::ObString &base_object_name,
-                                        bool is_oracle_mode);
+                                        const common::ObString &base_object_name);
   TO_STRING_KV(K(tenant_id_),
                K(trigger_id_),
                K(owner_id_),

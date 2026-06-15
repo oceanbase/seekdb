@@ -75,7 +75,7 @@ int ObAllVirtualProxyBaseIterator::get_rowkey_str(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc tmp_buf fail", KR(ret));
   } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-             is_oracle_mode, rowkey, buf, buf_len, pos, false, TZ_INFO(session_)))) {
+             rowkey, buf, buf_len, pos, false, TZ_INFO(session_)))) {
     LOG_WARN("fail to get rowkey str", KR(ret));
   } else if (OB_UNLIKELY(pos >= buf_len) || pos < 0) {
     ret = OB_BUF_NOT_ENOUGH;
@@ -216,7 +216,7 @@ int ObAllVirtualProxyBaseIterator::get_rows_str(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc tmp_buf fail", KR(ret));
   } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
-             is_oracle_mode, rows, buf, buf_len, pos, false, TZ_INFO(session_)))) {
+             rows, buf, buf_len, pos, false, TZ_INFO(session_)))) {
     LOG_WARN("fail to get rows str", KR(ret));
   } else if (OB_UNLIKELY(pos >= buf_len) || pos < 0) {
     ret = OB_BUF_NOT_ENOUGH;

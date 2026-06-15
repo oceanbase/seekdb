@@ -294,8 +294,7 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
             if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(high_bound_val_length)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               SERVER_LOG(WARN, "allocate memory failed", KR(ret));
-            } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(is_oracle_mode,
-                                                                               max_high_bound_val,
+            } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(max_high_bound_val,
                                                                                buf,
                                                                                high_bound_val_length,
                                                                                pos,

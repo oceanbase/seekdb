@@ -354,7 +354,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
   void reset();
   int get_byte_length(
       int64_t &length,
-      const bool is_oracle_mode,
       const bool for_check_length) const;
 
   int convert_column_id(const hash::ObHashMap<uint64_t, uint64_t> &column_id_map);

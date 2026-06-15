@@ -771,7 +771,7 @@ int ObMLogBuilder::set_basic_infos(
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
     ObTableType mlog_type = MATERIALIZED_VIEW_LOG;
     if (OB_FAIL(ObTableSchema::build_mlog_table_name(allocator, create_mlog_arg.table_name_,
-                                                            mlog_table_name, false/*is_oracle_mode*/,
+                                                            mlog_table_name,
                                                             create_mlog_arg.create_tmp_mlog_))) {
       LOG_WARN("failed to build mlog table name", KR(ret), K(create_mlog_arg.table_name_));
     } else if (OB_FAIL(mlog_schema.set_table_name(mlog_table_name))) {

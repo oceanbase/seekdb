@@ -496,8 +496,7 @@ int ObDynamicPartitionManager::build_high_bound_val_(const int64_t timestamp, Ob
         const int64_t len = OB_MAX_DEFAULT_VALUE_LENGTH;
         int64_t pos = 0;
         SMART_VAR(char[len], buf) {
-        if (FAILEDx(ObPartitionUtils::convert_rowkey_to_sql_literal(is_oracle_mode_,
-                                                                    high_bound_val_rowkey,
+        if (FAILEDx(ObPartitionUtils::convert_rowkey_to_sql_literal(high_bound_val_rowkey,
                                                                     buf,
                                                                     len,
                                                                     pos,

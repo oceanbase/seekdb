@@ -594,7 +594,7 @@ int ObSimpleTableSchemaV2::compare_partition_option(const schema::ObSimpleTableS
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("partition is null", KR(ret), KP(table_part1), KP(table_part2));
           } else if (OB_FAIL(schema::ObPartitionUtils::check_partition_value(
-                        false, *table_part1, *table_part2, t1_part_func_type, is_matched, user_error))) {
+                        *table_part1, *table_part2, t1_part_func_type, is_matched, user_error))) {
             LOG_WARN("fail to check partition value", KR(ret), KPC(table_part1), KPC(table_part2), K(t1_part_func_type));
           }
         }
@@ -655,7 +655,7 @@ int ObSimpleTableSchemaV2::compare_partition_option(const schema::ObSimpleTableS
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("subpartition is null", KR(ret), KP(table_subpart1), KP(table_subpart2));
                 } else if (OB_FAIL(schema::ObPartitionUtils::check_partition_value(
-                            false, *table_subpart1, *table_subpart2, t1_subpart_func_type, is_matched, user_error))) {
+                            *table_subpart1, *table_subpart2, t1_subpart_func_type, is_matched, user_error))) {
                   LOG_WARN("fail to check subpartition value", KR(ret), KPC(table_subpart1), KPC(table_subpart1), K(t1_subpart_func_type));
                 }
               }
@@ -1944,7 +1944,7 @@ int ObTableSchema::check_valid(const bool count_varchar_size_by_byte) const
                     K(OB_MAX_VARCHAR_LENGTH));
               } else {
                 if (count_varchar_size_by_byte) {
-                  if (OB_FAIL(column->get_byte_length(varchar_col_len, false, false))) {
+                  if (OB_FAIL(column->get_byte_length(varchar_col_len, false))) {
                     LOG_WARN("get_byte_length failed ", K(ret));
                   }
                 } else {
@@ -2327,17 +2327,16 @@ int ObTableSchema::alter_column(ObColumnSchemaV2 &column_schema, ObColumnCheckMo
       autoinc_column_id_ = 0;
     }
     if (src_schema->get_column_name_str() != dst_name && is_column_store_supported()) {
-      constexpr bool is_oracle_mode = false;
       char cg_name[OB_MAX_COLUMN_GROUP_NAME_LENGTH] = {'\0'};
       ObString cg_name_str(OB_MAX_COLUMN_GROUP_NAME_LENGTH, 0, cg_name);
 
       if (OB_FAIL(src_schema->get_each_column_group_name(cg_name_str))) {
         LOG_WARN("fail to get each column group name", K(ret));
-      } else if (OB_FAIL(remove_col_from_name_hash_array(false, src_schema))) {
+      } else if (OB_FAIL(remove_col_from_name_hash_array(src_schema))) {
         LOG_WARN("Failed to remove old column name from name_hash_array", K(ret));
       } else if (OB_FAIL(src_schema->set_column_name(dst_name))) {
         LOG_WARN("failed to change column name", K(ret));
-      } else if (OB_FAIL(add_col_to_name_hash_array(false, src_schema))) {
+      } else if (OB_FAIL(add_col_to_name_hash_array(src_schema))) {
         LOG_WARN("Failed to add new column name to name_hash_array", K(ret));
       }
 
@@ -2383,7 +2382,6 @@ int ObTableSchema::alter_mysql_table_columns(ObIArray<ObColumnSchemaV2> &columns
   int ret = OB_SUCCESS;
   ObSEArray<ObColumnSchemaV2 *, 16> src_cols;
   ObSEArray<ObColumnSchemaV2 *, 16> rename_cols;
-  constexpr bool is_oracle_mode = false;
   for (int i = 0; OB_SUCC(ret) && i < columns.count(); i++) {
     ObColumnSchemaV2 *src_col = get_column_schema(orig_names.at(i));
     if (OB_ISNULL(src_col)) {
@@ -2421,7 +2419,7 @@ int ObTableSchema::alter_mysql_table_columns(ObIArray<ObColumnSchemaV2> &columns
       LOG_WARN("push back element failed", K(ret));
     }
     if (OB_SUCC(ret) && src_col->get_column_name_str() != columns.at(i).get_column_name_str()) {
-      if (OB_FAIL(remove_col_from_name_hash_array(false, src_col))) {
+      if (OB_FAIL(remove_col_from_name_hash_array(src_col))) {
         LOG_WARN("failed to remove old column name from name_hash_array", K(ret));
       } else if (OB_FAIL(src_col->set_column_name(columns.at(i).get_column_name_str()))) {
         LOG_WARN("failed to change column namem", K(ret));
@@ -2431,7 +2429,7 @@ int ObTableSchema::alter_mysql_table_columns(ObIArray<ObColumnSchemaV2> &columns
     }
   }
   for (int i = 0; OB_SUCC(ret) && i < rename_cols.count(); i++) {
-    if (OB_FAIL(add_col_to_name_hash_array(false, rename_cols.at(i)))) {
+    if (OB_FAIL(add_col_to_name_hash_array(rename_cols.at(i)))) {
       LOG_WARN("failed to add new column name to name_hash_array", K(ret));
     }
   }
@@ -2596,13 +2594,12 @@ int ObTableSchema::create_idx_name_automatically_oracle(common::ObString &idx_na
 int ObTableSchema::create_cons_name_automatically(ObString &cst_name,
                                                   const ObString &table_name,
                                                   common::ObIAllocator &allocator,
-                                                  ObConstraintType cst_type,
-                                                  const bool is_oracle_mode)
+                                                  ObConstraintType cst_type)
 {
   int ret = OB_SUCCESS;
   ObSqlString cons_name_postfix_str;
   ObSqlString full_cons_name_str;
-  const int64_t max_constraint_name_len = false ? OB_MAX_CONSTRAINT_NAME_LENGTH_ORACLE : OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL;
+  const int64_t max_constraint_name_len = OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL;
 
   if (OB_SUCC(ret)) {
     switch (cst_type) {
@@ -2676,14 +2673,13 @@ int ObTableSchema::create_cons_name_automatically_with_dup_check(ObString &cst_n
                                                   const uint64_t tenant_id,
                                                   const uint64_t database_id,
                                                   const int64_t retry_times,
-                                                  bool &cst_name_generated,
-                                                  const bool is_oracle_mode)
+                                                  bool &cst_name_generated)
 {
   int ret = OB_SUCCESS;
   cst_name_generated = false;
   uint64_t constraint_id = OB_INVALID_ID;
   for (int64_t i = 0; OB_SUCC(ret) && i <= retry_times && !cst_name_generated; i++) {
-    if (OB_FAIL(create_cons_name_automatically(cst_name, table_name, allocator, cst_type, false))) {
+    if (OB_FAIL(create_cons_name_automatically(cst_name, table_name, allocator, cst_type))) {
       LOG_WARN("create constraint name failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_constraint_id(tenant_id, database_id,
                         cst_name, constraint_id))) {
@@ -3021,7 +3017,6 @@ ObColumnSchemaV2 *ObTableSchema::get_column_schema_by_name_internal(
 {
   int ret = OB_SUCCESS;
   ObColumnSchemaV2 *column = NULL;
-  constexpr bool is_oracle_mode = false;
   if (!column_name.empty() && NULL != name_hash_array_) {
     ObColumnSchemaHashWrapper column_name_key(column_name);
     if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column)) {
@@ -4013,7 +4008,6 @@ int ObTableSchema::remove_col_from_id_hash_array(const ObColumnSchemaV2 *column)
 }
 
 int ObTableSchema::add_col_to_name_hash_array(
-    const bool is_oracle_mode,
     ObColumnSchemaV2 *column)
 {
   int ret = OB_SUCCESS;
@@ -4087,7 +4081,6 @@ int ObTableSchema::add_col_to_name_hash_array(
 }
 
 int ObTableSchema::remove_col_from_name_hash_array(
-    const bool is_oracle_mode,
     const ObColumnSchemaV2 *column)
 {
   int ret = OB_SUCCESS;
@@ -4198,14 +4191,13 @@ int ObTableSchema::delete_column_internal(ObColumnSchemaV2 *column_schema, const
     LOG_USER_ERROR(OB_CANT_REMOVE_ALL_FIELDS);
     LOG_WARN("Can not delete all columns in table", K(ret));
   } else {
-    constexpr bool is_oracle_mode = false;
     if (!for_view && OB_FAIL(delete_column_update_prev_id(column_schema))) {
       LOG_WARN("Failed to update column previous id", K(ret));
     } else if (OB_FAIL(remove_col_from_column_array(column_schema))) {
       LOG_WARN("Failed to remove col from column array", K(ret));
     } else if (OB_FAIL(remove_col_from_id_hash_array(column_schema))) {
       LOG_WARN("Failed to remove col from id hash array", K(ret));
-    } else if (OB_FAIL(remove_col_from_name_hash_array(false, column_schema))) {
+    } else if (OB_FAIL(remove_col_from_name_hash_array(column_schema))) {
       LOG_WARN("Failed to remove col from name hash array", K(ret));
     } else if (column_schema->is_generated_column()
               && OB_FAIL(generated_columns_.del_member(column_schema->get_column_id() - common::OB_APP_MIN_COLUMN_ID)) ) {
@@ -4256,8 +4248,7 @@ bool ObTableSchema::is_same_type_category(
 }
 
 int ObTableSchema::check_alter_column_in_foreign_key(const ObColumnSchemaV2 &src_column,
-                                                     const ObColumnSchemaV2 &dst_column,
-                                                     const bool is_oracle_mode) const
+                                                     const ObColumnSchemaV2 &dst_column) const
 {
   int ret = OB_SUCCESS;
   ColumnType src_col_type = src_column.get_data_type();
@@ -4314,7 +4305,6 @@ int ObTableSchema::check_alter_column_in_foreign_key(const ObColumnSchemaV2 &src
 }
 
 int ObTableSchema::convert_char_to_byte_semantics(const ObColumnSchemaV2 *col_schema,
-                                                  const bool is_oracle_mode,
                                                   int32_t &col_byte_len) const
 {
   int ret = OB_SUCCESS;
@@ -4339,7 +4329,6 @@ int ObTableSchema::check_alter_column_accuracy(const ObColumnSchemaV2 &src_colum
                                               ObColumnSchemaV2 &dst_column,
                                               const int32_t src_col_byte_len,
                                               const int32_t dst_col_byte_len,
-                                              const bool is_oracle_mode,
                                               bool &is_offline) const
 {
   int ret = OB_SUCCESS;
@@ -4451,7 +4440,6 @@ int ObTableSchema::check_alter_column_type(const ObColumnSchemaV2 &src_column,
                                            ObColumnSchemaV2 &dst_column,
                                            const int32_t src_col_byte_len,
                                            const int32_t dst_col_byte_len,
-                                           const bool is_oracle_mode,
                                            bool &is_offline) const
 {
   int ret = OB_SUCCESS;
@@ -4596,7 +4584,6 @@ int ObTableSchema::get_not_null_constraint_map(hash::ObHashMap<uint64_t, uint64_
 int ObTableSchema::check_prohibition_rules(const ObColumnSchemaV2 &src_schema,
                                            const ObColumnSchemaV2 &dst_schema,
                                            ObSchemaGetterGuard &schema_guard,
-                                           const bool is_oracle_mode,
                                            const bool is_offline) const
 {
   int ret = OB_SUCCESS;
@@ -4609,7 +4596,7 @@ int ObTableSchema::check_prohibition_rules(const ObColumnSchemaV2 &src_schema,
     LOG_WARN("failed to check is exactly same type", K(ret));
   } else if (is_same) {
     // do nothing
-  } else if (OB_FAIL(check_alter_column_in_foreign_key(src_schema, dst_schema, false))) {
+  } else if (OB_FAIL(check_alter_column_in_foreign_key(src_schema, dst_schema))) {
     LOG_WARN("failed to check alter column in foreign key", K(ret));
   } else if (!false
             && (is_column_in_check_constraint(src_schema.get_column_id())
@@ -4657,7 +4644,6 @@ int ObTableSchema::check_prohibition_rules(const ObColumnSchemaV2 &src_schema,
 int ObTableSchema::check_ddl_type_change_rules(const ObColumnSchemaV2 &src_column,
                                                const ObColumnSchemaV2 &dst_column,
                                                ObSchemaGetterGuard &schema_guard,
-                                               const bool is_oracle_mode,
                                                bool &is_offline) const
 {
   int ret = OB_SUCCESS;
@@ -4855,28 +4841,28 @@ int ObTableSchema::check_alter_column_is_offline(const ObColumnSchemaV2 *src_col
                 && src_column->get_meta_type().is_character_type()
                 && dst_column->get_meta_type().is_character_type()
                 && src_column->get_length_semantics() != dst_column->get_length_semantics()) {
-      if (OB_FAIL(convert_char_to_byte_semantics(src_column, false, src_col_byte_len))) {
+      if (OB_FAIL(convert_char_to_byte_semantics(src_column, src_col_byte_len))) {
         LOG_WARN("failed to convert char to byte semantics", K(ret));
-      } else if (OB_FAIL(convert_char_to_byte_semantics(dst_column, false, dst_col_byte_len))) {
+      } else if (OB_FAIL(convert_char_to_byte_semantics(dst_column, dst_col_byte_len))) {
         LOG_WARN("failed to convert char to byte semantics", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_alter_column_accuracy(*src_column, *dst_column, src_col_byte_len,
-                  dst_col_byte_len, false, is_offline))) {
+                  dst_col_byte_len, is_offline))) {
         LOG_WARN("failed to check alter column accuracy", K(ret));
       } else if (OB_FAIL(check_alter_column_type(*src_column, *dst_column, src_col_byte_len,
-                         dst_col_byte_len, false, is_offline))) {
+                         dst_col_byte_len, is_offline))) {
         LOG_WARN("failed to check alter column type", K(ret));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_ddl_type_change_rules(*src_column, *dst_column,
-                     schema_guard, false, is_offline))) {
+                     schema_guard, is_offline))) {
       LOG_WARN("failed to check ddl type change rules", K(ret));
   } else if (OB_FAIL(check_prohibition_rules(*src_column, *dst_column,
-                     schema_guard, false, is_offline))) {
+                     schema_guard, is_offline))) {
     LOG_WARN("failed to check prohibition rules", K(ret));
   }
   // all alter skip_index operations are online ddl through progressive merge
@@ -4962,18 +4948,18 @@ int ObTableSchema::check_column_can_be_altered_offline(
                 && src_column->get_meta_type().is_character_type()
                 && dst_column->get_meta_type().is_character_type()
                 && src_column->get_length_semantics() != dst_column->get_length_semantics()) {
-      if (OB_FAIL(convert_char_to_byte_semantics(src_column, false, src_col_byte_len))) {
+      if (OB_FAIL(convert_char_to_byte_semantics(src_column, src_col_byte_len))) {
         LOG_WARN("failed to convert char to byte semantics", K(ret));
-      } else if (OB_FAIL(convert_char_to_byte_semantics(dst_column, false, dst_col_byte_len))) {
+      } else if (OB_FAIL(convert_char_to_byte_semantics(dst_column, dst_col_byte_len))) {
         LOG_WARN("failed to convert char to byte semantics", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(check_alter_column_accuracy(*src_column, *dst_column, src_col_byte_len,
-                  dst_col_byte_len, false, is_offline))) {
+                  dst_col_byte_len, is_offline))) {
         LOG_WARN("failed to check alter column accuracy", K(ret));
       } else if (OB_FAIL(check_alter_column_type(*src_column, *dst_column, src_col_byte_len,
-                         dst_col_byte_len, false, is_offline))) {
+                         dst_col_byte_len, is_offline))) {
         LOG_WARN("failed to check alter column type", K(ret));
       }
     }
@@ -4995,7 +4981,7 @@ int ObTableSchema::check_column_can_be_altered_offline(
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(check_row_length(false, src_column, dst_column))) {
+        if (OB_FAIL(check_row_length(src_column, dst_column))) {
           LOG_WARN("check row length failed", K(ret));
         }
       }
@@ -5158,7 +5144,7 @@ int ObTableSchema::check_column_can_be_altered_online(
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(check_row_length(false, src_schema, dst_schema))) {
+          if (OB_FAIL(check_row_length(src_schema, dst_schema))) {
             LOG_WARN("check row length failed", K(ret));
           }
         }
@@ -5212,7 +5198,7 @@ int ObTableSchema::check_rowkey_column_can_be_altered(const ObColumnSchemaV2 *sr
         if ((!is_index_table() && (column->get_rowkey_position() > 0))
             || (is_index_table() && (column->is_index_column()))) {
           if (ob_is_string_tc(column->get_data_type()) && !column->is_string_lob()) {
-            if (OB_FAIL(column->get_byte_length(length, false, false))) {
+            if (OB_FAIL(column->get_byte_length(length, false))) {
               LOG_WARN("fail to get byte length of column", KR(ret), K(false));
             } else {
               rowkey_varchar_col_length += length;
@@ -5241,7 +5227,6 @@ int ObTableSchema::check_rowkey_column_can_be_altered(const ObColumnSchemaV2 *sr
 // NULL == src_schema : for add_column
 // NULL != src_schema : for alter_column
 int ObTableSchema::check_row_length(
-    const bool is_oracle_mode,
     const ObColumnSchemaV2 *src_schema,
     const ObColumnSchemaV2 *dst_schema) const
 {
@@ -5266,7 +5251,7 @@ int ObTableSchema::check_row_length(
       } else if (ob_is_string_type(col->get_data_type()) || ob_is_json(col->get_data_type())
                  || ob_is_geometry(col->get_data_type()) || ob_is_roaringbitmap(col->get_data_type())) {
         // TODO (wenye): bug here! lob should use lob_inrow_threshold.
-        if (OB_FAIL(col->get_byte_length(length, false, true))) {
+        if (OB_FAIL(col->get_byte_length(length, true))) {
           SQL_RESV_LOG(WARN, "fail to get byte length of column", K(ret));
         }
       }
@@ -5288,7 +5273,7 @@ int ObTableSchema::check_row_length(
       } else if (is_storage_index_table() && dst_schema->is_fulltext_column()) {
         // The full text column in the index only counts the length of one word segment
         length = OB_MAX_OBJECT_NAME_LENGTH;
-      } else if (OB_FAIL(dst_schema->get_byte_length(length, false, true))) {
+      } else if (OB_FAIL(dst_schema->get_byte_length(length, true))) {
         SQL_RESV_LOG(WARN, "fail to get byte length of column", K(ret), KPC(dst_schema), K(false));
       }
       if (OB_FAIL(ret)) {
@@ -5320,7 +5305,7 @@ int64_t ObTableSchema::get_max_row_length() const
   return is_inner_table(get_table_id()) ? INT64_MAX : OB_MAX_USER_ROW_LENGTH;
 }
 
-int ObTableSchema::get_column_byte_length(const bool is_oracle_mode, const ObColumnSchemaV2 &col,
+int ObTableSchema::get_column_byte_length(const ObColumnSchemaV2 &col,
                                           const bool use_lob_inrow_threshold, int64_t &length) const
 {
   int ret = OB_SUCCESS;
@@ -5330,7 +5315,7 @@ int ObTableSchema::get_column_byte_length(const bool is_oracle_mode, const ObCol
   } else if (is_storage_index_table() && col.is_fulltext_column()) {
     // The full text column in the index only counts the length of one word segment
     length = OB_MAX_OBJECT_NAME_LENGTH;
-  } else if (OB_FAIL(col.get_byte_length(length, false, false))) {
+  } else if (OB_FAIL(col.get_byte_length(length, false))) {
     LOG_WARN("fail to get byte length of column", K(ret));
   } else if (is_lob_storage(col.get_data_type())) {
     // be careful lob_inrow_threshold may be actually value when deserialize table schema beacuase lob_inrow_threshold is deserialized after add_column
@@ -5340,7 +5325,7 @@ int ObTableSchema::get_column_byte_length(const bool is_oracle_mode, const ObCol
   return ret;
 }
 
-int ObTableSchema::check_row_length(const bool is_oracle_mode) const
+int ObTableSchema::check_row_length() const
 {
   int ret = OB_SUCCESS;
   if (is_view_table()) {
@@ -5354,7 +5339,7 @@ int ObTableSchema::check_row_length(const bool is_oracle_mode) const
       if (OB_ISNULL(col = column_array_[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("column schema is null", K(ret), K(i), KPC(this));
-      } else if (OB_FAIL(get_column_byte_length(false, *col, true/*use_lob_inrow_threshold*/, length))) {
+      } else if (OB_FAIL(get_column_byte_length(*col, true/*use_lob_inrow_threshold*/, length))) {
         LOG_WARN("fail to get byte length of column", K(ret), K(i), KPC(col), KPC(this));
       } else if (OB_FALSE_IT(row_length += length)) {
       } else if (row_length > max_row_length) {
@@ -5490,7 +5475,6 @@ int ObTableSchema::has_add_column_instant(bool &add_column_instant) const
   add_column_instant = false;
   int64_t max_column_id = 0;
   const ObColumnSchemaV2 *col = NULL;
-  constexpr bool is_oracle_mode = false;
   ObColumnIterByPrevNextID iter(*this);
   while (OB_SUCC(ret)) {
     if (OB_FAIL(iter.next(col))) {
@@ -9296,7 +9280,6 @@ int ObTableSchema::do_add_column_group(
 {
   int ret = OB_SUCCESS;
   ObColumnGroupSchema *column_group = NULL;
-  constexpr bool is_oracle_mode = false;
   if (OB_ISNULL(column_group = OB_NEWx(ObColumnGroupSchema, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", KR(ret));
@@ -9680,11 +9663,11 @@ int ObTableSchema::convert_column_udt_set_ids(const ObHashMap<uint64_t, uint64_t
             // update hidden column name
             char col_name[OB_MAX_COLUMN_NAME_LENGTH] = {0};
             databuff_printf(col_name, OB_MAX_COLUMN_NAME_LENGTH, "SYS_NC%05lu$", new_column_id);
-            if (OB_FAIL(remove_col_from_name_hash_array(true, column))) {
+            if (OB_FAIL(remove_col_from_name_hash_array(column))) {
               LOG_WARN("Failed to remove old column name from name_hash_array", K(ret));
             } else if (OB_FAIL(column->set_column_name(col_name))) {
               LOG_WARN("failed to change column name", K(ret));
-            } else if (OB_FAIL(add_col_to_name_hash_array(true, column))) {
+            } else if (OB_FAIL(add_col_to_name_hash_array(column))) {
               LOG_WARN("Failed to add new column name to name_hash_array", K(ret));
             }
           }

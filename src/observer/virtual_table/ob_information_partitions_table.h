@@ -55,11 +55,9 @@ private:
                      common::ObObj *cells,
                      const int64_t col_count);
   int gen_high_bound_val_str(
-      const bool is_oracle_mode,
       const share::schema::ObBasePartition *part,
       common::ObString &val_str);
   int gen_list_bound_val_str(
-      const bool is_oracle_mode,
       const share::schema::ObBasePartition *part,
       common::ObString &val_str);
   uint64_t tenant_id_;

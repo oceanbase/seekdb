@@ -87,7 +87,6 @@ public:
       const share::schema::ObTableSchema *table_schema,
       char *buf, const int64_t buf_len, int64_t &pos) const;
   int print_table_definition_fulltext_indexs(
-      const bool is_oracle_mode,
       const common::ObIArray<common::ObString> &fulltext_indexs,
       const uint64_t virtual_column_id,
       char *buf, int64_t buf_len, int64_t &pos) const;
@@ -181,7 +180,7 @@ public:
                                      const ObTimeZoneInfo *tz_info = NULL) const;
   int print_single_index_definition(const ObTableSchema *index_schema, const ObTableSchema &table_schema,
       ObIAllocator &arena_allocator, char* buf, const int64_t& buf_len, int64_t& pos,
-      const bool is_unique_index, const bool is_oracle_mode, const bool is_alter_table_add, ObSQLMode sql_mode,
+      const bool is_unique_index, const bool is_alter_table_add, ObSQLMode sql_mode,
       const ObTimeZoneInfo *tz_info) const;
   int print_constraint_stat(const bool rely_flag,
                             const bool enable_flag,
@@ -228,13 +227,11 @@ public:
                                 int64_t buf_len,
                                 int64_t &pos) const;
   int print_ordinary_index_column_expr(const ObColumnSchemaV2 &column,
-                                       bool is_oracle_mode,
                                        bool is_last,
                                        char *buf,
                                        int64_t buf_len,
                                        int64_t &pos) const;
   int print_table_definition_fulltext_indexs(
-      const bool is_oracle_mode,
       const common::ObIArray<common::ObString> &fulltext_indexs,
       char *buf, int64_t buf_len, int64_t &pos) const;
   int print_table_definition_rowkeys(const ObTableSchema &table_schema,
@@ -252,7 +249,7 @@ public:
   template<typename T>
   int print_referenced_table_info(
       char* buf, const int64_t &buf_len, int64_t &pos, ObArenaAllocator &allocator,
-      const bool is_oracle_mode, const ObForeignKeyInfo *foreign_key_info,
+      const ObForeignKeyInfo *foreign_key_info,
       const T *&schema) const;
   template<typename T>
   int print_column_list(const T &table_schema,
@@ -308,15 +305,13 @@ public:
                                                        char* buf,
                                                        const int64_t& buf_len,
                                                        int64_t& pos) const;
-  int print_range_sub_partition_elements(const bool is_oracle_mode,
-                                         ObSubPartition **sub_part_array,
+  int print_range_sub_partition_elements(ObSubPartition **sub_part_array,
                                          const int64_t sub_part_num,
                                          char *buf,
                                          const int64_t &buf_len,
                                          int64_t &pos,
                                          const common::ObTimeZoneInfo *tz_info) const;
   int print_list_sub_partition_elements(
-      const bool is_oracle_mode,
       ObSubPartition **sub_part_array,
       const int64_t sub_part_num,
       char *buf,
@@ -474,13 +469,11 @@ public:
   int print_identifier(char* buf,
                        const int64_t& buf_len,
                        int64_t& pos,
-                       const ObString &ident,
-                       bool is_oracle_mode) const;
+                       const ObString &ident) const;
   
   int print_view_define_str(char* buf,
                             const int64_t &buf_len,
                             int64_t& pos,
-                            bool is_oracle_mode,
                             const ObString &sql) const;
 
   int print_column_lob_params(const ObColumnSchemaV2 &column_schema,

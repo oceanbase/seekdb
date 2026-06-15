@@ -948,8 +948,7 @@ bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left,
 int ObTriggerInfo::replace_table_name_in_body(ObTriggerInfo &trigger_info,
                                               common::ObIAllocator &alloc,
                                               const common::ObString &base_object_database,
-                                              const common::ObString &base_object_name,
-                                              bool is_oracle_mode)
+                                              const common::ObString &base_object_name)
 {
   UNUSED(base_object_database);
   int ret = OB_SUCCESS;

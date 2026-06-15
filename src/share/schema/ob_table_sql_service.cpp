@@ -1630,7 +1630,7 @@ int ObTableSqlService::rename_csts_in_inner_table(common::ObISQLClient &sql_clie
     int64_t affected_rows = 0;
     // `drop table` modify constraint_name but do not modify name_generated_type
     const ObNameGeneratedType name_generated_type = (*iter)->get_name_generated_type();
-    if (OB_FAIL(ObTableSchema::create_cons_name_automatically(new_cst_name, table_schema.get_table_name_str(), allocator, (*iter)->get_constraint_type(), false))) {
+    if (OB_FAIL(ObTableSchema::create_cons_name_automatically(new_cst_name, table_schema.get_table_name_str(), allocator, (*iter)->get_constraint_type()))) {
       SQL_RESV_LOG(WARN, "create cons name automatically failed", K(ret));
     } else if (OB_FAIL(gen_constraint_update_name_dml(exec_tenant_id, new_cst_name, name_generated_type, new_schema_version, **iter, dml_for_update))) {
       LOG_WARN("failed to delete from __all_constraint or __all_constraint_history", K(ret), K(new_cst_name), K(**iter), K(table_schema));
@@ -3045,7 +3045,7 @@ int ObTableSqlService::add_transition_point_val(ObDMLSqlSplicer &dml,
     if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(table.get_tenant_id()));
     } else if (transition_point.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               false, transition_point, transition_point_str,
+               transition_point, transition_point_str,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(transition_point), K(ret));
     } else if (OB_FAIL(dml.add_column("transition_point",
@@ -3083,7 +3083,7 @@ int ObTableSqlService::add_interval_range_val(ObDMLSqlSplicer &dml,
     if (OB_FAIL(OTTZ_MGR.get_tenant_tz(table.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(table.get_tenant_id()));
     } else if (interval_range.is_valid() && OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-            false, interval_range, interval_range_str,
+            interval_range, interval_range_str,
             OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), K(interval_range), K(ret));
     } else if (OB_FAIL(

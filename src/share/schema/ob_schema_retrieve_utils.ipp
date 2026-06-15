@@ -465,7 +465,7 @@ int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::add_schema(TABLE_SCHE
     if (high_bound_val > transition_point) {
       const ObRowkey &interval_range = table_schema.get_interval_range();
       if (OB_FAIL(ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
-          false, p, interval_range))) {
+          p, interval_range))) {
         SHARE_SCHEMA_LOG(WARN, "fail to set_low_bound_val_by_interval_range", K(interval_range),
             K(p), K(ret));
       }

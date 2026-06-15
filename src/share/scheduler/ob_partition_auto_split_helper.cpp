@@ -1483,7 +1483,7 @@ int ObAutoSplitArgBuilder::convert_rowkey_to_sql_literal(
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc", K(ret), K(buf_len));
-  } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(is_oracle_mode, rowkey, buf, buf_len, pos, false/*print_collation*/, tz_info))) {
+  } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(rowkey, buf, buf_len, pos, false/*print_collation*/, tz_info))) {
     LOG_WARN("failed to convert rowkey to sql text", K(tz_info), K(ret));
   } else {
     rowkey_str.assign_ptr(buf, pos);

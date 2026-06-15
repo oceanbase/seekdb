@@ -6737,7 +6737,6 @@ bool ObPartitionUtils::is_default_list_part(const ObPartition &part)
 
 ///special case: char and varchar && oracle mode int and numberic
 bool ObPartitionUtils::is_types_equal_for_partition_check(
-     const bool is_oracle_mode,
      const common::ObObjType &type1,
      const common::ObObjType &type2)
 {
@@ -6747,16 +6746,6 @@ bool ObPartitionUtils::is_types_equal_for_partition_check(
   } else if ((common::ObCharType == type1 || common::ObVarcharType == type1)
               && (common::ObCharType == type2 || common::ObVarcharType == type2)) {
     is_equal = true;
-  } else if (is_oracle_mode) {
-    if ((common::ObIntType == type1 || common::ObNumberType == type1)
-        && (common::ObIntType == type2 || common::ObNumberType == type2)) {
-      is_equal = true;
-    } else if (common::ObNumberType == type1
-               && common::ObNumberType == type2) {
-      is_equal = true;
-    } else {
-      is_equal = false;
-    }
   } else {
     is_equal = false;
   }
@@ -6764,7 +6753,6 @@ bool ObPartitionUtils::is_types_equal_for_partition_check(
 }
 
 int ObPartitionUtils::convert_rows_to_sql_literal(
-    const bool is_oracle_mode,
     const common::ObIArray<common::ObNewRow>& rows,
     char *buf,
     const int64_t buf_len,
@@ -6823,7 +6811,6 @@ int ObPartitionUtils::convert_rows_to_sql_literal(
 
 
 int ObPartitionUtils::convert_rowkey_to_sql_literal(
-    const bool is_oracle_mode,
     const ObRowkey &rowkey,
     char *buf,
     const int64_t buf_len,
@@ -6929,7 +6916,6 @@ int ObPartitionUtils::convert_rowkey_to_hex(
 }
 
 int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
-    const bool is_oracle_mode,
     ObPartition &p,
     const ObRowkey &interval_range_val)
 {
@@ -6959,13 +6945,11 @@ int ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(p.get_tenant_id(), tz_info.get_tz_map_wrap()))) {
       LOG_WARN("get tenant timezone map failed", KR(ret), K(p.get_tenant_id()));
     } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               is_oracle_mode,
                p.get_high_bound_val(), high_bound_val_str,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH,
                high_bound_val_len, false, &tz_info))) {
       LOG_WARN("Failed to convert rowkey to sql text", K(tz_info), KR(ret));
     } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
-               is_oracle_mode,
                interval_range_val, interval_range_str,
                OB_MAX_B_HIGH_BOUND_VAL_LENGTH,
                interval_range_len, false, &tz_info))) {
@@ -8339,8 +8323,7 @@ const char *PART_TYPE_STR[PARTITION_FUNC_TYPE_MAX + 1] =
   "unknown"
 };
 
-int get_part_type_str(const bool is_oracle_mode,
-                      ObPartitionFuncType type,
+int get_part_type_str(ObPartitionFuncType type,
                       common::ObString &str)
 {
   int ret = common::OB_SUCCESS;
@@ -8348,14 +8331,6 @@ int get_part_type_str(const bool is_oracle_mode,
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "invalid partition function type", K(type));
   } else {
-    if (is_oracle_mode) {
-      if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == type
-         || PARTITION_FUNC_TYPE_INTERVAL == type) {
-        type = PARTITION_FUNC_TYPE_RANGE;
-      } else if (PARTITION_FUNC_TYPE_LIST_COLUMNS == type) {
-        type = PARTITION_FUNC_TYPE_LIST;
-      }
-    }
     str = common::ObString::make_string(PART_TYPE_STR[type]);
   }
   return ret;
@@ -11199,8 +11174,7 @@ int ObIndexNameInfo::init(
   return ret;
 }
 
-bool check_can_drop_column_instant(const uint64_t tenant_id,
-                                   const bool is_oracle_mode)
+bool check_can_drop_column_instant(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   bool can_drop_column_instant = true;

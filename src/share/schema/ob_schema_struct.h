@@ -248,7 +248,7 @@ enum ObObjectStatus : int64_t
   NA = 2, /*The use case is unknown*/
 };
 
-int get_part_type_str(const bool is_oracle_mode, ObPartitionFuncType type, common::ObString &str);
+int get_part_type_str(ObPartitionFuncType type, common::ObString &str);
 
 inline bool is_hash_part(const ObPartitionFuncType part_type)
 {
@@ -3209,7 +3209,6 @@ public:
 
   //Convert rowkey to sql literal for show
   static int convert_rowkey_to_sql_literal(
-             const bool is_oracle_mode,
              const common::ObRowkey &rowkey,
              char *buf,
              const int64_t buf_len,
@@ -3219,7 +3218,6 @@ public:
 
   // Used to display the defined value of the LIST partition
   static int convert_rows_to_sql_literal(
-             const bool is_oracle_mode,
              const common::ObIArray<common::ObNewRow>& rows,
              char *buf,
              const int64_t buf_len,
@@ -3241,7 +3239,6 @@ public:
   // check if partition value equal
   template <typename PARTITION>
   static int check_partition_value(
-             const bool is_oracle_mode,
              const PARTITION &l_part,
              const PARTITION &r_part,
              const ObPartitionFuncType part_type,
@@ -3249,12 +3246,10 @@ public:
              ObSqlString *user_error = NULL);
 
   static bool is_types_equal_for_partition_check(
-              const bool is_oracle_mode,
               const common::ObObjType &typ1,
               const common::ObObjType &type2);
 
   static int set_low_bound_val_by_interval_range_by_innersql(
-      const bool is_oracle_mode,
       ObPartition &p,
       const ObRowkey &interval_range);
 
@@ -6922,7 +6917,6 @@ public:
 
 template<typename PARTITION>
 int ObPartitionUtils::check_partition_value(
-    const bool is_oracle_mode,
     const PARTITION &l_part,
     const PARTITION &r_part,
     const ObPartitionFuncType part_type,
@@ -6946,12 +6940,12 @@ int ObPartitionUtils::check_partition_value(
         const common::ObObjMeta meta2 = r_part.get_high_bound_val().get_obj_ptr()[i].get_meta();
         // The obj comparison function does not require the same cs_level
         if (meta1.get_collation_type() == meta2.get_collation_type()) {
-          is_equal = is_types_equal_for_partition_check(is_oracle_mode, meta1.get_type(), meta2.get_type());
+          is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
           if (!is_equal) {
             ASSIGN_PARTITION_ERROR(user_error, "range_part partition meta type not equal");
             SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
                            "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i], K(is_oracle_mode));
+                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
           }
         } else {
           is_equal = false;
@@ -6998,7 +6992,7 @@ int ObPartitionUtils::check_partition_value(
               const common::ObObjMeta meta2 = r_rowkey.get_cell(z).get_meta();
               // The obj comparison function does not require the same cs_level
               if (meta1.get_collation_type() == meta2.get_collation_type()) {
-                is_equal = is_types_equal_for_partition_check(is_oracle_mode, meta1.get_type(), meta2.get_type());
+                is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
                 if (!is_equal) {
                   ASSIGN_PARTITION_ERROR(user_error, "list_part partition meta type not equal");
                   SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
@@ -7764,8 +7758,7 @@ struct GetIndexNameKey<ObIndexSchemaHashWrapper, ObIndexNameInfo*>
 
 typedef common::hash::ObPointerHashMap<ObIndexSchemaHashWrapper, ObIndexNameInfo*, GetIndexNameKey, 1024> ObIndexNameMap;
 
-bool check_can_drop_column_instant(const uint64_t tenant_id,
-                                   const bool is_oracle_mode);
+bool check_can_drop_column_instant(const uint64_t tenant_id);
 
 }//namespace schema
 }//namespace share

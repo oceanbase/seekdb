@@ -252,7 +252,7 @@ int ObDDLResolver::get_part_str_with_type(
 {
   int ret = OB_SUCCESS;
   ObString type_str;
-  if (OB_FAIL(get_part_type_str(is_oracle_mode, part_func_type, type_str))) {
+  if (OB_FAIL(get_part_type_str(part_func_type, type_str))) {
     LOG_WARN("Failed to get part type str", K(ret));
   } else if (OB_FAIL(part_str.append_fmt("%.*s (%.*s)",
                                          type_str.length(),
@@ -7469,7 +7469,7 @@ int ObDDLResolver::resolve_check_constraint_node(
       bool need_reset_generated_name = is_sys_generated_cst_name;
       do {
         if (need_reset_generated_name) { // generate cst name automatically
-          if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_CHECK, false))) {
+          if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_CHECK))) {
             SQL_RESV_LOG(WARN, "create cons name automatically failed", K(ret));
           } else {
             need_reset_generated_name = false;
@@ -7634,7 +7634,7 @@ int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
       ParseNode *cst_name_node = pk_cst_node.children_[1];
       if (OB_ISNULL(cst_name_node)) {
         // User has not explicitly named the primary key, the system names the primary key constraint
-        if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_PRIMARY_KEY, false))) {
+        if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_PRIMARY_KEY))) {
           SQL_RESV_LOG(WARN, "create cons name automatically failed", K(ret));
         } else {
           is_sys_generated_cst_name = true;
@@ -7648,7 +7648,7 @@ int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
     }
   } else {
     if (NULL == pk_name.ptr()) {
-      if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_PRIMARY_KEY, false))) {
+      if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_, CONSTRAINT_TYPE_PRIMARY_KEY))) {
         SQL_RESV_LOG(WARN, "create cons name automatically failed", K(ret));
       } else {
         is_sys_generated_cst_name = true;
@@ -8592,7 +8592,7 @@ int ObDDLResolver::resolve_not_null_constraint_node(
     bool is_sys_generate_name = false;
     if (NULL == cst_name_node) {
       if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name_, *allocator_,
-                                                                CONSTRAINT_TYPE_NOT_NULL, false))) {
+                                                                CONSTRAINT_TYPE_NOT_NULL))) {
         SQL_RESV_LOG(WARN, "create cons name automatically failed", K(ret));
       } else {
         is_sys_generate_name = true;
@@ -8643,8 +8643,7 @@ int ObDDLResolver::add_default_not_null_constraint(ObColumnSchemaV2 &column,
   ObString cst_name;
   ObConstraint cst;
   if (OB_FAIL(ObTableSchema::create_cons_name_automatically(cst_name, table_name, allocator,
-                                                                CONSTRAINT_TYPE_NOT_NULL,
-                                                                false))) {
+                                                                CONSTRAINT_TYPE_NOT_NULL))) {
     LOG_WARN("create cons name automatically failed", K(ret));
   } else if (OB_FAIL(add_not_null_constraint(column, cst_name, true, cst, allocator, stmt))) {
     LOG_WARN("add not null constraint", K(ret));

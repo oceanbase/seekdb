@@ -198,8 +198,7 @@ int ObShowCreateCatalog::print_catalog_definition(const uint64_t tenant_id,
   } else if (OB_FAIL(schema_printer.print_identifier(buf,
                                                      buf_len,
                                                      pos,
-                                                     catalog_schema->get_catalog_name(),
-                                                     false))) {
+                                                     catalog_schema->get_catalog_name()))) {
     LOG_WARN("failed to print create catalog prefix",
              K(ret),
              K(catalog_schema->get_catalog_name()));

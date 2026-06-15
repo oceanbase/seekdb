@@ -187,7 +187,7 @@ int ObCreateTableLikeHelper::generate_table_schema_()
           do {
             if (OB_FAIL(ObTableSchema::create_cons_name_automatically(
                         new_constraint_name, arg_.new_table_name_, allocator_,
-                        (*iter)->get_constraint_type(), false /*is_oracle_mode*/))) {
+                        (*iter)->get_constraint_type()))) {
               SQL_RESV_LOG(WARN, "create cons name automatically failed", KR(ret));
             } else if (OB_UNLIKELY(0 == new_constraint_name.case_compare((*iter_last)->get_constraint_name_str()))) {
               is_constraint_name_exist = true;

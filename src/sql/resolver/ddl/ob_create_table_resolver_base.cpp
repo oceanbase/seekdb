@@ -278,7 +278,7 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
     LOG_WARN("failed to set rowkey info", K(ret));
   } else if (!col->is_string_type()) {
     /* do nothing */
-  } else if (OB_FAIL(col->get_byte_length(length, false, false))) {
+  } else if (OB_FAIL(col->get_byte_length(length, false))) {
     SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
   } else if (length <= 0) {
     ret = OB_ERR_WRONG_KEY_COLUMN;
