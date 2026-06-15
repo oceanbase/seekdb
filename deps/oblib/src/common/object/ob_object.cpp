@@ -2004,10 +2004,7 @@ int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len, bool is
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("type must be char", K(get_type()));
   } else {
-    if (is_oracle_byte_length(is_oracle_mode, accuracy.get_length_semantics())) {
-      // get byte length
-      char_len = static_cast<int32_t>(get_val_len());
-    } else {
+    {
       // get char length
       char_len = static_cast<int32_t>(ObCharset::strlen_char(
                  get_collation_type(), get_string_ptr(), get_val_len()));

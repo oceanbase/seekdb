@@ -298,8 +298,6 @@ int ObField::get_field_mb_length(const ObObjType type,
       if (CS_TYPE_INVALID == charsetnr || accuracy.get_length() < 0) {
         length = static_cast<ObLength>(MAX_COLUMN_VARCHAR_LENGTH);
         //LOG_WARN("negative input length. something bad may have happened", K(ret), K(accuracy), K(charsetnr), K(common::lbt()));
-      } else if (is_oracle_byte_length(false, accuracy.get_length_semantics())) {
-        length = accuracy.get_length();
       } else {
         int64_t mbmaxlen = 1;
         if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(charsetnr, mbmaxlen))) {

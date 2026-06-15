@@ -20,22 +20,7 @@
 
 TEST(TestWorker, CompatMode)
 {
-  using oceanbase::lib::Worker;
-  set_compat_mode(oceanbase::lib::Worker::CompatMode::MYSQL);
-  // MySQL Mode as default.
-  EXPECT_EQ(oceanbase::lib::Worker::CompatMode::MYSQL, THIS_WORKER.get_compatibility_mode());
-  EXPECT_TRUE(oceanbase::lib::is_mysql_mode());
-  EXPECT_FALSE(oceanbase::lib::is_oracle_mode());
-
-  // Change to Oracle Mode if set
-  THIS_WORKER.set_compatibility_mode(oceanbase::lib::Worker::CompatMode::ORACLE);
-  EXPECT_EQ(oceanbase::lib::Worker::CompatMode::ORACLE, THIS_WORKER.get_compatibility_mode());
-  EXPECT_FALSE(oceanbase::lib::is_mysql_mode());
-  EXPECT_TRUE(oceanbase::lib::is_oracle_mode());
-
-  // Turn back to MySQL Mode if set back.
-  THIS_WORKER.set_compatibility_mode(oceanbase::lib::Worker::CompatMode::MYSQL);
-  EXPECT_EQ(oceanbase::lib::Worker::CompatMode::MYSQL, THIS_WORKER.get_compatibility_mode());
+  // seekdb is MySQL-only, is_mysql_mode() always returns true
   EXPECT_TRUE(oceanbase::lib::is_mysql_mode());
   EXPECT_FALSE(oceanbase::lib::is_oracle_mode());
 }

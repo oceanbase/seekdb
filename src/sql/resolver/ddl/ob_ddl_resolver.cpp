@@ -4591,7 +4591,6 @@ int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
      } else {
       // get characters of default value under specified charset
       ObString str;
-      const bool is_byte_length = is_oracle_byte_length(!is_mysql_mode, column.get_length_semantics());
       if (default_value.is_null()) {
         strlen = 0;
       } else if (OB_FAIL(trim_space_for_default_value(is_mysql_mode, column.get_meta_type().is_char(), column.get_collation_type(), default_value, str))) {
@@ -4600,13 +4599,12 @@ int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
         strlen = 0;
         default_value.set_varchar("");
       } else {
-        strlen = is_byte_length ? str.length() : ObCharset::strlen_char(column.get_collation_type(), str.ptr(), str.length());
+        strlen = ObCharset::strlen_char(column.get_collation_type(), str.ptr(), str.length());
       }
       if (OB_SUCC(ret) && strlen > column.get_data_length()) {
         ret = OB_INVALID_DEFAULT;
         SQL_RESV_LOG(WARN, "Invalid default value: length is larger than data length",
-                     "default_value", str, "length", strlen, "data_length", column.get_data_length(),
-                     K(is_byte_length));
+                     "default_value", str, "length", strlen, "data_length", column.get_data_length());
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
       }
     }

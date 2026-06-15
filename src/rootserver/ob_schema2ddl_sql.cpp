@@ -204,16 +204,7 @@ int ObSchema2DDLSql::type2str(
           if (0 == STRCMP(column_schema.get_column_name(), "view_definition")) {
             max_varchar_length = 8192;
           }
-          if (is_oracle_mode) {
-            if (is_oracle_byte_length(is_oracle_mode, column_schema.get_length_semantics())) {
-              n = snprintf(str_buf, buf_size, "varchar2(%d %s)",
-                  std::min(column_schema.get_data_length(), static_cast<int32_t>(max_varchar_length)),
-                  get_length_semantics_str(column_schema.get_length_semantics()));
-            } else {
-              n = snprintf(str_buf, buf_size, "varchar2(%d)",
-                  std::min(column_schema.get_data_length(), static_cast<int32_t>(max_varchar_length)));
-            }
-          } else {
+          {
             n = snprintf(str_buf, buf_size, "varchar(%d)",
                 std::min(column_schema.get_data_length(), static_cast<int32_t>(max_varchar_length)));
           }

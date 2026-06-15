@@ -4343,9 +4343,7 @@ int ObTableSchema::convert_char_to_byte_semantics(const ObColumnSchemaV2 *col_sc
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mbmaxlen is less than 0", K(ret), K(mbmaxlen));
     } else {
-      if (!is_oracle_byte_length(is_oracle_mode, col_schema->get_length_semantics())) {
-        col_byte_len = static_cast<int32_t>(col_byte_len * mbmaxlen);
-      }
+      col_byte_len = static_cast<int32_t>(col_byte_len * mbmaxlen);
     }
   }
   return ret;
@@ -5174,11 +5172,7 @@ int ObTableSchema::check_column_can_be_altered_online(
           } else {
             int32_t src_col_byte_len = src_schema->get_data_length();
             int32_t dst_col_byte_len = dst_schema->get_data_length();
-            if (!is_oracle_byte_length(is_oracle_mode, src_schema->get_length_semantics())) {
-              src_col_byte_len = static_cast<int32_t>(src_col_byte_len * mbmaxlen);
-            } else {
-              dst_col_byte_len = static_cast<int32_t>(dst_col_byte_len * mbmaxlen);
-            }
+            src_col_byte_len = static_cast<int32_t>(src_col_byte_len * mbmaxlen);
             if (src_col_byte_len > dst_col_byte_len) {
               ret = OB_ERR_DECREASE_COLUMN_LENGTH;
               LOG_WARN("The data of column schema can not be truncated",
