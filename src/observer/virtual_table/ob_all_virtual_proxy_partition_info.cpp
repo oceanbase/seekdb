@@ -582,7 +582,6 @@ int ObAllVirtualProxyPartitionInfo::gen_proxy_part_pruning_str_(
         // Because the constraint check expr str is in different modes, the text string is stored in different ways,
         // so use the interface of the corresponding mode when parsing and printing.
         // For example, the text string in MySQL mode: substr(`c1`,19,2), the text string in Oracle mode is: substr("C1",19,2)
-        lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::MYSQL);
         for (ObTableSchema::const_constraint_iterator iter = table_schema.constraint_begin();
              OB_SUCC(ret) && iter != table_schema.constraint_end(); ++iter) {
           sql::ObRawExpr *check_expr = NULL;

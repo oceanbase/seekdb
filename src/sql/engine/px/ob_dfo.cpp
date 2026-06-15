@@ -597,10 +597,6 @@ int ObPxRpcInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_
       LOG_WARN("session is NULL", K(ret));
     }
     if (OB_SUCC(ret)) {
-      // Compact mode may not set while rpc argument deserialize, set it manually.
-      // See: 
-      lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
-
       LST_DO_CODE(OB_UNIS_DECODE, sqc_);
 
       LOG_TRACE("deserialize sqc", K_(sqc));

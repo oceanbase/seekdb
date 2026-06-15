@@ -471,7 +471,6 @@ int ObNumberConstValue::init(ObIAllocator &allocator)
   buf[pos++] = '-';
 
   {
-    lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::MYSQL);
     for (int16_t precision = OB_MIN_DECIMAL_PRECISION; OB_SUCC(ret) && precision <= ObNumber::MAX_PRECISION; ++precision) {
       for (int16_t scale = 0; OB_SUCC(ret) && precision >= scale && scale <= ObNumber::MAX_SCALE; ++scale) {
         pos = 1;
@@ -514,7 +513,6 @@ int ObNumberConstValue::init(ObIAllocator &allocator)
   }
 
   {
-    lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::ORACLE);
     for (int16_t precision = OB_MIN_NUMBER_PRECISION; OB_SUCC(ret) && precision <= OB_MAX_NUMBER_PRECISION; ++precision) {
       for (int16_t scale = ObNumber::MIN_SCALE; OB_SUCC(ret) && scale <= ObNumber::MAX_SCALE; ++scale) {
         pos = 1;

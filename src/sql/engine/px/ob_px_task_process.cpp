@@ -86,7 +86,6 @@ int ObPxTaskProcess::check_inner_stat()
 void ObPxTaskProcess::run()
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
 
   LOG_TRACE("begin process task",
             KP(this));

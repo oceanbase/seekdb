@@ -126,7 +126,6 @@ int ObMPStmtPrexecute::before_process()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is NULL or invalid", K(ret), K(session));
     } else {
-      lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
       uint32_t ps_stmt_checksum = DEFAULT_ITERATION_COUNT;
       ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
       bool need_response_error = false;

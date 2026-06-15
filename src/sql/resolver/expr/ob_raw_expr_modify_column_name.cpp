@@ -62,7 +62,6 @@ int ObRawExprModifyColumnName::visit(ObPlQueryRefRawExpr &expr) {
 int ObRawExprModifyColumnName::visit(ObColumnRefRawExpr &expr) {
   int ret = OB_SUCCESS;
   ObString column_name = expr.get_column_name();
-  lib::CompatModeGuard compat_guard(compat_mode_);
   if (ObColumnNameHashWrapper(column_name) == ObColumnNameHashWrapper(orig_column_name_)) {
     expr.set_column_name(new_column_name_);
   }

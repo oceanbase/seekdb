@@ -911,7 +911,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
                                 ObVirtualTableIteratorFactory *vt_iter_factory)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard g(get_compat_mode());
   ObExecRecord exec_record;
   ObExecTimestamp exec_timestamp;
   ObExecutingSqlStatRecord sqlstat_record;
@@ -1856,7 +1855,6 @@ int ObInnerSQLConnection::execute(
     } else if (OB_FAIL(query(executor, res))) {
       LOG_WARN("executor execute failed", K(ret), K(tenant_id), K(executor));
     } else {
-      lib::CompatModeGuard g(get_compat_mode());
       MTL_SWITCH(tenant_id) {
         WITH_CONTEXT(res.mem_context_) {
           if (OB_FAIL(executor.process_result(res.result_set()))) {

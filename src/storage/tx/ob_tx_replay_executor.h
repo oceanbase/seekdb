@@ -142,7 +142,6 @@ private:
   int replay_lock_(storage::ObStoreCtx &store_ctx,
                    storage::ObTablet *tablet,
                    memtable::ObMemtableMutatorIterator *mmi_ptr);
-  int get_compat_mode_(const ObTabletID &tablet_id, lib::Worker::CompatMode &mode);
   bool can_replay() const;
 
   void rewrite_replay_retry_code_(int &ret_code);

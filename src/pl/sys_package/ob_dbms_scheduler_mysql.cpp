@@ -43,7 +43,6 @@ int ObDBMSSchedulerMysql::execute_sql(sql::ObExecContext &ctx, ObSqlString &sql,
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(session = ctx.get_my_session()));
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   CK (OB_NOT_NULL(
     pool = static_cast<ObInnerSQLConnectionPool *>(ctx.get_sql_proxy()->get_pool())));
   OZ (pool->acquire_spi_conn(session, conn));

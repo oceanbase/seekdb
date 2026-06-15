@@ -165,7 +165,6 @@ int ObMPStmtPrepare::process()
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     SQL_INFO_GUARD(ctx_.cur_sql_, ObString(ctx_.sql_id_));
     session.set_current_trace_id(ObCurTraceId::get_trace_id());

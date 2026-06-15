@@ -424,7 +424,6 @@ int ObLockExecutor::remove_session_record(ObLockContext &ctx,
   OV (OB_NOT_NULL(session = ctx.my_exec_ctx_->get_my_session()), OB_INVALID_ARGUMENT);
   OZ (ObTableLockDetector::check_lock_owner_exist_in_inner_table(session, client_session_id, client_session_create_ts, owner_exist));
   if (OB_SUCC(ret) && !owner_exist) {
-    lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
     OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                         "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
     OZ (delete_sql.assign_fmt("DELETE FROM %s WHERE client_session_id = %" PRIu32,
@@ -616,7 +615,6 @@ int ObLockExecutor::update_session_table_(ObLockContext &ctx,
   char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   OZ (insert_dml.add_gmt_create(now));
   OZ (insert_dml.add_gmt_modified(now));
   OZ (insert_dml.add_pk_column("server_session_id", server_session_id));

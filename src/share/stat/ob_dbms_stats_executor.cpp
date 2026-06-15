@@ -1541,7 +1541,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       bool need_reset_trx_lock_timeout = false;
       common::sqlclient::ObISQLConnection *conn = NULL;
       ctx.set_is_online_stats_gathering(true);
-      //lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
       if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
         LOG_WARN("failed to cancel async gather stats", K(ret));
       } else if (OB_FAIL(prepare_conn_and_store_session_for_online_stats(ctx.get_my_session(),
@@ -1588,7 +1587,6 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
         LOG_INFO("update online stats occur lock conflict, just skip");
       }
       //release source
-      //guard.~CompatModeGuard();
       ctx.set_is_online_stats_gathering(false);
       if (OB_NOT_NULL(conn)) {
         int tmp_ret = OB_SUCCESS;

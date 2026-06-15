@@ -47,8 +47,6 @@ int ObSysDispatchCallExecutor::execute(ObExecContext &ctx, ObSysDispatchCallStmt
   ObInnerSQLConnection *conn = nullptr;
   int64_t affected_rows = 0;
 
-  CompatModeGuard worker_guard(Worker::CompatMode::MYSQL);
-
   OZ (create_session(stmt.get_designated_tenant_id(), free_session_ctx, session));
   CK (OB_NOT_NULL(session));
   OZ (init_session(*session,

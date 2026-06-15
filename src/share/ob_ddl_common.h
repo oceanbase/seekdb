@@ -592,7 +592,6 @@ public:
 
 private:
   ObArenaAllocator allocator_;
-  lib::Worker::CompatMode compat_mode_;
   common::hash::ObHashMap<schema::ObColumnNameHashWrapper, ObString> col_name_map_;
 
   DISALLOW_COPY_AND_ASSIGN(ObColumnNameMap);

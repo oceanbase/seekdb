@@ -275,7 +275,6 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
           }
         }
         if (OB_SUCC(ret) && col->is_generated_column()) {
-          lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
           if (OB_FAIL(print_generated_column_definition(*col, buf, buf_len, table_schema, pos))) {
             SHARE_SCHEMA_LOG(WARN, "print generated column definition fail", K(ret));
           }

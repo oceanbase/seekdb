@@ -202,7 +202,6 @@ int ObAgentVirtualTable::init_non_exist_map_item(
 int ObAgentVirtualTable::add_extra_condition(common::ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
   uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (NULL == table_schema_) {
     ret = OB_ERR_UNEXPECTED;

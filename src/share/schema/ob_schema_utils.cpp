@@ -110,7 +110,6 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       }
     }
     if (OB_SUCC(ret)) {
-      lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
       if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator,
           root_expr_type, columns_names))) {
         LOG_WARN("get generated column expr failed", K(ret));

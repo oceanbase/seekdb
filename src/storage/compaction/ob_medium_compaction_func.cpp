@@ -852,7 +852,6 @@ int ObMediumCompactionScheduleFunc::init_parallel_range_and_schema_changed_and_c
       ObStoreRange range;
       range.set_start_key(ObStoreRowkey::MIN_STORE_ROWKEY);
       range.set_end_key(ObStoreRowkey::MAX_STORE_ROWKEY);
-      lib::CompatModeGuard guard(tablet->get_tablet_meta().compat_mode_);
       if (OB_FAIL(prepare_iter(result, table_iter))) {
         LOG_WARN("failed to get table iter", K(ret), K(range_array));
       } else if (OB_FAIL(input_range_array.push_back(range))) {

@@ -912,7 +912,6 @@ int ObPartitionExchange::check_column_conditions_in_mysql_mode_(const ObColumnSc
 {
   int ret = OB_SUCCESS;
   bool is_equal = false;
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));
@@ -945,7 +944,6 @@ int ObPartitionExchange::check_column_conditions_in_oracle_mode_(const ObColumnS
 {
   int ret = OB_SUCCESS;
   bool is_equal = false;
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::ORACLE);
   if (OB_ISNULL(base_table_col_schema) || OB_ISNULL(inc_table_col_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column schema is null", K(ret), KPC(base_table_col_schema), KPC(inc_table_col_schema));

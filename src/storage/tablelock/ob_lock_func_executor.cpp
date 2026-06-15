@@ -189,7 +189,6 @@ int ObGetLockExecutor::write_lock_id_(ObLockContext &ctx,
   ObSqlString insert_sql;
   int64_t affected_rows = 0;
   const int64_t now = ObTimeUtility::current_time();
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));

@@ -245,11 +245,9 @@ int ObColumnNameMap::init(const ObTableSchema &orig_table_schema,
                           const AlterTableSchema &alter_table_schema)
 {
   int ret = OB_SUCCESS;
-  compat_mode_ = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(col_name_map_.create(32, "ColNameMap"))) {
     LOG_WARN("failed to create column name map", K(ret));
   } else {
-    lib::CompatModeGuard guard(compat_mode_);
     for (ObTableSchema::const_column_iterator it = orig_table_schema.column_begin();
         OB_SUCC(ret) && it != orig_table_schema.column_end(); it++) {
       ObColumnSchemaV2 *column = *it;
@@ -326,7 +324,6 @@ int ObColumnNameMap::assign(const ObColumnNameMap &other)
   }
   if (OB_SUCC(ret)) {
     allocator_.reuse();
-    compat_mode_ = other.compat_mode_;
     for (common::hash::ObHashMap<ObColumnNameHashWrapper, ObString>::const_iterator it = other.col_name_map_.begin();
         OB_SUCC(ret) && it != other.col_name_map_.end(); it++) {
       if (OB_FAIL(set(it->first.column_name_, it->second))) {
@@ -342,7 +339,6 @@ int ObColumnNameMap::set(const ObString &orig_column_name, const ObString &new_c
   int ret = OB_SUCCESS;
   ObString orig_name;
   ObString new_name;
-  lib::CompatModeGuard guard(compat_mode_);
   if (OB_FAIL(deep_copy_ob_string(allocator_, orig_column_name, orig_name))) {
     LOG_WARN("failed to copy string", K(ret));
   } else if (OB_FAIL(deep_copy_ob_string(allocator_, new_column_name, new_name))) {
@@ -356,7 +352,6 @@ int ObColumnNameMap::set(const ObString &orig_column_name, const ObString &new_c
 int ObColumnNameMap::get(const ObString &orig_column_name, ObString &new_column_name) const
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard guard(compat_mode_);
   ret = col_name_map_.get_refactored(ObColumnNameHashWrapper(orig_column_name), new_column_name);
   if (OB_HASH_NOT_EXIST == ret) {
     ret = OB_ENTRY_NOT_EXIST;
@@ -367,7 +362,6 @@ int ObColumnNameMap::get(const ObString &orig_column_name, ObString &new_column_
 int ObColumnNameMap::get_orig_column_name(const ObString &new_column_name, ObString &orig_column_name) const
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard guard(compat_mode_);
   if (OB_UNLIKELY(!col_name_map_.created())) {
     ret = OB_NOT_INIT;
     LOG_WARN("invalid column name map", K(ret));

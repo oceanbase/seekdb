@@ -3033,7 +3033,6 @@ ObColumnSchemaV2 *ObTableSchema::get_column_schema_by_name_internal(
   int ret = OB_SUCCESS;
   ObColumnSchemaV2 *column = NULL;
   constexpr bool is_oracle_mode = false;
-  lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
   if (!column_name.empty() && NULL != name_hash_array_) {
     ObColumnSchemaHashWrapper column_name_key(column_name);
     if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column)) {
@@ -4038,7 +4037,6 @@ int ObTableSchema::add_col_to_name_hash_array(
   } else {
     // In some scenarios, the tenant id is not initialized when add_column, 4002 will be reported here,
     // and the error code will not be processed temporarily.
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     ObColumnSchemaHashWrapper column_name_key(column->get_column_name_str());
     if (NULL == name_hash_array_) {
       name_hash_array_mem_size = get_name_hash_array_mem_size(get_column_count());
@@ -4113,7 +4111,6 @@ int ObTableSchema::remove_col_from_name_hash_array(
     LOG_WARN("name hash array is NULL", K(ret));
   } else {
     // Tenant id is not initialized when add_column in some scenarios
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     ObColumnSchemaHashWrapper column_name_key(column->get_column_name());
     if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column_tmp)) {
       ret = OB_ERR_BAD_FIELD_ERROR;
@@ -9341,7 +9338,6 @@ int ObTableSchema::do_add_column_group(
     LOG_WARN("fail to allocate memory", KR(ret));
   }
   if (OB_SUCC(ret)) {
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(column_group->assign(other))) {
       LOG_WARN("fail to assign column_group", KR(ret), K(other));
     } else if (OB_FAIL((add_column_group_to_hash_array<ObColumnGroupIdKey, CgIdHashArray>(column_group,

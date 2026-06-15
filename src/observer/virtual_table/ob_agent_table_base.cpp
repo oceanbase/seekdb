@@ -157,7 +157,6 @@ int ObAgentTableBase::build_base_table_mapping()
     LOG_WARN("array prepare allocate failed", K(ret),
         K(table_schema_->get_max_used_column_id()));
   } else {
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     for (auto col = table_schema_->column_begin();
         OB_SUCC(ret) && col != table_schema_->column_end(); col++) {
       auto &item = mapping_.at((*col)->get_column_id());
@@ -339,7 +338,6 @@ int ObAgentTableBase::cast_as_default_value(
         }
       } else if (column->get_meta_type().is_signed_integer()
                  || column->get_meta_type().is_unsigned()) {
-        lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
         MEMSET(buf, '\0', buf_len);
         int64_t len = 0;
         if (OB_FAIL(default_value.print_plain_str_literal(buf, buf_len, len))) {

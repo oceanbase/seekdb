@@ -365,8 +365,6 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
     // schema has already changed.
     new_status = next_task_status;
   } else {
-    lib::Worker::CompatMode save_compat_mode = THIS_WORKER.get_compatibility_mode();
-    THIS_WORKER.set_compatibility_mode(compat_mode_);
     switch(task_type_) {
       case ObDDLType::DDL_DROP_DATABASE: {
         int64_t timeout_us = 0;
@@ -422,7 +420,6 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         break;
       }
     }
-    THIS_WORKER.set_compatibility_mode(save_compat_mode);
     if (OB_TRY_LOCK_ROW_CONFLICT == ret) {
       ret = OB_SUCCESS;
     } else {

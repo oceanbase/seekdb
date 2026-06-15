@@ -97,7 +97,6 @@ int ObTableLockDetectFuncList::do_session_alive_detect()
   ObTableLockOwnerID owner_id;
   uint32_t client_session_id = sql::ObSQLSessionInfo::INVALID_SESSID;
   ObArenaAllocator allocator;
-  lib::CompatModeGuard compat_guard(lib::Worker::CompatMode::MYSQL);
 
   if (OB_FAIL(get_owner_id_list_from_table_(allocator, owner_ids))) {
     LOG_WARN("get owner_id_list from table failed", K(ret));
@@ -275,7 +274,6 @@ int ObTableLockDetector::record_detect_info_to_inner_table(sql::ObSQLSessionInfo
   bool is_existed = false;
 
   need_record_to_lock_table = true;
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (!(LOCK_OBJECT == task_type || LOCK_TABLE == task_type)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("do not support detect task type", K(ret), K(task_type));
@@ -324,7 +322,6 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   bool need_release_conn = false;
   share::ObDMLSqlSplicer dml;
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   // Only when delete_record successfully, it needs to be removed from lock_table.
   // So we initialize it to false here, if delete failed, we will try to removed
   // it next time.
@@ -389,7 +386,6 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   bool need_release_conn = false;
   int64_t cnt_in_new_table = 0;
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {

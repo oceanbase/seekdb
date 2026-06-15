@@ -3618,7 +3618,6 @@ int ObDDLService::check_is_add_column_online_(const AlterTableSchema &alter_tabl
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("*it_begin is NULL", K(ret));
         } else if (ObSchemaOperationType::OB_DDL_DROP_COLUMN == column_schema->alter_type_) {
-          lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
           const ObString &drop_column_name = column_schema->get_origin_column_name();
           const ObString &add_column_name = alter_column_schema.get_column_name();
           if (ObColumnNameHashWrapper(drop_column_name) == ObColumnNameHashWrapper(add_column_name)) {
@@ -8766,7 +8765,6 @@ int ObDDLService::fill_column_collation(
   ObCollationType collation_type = table_schema.get_collation_type();
   ObCharsetType charset_type = table_schema.get_charset_type();
   const ObCollationType cur_extended_type_info_collation = ObCharset::get_system_collation();
-  lib::CompatModeGuard compat_mode_guard(lib::Worker::CompatMode::MYSQL);
 
   if (ObStringTC == col_tc) {
     if (OB_FAIL(ObDDLResolver::check_and_fill_column_charset_info(
@@ -9177,7 +9175,6 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
       const ObTenantSchema *tenant_schema = NULL;
       ObSchemaGetterGuard schema_guard;
       ObRawExpr *expr = NULL;
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
 
       if (OB_FAIL(default_session.init(0, 0, &allocator))) {
         LOG_WARN("init empty session failed", K(ret));
@@ -9204,8 +9201,7 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
         LOG_WARN("build generated column expr failed", K(ret));
       }
       if (OB_SUCC(ret)) {
-        compat_mode = lib::Worker::CompatMode::MYSQL;
-        ObRawExprModifyColumnName modifyColumnName(new_column_name, column_name, compat_mode);
+        ObRawExprModifyColumnName modifyColumnName(new_column_name, column_name);
         if (OB_FAIL(modifyColumnName.modifyColumnName(*expr))) {
           LOG_WARN("modifyColumnName modify column name failed", K(ret));
         } else {
@@ -9335,7 +9331,6 @@ int ObDDLService::modify_depend_column_type(sql::ObRawExpr *expr,
     LOG_WARN("unexpected null", K(ret));
   } else if (expr->has_flag(IS_COLUMN)) {
     ObColumnRefRawExpr *column_expr = static_cast<ObColumnRefRawExpr *>(expr);
-    lib::CompatModeGuard compat_guard(compat_mode);
     if (ObColumnNameHashWrapper(column_expr->get_column_name()) == ObColumnNameHashWrapper(column_name)) {
       column_expr->set_data_type(column_schema.get_data_type());
       column_expr->set_lob_column(is_lob_storage(column_schema.get_data_type()));
@@ -9508,15 +9503,13 @@ int ObDDLService::modify_func_expr_column_name(
     } else {
       char *new_part_func_expr_buf = NULL;
       int64_t outer_pos = 0;
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
       if (OB_ISNULL(new_part_func_expr_buf =
                     static_cast<char *>(allocator.alloc(OB_MAX_SQL_LENGTH)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc new_part_func_expr", K(ret));
       } else {
-        compat_mode = lib::Worker::CompatMode::MYSQL;
         ObRawExprModifyColumnName modifyColumnName(
-            alter_column_name, orig_column_name, compat_mode);
+            alter_column_name, orig_column_name);
         for (int64_t i = 0; OB_SUCC(ret) && i < expr_strs.count(); ++i) {
           expr = NULL;
           columns.reset();
@@ -9982,15 +9975,13 @@ int ObDDLService::rebuild_constraint_check_expr(
       } else {
         char *new_check_expr_buf = NULL;
         int64_t outer_pos = 0;
-        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
         if (OB_ISNULL(new_check_expr_buf =
                       static_cast<char *>(allocator.alloc(OB_MAX_SQL_LENGTH)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc new_check_expr_buf", K(ret));
         } else {
-          compat_mode = lib::Worker::CompatMode::MYSQL;
           ObRawExprModifyColumnName modifyColumnName(
-              alter_column.get_column_name_str(), orig_column.get_column_name_str(), compat_mode);
+              alter_column.get_column_name_str(), orig_column.get_column_name_str());
           if (OB_FAIL(ObRawExprUtils::parse_bool_expr_node_from_str(orig_check_expr,
                                                                     expr_factory.get_allocator(), node))) {
             LOG_WARN("parse expr node from string failed", K(ret));
@@ -10899,7 +10890,6 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
     ObTableSchema::const_column_iterator it_begin = alter_table_schema.column_begin();
     ObTableSchema::const_column_iterator it_end = alter_table_schema.column_end();
     common::hash::ObHashSet<ObColumnNameHashWrapper> update_column_name_set;
-    lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
     ObSEArray<ObString, 4> gen_col_expr_arr;
     if (OB_FAIL(update_column_name_set.create(32))) {
       LOG_WARN("failed to create update column name set", K(ret));
@@ -11381,7 +11371,6 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
     AlterColumnSchema *alter_column_schema;
     ObTableSchema::const_column_iterator it_begin = alter_table_schema.column_begin();
     ObTableSchema::const_column_iterator it_end = alter_table_schema.column_end();
-    lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
     ObArray<ObTableSchema> idx_schema_array;
     common::hash::ObHashSet<ObColumnNameHashWrapper> update_column_name_set;
     ObSEArray<ObString, 4> gen_col_expr_arr;
@@ -20966,7 +20955,6 @@ int ObDDLService::reconstruct_index_schema(obcall::ObAlterTableArg &alter_table_
     } else if (OB_FAIL(orig_table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
       LOG_WARN("failed to check if oralce compat mode", K(ret));
     }
-    lib::CompatModeGuard tmpCompatModeGuard(lib::Worker::CompatMode::MYSQL);
     /**
      * For recover restore table ddl that src_tenant_id does not equal to the dest,
      * any index rebuild error can be ignored. And to avoid building a invalid index which has duplicated index name,

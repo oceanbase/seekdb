@@ -3384,7 +3384,6 @@ int ObVirtualTableResultConverter::convert_key(const ObRowkey &src, ObRowkey &ds
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("keys are not match with columns", K(ret));
     }
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     for (int64_t nth_obj = 0; OB_SUCC(ret) && nth_obj < src.get_obj_cnt(); ++nth_obj) {
       const ObObj &src_obj = src_key_objs[nth_obj];
       if (pos == nth_obj && (src_obj.is_ext() || src_obj.is_null())) {

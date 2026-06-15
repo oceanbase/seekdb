@@ -5779,7 +5779,6 @@ int ObDbmsStats::do_gather_table_stats(sql::ObExecContext &ctx,
       LOG_WARN("failed to get table stale percent", K(ret));
     } else if (stat_table.stale_percent_ < 0 || stat_table.stale_percent_ > stale_percent_threshold) {
       if (is_oceanbase_sys_database_id(stat_table.database_id_)) {
-        lib::CompatModeGuard compat_guard(lib::Worker::CompatMode::MYSQL);
         if (OB_FAIL(gather_table_stats_with_default_param(ctx, duration_time, stat_table, task_info))) {
           LOG_WARN("failed to gather table stats with default param", K(ret));
         }

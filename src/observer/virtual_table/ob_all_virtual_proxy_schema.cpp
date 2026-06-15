@@ -198,7 +198,6 @@ int ObAllVirtualProxySchema::gen_column_value(char *&buf, int64_t len,
                                               const ObString &str, const bool is_oracle_mode)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   ObObj col_obj;
   col_obj.set_varchar(str);
   int64_t pos = 0;
@@ -678,7 +677,6 @@ int ObAllVirtualProxySchema::get_view_decoded_schema_(
       ParseResult parse_result;
       sql::ObParser parser(*allocator_, empty_session.get_sql_mode());
       sql::ObSchemaChecker schema_checker;
-      lib::CompatModeGuard tmp_guard(compat_mode);
       //FIXME: Resolve view definition directly may failed when sys views are involved.
       //       Select sql is needed here like int ObTableColumns::resolve_view_definition().
       if (OB_FAIL(ret)) {
@@ -766,7 +764,7 @@ int ObAllVirtualProxySchema::get_view_decoded_schema_(
             }
           }
         }
-      }//end of lib::CompatModeGuard
+      }
     }
 
     if (OB_SUCC(ret) && orig_complex_table_type != complex_table_type_) {

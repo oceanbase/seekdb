@@ -141,7 +141,6 @@ int ObInnerSQLResult::open()
   } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
     LOG_WARN("switch tenant failed", K(ret), K(session_.get_effective_tenant_id()));
   } else {
-    lib::CompatModeGuard g(compat_mode_);
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     bool is_select = ObStmt::is_select_stmt(result_set_->get_stmt_type());
@@ -205,7 +204,6 @@ int ObInnerSQLResult::force_close()
 int ObInnerSQLResult::inner_close()
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard g(compat_mode_);
   SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
   ObInnerSQLSessionGuard sess_guard(&session_);
   ObInterruptCheckerGuard interrupt_guard(interrupt_checker_);
@@ -249,7 +247,6 @@ int ObInnerSQLResult::next()
     store_first_row_ = false;
   } else {
     row_ = NULL;
-    lib::CompatModeGuard g(compat_mode_);
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     WITH_CONTEXT(mem_context_) {

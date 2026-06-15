@@ -5716,11 +5716,6 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info(
     LOG_WARN("fail to check oracle mode", KR(ret),
              "tenant_id", table_schema.get_tenant_id(), "table_id", table_schema.get_table_id());
   } else {
-    // Value comparsion is differ from mysql and oracle. eg:
-    // mysql: min < null < other < max
-    // oracle: min < other < null < max
-    // To make sorted result stable, compat guard should be used.
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(try_mock_partition_array(table_schema))) {
       LOG_WARN("fail to mock partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
@@ -5787,11 +5782,6 @@ int ObSchemaServiceSQLImpl::sort_tablegroup_partition_info(ObTablegroupSchema &t
              "tenant_id", tablegroup_schema.get_tenant_id(),
              "tablegroup_id", tablegroup_schema.get_tablegroup_id());
   } else {
-    // Value comparsion is differ from mysql and oracle. eg:
-    // mysql: min < null < other < max
-    // oracle: min < other < null < max
-    // To make sorted result stable, compat guard should be used.
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(tablegroup_schema))) {
       LOG_WARN("failed to sort partition array", KR(ret), K(tablegroup_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(tablegroup_schema))) {
@@ -7552,11 +7542,6 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info_v2(
     LOG_WARN("fail to check oracle mode", KR(ret),
              "tenant_id", table_schema.get_tenant_id(), "table_id", table_schema.get_table_id());
   } else {
-    // Value comparsion is differ from mysql and oracle. eg:
-    // mysql: min < null < other < max
-    // oracle: min < other < null < max
-    // To make sorted result stable, compat guard should be used.
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
       LOG_WARN("failed to sort partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(table_schema))) {

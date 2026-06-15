@@ -630,7 +630,6 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
   observer::ObInnerSQLConnectionPool *pool = nullptr;
   common::sqlclient::ObISQLConnection *conn = nullptr;
 
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session or sql_proxy is NULL", KP(session_info), KP(sql_proxy));
@@ -682,7 +681,6 @@ int ObInnerConnectionLockUtil::execute_write_sql(observer::ObInnerSQLConnection 
 
   // NOTICE: This will be overwritten by the oracle_made_ field on connection,
   // but for safety reason, we still set up a compat_guard here.
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -712,7 +710,6 @@ int ObInnerConnectionLockUtil::execute_read_sql(observer::ObInnerSQLConnection *
 
   // NOTICE: This will be overwritten by the oracle_made_ field on connection,
   // but for safety reason, we still set up a compat_guard here.
-  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;

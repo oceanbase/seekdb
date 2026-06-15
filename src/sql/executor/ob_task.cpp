@@ -114,10 +114,6 @@ OB_DEF_DESERIALIZE(ObTask)
     }
   }
   if (OB_SUCC(ret)) {
-    // Compact mode may not set while rpc argument deserialize, set it manually.
-    // See: 
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
-
     LST_DO_CODE(OB_UNIS_DECODE, ctrl_svr_);
     LST_DO_CODE(OB_UNIS_DECODE, runner_svr_);
     LST_DO_CODE(OB_UNIS_DECODE, ob_task_id_);

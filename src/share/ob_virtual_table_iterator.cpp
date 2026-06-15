@@ -111,7 +111,6 @@ int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, comm
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("keys are not match with columns", K(ret));
     }
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
     ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
     for (uint64_t nth_obj = 0; OB_SUCC(ret) && nth_obj < src.get_obj_cnt(); ++nth_obj) {
@@ -179,8 +178,6 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("get table schema failed", K(ret));
         } else {
-          // switch mysql mode, find column schema by column name
-          lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
           for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
             const ObString *column_name = column_names.at(i);
             const ObColumnSchemaV2 *col_schema = org_table_schema->get_column_schema(*column_name);

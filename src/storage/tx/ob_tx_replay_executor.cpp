@@ -685,7 +685,6 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
                                                     memtable::ObMemtableMutatorIterator *mmi_ptr)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode mode;
   ObTabletHandle tablet_handle;
   const bool is_update_mds_table = false;
   ObASHTabletIdSetterGuard ash_tablet_id_guard(row_head.tablet_id_.id());
@@ -715,8 +714,6 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
     } else {
       TX_REPLAY_LOG(WARN, "replay check restore status error", K(row_head.tablet_id_));
     }
-  } else if (OB_FAIL(get_compat_mode_(row_head.tablet_id_, mode))) {
-    TX_REPLAY_LOG(WARN, "get compat mode error", K(mode));
   } else {
     ObTablet *tablet = tablet_handle.get_obj();
     storage::ObStoreCtx storeCtx;
@@ -730,7 +727,6 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
     storeCtx.ls_ = ls_;
 
     ObRelativeTable relative_table;
-    lib::CompatModeGuard compat_guard(mode);
     switch (row_head.mutator_type_) {
     case MutatorType::MUTATOR_ROW: {
       if (OB_FAIL(replay_row_(storeCtx, tablet, mmi_ptr_)) && OB_ITER_END != ret) {
@@ -867,20 +863,7 @@ int ObTxReplayExecutor::replay_lock_(storage::ObStoreCtx &store_ctx,
   return ret;
 }
 
-int ObTxReplayExecutor::get_compat_mode_(const ObTabletID &tablet_id, lib::Worker::CompatMode &mode)
-{
-  int ret = OB_SUCCESS;
 
-  if (!tablet_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (tablet_id.is_sys_tablet()) {
-    mode = lib::Worker::CompatMode::MYSQL;
-  } else {
-    mode = THIS_WORKER.get_compatibility_mode();
-  }
-
-  return ret;
-}
 
 void ObTxReplayExecutor::rewrite_replay_retry_code_(int &ret_code)
 {

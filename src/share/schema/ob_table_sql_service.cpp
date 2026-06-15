@@ -1818,11 +1818,9 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMSET(orig_default_value_buf, 0, value_buf_len);
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (!ob_is_string_type(column.get_data_type()) && !ob_is_json(column.get_data_type())
         && !ob_is_geometry(column.get_data_type()) && !ob_is_roaringbitmap(column.get_data_type())) {
       {
-        lib::CompatModeGuard compat_mode_guard(compat_mode);
         ObTimeZoneInfo tz_info;
         if (OB_FAIL(column.get_orig_default_value().print_plain_str_literal(
                 orig_default_value_buf, value_buf_len, orig_default_value_len, &tz_info))) {
@@ -4232,7 +4230,6 @@ int ObTableSqlService::gen_column_dml_without_check(
 
       int64_t orig_default_value_len = 0;
       int64_t cur_default_value_len = 0;
-      lib::CompatModeGuard compat_mode_guard(compat_mode);
       ObTimeZoneInfo tz_info;
       if (OB_FAIL(OTTZ_MGR.get_tenant_tz(exec_tenant_id, tz_info.get_tz_map_wrap()))) {
         LOG_WARN("get tenant timezone failed", K(ret));

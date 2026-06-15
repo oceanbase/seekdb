@@ -2896,9 +2896,6 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
                                                         real_dep_obj_id))) {
       LOG_WARN("resolve base or alias table item failed", K(ret));
     } else {
-      // If the currently parsed table belongs to an Oracle tenant, set the mode in thread-local storage.
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-      lib::CompatModeGuard g(compat_mode);
       bool is_sync_ddl_user = false;
       if (OB_ISNULL(table_item) || OB_ISNULL(stmt)) {
         ret = OB_ERR_UNEXPECTED;

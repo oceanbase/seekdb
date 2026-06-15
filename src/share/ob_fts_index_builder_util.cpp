@@ -2532,8 +2532,6 @@ int ObFtsIndexBuilderUtil::get_index_column_ids_for_fts(
     ObItemType root_expr_type = T_INVALID;
     ObSEArray<ObString, 8> col_names;
     col_names.set_attr(ObMemAttr(tenant_id, "FtsIdxColNa"));
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    lib::CompatModeGuard guard(compat_mode);
     if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator, root_expr_type, col_names))) {
       LOG_WARN("fail to resolve generated column info", K(ret));
     } else {
