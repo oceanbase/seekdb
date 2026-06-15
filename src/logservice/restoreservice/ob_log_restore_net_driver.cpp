@@ -414,15 +414,13 @@ int ObLogRestoreNetDriver::init_fetcher_if_needed_(const int64_t cluster_id, con
   } else {
     const logfetcher::LogFetcherUser log_fetcher_user = logfetcher::LogFetcherUser::STANDBY;
     const bool is_loading_data_dict_baseline_data = false;
-    const logfetcher::ClientFetchingMode fetching_mode = logfetcher::ClientFetchingMode::FETCHING_MODE_INTEGRATED;
-    share::ObBackupPathString archive_dest;
     omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
     cfg_.fetch_log_rpc_timeout_sec = get_rpc_timeout_sec_();
     cfg_.logfetcher_parallel_log_transport = tenant_config.is_valid() ?
         tenant_config->_ob_enable_standby_db_parallel_log_transport : 0;
 
     if (OB_FAIL(fetcher_->init(log_fetcher_user, cluster_id, tenant_id, MTL_ID(),
-            is_loading_data_dict_baseline_data, fetching_mode, archive_dest,
+            is_loading_data_dict_baseline_data,
             cfg_, ls_ctx_factory_, ls_ctx_add_info_factory_,
             restore_function_, nullptr/*proxy*/, &error_handler_))) {
       CLOG_LOG(WARN, "fetcher init failed");

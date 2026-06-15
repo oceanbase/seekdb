@@ -193,7 +193,6 @@ int FetchStream::handle(volatile bool &stop_flag)
 {
   int ret = OB_SUCCESS;
   bool print_stream_dispatch_info = ATOMIC_LOAD(&g_print_stream_dispatch_info);
-  ClientFetchingMode fetching_mode = ClientFetchingMode::FETCHING_MODE_UNKNOWN;
 
   if (print_stream_dispatch_info) {
     LOG_INFO("[STAT] [FETCH_STREAM] begin handle", "fetch_stream", this,
@@ -216,33 +215,21 @@ int FetchStream::handle(volatile bool &stop_flag)
     } else {
       LOG_INFO("LSFetchCtx is discarded, dispatch fetch task success", K(tls_id));
     }
-  } else if (FALSE_IT(fetching_mode = ls_fetch_ctx_->get_fetching_mode())) {
-  } else if (is_integrated_fetching_mode(fetching_mode)) {
-    if (IDLE == state_) {
-      if (OB_FAIL(handle_idle_task_(stop_flag))) {
-        if (OB_IN_STOP_STATE != ret) {
-          LOG_ERROR("handle IDLE task fail", KR(ret));
-        }
-      }
-    } else if (FETCH_LOG == state_) {
-      if (OB_FAIL(handle_fetch_log_task_(stop_flag))) {
-        if (OB_IN_STOP_STATE != ret) {
-          LOG_ERROR("handle FETCH_LOG task fail", KR(ret));
-        }
-      }
-    } else {
-      ret = OB_INVALID_ERROR;
-      LOG_ERROR("invalid state", KR(ret), K(state_));
-    }
-  } else if (is_direct_fetching_mode(fetching_mode)) {
-    if (OB_FAIL(handle_fetch_archive_task_(stop_flag))) {
+  } else if (IDLE == state_) {
+    if (OB_FAIL(handle_idle_task_(stop_flag))) {
       if (OB_IN_STOP_STATE != ret) {
-        LOG_ERROR("handle fetch archive task failed", KR(ret));
+        LOG_ERROR("handle IDLE task fail", KR(ret));
+      }
+    }
+  } else if (FETCH_LOG == state_) {
+    if (OB_FAIL(handle_fetch_log_task_(stop_flag))) {
+      if (OB_IN_STOP_STATE != ret) {
+        LOG_ERROR("handle FETCH_LOG task fail", KR(ret));
       }
     }
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid fetching mode", KR(ret), K(fetching_mode));
+    ret = OB_INVALID_ERROR;
+    LOG_ERROR("invalid state", KR(ret), K(state_));
   }
 
   // Note: The following can no longer continue the operation, there may be concurrency issues ！
@@ -998,152 +985,6 @@ void FetchStream::update_fetch_stat_info_(
   fsi.last_update_ts_ = get_timestamp();
 }
 
-int FetchStream::handle_fetch_archive_task_(volatile bool &stop_flag)
-{
-  int ret = OB_SUCCESS;
-  static const int64_t UPDATE_FETCH_STATE_INTERVAL = 100;
-  bool need_fetch_log = true;
-  LOG_TRACE("handle_fetch_archive_task_ begin", K(svr_), "tls_id", ls_fetch_ctx_->get_tls_id());
-
-  if (OB_ISNULL(ls_fetch_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls fetch ctx is null", KR(ret), KPC(this));
-  } else if (! is_direct_fetching_mode(ls_fetch_ctx_->get_fetching_mode())) {
-    const ClientFetchingMode mode = ls_fetch_ctx_->get_fetching_mode();
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("fetching mode of ls fetch ctx doesn't match", KR(ret), K(mode), "tls_id", ls_fetch_ctx_->get_tls_id());
-  } else if (OB_FAIL(check_need_fetch_log_with_upper_limit_(need_fetch_log))) {
-    LOG_ERROR("get upper limit failed", KR(ret), KPC(this), K(need_fetch_log), "tls_id", ls_fetch_ctx_->get_tls_id());
-  } else if (! need_fetch_log) {
-    if (OB_FAIL(hibernate_())) {
-      LOG_ERROR("hibernate_ failed", KR(ret), KPC(this));
-    } else {
-      // exit, not allowed to manipulate ls_fetch_ctx afterwards
-    }
-  } else {
-    KickOutInfo kick_out_info;
-    TransStatInfo tsi;
-    const logservice::TenantLSID &tls_id = ls_fetch_ctx_->get_tls_id();
-    int64_t fetched_group_entry_cnt = 0;
-    int64_t fetched_group_entry_size = 0;
-    int64_t start_handle_timestamp = get_timestamp();
-    int64_t start_fetch_remote_timestamp = OB_INVALID_TIMESTAMP;
-    int64_t fetch_remote_time = 0;
-
-    while (OB_SUCC(ret) && need_fetch_log) {
-      palf::LogGroupEntry log_group_entry;
-      palf::LSN lsn;
-      const char *buf = NULL;
-      int64_t buf_size = 0;
-      start_fetch_remote_timestamp = get_timestamp();
-
-      if (! ls_fetch_ctx_->is_remote_iter_inited() && OB_FAIL(ls_fetch_ctx_->init_remote_iter())) {
-        LOG_ERROR("init remote iter when handle fetch archive task failed", KR(ret), KPC(ls_fetch_ctx_));
-      } else if (OB_FAIL(ls_fetch_ctx_->get_next_remote_group_entry(log_group_entry,
-          lsn, buf, buf_size))) {
-        // reset iter on OB_ITER_END because remote_iter become invalid when meet OB_ITER_END
-        if (OB_INVALID_DATA == ret) {
-          LOG_WARN("get invalid data, retry", KR(ret), KPC(ls_fetch_ctx_));
-        } else if (OB_ITER_END != ret && OB_NEED_RETRY != ret) {
-          LOG_ERROR("get next group entry failed", KR(ret), KPC(ls_fetch_ctx_));
-        } else if (OB_NEED_RETRY == ret) {
-          int tmp_ret = OB_SUCCESS;
-          const logservice::TenantLSID &tls_id = ls_fetch_ctx_->get_tls_id();
-          if (OB_TMP_FAIL(set_(kick_out_info, tls_id, KickOutReason::FETCH_LOG_FAIL_IN_DIRECT_MODE))) {
-            LOG_WARN("set kickout info failed", KR(tmp_ret), K(kick_out_info), K(tls_id));
-          }
-        }
-        // retry on fetch remote log failure anyway
-        // for all scenario above, no need to fetch log and need to reset remote iterator.
-        need_fetch_log = false;
-        ls_fetch_ctx_->reset_remote_iter();
-        ret = OB_SUCCESS;
-      } else if (FALSE_IT(fetch_remote_time += get_timestamp() - start_fetch_remote_timestamp)) {
-      } else if (OB_FAIL(ls_fetch_ctx_->append_log(buf, buf_size))) {
-        LOG_ERROR("append log failed", KR(ret), K(buf), K(buf_size));
-      } else if (OB_FAIL(read_group_entry_(log_group_entry, lsn, buf, kick_out_info, tsi, stop_flag))) {
-        if (OB_IN_STOP_STATE != ret && OB_NEED_RETRY != ret) {
-          LOG_ERROR("read group entry failed when handling fetch archive task", KR(ret), K(log_group_entry),
-              K(lsn), K(kick_out_info), KPC(ls_fetch_ctx_));
-        } else if (OB_NEED_RETRY == ret) {
-          LOG_WARN("read_group_entry failed, retry", KR(ret), K(log_group_entry), K(lsn), K(tls_id));
-          // reset remote iter to fetch log that match the next_lsn in progress next round,
-          // otherwise incorrect log may be fetched.
-          ls_fetch_ctx_->reset_remote_iter();
-          // reset memory storage to prevent the remain logentry in mem_storage from
-          // disruppting the iteration of log group entry.
-          ls_fetch_ctx_->reset_memory_storage();
-          need_fetch_log = false;
-          ret = OB_SUCCESS;
-        }
-      } else if (OB_FAIL(ls_fetch_ctx_->update_progress(log_group_entry, lsn))) {
-        LOG_ERROR("ls fetch ctx update progress failed", KR(ret), K(log_group_entry), K(lsn), K(tls_id));
-      }
-
-      // dispatch part trans task & update stats
-      if (OB_SUCC(ret)) {
-        const int64_t submit_ts = log_group_entry.get_scn().get_val_for_logservice();
-
-        if (submit_ts > upper_limit_) {
-          check_need_fetch_log_with_upper_limit_(need_fetch_log);
-        }
-        fetched_group_entry_size += log_group_entry.get_serialize_size();
-        // update fetch state every 100 group entries
-        if ((++fetched_group_entry_cnt % UPDATE_FETCH_STATE_INTERVAL) == 0) {
-          int64_t flush_time = 0;
-          const int64_t read_log_time = get_timestamp() - start_handle_timestamp;
-
-          if (OB_FAIL(update_fetch_task_state_(kick_out_info, stop_flag, flush_time))) {
-            LOG_ERROR("update fetch task state failed", KR(ret), K(kick_out_info), K(tls_id));
-          } else {
-            update_fetch_stat_info_(fetched_group_entry_cnt, fetched_group_entry_size,
-              read_log_time, fetch_remote_time, flush_time, tsi);
-            if (kick_out_info.need_kick_out()) {
-              need_fetch_log = false;
-            }
-          }
-          fetch_remote_time = 0;
-          fetched_group_entry_cnt = 0;
-          fetched_group_entry_size = 0;
-          tsi.reset();
-          start_handle_timestamp = get_timestamp();
-        }
-      }
-    }
-
-    // when exit from loop, there could still be some fetch tasks to be synchronized
-    if (OB_SUCC(ret)) {
-      int64_t flush_time = 0;
-      const int64_t read_log_time = get_timestamp() - start_handle_timestamp;
-      if (OB_FAIL(update_fetch_task_state_(kick_out_info, stop_flag, flush_time))) {
-        LOG_ERROR("update fetch task state failed at loop end", KR(ret), K(kick_out_info));
-      } else {
-        update_fetch_stat_info_(fetched_group_entry_cnt, fetched_group_entry_size,
-            read_log_time, fetch_remote_time, flush_time, tsi);
-      }
-    }
-
-    // rewrite ret code when ret equals OB_NEED_RETRY.
-    if (OB_NEED_RETRY == ret) {
-      ret = OB_SUCCESS;
-    }
-
-    if (OB_SUCC(ret)) {
-      if (kick_out_info.need_kick_out()) {
-        if (OB_FAIL(kick_out_task_(kick_out_info))) {
-          LOG_ERROR("kick out task failed", KR(ret), K(kick_out_info));
-        }
-      } else {
-        if (OB_FAIL(hibernate_())) {
-          LOG_ERROR("hibernate failed", KR(ret));
-        }
-      }
-    }
-  }
-
-  return ret;
-}
-
 void FetchStream::update_fetch_stat_info_(
     FetchLogRpcResult &result,
     const int64_t handle_rpc_time,
@@ -1852,31 +1693,29 @@ int FetchStream::update_fetch_task_state_(KickOutInfo &kick_out_info,
         LOG_ERROR("update progress fail", KR(ret), K(task), KPC(task));
       }
 
-      if (is_integrated_fetching_mode(ls_fetch_ctx_->get_fetching_mode())) {
-        // Check if the server list needs to be updated
-        if (OB_SUCCESS == ret && task->need_update_svr_list()) {
-          const ObLogFetcherConfig *cfg = nullptr;
+      // Check if the server list needs to be updated
+      if (OB_SUCCESS == ret && task->need_update_svr_list()) {
+        const ObLogFetcherConfig *cfg = nullptr;
 
-          if (OB_FAIL(ls_fetch_ctx_->get_fetcher_config(cfg))) {
-            LOG_ERROR("get_fetcher_config_ failed", KR(ret));
-          } else {
-            const bool need_print_info = (cfg->print_ls_server_list_update_info != 0);
-            if (OB_FAIL(task->update_svr_list(need_print_info))) {
-              LOG_ERROR("update svr list fail", KR(ret), KPC(task));
-            }
+        if (OB_FAIL(ls_fetch_ctx_->get_fetcher_config(cfg))) {
+          LOG_ERROR("get_fetcher_config_ failed", KR(ret));
+        } else {
+          const bool need_print_info = (cfg->print_ls_server_list_update_info != 0);
+          if (OB_FAIL(task->update_svr_list(need_print_info))) {
+            LOG_ERROR("update svr list fail", KR(ret), KPC(task));
           }
         }
+      }
 
-        // Check if the log fetch timeout on the current server, and add the timeout tasks to the kick out collection
-        if (OB_SUCCESS == ret && OB_FAIL(check_fetch_timeout_(*task, kick_out_info))) {
-          LOG_ERROR("check fetch timeout fail", KR(ret), K(task), KPC(task), K(kick_out_info));
-        }
+      // Check if the log fetch timeout on the current server, and add the timeout tasks to the kick out collection
+      if (OB_SUCCESS == ret && OB_FAIL(check_fetch_timeout_(*task, kick_out_info))) {
+        LOG_ERROR("check fetch timeout fail", KR(ret), K(task), KPC(task), K(kick_out_info));
+      }
 
-        // Periodically check if there is a server with a higher level of excellence at this time, and if so, add the task to the kick out set for active flow cutting
-        if (need_check_switch_server) {
-          if (OB_SUCCESS == ret && OB_FAIL(check_switch_server_(*task, kick_out_info))) {
-            LOG_ERROR("check switch server fail", KR(ret), K(task), KPC(task), K(kick_out_info));
-          }
+      // Periodically check if there is a server with a higher level of excellence at this time, and if so, add the task to the kick out set for active flow cutting
+      if (need_check_switch_server) {
+        if (OB_SUCCESS == ret && OB_FAIL(check_switch_server_(*task, kick_out_info))) {
+          LOG_ERROR("check switch server fail", KR(ret), K(task), KPC(task), K(kick_out_info));
         }
       }
 

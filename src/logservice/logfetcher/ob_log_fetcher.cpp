@@ -45,11 +45,7 @@ ObLogFetcher::ObLogFetcher() :
     source_min_observer_version_(0),
     cfg_(nullptr),
     is_loading_data_dict_baseline_data_(false),
-    fetching_mode_(ClientFetchingMode::FETCHING_MODE_UNKNOWN),
-    archive_dest_(),
     large_buffer_pool_(),
-    log_ext_handler_concurrency_(0),
-    log_ext_handler_(),
     ls_ctx_add_info_factory_(NULL),
     err_handler_(NULL),
     ls_fetch_mgr_(),
@@ -78,7 +74,6 @@ ObLogFetcher::~ObLogFetcher()
 }
 
 #ifdef ERRSIM
-ERRSIM_POINT_DEF(LOG_FETCHER_LOG_EXT_HANDLER_INIT_FAIL);
 ERRSIM_POINT_DEF(LOG_FETCHER_STREAM_WORKER_INIT_FAIL);
 #endif
 int ObLogFetcher::init(
@@ -87,8 +82,6 @@ int ObLogFetcher::init(
     const uint64_t source_tenant_id,
     const uint64_t self_tenant_id,
     const bool is_loading_data_dict_baseline_data,
-    const ClientFetchingMode fetching_mode,
-    const ObBackupPathString &archive_dest,
     const ObLogFetcherConfig &cfg,
     ObILogFetcherLSCtxFactory &ls_ctx_factory,
     ObILogFetcherLSCtxAddInfoFactory &ls_ctx_add_info_factory,
@@ -109,7 +102,6 @@ int ObLogFetcher::init(
     cfg_ = &cfg;
     // set self_tenant_id before suggest_cached_rpc_res_count
     log_fetcher_user_ = log_fetcher_user;
-    fetching_mode_ = fetching_mode;
     self_tenant_id_ = self_tenant_id;
 
     // Before the LogFetcher module is initialized, the following configuration items need to be loaded
@@ -120,7 +112,7 @@ int ObLogFetcher::init(
     const common::ObRegion region(cfg.region.str());
     const obcall::ObCdcClientType client_type = get_client_type_from_user_type(log_fetcher_user_);
 
-    if (is_integrated_fetching_mode(fetching_mode_) && OB_FAIL(log_route_service_.init(
+    if (OB_FAIL(log_route_service_.init(
         proxy,
         region,
         cluster_id,
@@ -143,12 +135,6 @@ int ObLogFetcher::init(
       LOG_ERROR("init progress controller fail", KR(ret));
     } else if (OB_FAIL(large_buffer_pool_.init("ObLogFetcher", 1L * 1024 * 1024 * 1024))) {
       LOG_ERROR("init large buffer pool failed", KR(ret));
-#ifdef ERRSIM
-    } else if (is_direct_fetching_mode(fetching_mode_) && OB_FAIL(LOG_FETCHER_LOG_EXT_HANDLER_INIT_FAIL)) {
-      LOG_ERROR("ERRSIM: LOG_FETCHER_LOG_EXT_HANDLER_INIT_FAIL", KR(ret));
-#endif
-    } else if (is_direct_fetching_mode(fetching_mode_) && OB_FAIL(log_ext_handler_.init())) {
-      LOG_ERROR("init failed", KR(ret));
     } else if (OB_FAIL(ls_fetch_mgr_.init(
             progress_controller_,
             ls_ctx_factory,
@@ -162,8 +148,6 @@ int ObLogFetcher::init(
     } else if (is_cdc(log_fetcher_user_) && OB_FAIL(start_lsn_locator_.init(
             cfg.start_lsn_locator_thread_num,
             cfg.start_lsn_locator_locate_count,
-            fetching_mode_,
-            archive_dest,
             cfg,
             rpc_, *err_handler))) {
       LOG_ERROR("init start log id locator fail", KR(ret));
@@ -213,18 +197,15 @@ int ObLogFetcher::init(
       cluster_id_ = cluster_id;
       source_tenant_id_ = source_tenant_id;
       is_loading_data_dict_baseline_data_ = is_loading_data_dict_baseline_data;
-      archive_dest_ = archive_dest;
 
       paused_ = false;
       pause_time_ = OB_INVALID_TIMESTAMP;
       resume_time_ = OB_INVALID_TIMESTAMP;
-      log_ext_handler_concurrency_ = cfg.cdc_read_archive_log_concurrency;
       stop_flag_ = true;
       is_inited_ = true;
 
       LOG_INFO("LogFetcher init succ", K_(cluster_id), K_(source_tenant_id),
-          K_(self_tenant_id), K_(is_loading_data_dict_baseline_data),
-          "fetching_mode", print_fetching_mode(fetching_mode_), K(archive_dest_));
+          K_(self_tenant_id), K_(is_loading_data_dict_baseline_data));
     }
   }
   return ret;
@@ -238,7 +219,6 @@ void ObLogFetcher::destroy()
   // TODO: Global destroy all memory
   is_inited_ = false;
   is_loading_data_dict_baseline_data_ = false;
-  archive_dest_.reset();
   large_buffer_pool_.destroy();
   ls_ctx_add_info_factory_ = NULL;
   err_handler_ = NULL;
@@ -258,20 +238,11 @@ void ObLogFetcher::destroy()
   rpc_.destroy();
   progress_controller_.destroy();
   ls_fetch_mgr_.destroy();
-  if (is_integrated_fetching_mode(fetching_mode_)) {
-    log_route_service_.wait();
-    log_route_service_.destroy();
-    bg_worker_.wait();
-    bg_worker_.destroy();
-  }
-  log_ext_handler_concurrency_ = 0;
-  if (is_direct_fetching_mode(fetching_mode_)) {
-    log_ext_handler_.wait();
-    log_ext_handler_.destroy();
-  }
+  log_route_service_.wait();
+  log_route_service_.destroy();
+  bg_worker_.wait();
+  bg_worker_.destroy();
   log_file_pool_.destroy();
-  // Finally reset fetching_mode_ because of some processing dependencies, such as ObLogRouteService
-  fetching_mode_ = ClientFetchingMode::FETCHING_MODE_UNKNOWN;
   log_fetcher_user_ = LogFetcherUser::UNKNOWN;
   source_min_observer_version_ = 0;
 
@@ -293,9 +264,9 @@ int ObLogFetcher::start()
   } else {
     stop_flag_ = false;
 
-    if (is_integrated_fetching_mode(fetching_mode_) && OB_FAIL(log_route_service_.start())) {
+    if (OB_FAIL(log_route_service_.start())) {
       LOG_ERROR("start LogRouterService fail", KR(ret));
-    } else if (is_integrated_fetching_mode(fetching_mode_) && OB_FAIL(bg_worker_.start())) {
+    } else if (OB_FAIL(bg_worker_.start())) {
       LOG_ERROR("failed to start LogFetcherBGWorker");
     } else if (is_cdc(log_fetcher_user_) && OB_FAIL(start_lsn_locator_.start())) {
       LOG_ERROR("start 'start_lsn_locator' fail", KR(ret));
@@ -305,10 +276,6 @@ int ObLogFetcher::start()
       LOG_ERROR("start dead pool fail", KR(ret));
     } else if (OB_FAIL(stream_worker_.start())) {
       LOG_ERROR("start stream worker fail", KR(ret));
-      // TODO by wenyue.zxl: change the concurrency of 'log_ext_handler_'(see resize interface)
-    } else if (is_direct_fetching_mode(fetching_mode_) &&
-        OB_FAIL(log_ext_handler_.start(log_ext_handler_concurrency_))) {
-      LOG_ERROR("start log external handler failed", KR(ret));
     } else {
       LOG_INFO("LogFetcher start success");
     }
@@ -329,13 +296,8 @@ void ObLogFetcher::stop()
     start_lsn_locator_.stop();
   }
 
-  if (is_integrated_fetching_mode(fetching_mode_)) {
-    log_route_service_.stop();
-    bg_worker_.stop();
-  }
-  if (is_direct_fetching_mode(fetching_mode_)) {
-    log_ext_handler_.stop();
-  }
+  log_route_service_.stop();
+  bg_worker_.stop();
 
   LOG_INFO("LogFetcher stop success");
 }
@@ -386,9 +348,6 @@ void ObLogFetcher::mark_stop_flag()
     if (is_cdc(log_fetcher_user_)) {
       start_lsn_locator_.mark_stop_flag();
     }
-    if (is_direct_fetching_mode(fetching_mode_)) {
-      log_ext_handler_.stop();
-    }
     LOG_INFO("LogFetcher mark stop succ");
   }
 }
@@ -421,7 +380,7 @@ int ObLogFetcher::add_ls(
   }
   // Push LS into ObLogLSFetchMgr
   else if (OB_FAIL(ls_fetch_mgr_.add_ls(tls_id, start_parameters, is_loading_data_dict_baseline_data_,
-      fetching_mode_, archive_dest_, *err_handler_))) {
+      *err_handler_))) {
     LOG_ERROR("add partition by part fetch mgr fail", KR(ret), K(tls_id), K(start_parameters),
         K(is_loading_data_dict_baseline_data_));
   } else if (OB_FAIL(ls_fetch_mgr_.get_ls_fetch_ctx(tls_id, ls_fetch_ctx))) {
@@ -666,10 +625,7 @@ int ObLogFetcher::wait_for_all_ls_to_be_removed(const int64_t timeout)
 
 void ObLogFetcher::configure(const ObLogFetcherConfig &cfg)
 {
-  int ret = OB_SUCCESS;
   bool print_ls_heartbeat_info = cfg.print_ls_heartbeat_info;
-
-  const int64_t log_ext_handler_concurrency = cfg.cdc_read_archive_log_concurrency;
 
   ATOMIC_STORE(&g_print_ls_heartbeat_info, print_ls_heartbeat_info);
 
@@ -679,14 +635,6 @@ void ObLogFetcher::configure(const ObLogFetcherConfig &cfg)
   ObLSWorker::configure(cfg);
   ObLogLSFetchMgr::configure(cfg);
   FetchLogARpc::configure(cfg);
-
-  if (IS_INIT && is_direct_fetching_mode(fetching_mode_)) {
-    if (OB_FAIL(log_ext_handler_.resize(log_ext_handler_concurrency))) {
-      LOG_ERROR("log_ext_handler failed to resize when reloading configure", K(log_ext_handler_concurrency));
-    } else {
-      log_ext_handler_concurrency_ = log_ext_handler_concurrency;
-    }
-  }
 }
 
 int ObLogFetcher::get_fs_container_mgr(IObFsContainerMgr *&fs_container_mgr)
@@ -726,20 +674,6 @@ int ObLogFetcher::get_large_buffer_pool(archive::LargeBufferPool *&large_buffer_
     LOG_ERROR("LogFetcher is not inited, could not get large buffer pool", KR(ret), K_(is_inited));
   } else {
     large_buffer_pool = &large_buffer_pool_;
-  }
-
-  return ret;
-}
-
-int ObLogFetcher::get_log_ext_handler(logservice::ObLogExternalStorageHandler *&log_ext_hander)
-{
-  int ret = OB_SUCCESS;
-
-  if(IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("LogFetcher is not inited, could not get log ext handler", KR(ret), K_(is_inited));
-  } else {
-    log_ext_hander = &log_ext_handler_;
   }
 
   return ret;

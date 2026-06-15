@@ -27,7 +27,6 @@
 #include "logservice/ob_log_base_header.h"
 #include "logservice/restoreservice/ob_remote_log_iterator.h"  // ObRemoteLogIterator
 #include "logservice/restoreservice/ob_remote_log_source.h"    // ObRemoteLogParent
-#include "ob_log_fetching_mode.h"             // ClientFetchingMode
 #include "ob_log_utils.h"                     // _SEC_
 #include "ob_log_start_lsn_locator.h"         // StartLSNLocateReq
 #include "ob_log_dlist.h"                     // ObLogDList, ObLogDListNode
@@ -98,8 +97,6 @@ public:
       const ObLogFetcherStartParameters &start_parameters,
       const bool is_loading_data_dict_baseline_data,
       const int64_t progress_id,
-      const ClientFetchingMode fetching_mode,
-      const ObBackupPathString &archive_dest_str,
       ObILogFetcherLSCtxAddInfo &ls_ctx_add_info,
       IObLogErrHandler &err_handler);
 
@@ -167,13 +164,9 @@ public:
 
   int get_large_buffer_pool(archive::LargeBufferPool *&large_buffer_pool);
 
-  int get_log_ext_handler(logservice::ObLogExternalStorageHandler *&log_ext_handler);
-
   int get_fetcher_config(const ObLogFetcherConfig *&cfg);
 
   ObRemoteLogParent *get_archive_source() { return source_; }
-
-  int init_remote_iter();
 
   bool is_remote_iter_inited() { return remote_iter_.is_init(); }
 
@@ -270,8 +263,6 @@ public:
     fetch_info_.dispatch_out(reason);
   }
 
-  ClientFetchingMode get_fetching_mode() const { return fetching_mode_; }
-
   // Determine if the server needs to be switched
   //
   /// @param [in]  cur_svr  The fetch log stream where the partition task is currently located - target server
@@ -296,11 +287,6 @@ private:
   static const int64_t SERVER_LIST_UPDATE_INTERVAL_SEC = 5 * _SEC_;
 
   int init_group_iterator_(const palf::LSN &start_lsn);
-
-  int init_archive_dest_(const ObBackupPathString &archve_dest_str,
-      ObBackupDest &archive_dest);
-
-  int init_archive_source_(const ObBackupDest &archive_dest);
 
   static const int64_t DEFAULT_SERVER_NUM = 16;
   typedef common::ObSEArray<common::ObAddr, DEFAULT_SERVER_NUM> LocateSvrList;
@@ -498,7 +484,6 @@ private:
 protected:
   FetchStreamType         stype_;
   FetchState              state_;
-  ClientFetchingMode      fetching_mode_;
   bool                    discarded_; // LS is deleted or not
   bool                    is_loading_data_dict_baseline_data_;
 

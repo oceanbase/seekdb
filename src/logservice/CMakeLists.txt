@@ -134,7 +134,6 @@ ob_set_subtarget(ob_logservice logfetcher
   logfetcher/ob_log_fetcher_ls_ctx_default_factory.cpp
   logfetcher/ob_log_fetcher_switch_info.cpp
   logfetcher/ob_log_fetcher.cpp
-  logfetcher/ob_log_fetching_mode.cpp
   logfetcher/ob_log_file_buffer_pool.cpp
   logfetcher/ob_log_ls_fetch_ctx.cpp
   logfetcher/ob_log_ls_fetch_mgr.cpp

@@ -213,7 +213,6 @@ private:
       bool &need_hibernate,
       bool &is_stream_valid);
   int handle_fetch_log_task_(volatile bool &stop_flag);
-  int handle_fetch_archive_task_(volatile bool &stop_flag);
 
   void update_fetch_stat_info_(
       FetchLogRpcResult &result,

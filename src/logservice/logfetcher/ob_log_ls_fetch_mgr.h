@@ -16,7 +16,6 @@
 #ifndef OCEANBASE_LOG_FETCHER_LS_FETCH_MGR_H__
 #define OCEANBASE_LOG_FETCHER_LS_FETCH_MGR_H__
 
-#include "ob_log_fetching_mode.h"
 #include "ob_log_ls_fetch_ctx.h"                // LSFetchCtx, LSFetchInfoForPrint
 
 #include "lib/hash/ob_linear_hash_map.h"        // ObLinearHashMap
@@ -45,8 +44,6 @@ public:
       const logservice::TenantLSID &tls_id,
       const ObLogFetcherStartParameters &start_parameters,
       const bool is_loading_data_dict_baseline_data,
-      const ClientFetchingMode fetching_mode,
-      const ObBackupPathString &archive_dest_str,
       IObLogErrHandler &err_handler) = 0;
 
   /// recycle a LS
@@ -100,8 +97,6 @@ public:
       const logservice::TenantLSID &tls_id,
       const ObLogFetcherStartParameters &start_parameters,
       const bool is_loading_data_dict_baseline_data,
-      const ClientFetchingMode fetching_mode,
-      const ObBackupPathString &archive_dest_str,
       IObLogErrHandler &err_handler);
   virtual int recycle_ls(const logservice::TenantLSID &tls_id);
   virtual int remove_ls(const logservice::TenantLSID &tls_id);
