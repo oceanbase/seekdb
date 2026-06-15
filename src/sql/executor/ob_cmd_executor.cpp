@@ -749,11 +749,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObAlterRoleStmt, ObAlterRoleExecutor);
         break;
       }
-      case stmt::T_ARCHIVE_LOG:
-      case stmt::T_BACKUP_DATABASE: {
-        ret = OB_NOT_SUPPORTED;
-        break;
-      }
       case stmt::T_ACTIVATE_STANDBY: {
         DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
         break;
@@ -764,17 +759,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_SWITCHOVER_TO_PRIMARY: {
         DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_MANAGE:
-      case stmt::T_BACKUP_CLEAN:
-      case stmt::T_DELETE_POLICY:
-      case stmt::T_BACKUP_CLUSTER_PARAMETERS:
-      case stmt::T_BACKUP_BACKUPSET:
-      case stmt::T_BACKUP_ARCHIVELOG:
-      case stmt::T_BACKUP_SET_ENCRYPTION:
-      case stmt::T_BACKUP_SET_DECRYPTION: {
-        ret = OB_NOT_SUPPORTED;
         break;
       }
       case stmt::T_ENABLE_SQL_THROTTLE: {
@@ -807,14 +791,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         break;
       }
       case stmt::T_BACKUP_BACKUPPIECE: {
-        ret = OB_NOT_SUPPORTED;
-        break;
-      }
-      case stmt::T_ADD_RESTORE_SOURCE: {
-        ret = OB_NOT_SUPPORTED;
-        break;
-      }
-      case stmt::T_CLEAR_RESTORE_SOURCE: {
         ret = OB_NOT_SUPPORTED;
         break;
       }

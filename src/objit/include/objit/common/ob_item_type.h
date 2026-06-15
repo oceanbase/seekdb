@@ -2234,16 +2234,16 @@ typedef enum ObItemType
   T_DISCONNECT_CLUSTER = 4358,
   T_VERIFY = 4359,
   T_OBCONFIG_URL = 4360,
-  T_ARCHIVE_LOG = 4361,
-  T_BACKUP_DATABASE = 4362,
+  // 4361: T_ARCHIVE_LOG abandoned, id reserved
+  // 4362: T_BACKUP_DATABASE abandoned, id reserved
   // 4363: T_RECOVER_TABLE abandoned, id reserved
   T_REMAP_TABLE = 4364,
   T_REMAP_TABLEGROUP = 4365,
   T_REMAP_TABLESPACE = 4366,
-  T_BACKUP_MANAGE = 4367,
-  T_BACKUP_CLEAN = 4368,
-  T_DELETE_POLICY = 4369,
-  T_BACKUP_KEY = 4370,
+  // 4367: T_BACKUP_MANAGE abandoned, id reserved
+  // 4368: T_BACKUP_CLEAN abandoned, id reserved
+  // 4369: T_DELETE_POLICY abandoned, id reserved
+  // 4370: T_BACKUP_KEY abandoned, id reserved
   T_RESTORE_TENANT_2 = 4371,
   // 4372: T_CANCEL_RESTORE abandoned, id reserved
   // 4373: T_CANCEL_RECOVER_TABLE abandoned, id reserved
@@ -2334,8 +2334,8 @@ typedef enum ObItemType
   T_LOGICAL_READS = 4447,
   T_QUEUE_TIME = 4448,
   T_SQL_THROTTLE_METRICS = 4449,
-  T_BACKUP_SET_ENCRYPTION = 4450,
-  T_BACKUP_SET_DECRYPTION = 4451,
+  // 4450: T_BACKUP_SET_ENCRYPTION abandoned, id reserved
+  // 4451: T_BACKUP_SET_DECRYPTION abandoned, id reserved
   T_GROUPING_SETS_LIST = 4452,
   T_CUBE_LIST = 4453,
   T_MODIFY_READ_TRANSPORT = 4454,
@@ -2392,14 +2392,14 @@ typedef enum ObItemType
 
   T_PRIMARY_KEY_DROP = 4495,
   T_PRIMARY_KEY_ALTER = 4496,
-  T_BACKUP_BACKUPSET = 4497,
-  T_BACKUP_ARCHIVELOG = 4498,
+  // 4497: T_BACKUP_BACKUPSET abandoned, id reserved
+  // 4498: T_BACKUP_ARCHIVELOG abandoned, id reserved
   T_COPY_ID = 4499,
   T_CREATE_DIRECTORY = 4500,
   T_DROP_DIRECTORY = 4501,
   T_BACKUP_BACKUPPIECE = 4502,
-  T_ADD_RESTORE_SOURCE = 4503,
-  T_CLEAR_RESTORE_SOURCE = 4504,
+  // 4503: T_ADD_RESTORE_SOURCE abandoned, id reserved
+  // 4504: T_CLEAR_RESTORE_SOURCE abandoned, id reserved
 
   T_PREVIEW = 4505,
 
@@ -2597,7 +2597,7 @@ typedef enum ObItemType
   T_VEC_INDEX_PARAMS = 4690,
   T_VEC_INDEX_COLUMN = 4691,
   T_VEC_INDEX_COLUMN_EXPR = 4692,
-  T_BACKUP_CLUSTER_PARAMETERS = 4693,
+  // 4693: T_BACKUP_CLUSTER_PARAMETERS abandoned, id reserved
   // create mv build deferred
   T_MV_REFRESH_OPT = 4694,
   T_MV_BUILD_OPT = 4695,

@@ -1960,12 +1960,6 @@ int get_sys_tenant_alter_system_priv(
              stmt::T_FREEZE != basic_stmt->get_stmt_type() &&
              stmt::T_CLEAR_MERGE_ERROR != basic_stmt->get_stmt_type() &&
              stmt::T_ADMIN_MERGE != basic_stmt->get_stmt_type() &&
-             stmt::T_ARCHIVE_LOG != basic_stmt->get_stmt_type() &&
-             stmt::T_BACKUP_DATABASE != basic_stmt->get_stmt_type() && 
-             stmt::T_BACKUP_MANAGE != basic_stmt->get_stmt_type() &&
-             stmt::T_BACKUP_CLEAN != basic_stmt->get_stmt_type() &&
-             stmt::T_DELETE_POLICY != basic_stmt->get_stmt_type() &&
-             stmt::T_BACKUP_KEY != basic_stmt->get_stmt_type() &&
              stmt::T_RECOVER != basic_stmt->get_stmt_type() &&
              stmt::T_TABLE_TTL != basic_stmt->get_stmt_type() &&
              stmt::T_ALTER_SYSTEM_RESET_PARAMETER != basic_stmt->get_stmt_type() &&

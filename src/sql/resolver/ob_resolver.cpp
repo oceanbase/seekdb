@@ -862,15 +862,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(Trigger);
         break;
       }
-      case T_ARCHIVE_LOG:
-      case T_BACKUP_DATABASE: {
-        ret = OB_NOT_SUPPORTED;
-        break;
-      }
-      case T_BACKUP_CLUSTER_PARAMETERS: {
-        ret = OB_NOT_SUPPORTED;
-        break;
-      }
       case T_ACTIVATE_STANDBY: {
         REGISTER_STMT_RESOLVER(SwitchRole);
         break;
@@ -881,17 +872,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_SWITCHOVER_TO_PRIMARY: {
         REGISTER_STMT_RESOLVER(SwitchRole);
-        break;
-      }
-      case T_BACKUP_MANAGE:
-      case T_BACKUP_CLEAN:
-      case T_DELETE_POLICY:
-      case T_BACKUP_ARCHIVELOG:
-      case T_BACKUP_SET_ENCRYPTION:
-      case T_BACKUP_SET_DECRYPTION:
-      case T_ADD_RESTORE_SOURCE:
-      case T_CLEAR_RESTORE_SOURCE: {
-        ret = OB_NOT_SUPPORTED;
         break;
       }
       case T_CREATE_DIRECTORY: {
