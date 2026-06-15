@@ -934,7 +934,7 @@ int ObParser::parse_sql(const ObString &stmt,
 
 
     if (OB_ERR_PARSE_SQL == ret) {
-      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                      error_length,
                      stmt.empty() ? NULL : stmt.ptr() + error_offset,
                      parse_result.line_ + 1);
@@ -1183,7 +1183,7 @@ int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_
                                                     stmt.length() - error_offset);
 
       if (OB_ERR_PARSE_SQL == ret) {
-        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                        error_length,
                        stmt.empty() ? NULL : stmt.ptr() + error_offset,
                        parse_result.line_ + 1);

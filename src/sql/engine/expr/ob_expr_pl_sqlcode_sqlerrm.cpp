@@ -134,7 +134,7 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
         if (OB_LIKELY(NULL != wb) && wb->get_err_code() == sqlcode) {
           sqlerrm_result = const_cast<char *>(wb->get_err_msg());
         } else {
-          const char* err_msg = ob_errpkt_strerror(sqlcode, true);
+          const char* err_msg = ob_errpkt_strerror(sqlcode);
           if (NULL == err_msg) {
             CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
             OZ (databuff_printf(sqlerrm_result, max_buf_size, pos,
@@ -178,7 +178,7 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
         if (OB_LIKELY(NULL != wb) && wb->get_err_code() == sqlcode) {
           sqlerrm_result = const_cast<char *>(wb->get_err_msg());
         } else {
-          const char* err_msg = ob_errpkt_str_user_error(sqlcode, true);
+          const char* err_msg = ob_errpkt_str_user_error(sqlcode);
           if (NULL == err_msg) {
             CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
             OZ (databuff_printf(sqlerrm_result, 200, pos, "OBE%ld: Message error_code not found; product=RDBMS; facility=ORA", sqlcode));

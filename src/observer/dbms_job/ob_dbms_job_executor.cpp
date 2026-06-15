@@ -125,8 +125,8 @@ int ObDBMSJobExecutor::run_dbms_job(uint64_t tenant_id, uint64_t job_id)
     int tmp_ret = OB_SUCCESS;
     ObString errmsg = common::ob_get_tsi_err_msg(ret);
     if (errmsg.empty() && ret != OB_SUCCESS) {
-      errmsg = ObString(strlen(ob_errpkt_strerror(ret, false)),
-                        ob_errpkt_strerror(ret, false));
+      errmsg = ObString(strlen(ob_errpkt_strerror(ret)),
+                        ob_errpkt_strerror(ret));
     }
     if ((tmp_ret = job_utils_.update_for_end(tenant_id, job_info, ret, errmsg)) != OB_SUCCESS) {
       LOG_WARN("update dbms job failed", K(tmp_ret), K(ret));

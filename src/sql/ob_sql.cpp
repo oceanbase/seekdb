@@ -4298,7 +4298,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
           const char *err_msg = "?";
           int32_t str_len = static_cast<int32_t>(strlen(err_msg));
           int32_t line_no = 1;
-          LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false), str_len, err_msg, line_no);
+          LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX), str_len, err_msg, line_no);
           LOG_WARN("the text query is invalid", K(outlined_stmt), K(children_node->value_), K(ret));
         } else if (OB_FAIL(ObResolverUtils::resolve_stmt_type(parse_result, stmt_type))) {
           LOG_WARN("failed to resolve stmt type", K(ret));

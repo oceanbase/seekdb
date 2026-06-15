@@ -253,7 +253,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
         // forward_user_error/ forward_user_warn/ forward_user_note.
         ret = error_message.ret_code_;
         if (OB_UNLIKELY(forward_user_msg_len == 0 && OB_SUCCESS != error_message.ret_code_)) {
-          const char *str_user_error = ob_errpkt_strerror(error_message.ret_code_, false);
+          const char *str_user_error = ob_errpkt_strerror(error_message.ret_code_);
           FORWARD_USER_ERROR(error_message.ret_code_, str_user_error);
           FLOG_INFO("error code is not succ, but forward user msg is null", K(ret), K(error_message), K(str_user_error));
         } else if (forward_user_msg_len > 0) {

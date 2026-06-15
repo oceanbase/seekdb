@@ -140,7 +140,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
       if (OB_SUCC(ret)) {
         switch (info_type) {
           case MYSQL_ERRNO_TYPE:
-            OZ(set_sql.assign_fmt("set %s%s=\"%d\";", "@", var.ptr(), ob_errpkt_errno(err_ret, false)));
+            OZ(set_sql.assign_fmt("set %s%s=\"%d\";", "@", var.ptr(), ob_errpkt_errno(err_ret)));
             break;
           case MESSAGE_TEXT_TYPE: {
             OZ(set_sql.assign_fmt("set %s%s=", "@", var.ptr()));
@@ -206,7 +206,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
             switch (info_type) {
               case MYSQL_ERRNO_TYPE:
                 {
-                  int64_t errnum = ob_errpkt_errno(err_ret, false);
+                  int64_t errnum = ob_errpkt_errno(err_ret);
                   sprintf(str, "%ld", errnum);
                   SET_OBJ_VAR(expect_type, errnum, ObString(str), has_lob_header);
                 }

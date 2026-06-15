@@ -1472,9 +1472,9 @@ int ObLoadDataSPImpl::log_failed_line(ToolBox &box,
   } else {
     box.expr_buffer->reset();
     int64_t log_buf_pos = 0;
-    //int err_no = ob_errpkt_errno(err_code, box.is_oracle_mode);
+    //int err_no = ob_errpkt_errno(err_code);
     if (err_msg.empty()) {
-      err_msg = ob_errpkt_strerror(err_code, box.is_oracle_mode);
+      err_msg = ob_errpkt_strerror(err_code);
     }
     if (OB_FAIL(databuff_printf(box.expr_buffer->begin_ptr(),
                                 box.expr_buffer->get_buffer_size(),

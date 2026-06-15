@@ -292,11 +292,11 @@ ObString handle_err_msg(int ret)
 {
   ObString errmsg = common::ob_get_tsi_err_msg(ret);
   if (errmsg.empty() && ret != OB_SUCCESS) {
-    const char *user_msg = ob_errpkt_str_user_error(ret, false);
+    const char *user_msg = ob_errpkt_str_user_error(ret);
     if (nullptr != user_msg && user_msg[0] != '\0') {
       errmsg = ObString(strlen(user_msg), user_msg);
     } else {
-      const char *err_str = ob_errpkt_strerror(ret, false);
+      const char *err_str = ob_errpkt_strerror(ret);
       errmsg = ObString(strlen(err_str), err_str);
     }
   }
@@ -310,7 +310,7 @@ ObString format_embed_error(int ret)
   const int err_no = ob_mysql_errno_with_check(ret);
   const char *user_msg = ob_str_user_error(ret);
   if (nullptr == user_msg || '\0' == user_msg[0]) {
-    user_msg = ob_errpkt_str_user_error(ret, false);
+    user_msg = ob_errpkt_str_user_error(ret);
   }
   ObString errmsg = (nullptr != user_msg && user_msg[0] != '\0')
       ? ObString(strlen(user_msg), user_msg)

@@ -1350,8 +1350,8 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
             ret_code_ = OB_ERR_PRIMARY_KEY_DUPLICATE;
           }
           const char *ddl_type_str = nullptr;
-          const char *str_user_error = ob_errpkt_str_user_error(ret_code_, is_oracle_mode);
-          const char *str_error = ob_errpkt_strerror(ret_code_, is_oracle_mode);
+          const char *str_user_error = ob_errpkt_str_user_error(ret_code_);
+          const char *str_error = ob_errpkt_strerror(ret_code_);
           const int64_t buf_size = is_ddl_retry_task ? forward_user_message.length() + 1 : OB_MAX_ERROR_MSG_LEN;
           error_message.ret_code_ = ret_code_;
           error_message.ddl_type_ = task_type_;
@@ -1370,8 +1370,8 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
         }
       } else if (is_oracle_mode && DDL_CREATE_INDEX != task_type_ && DDL_CREATE_PARTITIONED_LOCAL_INDEX != task_type_ && OB_ERR_DUPLICATED_UNIQUE_KEY == error_message.ret_code_) {
         error_message.ret_code_ = OB_ERR_PRIMARY_KEY_DUPLICATE;
-        const char *str_user_error = ob_errpkt_str_user_error(ret_code_, is_oracle_mode);
-        const char *str_error = ob_errpkt_strerror(error_message.ret_code_, is_oracle_mode);
+        const char *str_user_error = ob_errpkt_str_user_error(ret_code_);
+        const char *str_error = ob_errpkt_strerror(error_message.ret_code_);
         const int64_t buf_size = OB_MAX_ERROR_MSG_LEN;
         if (OB_FAIL(error_message.prepare_user_message_buf(buf_size))) {
           LOG_WARN("failed to prepare user message buf", K(ret));

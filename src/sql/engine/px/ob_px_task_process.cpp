@@ -571,7 +571,7 @@ int ObPxTaskProcess::record_user_error_msg(int retcode)
               && retcode <= OB_MAX_RAISE_APPLICATION_ERROR) {
             // do nothing ...
           } else {
-            (void)snprintf(rcode.msg_, common::OB_MAX_ERROR_MSG_LEN, "%s", ob_errpkt_strerror(retcode, false));
+            (void)snprintf(rcode.msg_, common::OB_MAX_ERROR_MSG_LEN, "%s", ob_errpkt_strerror(retcode));
           }
         }
         curr_len = STRLEN(rcode.msg_);

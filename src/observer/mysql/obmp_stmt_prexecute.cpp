@@ -985,7 +985,7 @@ int ObMPStmtPrexecute::response_fail_result(sql::ObSQLSessionInfo &session, int 
   int ret = OB_SUCCESS;
   // arraybinding_row_.count() >= 3
   arraybinding_row_->get_cell(0).set_int(curr_sql_idx_);
-  arraybinding_row_->get_cell(1).set_int(static_cast<uint16_t>(ob_errpkt_errno(err_ret, false)));
+  arraybinding_row_->get_cell(1).set_int(static_cast<uint16_t>(ob_errpkt_errno(err_ret)));
   for (int64_t i = 2; i < (arraybinding_row_->get_count() - 1); i++) {
     arraybinding_row_->get_cell(i).set_null();
   }

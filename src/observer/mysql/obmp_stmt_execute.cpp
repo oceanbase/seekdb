@@ -511,7 +511,7 @@ int ObMPStmtExecute::save_exception_for_arraybinding(
   int64_t errm_length = 0;
 
   exception.pos_ = pos;
-  exception.error_code_ = static_cast<uint16_t>(ob_errpkt_errno(error_code, false));
+  exception.error_code_ = static_cast<uint16_t>(ob_errpkt_errno(error_code));
 
   ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
 
@@ -520,7 +520,7 @@ int ObMPStmtExecute::save_exception_for_arraybinding(
     errm_result = wb->get_err_msg();
     errm_length = strlen(errm_result);
   } else {
-    errm_result = ob_errpkt_strerror(error_code, true);
+    errm_result = ob_errpkt_strerror(error_code);
     if (NULL == errm_result) {
       errm_result = "OBE%ld: Message error_code not found; product=RDBMS; facility=ORA";
     }

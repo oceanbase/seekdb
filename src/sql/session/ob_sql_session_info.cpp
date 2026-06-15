@@ -874,7 +874,7 @@ void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
   // if no error at all,
   //    clear err.
   if (OB_SUCCESS != error_code && strlen(warnings_buf_.get_err_msg()) <= 0) {
-    warnings_buf_.set_error(ob_errpkt_strerror(error_code, false), error_code);
+    warnings_buf_.set_error(ob_errpkt_strerror(error_code), error_code);
   } else if (OB_SUCCESS == error_code) {
     warnings_buf_.reset_err();
   }

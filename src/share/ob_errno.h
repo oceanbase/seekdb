@@ -9359,9 +9359,9 @@ extern int g_all_ob_errnos[2440];
 #ifndef __ERROR_CODE_PARSER_
   int get_ob_errno_from_oracle_errno(const int error_no, const char *error_msg, int &ob_errno);
 #endif
-  int ob_errpkt_errno(const int oberr, const bool is_oracle_mode);
-  const char *ob_errpkt_strerror(const int oberr, const bool is_oracle_mode);
-  const char *ob_errpkt_str_user_error(const int oberr, const bool is_oracle_mode);
+  int ob_errpkt_errno(const int oberr);
+  const char *ob_errpkt_strerror(const int oberr);
+  const char *ob_errpkt_str_user_error(const int oberr);
 
 
 } // end namespace common

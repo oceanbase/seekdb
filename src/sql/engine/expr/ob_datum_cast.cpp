@@ -9763,7 +9763,7 @@ CAST_FUNC_NAME(geometry, bit)
       const char *err_msg = "bit";
       int32_t str_len = static_cast<int32_t>(strlen(err_msg));
       int32_t line_no = 1;
-      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
           str_len, err_msg, line_no);
     }
   }
@@ -9790,7 +9790,7 @@ CAST_FUNC_NAME(geometry, otimestamp)
       const char *err_msg = "timestamp";
       int32_t str_len = static_cast<int32_t>(strlen(err_msg));
       int32_t line_no = 1;
-      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
           str_len, err_msg, line_no);
     }
   }

@@ -7564,7 +7564,7 @@ int ObDMLResolver::resolve_limit_clause(const ParseNode *node, bool disable_offs
       int32_t str_len = static_cast<int32_t>(offset_node->text_len_);
       int32_t line_no = 1;
       LOG_WARN("can't set offset for limit clause in delete/update stmt");
-      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+      LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                     str_len, offset_node->raw_text_, line_no);
     // resolve the question mark with less value first
     } else if (limit_node != NULL && limit_node->type_ == T_QUESTIONMARK && offset_node != NULL

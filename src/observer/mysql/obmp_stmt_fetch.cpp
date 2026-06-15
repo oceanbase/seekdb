@@ -68,43 +68,8 @@ int ObMPStmtFetch::before_process()
     ObMySQLUtil::get_int4(pos, fetch_rows);
     fetch_rows_ = fetch_rows;
     if (pkt.get_clen() > FETCH_PACKET_SIZE_WITHOUT_OFFSET) {
-      if (true) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
-      } else {
-        ObMySQLUtil::get_int2(pos, offset_type_);
-        ObMySQLUtil::get_int4(pos, offset_);
-        if (pkt.get_clen() > FETCH_PACKET_SIZE_WITH_OFFSET) {
-          ObMySQLUtil::get_int4(pos, extend_flag_);
-          if (has_long_data()) {
-            ObSQLSessionInfo *session = NULL;
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(get_session(session))) {
-              LOG_WARN("get session failed");
-            } else if (OB_ISNULL(session)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("session is NULL or invalid", K(ret), K(session));
-            } else if (OB_NOT_NULL(session->get_dbms_cursor(cursor_id_))) {
-              int64_t column_count = session->get_dbms_cursor(cursor_id_)
-                                            ->get_field_columns().count();
-              int64_t len = (column_count + 7) / 8;
-              column_flag_ = static_cast<char*>(THIS_WORKER.get_sql_arena_allocator()
-                                                            .alloc(len + 1));
-              MEMSET(column_flag_, 0, len+1);
-              MEMCPY(column_flag_, pos, len);
-              pos += len;
-            } else {
-              ret = OB_ERR_FETCH_OUT_SEQUENCE;
-              LOG_WARN("cursor not found", K(cursor_id_), K(ret));
-            }
-            if (session != NULL) {
-              revert_session(session);
-            }
-          }
-        } else {
-          extend_flag_ = 0;
-        }
-      }
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
     } else {
       offset_type_ = OB_OCI_DEFAULT;
       offset_ = 0;

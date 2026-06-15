@@ -1109,8 +1109,8 @@ int ObConstraintTask::report_check_constraint_error_code()
         LOG_WARN("print ddl user message failed", K(ret));
       }
     } else {
-      const char *str_user_error = ob_errpkt_str_user_error(ret_code_, is_oracle_mode);
-      const char *str_error = ob_errpkt_strerror(ret_code_, is_oracle_mode);
+      const char *str_user_error = ob_errpkt_str_user_error(ret_code_);
+      const char *str_error = ob_errpkt_strerror(ret_code_);
       if (OB_FAIL(get_ddl_type_str(task_type_, ddl_type_str))) {
         LOG_WARN("ddl type to string failed", K(ret));
       } else if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN, "ddl_type:%s", ddl_type_str))) {
@@ -1166,8 +1166,8 @@ int ObConstraintTask::report_foreign_key_constraint_error_code()
         LOG_WARN("print ddl user message failed", K(ret));
       }
     } else {
-      const char *str_user_error = ob_errpkt_str_user_error(ret_code_, is_oracle_mode);
-      const char *str_error = ob_errpkt_strerror(ret_code_, is_oracle_mode);
+      const char *str_user_error = ob_errpkt_str_user_error(ret_code_);
+      const char *str_error = ob_errpkt_strerror(ret_code_);
       if (OB_FAIL(get_ddl_type_str(task_type_, ddl_type_str))) {
         LOG_WARN("ddl type to string failed", K(ret));
       } else if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN, "ddl_type:%s", ddl_type_str))) {

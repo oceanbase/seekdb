@@ -412,7 +412,7 @@ int ObMPPacketSender::send_error_packet(int err,
                  && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
         // do nothing ...
       } else {
-        snprintf(msg_buf, MAX_MSG_BUF_SIZE, "%s", ob_errpkt_strerror(err, false));
+        snprintf(msg_buf, MAX_MSG_BUF_SIZE, "%s", ob_errpkt_strerror(err));
         message = ObString::make_string(msg_buf); // default error message
       }
     }
@@ -497,7 +497,7 @@ int ObMPPacketSender::send_error_packet(int err,
         LOG_WARN("set sql_state failed", K(ret));
       }
     } else {
-      epacket.set_errcode(static_cast<uint16_t>(ob_errpkt_errno(err, false)));
+      epacket.set_errcode(static_cast<uint16_t>(ob_errpkt_errno(err)));
       if (OB_FAIL(epacket.set_sqlstate(ob_sqlstate(err)))) {
         LOG_WARN("set sql_state failed", K(ret));
       }

@@ -492,8 +492,8 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
     }
     error_message.ret_code_ = tmp_ret_code;
     error_message.ddl_type_ = ddl_type;
-    str_user_error = ob_errpkt_str_user_error(tmp_ret_code, is_oracle_mode);
-    str_error = ob_errpkt_strerror(tmp_ret_code, is_oracle_mode);
+    str_user_error = ob_errpkt_str_user_error(tmp_ret_code);
+    str_error = ob_errpkt_strerror(tmp_ret_code);
     if (OB_SUCCESS == tmp_ret_code) {
       if (OB_FAIL(databuff_printf(error_message.dba_message_, OB_MAX_ERROR_MSG_LEN, "%s", "Successful ddl"))) {
         LOG_WARN("print to buffer failed", K(ret));

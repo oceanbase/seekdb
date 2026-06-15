@@ -102,7 +102,7 @@ int ObPLParser::fast_parse(const ObString &query,
         ObString stmt(MIN(MAX_PRINT_LEN, parse_ctx.stmt_len_), parse_ctx.stmt_str_);
         LOG_WARN("failed to parse pl stmt",
                 K(ret), K(err_line), K(global_errmsg), K(stmt));
-        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+        LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                       err_len, err_str, err_line);
       } else {
         LOG_WARN("failed to parse pl stmt", K(ret));
@@ -244,7 +244,7 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
     ObString stmt(MIN(MAX_PRINT_LEN, parse_ctx.stmt_len_), parse_ctx.stmt_str_);
     LOG_WARN("failed to parser pl stmt",
              K(ret), K(err_line), K(global_errmsg), K(stmt));
-    LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX, false),
+    LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                    err_len, err_str, err_line);
   } else if (parse_ctx.mysql_compatible_comment_) {
     ret = OB_ERR_PARSE_SQL;

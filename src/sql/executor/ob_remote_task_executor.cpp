@@ -91,7 +91,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
           ObCStringHelper helper;
           LOG_USER_WARN(OB_ERR_TASK_SKIPPED,
                         helper.convert(task_info->get_task_location().get_server()),
-                        common::ob_errpkt_errno(ret, false));
+                        common::ob_errpkt_errno(ret));
           handler->set_result_code(OB_ERR_TASK_SKIPPED);
           ret = OB_SUCCESS;
         } else {

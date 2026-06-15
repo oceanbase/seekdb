@@ -610,7 +610,7 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           } else {
             signal_stmt->set_cond_type(ERROR_CODE);
           }
-          signal_stmt->set_error_code(ob_errpkt_errno(save_ret, false));
+          signal_stmt->set_error_code(ob_errpkt_errno(save_ret));
           signal_stmt->set_ob_error_code(save_ret);
           signal_stmt->set_sql_state(ob_sqlstate(save_ret));
           signal_stmt->set_str_len(STRLEN(ob_sqlstate(save_ret)));

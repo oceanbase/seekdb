@@ -36829,17 +36829,17 @@ int g_all_ob_errnos[2440] = {0, -4000, -4001, -4002, -4003, -4004, -4005, -4006,
     }
     return ret;
   }
-  int ob_errpkt_errno(const int err, const bool is_oracle_mode)
+  int ob_errpkt_errno(const int err)
   {
-    return (is_oracle_mode ? ob_oracle_errno_with_check(err) : ob_mysql_errno_with_check(err));
+    return ob_mysql_errno_with_check(err);
   }
-  const char *ob_errpkt_strerror(const int err, const bool is_oracle_mode)
+  const char *ob_errpkt_strerror(const int err)
   {
-    return (is_oracle_mode ? ob_oracle_strerror(err) : ob_strerror(err));
+    return ob_strerror(err);
   }
-  const char *ob_errpkt_str_user_error(const int err, const bool is_oracle_mode)
+  const char *ob_errpkt_str_user_error(const int err)
   {
-    return (is_oracle_mode ? ob_oracle_str_user_error(err) : ob_str_user_error(err));
+    return ob_str_user_error(err);
   }
 
 } // end namespace common

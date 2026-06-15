@@ -101,7 +101,7 @@ int ObTenantVirtualWarning::fill_scanner()
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 1: {// code
-              cells[cell_idx].set_int(ob_errpkt_errno(warn_buff.get_err_code(), false));
+              cells[cell_idx].set_int(ob_errpkt_errno(warn_buff.get_err_code()));
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 2: {// message
@@ -162,7 +162,7 @@ int ObTenantVirtualWarning::fill_scanner()
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 1: {// code
-              cells[cell_idx].set_int(ob_errpkt_errno(item->code_, false));
+              cells[cell_idx].set_int(ob_errpkt_errno(item->code_));
               break;
             }
             case OB_APP_MIN_COLUMN_ID + 2: {// message
