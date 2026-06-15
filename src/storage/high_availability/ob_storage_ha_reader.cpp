@@ -427,22 +427,6 @@ int ObCopyMacroBlockObProducer::prefetch_()
   return ret;
 }
 
-ObCopyTabletInfoRestoreReader::ObCopyTabletInfoRestoreReader()
-{
-}
-
-ObCopyTabletInfoRestoreReader::~ObCopyTabletInfoRestoreReader()
-{
-}
-
-int ObCopyTabletInfoRestoreReader::fetch_tablet_info(obcall::ObCopyTabletInfo &tablet_info)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(tablet_info);
-  LOG_WARN("backup restore reader has been removed, fetch_tablet_info not supported", K(ret));
-  return ret;
-}
-
 ObCopyTabletInfoObProducer::ObCopyTabletInfoObProducer()
   : is_inited_(false),
     tablet_id_array_(),
@@ -534,28 +518,6 @@ int ObCopyTabletInfoObProducer::get_next_tablet_info(obcall::ObCopyTabletInfo &t
     }
     tablet_index_++;
   }
-  return ret;
-}
-
-ObCopySSTableInfoRestoreReader::ObCopySSTableInfoRestoreReader()
-{
-}
-
-int ObCopySSTableInfoRestoreReader::get_next_sstable_info(
-    obcall::ObCopyTabletSSTableInfo &sstable_info)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(sstable_info);
-  LOG_WARN("backup restore reader has been removed, get_next_sstable_info not supported", K(ret));
-  return ret;
-}
-
-int ObCopySSTableInfoRestoreReader::get_next_tablet_sstable_header(
-    obcall::ObCopyTabletSSTableHeader &copy_header)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(copy_header);
-  LOG_WARN("backup restore reader has been removed, get_next_tablet_sstable_header not supported", K(ret));
   return ret;
 }
 

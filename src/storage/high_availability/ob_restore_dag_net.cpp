@@ -3637,7 +3637,6 @@ ObTabletGroupRestoreTask::ObTabletGroupRestoreTask()
     helper_(nullptr),
     tablet_id_array_(),
     finish_dag_(nullptr),
-    ha_tablets_builder_(),
     tablet_group_ctx_(nullptr)
 {
 }

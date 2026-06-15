@@ -430,7 +430,6 @@ private:
   common::ObArenaAllocator allocator_;
   ObIRestoreHelper *helper_;
   share::ObIDag *finish_dag_;
-  ObStorageHATabletsBuilder ha_tablets_builder_;
   DISALLOW_COPY_AND_ASSIGN(ObDataTabletsRestoreTask);
 };
 
@@ -487,7 +486,6 @@ private:
   ObIRestoreHelper *helper_;
   common::ObArray<ObLogicTabletID> tablet_id_array_;
   share::ObIDag *finish_dag_;
-  ObStorageHATabletsBuilder ha_tablets_builder_;
   ObHATabletGroupCtx *tablet_group_ctx_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletGroupRestoreTask);
 };
@@ -524,20 +522,6 @@ private:
   ObRestoreDagNetCtx *ctx_;
   share::ObIDagNet *dag_net_;
   DISALLOW_COPY_AND_ASSIGN(ObRestoreFinishTask);
-};
-
-struct ObLSRestoreUtils
-{
-public:
-  static int init_ha_tablets_builder(
-      const uint64_t tenant_id,
-      const common::ObIArray<common::ObTabletID> &tablet_id_array,
-      const ObStorageHASrcInfo src_info,
-      const int64_t local_rebuild_seq,
-      const ObRestoreType &type,
-      ObLS *ls,
-      ObStorageHATableInfoMgr *ha_table_info_mgr,
-      ObStorageHATabletsBuilder &ha_tablets_builder);
 };
 
 class ObRestoreDagNetUtils

@@ -133,34 +133,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCopyMacroBlockObProducer);
 };
 
-class ObICopyTabletInfoReader
-{
-public:
-  enum Type {
-    TABLET_INFO_OB_READER = 0,
-    TABLET_INFO_RESTORE_READER = 1,
-    MAX,
-  };
-  ObICopyTabletInfoReader() {}
-  virtual ~ObICopyTabletInfoReader() {}
-  virtual int fetch_tablet_info(
-      obcall::ObCopyTabletInfo &tablet_info) = 0;
-  virtual Type get_type() const = 0;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObICopyTabletInfoReader);
-};
-
-class ObCopyTabletInfoRestoreReader : public ObICopyTabletInfoReader
-{
-public:
-  ObCopyTabletInfoRestoreReader();
-  virtual ~ObCopyTabletInfoRestoreReader();
-  virtual int fetch_tablet_info(obcall::ObCopyTabletInfo &tablet_info);
-  virtual Type get_type() const { return TABLET_INFO_RESTORE_READER; }
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCopyTabletInfoRestoreReader);
-};
-
 class ObCopyTabletInfoObProducer
 {
 public:
@@ -210,39 +182,6 @@ private:
   ObTabletHandle tablet_handle_;
   ObTableStoreIterator iter_;
   DISALLOW_COPY_AND_ASSIGN(ObCopyRemoteSSTableInfoObProducer);
-};
-
-class ObICopySSTableInfoReader
-{
-public:
-  enum Type {
-    COPY_SSTABLE_INFO_OB_READER = 0,
-    COPY_SSTABLE_INFO_RESTORE_READER = 1,
-    MAX_TYPE
-  };
-  ObICopySSTableInfoReader() {}
-  virtual ~ObICopySSTableInfoReader() {}
-  virtual int get_next_sstable_info(
-      obcall::ObCopyTabletSSTableInfo &sstable_info) = 0;
-  virtual int get_next_tablet_sstable_header(
-      obcall::ObCopyTabletSSTableHeader &copy_header) = 0;
-  virtual Type get_type() const = 0;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObICopySSTableInfoReader);
-};
-
-class ObCopySSTableInfoRestoreReader : public ObICopySSTableInfoReader
-{
-public:
-  ObCopySSTableInfoRestoreReader();
-  virtual ~ObCopySSTableInfoRestoreReader() {}
-  virtual int get_next_sstable_info(
-      obcall::ObCopyTabletSSTableInfo &sstable_info);
-  virtual int get_next_tablet_sstable_header(
-      obcall::ObCopyTabletSSTableHeader &copy_header);
-  virtual Type get_type() const { return COPY_SSTABLE_INFO_RESTORE_READER; }
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCopySSTableInfoRestoreReader);
 };
 
 class ObCopyTabletsSSTableInfoObProducer

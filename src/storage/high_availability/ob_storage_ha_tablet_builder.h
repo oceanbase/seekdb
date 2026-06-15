@@ -38,36 +38,6 @@ namespace storage
 {
 
 class ObStorageHATableInfoMgr;
-struct ObStorageHATabletsBuilderParam final
-{
-  ObStorageHATabletsBuilderParam();
-  ~ObStorageHATabletsBuilderParam() = default;
-  bool is_valid() const;
-  int assign(const ObStorageHATabletsBuilderParam &param);
-
-  TO_STRING_KV(K_(tenant_id), KPC_(ls), K_(tablet_id_array), K_(src_info), K_(local_rebuild_seq),
-      K_(need_check_seq), K_(is_leader_restore), K_(need_keep_old_tablet), KP_(ha_table_info_mgr),
-      K_(restore_action), KP_(bandwidth_throttle), KP_(svr_rpc_proxy), KP_(storage_rpc));
-
-  uint64_t tenant_id_;
-  ObLS *ls_;
-  common::ObArray<common::ObTabletID> tablet_id_array_;
-  ObStorageHASrcInfo src_info_;
-  int64_t local_rebuild_seq_;
-  bool need_check_seq_;
-  bool is_leader_restore_;
-  bool need_keep_old_tablet_;
-
-  ObStorageHATableInfoMgr *ha_table_info_mgr_;
-  common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  obcall::ObStorageRpcProxy *svr_rpc_proxy_;
-  storage::ObStorageRpc *storage_rpc_;
-  const ObRestoreBaseInfo *restore_base_info_;
-  ObTabletRestoreAction::ACTION restore_action_;
-
-  DISALLOW_COPY_AND_ASSIGN(ObStorageHATabletsBuilderParam);
-};
-
 struct ObBuildMajorSSTablesParam final
 {
   ObBuildMajorSSTablesParam(
@@ -83,89 +53,6 @@ struct ObBuildMajorSSTablesParam final
   TO_STRING_KV(K_(storage_schema), K_(has_truncate_info));
   const ObStorageSchema &storage_schema_;
   const bool has_truncate_info_;
-};
-
-class ObStorageHATabletsBuilder
-{
-public:
-  typedef hash::ObHashMap<common::ObTabletID, ObCopyTabletSimpleInfo> CopyTabletSimpleInfoMap;
-  ObStorageHATabletsBuilder();
-  virtual ~ObStorageHATabletsBuilder();
-  int init(const ObStorageHATabletsBuilderParam &param);
-  // Create all tablets with remote tablet meta.
-  int create_or_update_tablets(ObIDagNet *dag_net);
-  // Restore PENDING tablets meta. PENDING tablets will be exist at restore phase RESTORE_SYS_TABLETS, 
-  // RESTORE_TO_CONSISTENT_SCN, or QUICK_RESTORE. Leader gets the meta from backup, follower gets it from leader.
-  // If that tablet meta identified uniquely by transfer sequence exists, replace and update the restore status to EMPTY.
-  // Otherwise, just update it to UNDEFINED.
-  int update_pending_tablets_with_remote();
-  int build_tablets_sstable_info(ObIDagNet *dag_net);
-private:
-  int get_tablet_info_reader_(ObICopyTabletInfoReader *&reader);
-  int get_tablet_info_restore_reader_(ObICopyTabletInfoReader *&reader);
-  void free_tablet_info_reader_(ObICopyTabletInfoReader *&reader);
-  int create_or_update_tablet_(
-      const obcall::ObCopyTabletInfo &tablet_info,
-      const bool need_check_tablet_limit,
-      ObLS *ls);
-  int get_tablets_sstable_reader_(
-      const common::ObIArray<ObTabletHandle> &tablet_handle_array,
-      ObICopySSTableInfoReader *&reader);
-  int build_tablets_sstable_info_(
-      const obcall::ObCopyTabletSSTableInfo &sstable_info);
-  int get_tablets_sstable_restore_reader_(
-      const common::ObIArray<ObTabletHandle> &tablet_handle_array,
-      ObICopySSTableInfoReader *&reader);
-  void free_sstable_info_reader_(ObICopySSTableInfoReader *&reader);
-
-  int build_copy_tablet_sstable_info_arg_(
-      const ObTabletHandle &tablet_handle,
-      obcall::ObCopyTabletSSTableInfoArg &arg);
-  int get_major_sstable_max_snapshot_(
-      const ObSSTableArray &major_sstable_array,
-      int64_t &max_snapshot_version);
-  int get_minor_scn_range_(
-      const ObSSTableArray &minor_sstable_array,
-      ObTablet *tablet,
-      share::ObScnRange &scn_range);
-  int get_need_copy_ddl_sstable_range_(
-      const ObTablet *tablet,
-      const ObSSTableArray &ddl_sstable_array,
-      share::ObScnRange &scn_range);
-  int get_ddl_sstable_min_start_scn_(
-      const ObSSTableArray &ddl_sstable_array,
-      share::SCN &max_start_scn);
-  int hold_local_reuse_sstable_(
-      const common::ObTabletID &tablet_id,
-      ObTabletHandle &local_tablet_hdl,
-      ObTablesHandleArray &tables_handle,
-      ObStorageSchema &storage_schema,
-      common::ObIAllocator &allocator);
-  int hold_local_complete_tablet_sstable_(
-      ObTablet *tablet,
-      ObTablesHandleArray &tables_handle);
-  int remove_uncomplete_tablet_(
-      const common::ObTabletID &tablet_id);
-  int modified_tablet_info_(
-      obcall::ObCopyTabletInfo &tablet_info);
-
-  int create_tablet_with_major_sstables_(
-      ObLS *ls,
-      const obcall::ObCopyTabletInfo &tablet_info,
-      const ObTablesHandleArray &major_tables,
-      const ObBuildMajorSSTablesParam &major_sstables_param,
-      const bool is_only_replace_major);
-  int hold_local_tablet_(
-      common::ObIArray<ObTabletHandle> &tablet_handle_array);
-private:
-  struct MajorSSTableSnapshotVersionCmp
-  {
-    bool operator()(const ObSSTableWrapper &lhs, const ObSSTableWrapper &rhs) const;
-  };
-  
-  bool is_inited_;
-  ObStorageHATabletsBuilderParam param_;
-  DISALLOW_COPY_AND_ASSIGN(ObStorageHATabletsBuilder);
 };
 
 class ObStorageHATableInfoMgr
