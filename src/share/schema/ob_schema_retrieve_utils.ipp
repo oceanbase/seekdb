@@ -1436,9 +1436,6 @@ int fill_column_schema_default_value(T &result,
                                      const uint64_t tenant_id)
 {
   int ret = common::OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-  bool is_oracle_mode = false;
-  lib::CompatModeGuard guard(compat_mode);
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, orig_default_value, default_type,
                                     column,false, false, tenant_id);
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL_V2(result, default_type,
@@ -3893,12 +3890,7 @@ int ObSchemaRetrieveUtils::fill_base_part_info(
       } else {
         // bugfix: issue/48579037
         // In 4.x, tablegroup_id/table_id is in the same scope, so we can distinguish table and tablegroup based on object_id.
-        bool is_oracle_mode = false;
         const uint64_t table_id = partition.get_table_id();
-        if (is_sys_tablegroup_id(table_id)) {
-          is_oracle_mode = false;
-        }
-        lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
         if (FAILEDx(partition.set_list_vector_values_with_hex_str(blist_val))) {
           SHARE_SCHEMA_LOG(WARN, "Failed to set list val to partition", K(ret));
         }

@@ -1394,7 +1394,7 @@ int ObNumber::round_scale_(const int64_t scale, const bool using_floating_scale)
       && using_floating_scale) {
     floating_scale -= integer_counter;
   }
-//  LOG_DEBUG("Number before rebuild", K(is_oracle_mode()), K(using_floating_scale),
+//  LOG_DEBUG("Number before rebuild", K(using_floating_scale),
 //      K(scale), K(floating_scale), K(integer_counter), K(integer_length),
 //      K(decimal_length), KPC(this), K(lbt()));
 

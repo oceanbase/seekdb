@@ -42,10 +42,7 @@ int ObExprConcatWs::calc_result_typeN(ObExprResType &type,
 {
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
-  if (!is_mysql_mode()) {
-    ret = OB_ERR_FUNCTION_UNKNOWN;
-    LOG_WARN("concat_ws only support on mysql mode", K(ret));
-  } else if (param_num <= 1) {
+  if (param_num <= 1) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid argument number, param should not less than 1", K(ret), K(param_num));
   } else {

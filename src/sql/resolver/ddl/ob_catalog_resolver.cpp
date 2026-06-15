@@ -186,7 +186,7 @@ int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obcall::
     LOG_WARN("failed to convert sql text", K(ret), K(catalog_name));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
     LOG_WARN("failed to get name case mode", K(ret));
-  } else if (is_mysql_mode() && OB_LOWERCASE_AND_INSENSITIVE == case_mode
+  } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode
              && OB_FAIL(ObCharset::tolower(cs_type, catalog_name, catalog_name, *allocator_))) {
     LOG_WARN("failed to lower string", K(ret));
   } else if (OB_FAIL(arg.schema_.set_catalog_name(catalog_name))) {

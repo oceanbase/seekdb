@@ -49,7 +49,7 @@ struct ToStringCastImpl
               length = ob_fcvt(in_val, in_scale_, buf_len - 1, buf_, NULL);
             } else {
               int32_t double_width = buf_len - 1;
-              if (lib::is_mysql_mode() && CM_IS_COLUMN_CONVERT(expr.extra_) &&
+              if (CM_IS_COLUMN_CONVERT(expr.extra_) &&
                   ob_is_double_tc(expr.args_[0]->datum_meta_.type_) && expr.max_length_ > 0) {
                 double_width = min(double_width, expr.max_length_);
               }
@@ -63,7 +63,7 @@ struct ToStringCastImpl
           }
           const ObCharsetInfo *cs = NULL;
           int64_t align_offset = 0;
-          if (CS_TYPE_BINARY == in_cs_type_ && lib::is_mysql_mode()
+          if (CS_TYPE_BINARY == in_cs_type_
               && (NULL != (cs = ObCharset::get_charset(out_cs_type_)))) {
             if (cs->mbminlen > 0 && length % cs->mbminlen != 0) {
               align_offset = cs->mbminlen - length % cs->mbminlen;
@@ -252,7 +252,7 @@ struct ToStringCastImpl
           } else {
             const ObCharsetInfo *cs = NULL;
             int64_t align_offset = 0;
-            if (CS_TYPE_BINARY == in_cs_type_ && lib::is_mysql_mode()
+            if (CS_TYPE_BINARY == in_cs_type_
                 && (NULL != (cs = ObCharset::get_charset(out_cs_type_)))) {
               if (cs->mbminlen > 0 && length % cs->mbminlen != 0) {
                 align_offset = cs->mbminlen - length % cs->mbminlen;
@@ -309,7 +309,7 @@ struct ToStringCastImpl
           if (OB_SUCC(ret)) {
             const ObCharsetInfo *cs = NULL;
             int64_t align_offset = 0;
-            if (CS_TYPE_BINARY == in_cs_type_ && lib::is_mysql_mode()
+            if (CS_TYPE_BINARY == in_cs_type_
                 && (NULL != (cs = ObCharset::get_charset(out_cs_type_)))) {
               if (cs->mbminlen > 0 && length % cs->mbminlen != 0) {
                 align_offset = cs->mbminlen - length % cs->mbminlen;
@@ -371,7 +371,7 @@ struct ToStringCastImpl
               ret = OB_ALLOCATE_MEMORY_FAILED;
               SQL_LOG(WARN, "alloc memory failed", K(ret));
             } else if (OB_FAIL(ObCharset::charset_convert(in_cs_type_, in_str.ptr(), in_str.length(),
-                                                          out_cs_type_, buf, buf_len, result_len, lib::is_mysql_mode(),
+                                                          out_cs_type_, buf, buf_len, result_len, true,
                                                           !CM_IS_IGNORE_CHARSET_CONVERT_ERR(expr.extra_) && CM_IS_IMPLICIT_CAST(expr.extra_),
                                                           ObCharset::is_cs_unicode(out_cs_type_) ? 0xFFFD : '?'))) {
               SQL_LOG(WARN, "charset convert failed", K(ret));
@@ -381,7 +381,7 @@ struct ToStringCastImpl
           } else {  // CS_TYPE_BINARY == in_cs_type || CS_TYPE_BINARY == out_cs_type
             const ObCharsetInfo *cs = NULL;
             int64_t align_offset = 0;
-            if (CS_TYPE_BINARY == in_cs_type_ && lib::is_mysql_mode()
+            if (CS_TYPE_BINARY == in_cs_type_
                 && (NULL != (cs = ObCharset::get_charset(out_cs_type_)))) {
               if (cs->mbminlen > 0 && in_str.length() % cs->mbminlen != 0) {
                 align_offset = cs->mbminlen - in_str.length() % cs->mbminlen;

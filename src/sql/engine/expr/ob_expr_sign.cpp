@@ -99,7 +99,7 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
       case ObFloatTC: {
         float v = arg_datum->get_float();
-        if (is_mysql_mode() && 0 == v) {
+        if (0 == v) {
           res_int = 0;
         } else {
           res_int = v < 0 ? -1 : 1;
@@ -108,7 +108,7 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
       case ObDoubleTC: {
         double v = arg_datum->get_double();
-        if (is_mysql_mode() && 0 == v) {
+        if (0 == v) {
           res_int = 0;
         } else {
           res_int = v < 0 ? -1 : 1;

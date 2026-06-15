@@ -79,7 +79,7 @@ int ObDropLocationResolver::resolve(const ParseNode &parse_tree)
       
     } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
       LOG_WARN("failed to get name case mode", K(ret));
-    } else if (is_mysql_mode() && OB_LOWERCASE_AND_INSENSITIVE == case_mode
+    } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode
                && OB_FAIL(ObCharset::tolower(cs_type, location_name, location_name, *allocator_))) {
       LOG_WARN("failed to lower string", K(ret));
     } else {

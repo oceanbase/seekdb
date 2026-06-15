@@ -112,12 +112,7 @@ int ObRawExprPartFuncChecker::visit(ObOpRawExpr &expr)
     case T_OP_MUL:    // *
     case T_OP_MOD:    // %
     {
-      if (is_mysql_mode()) {
-        ret =  OB_SUCCESS;
-      } else {
-        ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-        LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
-      }
+      ret =  OB_SUCCESS;
       break;
     }
     default: {
@@ -230,13 +225,7 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
       case T_FUN_SYS_CEILING:
       case T_FUN_SYS_FLOOR: //FLOOR()
         {
-          if (is_mysql_mode()) {
-            ret =  OB_SUCCESS;
-          } else {
-            ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-            LOG_WARN("invalid partition function", K(ret),
-                     "item_type", expr.get_expr_type());
-          }
+          ret =  OB_SUCCESS;
           break;
         }
         // Only oracle mode is supported

@@ -187,13 +187,11 @@ int ObAnalyzeStmt::add_table(const ObString database_name,
 {
   int ret = OB_SUCCESS;
   ObAnalyzeTableInfo table;
-  if (is_mysql_mode()) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tables_.count(); ++i) {
-      if (tables_.at(i).get_table_id() == table_id
-          && tables_.at(i).get_database_id() == database_id) {
-        ret = OB_ERR_NONUNIQ_TABLE;
-        LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_name.length(), table_name.ptr());
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables_.count(); ++i) {
+    if (tables_.at(i).get_table_id() == table_id
+        && tables_.at(i).get_database_id() == database_id) {
+      ret = OB_ERR_NONUNIQ_TABLE;
+      LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_name.length(), table_name.ptr());
     }
   }
   if (OB_SUCC(ret)) {

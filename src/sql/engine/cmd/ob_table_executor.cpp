@@ -312,7 +312,7 @@ int ObCreateTableExecutor::prepare_drop_arg(const ObCreateTableStmt &stmt,
   drop_table_arg.exec_tenant_id_ = my_session->get_effective_tenant_id();
   int64_t foreign_key_checks = 0;
   my_session->get_foreign_key_checks(foreign_key_checks);
-  drop_table_arg.foreign_key_checks_ = (is_mysql_mode() && foreign_key_checks);
+  drop_table_arg.foreign_key_checks_ = foreign_key_checks;
   table_item.database_name_ = db_name;
   table_item.table_name_ = tab_name;
   if (OB_FAIL(my_session->get_name_case_mode(table_item.mode_))) {
@@ -2067,7 +2067,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
                && FALSE_IT(tmp_arg.session_id_ = my_session->get_sessid_for_table())) {
       //impossible
     } else if (FALSE_IT(my_session->get_foreign_key_checks(foreign_key_checks))) {
-    } else if (FALSE_IT(tmp_arg.foreign_key_checks_ = (is_mysql_mode() && foreign_key_checks))) {
+    } else if (FALSE_IT(tmp_arg.foreign_key_checks_ = foreign_key_checks)) {
     } else if (FALSE_IT(tmp_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL)) {
     } else {
       bool is_parallel_drop = false;
@@ -2233,7 +2233,7 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
     } else {
       int64_t foreign_key_checks = 0;
       my_session->get_foreign_key_checks(foreign_key_checks);
-      tmp_arg.foreign_key_checks_ = (is_mysql_mode() && foreign_key_checks);
+      tmp_arg.foreign_key_checks_ = foreign_key_checks;
       tmp_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
       int64_t affected_rows = 0;
       bool use_parallel_truncate = false;

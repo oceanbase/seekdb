@@ -1128,21 +1128,12 @@
         else if (ob_is_json(data_type))                                                   \
         {                                                                                 \
           def_obj.set_type(data_type);                                                    \
-          if (is_mysql_mode()) {                                                          \
-            if (OB_FAIL(def_obj.build_not_strict_default_value(column.get_data_precision(), ObCollationType::CS_TYPE_INVALID /*string_cs_type, no need set for json*/))) {    \
-              SQL_LOG(WARN, "failed to build not strict default json value", K(ret));     \
-            } else {                                                                      \
-              res_obj.set_json_value(data_type,  def_obj.get_string().ptr(),              \
-                                      def_obj.get_string().length());                     \
-            }                                                                             \
-          } else {                                                                        \
-            def_obj.set_json_value(data_type, str_value.ptr(), str_value.length());       \
-            if (OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, def_obj, res_obj))) {   \
-              SQL_LOG(WARN, "cast obj failed, ", "src type", def_obj.get_type(), "dest type", data_type); \
-            } else {                                                                      \
-              res_obj.set_inrow();                                                        \
-            }                                                                             \
-          }                                                                               \
+          if (OB_FAIL(def_obj.build_not_strict_default_value(column.get_data_precision(), ObCollationType::CS_TYPE_INVALID /*string_cs_type, no need set for json*/))) {    \
+            SQL_LOG(WARN, "failed to build not strict default json value", K(ret));     \
+          } else {                                                                      \
+            res_obj.set_json_value(data_type,  def_obj.get_string().ptr(),              \
+                                    def_obj.get_string().length());                     \
+          }                                                                             \
           if (OB_SUCC(ret)) {                                                             \
             res_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);                         \
             ret = (class_obj).set_##column_name(res_obj);                                 \
@@ -1276,21 +1267,12 @@
         else if (ob_is_json(data_type))                                                          \
         {                                                                                        \
           def_obj.set_type(data_type);                                                           \
-          if (is_mysql_mode()) {                                                                 \
-            if (OB_FAIL(def_obj.build_not_strict_default_value(column.get_data_precision(), ObCollationType::CS_TYPE_INVALID /*string_cs_type, no need set for json*/))) {  \
-              SQL_LOG(WARN, "failed to build not strict default json value", K(ret));            \
-            } else {                                                                             \
-              res_obj.set_json_value(data_type,  def_obj.get_string().ptr(),                     \
-                                      def_obj.get_string().length());                            \
-            }                                                                                    \
-          } else {                                                                               \
-            def_obj.set_json_value(data_type, str_value.ptr(), str_value.length());              \
-            if (OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, def_obj, res_obj))) {          \
-              SQL_LOG(WARN, "cast obj failed, ", "src type", def_obj.get_type(), "dest type", data_type); \
-            } else {                                                                             \
-              res_obj.set_inrow();                                                               \
-            }                                                                                    \
-          }                                                                                      \
+          if (OB_FAIL(def_obj.build_not_strict_default_value(column.get_data_precision(), ObCollationType::CS_TYPE_INVALID /*string_cs_type, no need set for json*/))) {  \
+            SQL_LOG(WARN, "failed to build not strict default json value", K(ret));            \
+          } else {                                                                             \
+            res_obj.set_json_value(data_type,  def_obj.get_string().ptr(),                     \
+                                    def_obj.get_string().length());                            \
+          }                                                                                    \
           if (OB_SUCC(ret)) {                                                                    \
             res_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);                                \
             ret = (class_obj).set_cur_default_value(res_obj, column.is_default_expr_v2_column());\

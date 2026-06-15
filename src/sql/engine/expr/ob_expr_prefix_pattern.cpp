@@ -63,7 +63,7 @@ int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (len_param->is_null() || pattern->is_null()) {
     is_valid = false;
     LOG_WARN("the lenth or escape param is not valid", K(ret), K(len_param), K(escape));
-  } else if (is_mysql_mode() && escape->is_null()) {
+  } else if (escape->is_null()) {
     escape_coll = CS_TYPE_UTF8MB4_BIN;
     escape_str = ObString::make_string("\\");
   } else {

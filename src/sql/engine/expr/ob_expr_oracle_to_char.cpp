@@ -286,11 +286,9 @@ int ObExprToCharCommon::eval_to_char(const ObExpr &expr,
       ObCollationType src_coll_type = (ObDateTimeTC == input_tc || ObOTimestampTC == input_tc)
                                             ? ctx.exec_ctx_.get_my_session()->get_nls_collation()
                                             : CS_TYPE_UTF8MB4_BIN;
-      if (is_mysql_mode()) {
-        src_coll_type = (ObDateTimeTC == input_tc) ? ObCharset::get_default_collation(
-                                           ObCharset::get_default_charset())
-                                     : CS_TYPE_UTF8MB4_BIN;
-      }
+      src_coll_type = (ObDateTimeTC == input_tc) ? ObCharset::get_default_collation(
+                                         ObCharset::get_default_charset())
+                                   : CS_TYPE_UTF8MB4_BIN;
       if (OB_FAIL(ObExprUtil::set_expr_ascii_result(expr, ctx, expr_datum, res, is_ascii,
                                                     src_coll_type))) {
         LOG_WARN("set expr ascii result failed", K(ret));
@@ -559,11 +557,9 @@ int ObExprToCharCommon::inner_eval_to_char_vector(VECTOR_EVAL_FUNC_ARG_DECL) {
             ObCollationType src_coll_type = (ObDateTimeTC == input_tc || ObOTimestampTC == input_tc)
                                                   ? ctx.exec_ctx_.get_my_session()->get_nls_collation()
                                                   : CS_TYPE_UTF8MB4_BIN;
-            if (is_mysql_mode()) {
-              src_coll_type = (ObDateTimeTC == input_tc) ? ObCharset::get_default_collation(
-                                                 ObCharset::get_default_charset())
-                                           : CS_TYPE_UTF8MB4_BIN;
-            }
+            src_coll_type = (ObDateTimeTC == input_tc) ? ObCharset::get_default_collation(
+                                               ObCharset::get_default_charset())
+                                         : CS_TYPE_UTF8MB4_BIN;
             if (OB_FAIL(ObExprUtil::set_expr_asscii_result(expr, ctx, output_result,
                                                  res, idx, is_ascii,
                                                  src_coll_type))) {
@@ -742,8 +738,7 @@ int ObExprToCharCommon::datetime_to_char(const ObExpr &expr,
     if (OB_UNLIKELY(format_str.empty())) {
       res.reset();
       // handle case of mysql mode when input has no format string
-      if (is_mysql_mode()) {
-        if (ob_is_datetime_or_mysql_datetime_tc(input_meta.type_)) {
+      if (ob_is_datetime_or_mysql_datetime_tc(input_meta.type_)) {
           const ObTimeZoneInfo *tz_info_use =
               (ObTimestampType == input_meta.type_) ? tz_info : NULL;
           char *result_buf = NULL;
@@ -776,7 +771,6 @@ int ObExprToCharCommon::datetime_to_char(const ObExpr &expr,
             LOG_WARN("fail to convert to string", K(ret), K(format_str));
           }
         }
-      }
     } else {
       char *result_buf = NULL;
       int64_t pos = 0;

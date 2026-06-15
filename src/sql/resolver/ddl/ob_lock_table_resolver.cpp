@@ -40,10 +40,8 @@ int ObLockTableResolver::resolve(const ParseNode &parse_tree)
     stmt_ = lock_stmt;
   }
   if (OB_FAIL(ret)) {
-  } else if (is_mysql_mode()) {
-    ret = resolve_mysql_mode_(parse_tree);
   } else {
-    ret = resolve_oracle_mode_(parse_tree);
+    ret = resolve_mysql_mode_(parse_tree);
   }
   return ret;
 }

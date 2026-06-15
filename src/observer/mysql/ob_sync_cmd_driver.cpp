@@ -187,7 +187,7 @@ int ObSyncCmdDriver::response_result(ObMySQLResultSet &result)
     } else if (!result.is_with_rows()
                 || (sender_.need_send_extra_ok_packet() && !result.has_more_result())
                 || is_prexecute_
-                || (is_mysql_mode() && session_.client_non_standard())) {
+                || session_.client_non_standard()) {
       process_ok = true;
       ObOKPParam ok_param;
       ok_param.message_ = const_cast<char*>(result.get_message());

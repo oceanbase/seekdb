@@ -59,10 +59,7 @@ int ObExprInterval::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
 
-  if (!is_mysql_mode()) {
-    ret = OB_ERR_FUNCTION_UNKNOWN;
-    LOG_WARN("interval expr only exists in mysql mode", K(ret));
-  } else if (OB_ISNULL(types) || param_num < 2) {
+  if (OB_ISNULL(types) || param_num < 2) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(types), K(param_num), K(ret));
   } else if (OB_LIKELY(NOT_ROW_DIMENSION == row_dimension_)) {

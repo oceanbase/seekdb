@@ -1249,7 +1249,7 @@ int ObExprOperatorFactory::alloc(common::ObIAllocator &alloc, ObExprOperator *&e
 
 
 void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name, ObString &alias_name) {
-  if (is_mysql_mode()) {
+  {
     //for synonyms in mysql mode
     if (0 == origin_name.case_compare("bin")) {
       // bin(N) is equivalent to CONV(N,10,2)
@@ -1334,8 +1334,6 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
     } else {
       //do nothing
     }
-  } else {
-    //for synonyms in oracle mode
   }
 }
 

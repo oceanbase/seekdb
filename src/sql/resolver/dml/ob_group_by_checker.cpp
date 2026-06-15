@@ -204,7 +204,7 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
     if (OB_SUCCESS == check_ctx.err_code_ && !found && is_top_select_stmt()) {
       for (int64_t nth_rollup = 0; !found_same_structure && nth_rollup < rollup_cnt; ++nth_rollup) {
         //in oracle mode, only non static const expr will be replaced later in replace_group_by_exprs
-        if (is_mysql_mode() || !rollup_exprs_->at(nth_rollup)->is_static_const_expr()) {
+        {
           check_ctx.reset();
           check_ctx.ignore_param_ = true;
           check_ctx.override_const_compare_ = true;
@@ -345,10 +345,8 @@ int ObGroupByChecker::colref_belongs_to_check_stmt(ObColumnRefRawExpr &expr, boo
 int ObGroupByChecker::visit(ObConstRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    if (find_in_group_by(expr) || find_in_rollup(expr)) {
-      set_skip_expr(&expr);
-    }
+  if (find_in_group_by(expr) || find_in_rollup(expr)) {
+    set_skip_expr(&expr);
   }
   return ret;
 }

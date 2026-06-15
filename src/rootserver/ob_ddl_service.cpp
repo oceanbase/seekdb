@@ -10174,7 +10174,7 @@ int ObDDLService::fill_new_column_attributes(
     new_column_schema.set_data_length(alter_column_schema.get_data_length());
     new_column_schema.set_data_precision(alter_column_schema.get_data_precision());
     new_column_schema.set_data_scale(alter_column_schema.get_data_scale());
-    if (!is_oracle_mode() || alter_column_schema.is_set_default_) {
+    {
       new_column_schema.set_cur_default_value(
           alter_column_schema.get_cur_default_value(),
           alter_column_schema.is_default_expr_v2_column());

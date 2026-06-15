@@ -1273,7 +1273,7 @@ int ObInsertResolver::check_view_insertable()
     LOG_WARN("stmt is NULL or table item is NULL", K(ret));
   }
   // uv_check_basic already checked
-  if (OB_SUCC(ret) && is_mysql_mode() &&
+  if (OB_SUCC(ret) &&
       (table->is_generated_table() || table->is_temp_table())) {
     // check duplicate base column and non column reference column.
     if (OB_SUCC(ret)) {

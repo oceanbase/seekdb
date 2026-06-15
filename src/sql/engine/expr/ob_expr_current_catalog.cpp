@@ -69,7 +69,7 @@ int ObExprCurrentCatalog::eval_current_catalog(const ObExpr &expr, ObEvalCtx &ct
     if (OB_INVALID_ID == catalog_id) {
       expr_datum.set_null();
     } else if (OB_INTERNAL_CATALOG_ID == catalog_id) {
-      expr_datum.set_string(is_mysql_mode() ? OB_INTERNAL_CATALOG_NAME : OB_INTERNAL_CATALOG_NAME_UPPER);
+      expr_datum.set_string(OB_INTERNAL_CATALOG_NAME);
     } else {
       if (OB_ISNULL(GCTX.schema_service_)) {
         ret = OB_ERR_UNEXPECTED;

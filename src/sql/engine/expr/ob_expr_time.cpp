@@ -336,11 +336,9 @@ int ObExprTimeBase::calc(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprTimeBase, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(2);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(2);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
   return ret;
 }
 

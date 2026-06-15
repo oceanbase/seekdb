@@ -2656,7 +2656,7 @@ int ObFastParserMysql::parse_next_token()
           if (OB_LIKELY(process_idf_func_ != nullptr)) {
             OZ ((this->*process_idf_func_)(false));
           }
-        } else if (is_mysql_mode() && raw_sql_.char_at(raw_sql_.cur_pos_) == '\\') {
+        } else if (raw_sql_.char_at(raw_sql_.cur_pos_) == '\\') {
           raw_sql_.cur_pos_ += 1;
           if (OB_LIKELY(process_idf_func_ != nullptr)) {
             OZ ((this->*process_idf_func_)(false));

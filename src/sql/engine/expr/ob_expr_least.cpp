@@ -344,11 +344,9 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprLeastGreatest, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(2);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(2);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 

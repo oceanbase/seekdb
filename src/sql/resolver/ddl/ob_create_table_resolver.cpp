@@ -1192,7 +1192,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           } else if (column.is_string_type() || is_lob_storage(column.get_data_type())) {
             int64_t length = 0;
             if (OB_FAIL(column.get_byte_length(length, is_oracle_mode, false))) {
-              SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+              SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
             } else if (ob_is_string_tc(column.get_data_type()) && length > OB_MAX_VARCHAR_LENGTH) {
               ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
               LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(), static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH));
@@ -1239,7 +1239,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                 } else if (ob_is_string_tc(column.get_data_type()) && !column.is_string_lob()) {
                   int64_t length = 0;
                   if (OB_FAIL(column.get_byte_length(length, is_oracle_mode, false))){
-                    SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+                    SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
                   } else if (pk_data_length += length > OB_MAX_VARCHAR_LENGTH_KEY) {
                     ret = OB_ERR_TOO_LONG_KEY_LENGTH;
                     LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_VARCHAR_LENGTH_KEY);
@@ -2375,7 +2375,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               if (OB_SUCC(ret) && ob_is_string_type(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
                 int64_t length = 0;
                 if (OB_FAIL(column_schema->get_byte_length(length, is_oracle_mode, false))) {
-                  SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+                  SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
                 } else if (sort_item.prefix_len_ > 0) {
                   length = length * sort_item.prefix_len_ / column_schema->get_data_length();
                 } else { /*do nothing*/ }
@@ -2474,7 +2474,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
         } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
           int64_t length = 0;
           if (OB_FAIL(column_schema->get_byte_length(length, is_oracle_mode, false))) {
-            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
           } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
             ret = OB_ERR_TOO_LONG_KEY_LENGTH;
             LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
@@ -3083,7 +3083,7 @@ int ObCreateTableResolver::resolve_single_column_primary_key_node(const ParseNod
         } else if (ob_is_string_tc(column_schema->get_data_type()) && !column_schema->is_string_lob()) {
           int64_t length = 0;
           if (OB_FAIL(column_schema->get_byte_length(length, false, false))) {
-            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret), K(is_oracle_mode));
+            SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
           } else if (length > OB_MAX_USER_ROW_KEY_LENGTH) {
             ret = OB_ERR_TOO_LONG_KEY_LENGTH;
             LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);

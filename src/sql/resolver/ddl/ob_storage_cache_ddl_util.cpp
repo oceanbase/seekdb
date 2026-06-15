@@ -90,7 +90,7 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
         use_default_storage_cache_policy = true;
       }
     } else if (stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-      if (LOCAL_INDEX == index_scope_ || (NOT_SPECIFIED == index_scope_ && is_mysql_mode())) {
+      if (LOCAL_INDEX == index_scope_ || NOT_SPECIFIED == index_scope_) {
         // When create local index, the default storage cache policy is NONE
         // In mysql mode, if the index scope is not specified, the index is regarded as local index
         storage_cache_policy.set_global_policy(ObStorageCacheGlobalPolicy::PolicyType::NONE_POLICY);
@@ -104,7 +104,7 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
         LOG_WARN("alter table stmt is null", K(ret));
       } else if (GLOBAL_INDEX == index_scope_) {
         use_default_storage_cache_policy = true;
-      } else if (LOCAL_INDEX == index_scope_ || (NOT_SPECIFIED == index_scope_ && is_mysql_mode())) {
+      } else if (LOCAL_INDEX == index_scope_ || NOT_SPECIFIED == index_scope_) {
         storage_cache_policy.set_global_policy(ObStorageCacheGlobalPolicy::PolicyType::NONE_POLICY);
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -335,7 +335,7 @@ int ObDDLResolver::check_and_set_default_storage_cache_policy()
         SQL_RESV_LOG(WARN, "load storage cache policy failed", K(ret), K_(storage_cache_policy));
       } else if (ObStorageCacheGlobalPolicy::NONE_POLICY == storage_cache_policy.get_global_policy()) {
         if (stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-          if (!(LOCAL_INDEX == index_scope_ || (is_mysql_mode() && NOT_SPECIFIED == index_scope_))) {
+          if (!(LOCAL_INDEX == index_scope_ || NOT_SPECIFIED == index_scope_)) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("only allow to set NONE_POLICY for local index", K(ret));
           }

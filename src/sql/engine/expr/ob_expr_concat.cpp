@@ -294,14 +294,7 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       }
     }
     int64_t max_len = 0;
-    if (is_mysql_mode()) {
-      max_len = OB_MAX_VARCHAR_LENGTH;
-    } else if (expr.is_called_in_sql_) { // SQL in oracle mode
-      max_len = OB_MAX_ORACLE_VARCHAR_LENGTH;
-    } else { // PL in oracle mode
-      const int64_t concat_res_max_len_in_pl = 65535;
-      max_len = concat_res_max_len_in_pl;
-    }
+    max_len = OB_MAX_VARCHAR_LENGTH;
     if (ob_is_text_tc(res_type)) {
       // FIXME bin.lb: mysql mode can not reach here, since result type is always varchar.
       // Seem to be a bug: 

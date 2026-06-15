@@ -444,10 +444,8 @@ int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& 
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprInetAton, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(1);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
   return ret;
 }
 

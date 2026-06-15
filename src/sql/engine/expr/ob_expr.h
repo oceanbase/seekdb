@@ -47,9 +47,6 @@ namespace storage
 namespace sql
 {
 
-using lib::is_oracle_mode;
-using lib::is_mysql_mode;
-
 class ObExecContext;
 struct ObIExprExtraInfo;
 struct ObSqlDatumArray;

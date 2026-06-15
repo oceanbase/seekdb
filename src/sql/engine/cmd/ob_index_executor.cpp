@@ -182,8 +182,7 @@ int ObCreateIndexExecutor::set_drop_index_stmt_str(
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", K(ret), K(OB_MAX_SQL_LENGTH));
-  } else if (is_mysql_mode()
-             && OB_FAIL(databuff_printf(buf, buf_len, pos,
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                         "ALTER TABLE `%.*s`.`%.*s` DROP INDEX `%.*s`",
                         drop_index_arg.database_name_.length(),
                         drop_index_arg.database_name_.ptr(),

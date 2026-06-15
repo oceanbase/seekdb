@@ -88,7 +88,7 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
 //    }
     if (OB_FAIL(resolve_outline_data_hints())) {
       LOG_WARN("resolve outline data hints failed", K(ret));
-    } else if (is_mysql_mode() && OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
+    } else if (OB_FAIL(resolve_with_clause(parse_tree.children_[WITH_MYSQL]))) {
       LOG_WARN("resolve with clause failed", K(ret));
     } else if (OB_FAIL(resolve_table_list(*parse_tree.children_[TABLE], is_multi_table_delete))) {
       LOG_WARN("resolve table failed", K(ret));
@@ -478,7 +478,7 @@ int ObDeleteResolver::check_view_deletable()
       LOG_WARN("ref query is NULL for generate table", K(ret));
     }
 
-    if (OB_SUCC(ret) && is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (OB_SUCC(ret)) {
         bool has_subquery = false;
         bool has_dependent_subquery = false;

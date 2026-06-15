@@ -173,14 +173,9 @@ int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprTimeDiff, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(2);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
-  } else {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(2);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
   return ret;
 }
 
