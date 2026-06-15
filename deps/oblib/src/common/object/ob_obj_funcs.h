@@ -105,8 +105,6 @@ template <>
   int ret = OB_SUCCESS;
   const char *NULL_VALUE_STR = "NULL";
   if (params.print_null_string_value_) {
-    const bool is_oracle_mode = false;
-    // oracle and mysql data type mapping:
     switch (params.ob_obj_type_) {
       case ObNullType:
         break;
@@ -115,32 +113,32 @@ template <>
       case ObMediumIntType:
       case ObInt32Type:
       case ObIntType:
-        NULL_VALUE_STR = is_oracle_mode ? "CAST(NULL AS NUMBER)" : "CAST(NULL AS SIGNED)";
+        NULL_VALUE_STR = "CAST(NULL AS SIGNED)";
         break;
       case ObUTinyIntType:
       case ObUSmallIntType:
       case ObUMediumIntType:
       case ObUInt32Type:
       case ObUInt64Type:
-        NULL_VALUE_STR = "CAST(NULL AS SIGNED)";//only need map to mysql datatype
+        NULL_VALUE_STR = "CAST(NULL AS SIGNED)";
         break;
       case ObFloatType:
-        NULL_VALUE_STR = "CAST(NULL AS FLOAT)";//only need map to mysql datatype
+        NULL_VALUE_STR = "CAST(NULL AS FLOAT)";
         break;
       case ObDoubleType:
-        NULL_VALUE_STR = "TO_BINARY_DOUBLE(NULL)";//only need map to oracle datatype
+        NULL_VALUE_STR = "TO_BINARY_DOUBLE(NULL)";
         break;
       case ObUFloatType:
       case ObUDoubleType:
         break;
       case ObNumberType:
-        NULL_VALUE_STR = is_oracle_mode ?  "CAST(NULL AS NUMBER)" : "CAST(NULL AS DECIMAL)";
+        NULL_VALUE_STR = "CAST(NULL AS DECIMAL)";
         break;
       case ObUNumberType:
         break;
       case ObDateTimeType:
       case ObMySQLDateTimeType:
-        NULL_VALUE_STR = is_oracle_mode ? "TO_DATE(NULL, 'YYYY-MM-DD')" : "STR_TO_DATE(NULL, '%Y-%m-%d %H:%i:%s')";
+        NULL_VALUE_STR = "STR_TO_DATE(NULL, '%Y-%m-%d %H:%i:%s')";
         break;
       case ObTimestampType:
         NULL_VALUE_STR = "FROM_UNIXTIME(UNIX_TIMESTAMP(NULL), '%Y-%m-%d %H:%i:%s')";//only need map to mysql datatype
@@ -157,7 +155,6 @@ template <>
         break;
       case ObVarcharType:
       case ObCharType:
-        NULL_VALUE_STR = is_oracle_mode ? "''" : "NULL";
         break;
       case ObHexStringType:
       case ObExtendType:
