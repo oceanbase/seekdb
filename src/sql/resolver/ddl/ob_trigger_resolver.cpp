@@ -236,9 +236,8 @@ int ObTriggerResolver::resolve_create_trigger_stmt(const ParseNode &parse_node,
                                                               table_schema));
     CK (OB_NOT_NULL(table_schema));
     OZ (trigger_arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(table_schema->get_table_id(),
-                                                                                 TABLE_SCHEMA,
-                                                                                 table_schema->get_schema_version())));
-    OZ(ObTTLUtil::check_htable_ddl_supported(*table_schema, false/*by_admin*/));
+                                                                                TABLE_SCHEMA,
+                                                                                table_schema->get_schema_version())));
   }
   if (OB_SUCC(ret)) {
     ObErrorInfo &error_info = trigger_arg.error_info_;

@@ -159,6 +159,9 @@ namespace rootserver
   class ObPrimaryMajorFreezeService;
   class ObRestoreMajorFreezeService;
   class ObBackupTaskScheduler;
+  class ObBackupDataService;
+  class ObBackupCleanService;
+  class ObArchiveSchedulerService;
   class ObDBMSSchedService;
   class ObMViewMaintenanceService;
   class ObDDLScheduler;
@@ -271,6 +274,9 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       observer::ObTabletTableUpdater*,               \
       storage::ObStorageHAHandlerService*,           \
       rootserver::ObBackupTaskScheduler*,            \
+      rootserver::ObBackupDataService*,              \
+      rootserver::ObBackupCleanService*,             \
+      rootserver::ObArchiveSchedulerService*,        \
       storage::ObTenantSSTableMergeInfoMgr*,         \
       share::ObDagWarningHistoryManager*,            \
       compaction::ObScheduleSuspectInfoMgr*,         \

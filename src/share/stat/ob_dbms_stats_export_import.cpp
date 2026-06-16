@@ -842,7 +842,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
             ObNumStackOnceAlloc tmp_alloc;
             if (stat_type == COLUMN_STAT) {
               if (result_objs.at(i).is_null()) {
-                compress_type = ObOptStatCompressType::ZLIB_COMPRESS;
+                compress_type = ObOptStatCompressType::ZSTD_1_3_8_COMPRESS;
               } else if (OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
                 LOG_WARN("failed to get number", K(ret));
               } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(compress_type))) {

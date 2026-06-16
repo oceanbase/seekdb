@@ -267,8 +267,6 @@ int ObCreateIndexHelper::check_table_legitimacy_()
     LOG_WARN("fail to check table udt exist", KR(ret));
   } else if (OB_FAIL(check_fk_related_table_ddl_(*orig_data_table_schema_, ObDDLType::DDL_CREATE_INDEX))) {
     LOG_WARN("check whether the forign key related table is executing ddl failed", KR(ret));
-  } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*orig_data_table_schema_, false/*by_admin*/))) {
-    LOG_WARN("failed to check htable ddl supported", KR(ret));
   }
   RS_TRACE(check_schemas);
   return ret;

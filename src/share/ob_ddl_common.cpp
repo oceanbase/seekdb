@@ -4467,7 +4467,7 @@ int ObDDLUtil::get_temp_store_compress_type(const share::schema::ObTableSchema *
   } else {
     ObCompressorType schema_compr_type = table_schema->get_compressor_type();
     if (NONE_COMPRESSOR == schema_compr_type && table_schema->get_row_store_type() != FLAT_ROW_STORE) { // encoding without compress
-      schema_compr_type = ZSTD_COMPRESSOR;
+      schema_compr_type = ZSTD_1_3_8_COMPRESSOR;
     }
     ret = get_temp_store_compress_type(schema_compr_type, parallel, compr_type);
   }
@@ -4488,9 +4488,9 @@ int ObDDLUtil::get_temp_store_compress_type(const ObCompressorType schema_compr_
     if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("NONE")) {
       compr_type = NONE_COMPRESSOR;
     } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("ZSTD")) {
-      compr_type = ZSTD_COMPRESSOR;
+      compr_type = ZSTD_1_3_8_COMPRESSOR;
     } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("LZ4")) {
-      compr_type = LZ4_COMPRESSOR;
+      compr_type = ZSTD_1_3_8_COMPRESSOR;
     } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("AUTO")) {
       UNUSED(parallel);
       if (schema_compr_type > INVALID_COMPRESSOR && schema_compr_type < MAX_COMPRESSOR) {

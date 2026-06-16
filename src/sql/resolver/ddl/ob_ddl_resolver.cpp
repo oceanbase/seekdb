@@ -2580,10 +2580,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
                 } else if (OB_ISNULL(tbl_schema)) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("table schema is NULL", K(ret));
-                } else if (OB_FAIL(ObTTLUtil::check_kv_attributes(kv_attributes_,
-                                                                  *tbl_schema,
-                                                                  tbl_schema->get_part_level()))) {
-                  LOG_WARN("fail to check kv attributes partition", K(ret));
                 }
               }
               if (OB_SUCC(ret) && OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::KV_ATTRIBUTES))) {
@@ -8028,9 +8024,6 @@ int ObDDLResolver::resolve_foreign_key_node(const ParseNode *node,
       } else if (OB_ISNULL(tbl_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", K(ret), "tenant_id", session_info_->get_effective_tenant_id(),
-                 K(arg.parent_database_), K(arg.parent_table_));
-      } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*tbl_schema, false /*by_admin*/))) {
-        LOG_WARN("failed to check htable ddl supported", K(ret), "tenant_id", session_info_->get_effective_tenant_id(),
                  K(arg.parent_database_), K(arg.parent_table_));
       }
     }

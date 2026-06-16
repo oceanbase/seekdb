@@ -1849,8 +1849,6 @@ int ObMemtable::resolve_max_end_scn_()
   return ret;
 }
 
-
-DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(UpdateScheduleDagTime, update_schedule_dag_time)
 int ObMemtable::flush(share::ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
@@ -1873,7 +1871,6 @@ int ObMemtable::flush(share::ObLSID ls_id)
       }
     } else {
       mt_stat_.create_flush_dag_time_ = cur_time;
-      report_memtable_diagnose_info(UpdateScheduleDagTime());
       TRANS_LOG(INFO, "schedule tablet merge dag successfully", K(ret), K(param), KPC(this));
     }
 
@@ -3153,8 +3150,6 @@ int ObMemtable::finish_freeze()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObFreezeCheckpoint::finish_freeze())) {
     TRANS_LOG(WARN, "fail to finish_freeze", KR(ret));
-  } else {
-    report_memtable_diagnose_info(TabletMemtableUpdateFreezeInfo(*this));
   }
   return ret;
 }

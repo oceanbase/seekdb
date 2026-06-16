@@ -21,6 +21,7 @@
 #include "storage/ls/ob_ls.h"                  // ObLS
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/tablelock/ob_lock_memtable.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 
 namespace oceanbase
 {
@@ -939,7 +940,7 @@ int ObLockTable::flush(share::SCN &scn)
     TABLELOCK_LOG(WARN, "get lock memtable failed", K(ret));
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
     TABLELOCK_LOG(ERROR, "get lock memtable from lock handle failed", K(ret));
-  } else if (OB_FAIL(MTL(storage::checkpoint::ObCheckpointDiagnoseMgr*)->acquire_trace_id(ls_id, trace_id))) {
+  } else if (OB_FAIL(storage::acquire_checkpoint_batch_trace_id(ls_id, trace_id))) {
     TABLELOCK_LOG(WARN, "acquire trace_id failed", K(ret), K(ls_id));
   } else if (OB_FAIL(memtable->flush(scn, trace_id))) {
     TABLELOCK_LOG(WARN, "ObLockTable::flush failed", K(ret), K(scn));                                    

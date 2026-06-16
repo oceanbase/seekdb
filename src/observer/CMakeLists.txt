@@ -116,6 +116,16 @@ ob_set_subtarget(ob_server omt
 )
 
 ob_set_subtarget(ob_server table_load
+  table_load/backup/v_1_4/ob_table_load_backup_macro_block_meta_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_macro_block_reader_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_macro_block_scanner_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_micro_block_scanner_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_partition_scanner_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_row_reader_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_table_v_1_4.cpp
+  table_load/backup/v_1_4/ob_table_load_backup_util_v_1_4.cpp
+  table_load/backup/ob_table_load_backup_file_util.cpp
+  table_load/backup/ob_table_load_backup_table.cpp
   table_load/control/ob_table_load_control_rpc_executor.cpp
   table_load/control/ob_table_load_control_rpc.cpp
   table_load/control/ob_table_load_control_rpc_struct.cpp
@@ -379,6 +389,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_table_columns.cpp
   virtual_table/ob_table_index.cpp
   virtual_table/ob_tenant_all_tables.cpp
+  virtual_table/ob_tenant_show_restore_preview.cpp
   virtual_table/ob_tenant_show_tables.cpp
   virtual_table/ob_tenant_virtual_charset.cpp
   virtual_table/ob_tenant_virtual_privilege.cpp

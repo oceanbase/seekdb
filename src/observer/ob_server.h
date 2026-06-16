@@ -67,7 +67,6 @@
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
 #include "observer/ob_root_service_monitor.h"
-#include "observer/table/ob_table_service.h"
 #include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
@@ -396,8 +395,6 @@ private:
   transaction::ObWeakReadService  weak_read_service_;
   // blacklist service
   transaction::ObBLService &bl_service_;
-  // table service
-  ObTableService table_service_;
 
   // Tenant isolation resource management
   share::ObCgroupCtrl cgroup_ctrl_;

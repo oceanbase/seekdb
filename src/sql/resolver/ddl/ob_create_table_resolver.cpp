@@ -25,6 +25,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/ob_vec_index_builder_util.h"
+#include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
 {
@@ -633,10 +634,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 
     if (OB_SUCC(ret)) {
       ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-      if (!table_schema.get_kv_attributes().empty() &&
-          OB_FAIL(ObTTLUtil::check_kv_attributes(table_schema, params_.is_htable_))) {
-        LOG_WARN("fail to check kv attributes", K(ret));
-      }
     }
   }
   return ret;

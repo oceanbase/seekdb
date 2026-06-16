@@ -347,8 +347,6 @@ int ObSetKvAttributeHelper::check_table_legitimacy_()
       } else if (OB_UNLIKELY(is_exist)) {
         ret = OB_OP_NOT_ALLOW;
         LOG_WARN("restore point exist, cannot alter ", KR(ret), K_(tenant_id), K(orig_table_schema->get_table_id()));
-      } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*orig_table_schema, true/*by_admin*/))) {
-        LOG_WARN("failed to check htable ddl supoprted", KR(ret));
       }
     }
   }

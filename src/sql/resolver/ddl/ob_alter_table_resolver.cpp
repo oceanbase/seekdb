@@ -356,8 +356,6 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_ISNULL(tbl_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is NULL", K(ret));
-      } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*tbl_schema, params_.is_htable_))) {
-        LOG_WARN("failed to check htable ddl supported", K(ret));
       }
     }
   }
@@ -397,10 +395,6 @@ int ObAlterTableResolver::set_table_options()
     //deep copy
     if (OB_FAIL(ret)) {
       //do nothing
-    } else if (compress_method_ == all_compressor_name[ZLIB_COMPRESSOR]) {
-      ret = OB_NOT_SUPPORTED;
-      SQL_RESV_LOG(WARN, "Not allowed to use zlib compressor!", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "zlib compressor");
     } else if (OB_FAIL(alter_table_schema.set_compress_func_name(compress_method_))) {
       SQL_RESV_LOG(WARN, "Write compress_method_ to alter_table_schema failed!", K(ret));
     } else if (OB_FAIL(alter_table_schema.set_comment(comment_))) {
@@ -1380,11 +1374,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         } else if (OB_ISNULL(tbl_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is NULL", K(ret));
-        } else if (!tbl_schema->get_kv_attributes().empty() &&
-            OB_FAIL(ObTTLUtil::check_kv_attributes(tbl_schema->get_kv_attributes(),
-                                                   *tbl_schema,
-                                                   PARTITION_LEVEL_TWO))) {
-          LOG_WARN("fail to check kv attributes", K(ret));
         }
       }
     }

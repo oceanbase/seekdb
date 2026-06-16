@@ -21,7 +21,7 @@
 
 #include "src/share/schema/ob_table_schema.h"
 #include "storage/test_schema_prepare.h"
-#include "mtlenv/mock_tenant_module_env.h"
+#include "mittest/mtlenv/mock_tenant_module_env.h"
 #include "storage/ob_storage_schema_util.h"
 
 namespace oceanbase

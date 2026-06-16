@@ -643,17 +643,19 @@ bool ObSerialDfoScheduler::CleanDtlIntermRes::operator()(const ObAddr &attr,
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = tenant_id_;
-  // serialize-arg overload deep-copies *arg, so *arg can be destructed below.
-  (void)ex_rpc::async_call<void>(*arg,
-      [tenant_id](ObPxCleanDtlIntermResArgs &copied_arg) -> int {
-        int ret = OB_SUCCESS;
-        MTL_SWITCH(tenant_id) {
-          if (OB_FAIL(ObSerialDfoScheduler::clean_dtl_interm_result_local(copied_arg))) {
-            LOG_WARN("clean dtl interm result failed", K(ret), K(copied_arg));
-          }
-        }
-        return ret;
-      });
+  // single-replica: target is always self; dispatch in-process synchronously.
+  // arg is owned by the query exec_ctx allocator and is destructed here just
+  // like the old NULL-cb rpc path, so a synchronous local erase avoids any
+  // use-after-free that a deferred async run could cause.
+  ex_rpc::sync_call([&]() {
+    int ret = OB_SUCCESS;
+    MTL_SWITCH(tenant_id) {
+      if (OB_FAIL(ObSerialDfoScheduler::clean_dtl_interm_result_local(*arg))) {
+        LOG_WARN("clean dtl interm result failed", K(ret), KPC(arg));
+      }
+    }
+    return ret;
+  });
   LOG_TRACE("clean dtl res map", K(attr), KPC(arg));
   arg->~ObPxCleanDtlIntermResArgs();
   arg = NULL;
@@ -1227,7 +1229,6 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
   // / set_server_not_alive otherwise) so QC waiting/retry semantics are kept.
   ObSEArray<ObPxRpcInitSqcResponse, 8> responses;
   ObSEArray<int, 8> resp_rets;
-  ObSEArray<ex_rpc::HandleRef<ObPxRpcInitSqcResponse>, 8> handles;
   int64_t error_index = 0;
   if (OB_SUCC(ret) && sqcs.count() > 0) {
     SMART_VAR(ObPxRpcInitSqcArgs, args) {
@@ -1237,6 +1238,8 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
       args.set_serialize_param(exec_ctx, const_cast<ObOpSpec &>(*dfo.get_root_op_spec()), *phy_plan);
       ARRAY_FOREACH_X(sqcs, idx, count, OB_SUCC(ret)) {
         ObPxSqcMeta &sqc = sqcs.at(idx);
+        ObPxRpcInitSqcResponse resp;
+        int launch_ret = OB_SUCCESS;
         int64_t timeout_us = phy_plan_ctx->get_timeout_timestamp() - ObTimeUtility::current_time();
         if (OB_UNLIKELY(ObPxCheckAlive::is_in_blacklist(sqc.get_exec_addr(),
                         session->get_process_query_time()))) {
@@ -1256,40 +1259,27 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
           } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
-            ex_rpc::HandleRef<ObPxRpcInitSqcResponse> handle =
-                ex_rpc::async_call<ObPxRpcInitSqcResponse>(
-                    [ser_buf, ser_pos](ObPxRpcInitSqcResponse &resp) -> int {
-                      return px_init_sqc_async_in_proc(ser_buf, ser_pos, resp); });
-            if (!handle) {
-              ret = OB_ALLOCATE_MEMORY_FAILED;
+            launch_ret = ex_rpc::sync_call([&]() {
+              return px_init_sqc_async_in_proc(ser_buf, ser_pos, resp); });
+            if (OB_SUCCESS != launch_ret) {
               error_index = idx;
-              LOG_WARN("fail to dispatch in-proc sqc", K(ret), K(sqc));
-            } else if (OB_FAIL(handles.push_back(handle))) {
-              error_index = idx;
-              LOG_WARN("fail to push sqc handle", K(ret));
+              ret = launch_ret;
+              LOG_WARN("fail to launch in-proc sqc", K(ret), K(sqc));
             }
           }
+        }
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = responses.push_back(resp))) {
+          ret = OB_SUCCESS == ret ? tmp_ret : ret;
+        }
+        if (OB_SUCCESS != (tmp_ret = resp_rets.push_back(launch_ret))) {
+          ret = OB_SUCCESS == ret ? tmp_ret : ret;
         }
         if (OB_FAIL(ret)) {
           error_index = idx;
           break;
         }
       }
-    }
-  }
-
-  for (int64_t hidx = 0; hidx < handles.count(); ++hidx) {
-    int launch_ret = handles.at(hidx)->wait();
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = responses.push_back(handles.at(hidx)->result()))) {
-      ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    } else if (OB_SUCCESS != (tmp_ret = resp_rets.push_back(launch_ret))) {
-      ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    }
-    if (OB_SUCCESS != launch_ret && OB_SUCC(ret)) {
-      ret = launch_ret;
-      error_index = hidx;
-      LOG_WARN("fail to init in-proc sqc", K(ret), K(hidx));
     }
   }
 

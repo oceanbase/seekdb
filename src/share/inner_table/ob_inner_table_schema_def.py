@@ -6415,7 +6415,22 @@ def_table_schema(
   )
 
 
-# 11102: __tenant_virtual_show_restore_preview (abandoned)
+def_table_schema(
+  owner = 'chongrong.th',
+  table_name     = '__tenant_virtual_show_restore_preview',
+  table_id       = '11102',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+  ],
+
+  normal_columns = [
+    ('backup_type', 'varchar:20'),
+    ('backup_id', 'int'),
+    ('backup_dest', 'varchar:OB_MAX_BACKUP_DEST_LENGTH', 'true'),
+    ('description', 'varchar:OB_MAX_BACKUP_DEST_LENGTH', 'true')
+  ]
+  )
 
 def_table_schema(
     owner = 'lixia.yq',

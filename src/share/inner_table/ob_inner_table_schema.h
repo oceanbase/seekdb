@@ -425,6 +425,7 @@ public:
   static int all_virtual_memory_context_stat_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_dump_tenant_info_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_dag_warning_history_schema(share::schema::ObTableSchema &table_schema);
+  static int tenant_virtual_show_restore_preview_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_dag_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_dag_scheduler_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_server_compaction_progress_schema(share::schema::ObTableSchema &table_schema);
@@ -1849,6 +1850,7 @@ const schema_create_func virtual_table_schema_creators [] = {
   ObInnerTableSchema::all_virtual_memory_context_stat_schema,
   ObInnerTableSchema::all_virtual_dump_tenant_info_schema,
   ObInnerTableSchema::all_virtual_dag_warning_history_schema,
+  ObInnerTableSchema::tenant_virtual_show_restore_preview_schema,
   ObInnerTableSchema::all_virtual_dag_schema,
   ObInnerTableSchema::all_virtual_dag_scheduler_schema,
   ObInnerTableSchema::all_virtual_server_compaction_progress_schema,
@@ -6557,11 +6559,11 @@ static inline int get_sys_table_lob_aux_schema(const uint64_t tid,
 
 const int64_t OB_CORE_TABLE_COUNT = 4;
 const int64_t OB_SYS_TABLE_COUNT = 177;
-const int64_t OB_VIRTUAL_TABLE_COUNT = 377;
+const int64_t OB_VIRTUAL_TABLE_COUNT = 378;
 const int64_t OB_SYS_VIEW_COUNT = 408;
-const int64_t OB_SYS_TENANT_TABLE_COUNT = 967;
+const int64_t OB_SYS_TENANT_TABLE_COUNT = 968;
 const int64_t OB_CORE_SCHEMA_VERSION = 1;
-const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = 970;
+const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = 971;
 
 } // end namespace share
 } // end namespace oceanbase
