@@ -69,10 +69,8 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
           SERVER_LOG(WARN, "sys var is NULL", K(ret), K(i));
         } else if (sys_var->is_invisible()) {
           // invisible, skip
-        } else if (sys_var->is_oracle_only() && !session_->is_oracle_compatible()) {
-          //skip oracle variable in mysql mode
-        } else if (sys_var->is_mysql_only() && session_->is_oracle_compatible()) {
-          //skip mysql variable in oracle mode
+        } else if (sys_var->is_oracle_only()) {
+          //skip oracle variable in MySQL-only mode
         } else {
           uint64_t cell_idx = 0;
           for (int64_t j = 0; OB_SUCC(ret) && j < output_column_ids_.count(); ++j) {

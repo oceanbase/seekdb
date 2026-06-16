@@ -905,7 +905,6 @@ int ObPLDDLOperator::drop_trigger_in_drop_database(uint64_t tenant_id,
   } else if (OB_FAIL(schema_guard.get_trigger_ids_in_database(tenant_id, database_id, trigger_ids))) {
     LOG_WARN("get trigger infos in database failed", KR(ret), K(tenant_id), K(database_id));
   } else {
-    bool is_oracle_mode = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_ids.count(); i++) {
       const ObTriggerInfo *tg_info = NULL;
       const uint64_t trigger_id = trigger_ids.at(i);
@@ -918,7 +917,7 @@ int ObPLDDLOperator::drop_trigger_in_drop_database(uint64_t tenant_id,
         LOG_WARN("trigger info is NULL", K(ret));
       } else if (tg_info->is_system_type()) {
         ObArray<const ObUserInfo *> user_array;
-        CK (is_oracle_mode);
+        CK (false);
         OZ (schema_guard.get_user_info(tenant_id, db_schema.get_database_name_str(), user_array));
         OV (1 == user_array.count(), OB_ERR_UNEXPECTED, user_array.count());
         CK (OB_NOT_NULL(user_array.at(0)));

@@ -175,7 +175,6 @@ int ObAllVirtualProxyPartition::fill_row_(const ObPartition &partition)
   ObCollationType coll_type = ObCharset::get_default_collation(ObCharset::get_default_charset());
   const int64_t table_id = partition.get_table_id();
   const uint64_t tenant_id = partition.get_tenant_id();
-  bool is_oracle_mode = false;
   const ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;

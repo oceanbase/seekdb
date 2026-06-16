@@ -4868,7 +4868,7 @@ int ObResolverUtils::resolve_default_expr_v2_column_expr(ObResolverParams &param
                                                                  params.schema_checker_,
                                                             PureFunctionCheckStatus::DISABLE_CHECK,
                                                                  false))) {
-    LOG_WARN("build expr_default column expr failed", "is_oracle_compatible", session_info->get_compatibility_mode(), K(ret));
+    LOG_WARN("build expr_default column expr failed", K(ret));
   } else if (OB_UNLIKELY(!columns.empty())) {
     const ObQualifiedName &q_name = columns.at(0);
     bool contain_udf = false;

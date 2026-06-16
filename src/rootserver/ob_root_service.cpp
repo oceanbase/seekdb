@@ -1913,7 +1913,6 @@ int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlt
 {
   LOG_DEBUG("receive alter table arg", K(arg));
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   const uint64_t tenant_id = arg.alter_table_schema_.get_tenant_id();
   ObAlterTableArg &nonconst_arg = const_cast<ObAlterTableArg &>(arg);
@@ -2560,7 +2559,6 @@ int ObRootService::send_auto_split_tablet_task_request(const obcall::ObAutoSplit
 int ObRootService::split_global_index_tablet(const obcall::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   const uint64_t tenant_id = arg.alter_table_schema_.get_tenant_id();
   ObAlterTableArg &nonconst_arg = const_cast<ObAlterTableArg &>(arg);

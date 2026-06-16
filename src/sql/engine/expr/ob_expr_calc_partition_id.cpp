@@ -756,7 +756,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
   ObPartitionFuncType part_type = calc_part_info->part_type_;
   ObDASTabletMapper tablet_mapper;
   const ObExpr *part_expr = expr.args_[0];
-  const bool is_oracle_mode = false;
   if (OB_FAIL(ctx.exec_ctx_.get_das_ctx().get_das_tablet_mapper(calc_part_info->ref_table_id_,
                                                                 tablet_mapper,
                                                                 &calc_part_info->related_table_ids_))) {
@@ -813,10 +812,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
       } else if (OB_FAIL(tablet_mapper.get_tablet_and_object_id(part_level, OB_INVALID_ID, row,
                                                                 tablet_id, partition_id))) {
         LOG_WARN("Failed to get part id", K(ret), K(row));
-      } else if (OB_INVALID_ID == partition_id && PARTITION_LEVEL_ONE == part_level
-                 && is_oracle_mode
-                 && OB_FAIL(add_interval_part(ctx.exec_ctx_, *calc_part_info, allocator, row))) {
-        LOG_WARN("add interval part failed", K(ret), KPC(calc_part_info), K(row));
       } else {
         res_vec->unset_null(row_idx);
         eval_flags.set(row_idx);
@@ -840,7 +835,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
       ObIVector *res_vec = expr.get_vector(ctx);
       res_vec->reset_has_null();
       ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-      const bool is_oracle_mode = false;
       for (int64_t row_idx = bound.start(); row_idx < bound.end() && OB_SUCC(ret); row_idx++) {
         if (skip.contain(row_idx) || eval_flags.at(row_idx)) {
           continue;
@@ -862,9 +856,7 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
         } else {
           result = func_value;
           if (PARTITION_FUNC_TYPE_HASH == part_type) {
-            if (is_oracle_mode) {
-              // do nothing
-            } else if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value, result,
+            if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value, result,
                         func_value.get_type()))) {
               LOG_WARN("Failed to calc hash value mysql mode", K(ret));
             }
@@ -889,14 +881,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
               ret = OB_INVALID_ARGUMENT;
               LOG_WARN("invalid partition cnt", K(ret), K(part_expr), K(partition_ids), K(range), K(rowkey));
             } else {
-              if (0 == partition_ids.count() &&
-                  PARTITION_LEVEL_ONE == part_level &&
-                  is_oracle_mode) {
-                ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-                ObIAllocator &allocator = alloc_guard.get_allocator();
-                ObNewRow row(const_cast<ObObj*>(&result), 1);
-                OZ (add_interval_part(ctx.exec_ctx_, *calc_part_info, allocator, row));
-              }
               ObTabletID tablet_id(ObTabletID::INVALID_TABLET_ID);
               ObObjectID partition_id = OB_INVALID_ID;
               if (OB_SUCC(ret) && 1 == partition_ids.count()) {

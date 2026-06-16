@@ -1327,7 +1327,6 @@ int ObDDLTask::remove_task_record()
 int ObDDLTask::report_error_code(const ObString &forward_user_message, const int64_t affected_rows)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObIndexBuildTask has not been inited", K(ret));
@@ -1346,7 +1345,7 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
         LOG_WARN("load ddl user error failed", K(ret), K(dst_tenant_id_), K(task_id_), K(object_id_));
         if (OB_ITER_END == ret) {     // no single replica error message found, use ret_code_
           ret = OB_SUCCESS;
-          if (is_oracle_mode && DDL_CREATE_INDEX != task_type_ && DDL_CREATE_PARTITIONED_LOCAL_INDEX != task_type_ && OB_ERR_DUPLICATED_UNIQUE_KEY == ret_code_) {
+          if (false && DDL_CREATE_INDEX != task_type_ && DDL_CREATE_PARTITIONED_LOCAL_INDEX != task_type_ && OB_ERR_DUPLICATED_UNIQUE_KEY == ret_code_) {
             ret_code_ = OB_ERR_PRIMARY_KEY_DUPLICATE;
           }
           const char *ddl_type_str = nullptr;
@@ -1368,7 +1367,7 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
             LOG_WARN("print ddl user message failed", K(ret));
           }
         }
-      } else if (is_oracle_mode && DDL_CREATE_INDEX != task_type_ && DDL_CREATE_PARTITIONED_LOCAL_INDEX != task_type_ && OB_ERR_DUPLICATED_UNIQUE_KEY == error_message.ret_code_) {
+      } else if (false && DDL_CREATE_INDEX != task_type_ && DDL_CREATE_PARTITIONED_LOCAL_INDEX != task_type_ && OB_ERR_DUPLICATED_UNIQUE_KEY == error_message.ret_code_) {
         error_message.ret_code_ = OB_ERR_PRIMARY_KEY_DUPLICATE;
         const char *str_user_error = ob_errpkt_str_user_error(ret_code_);
         const char *str_error = ob_errpkt_strerror(error_message.ret_code_);

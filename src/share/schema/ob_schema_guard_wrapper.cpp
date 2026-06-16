@@ -419,12 +419,8 @@ int ObSchemaGuardWrapper::get_coded_index_name_info_mysql(common::ObIAllocator &
     LOG_WARN("not init", KR(ret));
   } else if (is_local_guard_) {
     const ObTableSchema *data_table_schema = nullptr;
-    bool is_oracle_mode = false;
     ObSchemaService *schema_service_impl = nullptr;
-    if (OB_UNLIKELY(is_oracle_mode)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("should use in mysql mode", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(local_schema_guard_.get_table_schema(tenant_id_, data_table_id, data_table_schema))) {
+    if (OB_FAIL(local_schema_guard_.get_table_schema(tenant_id_, data_table_id, data_table_schema))) {
       LOG_WARN("fail to get simple table schema", KR(ret), K_(tenant_id), K(data_table_id));
     } else if (OB_ISNULL(data_table_schema)) {
       // this interface don't care about whehter the data table is exist or not.

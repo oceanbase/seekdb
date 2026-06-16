@@ -114,14 +114,10 @@ int ObFlushNcompDll::get_job_id(const uint64_t tenant_id,
 int ObFlushNcompDll::get_job_action(const ObSysVariableSchema &sys_variable, ObSqlString &job_action)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   job_action.reset();
-  OZ (sys_variable.get_oracle_mode(is_oracle_mode));
-  if (!is_oracle_mode) {
-    OZ (job_action.assign_fmt("__DBMS_UPGRADE.FLUSH_DLL_NCOMP()"));
-  } else {
-    OZ (job_action.assign_fmt("\"__DBMS_UPGRADE\".FLUSH_DLL_NCOMP()"));
-  }
+  // seekdb is MySQL-only; always use MySQL format
+  UNUSED(sys_variable);
+  OZ (job_action.assign_fmt("__DBMS_UPGRADE.FLUSH_DLL_NCOMP()"));
 
   return ret;
 }
@@ -194,7 +190,6 @@ int ObFlushNcompDll::create_flush_ncomp_dll_job_common(const ObSysVariableSchema
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
   ObDMLExecHelper exec(trans, tenant_id);
-  bool is_oracle_mode = false;
   char buf[OB_MAX_PROC_ENV_LENGTH] = {0};
   int64_t pos = 0;
   int32_t offset_sec = 0;
@@ -203,9 +198,7 @@ int ObFlushNcompDll::create_flush_ncomp_dll_job_common(const ObSysVariableSchema
   int64_t affected_rows = 0;
   int64_t current_time = ObTimeUtility::current_time();
 
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", KR(ret));
-  } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+  if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
     LOG_WARN("failed to gen exec env", KR(ret));
   } else if (OB_FAIL(ObDbmsStatsMaintenanceWindow::get_time_zone_offset(sys_variable,
                                                                         tenant_id,
@@ -226,9 +219,9 @@ int ObFlushNcompDll::create_flush_ncomp_dll_job_common(const ObSysVariableSchema
       job_info.job_ = job_id;
       job_info.job_name_ = job_name;
       job_info.job_action_ = job_action.ptr();
-      job_info.lowner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-      job_info.powner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-      job_info.cowner_ = is_oracle_mode ? ObString("SYS") :  ObString("oceanbase");
+      job_info.lowner_ = ObString("root@%");
+      job_info.powner_ = ObString("root@%");
+      job_info.cowner_ = ObString("oceanbase");
       job_info.job_style_ = ObString("regular");
       job_info.job_type_ = ObString("PLSQL_BLOCK");
       job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");

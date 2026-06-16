@@ -948,7 +948,6 @@ int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreat
   int ret = OB_SUCCESS;
   LOG_DEBUG("resolve trigger order clause start", K(ret));
   if (OB_NOT_NULL(parse_node)) {
-    bool is_oracle_mode = false;
     ObTriggerInfo &trg_info = trigger_arg.trigger_info_;
     OV (T_TG_ORDER == parse_node->type_ && 1 == parse_node->num_child_ && NULL != parse_node->children_[0]);
     if (OB_SUCC(ret)) {

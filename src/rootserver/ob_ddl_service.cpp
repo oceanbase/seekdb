@@ -4166,7 +4166,6 @@ int ObDDLService::check_alter_heap_table_index(const obcall::ObIndexArg::IndexAc
   char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE] = {0};
   uint64_t tenant_id = orig_table_schema.get_tenant_id();
   ObArenaAllocator allocator("HeapTblCheck", OB_MALLOC_NORMAL_BLOCK_SIZE);
-  bool is_oracle_mode = false;
   if (OB_ISNULL(index_arg)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("index_arg is NULL", K(ret));
@@ -4185,7 +4184,7 @@ int ObDDLService::check_alter_heap_table_index(const obcall::ObIndexArg::IndexAc
   }
   ObIndexSchemaHashWrapper dest_index_schema_name_wrapper(tenant_id,
                                                          orig_table_schema.get_database_id(),
-                                                         is_oracle_mode ? common::OB_INVALID_ID : orig_table_schema.get_table_id(),
+                                                         orig_table_schema.get_table_id(),
                                                          index_table_name);
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
     if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_schema))) {
@@ -4198,7 +4197,7 @@ int ObDDLService::check_alter_heap_table_index(const obcall::ObIndexArg::IndexAc
     }
     ObIndexSchemaHashWrapper orgin_index_schema_name_wrapper(index_schema->get_tenant_id(),
                                                              orig_table_schema.get_database_id(),
-                                                             is_oracle_mode ? common::OB_INVALID_ID : orig_table_schema.get_table_id(),
+                                                             orig_table_schema.get_table_id(),
                                                              index_schema->get_table_name_str());
     //RENAME_INDEX ddl needs to check whether it reuses the primary key name in the heap table
     if (OB_FAIL(ret)) {
@@ -4221,11 +4220,11 @@ int ObDDLService::check_alter_heap_table_index(const obcall::ObIndexArg::IndexAc
       }
       ObIndexSchemaHashWrapper rename_from_name_wrapper(tenant_id,
                                                         orig_table_schema.get_database_id(),
-                                                        is_oracle_mode ? common::OB_INVALID_ID : index_schema->get_data_table_id(),
+                                                        index_schema->get_data_table_id(),
                                                         ori_index_table_name);
       ObIndexSchemaHashWrapper rename_to_name_wrapper(tenant_id,
                                                       orig_table_schema.get_database_id(),
-                                                      is_oracle_mode ? common::OB_INVALID_ID : index_schema->get_data_table_id(),
+                                                      index_schema->get_data_table_id(),
                                                       new_index_table_name);
       if (OB_FAIL(ret)) {
       } else if (rename_from_name_wrapper == orgin_index_schema_name_wrapper) {
@@ -5392,7 +5391,6 @@ int ObDDLService::drop_lob_caused_by_drop_column_online_if_need(
     obcall::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   uint64_t tenant_data_version = 0;
   // To check whether there is any lob column before and after this drop column operation,
   // If so, a drop lob tablet task will be created to remove lob meta/piece tablet.
@@ -12794,7 +12792,6 @@ int ObDDLService::update_global_index(ObAlterTableArg &arg,
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   ObSchemaGetterGuard schema_guard;
-  bool is_oracle_mode = false;
   UpdateGlobalIndexOpType suggest_op_type = MAX_OP_TYPE;
   const uint64_t data_table_id = orig_table_schema.get_table_id();
   if (obcall::ObAlterTableArg::DROP_PARTITION == arg.alter_part_type_
@@ -16883,7 +16880,6 @@ int ObDDLService::check_alter_partitions(const ObTableSchema &orig_table_schema,
   ObSchemaGetterGuard schema_guard;
   bool is_drop_or_truncate = false;
   bool is_split = false;
-  bool is_oracle_mode = false;
   bool has_local_index = false;
   if (GCONF.in_upgrade_mode()) {
     ret = OB_OP_NOT_ALLOW;
@@ -16965,15 +16961,6 @@ int ObDDLService::check_alter_partitions(const ObTableSchema &orig_table_schema,
   } else if (obcall::ObAlterTableArg::ADD_SUB_PARTITION == alter_part_type) {
     if (OB_FAIL(check_alter_add_subpartitions(orig_table_schema, alter_table_arg))) {
       LOG_WARN("failed to check add paritions", K(ret), K(orig_table_schema), K(alter_table_arg));
-    }
-  } else if (is_oracle_mode && obcall::ObAlterTableArg::SET_INTERVAL == alter_part_type) {
-    if (OB_FAIL(check_alter_set_interval(orig_table_schema, alter_table_arg))) {
-      LOG_WARN("failed to check set interval", K(ret), K(orig_table_schema), K(alter_table_arg));
-    }
-  } else if (is_oracle_mode && obcall::ObAlterTableArg::INTERVAL_TO_RANGE == alter_part_type) {
-    if (PARTITION_FUNC_TYPE_INTERVAL != orig_table_schema.get_part_option().get_part_func_type()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("type is unexpected when interval to range", K(orig_table_schema), K(alter_table_arg), KR(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -18293,7 +18280,6 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
     const uint64_t tenant_id = rename_table_arg.tenant_id_;
     ObTableLockOwnerID owner_id;
     int64_t timeout_us = 0;
-    bool is_oracle_mode = false;
     bool sequence_exist = false;
     RenameOracleObjectType rename_oracle_obj_type = RENAME_TYPE_INVALID;
     if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
@@ -18310,10 +18296,8 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
         LOG_WARN("tenant_id is invalid", K(tenant_id), K(ret));
       } else if (is_virtual_tenant_id(tenant_id) || OB_SYS_TENANT_ID == tenant_id) {
         compat_mode = lib::Worker::CompatMode::MYSQL;
-        is_oracle_mode = false;
       } else {
         compat_mode = lib::Worker::CompatMode::MYSQL;
-        is_oracle_mode = false;
       }
       ObDDLSQLTransaction trans(schema_service_);
       int64_t refreshed_schema_version = 0;
@@ -18435,15 +18419,10 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
                 } else if (OB_HASH_NOT_EXIST == hash_ret) {
                   //already had t1,t2
                   //rename table t2 to t1 (t1 exist!)
-                  if (!is_oracle_mode) {
-                    ret = OB_ERR_TABLE_EXIST;
-                    LOG_USER_ERROR(OB_ERR_TABLE_EXIST, to_table_item.table_name_.length(),
-                        to_table_item.table_name_.ptr());
-                    LOG_WARN("table already exist!", K(to_table_item), K(ret));
-                  } else {
-                    ret = OB_ERR_EXIST_OBJECT;
-                    LOG_WARN("Name is already used by an existing object", K(ret), K(to_table_item));
-                  }
+                  ret = OB_ERR_TABLE_EXIST;
+                  LOG_USER_ERROR(OB_ERR_TABLE_EXIST, to_table_item.table_name_.length(),
+                      to_table_item.table_name_.ptr());
+                  LOG_WARN("table already exist!", K(to_table_item), K(ret));
                 } else if (OB_HASH_EXIST == hash_ret) {
                   //already had t1,t2
                   //rename table t1 to t3, t2 to t1(success!)
@@ -18457,18 +18436,6 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
             ObTableItem from_table_item;
             from_table_item.table_name_ = rename_item.origin_table_name_;
             from_table_item.database_name_ = rename_item.origin_db_name_;
-            // Determine the object type in oracle mode
-            if (is_oracle_mode && OB_SUCC(ret)) {
-              if (OB_FAIL(check_rename_object_type(schema_guard,
-                                                   tenant_id,
-                                                   database_schema->get_database_id(),
-                                                   from_table_item.table_name_,
-                                                   from_table_schema,
-                                                   sequence_schema,
-                                                   rename_oracle_obj_type))) {
-                LOG_WARN("fail to check rename object type!", K(ret), K(tenant_id), K(database_schema->get_database_id()), K(from_table_item.table_name_));
-              }
-            }
             if (OB_SUCC(ret) && OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, from_table_item.mode_))) {
               LOG_WARN("failed to get tenant name case mode!", K(tenant_id), K(from_table_item), K(ret));
             }
@@ -18507,12 +18474,8 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
                 } else {
                   //already had t1,t2
                   //rename table t3 to table3 (t3 not exist)
-                  if (!is_oracle_mode) {
-                    ret = OB_FILE_NOT_EXIST;
-                    LOG_WARN("table not exist!", K(rename_item), K(ret));
-                  } else {
-                    LOG_INFO("oracle mode rename A to B", K(ret), K(rename_oracle_obj_type));
-                  }
+                  ret = OB_FILE_NOT_EXIST;
+                  LOG_WARN("table not exist!", K(rename_item), K(ret));
                 }
               } else {
                 //rename table t1 to t2, t2 to t3
@@ -18530,32 +18493,22 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
                 }
               }
             }
-            if (OB_SUCC(ret) && !is_oracle_mode
+            if (OB_SUCC(ret)
                 && OB_FAIL(check_cst_name_dup_for_rename_table_mysql(schema_guard, from_table_schema, database_schema->get_database_id()))) {
               LOG_WARN("check cst_name dup for rename table in mysql mode failed", K(ret));
             }
             if (OB_SUCC(ret)) {
               ObSqlString sql;
-              if (!is_oracle_mode) {
-                if (OB_FAIL(sql.append_fmt("RENAME TABLE `%.*s`.`%.*s` TO `%.*s`.`%.*s`",
-                            rename_item.origin_db_name_.length(),
-                            rename_item.origin_db_name_.ptr(),
-                            rename_item.origin_table_name_.length(),
-                            rename_item.origin_table_name_.ptr(),
-                            rename_item.new_db_name_.length(),
-                            rename_item.new_db_name_.ptr(),
-                            rename_item.new_table_name_.length(),
-                            rename_item.new_table_name_.ptr()))) {
-                  LOG_WARN("failed to append sql", K(ret));
-                }
-              } else { // oracle mode
-                if (OB_FAIL(sql.append_fmt("RENAME \"%.*s\" TO \"%.*s\"",
-                            rename_item.origin_table_name_.length(),
-                            rename_item.origin_table_name_.ptr(),
-                            rename_item.new_table_name_.length(),
-                            rename_item.new_table_name_.ptr()))) {
-                  LOG_WARN("failed to append sql", K(ret));
-                }
+              if (OB_FAIL(sql.append_fmt("RENAME TABLE `%.*s`.`%.*s` TO `%.*s`.`%.*s`",
+                          rename_item.origin_db_name_.length(),
+                          rename_item.origin_db_name_.ptr(),
+                          rename_item.origin_table_name_.length(),
+                          rename_item.origin_table_name_.ptr(),
+                          rename_item.new_db_name_.length(),
+                          rename_item.new_db_name_.ptr(),
+                          rename_item.new_table_name_.length(),
+                          rename_item.new_table_name_.ptr()))) {
+                LOG_WARN("failed to append sql", K(ret));
               }
               bool need_reset_object_status = false;
               if (OB_SUCC(ret) && OB_NOT_NULL(from_table_schema)) {
@@ -18591,7 +18544,7 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
                 LOG_WARN("lock table failed", K(ret), K(from_table_schema->get_table_id()));
               }
 
-              if (OB_SUCC(ret) && !is_oracle_mode) {
+              if (OB_SUCC(ret)) {
                 ObString rename_sql = sql.string();
                 ObSArray<std::pair<uint64_t, int64_t>> idx_schema_versions;
                 int64_t new_table_schema_version = 0;
@@ -18642,52 +18595,6 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
                   }
                 }
               }
-              if (OB_SUCC(ret) && is_oracle_mode) {
-                ObString rename_sql = sql.string();
-                ObSArray<std::pair<uint64_t, int64_t>> idx_schema_versions;
-                int64_t new_table_schema_version = 0;
-                if (database_schema->is_in_recyclebin()) {
-                  ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-                  LOG_WARN("can not rename table in recyclebin", K(ret), K(to_table_item), K(tenant_id));
-                } else {
-                  if (RENAME_TYPE_TABLE_OR_VIEW == rename_oracle_obj_type) {
-                    if (OB_FAIL(ddl_operator.rename_table(*from_table_schema,
-                                                          to_table_item.table_name_,
-                                                          database_schema->get_database_id(),
-                                                          false,/*oracle mode can not rename multiple table*/
-                                                          trans,
-                                                          &rename_sql,
-                                                          new_table_schema_version,
-                                                          idx_schema_versions))) {
-                      LOG_WARN("failed to rename table!", K(ret), K(rename_item), K(table_id));
-                    } else if (need_table_lock_and_defense &&
-                              OB_FAIL(build_rw_defense_for_table_(
-                                  *from_table_schema,
-                                  new_table_schema_version,
-                                  idx_schema_versions,
-                                  trans))) {
-                      LOG_WARN("fail to build rw defense for table", K(ret), K(new_table_schema_version), KPC(from_table_schema), KPC(database_schema));
-                    } else if (OB_FAIL(ObPLDDLService::rebuild_trigger_on_rename(schema_guard,
-                                                                              tenant_id,
-                                                                              from_table_schema->get_trigger_list(),
-                                                                              database_schema->get_database_name_str(),
-                                                                              to_table_item.table_name_,
-                                                                              ddl_operator, trans))) {
-                      LOG_WARN("failed to rebuild trigger package", K(rename_item), K(ret));
-                    }
-                  } else if (RENAME_TYPE_SEQUENCE == rename_oracle_obj_type) {
-                    ObSequenceDDLProxy ddl_operator(*schema_service_);
-                    ObSequenceSchema tmp_sequence_schema;
-                    if (OB_FAIL(tmp_sequence_schema.assign(*sequence_schema))) {
-                      LOG_WARN("fail to assign sequence schema", KR(ret));
-                    } else if (OB_FAIL(tmp_sequence_schema.set_sequence_name(to_table_item.table_name_))) {
-                      LOG_WARN("failed to set new sequence name to sequence_schema", K(ret), K(to_table_item.table_name_), KPC(sequence_schema));
-                    } else if (OB_FAIL(ddl_operator.rename_sequence(tmp_sequence_schema, trans, &rename_sql))) {
-                      LOG_WARN("failed to rename sequence", K(ret), K(tmp_sequence_schema));
-                    }
-                  }
-                }
-              }
             }
           }
         } // end for
@@ -18698,7 +18605,7 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
             LOG_WARN("failed to modify all obj status", K(ret));
           }
         }
-        if (OB_SUCC(ret) && !is_oracle_mode) {
+        if (OB_SUCC(ret)) {
           ObArray<ObMockFKParentTableSchema> mock_fk_parent_table_schema_array;
           for (int64_t i = 0; OB_SUCC(ret) && i < full_rename_items.count(); ++i) {
             const ObRenameTableItem &rename_item = full_rename_items.at(i);
@@ -23639,7 +23546,6 @@ int ObDDLService::check_db_and_table_is_exist(const obcall::ObTruncateTableArg &
   ObString table_name = arg.table_name_;
   uint64_t tmp_session_id = OB_INVALID_ID;
   uint64_t session_id = arg.session_id_;
-  bool is_oracle_mode = false;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     common::sqlclient::ObMySQLResult *result = NULL;
     bool skip_escape = false;
@@ -23679,21 +23585,8 @@ int ObDDLService::check_db_and_table_is_exist(const obcall::ObTruncateTableArg &
         EXTRACT_INT_FIELD_MYSQL(*result, "table_id", table_id, uint64_t);
         EXTRACT_VARCHAR_FIELD_MYSQL(*result, "database_name", new_database_name);
         EXTRACT_VARCHAR_FIELD_MYSQL(*result, "table_name", new_table_name);
-        if (OB_SUCC(ret) && is_oracle_mode){
-          if (0 != new_database_name.compare(database_name)) {
-            //do nothing
-          } else if (0 != new_table_name.compare(table_name)) {
-            //do nothing
-          } else {
-            if (0 != tmp_session_id) {
-              //do nothing
-            } else {
-              not_find_table = false;
-              break;
-            }
-          }
-        } else {
-          // If it is MySQL mode, the case is not sensitive,
+        if (OB_SUCC(ret)) {
+          // MySQL mode: case is not sensitive,
           // i.e. it can be uniquely determined and the first result can be output directly
           not_find_table = false;
           break;
@@ -23707,10 +23600,6 @@ int ObDDLService::check_db_and_table_is_exist(const obcall::ObTruncateTableArg &
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name),
                                             helper.convert(table_name));
-        } else if (0 != tmp_session_id && is_oracle_mode) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("truncate oracle tmp table not supported",
-                  KR(ret), K(tenant_id), K(table_name), K(database_name));
         }
       } else if (OB_FAIL(ret) && OB_ITER_END == ret) {
         ret = OB_TABLE_NOT_EXIST;
@@ -29076,9 +28965,8 @@ int ObDDLService::create_user(ObCreateUserArg &arg,
                               ObIArray<int64_t> &failed_index)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   uint64_t creator_id = arg.creator_id_;
-  if (!is_oracle_mode && arg.is_create_role_) {
+  if (arg.is_create_role_) {
     if (OB_FAIL(create_mysql_roles_in_trans(arg.tenant_id_, arg.if_not_exist_, arg.user_infos_))) {
       LOG_WARN("fail to create mysql roles", K(ret));
     }
@@ -29089,21 +28977,17 @@ int ObDDLService::create_user(ObCreateUserArg &arg,
     if (OB_FAIL(create_user(user_info, creator_id, user_id))) {
       const ObString &user_name = user_info.get_user_name_str();
       const ObString &host_name = user_info.get_host_name_str();
-      if (is_oracle_mode) {
-        // in oracle mode, if creating a user failed, just return the error code directly
-        LOG_WARN("create user failed", K(ret), K(user_info), K(creator_id));
-      } else { // mysql mode
-        if (OB_ERR_USER_EXIST == ret && true == arg.if_not_exist_) {
-          ret = OB_SUCCESS;
-          LOG_WARN("user already exist", K(ret), K(user_info));
-          LOG_USER_WARN(OB_ERR_USER_EXIST);
-        } else {
-          // in mysql mode, if creating a user failed, try next one and recover error code
-          LOG_WARN("create_user failed", K(ret), K(user_info));
-          ret = OB_SUCCESS;
-          if (OB_FAIL(failed_index.push_back(i))) {
-            LOG_WARN("push_back failed", K(ret));
-          }
+      // mysql mode
+      if (OB_ERR_USER_EXIST == ret && true == arg.if_not_exist_) {
+        ret = OB_SUCCESS;
+        LOG_WARN("user already exist", K(ret), K(user_info));
+        LOG_USER_WARN(OB_ERR_USER_EXIST);
+      } else {
+        // in mysql mode, if creating a user failed, try next one and recover error code
+        LOG_WARN("create_user failed", K(ret), K(user_info));
+        ret = OB_SUCCESS;
+        if (OB_FAIL(failed_index.push_back(i))) {
+          LOG_WARN("push_back failed", K(ret));
         }
       }
     }
@@ -29179,14 +29063,13 @@ int ObDDLService::drop_user(const ObDropUserArg &arg,
   ObSqlString ddl_stmt_str;
   ObAccountArg account;
   ObString ddl_sql;
-  bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   ObArray<uint64_t> user_ids;
 
   if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     ret = OB_ERR_SYS;
     LOG_WARN("Get schema manager failed", K(ret), K(tenant_id));
-  } else if (arg.is_role_ && !is_oracle_mode) {
+  } else if (arg.is_role_) {
     //mysql drop roles in one trans
     //either succeeds for all named roles or rolls back and has no effect if any error occurs
     bool has_any_role_not_exist = false;
@@ -29241,17 +29124,6 @@ int ObDDLService::drop_user(const ObDropUserArg &arg,
             LOG_WARN("push_back failed", K(ret));
           }
         }
-      } else if (is_oracle_mode && is_role != user_info->is_role()) {
-        if (is_role) {
-          // Try to drop role, but the current name is user
-          ret = OB_ROLE_NOT_EXIST;
-          LOG_WARN("this is an user name", K(ret), K(tenant_id), K(account.user_name_));
-          LOG_USER_ERROR(OB_ROLE_NOT_EXIST, account.user_name_.length(), account.user_name_.ptr());
-        } else {
-          // Try to drop user, but the current name is essentially a role
-          ret = OB_USER_NOT_EXIST; //no such user
-          LOG_WARN("Try to drop user", K(ret), K(tenant_id), K(account.user_name_));
-        }
       } else if (OB_FAIL(ObDDLSqlGenerator::gen_drop_user_sql(account, ddl_stmt_str))) {
         LOG_WARN("gen drop_user sql failed", K(ret), K(account));
       } else if (FALSE_IT(ddl_sql = ddl_stmt_str.string())) {
@@ -29304,45 +29176,6 @@ int ObDDLService::drop_user_in_trans(const uint64_t tenant_id,
       LOG_WARN("failed to drop triggers", K(ret), K(tenant_id), K(user_id));
     } else if (OB_FAIL(ddl_operator.drop_user(tenant_id, user_id, (0 == i) ? ddl_stmt_str : NULL, trans))) {
       LOG_WARN("failed to drop user", K(ret), K(tenant_id), K(user_id));
-    } else {
-      const ObTenantSchema *tenant_schema = NULL;
-      const ObSysVariableSchema *sys_variable_schema = NULL;
-      bool is_oracle_mode = false;
-      const ObUserInfo *user_info = NULL;
-      if (OB_FAIL(ret)) {
-        // do-nothing
-      } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-        LOG_WARN("tenant not exists", K(ret), K(tenant_id));
-      } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-        ret = OB_TENANT_NOT_EXIST;
-        LOG_WARN("tenant not exist", K(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
-        LOG_WARN("get sys variable schema failed", K(ret));
-      } else if (OB_ISNULL(sys_variable_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sys variable schema is null", K(ret));
-      } else if (OB_FAIL(sys_variable_schema->get_oracle_mode(is_oracle_mode))) {
-        LOG_WARN("failed to get oracle mode", K(ret), K(tenant_id));
-      } else if (is_oracle_mode) {
-        if (OB_FAIL(schema_guard.get_user_info(tenant_id, user_id, user_info))) {
-          LOG_WARN("failed to get user info", K(ret), K(tenant_id), K(user_id));
-        } else if (NULL == user_info) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to get user info", K(ret), K(tenant_id), K(user_id));
-        } else if (!user_info->is_role()) {
-          // For Oracle mode, drop user will drop the same name db
-          // role does not contain the same name db
-          obcall::ObDropDatabaseArg arg;
-          arg.tenant_id_ = tenant_id;
-          arg.database_name_ = user_info->get_user_name();
-          arg.if_exist_ = false;
-          arg.to_recyclebin_ = false;
-          obcall::ObDropDatabaseRes res;
-          if (OB_FAIL(drop_database(arg, res, &trans))) {
-            LOG_WARN("failed to create oracle user database", K(ret), K(tenant_id), K(user_info));
-          }
-        }
-      }
     }
   }
 
@@ -29975,11 +29808,9 @@ int ObDDLService::grant(const ObGrantArg &arg)
           ObArray<uint64_t> role_ids;
           ObArray<ObUserInfo> roles_info;
           // Resolve each role id and role info
-          bool is_oracle_mode = false;
           int64_t step = 2;
           for (int64_t i = GRANT_ROLE_MIN_ROLE_NUM - 1; OB_SUCC(ret) && i + step <= roles.count(); i+=step) {
-            // Oracle currently does not support specifying hostname to create a role
-            const ObString host_name = is_oracle_mode ? ObString(OB_DEFAULT_HOST_NAME) : roles.at(i+1);
+            const ObString host_name = roles.at(i+1);
             const ObString role = roles.at(i);
             const ObUserInfo *role_info = NULL;
             if (OB_FAIL(schema_guard.get_user_info(tenant_id, role, host_name, role_info))) {
@@ -29997,17 +29828,13 @@ int ObDDLService::grant(const ObGrantArg &arg)
           // Operate on each user_name
           for (int i = 0; OB_SUCC(ret) && i < users_info.count(); ++i) {
             const ObUserInfo &user_info = users_info.at(i);
-            if (!user_info.is_role() && is_oracle_mode) {
-              //skip check
-            } else {
-              // Check if there is a cyclic grant
-              for (int j = 0; OB_SUCC(ret) && j < roles_info.count(); ++j) {
-                if (OB_FAIL(exists_role_grant_cycle(schema_guard,
-                                                    tenant_id,
-                                                    user_info,
-                                                    &roles_info.at(j)))) {
-                  LOG_WARN("role cycle exists", K(ret), K(roles_info.at(j)));
-                }
+            // Check if there is a cyclic grant
+            for (int j = 0; OB_SUCC(ret) && j < roles_info.count(); ++j) {
+              if (OB_FAIL(exists_role_grant_cycle(schema_guard,
+                                                  tenant_id,
+                                                  user_info,
+                                                  &roles_info.at(j)))) {
+                LOG_WARN("role cycle exists", K(ret), K(roles_info.at(j)));
               }
             }
             // Do the operation
@@ -30222,7 +30049,6 @@ int ObDDLService::revoke(const ObRevokeUserArg &arg)
     // this process include revoke role
     user_id = user_info->get_user_id();
     ObArray<uint64_t> role_ids;
-    bool is_oracle_mode = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.role_ids_.count(); ++i) {
       const uint64_t role_id = arg.role_ids_.at(i);
       const ObUserInfo *role_info = NULL;
@@ -32131,7 +31957,6 @@ int ObDDLService::check_user_exist(const share::schema::ObUserInfo &user_info) c
   int ret = OB_SUCCESS;
   bool is_user_name_exist = false;
   bool is_user_id_exist = false;
-  bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init");
   } else if (OB_FAIL(schema_service_->check_user_exist(user_info.get_tenant_id(),
@@ -32144,7 +31969,7 @@ int ObDDLService::check_user_exist(const share::schema::ObUserInfo &user_info) c
     LOG_WARN("Failed to check whether user exist", "tenant_id", user_info.get_tenant_id(),
         "user_id", user_info.get_user_id(), K(ret));
   } else if (is_user_name_exist || is_user_id_exist) {
-    ret = user_info.is_role() && is_oracle_mode ? OB_ROLE_EXIST : OB_ERR_USER_EXIST;
+    ret = OB_ERR_USER_EXIST;
     LOG_WARN("User/role is exist, cannot create it twice,",
              "tenant_id", user_info.get_tenant_id(),
              "user_id", user_info.get_user_id(),
@@ -32347,65 +32172,6 @@ int ObDDLService::create_user_in_trans(share::schema::ObUserInfo &user_info,
                "user_name", user_info.get_user_name_str(),
                K(user_info));
       user_id = user_info.get_user_id();
-    }
-  }
-
-  const ObTenantSchema *tenant_schema = NULL;
-  const ObSysVariableSchema *sys_variable_schema = NULL;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(ret)) {
-    // do-nothing
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-    LOG_WARN("tenant not exists", K(ret), K(tenant_id));
-  } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("tenant not exist", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
-    LOG_WARN("get sys variable schema failed", K(ret));
-  } else if (OB_ISNULL(sys_variable_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys variable schema is null", K(ret));
-  } else if (OB_FAIL(sys_variable_schema->get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret), K(tenant_id));
-  } else if (is_oracle_mode && !user_info.is_role()) {
-    // For Oracle mode, Creating a user will also create a db with the same name
-    // role does not need to create a db with the same name
-    ObDatabaseSchema db_schema;
-    db_schema.set_tenant_id(user_info.get_tenant_id());
-    if (OB_FAIL(db_schema.set_database_name(user_info.get_user_name()))) {
-      LOG_WARN("failed to set database name", K(ret), K(user_info.get_user_name_str()));
-    } else if (OB_FAIL(db_schema.set_comment("oracle user database"))) {
-      LOG_WARN("failed to set database comment", K(ret), K(user_info.get_user_name_str()));
-    } else if (OB_FAIL(create_database(false, db_schema, NULL, &trans))) {
-      LOG_WARN("failed to create oracle user database", K(ret), K(tenant_id));
-    }
-  } else if (is_oracle_mode && user_info.is_role() && OB_INVALID_ID != creator_id) {
-    // For Oracle mode, role shall be granted to creator after creation with admin option
-    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-    const ObUserInfo *creator_info = NULL;
-    ObArray<uint64_t> role_ids;
-    if (OB_FAIL(ret)) {
-      LOG_WARN("failed to grant role to creator", K(ret));
-    } else if (is_root_user(creator_id)) {
-      LOG_WARN("creator_id is OB_SYS_USER_ID, refuse to grant role to it",
-               K(user_id), K(creator_id));
-    } else if (OB_FAIL(schema_guard.get_user_info(tenant_id, creator_id, creator_info))) {
-      LOG_WARN("get_user_info failed", K(ret), K(tenant_id), K(creator_id));
-    } else if (NULL == creator_info) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get creator_info", K(ret));
-    } else if (OB_FAIL(role_ids.push_back(user_id))) {
-      LOG_WARN("failed to add to role_ids", K(ret), K(tenant_id), K(user_id),
-               K(user_info.get_user_name_str()));
-    } else if (OB_FAIL(ddl_operator.grant_revoke_role(tenant_id,
-        *creator_info,
-        role_ids,
-        &user_info,
-        trans,
-        true /*log_operation*/,
-        true /*is grant*/,
-        ADMIN_OPTION))) {
-        LOG_WARN("failed to grant_revoke_role", K(ret), K(tenant_id), K(*creator_info));
     }
   }
 
@@ -33116,75 +32882,15 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
 int ObDDLService::create_directory(const obcall::ObCreateDirectoryArg &arg, const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  const bool is_or_replace = arg.or_replace_;
-  const uint64_t tenant_id = arg.schema_.get_tenant_id();
-  const uint64_t user_id = arg.user_id_;
-  const ObString &directory_name = arg.schema_.get_directory_name();
-  const ObString &directory_path = arg.schema_.get_directory_path();
-  const ObDirectorySchema *schema_ptr = NULL;
-  bool is_exist = false;
-  bool is_oracle_mode = false;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-  ObDirectorySchema new_schema;
-  ObSchemaGetterGuard schema_guard;
-  int64_t refreshed_schema_version = 0;
+  UNUSED(arg);
+  UNUSED(ddl_stmt_str);
+  // seekdb is MySQL-only; Oracle directories are not supported
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init", K(ret));
-  } else if (FALSE_IT(compat_mode = lib::Worker::CompatMode::MYSQL)) {
-  } else if (!is_oracle_mode) {
+  } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create directory under non oracle mode is not supported", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create directory under non oracle mode");
-  } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
-    LOG_WARN("failed to get schema guard with version in inner table", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_directory_schema_by_name(tenant_id, directory_name, schema_ptr))) {
-    LOG_WARN("failed to get directory schema by name", K(ret), K(tenant_id), K(directory_name));
-  } else if (NULL != schema_ptr) {
-    is_exist = true;
-    if (OB_FAIL(new_schema.assign(*schema_ptr))) {
-      LOG_WARN("failed to assign new directory schema", K(ret), K(*schema_ptr));
-    } else if (OB_FAIL(new_schema.set_directory_path(directory_path))) {
-      LOG_WARN("failed to set directory path", K(ret), K(directory_path));
-    }
-  } else if (NULL == schema_ptr) {
-    if (OB_FAIL(new_schema.assign(arg.schema_))) {
-      LOG_WARN("failed to assign new directory schema", K(ret), K(arg));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (is_exist && !is_or_replace) {
-    ret = OB_ERR_EXIST_OBJECT;
-    LOG_WARN("directory already exists and is not replace operation", K(ret),
-        K(is_or_replace), K(directory_name));
-  } else {
-    ObDDLSQLTransaction trans(schema_service_);
-    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-    if (OB_FAIL(trans.start(sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(tenant_id), K(refreshed_schema_version));
-    } else if (is_exist && is_or_replace
-        && OB_FAIL(ddl_operator.alter_directory(*ddl_stmt_str, new_schema, trans))) {
-      LOG_WARN("failed to alter directory", K(ret), K(new_schema));
-    } else if (!is_exist && OB_FAIL(ddl_operator.create_directory(*ddl_stmt_str, user_id, new_schema, trans))) {
-      LOG_WARN("failed to create directory", K(ret), K(new_schema));
-    }
-
-    if (trans.is_started()) {
-      int temp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
-        ret = (OB_SUCC(ret)) ? temp_ret : ret;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(publish_schema(tenant_id))) {
-      LOG_WARN("publish schema failed", K(ret));
-    }
   }
   return ret;
 }
@@ -33192,64 +32898,15 @@ int ObDDLService::create_directory(const obcall::ObCreateDirectoryArg &arg, cons
 int ObDDLService::drop_directory(const obcall::ObDropDirectoryArg &arg, const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.tenant_id_;
-  const ObString &directory_name = arg.directory_name_;
-  const ObDirectorySchema *schema_ptr = NULL;
-  bool is_exist = false;
-  bool is_oracle_mode = false;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-  ObSchemaGetterGuard schema_guard;
-  int64_t refreshed_schema_version = 0;
+  UNUSED(arg);
+  UNUSED(ddl_stmt_str);
+  // seekdb is MySQL-only; Oracle directories are not supported
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init", K(ret));
-  } else if (FALSE_IT(compat_mode = lib::Worker::CompatMode::MYSQL)) {
-  } else if (!is_oracle_mode) {
+  } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("drop directory under non oracle mode is not supported", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop directory under non oracle mode");
-  } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
-    LOG_WARN("failed to get schema guard with version in inner table", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_directory_schema_by_name(tenant_id, directory_name, schema_ptr))) {
-    LOG_WARN("failed to get schema by directory name", K(ret), K(tenant_id), K(directory_name));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-  } else if (NULL != schema_ptr) {
-    is_exist = true;
-  }
-
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (!is_exist) {
-    ret = OB_ERR_OBJECT_STRING_DOES_NOT_EXIST;
-    LOG_WARN("directory does not exist", K(ret), K(directory_name));
-    LOG_USER_ERROR(OB_ERR_OBJECT_STRING_DOES_NOT_EXIST,
-                   static_cast<int>(directory_name.length()),
-                   directory_name.ptr());
-  } else {
-    ObDDLSQLTransaction trans(schema_service_);
-    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-    ObDirectorySchema schema;
-    if (OB_FAIL(schema.assign(*schema_ptr))) {
-      LOG_WARN("fail to assign directory schema", K(ret), K(*schema_ptr));
-    } else if (OB_FAIL(trans.start(sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(tenant_id), K(refreshed_schema_version));
-    } else if (OB_FAIL(ddl_operator.drop_directory(*ddl_stmt_str, schema, trans))) {
-      LOG_WARN("failed to drop directory", K(ret), K(schema));
-    }
-
-    if (trans.is_started()) {
-      int temp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
-        ret = (OB_SUCC(ret)) ? temp_ret : ret;
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(publish_schema(tenant_id))) {
-      LOG_WARN("publish schema failed", K(ret));
-    }
   }
   return ret;
 }

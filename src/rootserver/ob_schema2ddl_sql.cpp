@@ -183,7 +183,6 @@ int ObSchema2DDLSql::type2str(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(column_schema), KP(str_buf), K(buf_size), K(ret));
   } else {
-    bool is_oracle_mode = false;
     {
       switch (column_schema.get_data_type()) {
         case ObTinyIntType: {
@@ -211,11 +210,11 @@ int ObSchema2DDLSql::type2str(
           break;
         }
         case ObFloatType: {
-          n = snprintf(str_buf, buf_size, is_oracle_mode ? "binary_float" : "float");
+          n = snprintf(str_buf, buf_size, "float");
           break;
         }
         case ObDoubleType: {
-          n = snprintf(str_buf, buf_size, is_oracle_mode ? "binary_double" : "double");
+          n = snprintf(str_buf, buf_size, "double");
           break;
         }
         case ObUInt64Type: {

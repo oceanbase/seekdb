@@ -4132,7 +4132,6 @@ int ObRecoverTableResolver::resolve_remap_tables_(
     share::ObRemapTableItem remap_table_item;
     ObCollationType cs_type = CS_TYPE_INVALID;
     bool perserve_lettercase = (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
-    bool is_oracle_mode = false;
     // No matter what name case mode is of target tenant, the names of remap tables are case sensitive.
     const ObNameCaseMode sensitive_case_mode = OB_ORIGIN_AND_SENSITIVE;
     for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
@@ -4256,7 +4255,6 @@ int ObRecoverTableResolver::resolve_recover_tables_(
   int ret = OB_SUCCESS;
   ObCollationType cs_type = CS_TYPE_INVALID;
   bool perserve_lettercase = (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
-  bool is_oracle_mode = false;
   // No matter what name case mode is of target tenant, the names of recover tables are case sensitive.
     const ObNameCaseMode sensitive_case_mode = OB_ORIGIN_AND_SENSITIVE;
   if (OB_ISNULL(node)) {

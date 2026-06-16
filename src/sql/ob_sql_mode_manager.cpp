@@ -25,6 +25,7 @@ namespace sql
 
 int compatibility_mode2index(const common::ObCompatibilityMode mode, int64_t &index)
 {
+  // ORACLE_MODE kept in the table for serialization compatibility with old versions.
   static const ObCompatibilityMode modes[] = { OCEANBASE_MODE, MYSQL_MODE, ORACLE_MODE };
   int ret = OB_ENTRY_NOT_EXIST;
   for (int64_t i = 0; OB_ENTRY_NOT_EXIST == ret && i < ARRAYSIZEOF(modes); ++i) {

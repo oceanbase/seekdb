@@ -640,9 +640,6 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_WARN("connection pool is NULL", K(ret));
   } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
     LOG_WARN("can not get the compat_mode", KPC(session_info));
-  } else if (current_mode != mysql_mode
-             && OB_FAIL(session_info->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
-    LOG_WARN("update session_info to msyql_mode failed", KR(ret), KPC(session_info));
   } else if (common::sqlclient::INNER_POOL != pool->get_type()) {
     LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
     // NOTICE: the pool acquire no longer takes is_oracle_mode, it's always false internally
@@ -655,11 +652,7 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     inner_conn = static_cast<observer::ObInnerSQLConnection *>(conn);
   }
 
-  if (current_mode != mysql_mode && current_mode.get_int() != -1 && OB_NOT_NULL(session_info)
-      && OB_TMP_FAIL(session_info->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
-    ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    LOG_WARN("failed to update sys variable for compatibility mode", K(current_mode), KPC(session_info));
-  }
+  // seekdb is MySQL-only; no need to save/restore compatibility mode
 
   return ret;
 }
@@ -1060,25 +1053,18 @@ int ObInnerConnectionLockUtil::set_to_mysql_compat_mode_(observer::ObInnerSQLCon
 
   if (OB_FAIL(conn->get_session().get_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
     LOG_WARN("can not get the compat_mode", );
-  } else if (FALSE_IT(need_reset_sess_mode = (current_mode != mysql_mode))) {
-  } else if (need_reset_sess_mode
-             && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
-    LOG_WARN("update compat_mode to mysql_mode failed");
   }
+  // seekdb is MySQL-only; need_reset_sess_mode is always false
   return ret;
 }
 
 int ObInnerConnectionLockUtil::reset_compat_mode_(observer::ObInnerSQLConnection *conn, const bool need_reset_sess_mode, const bool need_reset_conn_mode)
 {
-  int ret = OB_SUCCESS;
-  ObObj oracle_mode;
-  oracle_mode.set_int(1);
-
-  if (need_reset_sess_mode
-      && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, oracle_mode))) {
-    LOG_WARN("failed to update sys variable for compatibility mode", K(ret));
-  }
-  return ret;
+  // seekdb is MySQL-only; need_reset_sess_mode is always false, nothing to do
+  UNUSED(conn);
+  UNUSED(need_reset_sess_mode);
+  UNUSED(need_reset_conn_mode);
+  return OB_SUCCESS;
 }
 } // tablelock
 } // transaction

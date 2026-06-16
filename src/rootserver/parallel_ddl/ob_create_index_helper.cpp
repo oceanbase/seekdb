@@ -137,7 +137,6 @@ int ObCreateIndexHelper::lock_database_by_obj_name_()
 int ObCreateIndexHelper::lock_objects_by_name_()
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const ObString &database_name = arg_.database_name_;
   const ObString &table_name = arg_.table_name_;
   if (OB_FAIL(check_inner_stat_())) {
@@ -145,12 +144,6 @@ int ObCreateIndexHelper::lock_objects_by_name_()
   } else if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
     LOG_WARN("fail to add lock object by name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
-  } else if (is_oracle_mode) {
-    const ObString &index_name = arg_.index_name_;
-    if (OB_FAIL(add_lock_object_by_name_(database_name, index_name,
-        share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-      LOG_WARN("fail to lock object by index name", KR(ret), K_(tenant_id), K(database_name), K(index_name));
-    }
   }
   if (FAILEDx(lock_existed_objects_by_name_())) {
     LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
@@ -378,10 +371,9 @@ int ObCreateIndexHelper::generate_index_schema_()
       LOG_WARN("fail to check create index on hidden primary key", KR(ret), KPC(index_schema));
     }
   }
-  bool is_oracle_mode = false;
   if (FAILEDx(index_schema->generate_origin_index_name())) {
     LOG_WARN("fail to generate origin index name", KR(ret), KPC(index_schema));
-  } else if (!is_oracle_mode) {
+  } else {
     ObIndexSchemaInfo index_info;
     if (OB_FAIL(schema_guard_wrapper_.get_coded_index_name_info_mysql(
                 allocator_,
@@ -402,20 +394,6 @@ int ObCreateIndexHelper::generate_index_schema_()
               "data_table_id", orig_data_table_schema_->get_table_id(),
               "index_name", arg_.index_name_);
     }
-  } else {
-    bool name_exist = false;
-    if (OB_FAIL(ddl_service_->get_index_name_checker().check_index_name_exist(tenant_id_,
-                                                                              index_schema->get_database_id(),
-                                                                              index_schema->get_table_name_str(),
-                                                                              name_exist))) {
-    LOG_WARN("fail to check index name exist", KR(ret), K_(tenant_id), K(index_schema->get_table_name_str()));
-    } else if (name_exist) {
-      ret = OB_ERR_KEY_NAME_DUPLICATE;
-      LOG_WARN("duplicate index name", KR(ret), K_(tenant_id),
-              "database_id", orig_data_table_schema_->get_database_id(),
-              "data_table_id", orig_data_table_schema_->get_table_id(),
-              "index_name", arg_.index_name_);
-    }
   }
   uint64_t object_id = OB_INVALID_ID;
   ObIDGenerator id_generator;
@@ -430,7 +408,7 @@ int ObCreateIndexHelper::generate_index_schema_()
   } else {
     index_schemas_.at(0).set_table_id(object_id);
   }
-  } // end heapvar
+  } // end HEAP_VAR
   RS_TRACE(generate_schemas);
   return ret;
 }

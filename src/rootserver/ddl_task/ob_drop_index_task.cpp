@@ -217,7 +217,6 @@ int ObDropIndexTask::drop_index_impl()
   const ObDatabaseSchema *database_schema = nullptr;
   const ObTableSchema *data_table_schema = nullptr;
   ObSqlString drop_index_sql;
-  bool is_oracle_mode = false;
   bool is_index_exist = false;
   ObString index_name;
   const ObTableSchema *index_schema = nullptr;

@@ -172,41 +172,8 @@ int ObCreateViewHelper::lock_and_check_view_name_()
   ObTableType table_type = MAX_TABLE_TYPE;
   int64_t schema_version = OB_INVALID_VERSION;
   const uint64_t session_id = arg_.schema_.get_session_id();
-  bool is_oracle_mode = false;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (is_oracle_mode) {
-    if (arg_.is_alter_view_) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support alter view in oracle mode", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(schema_guard_wrapper_.check_oracle_object_exist(
-               database_id, session_id, table_name, TABLE_SCHEMA,
-               INVALID_ROUTINE_TYPE, arg_.if_not_exist_))) {
-      LOG_WARN("fail to check oracle object exist", KR(ret), K(database_id), K(session_id), K(table_name), K_(arg_.if_not_exist));
-    } else if (arg_.if_not_exist_) {
-      // create or replace view
-      // could be no object exist
-      // or exist in table space, should check table type
-      if (OB_FAIL(schema_guard_wrapper_.get_table_id(database_id, session_id, table_name,
-                                                     orig_table_id_, table_type, schema_version))) {
-        LOG_WARN("fail to get table id", KR(ret), K_(tenant_id), K(database_id), K(session_id), K(table_name));
-      } else if (OB_INVALID_ID != orig_table_id_) {
-        if (USER_VIEW == table_type
-            || (GCONF.enable_sys_table_ddl && SYSTEM_VIEW == table_type)) {
-          // do nothing
-        } else if (SYSTEM_VIEW == table_type) {
-          ret = OB_OP_NOT_ALLOW;
-          LOG_WARN("not allowed to replace sys view when enable_sys_table_ddl is false", KR(ret), K(table_type));
-          LOG_USER_ERROR(OB_OP_NOT_ALLOW, "replace sys view when enable_sys_table_ddl is false");
-        } else {
-          ret = OB_ERR_EXIST_OBJECT;
-          LOG_WARN("name is already used by an existing object", KR(ret), K(table_name));
-        }
-      }
-    } else {
-      // create view
-      // no object exist when !arg_.if_not_exist_
-    }
   } else {
     uint64_t mock_table_id = OB_INVALID_ID;
     if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_id(database_id,
@@ -856,31 +823,13 @@ int ObCreateViewHelper::drop_obj_privs_()
 int ObCreateViewHelper::handle_error_info_()
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (ERROR_STATUS_HAS_ERROR != arg_.error_info_.get_error_status()) {
     // do nothing
-  } else if (OB_UNLIKELY(!is_oracle_mode)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected compat mode add create vew error info", KR(ret), K_(tenant_id), K(is_oracle_mode));
-  } else if (OB_UNLIKELY(OB_ISNULL(new_view_schema_))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("new view schema is null", KR(ret));
   } else {
-    ObErrorInfo error_info;
-    if (OB_FAIL(error_info.assign(arg_.error_info_))) {
-      LOG_WARN("fail to assign error info", KR(ret));
-    } else {
-      error_info.set_obj_id(new_view_schema_->get_table_id());
-      error_info.set_obj_type(static_cast<uint64_t>(ObObjectType::VIEW));
-      error_info.set_database_id(new_view_schema_->get_database_id());
-      error_info.set_tenant_id(tenant_id_);
-      error_info.set_schema_version(new_view_schema_->get_schema_version());
-      if (OB_FAIL(error_info.handle_error_info(get_trans_(), nullptr /*info*/))) {
-        LOG_WARN("insert create error info failed", KR(ret));
-      }
-    }
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected compat mode add create view error info", KR(ret), K_(tenant_id));
   }
   return ret;
 }

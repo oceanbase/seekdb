@@ -4129,7 +4129,6 @@ int ObSchemaPrinter::print_routine_definition(
           MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
 
           routine_stmt.assign_ptr(stmt_buf, buf_sz);
-          sql_mode &= ~SMO_ORACLE;
         }
       }
       CK(!routine_stmt.empty());
@@ -4702,7 +4701,7 @@ int ObSchemaPrinter::print_sequence_definition(const ObSequenceSchema &sequence_
   return ret;
 }
 
-// print unique constraint definition for dbms_metadata.get_ddl in oracle mode
+// print unique constraint definition for dbms_metadata.get_ddl
 int ObSchemaPrinter::print_unique_cst_definition(
     const ObDatabaseSchema &db_schema,
     const ObTableSchema &table_schema, // data_table
@@ -4715,8 +4714,7 @@ int ObSchemaPrinter::print_unique_cst_definition(
   const ObString &tb_name = table_schema.get_table_name_str();
   ObString new_db_name;
   ObString new_data_table_name;
-  ObSQLMode sql_mode = SMO_ORACLE;
-  const bool is_oracle_mode = true;
+  ObSQLMode sql_mode = 0; // MySQL mode
 
   if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(allocator,
               db_schema.get_database_name_str(), new_db_name))) {

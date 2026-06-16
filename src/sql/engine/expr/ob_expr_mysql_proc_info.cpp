@@ -86,7 +86,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
   ParseResult parse_result;
   ObString routine_stmt;
   ObSQLMode sql_mode = exec_env.get_sql_mode();
-  sql_mode &= ~SMO_ORACLE;
   pl::ObPLParser parser(alloc, sql::ObCharsets4Parser(), sql_mode);
   const ObString &routine_body = routine_info.get_routine_body();
   const char prefix[] = "CREATE\n";
@@ -132,7 +131,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
   ParseResult parse_result;
   ObString routine_stmt;
   ObSQLMode sql_mode = exec_env.get_sql_mode();
-  sql_mode &= ~SMO_ORACLE;
   pl::ObPLParser parser(alloc, sql::ObCharsets4Parser(), sql_mode);
   const char prefix[] = "CREATE\n";
   int64_t prefix_len = STRLEN(prefix);

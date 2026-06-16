@@ -1699,7 +1699,6 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
                                   const bool need_check_valid/* false */)
 {
   int ret = OB_SUCCESS;
-  const bool is_oracle_mode = false;
   ret_more = OB_SUCCESS;
   // Format of time_zone in mysql mode is more strict.
   // When init or deserialize session, need_check_valid may be false.
@@ -1749,38 +1748,18 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
       if ('-' == sign) {
         value = -value;
       }
-    } else if (is_oracle_mode && OB_FAIL(check_leading_precision(hour))) {
-      LOG_WARN("check hour leading precision failed", K(ret), K(hour));
-    } else if (is_oracle_mode && OB_FAIL(check_leading_precision(minute))) {
-      LOG_WARN("check minute leading precision failed", K(ret), K(minute));
     } else if (OB_UNLIKELY(minute.value_ >= MINS_PER_HOUR || minute.value_ < 0)) {
       ret = OB_ERR_UNKNOWN_TIME_ZONE;
-      // In the case where both hour and minute are out of range, Oracle reports an hour out-of-bounds error
-      ret_more = is_oracle_mode ? (hour.value_ > ORACLE_OFFSET_MAX_HOUR
-                                    ? OB_ERR_INVALID_TIME_ZONE_HOUR
-                                    : OB_ERR_INVALID_TIME_ZONE_MINUTE)
-                                : ret_more;
     } else {
       value = static_cast<int32_t>(((hour.value_ * MINS_PER_HOUR) + minute.value_) * SECS_PER_MIN);
       if ('-' == sign) {
         value = -value;
       }
 
-      if (is_oracle_mode ) {
-        if (OB_UNLIKELY(!(ORACLE_OFFSET_MIN <= value && value <= ORACLE_OFFSET_MAX))) {
-          // In the case where both hour and minute are out of range, Oracle reports an hour out-of-bounds error
-          ret_more = hour.value_ > ORACLE_OFFSET_MAX_HOUR ? OB_ERR_INVALID_TIME_ZONE_HOUR
-                : OB_ERR_INVALID_TIME_ZONE_MINUTE;
-          ret = OB_ERR_UNKNOWN_TIME_ZONE;
-          LOG_WARN("invalid time zone offset", K(ret), K(minute.value_), K(str));
-        }
-        LOG_DEBUG("finish str_to_offset", K(str),  K(value), K(ret), KCSTRING(lbt()));
-      } else {
-        if (OB_UNLIKELY(!(OFFSET_MIN <= value && value <= OFFSET_MAX))) {
-          ret_more = (minute.value_ >= DT_PART_BASE[DT_MIN] ? OB_ERR_INVALID_TIME_ZONE_MINUTE : OB_ERR_INVALID_TIME_ZONE_HOUR);
-          ret = OB_ERR_UNKNOWN_TIME_ZONE;
-          LOG_WARN("invalid time zone offset", K(ret), K(minute.value_), K(str));
-        }
+      if (OB_UNLIKELY(!(OFFSET_MIN <= value && value <= OFFSET_MAX))) {
+        ret_more = (minute.value_ >= DT_PART_BASE[DT_MIN] ? OB_ERR_INVALID_TIME_ZONE_MINUTE : OB_ERR_INVALID_TIME_ZONE_HOUR);
+        ret = OB_ERR_UNKNOWN_TIME_ZONE;
+        LOG_WARN("invalid time zone offset", K(ret), K(minute.value_), K(str));
       }
     }
   }
@@ -6237,8 +6216,7 @@ int ObTimeConverter::calc_last_date_of_the_month(const int64_t ori_datetime_valu
   int ret = OB_SUCCESS;
   ObTime ob_time(DT_TYPE_DATETIME);
   ObTimeConvertCtx cvrt_ctx(NULL, false); //utc time no timezone
-  const bool is_oracle_mode = false;
-  if (!is_oracle_mode && ZERO_DATETIME == ori_datetime_value) {
+  if (ZERO_DATETIME == ori_datetime_value) {
     ret = OB_INVALID_DATE_VALUE;
     LOG_WARN("invalid datetime", K(ret), K(ori_datetime_value));
   } else if (OB_FAIL(datetime_to_ob_time(ori_datetime_value, NULL, ob_time))) {
@@ -6247,9 +6225,7 @@ int ObTimeConverter::calc_last_date_of_the_month(const int64_t ori_datetime_valu
     int is_leap = IS_LEAP_YEAR(ob_time.parts_[DT_YEAR]);
     ob_time.parts_[DT_MDAY] = DAYS_PER_MON[is_leap][ob_time.parts_[DT_MON]];
 
-    if (is_oracle_mode && OB_FAIL(validate_basic_part_of_ob_time_oracle(ob_time))) {
-      LOG_WARN("failed to validate ob_time", K(ret), K(ob_time));
-    } else if (!is_oracle_mode && OB_FAIL(validate_datetime(ob_time, date_sql_mode))) {
+    if (OB_FAIL(validate_datetime(ob_time, date_sql_mode))) {
       LOG_WARN("failed to validate ob_time", K(ret), K(ob_time));
     } else {
       ob_time.parts_[DT_DATE] = ob_time_to_date(ob_time);

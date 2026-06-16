@@ -1069,7 +1069,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                                                           // Second parsing non-column
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const uint64_t tenant_id = session_info_->get_effective_tenant_id();
   if (OB_ISNULL(node)) {
    // do nothing, create table t as select ... will come here
@@ -1198,11 +1197,11 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
               LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(), static_cast<int32_t>(OB_MAX_VARCHAR_LENGTH));
             } else if (is_lob_storage(column.get_data_type())) {
               ObLength max_length = 0;
-              max_length = ObAccuracy::MAX_ACCURACY2[is_oracle_mode][column.get_data_type()].get_length();
+              max_length = ObAccuracy::MAX_ACCURACY2[0][column.get_data_type()].get_length();
               if (length > max_length) {
                 ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
                 LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(),
-                    ObAccuracy::MAX_ACCURACY2[is_oracle_mode][column.get_data_type()].get_length());
+                    ObAccuracy::MAX_ACCURACY2[0][column.get_data_type()].get_length());
               } else {
                 // table lob inrow theshold has not been parsed, so use handle length check
                 // will recheck after parsing table lob inrow theshold
@@ -1222,7 +1221,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           if (OB_SUCC(ret)){
             stat.column_id_ = column.get_column_id();
             if (stat.is_primary_key_) {
-              if (!is_oracle_mode && is_organization_set_to_heap()) {
+              if (is_organization_set_to_heap()) {
                 primary_key_set_in_heap_table = true;
                 if (OB_FAIL(uk_or_heap_table_pk_add_to_index_list(index_node_position_list, i))) {
                   SQL_RESV_LOG(WARN, "add heap table pk to index list failed", K(ret));
@@ -1255,15 +1254,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                     SQL_RESV_LOG(WARN, "add primary key failed");
                   } else {
                     column.set_rowkey_position(get_primary_key_size());
-                    // Determine if it is oracle mode, a constraint name needs to be given to the primary key only in oracle mode
-                    if (session_info_->is_oracle_compatible()) {
-                      ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-                      ObSEArray<ObConstraint, 4> &csts = create_table_stmt->get_create_table_arg().constraint_list_;
-                      // Add pk to cst_list inside
-                      if (OB_FAIL(resolve_pk_constraint_node(*element, pk_name, csts))) {
-                        SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
-                      }
-                    }
                   }
                 }
               }
@@ -1349,22 +1339,13 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
           SQL_RESV_LOG(WARN, "multiple primary key defined");
         } else if (NULL == primary_node) {
-          if (!is_oracle_mode && is_organization_set_to_heap()) {
+          if (is_organization_set_to_heap()) {
             primary_node_in_heap_table = element;
             if (OB_FAIL(uk_or_heap_table_pk_add_to_index_list(index_node_position_list, i))) {
               SQL_RESV_LOG(WARN, "add heap table pk to index list failed", K(ret));
             }
           } else {
             primary_node = element;
-            if (session_info_->is_oracle_compatible()) {
-              ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-              ObSEArray<ObConstraint, 4> &csts =
-                  create_table_stmt->get_create_table_arg().constraint_list_;
-              ObString pk_name;
-              if (OB_FAIL(resolve_pk_constraint_node(*element, pk_name, csts))) {
-                SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
-              }
-            }
           }
         } else {
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
@@ -2137,7 +2118,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
   ObString uk_name;
-  bool is_oracle_mode = false;
   const uint64_t tenant_id = session_info_->get_effective_tenant_id();
   bool is_index_part_specified = false;
   if (OB_ISNULL(node)) {
@@ -2309,11 +2289,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                     LOG_WARN("add column name to map failed", K(column_schema->get_column_name_str()), K(ret));
                   }
                 }
-              } else if (is_oracle_mode) {
-                const ObColumnRefRawExpr *ref_expr = static_cast<const ObColumnRefRawExpr*>(expr);
-                sort_item.column_name_ = ref_expr->get_column_name();
-                sort_item.is_func_index_ = false;
-                column_schema = tbl_schema.get_column_schema(ref_expr->get_column_id());
               } else {
                 ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
                 LOG_WARN("Functional index on a column is not supported.", K(ret), K(*expr));
@@ -2342,8 +2317,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               }  else if (sort_item.prefix_len_ > column_schema->get_data_length()) {
                 ret = OB_WRONG_SUB_KEY;
                 SQL_RESV_LOG(WARN, "prefix length is longer than column length", K(sort_item), K(column_schema->get_data_length()), K(ret));
-              } else if (!is_oracle_mode // oracle mode is not support vector column yet
-                  && ob_is_collection_sql_type(column_schema->get_data_type())
+              } else if (ob_is_collection_sql_type(column_schema->get_data_type())
                   && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("index column is vector column, but is not vector index is not supported", K(ret));
@@ -2358,7 +2332,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                   LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());
                 }
               } else if (OB_FAIL(resolve_spatial_index_constraint(*column_schema,
-                  index_column_list_node->num_child_, node->value_, is_oracle_mode,
+                  index_column_list_node->num_child_, node->value_, false/*false*/,
                   NULL != index_column_node->children_[2] && 1 != index_column_node->children_[2]->is_empty_))) {
                 SQL_RESV_LOG(WARN, "fail to resolve spatial index constraint", K(ret), K(column_name));
               } else if (OB_FAIL(resolve_vec_index_constraint(*column_schema,
@@ -2399,13 +2373,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
             }
             if (OB_SUCC(ret)) {
               //column_order
-              if (is_oracle_mode && NULL != index_column_node->children_[2]
-                  && T_SORT_DESC == index_column_node->children_[2]->type_) {
-                // sort_item.order_type_ = common::ObOrderType::DESC;
-                ret = OB_NOT_SUPPORTED;
-                LOG_WARN("not support desc index now", K(ret));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "desc index");
-              } else {
+              {
                 // Compatible with mysql5.7, descending index does not take effect and does not report an error
                 sort_item.order_type_ = common::ObOrderType::ASC;
               }
@@ -2444,7 +2412,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           first_column_name = ObString::make_string("functional_index");
         }
       }
-    } else if (is_organization_set_to_heap() && ObItemType::T_PRIMARY_KEY == node->type_ && !is_oracle_mode) {
+    } else if (is_organization_set_to_heap() && ObItemType::T_PRIMARY_KEY == node->type_) {
       if (OB_FAIL(resolve_single_column_primary_key_node(node->children_[0], tbl_schema, process_heap_table_primary_key, first_column_name))) {
         SQL_RESV_LOG(WARN, "failed to resolve the single column primary key node in the heap table", K(ret));
       }
@@ -2973,7 +2941,6 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
           int64_t length = 0;
           int64_t index_data_length = 0;
 
-          bool is_oracle_mode = false;
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(create_table_stmt)) {
             ret = OB_NOT_INIT;

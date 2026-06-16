@@ -725,11 +725,7 @@ int ObPrivSqlService::delete_db_priv(
       //so the record number could only be one.
       //here we bypass now, should fix the bug, then delete this code.
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      bool is_oracle_mode = false;
-      if (is_oracle_mode) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
-      } else if (OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, mode))) {
+      if (OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, mode))) {
         LOG_WARN("fail to get tenant name case mode", K(tenant_id), K(ret));
       } else if (mode != OB_ORIGIN_AND_SENSITIVE) {
         ret = OB_ERR_UNEXPECTED;
@@ -805,11 +801,7 @@ int ObPrivSqlService::delete_table_priv(
       //so the records number could be only exist one.
       //here we bypass now, should fix the bug, then delete this code.
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      bool is_oracle_mode = false;
-      if (is_oracle_mode) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
-      } else if (OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, mode))) {
+      if (OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, mode))) {
         LOG_WARN("fail to get tenant name case mode", K(tenant_id), K(ret));
       } else if (mode != OB_ORIGIN_AND_SENSITIVE) {
         ret = OB_ERR_UNEXPECTED;
@@ -1228,7 +1220,6 @@ int ObPrivSqlService::grant_revoke_role(
   const int64_t is_deleted = is_grant ? 0 : 1;
   ObSqlString sql;
   int64_t affected_rows = 0;
-  bool is_oracle_mode = false;
 
   // __all_tenant_role_grantee_map
   if (OB_FAIL(ret)) {
@@ -1250,7 +1241,7 @@ int ObPrivSqlService::grant_revoke_role(
             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, grantee_id),
             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, role_id),
             option,
-            static_cast<uint64_t>(is_oracle_mode ? 0 : 1)  /* disable flag */))) {
+            static_cast<uint64_t>(1)  /* disable flag */))) {
           LOG_WARN("append sql failed, ", K(ret));
         }
       }
@@ -1306,7 +1297,7 @@ int ObPrivSqlService::grant_revoke_role(
           new_schema_version,
           is_deleted,
           option,
-          static_cast<uint64_t>(is_oracle_mode ? 0 : 1)/* disable flag */))) {
+          static_cast<uint64_t>(1)/* disable flag */))) {
         LOG_WARN("append sql failed, ", K(ret));
       }
     }

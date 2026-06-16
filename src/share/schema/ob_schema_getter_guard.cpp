@@ -2399,7 +2399,6 @@ int ObSchemaGetterGuard::check_db_access(
   } else if (OB_FAIL(get_tenant_compat_mode(tenant_id, compat_mode))) {
     LOG_WARN("fail to get compat mode", K(ret));
   } else {
-    bool is_oracle_mode = false;
     const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
     ObOriginalDBKey db_priv_key(session_priv.tenant_id_,
                                 session_priv.user_id_,
@@ -2444,7 +2443,7 @@ int ObSchemaGetterGuard::check_db_access(
           ObPrivSet total_db_priv_set_role = OB_PRIV_SET_EMPTY;
           ObArray<uint64_t> role_id_array;
 
-          if (OB_FAIL(role_id_array.assign(is_oracle_mode ? user_info->get_role_id_array()
+          if (OB_FAIL(role_id_array.assign(false ? user_info->get_role_id_array()
                                                           : enable_role_id_array))) {
             LOG_WARN("fail to assign role ids", K(ret));
           }
@@ -2471,7 +2470,7 @@ int ObSchemaGetterGuard::check_db_access(
                 // append db level privilege
                 total_db_priv_set_role |= db_priv_set_role;
               }
-              if (OB_SUCC(ret) && !is_oracle_mode) {
+              if (OB_SUCC(ret) && true) {
                 column_privs.reuse();
                 if (!is_grant_role && OB_FAIL(priv_mgr.get_column_priv_in_db(db_priv_key_role.tenant_id_,
                                                                             db_priv_key_role.user_id_,

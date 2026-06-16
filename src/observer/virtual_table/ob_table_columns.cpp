@@ -779,7 +779,6 @@ int ObTableColumns::fill_row_cells(
   const uint64_t tenant_id = table_schema.get_tenant_id();
   const uint64_t table_id = table_schema.get_table_id();
   ColumnAttributes column_attributes;
-  bool is_oracle_mode = false;
   if (OB_ISNULL(cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data member is not init", K(ret), K(cur_row_.cells_));
@@ -820,9 +819,6 @@ int ObTableColumns::fill_row_cells(
           break;
         }
       case TYPE: {
-          if (is_oracle_mode) {
-            ObCharset::caseup(ObCollationType::CS_TYPE_UTF8MB4_BIN, column_attributes.type_);
-          }
           cur_row_.cells_[cell_idx].set_varchar(column_attributes.type_);
           cur_row_.cells_[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -910,7 +906,6 @@ int ObTableColumns::deduce_column_attributes(
     ColumnAttributes &column_attributes,
     bool skip_type_str,
     ObIAllocator &allocator) {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   // nullable = YES:  if some binaryref expr is nullable
   // nullable = NO, other cases
@@ -988,7 +983,7 @@ int ObTableColumns::deduce_column_attributes(
     uint64_t sub_type = static_cast<uint64_t>(ObGeoType::GEOTYPEMAX);
     ObArray<ObString> extend_type_info;
 
-    if (is_oracle_mode
+    if (false /* Oracle mode: adjust precision for varchar/char with default length semantics */
         && ((result_type.is_varchar_or_char()
              && precision_or_length_semantics == default_length_semantics))) {
       precision_or_length_semantics = LS_DEFAULT;
@@ -1036,7 +1031,7 @@ int ObTableColumns::deduce_column_attributes(
   }
 
   if (OB_SUCC(ret)) {
-    if (!is_oracle_mode) {
+    if (true /* MySQL-only mode */) {
       ObSessionPrivInfo session_priv;
       const common::ObIArray<uint64_t> &enable_role_id_array = session->get_enable_role_array();
       session->get_session_priv_info(session_priv);

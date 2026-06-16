@@ -479,7 +479,6 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
 {
   int ret = OB_SUCCESS;
   int tmp_ret_code = ret_code;
-  bool is_oracle_mode = false;
   const char *str_user_error = NULL;
   const char *str_error = NULL;
   if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == table_id || index_name.empty() || OB_INVALID_ID == index_id) {
@@ -505,15 +504,9 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
           "Supported ddl error message type: create unique index, index_id = %ld", index_id))) {
         LOG_WARN("print to buffer failed", K(ret), K(table_id));
       } else {
-        if (is_oracle_mode) {
-          if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN, "%s", str_user_error))) {
-            LOG_WARN("print to buffer failed", K(ret), K(str_user_error), K(index_name));
-          }
-        } else {
-          if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN,
-              str_user_error, message, index_name.length(), index_name.ptr()))) {
-            LOG_WARN("print to buffer failed", K(ret), K(str_user_error), K(index_name));
-          }
+        if (OB_FAIL(databuff_printf(error_message.user_message_, OB_MAX_ERROR_MSG_LEN,
+            str_user_error, message, index_name.length(), index_name.ptr()))) {
+          LOG_WARN("print to buffer failed", K(ret), K(str_user_error), K(index_name));
         }
       }
     } else {

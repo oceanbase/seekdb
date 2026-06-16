@@ -198,11 +198,10 @@ int ObTransOnDetectOperation::operator()(
   } else if (++step && OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id_, session_guard))) {
   } else if (++step && !session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (++step && ObCompatibilityMode::MYSQL_MODE == session_guard->get_compatibility_mode()) {
-    ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id_);
+  } else if (FALSE_IT(step++)) {
+    // seekdb is MySQL-only; always kill_tx path
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "unknown mode", KR(ret), K(step), K(session_guard.get_session()), K(*this));
+    ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id_);
   }
 
   if (!OB_SUCC(ret)) {

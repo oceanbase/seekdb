@@ -427,7 +427,6 @@ int ObLatestSchemaGuard::check_oracle_object_exist(
     const bool is_or_replace)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(
       OB_INVALID_TENANT_ID == tenant_id_
       || OB_INVALID_ID == database_id
@@ -436,7 +435,7 @@ int ObLatestSchemaGuard::check_oracle_object_exist(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K_(tenant_id),
              K(database_id), K(object_name), K(schema_type));
-  } else if (!is_oracle_mode) {
+  } else if (true) {
     // skip
   } else {
     // table
@@ -662,7 +661,6 @@ int ObLatestSchemaGuard::get_coded_index_name_info_mysql(
   int ret = OB_SUCCESS;
   ObISQLClient *sql_client = NULL;
   ObSchemaService *schema_service_impl = nullptr;
-  bool is_oracle_mode = false;
   ObArray<ObIndexSchemaInfo> index_infos;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));

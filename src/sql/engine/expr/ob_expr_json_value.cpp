@@ -119,7 +119,6 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
 int ObExprJsonValue::calc_input_type(ObExprResType& types_stack, bool &is_json_input)
 {
   INIT_SUCC(ret);
-  const bool is_oracle_mode = false;
   ObObjType doc_type = types_stack.get_type();
   if (types_stack.get_type() == ObNullType) {
   } else if (!ObJsonExprHelper::is_convertible_to_json(doc_type)) {

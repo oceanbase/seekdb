@@ -783,13 +783,12 @@ int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx
   int32_t sec_val = 0;
   int ret_more = OB_SUCCESS;
   bool check_timezone_valid = false;
-  bool is_oralce_mode = false;
-  ObSQLSessionInfo *session = ctx.get_my_session(); 
+  bool is_oralce_mode = false; // seekdb is MySQL-only
+  ObSQLSessionInfo *session = ctx.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get session info", K(ret), K(session));
   } else {
-    is_oralce_mode = is_oracle_compatible(session->get_sql_mode());
     ObString str = in_val.get_string();
     if (OB_FAIL(ObTimeConverter::str_to_offset(str, sec_val, ret_more, check_timezone_valid))) {
       if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {

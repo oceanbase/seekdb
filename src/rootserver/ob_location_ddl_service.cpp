@@ -115,7 +115,6 @@ int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
   const ObString &location_name = arg.location_name_;
   const ObLocationSchema *schema_ptr = NULL;
   bool is_exist = false;
-  bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   int64_t refreshed_schema_version = 0;
   if (OB_ISNULL(ddl_service_)) {

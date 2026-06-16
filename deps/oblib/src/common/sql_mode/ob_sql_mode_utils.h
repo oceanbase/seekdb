@@ -31,17 +31,20 @@ int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode);
 int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *allocator);
 inline ObSQLMode ob_compatibility_mode_to_sql_mode(ObCompatibilityMode comp_mode)
 {
-  return ObCompatibilityMode::ORACLE_MODE == comp_mode ? SMO_ORACLE : 0;
+  // seekdb is MySQL-only; Oracle mode bit is never set.
+  UNUSED(comp_mode);
+  return 0;
 }
 
 inline ObCompatibilityMode ob_sql_mode_to_compatibility_mode(ObSQLMode sql_mode)
 {
-  return 0 == (sql_mode & SMO_ORACLE) ? MYSQL_MODE : ORACLE_MODE;
+  UNUSED(sql_mode);
+  return MYSQL_MODE;
 }
 
 inline bool is_strict_mode(ObSQLMode mode)
 {
-  return ((SMO_STRICT_ALL_TABLES & mode) || (SMO_STRICT_TRANS_TABLES & mode) || (SMO_ORACLE & mode));
+  return ((SMO_STRICT_ALL_TABLES & mode) || (SMO_STRICT_TRANS_TABLES & mode));
 }
 inline bool is_pad_char_to_full_length(ObSQLMode mode)
 {
@@ -89,15 +92,18 @@ inline bool is_mysql_compatible(ObCompatibilityMode mode)
 }
 inline bool is_oracle_compatible(ObCompatibilityMode mode)
 {
-  return ORACLE_MODE == mode;
+  UNUSED(mode);
+  return false; // seekdb is MySQL-only
 }
 inline bool is_mysql_compatible(ObSQLMode mode)
 {
-  return is_mysql_compatible(ob_sql_mode_to_compatibility_mode(mode));
+  UNUSED(mode);
+  return true; // seekdb is MySQL-only
 }
 inline bool is_oracle_compatible(ObSQLMode mode)
 {
-  return is_oracle_compatible(ob_sql_mode_to_compatibility_mode(mode));
+  UNUSED(mode);
+  return false; // seekdb is MySQL-only
 }
 inline ObCompatibilityMode get_compatibility_mode()
 {

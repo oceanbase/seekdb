@@ -4753,7 +4753,6 @@ int ObDDLResolver::check_prefix_key(const int32_t prefix_len,
 
 int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, const bool is_prepare_stage)
 {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if(ObStringTC != column.get_data_type_class()
      || CHARSET_INVALID == column.get_charset_type()
@@ -4768,15 +4767,12 @@ int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, co
    * oracle
    * char(N)&raw(N): N represents the number of bytes, the upper limit is 2000 bytes
    */
-    const int64_t max_char_length = is_oracle_mode ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE : OB_MAX_CHAR_LENGTH;
+    const int64_t max_char_length = OB_MAX_CHAR_LENGTH;
     const int64_t data_len = column.get_data_length();
     if (data_len < 0 || data_len > max_char_length) {
       ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
       LOG_WARN("column data length is invalid", K(ret), K(max_char_length), "real_data_length", column.get_data_length());
       LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(), static_cast<int>(max_char_length));
-    } else if (is_oracle_mode && 0 == data_len) {
-      ret = OB_ERR_ZERO_LEN_COL;
-      LOG_WARN("column data length cannot be zero on oracle mode", K(ret), K(data_len));
     }
   } else if (ObVarcharType == column.get_data_type()) {
     int64_t mbmaxlen = 0;
@@ -4789,17 +4785,12 @@ int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, co
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(ERROR, "mbmaxlen can not be 0", K(ret));
       } else if ((!is_prepare_stage && data_len < 0) ||
-          (is_oracle_mode
-            ? data_len > OB_MAX_ORACLE_VARCHAR_LENGTH
-            : data_len * mbmaxlen > OB_MAX_VARCHAR_LENGTH)) {
+          data_len * mbmaxlen > OB_MAX_VARCHAR_LENGTH) {
         ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
         const uint64_t real_data_length = static_cast<uint64_t>(data_len);
         LOG_WARN("column data length is invalid", K(ret), K(data_len), K(real_data_length), K(mbmaxlen));
         LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(),
-            static_cast<int>(is_oracle_mode ? OB_MAX_ORACLE_VARCHAR_LENGTH : OB_MAX_VARCHAR_LENGTH/mbmaxlen));
-      } else if (is_oracle_mode && 0 == data_len) {
-        ret = OB_ERR_ZERO_LEN_COL;
-        LOG_WARN("column data length cannot be zero on oracle mode", K(ret), K(data_len));
+            static_cast<int>(OB_MAX_VARCHAR_LENGTH/mbmaxlen));
       }
     }
   } else {
@@ -5705,11 +5696,10 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     }
     LOG_DEBUG("finish check default value", K(input_default_value), K(expr_str), K(tmp_default_value), K(tmp_dest_obj), K(tmp_dest_obj_null), KPC(expr), K(ret));
   } else {
-    bool is_oracle_mode = false;
     if (OB_FAIL(cast_default_value(session_info, default_value, tz_info_wrap.get_time_zone_info(),
                                    nls_formats, allocator, column, sql_mode))) {
       LOG_WARN("fail to cast default value!", K(ret), K(default_value), KPC(tz_info_wrap.get_time_zone_info()), K(column), K(sql_mode));
-    } else if (OB_FAIL(check_default_value_length(!is_oracle_mode, column, default_value))) {
+    } else if (OB_FAIL(check_default_value_length(true/*is_mysql_mode*/, column, default_value))) {
       LOG_WARN("fail to check default value length", K(ret), K(default_value), K(column));
     } else {
       default_value.set_collation_type(column.get_collation_type());
@@ -6149,7 +6139,7 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
 int ObDDLResolver::adjust_string_column_length_within_max(share::schema::ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
-  // is_oracle_mode is always false in seekdb, so this function is a no-op
+  // false is always false in seekdb, so this function is a no-op
   return ret;
 }
 
@@ -8875,7 +8865,6 @@ int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
     } else if (is_inner_table(table_id_)) {
       // Here why get part str first then change part func type?
       ObSqlString part_expr;
-      bool is_oracle_mode = false;
       const uint64_t tenant_id = session_info_->get_effective_tenant_id();
       if (OB_FAIL(get_part_str_with_type(part_func_type, func_expr_name, part_expr))) {
         SQL_RESV_LOG(WARN, "Failed to get part str with type", K(ret));

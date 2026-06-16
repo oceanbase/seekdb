@@ -1020,7 +1020,6 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
   ObTableColumns::ColumnAttributes column_attributes;
   ObObj *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
-  bool is_oracle_mode = false;
   if (OB_ISNULL(allocator_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or session_ is NULL", K(ret), K(allocator_), K(session_));

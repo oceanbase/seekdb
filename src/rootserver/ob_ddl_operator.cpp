@@ -7167,7 +7167,6 @@ int ObDDLOperator::revoke_table(
   const uint64_t tenant_id = table_priv_key.tenant_id_;
   ObSchemaGetterGuard schema_guard;
   ObSchemaService *schema_sql_service = schema_service_.get_schema_service();
-  bool is_oracle_mode = false;
   if (OB_ISNULL(schema_sql_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schama service_impl and schema manage must not null",
@@ -7259,7 +7258,7 @@ int ObDDLOperator::revoke_table(
         if (OB_SUCC(ret) && revoke_all_ora) {
           OZ (revoke_table_all(schema_guard, tenant_id, obj_priv_key, ddl_sql, trans));
         }
-      } else if (!is_oracle_mode) {
+      } else if (true) {
         //do nothing
       } else {
         ObSqlString ddl_stmt_str;
@@ -7438,7 +7437,6 @@ int ObDDLOperator::grant_revoke_role(
   ObSchemaGetterGuard schema_guard;
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObString ddl_sql;
-  bool is_oracle_mode = false;
 
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
@@ -7480,7 +7478,7 @@ int ObDDLOperator::grant_revoke_role(
           } else if (NULL == role_info) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("role doesn't exist", K(ret), K(role_id));
-          } else if (is_oracle_mode ?
+          } else if (false ?
                        OB_FAIL(sql_string.append_fmt("%s", role_info->get_user_name()))
                      : OB_FAIL(sql_string.append_fmt("`%s`@`%s`",
                                                      role_info->get_user_name(),
@@ -7490,7 +7488,7 @@ int ObDDLOperator::grant_revoke_role(
         }
       }
       if (OB_SUCC(ret)) {
-        if (is_oracle_mode ? OB_FAIL(sql_string.append_fmt(is_grant ? " TO %s": " FROM %s",
+        if (false ? OB_FAIL(sql_string.append_fmt(is_grant ? " TO %s": " FROM %s",
                                                            user_info.get_user_name()))
                            : OB_FAIL(sql_string.append_fmt(is_grant ? " TO `%s`@`%s`": " FROM `%s`@`%s`",
                                                            user_info.get_user_name(),

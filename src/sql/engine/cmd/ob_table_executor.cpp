@@ -199,7 +199,6 @@ int ObCreateTableExecutor::prepare_ins_arg(ObCreateTableStmt &stmt,
   char *buf = static_cast<char*>(allocator.alloc(OB_MAX_SQL_LENGTH));
   int64_t buf_len = OB_MAX_SQL_LENGTH;
   int64_t pos1 = 0;
-  bool is_oracle_mode = false;
   bool no_osg_hint = false;
   bool online_sys_var = false;
   ObSelectStmt *select_stmt = stmt.get_sub_select();

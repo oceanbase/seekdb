@@ -58,7 +58,6 @@ int ObIndexNameCache::check_index_name_exist(
 {
   int ret = OB_SUCCESS;
   is_exist = false;
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(
       OB_INVALID_TENANT_ID == tenant_id
       || tenant_id_ != tenant_id
@@ -83,8 +82,7 @@ int ObIndexNameCache::check_index_name_exist(
       } else if (OB_FAIL(ObSimpleTableSchemaV2::get_index_name(index_name, idx_name))) {
         LOG_WARN("fail to get original index name", KR(ret), K(index_name));
       } else {
-        data_table_id = (is_oracle_mode && !is_mysql_sys_database_id(database_id)) ?
-                        OB_INVALID_ID : data_table_id;
+        // data_table_id stays as is in MySQL mode
       }
     }
     if (OB_SUCC(ret)) {
@@ -149,7 +147,6 @@ int ObIndexNameCache::add_index_name(
   const ObString &index_name = index_schema.get_table_name_str();
   const ObTableType table_type = index_schema.get_table_type();
   uint64_t data_table_id = index_schema.get_data_table_id();
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(
       OB_INVALID_TENANT_ID == tenant_id
       || tenant_id_ != tenant_id
@@ -181,8 +178,7 @@ int ObIndexNameCache::add_index_name(
         data_table_id = OB_INVALID_ID;
         idx_name = index_name_info->get_index_name();
       } else {
-        data_table_id = (is_oracle_mode && !is_mysql_sys_database_id(database_id)) ?
-                        OB_INVALID_ID : index_name_info->get_data_table_id();
+        data_table_id = index_name_info->get_data_table_id();
         idx_name = index_name_info->get_original_index_name();
       }
       if (OB_SUCC(ret)) {
@@ -432,13 +428,12 @@ int ObIndexNameChecker::check_tenant_can_be_skipped_(
     bool &can_skip)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   can_skip = false;
   if (is_sys_tenant(tenant_id)
       || is_meta_tenant(tenant_id)) {
     can_skip = true;
   } else {
-    can_skip = !is_oracle_mode;
+    can_skip = true; // always MySQL mode
   }
   return ret;
 }

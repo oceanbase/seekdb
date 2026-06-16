@@ -55,7 +55,6 @@ int ObDDLTabletScheduler::init(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator arena("tblt_sched_init");
-  bool is_oracle_mode = false;
   common::ObAddr inner_sql_exec_addr;
   common::ObArray<ObString> running_sql_info;
   common::ObArray<ObLSID> ls_ids;
@@ -701,7 +700,6 @@ int ObDDLTabletScheduler::get_session_running_lsid(ObIArray<share::ObLSID> &runn
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator arena("tblt_sched_get");
-  bool is_oracle_mode = false;
   common::ObAddr inner_sql_exec_addr;
   common::ObArray<ObString> running_sql_info;
   running_ls_ids.reset();

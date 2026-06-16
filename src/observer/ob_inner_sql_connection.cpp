@@ -440,7 +440,6 @@ int ObInnerSQLConnection::init_session_info(
     const bool is_extern_session,
     const bool is_ddl)
 {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (NULL == session) {
     ret = OB_INVALID_ARGUMENT;
@@ -452,13 +451,9 @@ int ObInnerSQLConnection::init_session_info(
     ObPCMemPctConf pc_mem_conf;
     session->set_inner_session();
     ObObj mysql_mode;
-    ObObj oracle_mode;
     mysql_mode.set_int(0);
-    oracle_mode.set_int(1);
     ObObj mysql_sql_mode;
-    ObObj oracle_sql_mode;
     mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
-    oracle_sql_mode.set_uint(ObUInt64Type, DEFAULT_ORACLE_MODE);
     if (!NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_essential_sys_vars_only(print_info_log, is_sys_tenant))) {
       LOG_WARN("session load default system variable failed", K(ret));
     } else if (NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_default_sys_variable(print_info_log, is_sys_tenant))) {
@@ -483,10 +478,10 @@ int ObInnerSQLConnection::init_session_info(
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_SQL_MODE, is_oracle_mode ? oracle_sql_mode : mysql_sql_mode))) {
+            SYS_VAR_SQL_MODE, mysql_sql_mode))) {
           LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_OB_COMPATIBILITY_MODE, is_oracle_mode ? oracle_mode : mysql_mode))) {
+            SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
           LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_NLS_DATE_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT))) {

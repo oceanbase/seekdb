@@ -665,7 +665,6 @@ public:
   {
     return ob_sql_mode_to_compatibility_mode(get_sql_mode());
   }
-  bool is_oracle_compatible() const { return false; }
   ObSQLMode get_sql_mode() const { return sys_vars_cache_.get_sql_mode(); }
   int get_div_precision_increment(int64_t &div_precision_increment) const;
   int get_character_set_client(common::ObCharsetType &character_set_client) const;

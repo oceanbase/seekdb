@@ -1366,7 +1366,6 @@ int ObDropTableHelper::construct_drop_table_sql_(const ObTableSchema &table_sche
   } else {
     bool is_offline_ddl_hidden_data_table = ObTableStateFlag::TABLE_STATE_HIDDEN_OFFLINE_DDL == table_schema.get_table_state_flag();
     bool use_drop_table_stmt_in_arg = (USER_INDEX == arg_.table_type_) || is_offline_ddl_hidden_data_table;
-    bool is_oracle_mode = false;
     bool is_cascade_constraints = false;
     const ObTableType table_type = table_schema.get_table_type();
     if (use_drop_table_stmt_in_arg) {

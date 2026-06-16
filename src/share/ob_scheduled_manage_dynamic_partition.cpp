@@ -207,14 +207,11 @@ int ObScheduledManageDynamicPartition::create_job_(
   ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   char buf[OB_MAX_PROC_ENV_LENGTH] = {0};
   int64_t pos = 0;
   int64_t job_id = OB_INVALID_ID;
 
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", KR(ret));
-  } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+  if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
     LOG_WARN("failed to gen exec env", KR(ret));
   } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(tenant_id, job_id))) {
     LOG_WARN("generate_job_id failed", KR(ret), K(tenant_id));
@@ -229,9 +226,9 @@ int ObScheduledManageDynamicPartition::create_job_(
       job_info.job_ = job_id;
       job_info.job_name_ = job_name;
       job_info.job_action_ = job_action;
-      job_info.lowner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-      job_info.powner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-      job_info.cowner_ = is_oracle_mode ? ObString("SYS") :  ObString("oceanbase");
+      job_info.lowner_ = ObString("root@%");
+      job_info.powner_ = ObString("root@%");
+      job_info.cowner_ = ObString("oceanbase");
       job_info.job_style_ = ObString("REGULAR");
       job_info.job_type_ = ObString("STORED_PROCEDURE");
       job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");

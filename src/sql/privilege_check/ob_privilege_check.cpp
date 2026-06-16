@@ -2809,8 +2809,7 @@ int ObPrivilegeCheck::check_password_expired_on_connection(
   int ret = OB_SUCCESS;
   if (is_root_user(user_id)) {
     //do nothing
-  } else if (MYSQL_MODE == session.get_compatibility_mode()
-             && OB_FAIL(check_password_life_time_mysql(tenant_id, user_id, schema_guard, session))) {
+  } else if (OB_FAIL(check_password_life_time_mysql(tenant_id, user_id, schema_guard, session))) {
     LOG_WARN("The current user's password may be out of date", K(ret), K(tenant_id), K(user_id));
   }
   return ret;

@@ -3960,7 +3960,6 @@ int ObMultiVersionSchemaService::get_tenant_name_case_mode(
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard guard;
   const ObSimpleSysVariableSchema *sys_variable = NULL;
-  bool is_oracle_mode = false;
   name_case_mode = OB_NAME_CASE_INVALID;
   if (OB_FAIL(get_tenant_schema_guard(tenant_id, guard))) {
     LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));

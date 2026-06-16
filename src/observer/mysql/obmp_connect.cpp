@@ -672,8 +672,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, ssl_st, user_info))) {
           int inner_ret = OB_SUCCESS;
           bool is_unlocked = false;
-          if (MYSQL_MODE == session.get_compatibility_mode()
-              && OB_ERR_USER_IS_LOCKED == ret) {
+          if (OB_ERR_USER_IS_LOCKED == ret) {
             if (OB_SUCCESS != (inner_ret = unlock_user_if_time_is_up_mysql(conn->tenant_id_,
                                                                            session_priv.user_id_,
                                                                            schema_guard,
@@ -729,8 +728,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         }
       }
 
-      if (MYSQL_MODE == session.get_compatibility_mode()
-          && (OB_SUCC(ret) || OB_PASSWORD_WRONG == ret || OB_ERR_USER_IS_LOCKED == ret)) {
+      if (OB_SUCC(ret) || OB_PASSWORD_WRONG == ret || OB_ERR_USER_IS_LOCKED == ret) {
         int login_ret = ret;
         bool is_unlocked_now = false;
         if (OB_FAIL(update_login_stat_mysql(conn->tenant_id_, is_valid_id(session_priv.user_id_),

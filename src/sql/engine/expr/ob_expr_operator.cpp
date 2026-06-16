@@ -1195,45 +1195,16 @@ int ObExprOperator::aggregate_result_type_for_case(
   bool skip_null,
   bool is_called_in_sql)
 {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("types is null or param_num is wrong", K(types), K(param_num), K(ret));
-  } else if (1 == param_num && ob_is_enumset_tc(types[0].get_type())) {
-  } else if (is_oracle_mode) {
-    bool match = false;
-    int64_t nth = OB_INVALID_ID;
-    for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_ID == nth && i < param_num; ++i) {
-      if (!ob_is_null(types[i].get_type())) {
-        nth = i;
-      }
-    }
-    nth = OB_INVALID_ID == nth ? 0 : nth;
-    const ObExprResType &res_type = types[nth];
-    if (need_merge_type && is_called_in_sql
-        && ObTinyIntType == types[0].get_type()) {
-      ret = OB_ERR_CALL_WRONG_ARG;
-      LOG_WARN("PLS-00306: wrong number or types of arguments in call", K(ret));
-    }
-    for (int64_t i = 1; OB_SUCC(ret) && is_called_in_sql && i < param_num; ++i) {
-      if (need_merge_type && ObTinyIntType == types[i].get_type()) {
-        ret = OB_ERR_CALL_WRONG_ARG;
-        LOG_WARN("PLS-00306: wrong number or types of arguments in call", K(ret));
-      } else if (OB_FAIL(ObExprOperator::is_same_kind_type_for_case(res_type,
-                                                             types[i], match))) {
-        LOG_WARN("fail to judge same type", K(i), K(res_type), K(types[i]), K(ret));
-      } else if (!match) {
-        ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("fail to judge same type", K(i), K(res_type), K(types[i]), K(ret));
-      }
-    }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(aggregate_result_type_for_merge(type, types, param_num,
                           type_ctx, need_merge_type, skip_null, is_called_in_sql))) {
       LOG_WARN("fail to aggregate result type", K(ret));
-    } else if (ObFloatType == type.get_type() && !is_oracle_mode) {
+    } else if (ObFloatType == type.get_type()) {
       type.set_type(ObDoubleType);
     }
   }
@@ -1249,7 +1220,6 @@ int ObExprOperator::aggregate_result_type_for_merge(
   bool skip_null,
   bool is_called_in_sql)
 {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1261,7 +1231,6 @@ int ObExprOperator::aggregate_result_type_for_merge(
     type.set_collation_type(type_ctx.get_coll_type());
   } else {
     ObObjType res_type = types[0].get_type();
-    bool is_oracle_all_same_number = is_oracle_mode && ob_is_number_or_decimal_int_tc(types[0].get_type());
     const ObLengthSemantics default_length_semantics = ((OB_NOT_NULL(type_ctx.get_session())) ?
                                                        type_ctx.get_session()->get_actual_nls_length_semantics() : LS_BYTE);
 
@@ -1274,32 +1243,13 @@ int ObExprOperator::aggregate_result_type_for_merge(
       } else if (OB_UNLIKELY(ObMaxType == res_type)) {
         ret = OB_INVALID_ARGUMENT; // not compatible input
         LOG_WARN("invalid argument. wrong type for merge", K(i), K(types[i].get_type()), K(ret));
-      } else if (is_oracle_all_same_number) {
-        if (types[i].is_null() && types[0].is_decimal_int()) {
-          // optimization for decimal_int type, when the parameter has null, try not to affect
-          // the result type, otherwise the parameter may be cast to number and result type will
-          // also be number.
-        } else {
-          is_oracle_all_same_number = types[i].get_type() == types[i-1].get_type() &&
-            types[i].get_precision() == types[i-1].get_precision() &&
-            types[i].get_scale() == types[i-1].get_scale();
-        }
       } else if (types[i].is_enum_set_with_subschema()) {
         has_new_enum_set_type = true;
       }
     }
     if (OB_SUCC(ret)) {
-      if (is_oracle_all_same_number) {
-        // in oracle mode, When all inputs are of the same number type with same PS info,
-        // the result type is also the same as the inputs
-        res_type = types[0].get_type();
-      }
       type.set_type(res_type);
-      if ((ob_is_decimal_int_tc(res_type) || ob_is_number_tc(res_type))
-          && is_oracle_all_same_number) {
-        // no need to aggregate numeric accuracy again
-        type.set_accuracy(types[0].get_accuracy());
-      } else if (ob_is_numeric_type(res_type)) {
+      if (ob_is_numeric_type(res_type)) {
         ret = aggregate_numeric_accuracy_for_merge(type, types, param_num);
       } else if (ob_is_temporal_type(res_type) || ob_is_otimestamp_type(res_type)) {
         ret = aggregate_temporal_accuracy_for_merge(type, types, param_num);
@@ -1351,7 +1301,7 @@ int ObExprOperator::aggregate_result_type_for_merge(
         }
       }
     }
-    LOG_DEBUG("merged type is", K(type), K(is_oracle_mode));
+    LOG_DEBUG("merged type is", K(type));
   }
   return ret;
 }
@@ -1364,7 +1314,6 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
                                                            bool skip_null,
                                                            bool is_called_in_sql)
 {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1395,12 +1344,6 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
         }
         /* Oracle compatible： if prejudged result type is char and args' length are different， change result type to varchar */
         LOG_DEBUG("cur len", K(length), K(max_length), K(types[i]));
-        if (is_oracle_mode && need_merge_type
-            && (ObCharType == type.get_type() && ObCharType == types[i].get_type())
-            && (max_length != -1) && (length != max_length)) {
-          LOG_DEBUG("Merge type from Char to Varchar ", K(length), K(max_length), K(types[i]));
-          type.set_type(ObVarcharType);
-        }
         /*no need to if(OB_SUCCE(ret)) here*/
         if (length > max_length) {
           if (types[i].is_null() && skip_null) {
@@ -1431,14 +1374,6 @@ int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
         }
         /* Oracle compatible： if prejudged result type is char and args' length are different， change result type to varchar */
         LOG_DEBUG("cur len", K(length), K(max_length), K(max_length_char), K(length_semantics), K(types[i]), K(type));
-        if (is_oracle_mode
-            && need_merge_type
-            && (ObCharType == type.get_type() && ObCharType == types[i].get_type())
-            && (max_length != -1)
-            && (length != max_length || (byte_length_count > 0 && char_length_count > 0))) {
-          LOG_DEBUG("Merge type from Char to Varchar ", K(length), K(max_length), K(length_semantics), K(types[i]));
-          type.set_type(ObVarcharType);
-        }
         if (length > max_length) {
           if (types[i].is_null() && skip_null) {
             //skip
@@ -1520,14 +1455,10 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
                                                          const ObExprResType *types,
                                                          int64_t param_num)
 {
-  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("types is null or param_num is wrong", K(types), K(param_num), K(ret));
-  } else if (is_oracle_mode) {
-    type.set_scale(ORA_NUMBER_SCALE_UNKNOWN_YET);
-    type.set_precision(PRECISION_UNKNOWN_YET);
   } else {
     ObPrecision precision = 0;
     ObScale scale = 0;
@@ -1563,7 +1494,7 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
           a union c will result to 12345 and 123.33
         */
         if (ob_is_integer_type(types[i].get_type())) {
-          precision = MAX(ObAccuracy::DDL_DEFAULT_ACCURACY2[is_oracle_mode][types[i].get_type()].precision_,
+          precision = MAX(ObAccuracy::DDL_DEFAULT_ACCURACY2[0][types[i].get_type()].precision_,
                           types[i].get_precision());
           scale = 0;
         } else if (ob_is_number_tc(types[i].get_type())
@@ -1595,7 +1526,7 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
 
     if (OB_FAIL(ret)) {
     } else if (ob_is_real_type(type.get_type()) && has_real_type) {
-      if (is_oracle_mode || has_unknow_scale || max_scale_for_real > OB_MAX_DOUBLE_FLOAT_SCALE) {
+      if (has_unknow_scale || max_scale_for_real > OB_MAX_DOUBLE_FLOAT_SCALE) {
         type.set_precision(PRECISION_UNKNOWN_YET);
         type.set_scale(SCALE_UNKNOWN_YET);
       } else {
@@ -1610,11 +1541,11 @@ int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
           type.set_precision(MIN(precision, OB_MAX_DECIMAL_POSSIBLE_PRECISION));
         } else {
           type.set_precision(
-            MIN(precision, ObAccuracy::MAX_ACCURACY2[is_oracle_mode][type.get_type()].precision_));
+            MIN(precision, ObAccuracy::MAX_ACCURACY2[0][type.get_type()].precision_));
         }
       }
       if (max_decimal_digits >= 0) {
-        type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY2[is_oracle_mode][type.get_type()].scale_));
+        type.set_scale(MIN(max_decimal_digits, ObAccuracy::MAX_ACCURACY2[0][type.get_type()].scale_));
       }
     }
     LOG_DEBUG("aggregate numeric accuracy", K(max_integer_digits), K(max_decimal_digits), K(type));

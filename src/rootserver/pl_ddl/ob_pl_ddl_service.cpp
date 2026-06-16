@@ -1336,7 +1336,6 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
   OX (copy_trg_info.set_action_order(new_action_order)); \
   OZ (pl_operator.alter_trigger(copy_trg_info, trans, NULL, false/*is_update_table_schema_version*/));
 
-  bool is_oracle_mode = false;
   const uint64_t tenant_id = trigger_info.get_tenant_id();
   common::ObSArray<uint64_t> trg_list;
   if (OB_SUCC(ret)) {
@@ -1365,7 +1364,7 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
           OV (OB_NOT_NULL(ref_trg_info));
         }
         if (OB_FAIL(ret)) {
-        } else if (is_oracle_mode) {
+        } else if (false) {
           OZ (recursive_check_trigger_ref_cyclic(schema_guard, trigger_info, trg_list,
                                                  trigger_info.get_trigger_name(), trigger_info.get_ref_trg_name()));
           if (OB_SUCC(ret)) {
@@ -1414,7 +1413,7 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
         }
       }
       OX (trigger_info.set_action_order(action_order));
-    } else if (!is_oracle_mode) {
+    } else if (true) {
       if (OB_SUCC(ret)) {
         for (int64_t i = 0; OB_SUCC(ret) && i < trg_list.count(); i++) {
           OZ (schema_guard.get_trigger_info(tenant_id, trg_list.at(i), old_trg_info));

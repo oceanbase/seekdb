@@ -202,7 +202,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
     ObStmtNeedPrivs stmt_need_privs;
     stmt_need_privs.need_privs_.set_allocator(&alloc);
     ObSqlStrGenerator sql_gen;
-    const bool is_oracle_mode = false;
     switch (parse_tree.type_) {
       case T_SHOW_TABLES: {
         if (OB_UNLIKELY(parse_tree.num_child_ != 3 || NULL == parse_tree.children_)) {
@@ -1769,7 +1768,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
         } else {
           show_resv_ctx.stmt_type_ = stmt::T_SHOW_LOCATIONS;
-          uint64_t tenant_id = is_oracle_mode ? session_info_->get_effective_tenant_id() : sql_tenant_id;
+          uint64_t tenant_id = sql_tenant_id;
           GEN_SQL_STEP_1(ObShowSqlSet::SHOW_LOCATIONS);
           GEN_SQL_STEP_2(ObShowSqlSet::SHOW_LOCATIONS,
                          OB_SYS_DATABASE_NAME,

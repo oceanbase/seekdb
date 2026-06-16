@@ -39538,7 +39538,6 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
   const common::ObSArray<ObTZRevertTypeInfo> &tz_revt_types = get_tz_revt_types();
   tz_id = static_cast<int32_t>(tz_id_);
   int64_t type_idx = 0;
-  const bool is_oracle_mode = false;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz info is invalid", K(ret));
@@ -39550,8 +39549,7 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
   } else {
     const ObTZRevertTypeInfo &revt_type_info = tz_revt_types.at(type_idx);
     if (OB_UNLIKELY(revt_type_info.is_gap())) {//gap
-      ret = is_oracle_mode ? OB_ERR_FIELD_NOT_FOUND_IN_DATETIME_OR_INTERVAL
-            : OB_ERR_UNEXPECTED_TZ_TRANSITION;
+      ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
       LOG_WARN("fail to get offset, value may be in gap range", K(tz_id_), K(value), K(type_idx), K(revt_type_info), K(ret));
     } else if (OB_UNLIKELY(revt_type_info.is_overlap())) {//overlap
       if (OB_LIKELY(tz_abbr_str.empty())) {
@@ -39560,17 +39558,12 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
           LOG_WARN("fail to get offset, value may be in overlap range", K(value), K(type_idx), K(revt_type_info), K(ret));
         } else {//if error_on_overlap_time_ == false,
         // oracle mode : use standard offset, mysql mode: use daylight saving time
-          if (is_oracle_mode) {
-            offset_sec = revt_type_info.extra_info_.offset_sec_;
-            tran_type_id = revt_type_info.extra_info_.tran_type_id_;
-          } else {
-            offset_sec = revt_type_info.info_.offset_sec_;
-            tran_type_id = revt_type_info.info_.tran_type_id_;
-          }
+          offset_sec = revt_type_info.info_.offset_sec_;
+          tran_type_id = revt_type_info.info_.tran_type_id_;
         }
       } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
         LOG_WARN("fail to get offset according to abbr", K(tz_abbr_str), K(revt_type_info), K(ret));
-        ret = is_oracle_mode ? OB_ERR_NOT_A_VALID_TIME_ZONE : OB_ERR_UNEXPECTED_TZ_TRANSITION;
+        ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
       }
     } else if (revt_type_info.is_normal()) {//normal
       if (OB_LIKELY(tz_abbr_str.empty())) {
@@ -39578,7 +39571,7 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
         tran_type_id = revt_type_info.info_.tran_type_id_;
       } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
         LOG_WARN("fail to get offset according to abbr", K(tz_abbr_str), K(revt_type_info), K(ret));
-        ret = is_oracle_mode ? OB_ERR_NOT_A_VALID_TIME_ZONE : OB_ERR_UNEXPECTED_TZ_TRANSITION;
+        ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

@@ -1451,7 +1451,7 @@ int ObSQLUtils::set_compatible_cast_mode(const ObSQLSessionInfo *session, ObCast
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument in set_compatible_cast_mode ", K(session), K(ret), K(cast_mode), K(lbt()));
   } else {
-    cast_mode &= ~CM_ORACLE_MODE;
+    cast_mode &= ~CM_ORACLE_MODE; // seekdb is MySQL-only; ensure oracle cast mode is off
   }
   return ret;
 }

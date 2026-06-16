@@ -149,7 +149,6 @@ int ObIndexSSTableBuildTask::process()
     #endif
     if (OB_FAIL(ret)) {
     } else if (is_partitioned_local_index_task()) {
-      bool is_oracle_mode = false;
       if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(tenant_id_, data_table_id_, dest_table_id_, addition_info_.partition_ids_, arena, batch_partition_names))) {
         LOG_WARN("fail to get index table batch partition names", K(ret), K(tenant_id_), K(data_table_id_), K(dest_table_id_), K(addition_info_.partition_ids_), K(batch_partition_names));
       } else if (OB_FAIL(ObDDLUtil::generate_partition_names(batch_partition_names, arena, partition_names))) {
@@ -1733,7 +1732,6 @@ int ObIndexBuildTask::clean_on_failed()
         const ObTableSchema *data_table_schema = nullptr;
         const ObSysVariableSchema *sys_variable_schema = nullptr;
         ObSqlString drop_index_sql;
-        bool is_oracle_mode = false;
         ObString index_name;
         ObIndexArg::IndexActionType index_action_type = ObIndexArg::DROP_INDEX;
         if (OB_FAIL(schema_guard.get_database_schema(tenant_id_, index_schema->get_database_id(), database_schema))) {
@@ -1745,8 +1743,6 @@ int ObIndexBuildTask::clean_on_failed()
         } else if (OB_UNLIKELY(nullptr == sys_variable_schema || nullptr == database_schema || nullptr == data_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get null schema", K(ret), KP(database_schema), KP(data_table_schema), KP(sys_variable_schema));
-        } else if (OB_FAIL(sys_variable_schema->get_oracle_mode(is_oracle_mode))) {
-          LOG_WARN("get oracle mode failed", K(ret));
         } else if (index_schema->is_in_recyclebin()) {
           // index is already in recyclebin, skip get index name, use a fake one, this is just to pass IndexArg validity check
           index_name = "__fake";
@@ -1767,7 +1763,7 @@ int ObIndexBuildTask::clean_on_failed()
           if (!create_index_arg_.ddl_stmt_str_.empty()) { // means create index syntax.
             // 1. rollback of alter table add index is completed by the following splicing sql.
             // 2. rollback of create index does nothing here because the stmt only be recorded when enabling index.
-          } else if (is_oracle_mode) {
+          } else if (false) {
             if (OB_FAIL(drop_index_sql.append_fmt("drop index \"%.*s\"", index_name.length(), index_name.ptr()))) {
               LOG_WARN("generate drop index sql failed", K(ret));
             }

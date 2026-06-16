@@ -211,7 +211,6 @@ int ObDbmsSpace::get_index_column_ids(const share::schema::ObTableSchema *table_
   ObString tmp_col_name;
   bool is_tmp_match = true;
   bool is_match = false;
-  bool is_oracle_mode = false;
 
   if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;

@@ -275,7 +275,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           break;
         }
         case MAX_HIGH_BOUND_VAL: {
-          bool is_oracle_mode = false;
           const ObPartition *max_part = NULL;
           if (OB_UNLIKELY(table_schema.get_partition_num() <= 0)) {
             ret = OB_ERR_UNEXPECTED;

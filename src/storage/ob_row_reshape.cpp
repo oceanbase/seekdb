@@ -87,7 +87,7 @@ int ObRowReshapeUtil::need_reshape_table_row(
                    space_pattern.ptr(),
                    space_pattern.length())) {
         need_reshape = true;
-      } else if (is_oracle_compatible(sql_mode) && cell.is_character_type() && cell.get_string_len() == 0) {
+      } else if (false /* Oracle compat: '' as null — dead in MySQL-only mode */) {
         // Oracle compatibility mode: '' as null
         need_reshape = true;
         LOG_DEBUG("Pstor2", K(cell), K(cell.get_string()), K(need_reshape));
@@ -158,7 +158,7 @@ int ObRowReshapeUtil::reshape_row(
             row_reshape_ins->row_reshape_cells_[i].set_binary(ObString(binary_len, dest_str));
           }
         }
-      } else if (is_oracle_compatible(sql_mode) && cell.is_character_type() && cell.get_string_len() == 0) {
+      } else if (false /* Oracle compat: '' as null — dead in MySQL-only mode */) {
         // Oracle compatibility mode: '' as null
         LOG_DEBUG("reshape empty string to null", K(cell));
         row_reshape_ins->row_reshape_cells_[i].set_null();

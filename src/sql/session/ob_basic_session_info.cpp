@@ -215,7 +215,7 @@ int ObBasicSessionInfo::test_init(uint32_t sessid, uint64_t proxy_sessid,
     LOG_WARN("fail to init debug sync actions", K(ret));
   } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
     LOG_WARN("fail to set session stat", K(ret));
-  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), is_oracle_compatible(),
+  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), false/*is_oracle_mode*/,
                                    true/* check_timezone_valid */))) {
     LOG_WARN("fail to set time zone", K(ret));
   } else {
@@ -3705,17 +3705,16 @@ int ObBasicSessionInfo::process_session_sql_mode_value(const ObObj &value)
 int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &value)
 {
   int ret = OB_SUCCESS;
-  ObCompatibilityMode comp_mode = ObCompatibilityMode::OCEANBASE_MODE;
+  // seekdb is MySQL-only; Oracle mode is not supported.
+  ObCompatibilityMode comp_mode = ObCompatibilityMode::MYSQL_MODE;
   if (value.is_string_type()) {
     const ObString &comp_mode_str = value.get_string();
-    if (comp_mode_str.case_compare("ORACLE")) {
-      comp_mode = ObCompatibilityMode::ORACLE_MODE;
-    } else if (comp_mode_str.case_compare("MYSQL")) {
+    if (0 == comp_mode_str.case_compare("MYSQL")) {
       comp_mode = ObCompatibilityMode::MYSQL_MODE;
     } else {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "compatibility mode");
-      LOG_WARN("not supported sql mode", K(ret), K(value), K(comp_mode_str));
+      LOG_WARN("not supported compatibility mode", K(ret), K(value), K(comp_mode_str));
     }
   } else if (ObUInt64Type == value.get_type()) {
     comp_mode = static_cast<ObCompatibilityMode>(value.get_uint64());
@@ -3723,7 +3722,7 @@ int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &va
     comp_mode = static_cast<ObCompatibilityMode>(value.get_int());
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid sql mode val type", K(value.get_type()), K(value), K(ret));
+    LOG_WARN("invalid compatibility mode val type", K(value.get_type()), K(value), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -3738,11 +3737,11 @@ int ObBasicSessionInfo::process_session_time_zone_value(const ObObj &value,
 {
   int ret = OB_SUCCESS;
   ObString str_val;
-  const bool is_oralce_mode = is_oracle_compatible();
+  const bool is_oralce_mode = false;
   if (OB_FAIL(value.get_string(str_val))) {
     LOG_WARN("fail to get string value", K(value), K(ret));
   } else if (OB_FAIL(set_time_zone(str_val, is_oralce_mode, check_timezone_valid))) {
-    LOG_WARN("failed to set time zone", K(str_val), K(is_oralce_mode), "is_oracle_compatible", is_oracle_compatible(), K(ret));
+    LOG_WARN("failed to set time zone", K(str_val), K(is_oralce_mode), K(ret));
   }
   return ret;
 }

@@ -255,7 +255,6 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
 {
   int ret = OB_SUCCESS;
   col = NULL;
-  bool is_oracle_mode = false;
   int64_t length = 0;
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
