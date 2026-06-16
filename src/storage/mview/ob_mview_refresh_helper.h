@@ -71,8 +71,7 @@ public:
                                                  const share::SCN &read_snapshot,
                                                  const ObIArray<uint64_t> &dep_mview_ids,
                                                  common::ObISQLClient &sql_proxy,
-                                                 bool &satisfy,
-                                                 bool oracle_mode = false);
+                                                 bool &satisfy);
   static int get_dep_mviews_from_dep_info(const uint64_t tenant_id,
                                           const ObIArray<share::schema::ObDependencyInfo> &dependency_infos,
                                           ObSchemaGetterGuard &schema_guard,
@@ -82,13 +81,11 @@ public:
                                             const uint64_t target_data_sync_ts,
                                             const uint64_t snapshot_version,
                                             common::ObISQLClient &sql_proxy,
-                                            ObSchemaGetterGuard &schema_guard,
-                                            bool oracle_mode = false);
+                                            ObSchemaGetterGuard &schema_guard);
   
   static int replace_all_snapshot_zero(const std::string &input,
                                        const uint64_t snapshot_version,
-                                       std::string &output,
-                                       const bool oracle_mode);
+                                       std::string &output);
   static int sync_get_min_target_data_sync_scn(const uint64_t tenant_id,
                                                const uint64_t mview_id,
                                                share::SCN &min_target_scn);

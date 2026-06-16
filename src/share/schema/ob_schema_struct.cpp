@@ -1193,13 +1193,6 @@ const ObSysVarSchema *ObSysVariableSchema::get_sysvar_schema(int64_t idx) const
   return ret;
 }
 
-int ObSysVariableSchema::get_oracle_mode(bool &is_oracle_mode) const
-{
-  // Oracle mode removed - always MySQL mode
-  is_oracle_mode = false;
-  return OB_SUCCESS;
-}
-
 /*-------------------------------------------------------------------------------------------------
  * ------------------------------ObTenantSchema-------------------------------------------
  ----------------------------------------------------------------------------------------------------*/

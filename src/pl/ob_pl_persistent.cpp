@@ -257,8 +257,7 @@ int ObRoutinePersistentInfo::decode_dll(ObSQLSessionInfo &session_info,
                       schema_guard,
                       *routine_ast,
                       routine->get_expressions(),
-                      routine->get_helper(),
-                      false) {
+                      routine->get_helper()) {
     #endif
                 int8_t cur_level = 0;
                 int16_t sub_id = 0;

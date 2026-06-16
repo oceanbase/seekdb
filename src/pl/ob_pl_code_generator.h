@@ -169,8 +169,7 @@ public:
                     share::schema::ObSchemaGetterGuard &schema_guard,
                     ObPLCompileUnitAST &func_ast,
                     common::ObIArray<ObSqlExpression*> &exprs,
-                    jit::ObLLVMHelper &helper,
-                    bool oracle_mode)
+                    jit::ObLLVMHelper &helper)
   :
     allocator_(allocator),
     session_info_(session_info),

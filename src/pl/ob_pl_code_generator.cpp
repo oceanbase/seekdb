@@ -3670,9 +3670,7 @@ int ObPLCodeGenerator::init_eh_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(int8_type))) {
-      LOG_WARN("push_back error", K(ret));
-    } else if (OB_FAIL(arg_types.push_back(int32_type))) {
+    if (OB_FAIL(arg_types.push_back(int32_type))) {
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int_pointer_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -5939,14 +5937,9 @@ int ObPLCodeGenerator::check_success(jit::ObLLVMValue &ret_err, int64_t stmt_id,
         LOG_WARN("failed to get_int_buffer", K(ret));
       } else {
         ObSEArray<ObLLVMValue, 2> args;
-        ObLLVMValue oracle_mode;
         ObLLVMValue ret_err;
-        if (OB_FAIL(helper_.get_int8(false, oracle_mode))) {
-          LOG_WARN("helper get int8 failed", K(ret));
-        } else if (OB_FAIL(helper_.create_load(ObString("load_ret"), vars_.at(RET_IDX), ret_err))) {
+        if (OB_FAIL(helper_.create_load(ObString("load_ret"), vars_.at(RET_IDX), ret_err))) {
           LOG_WARN("failed to load ret_err from vars_.at(RET_IDX)", K(ret));
-        } else if (OB_FAIL(args.push_back(oracle_mode))) {
-          LOG_WARN("push_back error", K(ret));
         } else if (OB_FAIL(args.push_back(ret_err))) {
           LOG_WARN("push_back error", K(ret));
         } else if (OB_FAIL(args.push_back(type_ptr))) {

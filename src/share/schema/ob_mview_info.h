@@ -114,8 +114,7 @@ public:
                                      const uint64_t tenant_id,
                                      const uint64_t refresh_scn,
                                      const ObIArray<uint64_t> &mview_ids,
-                                     ObIArray<ObMViewInfo> &mview_infos,
-                                     bool oracle_mode = false);
+                                     ObIArray<ObMViewInfo> &mview_infos);
   static int extract_mview_info(common::sqlclient::ObMySQLResult *result,
                                 const uint64_t tenant_id,
                                 ObMViewInfo &mview_info);

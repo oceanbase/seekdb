@@ -2023,7 +2023,6 @@ public:
   bool is_read_only() const { return read_only_; }
   common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
   void set_name_case_mode(const common::ObNameCaseMode mode) { name_case_mode_ = mode; }
-  int get_oracle_mode(bool &is_oracle_mode) const;
   TO_STRING_KV(K_(tenant_id), K_(schema_version),
                "sysvars", common::ObArrayWrap<ObSysVarSchema *>(sysvar_array_, ObSysVarFactory::ALL_SYS_VARS_COUNT),
                K_(read_only), K_(name_case_mode));

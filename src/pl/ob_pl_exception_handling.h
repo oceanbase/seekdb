@@ -74,7 +74,7 @@ public:
                                                     _Unwind_Exception_Class exceptionClass,
                                                     ObUnwindException *exceptionObject,
                                                     struct _Unwind_Context *context);
-  static int eh_convert_exception(bool oracle_mode, int oberr, ObPLConditionType *type, int64_t *error_code, const char **sql_state, int64_t *str_len);
+  static int eh_convert_exception(int oberr, ObPLConditionType *type, int64_t *error_code, const char **sql_state, int64_t *str_len);
   static ObPLConditionType eh_classify_exception(const char *sql_state);
 
 public:

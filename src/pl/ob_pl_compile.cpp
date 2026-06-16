@@ -323,8 +323,7 @@ int ObPLCompiler::compile(
                schema_guard_,
                func_ast,
                func.get_expressions(),
-               func.get_helper(),
-               false) {
+               func.get_helper()) {
   #endif
         int64_t cg_jit_mem = 0;
         ObPLCGMallocCallback pmcb(cg_jit_mem);
@@ -581,8 +580,7 @@ int ObPLCompiler::compile(
              schema_guard_,
              func_ast,
              func.get_expressions(),
-             func.get_helper(),
-             false) {
+             func.get_helper()) {
 #endif
       int64_t cg_jit_mem = 0;
       ObPLCGMallocCallback pmcb(cg_jit_mem);
@@ -963,8 +961,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
              schema_guard_,
              package_ast,
              package.get_expressions(),
-             package.get_helper(),
-             false) {
+             package.get_helper()) {
 #endif
       int64_t cg_jit_mem = 0;
       ObPLCGMallocCallback pmcb(cg_jit_mem);
@@ -1457,8 +1454,7 @@ int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
                      schema_guard,
                      *routine_ast,
                      routine->get_expressions(),
-                     routine->get_helper(),
-                     false) {
+                     routine->get_helper()) {
 #endif
               lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
               if (OB_FAIL(cg.init())) {

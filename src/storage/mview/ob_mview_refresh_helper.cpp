@@ -454,8 +454,7 @@ int ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(
                           const share::SCN &read_snapshot,
                           const ObIArray<uint64_t> &dep_mview_ids,
                           common::ObISQLClient &sql_proxy,
-                          bool &satisfy,
-                          bool oracle_mode)
+                          bool &satisfy)
 {
   int ret = OB_SUCCESS;
   satisfy = true;
@@ -471,7 +470,7 @@ int ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(
       satisfy = true;
       LOG_INFO("no dep mview");
     } else if (OB_FAIL(ObMViewInfo::bacth_fetch_mview_infos(sql_proxy, tenant_id,
-                       read_snapshot.get_val_for_sql(), dep_mview_ids, dep_mview_infos, oracle_mode))) {
+                       read_snapshot.get_val_for_sql(), dep_mview_ids, dep_mview_infos))) {
       LOG_WARN("fail to batch fetch mview info", K(ret));
     } else {
       const uint64_t target_data_sync_ts = target_data_sync_scn.get_val_for_gts();
@@ -498,8 +497,7 @@ int ObMViewRefreshHelper::collect_deps_and_check_satisfy(
                           const uint64_t target_data_sync_ts,
                           const uint64_t snapshot_version,
                           common::ObISQLClient &sql_proxy,
-                          ObSchemaGetterGuard &schema_guard,
-                          bool oracle_mode)
+                          ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
   ObArray<ObDependencyInfo> dep_infos;
@@ -525,7 +523,7 @@ int ObMViewRefreshHelper::collect_deps_and_check_satisfy(
     LOG_WARN("fail to get dep mview ids", K(ret));
   } else if (OB_FAIL(ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(
                      tenant_id, target_data_sync_scn, read_snapshot,
-                     dep_mview_ids, sql_proxy, satisfy, oracle_mode))) {
+                     dep_mview_ids, sql_proxy, satisfy))) {
     LOG_WARN("fail to target data sync scn satisfied", K(ret));
   } else if (!satisfy) {
     ret = OB_ERR_UNEXPECTED;
@@ -538,8 +536,7 @@ int ObMViewRefreshHelper::collect_deps_and_check_satisfy(
 int ObMViewRefreshHelper::replace_all_snapshot_zero(
                           const std::string &input,
                           const uint64_t snapshot_version,
-                          std::string &output,
-                          const bool oracle_mode)
+                          std::string &output)
 {
   int ret = OB_SUCCESS;
   output = input;

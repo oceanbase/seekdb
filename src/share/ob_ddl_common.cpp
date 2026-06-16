@@ -1309,7 +1309,7 @@ int ObDDLUtil::generate_build_mview_replica_sql(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("nested sync refresh with empty sql string", K(mview_select_sql), K(mview_table_id));
         } else if (OB_FAIL(ObMViewRefreshHelper::replace_all_snapshot_zero(
-                           select_sql, snapshot_version, real_sql, false))) {
+                           select_sql, snapshot_version, real_sql))) {
           LOG_WARN("fail to replace snapshot", K(ret));
         } else {
           if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ append monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) "

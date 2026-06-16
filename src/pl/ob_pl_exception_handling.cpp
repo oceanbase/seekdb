@@ -107,9 +107,8 @@ void ObPLEH::eh_debug_objparam(const char *name_ptr, int64_t name_len, const ObO
   LOG_DEBUG(">>>>>>>>>>0", K(ObString(name_len, name_ptr)), K(*object));
 }
 
-int ObPLEH::eh_convert_exception(bool oracle_mode, int oberr, ObPLConditionType *type, int64_t *error_code, const char **sql_state, int64_t *str_len)
+int ObPLEH::eh_convert_exception(int oberr, ObPLConditionType *type, int64_t *error_code, const char **sql_state, int64_t *str_len)
 {
-  UNUSED(oracle_mode);
   int ret = OB_SUCCESS;
   if (OB_ISNULL(type) || OB_ISNULL(error_code) || OB_ISNULL(sql_state)) {
     ret = OB_ERR_UNEXPECTED;

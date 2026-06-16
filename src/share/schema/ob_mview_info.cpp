@@ -630,8 +630,7 @@ int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
                                          const uint64_t tenant_id,
                                          const uint64_t refresh_scn,
                                          const ObIArray<uint64_t> &mview_ids,
-                                         ObIArray<ObMViewInfo> &mview_infos,
-                                         bool oracle_mode)
+                                         ObIArray<ObMViewInfo> &mview_infos)
 {
   int ret = OB_SUCCESS;
   if (mview_ids.empty() || tenant_id == OB_INVALID_TENANT_ID) {
