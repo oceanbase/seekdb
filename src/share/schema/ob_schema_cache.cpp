@@ -20,6 +20,7 @@
 #include "ob_schema_cache.h"
 #include "share/cache/ob_cache_name_define.h"
 #include "observer/ob_server_struct.h"
+#include "common/ob_smart_call.h"
 #include "deps/oblib/src/lib/lock/ob_latch.h"
 #include "deps/oblib/src/lib/stat/ob_latch_define.h"
 namespace oceanbase
@@ -1490,11 +1491,11 @@ int ObSchemaFetcher::fetch_##OBJECT_NAME##_info(const ObRefreshSchemaStatus &sch
     if (OB_FAIL(tenant_object_ids.push_back(object_id))) { \
       LOG_WARN("fail to push back object_id for " #OBJECT_NAME, \
                K(object_id), K(ret)); \
-    } else if (OB_FAIL(schema_service_->get_batch_##OBJECT_NAME##s(schema_status, \
-                                                                   schema_version, \
-                                                                   tenant_object_ids, \
-                                                                   *sql_client_, \
-                                                                   object_schema_array))) { \
+    } else if (OB_FAIL(SMART_CALL_LARGE(schema_service_->get_batch_##OBJECT_NAME##s(schema_status, \
+                                                                                    schema_version, \
+                                                                                    tenant_object_ids, \
+                                                                                    *sql_client_, \
+                                                                                    object_schema_array)))) { \
       LOG_WARN("fail to get batch " #OBJECT_NAME, \
                K(tenant_object_ids), K(schema_version), K(ret)); \
     } else if (OB_UNLIKELY(1 != object_schema_array.count())) { \
