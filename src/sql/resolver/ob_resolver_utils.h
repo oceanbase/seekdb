@@ -386,7 +386,7 @@ public:
   static int resolve_data_type(const ParseNode &type_node,
                                const common::ObString &ident_name,
                                common::ObDataType &data_type,
-                               const int is_oracle_mode/*1:Oracle, 0:MySql */,
+                               const int is_oracle_mode /*always 0 (MySQL mode)*/,
                                const bool is_for_pl_type,
                                const ObSessionNLSParams &nls_session_param,
                                uint64_t tenant_id,

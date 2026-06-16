@@ -779,7 +779,7 @@ SPEC_INT_WIDEINT_DIV_STRUCT(int64_t, int512_t)
 
 #undef SPEC_INT_WIDEINT_DIV_STRUCT
 
-template <typename Base, bool is_oracle_mode>
+template <typename Base>
 struct ObDecintDivWrap : public ObArithOpWrap<Base>
 {
   constexpr static bool is_raw_op_supported() { return false; }
@@ -790,10 +790,7 @@ struct ObDecintDivWrap : public ObArithOpWrap<Base>
     if (l.is_null() || r.is_null()) {
       res.set_null();
     } else if (*reinterpret_cast<const typename Base::R_RAW_TYPE *>(r.ptr_) == 0) {
-      if (is_oracle_mode) {
-        ret = OB_ERR_DIVISOR_IS_ZERO;
-        LOG_WARN("divisor is equal to zero on oracle mode", K(ret));
-      } else if (is_error_div_by_zero) {
+      if (is_error_div_by_zero) {
         ret = OB_DIVISION_BY_ZERO;
       } else {
         res.set_null();
@@ -813,11 +810,11 @@ struct ObDecintDivWrap : public ObArithOpWrap<Base>
 #define DECINC_DIV_EVAL_FUNC_BASIC_DECL(L, R) \
 int ObExprDiv::div_decimalint_##L##_##R(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>, false>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
 }                                            \
 int ObExprDiv::div_decimalint_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>, false>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
 }
 
 #define DECINC_DIV_EVAL_FUNC_DECL(TYPE)                \
@@ -830,11 +827,11 @@ int ObExprDiv::div_decimalint_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 #define DECINC_DIV_EVAL_FUNC_WITH_CHECK_DECL(TYPE)                             \
 int ObExprDiv::div_decimalint_512_##TYPE##_with_check(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>, false>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
 }                                            \
 int ObExprDiv::div_decimalint_512_##TYPE##_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>, false>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
 }
 
 

@@ -4069,7 +4069,7 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  const bool use_oracle_mode = false;
+  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("add_v3", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(is_zero())) {
     ret = res.deep_copy_v3(other, allocator);
@@ -4193,7 +4193,7 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4325,7 +4325,7 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  const bool use_oracle_mode = false;
+  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("sub_v3", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(is_zero())) {
     ret = other.negate_v3_(res, allocator);
@@ -4485,7 +4485,7 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4724,7 +4724,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  const bool use_oracle_mode = false;
+  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("mul_v3_", K(ret), KPC(this), K(other));
   if (is_zero() || other.is_zero()) {
     res.set_zero();
@@ -4835,7 +4835,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
   if (OB_SUCC(ret)) {
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;
@@ -4991,7 +4991,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 {
   int ret = OB_SUCCESS;
   ObNumber res;
-  const bool use_oracle_mode = false;
+  // use_oracle_mode removed (always MySQL)
   LOG_DEBUG("div_v3_", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
@@ -5057,7 +5057,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   if (OB_SUCC(ret)) {
     LOG_DEBUG("round scale before", K(res));
     if (do_rounding && res.need_round_after_arithmetic()
-        && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
+        && OB_FAIL(res.round_scale_v3_(FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
       value = res;

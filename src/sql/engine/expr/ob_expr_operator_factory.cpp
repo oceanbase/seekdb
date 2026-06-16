@@ -39,7 +39,7 @@
 #include "sql/engine/expr/ob_expr_bit_right_shift.h"
 #include "sql/engine/expr/ob_expr_bm25.h"
 #include "sql/engine/expr/ob_expr_case.h"
-#include "sql/engine/expr/ob_expr_oracle_decode.h"
+// ob_expr_oracle_decode.h removed (Oracle cleanup)
 #include "sql/engine/expr/ob_expr_fun_values.h"
 #include "sql/engine/expr/ob_expr_fun_default.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -437,7 +437,7 @@
 #include "sql/engine/expr/ob_expr_map_keys.h"
 #include "sql/engine/expr/ob_expr_current_catalog.h"
 #include "sql/engine/expr/ob_expr_check_catalog_access.h"
-#include "sql/engine/expr/ob_expr_oracle_to_char.h"
+// ob_expr_oracle_to_char.h removed (Oracle cleanup)
 #include "sql/engine/expr/ob_expr_semantic_distance.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
@@ -596,7 +596,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprTimeStampAdd);
     REG_OP(ObExprToType);
     REG_OP(ObExprChar);
-    REG_OP(ObExprToChar);
     REG_OP(ObExprConvert);
     REG_OP(ObExprCoalesce);
     REG_OP(ObExprNvl);

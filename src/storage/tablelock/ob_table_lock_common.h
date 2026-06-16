@@ -90,22 +90,6 @@ int lock_mode_to_string(const ObTableLockMode lock_mode,
 }
 
 static inline
-ObTableLockMode get_lock_mode_from_oracle_mode(const int64_t oracle_lock_mode)
-{
-  ObTableLockMode ob_lock_mode = MAX_LOCK_MODE;
-  switch (oracle_lock_mode) {
-  case 1: { ob_lock_mode = NO_LOCK; break; }
-  case 2: { ob_lock_mode = ROW_SHARE; break; }
-  case 3: { ob_lock_mode = ROW_EXCLUSIVE; break; }
-  case 4: { ob_lock_mode = SHARE; break; }
-  case 5: { ob_lock_mode = SHARE_ROW_EXCLUSIVE; break; }
-  case 6: { ob_lock_mode = EXCLUSIVE; break; }
-  default: { ob_lock_mode = MAX_LOCK_MODE; }
-  }
-  return ob_lock_mode;
-}
-
-static inline
 bool is_lock_mode_valid(const ObTableLockMode lock_mode)
 {
   return lock_mode < MAX_LOCK_MODE;

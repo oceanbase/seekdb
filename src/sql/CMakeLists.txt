@@ -739,8 +739,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_operator.cpp
   engine/expr/ob_expr_operator_factory.cpp
   engine/expr/ob_expr_or.cpp
-  engine/expr/ob_expr_oracle_decode.cpp
-  engine/expr/ob_expr_oracle_to_char.cpp
   engine/expr/ob_expr_output_pack.cpp
   engine/expr/ob_expr_pad.cpp
   engine/expr/ob_expr_mysql_port.cpp

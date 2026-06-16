@@ -5334,7 +5334,7 @@ int ObResolverUtils::unique_idx_covered_partition_columns(
 int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
                                        const ObString &ident_name,
                                        ObDataType &data_type,
-                                       const int is_oracle_mode/*1:Oracle, 0:MySql */,
+                                       const int is_oracle_mode /*always 0 (MySQL)*/,
                                        const bool is_for_pl_type,
                                        const ObSessionNLSParams &nls_session_param,
                                        uint64_t tenant_id,
@@ -5356,7 +5356,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
   const bool has_specify_scale = (1 == type_node.int16_values_[2]);
   uint64_t data_version = 0;
 
-  if (convert_real_type_to_decimal && !is_oracle_mode &&
+  if (convert_real_type_to_decimal &&
       (precision >= 0 && scale >= 0)) {
       if (static_cast<ObObjType>(type_node.type_) == ObFloatType ||
           static_cast<ObObjType>(type_node.type_) == ObDoubleType) {
@@ -5366,7 +5366,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         data_type.set_obj_type(ObUNumberType);
       }
   }
-  const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[is_oracle_mode][data_type.get_obj_type()];
+  const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0/*MySQL*/][data_type.get_obj_type()];
 
   LOG_DEBUG("resolve_data_type", K(ret), K(has_specify_scale), K(type_node.type_), K(type_node.param_num_), K(number_type), K(scale), K(precision), K(length));
   switch (data_type.get_type_class()) {
@@ -5388,10 +5388,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
     case ObFloatTC:
       // fallthrough
     case ObDoubleTC: {
-      if(is_oracle_mode) {
-        data_type.set_precision(precision);
-        data_type.set_scale(scale);
-      } else {
+      {
         if (OB_UNLIKELY(scale > OB_MAX_DOUBLE_FLOAT_SCALE)) {
           ret = OB_ERR_TOO_BIG_SCALE;
           LOG_USER_ERROR(OB_ERR_TOO_BIG_SCALE, scale, ident_name.ptr(), OB_MAX_DOUBLE_FLOAT_SCALE);
@@ -5478,17 +5475,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
     }
     break;
     case ObOTimestampTC:
-      if (is_oracle_mode && -86 == type_node.int16_values_[2]) {
-          if (is_for_pl_type) {
-            ret = OB_NUMERIC_PRECISION_NOT_INTEGER;
-            LOG_USER_ERROR(OB_NUMERIC_PRECISION_NOT_INTEGER, (int)type_node.str_len_, type_node.str_value_);
-            LOG_WARN("non-integral numeric literal value is inappropriate in this context", K(ret), K(scale), K(precision));
-          } else {
-            ret = OB_ERR_REQUIRE_INTEGER;
-            LOG_USER_ERROR(OB_ERR_REQUIRE_INTEGER);
-            LOG_WARN("non-integral numeric literal value is inappropriate in this context", K(ret), K(scale), K(precision));
-          }
-      } else {
+      {
         if (!has_specify_scale) {
           scale = default_accuracy.get_scale();
         }
@@ -5568,39 +5555,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         }
       } else if (OB_FAIL(resolve_str_charset_info(type_node, data_type, is_for_pl_type))) {
         SQL_RESV_LOG(WARN, "fail to resolve string charset and collation", K(ret), K(data_type));
-      } else if (is_oracle_mode && data_type.get_meta_type().get_collation_type() != CS_TYPE_ANY) {
-        int64_t nchar_mbminlen = 0;
-        ObCollationType cs_type = nls_session_param.nls_collation_;
-
-        if (OB_UNLIKELY(0 == length)) {
-          ret = OB_ERR_ZERO_LEN_COL;
-          LOG_WARN("Oracle not allowed zero length", K(ret));
-        } else if (OB_FAIL(ObCharset::get_mbminlen_by_coll(
-                            nls_session_param.nls_nation_collation_, nchar_mbminlen))) {
-          LOG_WARN("fail to get mbminlen of nchar", K(ret), K(nls_session_param));
-        } else if (((ObVarcharType == data_type.get_obj_type()) && OB_MAX_ORACLE_VARCHAR_LENGTH < length)
-                  || (ObCharType == data_type.get_obj_type()
-                  && (is_for_pl_type ? OB_MAX_ORACLE_PL_CHAR_LENGTH_BYTE < length :
-                                        OB_MAX_ORACLE_CHAR_LENGTH_BYTE < length))) {
-          ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
-          LOG_WARN("column data length is invalid",
-                  K(ret), K(length), K(data_type), K(nchar_mbminlen));
-          LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, ident_name.ptr(),
-            static_cast<int>((ObVarcharType == data_type.get_obj_type())
-                ? OB_MAX_ORACLE_VARCHAR_LENGTH :
-                (is_for_pl_type ? OB_MAX_ORACLE_PL_CHAR_LENGTH_BYTE : OB_MAX_ORACLE_CHAR_LENGTH_BYTE)));
-        } else if (type_node.length_semantics_ == LS_DEFAULT) {
-          data_type.set_length_semantics(nls_session_param.nls_length_semantics_);
-        } else if (OB_UNLIKELY(type_node.length_semantics_ != LS_BYTE && type_node.length_semantics_ != LS_CHAR)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("length_semantics_ is invalid", K(ret), K(type_node.length_semantics_));
-        } else {
-          data_type.set_length_semantics(type_node.length_semantics_);
-        }
-        data_type.set_charset_type(ObCharset::charset_type_by_coll(cs_type));
-        data_type.set_collation_type(cs_type);
-        LOG_DEBUG("check data type after resolve", K(ret), K(data_type));
-      } else if (!is_oracle_mode && ObCharType == data_type.get_obj_type()
+      } else if (ObCharType == data_type.get_obj_type()
                                 && OB_MAX_CHAR_LENGTH < length) {
         // varchar length check , TODO:
         ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
@@ -5663,18 +5618,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       }
       break;
     case ObExtendTC:
-      //to do: udt type compatibility
-      // maybe we should not use udt type, or should change column schema
-      // if (!is_for_pl_type) {
-      //  data_type.set_obj_type(ObUserDefinedSQLType);
-      //  data_type.set_subschema_id(ObXMLSqlType);
-      //} else {
-        if (is_oracle_mode) {
-          data_type.set_length(length);
-          data_type.set_charset_type(CHARSET_BINARY);
-          data_type.set_collation_type(CS_TYPE_INVALID);
-        }
-      //}
+      // Oracle mode extend type handling removed (MySQL-only project)
       break;
     case ObCollectionSQLTC: {
       length = 0;

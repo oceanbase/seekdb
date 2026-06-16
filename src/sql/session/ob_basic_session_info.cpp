@@ -338,8 +338,6 @@ int ObBasicSessionInfo::reset_sys_vars()
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObObj oracle_mode;
-  ObObj oracle_sql_mode;
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   // Clean up sys_var information

@@ -117,34 +117,30 @@ int ObPLEH::eh_convert_exception(bool oracle_mode, int oberr, ObPLConditionType 
   } else {
     *sql_state = ob_sqlstate(oberr);
     *str_len = STRLEN(*sql_state);
-    if (oracle_mode) {
-      *error_code = oberr;
-      *type = ERROR_CODE;
+    // Oracle mode branch removed (MySQL-only project)
+    if (OB_SP_RAISE_APPLICATION_ERROR == oberr) {
+      ObWarningBuffer *wb = NULL;
+      CK (OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer()));
+      OX (*error_code = wb->get_err_code());
+      OX (*sql_state = wb->get_sql_state());
+      OX (*str_len = STRLEN(*sql_state));
+      if (OB_FAIL(ret)) {
+      } else if (-1 == *error_code) {
+        *type = SQL_STATE;
+      } else {
+        *type = ERROR_CODE;
+      }
     } else {
-      if (OB_SP_RAISE_APPLICATION_ERROR == oberr) {
-        ObWarningBuffer *wb = NULL;
-        CK (OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer()));
-        OX (*error_code = wb->get_err_code());
-        OX (*sql_state = wb->get_sql_state());
-        OX (*str_len = STRLEN(*sql_state));
-        if (OB_FAIL(ret)) {
-        } else if (-1 == *error_code) {
+      if (oberr < 0) {
+        *error_code = ob_mysql_errno(oberr);
+        if (-1 == *error_code) {
           *type = SQL_STATE;
         } else {
           *type = ERROR_CODE;
         }
       } else {
-        if (oberr < 0) {
-          *error_code = ob_mysql_errno(oberr);
-          if (-1 == *error_code) {
-            *type = SQL_STATE;
-          } else {
-            *type = ERROR_CODE;
-          }
-        } else {
-          *error_code = oberr;
-          *type = SQL_STATE;
-        }
+        *error_code = oberr;
+        *type = SQL_STATE;
       }
     }
   }
@@ -178,7 +174,7 @@ ObUnwindException *ObPLEH::eh_create_exception(int64_t pl_context,
     CK (pl_ctx->get_exec_stack().count() > 0);
     CK (OB_NOT_NULL(frame = pl_ctx->get_exec_stack().at(0)));
     CK (frame->is_top_call());
-    CK (OB_NOT_NULL(pl_allocator = frame->get_exec_ctx().get_top_expr_allocator()));
+    CK (OB_NOT_NULL(pl_allocator = &(frame->get_exec_ctx().expr_alloc_)));
     if (OB_FAIL(ret)) {
     } else if (OB_ALLOCATE_MEMORY_FAILED == value->error_code_) {
       unwind = &pre_reserved_e.body_;

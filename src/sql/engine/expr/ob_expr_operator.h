@@ -1165,7 +1165,7 @@ public:
   /**
    * compare with cast.
    * use this func if you are SURE the compare always NEED cast.
-   * like ObExprBetween / ObExprNotBetween / ObExprField / ObExprStrcmp / ObExprOracleDecode.
+   * like ObExprBetween / ObExprNotBetween / ObExprField / ObExprStrcmp.
    * @param[out] result: true / false / -1 / 0 / 1 / null.
    * @param[in] obj1
    * @param[in] obj2

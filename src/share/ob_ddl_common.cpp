@@ -926,7 +926,6 @@ int ObDDLUtil::generate_build_replica_sql(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *source_table_schema = nullptr;
   const ObTableSchema *dest_table_schema = nullptr;
-  bool oracle_mode = false;
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == data_table_id || OB_INVALID_ID == dest_table_id
       || schema_version <= 0 || snapshot_version <= 0 || execution_id < 0 || task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -948,7 +947,6 @@ int ObDDLUtil::generate_build_replica_sql(
     LOG_WARN("fail to get table schema", K(ret), KP(source_table_schema), KP(dest_table_schema),
       K(tenant_id), K(data_table_id), K(dest_table_id));
   } else {
-    bool oracle_mode = false;
     ObArray<ObColDesc> column_ids;
     ObArray<ObColumnNameInfo> column_names;
     ObArray<ObColumnNameInfo> insert_column_names;
@@ -1182,21 +1180,6 @@ int ObDDLUtil::generate_build_replica_sql(
           src_table_schema_version_hint_sql_string.reset();
         }
         if (OB_FAIL(ret)) {
-        } else if (oracle_mode) {
-          if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO \"%.*s\".\"%.*s\" %.*s(%.*s) SELECT /*+ index(\"%.*s\" primary) %.*s */ %.*s from \"%.*s\".\"%.*s\" %.*s as of scn %ld %.*s",
-              real_parallelism, execution_id, task_id,
-              static_cast<int>(strlen(io_read_hint)), io_read_hint,
-              static_cast<int>(new_dest_database_name.length()), new_dest_database_name.ptr(), static_cast<int>(new_dest_table_name.length()), new_dest_table_name.ptr(),
-              static_cast<int>(partition_names.length()), partition_names.ptr(),
-              static_cast<int>(insert_column_sql_string.length()), insert_column_sql_string.ptr(),
-              static_cast<int>(new_source_table_name.length()), new_source_table_name.ptr(),
-              static_cast<int>(src_table_schema_version_hint_sql_string.length()), src_table_schema_version_hint_sql_string.ptr(),
-              static_cast<int>(query_column_sql_string.length()), query_column_sql_string.ptr(),
-              static_cast<int>(new_source_database_name.length()), new_source_database_name.ptr(), static_cast<int>(new_source_table_name.length()), new_source_table_name.ptr(),
-              static_cast<int>(partition_names.length()), partition_names.ptr(),
-              snapshot_version, static_cast<int>(rowkey_column_sql_string.length()), rowkey_column_sql_string.ptr()))) {
-            LOG_WARN("fail to assign sql string", K(ret));
-          }
         } else {
           if (OB_FAIL(sql_string.assign_fmt("INSERT /*+ monitor enable_parallel_dml parallel(%ld) opt_param('ddl_execution_id', %ld) opt_param('ddl_task_id', %ld) opt_param('enable_newsort', 'false') %.*s use_px */INTO `%.*s`.`%.*s` %.*s(%.*s) SELECT /*+ index(`%.*s` primary) %.*s */ %.*s from `%.*s`.`%.*s` %.*s as of snapshot %ld %.*s",
               real_parallelism, execution_id, task_id,

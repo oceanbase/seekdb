@@ -1195,15 +1195,9 @@ const ObSysVarSchema *ObSysVariableSchema::get_sysvar_schema(int64_t idx) const
 
 int ObSysVariableSchema::get_oracle_mode(bool &is_oracle_mode) const
 {
-  int ret = OB_SUCCESS;
+  // Oracle mode removed - always MySQL mode
   is_oracle_mode = false;
-  const ObSysVarSchema *sysvar_schema = nullptr;
-  if (OB_FAIL(get_sysvar_schema(SYS_VAR_OB_COMPATIBILITY_MODE, sysvar_schema))) {
-    LOG_WARN("failed to get ob_compatibility_mode", K(ret));
-  } else if (0 == (sysvar_schema->get_value()).case_compare("1")) {
-    is_oracle_mode = true;
-  }
-  return ret;
+  return OB_SUCCESS;
 }
 
 /*-------------------------------------------------------------------------------------------------

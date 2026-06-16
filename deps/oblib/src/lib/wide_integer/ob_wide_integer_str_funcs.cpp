@@ -236,45 +236,20 @@ int to_string(const ObDecimalInt *decint, const int32_t int_bytes, const int64_t
     pos++;
     is_neg = true;
   }
-  bool oracle_mode = false;
-  bool need_transform_sci = false;
   if (OB_SUCC(ret) && !zero_val) {
     if (scale > 0) {
-      if (oracle_mode) {
-        // in oracle mode,
-        if (OB_UNLIKELY(scale >= length && pos + scale + 1 > buf_len)
-            || OB_UNLIKELY(scale < length && pos + length + 1 > buf_len)) {
-          // in oracle, -0.0011 displays as -.0011, 0.0011 displays as -.0011
-          ret = OB_SIZE_OVERFLOW;
-        }
-      } else if (OB_UNLIKELY(scale >= length && pos + scale + 2 > buf_len)
+      if (OB_UNLIKELY(scale >= length && pos + scale + 2 > buf_len)
                  || OB_UNLIKELY(scale < length && pos + length + 1 > buf_len)) {
         ret = OB_SIZE_OVERFLOW;
       }
       if (OB_FAIL(ret)) {
       } else if (scale >= length) {
-        if (oracle_mode) {
-          str_helper::prepend_chars(buf + pos, length, scale - length + 1, '0');
-          buf[pos] = '.';
-          pos += scale + 1;
-        } else {
-          str_helper::prepend_chars(buf + pos, length, scale - length + 2, '0');
-          buf[pos + 1] = '.';
-          pos += scale + 2;
-        }
+        str_helper::prepend_chars(buf + pos, length, scale - length + 2, '0');
+        buf[pos + 1] = '.';
+        pos += scale + 2;
       } else {
         str_helper::prepend_chars(buf + pos + length - scale, scale, 1, '.');
         pos += length + 1;
-      }
-      if (oracle_mode) {
-        // remove tailing zeros for decimal part
-        while (buf[pos-1] == '0') pos--;
-        if (buf[pos - 1] == '.') { // 3.0000 => 3
-          pos--;
-        }
-        if (pos == orig_pos) { // zero value
-          buf[pos++] = '0';
-        }
       }
     } else if (scale < 0) {
       if (OB_UNLIKELY(-scale + length + pos > buf_len)) {
@@ -285,15 +260,6 @@ int to_string(const ObDecimalInt *decint, const int32_t int_bytes, const int64_t
       }
     } else {
       pos += length;
-    }
-    if (oracle_mode && need_to_sci && (pos - orig_pos) > number::ObNumber::SCI_NUMBER_LENGTH) {
-      // transform to scientific notation
-      int64_t tmp_pos = orig_pos;
-      if (OB_FAIL(to_sci_string_(buf, pos - orig_pos, is_neg, tmp_pos))) {
-        COMMON_LOG(WARN, "to_sci_string_ failed", K(ret));
-      } else {
-        pos = tmp_pos;
-      }
     }
   }
   return ret;

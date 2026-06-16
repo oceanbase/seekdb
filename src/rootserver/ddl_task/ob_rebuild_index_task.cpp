@@ -493,8 +493,6 @@ int ObRebuildIndexTask::purge_old_mlog(const ObDDLTaskStatus new_status)
   const ObDatabaseSchema *db_schema = nullptr;
   const uint64_t old_mlog_tid = target_object_id_;
   const uint64_t new_mlog_tid = new_index_id_;
-  bool oracle_mode = false;
-  const ObSysVariableSchema *sys_variable_schema = NULL;
   ObMLogInfo old_mlog_info;
   ObMLogInfo new_mlog_info;
 
@@ -530,13 +528,6 @@ int ObRebuildIndexTask::purge_old_mlog(const ObDDLTaskStatus new_status)
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database not exist", KR(ret), K(tenant_id_), K(new_mlog_schema->get_database_id()));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id_, sys_variable_schema))) {
-    LOG_WARN("get sys variable schema failed", K(ret), K(tenant_id_));
-  } else if (NULL == sys_variable_schema) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys variable schema is NULL", K(ret));
-  } else if (OB_FAIL(sys_variable_schema->get_oracle_mode(oracle_mode))) {
-    LOG_WARN("get oracle mode failed", K(ret));
   } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(*GCTX.sql_proxy_, tenant_id_, old_mlog_tid,
                                                  old_mlog_info, false /*for_update*/))) {
     LOG_WARN("failed to fetch mlog info", KR(ret), K(tenant_id_), K(old_mlog_tid));

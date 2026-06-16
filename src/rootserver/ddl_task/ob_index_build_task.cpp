@@ -80,8 +80,6 @@ int ObIndexSSTableBuildTask::process()
   ObSchemaGetterGuard schema_guard;
   ObString partition_names;
   ObArray<ObString> batch_partition_names;
-  const ObSysVariableSchema *sys_variable_schema = NULL;
-  bool oracle_mode = false;
   ObTabletID unused_tablet_id;
   ObAddr unused_addr;
   const ObTableSchema *data_schema = nullptr;
@@ -110,17 +108,8 @@ int ObIndexSSTableBuildTask::process()
     LOG_WARN("fail to get tenant schema guard", K(ret), K(data_table_id_));
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
     LOG_WARN("fail to check formal guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(
-      tenant_id_, sys_variable_schema))) {
-    LOG_WARN("get sys variable schema failed",
-        K(ret), K(tenant_id_));
-  } else if (NULL == sys_variable_schema) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys variable schema is NULL", K(ret));
   } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, BUILD_REPLICA_ASYNC_TASK_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
-  } else if (OB_FAIL(sys_variable_schema->get_oracle_mode(oracle_mode))) {
-    LOG_WARN("get oracle mode failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, data_table_id_, data_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(tenant_id_), K(data_table_id_));
   } else if (nullptr == data_schema) {
@@ -195,11 +184,7 @@ int ObIndexSSTableBuildTask::process()
           LOG_INFO("inner sql execute addr" , K(*sql_exec_addr));
         }
         int tmp_ret = OB_SUCCESS;
-        if (oracle_mode) {
-          user_sql_proxy = GCTX.ddl_oracle_sql_proxy_;
-        } else {
-          user_sql_proxy = GCTX.ddl_sql_proxy_;
-        }
+        user_sql_proxy = GCTX.ddl_sql_proxy_;
         DEBUG_SYNC(BEFORE_INDEX_SSTABLE_BUILD_TASK_SEND_SQL);
         ObTimeoutCtx timeout_ctx;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();

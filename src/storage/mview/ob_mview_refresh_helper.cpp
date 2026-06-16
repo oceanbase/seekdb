@@ -543,7 +543,8 @@ int ObMViewRefreshHelper::replace_all_snapshot_zero(
 {
   int ret = OB_SUCCESS;
   output = input;
-  std::string search = oracle_mode ? "as of scn " : "as of snapshot ";
+  // Oracle mode removed - always use MySQL "as of snapshot" syntax
+  std::string search = "as of snapshot ";
   std::string new_value_str = std::to_string(snapshot_version);
 
   int64_t pos = 0;
@@ -564,7 +565,7 @@ int ObMViewRefreshHelper::replace_all_snapshot_zero(
     }
   }
   // for debug
-  LOG_DEBUG("print generate sql", K(input.c_str()), K(output.c_str()), K(oracle_mode));
+  LOG_DEBUG("print generate sql", K(input.c_str()), K(output.c_str()));
   return ret;
 }
 } // namespace storage
