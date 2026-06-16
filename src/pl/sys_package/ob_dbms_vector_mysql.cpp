@@ -287,7 +287,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
       LOG_WARN("fail to get collation_connection", KR(ret));
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-                  cs_type, case_mode, false, param_table_name,
+                  cs_type, case_mode, param_table_name,
                   database_name, table_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode), K(param_table_name));
     } else if (database_name.empty() && FALSE_IT(database_name = session_info->get_database_name())) {

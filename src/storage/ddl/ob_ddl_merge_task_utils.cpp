@@ -121,7 +121,7 @@ int init_datum_utils(ObTablet &tablet,
       const bool is_column_store = true;
       if (OB_FAIL(col_descs.push_back(int_col_desc))) {
         LOG_WARN("push back col desc failed", K(ret));
-      } else if (OB_FAIL(row_id_datum_utils.init(col_descs, col_descs.count(), false, allocator, is_column_store))) {
+      } else if (OB_FAIL(row_id_datum_utils.init(col_descs, col_descs.count(), allocator, is_column_store))) {
         LOG_WARN("init row id datum utils failed", K(ret), K(col_descs));
       } else {
         datum_utils = &row_id_datum_utils;

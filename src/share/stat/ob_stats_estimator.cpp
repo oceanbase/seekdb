@@ -69,14 +69,12 @@ int ObStatsEstimator::add_from_table(common::ObIAllocator &allocator,
   if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator,
               db_name,
-              new_db_name,
-              false))) {
+              new_db_name))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(db_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator,
                     table_name,
-                    new_tbl_name,
-                    false))) {
+                    new_tbl_name))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(table_name));
   } else {
     db_name_ = new_db_name;
@@ -434,7 +432,7 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     session->set_autocommit(true);
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(pool->acquire(session, conn, false))) {
+      if (OB_FAIL(pool->acquire(session, conn))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;

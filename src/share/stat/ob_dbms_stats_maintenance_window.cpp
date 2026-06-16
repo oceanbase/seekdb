@@ -417,7 +417,7 @@ int ObDbmsStatsMaintenanceWindow::get_time_zone_offset(const ObSysVariableSchema
       trimed_tz_str = trimed_tz_str.trim();
       int ret_more = OB_SUCCESS;
       if (OB_FAIL(ObTimeConverter::str_to_offset(trimed_tz_str, offset_sec, ret_more,
-                                                 false, true))) {
+                                                 true))) {
         if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
           LOG_WARN("fail to convert str_to_offset", K(trimed_tz_str), K(ret));
         } else if (ret_more != OB_SUCCESS) {

@@ -193,7 +193,7 @@ void TestCOSSTableRowsFilter::init_iter_param()
   ASSERT_EQ(OB_SUCCESS, col_descs_.push_back(col_desc));
   ASSERT_EQ(OB_SUCCESS, col_descs_.push_back(col_desc));
   ASSERT_EQ(OB_SUCCESS, storage::ObMultiVersionRowkeyHelpper::add_extra_rowkey_cols(col_descs_));
-  ASSERT_EQ(OB_SUCCESS, read_info_.init(allocator_, 16000, 1, lib::is_oracle_mode(), col_descs_, nullptr, nullptr));
+  ASSERT_EQ(OB_SUCCESS, read_info_.init(allocator_, 16000, 1, col_descs_, nullptr, nullptr));
   iter_param_.table_id_ = 1;
   iter_param_.tablet_id_.id_ = 1;
   iter_param_.read_info_ = &read_info_;

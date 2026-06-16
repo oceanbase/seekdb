@@ -258,7 +258,7 @@ int ObAllVirtualProxySubPartition::fill_row_(const ObSubPartition &sub_partition
         break;
       }
     case HIGH_BOUND_VAL: {
-        if (OB_FAIL(get_partition_value_str(is_oracle_mode, part_func_type_, sub_partition, cells[i]))) {
+        if (OB_FAIL(get_partition_value_str(part_func_type_, sub_partition, cells[i]))) {
           LOG_WARN("fail to get str", K(sub_partition), KR(ret));
         } else {
           cells[i].set_collation_type(coll_type);

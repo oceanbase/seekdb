@@ -645,9 +645,8 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_WARN("update session_info to msyql_mode failed", KR(ret), KPC(session_info));
   } else if (common::sqlclient::INNER_POOL != pool->get_type()) {
     LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
-    // NOTICE: although we can set is_oracle_mode here, internally it will prioritize referencing
-    // the system variables on the session, so this parameter actually has no effect
-  } else if (OB_FAIL(pool->acquire(session_info, conn, false /* is_oracle_mode */))) {
+    // NOTICE: the pool acquire no longer takes is_oracle_mode, it's always false internally
+  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
     LOG_WARN("acquire connection from inner sql connection pool failed", KR(ret), KPC(session_info));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;

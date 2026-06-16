@@ -268,7 +268,6 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
       allocator,
       full_stored_col_cnt,
       storage_schema.get_rowkey_column_num(),
-      storage_schema.is_oracle_mode(),
       cols_desc,
       false/*is_cg_sstable*/,
       true/*use_default_compat_version*/,

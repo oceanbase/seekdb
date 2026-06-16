@@ -98,7 +98,6 @@ int ObForkSnapshotRowScan::build_rowkey_read_info(const ObForkScanParam &param)
   } else if (OB_FAIL(rowkey_read_info_->init(allocator_,
                                              full_stored_col_cnt,
                                              param.storage_schema_->get_rowkey_column_num(),
-                                             param.storage_schema_->is_oracle_mode(),
                                              cols_desc,
                                              false /*is_cg_sstable*/,
                                              false /*use_default_compat_version*/,

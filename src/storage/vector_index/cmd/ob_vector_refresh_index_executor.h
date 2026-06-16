@@ -140,7 +140,7 @@ public:
                       const ObVectorRebuildIndexInnerArg &arg);
   static int resolve_table_name(const ObCollationType cs_type,
                                 const ObNameCaseMode case_mode,
-                                const bool is_oracle_mode, const ObString &name,
+                                const ObString &name,
                                 ObString &database_name, ObString &table_name);
 
 private:
@@ -148,7 +148,7 @@ private:
                                     const uint64_t min_data_version,
                                     const char *errmsg);
   static void upper_db_table_name(const ObNameCaseMode case_mode,
-                                  const bool is_oracle_mode, ObString &name);
+                                  ObString &name);
   static int to_refresh_method(const ObString &arg_refresh_method,
                                share::schema::ObVectorRefreshMethod &method,
                                bool is_rebuild = false);

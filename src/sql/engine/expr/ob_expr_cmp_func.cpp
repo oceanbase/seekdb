@@ -138,7 +138,6 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
                                                               const ObPrecision prec1,
                                                               const ObPrecision prec2,
                                                               const ObCmpOp cmp_op,
-                                                              const bool is_oracle_mode,
                                                               const ObCollationType cs_type,
                                                               const bool has_lob_header)
 {
@@ -175,7 +174,7 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
     func_ptr = EVAL_TYPE_CMP_FUNCS[type1][type2][cmp_op];
   } else {
     OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2, is_oracle_mode,
+    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2,
                                                               cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
@@ -200,7 +199,6 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
     const ObPrecision prec1,
     const ObPrecision prec2,
     const ObCmpOp cmp_op,
-    const bool is_oracle_mode,
     const ObCollationType cs_type,
     const bool has_lob_header)
 {
@@ -239,7 +237,7 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
     func_ptr = EVAL_BATCH_TYPE_CMP_FUNCS[type1][type2][cmp_op];
   } else {
     OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2, is_oracle_mode,
+    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2,
                                                               cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
@@ -270,7 +268,6 @@ DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1
                                            const ObScale scale2,
                                            const ObPrecision prec1,
                                            const ObPrecision prec2,
-                                           const bool is_oracle_mode,
                                            const ObCollationType cs_type,
                                            const bool has_lob_header)
 {
@@ -303,7 +300,7 @@ DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1
     }
   } else {
     OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2, is_oracle_mode,
+    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2,
                                                               cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {

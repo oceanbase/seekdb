@@ -195,7 +195,7 @@ int ObAllVirtualProxySchema::convert_output_row(ObNewRow *&cur_row)
 }
 
 int ObAllVirtualProxySchema::gen_column_value(char *&buf, int64_t len,
-                                              const ObString &str, const bool is_oracle_mode)
+                                              const ObString &str)
 {
   int ret = OB_SUCCESS;
   ObObj col_obj;
@@ -401,13 +401,11 @@ int ObAllVirtualProxySchema::inner_open()
           if (OB_FAIL(sql.append_fmt(" (TENANT_NAME, DATABASE_NAME, TABLE_NAME, TABLET_ID) = ('%.*s'",
                                      input_tenant_name_.length(), input_tenant_name_.ptr()))) {
             LOG_WARN("fail to append_fmt", K(ret));
-          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, input_db_name_,
-                                              is_oracle_tenant))) {
+          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, input_db_name_))) {
             LOG_WARN("fail to gen_column_value", K(ret));
           } else if (OB_FAIL(sql.append_fmt(", %s", value_buf))) {
             LOG_WARN("fail to append_fmt", K(ret));
-          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, table_name,
-                                              is_oracle_tenant))) {
+          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, table_name))) {
             LOG_WARN("fail to gen_column_value", K(ret));
           } else if (OB_FAIL(sql.append_fmt(", %s", value_buf))) {
             LOG_WARN("fail to append_fmt", K(ret));
@@ -418,13 +416,11 @@ int ObAllVirtualProxySchema::inner_open()
           if (OB_FAIL(sql.append_fmt(" (TENANT_NAME, DATABASE_NAME, TABLE_NAME) = ('%.*s'",
                                      input_tenant_name_.length(), input_tenant_name_.ptr()))) {
             LOG_WARN("fail to append_fmt", K(ret));
-          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, input_db_name_,
-                                              is_oracle_tenant))) {
+          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, input_db_name_))) {
             LOG_WARN("fail to gen_column_value", K(ret));
           } else if (OB_FAIL(sql.append_fmt(", %s", value_buf))) {
             LOG_WARN("fail to append_fmt", K(ret));
-          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, table_name,
-                                              is_oracle_tenant))) {
+          } else if (OB_FAIL(gen_column_value(value_buf, OB_MAX_SQL_LENGTH, table_name))) {
             LOG_WARN("fail to gen_column_value", K(ret));
           } else if (OB_FAIL(sql.append_fmt(", %s)", value_buf))) {
             LOG_WARN("fail to append_fmt", K(ret));
@@ -520,7 +516,6 @@ int ObAllVirtualProxySchema::init_data_(
       if (OB_FAIL(get_view_decoded_schema_(tenant_id,
                                                   tenant_name,
                                                   view_definition,
-                                                  false/*is_oracle_mode*/,
                                                   new_table_schema,
                                                   database_name))) {
         LOG_WARN("get_view_decoded_schema failed", KR(ret));
@@ -648,7 +643,6 @@ int ObAllVirtualProxySchema::get_view_decoded_schema_(
     const uint64_t tenant_id,
     const common::ObString &tenant_name,
     const common::ObString &view_definition,
-    const bool is_oracle_mode,
     const ObTableSchema *&new_table_schema,
     const common::ObString &database_name)
 {

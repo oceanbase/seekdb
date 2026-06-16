@@ -1084,11 +1084,10 @@ int ObCsSliceWriter::init_last_rowkey()
     LOG_WARN("invlaid rowkey or param", K(ret), K(last_key_), K(datum_utils_), K(rowkey_column_count_), KP(storage_schema), K(writer_param_));
   } else {
     ObArray<share::schema::ObColDesc> rowkey_column_descs;
-    const bool is_oracle_mode = false;
     if (OB_FAIL(storage_schema->get_rowkey_column_ids(rowkey_column_descs))) {
       LOG_WARN("get column desc failed", K(ret));
-    } else if (OB_FAIL(datum_utils_.init(rowkey_column_descs, rowkey_column_count_, is_oracle_mode, arena_))) {
-      LOG_WARN("init datum utils failed", K(ret), K(rowkey_column_count_), K(rowkey_column_descs), K(false));
+    } else if (OB_FAIL(datum_utils_.init(rowkey_column_descs, rowkey_column_count_, arena_))) {
+      LOG_WARN("init datum utils failed", K(ret), K(rowkey_column_count_), K(rowkey_column_descs));
     }
   }
   if (OB_SUCC(ret)) {

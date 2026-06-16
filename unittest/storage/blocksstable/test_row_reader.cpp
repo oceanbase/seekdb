@@ -249,7 +249,7 @@ void TestNewRowReader::build_column_read_info(const int64_t rowkey_column_count,
     col_desc.col_id_ = i + common::OB_APP_MIN_COLUMN_ID;
     full_schema_cols_.push_back(col_desc);
   }
-  read_info_.init(allocator_,  writer_row.row_val_.count_, rowkey_column_count, lib::is_oracle_mode(), full_schema_cols_);
+  read_info_.init(allocator_,  writer_row.row_val_.count_, rowkey_column_count, full_schema_cols_);
 }
 
 void TestNewRowReader::build_column_read_info(const int64_t rowkey_column_count, const ObDatumRow &writer_row)
@@ -263,7 +263,7 @@ void TestNewRowReader::build_column_read_info(const int64_t rowkey_column_count,
     col_desc.col_id_ = i + common::OB_APP_MIN_COLUMN_ID;
     full_schema_cols_.push_back(col_desc);
   }
-  read_info_.init(allocator_,  writer_row.count_, rowkey_column_count, lib::is_oracle_mode(), full_schema_cols_);
+  read_info_.init(allocator_,  writer_row.count_, rowkey_column_count, full_schema_cols_);
 }
 
 void TestNewRowReader::check_read_datum_row(

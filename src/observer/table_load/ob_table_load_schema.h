@@ -90,8 +90,7 @@ public:
                K_(cg_cnt), K_(collation_type), K_(column_descs), K_(is_inited));
 private:
   int init_table_schema(const share::schema::ObTableSchema *table_schema);
-  int init_cmp_funcs(const common::ObIArray<share::schema::ObColDesc> &column_descs,
-                     const bool is_oracle_mode);
+  int init_cmp_funcs(const common::ObIArray<share::schema::ObColDesc> &column_descs);
   int init_lob_storage(const common::ObIArray<share::schema::ObColDesc> &column_descs);
   int gen_lob_meta_datum_utils();
 public:

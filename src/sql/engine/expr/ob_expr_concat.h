@@ -40,7 +40,6 @@ public:
                   const common::ObString obj1,
                   const common::ObString obj2,
                   common::ObIAllocator *allocator,
-                  bool is_oracle_mode,
                   const int64_t max_result_len);
   // Check result length with OB_MAX_PACKET_LENGTH.
   // %result type is set to ObLongTextType

@@ -167,8 +167,8 @@ int ObWkbToJsonVisitor::appendDouble(double x)
     x = ObGeoTypeUtil::round_double(x, max_dec_digits_, false);
     len_x = ob_gcvt(x, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE,
         DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE, buff_ptr, NULL);
-  } else if (OB_FAIL(ObGeoToWktVisitor::convert_double_to_str(buff_ptr, double_buff_size, x, true, 
-                          MAX_DIGITS_IN_DOUBLE, !is_mysql_mode_, len_x))) {
+  } else if (OB_FAIL(ObGeoToWktVisitor::convert_double_to_str(buff_ptr, double_buff_size, x, true,
+                          MAX_DIGITS_IN_DOUBLE, len_x))) {
     LOG_WARN("fail to append x val to buffer", K(ret));
   }
   if (OB_FAIL(ret)) {

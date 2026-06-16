@@ -479,7 +479,6 @@ public:
                               const ObTimeZoneInfo *sys_tz_info,
                               const ObTimeZoneInfo *session_tz_info,
                               const ObString &nlf_format,
-                              const bool is_oracle_mode,
                               uint64_t &scn_value);
   //convert a scn to timestamp str with ns
   //invoker need to gurantee scn_val is valid
@@ -560,7 +559,7 @@ public:
   static int mdate_to_year(ObMySQLDate md_value, uint8_t &y_value);
   // string -> offset. value: seconds, not useconds.
   static int str_to_offset(const ObString &str, int32_t &value, int &ret_more,
-                           const bool is_oracle_mode, const bool need_check_valid = false);
+                           const bool need_check_valid = false);
   // year / month / day / quarter / week / hour / minite / second / microsecond.
   static int int_to_week(int64_t uint64, int64_t mode, int32_t &value);
   // date add / sub / diff.
@@ -797,7 +796,7 @@ private:
 //  static int find_transition_type(int64_t t, const ObTimeZoneInfo *sp, TRAN_TYPE_INFO *& result);
   static int add_timezone_offset(const ObTimeZoneInfo *tz_info, int64_t &value);
   static int sub_timezone_offset(const ObTimeZoneInfo *tz_info, bool is_timestamp, const ObString &tz_abbr_str,
-                                 int64_t &value, const bool is_oracle_mode = false);
+                                 int64_t &value);
   static int sub_timezone_offset(const ObTimeZoneInfo &tz_info, const ObString &tz_abbr_str,
                                  int64_t &value_us, int32_t &offset_min, int32_t &tz_id, int32_t &tran_type_id);
   static int get_str_array_idx(const ObString &str, const ObTimeConstStr *array, int32_t count, int32_t &idx);

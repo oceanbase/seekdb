@@ -74,7 +74,7 @@ int ObMViewExecutorUtil::check_min_data_version(const uint64_t tenant_id,
 
 int ObMViewExecutorUtil::resolve_table_name(const ObCollationType cs_type,
                                             const ObNameCaseMode case_mode,
-                                            const bool is_oracle_mode, const ObString &name,
+                                            const ObString &name,
                                             ObString &database_name, ObString &table_name)
 {
   int ret = OB_SUCCESS;
@@ -100,14 +100,14 @@ int ObMViewExecutorUtil::resolve_table_name(const ObCollationType cs_type,
     }
     if (OB_SUCC(ret)) {
       const bool preserve_lettercase =
-        is_oracle_mode ? true : (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
-      upper_db_table_name(case_mode, is_oracle_mode, database_name);
-      upper_db_table_name(case_mode, is_oracle_mode, table_name);
+        (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
+      upper_db_table_name(case_mode, database_name);
+      upper_db_table_name(case_mode, table_name);
       if (!database_name.empty() && OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                                       cs_type, preserve_lettercase, database_name))) {
         LOG_WARN("fail to check and convert database name", KR(ret), K(database_name));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, preserve_lettercase,
-                                                                  table_name, is_oracle_mode))) {
+                                                                  table_name))) {
         LOG_WARN("fail to check and convert table name", KR(ret), K(cs_type),
                  K(preserve_lettercase), K(table_name));
       }
@@ -117,14 +117,11 @@ int ObMViewExecutorUtil::resolve_table_name(const ObCollationType cs_type,
 }
 
 void ObMViewExecutorUtil::upper_db_table_name(const ObNameCaseMode case_mode,
-                                              const bool is_oracle_mode, ObString &name)
+                                              ObString &name)
 {
-  if (is_oracle_mode) {
-    str_toupper(name.ptr(), name.length());
-  } else {
-    if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
-      str_tolower(name.ptr(), name.length());
-    }
+  // MySQL mode
+  if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
+    str_tolower(name.ptr(), name.length());
   }
 }
 

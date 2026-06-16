@@ -7492,7 +7492,7 @@ int ObTableSchema::get_partition_keys_by_part_func_expr(const common::ObString &
   ObArray<ObString> partkey_strs;
   const int64_t table_id = get_table_id();
   const uint64_t tenant_id = get_tenant_id();
-  if (OB_FAIL(ObDDLResolver::get_partition_keys_by_part_func_expr(part_func_expr_str, false, allocator, partkey_strs))) {
+  if (OB_FAIL(ObDDLResolver::get_partition_keys_by_part_func_expr(part_func_expr_str, allocator, partkey_strs))) {
     LOG_WARN("failed to get part keys", K(ret), K(part_func_expr_str), K(false));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < partkey_strs.count(); i++) {

@@ -138,11 +138,11 @@ int ObMViewRefreshHelper::generate_purge_mlog_sql(ObSchemaGetterGuard &schema_gu
     ObString database_name;
     ObString table_name;
     if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
-          allocator, database_schema->get_database_name_str(), database_name, is_oracle_mode))) {
+          allocator, database_schema->get_database_name_str(), database_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(database_schema->get_database_name_str()), K(is_oracle_mode));
     } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
-                 allocator, table_schema->get_table_name_str(), table_name, is_oracle_mode))) {
+                 allocator, table_schema->get_table_name_str(), table_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(table_schema->get_table_name_str()), K(is_oracle_mode));
     } else {
@@ -200,11 +200,11 @@ int ObMViewRefreshHelper::get_table_row_num(ObMViewTransaction &trans, const uin
     ObString database_name;
     ObString table_name;
     if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
-          allocator, database_schema->get_database_name_str(), database_name, is_oracle_mode))) {
+          allocator, database_schema->get_database_name_str(), database_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(database_schema->get_database_name_str()), K(is_oracle_mode));
     } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
-                 allocator, table_schema->get_table_name_str(), table_name, is_oracle_mode))) {
+                 allocator, table_schema->get_table_name_str(), table_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(table_schema->get_table_name_str()), K(is_oracle_mode));
     } else {
@@ -282,11 +282,11 @@ int ObMViewRefreshHelper::get_mlog_dml_row_num(ObMViewTransaction &trans, const 
     ObString database_name;
     ObString table_name;
     if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
-          allocator, database_schema->get_database_name_str(), database_name, is_oracle_mode))) {
+          allocator, database_schema->get_database_name_str(), database_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(database_schema->get_database_name_str()), K(is_oracle_mode));
     } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
-                 allocator, table_schema->get_table_name_str(), table_name, is_oracle_mode))) {
+                 allocator, table_schema->get_table_name_str(), table_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(table_schema->get_table_name_str()), K(is_oracle_mode));
     } else {

@@ -2377,8 +2377,7 @@ int ObPartitionMVRowMergeIter::inner_init(const ObMergeParameter &merge_param)
 {
   int ret = OB_SUCCESS;
   const ObSqlString &sql = merge_param.mview_merge_param_->refresh_sqls_[sql_idx_].sql_;
-  if (OB_FAIL(ObMviewCompactionHelper::create_inner_session(merge_param.get_schema()->is_oracle_mode(),
-                                                            merge_param.mview_merge_param_->database_id_,
+  if (OB_FAIL(ObMviewCompactionHelper::create_inner_session(merge_param.mview_merge_param_->database_id_,
                                                             mv_sql_resource_.free_session_ctx_,
                                                             mv_sql_resource_.session_))) {
     LOG_WARN("Failed to create inner session", K(ret), KPC(merge_param.mview_merge_param_));

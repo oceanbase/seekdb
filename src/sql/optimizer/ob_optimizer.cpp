@@ -819,7 +819,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     LOG_WARN("failed to check stmt has function table", K(ret));
   } else if (OB_FAIL(stmt.check_var_assign(has_var_assign, is_var_assign_only_in_root_stmt))) {
     LOG_WARN("failed to check has ref assign user var", K(ret));
-  } else if (OB_FAIL(session.is_serial_set_order_forced(force_serial_set_order, false))) {
+  } else if (OB_FAIL(session.is_serial_set_order_forced(force_serial_set_order))) {
     LOG_WARN("fail to get force_serial_set_order", K(ret));
   } else if (OB_FAIL(check_force_default_stat())) {
     LOG_WARN("failed to check force default stat", K(ret));

@@ -1925,7 +1925,6 @@ int ObTabletLobSplitUtil::open_snapshot_scan_iters(ObLobSplitParam *param,
   } else {
     HEAP_VAR(ObTableSchema, aux_lob_meta_schema) {
     LOG_INFO("open one sstable rowscan", K(last_major_table_handle));
-    const bool is_oracle_mode = false;
     ObArray<ObColDesc> col_descs;
     ObTabletLobWriteSSTableCtx write_sstable_ctx;
     ObSSTable *sst = static_cast<ObSSTable*>(last_major_table_handle.get_table());
@@ -1949,7 +1948,6 @@ int ObTabletLobSplitUtil::open_snapshot_scan_iters(ObLobSplitParam *param,
                                            col_descs,
                                            aux_lob_meta_schema.get_column_count(),
                                            aux_lob_meta_schema.get_rowkey_column_num(),
-                                           is_oracle_mode,
                                            tablet_handle,
                                            major_snapshot_version))) {
         LOG_WARN("fail to init row scanner", K(ret));

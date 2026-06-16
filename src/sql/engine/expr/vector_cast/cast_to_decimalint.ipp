@@ -129,7 +129,7 @@ struct ToDecimalintCastImpl
             ob_gcvt_arg_type arg_type = std::is_same<IN_TYPE, float>::value
                                         ? OB_GCVT_ARG_FLOAT : OB_GCVT_ARG_DOUBLE;
             int32_t val_len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec_);
-            if (OB_SUCCESS == ObFloatToDecimal::float2decimal(in_val, false, arg_type,
+            if (OB_SUCCESS == ObFloatToDecimal::float2decimal(in_val, arg_type,
                                                    out_prec_, out_scale_, expr.extra_, tmp_alloc,
                                                    ctx_.exec_ctx_.get_user_logging_ctx(), decint)) {
               res_vec_->set_payload(idx, decint, val_len);

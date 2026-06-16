@@ -1458,7 +1458,7 @@ int ObAutoSplitArgBuilder::print_identifier(
     LOG_WARN("failed to alloc", KR(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ObString(quote)))) {
     LOG_WARN("failed to print quote", K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::print_identifier(buf, buf_len, pos, CS_TYPE_UTF8MB4_GENERAL_CI, name, false))) {
+  } else if (OB_FAIL(sql::ObSQLUtils::print_identifier(buf, buf_len, pos, CS_TYPE_UTF8MB4_GENERAL_CI, name))) {
     LOG_WARN("print partition name failed", K(ret), K(name));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ObString(quote)))) {
     LOG_WARN("failed to print quote", K(ret));

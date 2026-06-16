@@ -99,7 +99,7 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
   int null_pos_idx = NULL_LAST == null_pos ? 0 : 1;
   if (is_string_type(type1) && is_string_type(type2)) {
     int64_t calc_with_end_space_idx =
-        (is_calc_with_end_space(type1, type2, false, cs_type, cs_type) ? 1 : 0);
+        (is_calc_with_end_space(type1, type2, cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
         func_ptr = NULLSAFE_TEXT_CMP_FUNCS[cs_type][calc_with_end_space_idx][null_pos_idx];

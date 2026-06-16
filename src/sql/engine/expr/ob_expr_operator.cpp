@@ -1190,12 +1190,12 @@ int ObExprOperator::aggregate_result_type_for_case(
   ObExprResType &type,
   const ObExprResType *types,
   int64_t param_num,
-  bool is_oracle_mode,
   common::ObExprTypeCtx &type_ctx,
   bool need_merge_type,
   bool skip_null,
   bool is_called_in_sql)
 {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1230,7 +1230,7 @@ int ObExprOperator::aggregate_result_type_for_case(
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(aggregate_result_type_for_merge(type, types, param_num, is_oracle_mode,
+    if (OB_FAIL(aggregate_result_type_for_merge(type, types, param_num,
                           type_ctx, need_merge_type, skip_null, is_called_in_sql))) {
       LOG_WARN("fail to aggregate result type", K(ret));
     } else if (ObFloatType == type.get_type() && !is_oracle_mode) {
@@ -1244,12 +1244,12 @@ int ObExprOperator::aggregate_result_type_for_merge(
   ObExprResType &type,
   const ObExprResType *types,
   int64_t param_num,
-  bool is_oracle_mode,
   common::ObExprTypeCtx &type_ctx,
   bool need_merge_type,
   bool skip_null,
   bool is_called_in_sql)
 {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1300,7 +1300,7 @@ int ObExprOperator::aggregate_result_type_for_merge(
         // no need to aggregate numeric accuracy again
         type.set_accuracy(types[0].get_accuracy());
       } else if (ob_is_numeric_type(res_type)) {
-        ret = aggregate_numeric_accuracy_for_merge(type, types, param_num, is_oracle_mode);
+        ret = aggregate_numeric_accuracy_for_merge(type, types, param_num);
       } else if (ob_is_temporal_type(res_type) || ob_is_otimestamp_type(res_type)) {
         ret = aggregate_temporal_accuracy_for_merge(type, types, param_num);
       } else if (ob_is_string_or_lob_type(res_type)) {
@@ -1330,7 +1330,7 @@ int ObExprOperator::aggregate_result_type_for_merge(
         } else if (OB_FAIL(aggregate_charsets_for_string_result(type, new_types, param_num,
                            type_ctx))) {
         } else if (OB_FAIL(aggregate_max_length_for_string_result(type, new_types, param_num,
-            is_oracle_mode, default_length_semantics, need_merge_type, skip_null,
+            default_length_semantics, need_merge_type, skip_null,
             is_called_in_sql))) {
         } else {/*do nothing*/}
       } else if (ob_is_interval_tc(res_type)) {
@@ -1359,12 +1359,12 @@ int ObExprOperator::aggregate_result_type_for_merge(
 int ObExprOperator::aggregate_max_length_for_string_result(ObExprResType &type,
                                                            const ObExprResType *types,
                                                            int64_t param_num,
-                                                           bool is_oracle_mode,
                                                            const ObLengthSemantics default_length_semantics,
                                                            bool need_merge_type,
                                                            bool skip_null,
                                                            bool is_called_in_sql)
 {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1518,9 +1518,9 @@ int ObExprOperator::aggregate_temporal_accuracy_for_merge(ObExprResType &type,
 
 int ObExprOperator::aggregate_numeric_accuracy_for_merge(ObExprResType &type,
                                                          const ObExprResType *types,
-                                                         int64_t param_num,
-                                                         bool is_oracle_mode)
+                                                         int64_t param_num)
 {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types) || OB_UNLIKELY(param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2120,11 +2120,9 @@ bool ObRelationalExprOperator::can_cmp_without_cast(ObExprResType type1,
 //If left is same as right, we can process equal cond without cast,
 //otherwise we have to cast one to another
                     && (common::is_calc_with_end_space(type1.get_type(), type1.get_type(),
-                                                        false,
                                                         type1.get_collation_type(),
                                                         type1.get_collation_type())
                         == common::is_calc_with_end_space(type2.get_type(), type2.get_type(),
-                                                          false,
                                                           type2.get_collation_type(),
                                                           type2.get_collation_type()));
     } else if (ob_is_decimal_int_tc(type1.get_type()) && ob_is_decimal_int_tc(type2.get_type())) {
@@ -2142,7 +2140,6 @@ bool ObRelationalExprOperator::can_cmp_without_cast(ObExprResType type1,
                                                                    type1.get_precision(),
                                                                    type2.get_precision(),
                                                                    cmp_op,
-                                                                   false,
                                                                    CS_TYPE_BINARY,
                                                                    has_lob_header);
       need_no_cast = (func_ptr != nullptr);
@@ -3963,7 +3960,7 @@ int ObSubQueryRelationalExpr::cg_expr(ObExprCGCtx &op_cg_ctx,
       if (OB_SUCC(ret)) {
         funcs[i] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
           l.get_type(), r.get_type(), l.get_scale(), r.get_scale(), l.get_precision(),
-          r.get_precision(), false, l.get_collation_type(), has_lob_header);
+          r.get_precision(), l.get_collation_type(), has_lob_header);
         CK(NULL != funcs[i]);
       }
     }
@@ -6654,10 +6651,10 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
     if (OB_SUCC(ret)) {
       rt_expr.eval_func_ = ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
         input_type1, input_type2, input_scale1, input_scale2, in_prec1, in_prec2, cmp_op,
-        false, cs_type, has_lob_header);
+        cs_type, has_lob_header);
       rt_expr.eval_batch_func_ = ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
         input_type1, input_type2, input_scale1, input_scale2, in_prec1, in_prec2, cmp_op,
-        false, cs_type, has_lob_header);
+        cs_type, has_lob_header);
       rt_expr.eval_vector_func_ = VectorCmpExprFuncsHelper::get_eval_vector_expr_cmp_func(
         rt_expr.args_[0]->datum_meta_, rt_expr.args_[1]->datum_meta_, cmp_op);
     }
@@ -6753,12 +6750,11 @@ int ObRelationalExprOperator::cg_row_cmp_expr(const int row_dimension,
                                                                   type1, type2,
                                                                   scale1, scale2,
                                                                   prec1, prec2,
-                                                                  false,
                                                                   cs_type,
                                                                   has_lob_header);
         } else {
           rt_expr.inner_functions_[i] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-            type1, type2, scale1, scale2, prec1, prec2, false, cs_type,
+            type1, type2, scale1, scale2, prec1, prec2, cs_type,
             has_lob_header);
           if (OB_ISNULL(rt_expr.inner_functions_[i])) {
             ret = OB_ERR_UNEXPECTED;

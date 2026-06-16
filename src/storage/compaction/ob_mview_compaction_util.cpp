@@ -90,7 +90,7 @@ int ObMviewMergeParameter::init(const ObMergeParameter &merge_param)
   } else if (OB_UNLIKELY(!refresh_scn_range_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected refresh scn range", K(ret), K_(refresh_scn_range));
-  } else if (OB_FAIL(ObMviewCompactionHelper::create_inner_session(merge_param.get_schema()->is_oracle_mode(), database_id_, free_session_ctx, session))) {
+  } else if (OB_FAIL(ObMviewCompactionHelper::create_inner_session(database_id_, free_session_ctx, session))) {
     LOG_WARN("Failed to create inner session", K(ret),K(tenant_id), K_(container_table_id), K_(container_tablet_id), K(database_id_));
   } else if (OB_FAIL(ObMviewCompactionHelper::generate_mview_refresh_sql(session, schema_guard, table_schema, merge_param.merge_range_,
                                                                          merge_param.static_param_.rowkey_read_info_, *this))) {
@@ -265,7 +265,6 @@ int ObMviewCompactionHelper::generate_mview_refresh_sql(
 }
 
 int ObMviewCompactionHelper::create_inner_session(
-    const bool is_oracle_mode,
     const uint64_t database_id,
     sql::ObFreeSessionCtx &free_session_ctx,
     sql::ObSQLSessionInfo *&session)
@@ -308,7 +307,7 @@ int ObMviewCompactionHelper::create_inner_session(
      LOG_WARN("Failed to init tenant in session", K(ret), K(tenant_id), K(database_id));
   } else if (OB_FAIL(session->set_default_database(database_schema->get_database_name()))) {
     LOG_WARN("Failed to set default database", K(ret), K(tenant_id), K(database_id));
-  } else if (OB_FAIL(set_params_to_session(is_oracle_mode, session))) {
+  } else if (OB_FAIL(set_params_to_session(session))) {
     LOG_WARN("Failed to set params to session", K(ret));
   } else {
     session->set_inner_session();
@@ -359,7 +358,7 @@ void ObMviewCompactionHelper::release_inner_connection(common::sqlclient::ObISQL
   }
 }
 
-int ObMviewCompactionHelper::set_params_to_session(const bool is_oracle_mode, sql::ObSQLSessionInfo *session)
+int ObMviewCompactionHelper::set_params_to_session(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   ObObj param_val;
@@ -399,8 +398,7 @@ int ObMviewCompactionHelper::validate_row_count(const ObMergeParameter &merge_pa
   observer::ObInnerSQLResult *sql_result = nullptr;
   SMART_VAR(ObISQLClient::ReadResult, read_result) {
     const ObSqlString &sql = merge_param.mview_merge_param_->validation_sql_;
-    if (OB_FAIL(create_inner_session(merge_param.get_schema()->is_oracle_mode(),
-                                    merge_param.mview_merge_param_->database_id_,
+    if (OB_FAIL(create_inner_session(merge_param.mview_merge_param_->database_id_,
                                     free_session_ctx, session))) {
       LOG_WARN("Failed to create inner session", K(ret), KPC(merge_param.mview_merge_param_));
     } else if (OB_FAIL(ObMviewCompactionHelper::create_inner_connection(session, conn))) {
@@ -422,11 +420,6 @@ int ObMviewCompactionHelper::validate_row_count(const ObMergeParameter &merge_pa
         if (OB_UNLIKELY(nullptr == new_row || 1 != new_row->get_count())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected result row", K(ret), KPC(new_row));
-        } else if (merge_param.get_schema()->is_oracle_mode()) {
-          const number::ObNumber nmb(new_row->get_cell(0).get_number());
-          if (OB_FAIL(nmb.extract_valid_int64_with_trunc(join_row_count))) {
-            STORAGE_LOG(WARN, "Failed to cast number to int64", K(ret), K(new_row->get_cell(0)));
-          }
         } else {
           join_row_count = new_row->get_cell(0).get_int();
         }

@@ -115,10 +115,6 @@ public:
   {
     return is_store_format_mysql(store_format) || is_store_format_oracle(store_format);
   }
-  static inline bool is_store_format_valid(const ObStoreFormatType store_format, bool is_oracle_mode)
-  {
-    return is_oracle_mode ? is_store_format_oracle(store_format) : is_store_format_mysql(store_format);
-  }
   static inline const char* get_store_format_name(const ObStoreFormatType store_format)
   {
     return is_store_format_valid(store_format) ? store_format_items[store_format].format_name_ : NULL;

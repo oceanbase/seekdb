@@ -791,7 +791,7 @@ int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx
   } else {
     is_oralce_mode = is_oracle_compatible(session->get_sql_mode());
     ObString str = in_val.get_string();
-    if (OB_FAIL(ObTimeConverter::str_to_offset(str, sec_val, ret_more, is_oralce_mode, check_timezone_valid))) {
+    if (OB_FAIL(ObTimeConverter::str_to_offset(str, sec_val, ret_more, check_timezone_valid))) {
       if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
         LOG_WARN("fail to convert time zone", K(sec_val), K(ret));
       } else {

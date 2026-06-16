@@ -330,7 +330,6 @@ private:
     const bool end_with_space = common::is_calc_with_end_space(
         obj_meta.get_type(),
         obj_meta.get_type(),
-        true,
         obj_meta.get_collation_type(),
         obj_meta.get_collation_type());
     const ObCollationType &coll = obj_meta.get_collation_type();

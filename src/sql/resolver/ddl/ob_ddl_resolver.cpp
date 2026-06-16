@@ -245,7 +245,6 @@ int ObDDLResolver::append_multivalue_args(
 }
 
 int ObDDLResolver::get_part_str_with_type(
-    const bool is_oracle_mode,
     ObPartitionFuncType part_func_type,
     ObString &func_str,
     ObSqlString &part_str)
@@ -1428,7 +1427,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             SQL_RESV_LOG(WARN, "option_node child is null", K(option_node->children_[0]), K(ret));
           } else {
             store_format_ = static_cast<ObStoreFormatType>(option_node->children_[0]->value_);
-            if (!ObStoreFormat::is_store_format_valid(store_format_, false)) {
+            if (!ObStoreFormat::is_store_format_valid(store_format_)) {
               ret = OB_ERR_UNEXPECTED;
               SQL_RESV_LOG(WARN, "Unexpected invalid store format value", K_(store_format), K(ret));
             } else if (OB_FAIL(ObDDLResolver::get_row_store_type(tenant_id, store_format_, row_store_type_))) {
@@ -3140,7 +3139,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
           } else if (is_string && data_type.get_meta_type().is_text()) {
             column.set_is_string_lob();
           }
-        } else if (OB_FAIL(check_string_column_length(column, false, params_.is_prepare_stage_))) {
+        } else if (OB_FAIL(check_string_column_length(column, params_.is_prepare_stage_))) {
           SQL_RESV_LOG(WARN, "fail to check string column length", K(ret), K(column));
         }
       }
@@ -4752,8 +4751,9 @@ int ObDDLResolver::check_prefix_key(const int32_t prefix_len,
   return ret;
 }
 
-int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, const bool is_oracle_mode, const bool is_prepare_stage)
+int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, const bool is_prepare_stage)
 {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if(ObStringTC != column.get_data_type_class()
      || CHARSET_INVALID == column.get_charset_type()
@@ -5627,7 +5627,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
           column.set_collation_type(expr->get_collation_type());
           column.set_accuracy(expr->get_accuracy());
         }
-        OZ (adjust_string_column_length_within_max(column, false));
+        OZ (adjust_string_column_length_within_max(column));
       }
     }
   } else if (column.is_default_expr_v2_column()) {
@@ -6146,36 +6146,10 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
 
 // the column length is determined by the expr result length in CTAS and GC, if the result length
 // is longer than the max length of string type, need to adjust the column length to max length
-int ObDDLResolver::adjust_string_column_length_within_max(share::schema::ObColumnSchemaV2 &column,
-                                                          const bool is_oracle_mode)
+int ObDDLResolver::adjust_string_column_length_within_max(share::schema::ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
-  if (!is_oracle_mode || ObStringTC != column.get_data_type_class()) {
-    // do nothing
-  } else if (ObCharType == column.get_data_type()) {
-    const int64_t data_len = column.get_data_length();
-    const int64_t max_char_length = is_oracle_mode ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE
-                                                     : OB_MAX_CHAR_LENGTH;
-    if (data_len > max_char_length) {
-      column.set_data_length(max_char_length);
-    }
-  } else if (ObVarcharType == column.get_data_type()) {
-    int64_t mbmaxlen = 0;
-    if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(column.get_collation_type(), mbmaxlen))) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "fail to get mbmaxlen", K(ret), K(column.get_collation_type()));
-    } else if (0 == mbmaxlen) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(ERROR, "mbmaxlen can not be 0", K(ret));
-    } else {
-      const int64_t data_len = column.get_data_length();
-      const int64_t max_varchar_length = is_oracle_mode ? OB_MAX_ORACLE_VARCHAR_LENGTH
-                                                          : OB_MAX_VARCHAR_LENGTH / mbmaxlen;
-      if (data_len > max_varchar_length) {
-        column.set_data_length(max_varchar_length);
-      }
-    }
-  }
+  // is_oracle_mode is always false in seekdb, so this function is a no-op
   return ret;
 }
 
@@ -6448,7 +6422,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
       }
     } else if (OB_FAIL(resolve_spatial_index_constraint(*column_schema, column_num,
-        index_keyname_value, false/*is_oracle_mode*/, is_explicit_order, is_prefix_index))) {
+        index_keyname_value, is_explicit_order, is_prefix_index))) {
       LOG_WARN("resolve spatial index constraint fail", K(ret), K(column_num), K(index_keyname_value));
     }
   }
@@ -6476,7 +6450,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
     const share::schema::ObColumnSchemaV2 &column_schema,
     int64_t column_num,
     const int64_t index_keyname_value,
-    bool is_oracle_mode,
     bool is_explicit_order,
     bool is_prefix_index)
 {
@@ -8400,7 +8373,7 @@ int ObDDLResolver::check_foreign_key_reference(
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObResolverUtils::foreign_key_column_match_index_column(
-              *parent_table_schema, *schema_checker_, parent_columns, index_arg_list, false/*is_oracle_mode*/,
+              *parent_table_schema, *schema_checker_, parent_columns, index_arg_list,
               arg.fk_ref_type_, arg.ref_cst_id_, is_matched))) {
             LOG_WARN("Failed to check reference columns in parent table");
           } else if (!is_matched) {
@@ -8697,7 +8670,7 @@ int ObDDLResolver::add_not_null_constraint(ObColumnSchemaV2 &column,
     cst.set_check_expr(column.get_column_name_str());
     const ObString &column_name = column.get_column_name_str();
     ObString expr_str;
-    if (OB_FAIL(ObResolverUtils::create_not_null_expr_str(column_name, allocator, expr_str, false))) {
+    if (OB_FAIL(ObResolverUtils::create_not_null_expr_str(column_name, allocator, expr_str))) {
       LOG_WARN("create not null expr string failed", K(ret));
     } else {
       cst.set_check_expr(expr_str);
@@ -8904,7 +8877,7 @@ int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
       ObSqlString part_expr;
       bool is_oracle_mode = false;
       const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-      if (OB_FAIL(get_part_str_with_type(is_oracle_mode, part_func_type, func_expr_name, part_expr))) {
+      if (OB_FAIL(get_part_str_with_type(part_func_type, func_expr_name, part_expr))) {
         SQL_RESV_LOG(WARN, "Failed to get part str with type", K(ret));
       } else if (OB_FAIL(ob_write_string(*allocator_, part_expr.string(), func_expr_name))) {
         LOG_WARN("failed to copy string", K(part_expr.string()));
@@ -11923,7 +11896,6 @@ int ObDDLResolver::resolve_semistruct_encoding_type(const ParseNode *option_node
 // assuming part_func_expr_str is utf-8 encoded
 int ObDDLResolver::get_partition_keys_by_part_func_expr(
     const ObString &part_func_expr_str,
-    const bool is_oracle_mode,
     ObIAllocator &allocator,
     ObIArray<ObString> &partkey_strs)
 {
@@ -11931,7 +11903,7 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
   partkey_strs.reset();
   const char DELIMITER = ',';
   const char WHITESPACE = ' ';
-  const char QUOTE = is_oracle_mode ? '"' : '`';
+  const char QUOTE = '`';
   const int64_t len = part_func_expr_str.length();
   ObString wc;
   int32_t wc_value = 0;
@@ -12018,14 +11990,7 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
       } else {
         ObString ident(ident_len, ident_start);
         const ObColumnSchemaV2 *column = nullptr;
-        if (is_oracle_mode && !quoted) {
-          ObString upper_ident;
-          if (OB_FAIL(ObCharset::toupper(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, ident, upper_ident, allocator))) {
-            LOG_WARN("failed to upper case", K(ret));
-          } else if (OB_FAIL(partkey_strs.push_back(upper_ident))) {
-            LOG_WARN("failed to push back", K(ret));
-          }
-        } else if (OB_FAIL(partkey_strs.push_back(ident))) {
+        if (OB_FAIL(partkey_strs.push_back(ident))) {
           LOG_WARN("failed to push back", K(ret));
         }
       }

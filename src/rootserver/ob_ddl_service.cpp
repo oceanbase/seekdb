@@ -15070,7 +15070,6 @@ int ObDDLService::check_is_offline_ddl(ObAlterTableArg &alter_table_arg,
       ObAlterAutoPartAttrOp alter_auto_table(*this);
       if (OB_FAIL(alter_auto_table.check_alter_table_partition_attr(alter_table_arg,
                                                                     *orig_table_schema,
-                                                                    false,
                                                                     ddl_type))) {
         LOG_WARN("fail to check alter table partition", K(ret));
       }
@@ -22857,7 +22856,7 @@ int ObDDLService::check_rebuild_foreign_key_satisfy(
     LOG_WARN("Failed to check_foreign_key_columns_type", K(ret));
   } else if (OB_FAIL(ObResolverUtils::foreign_key_column_match_index_column(
       parent_table_schema, schema_checker, create_fk_arg.parent_columns_, index_arg_list/*without initialization is expected*/,
-      false, create_fk_arg.fk_ref_type_, create_fk_arg.ref_cst_id_, is_matched))) {
+      create_fk_arg.fk_ref_type_, create_fk_arg.ref_cst_id_, is_matched))) {
     LOG_WARN("Failed to check reference columns in parent table");
   } else if (!is_matched || expected_cst_type != create_fk_arg.fk_ref_type_) {
       ret = OB_ERR_CANNOT_ADD_FOREIGN;
@@ -26595,15 +26594,13 @@ int ObDDLService::construct_drop_sql(const ObTableItem &table_item,
   if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator,
               table_item.database_name_,
-              new_db_name,
-              false))) {
+              new_db_name))) {
     LOG_WARN("fail to generate new name with escape character",
              K(ret), K(table_item.database_name_));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                      allocator,
                      table_item.table_name_,
-                     new_tbl_name,
-                     false))) {
+                     new_tbl_name))) {
     LOG_WARN("fail to generate new name with escape character",
              K(ret), K(table_item.database_name_));
   } else if (OB_FAIL(sql.append_fmt(

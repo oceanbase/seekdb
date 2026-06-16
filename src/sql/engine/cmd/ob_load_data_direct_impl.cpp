@@ -124,8 +124,7 @@ const char *ObLoadDataDirectImpl::Logger::log_file_column_names =
 const char *ObLoadDataDirectImpl::Logger::log_file_row_fmt = "%.*s\t%ld\t%d\t%s\t\n";
 
 ObLoadDataDirectImpl::Logger::Logger()
-  : is_oracle_mode_(false),
-    buf_(nullptr),
+  : buf_(nullptr),
     is_create_log_succ_(false),
     err_cnt_(0),
     max_error_rows_(0),
@@ -160,7 +159,6 @@ int ObLoadDataDirectImpl::Logger::init(const ObString &load_info, int64_t max_er
     } else {
       is_create_log_succ_ = true;
     }
-    is_oracle_mode_ = false;
     max_error_rows_ = max_error_rows;
     is_inited_ = true;
   }

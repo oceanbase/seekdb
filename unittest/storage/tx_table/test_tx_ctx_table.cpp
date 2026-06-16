@@ -232,7 +232,7 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
   ObColDesc col_desc;
   columns_.push_back(col_desc);
   param.reset();
-  read_info.init(allocator, 16000, 1, lib::is_oracle_mode(), columns_, nullptr/*storage_cols_index*/);
+  read_info.init(allocator_, 16000, 1, columns_, nullptr/*storage_cols_index*/);
   param.tablet_id_ = tablet_id_;
   param.read_info_ = &read_info;
   param.is_multi_version_minor_merge_ = true;

@@ -34,7 +34,6 @@ public:
     has_scale_(false),
     in_multi_visit_(false),
     colloction_level_(0),
-    is_oracle_mode_(false),
     comma_length_(1) {}
   ~ObGeoToWktVisitor() {}
   bool prepare(ObGeometry *geo) { UNUSED(geo); return true; }
@@ -107,8 +106,8 @@ private:
   int estimate_polygon_len(T_IBIN *geo);
 
 public:
-  static int convert_double_to_str(char* buff, uint64_t buff_size, double val, bool has_scale, 
-                                int16_t scale, bool is_oracle_mode, uint64_t &out_len);
+  static int convert_double_to_str(char* buff, uint64_t buff_size, double val, bool has_scale,
+                                int16_t scale, uint64_t &out_len);
   static int append_double_oracle(char *buff, const int32_t buff_size, uint64_t &out_len, double value);
   static int append_double_with_prec(char *buff, const int32_t buff_size, uint64_t &out_len, double value, int16_t scale);
 
@@ -117,7 +116,6 @@ public:
   int64_t scale_;
   bool in_multi_visit_;
   int colloction_level_;
-  bool is_oracle_mode_;
   uint64_t comma_length_;
   DISALLOW_COPY_AND_ASSIGN(ObGeoToWktVisitor);
 };

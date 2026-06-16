@@ -1249,7 +1249,6 @@ int ObTableParam::construct_columns_and_projector(
     if (OB_FAIL(main_read_info_.init(allocator_,
                                      table_schema.get_column_count(),
                                      rowkey_count,
-                                     true,
                                      tmp_access_cols_desc,
                                      &tmp_access_cols_index,
                                      &tmp_access_cols_param,
@@ -1285,7 +1284,6 @@ int ObTableParam::construct_columns_and_projector(
           LOG_WARN("alloc failed", K(ret));
         } else if (FALSE_IT(cur_read_info = new (tmp_ptr) ObTableReadInfo())) {
         } else if (OB_FAIL(ObTenantCGReadInfoMgr::construct_cg_read_info(allocator_,
-                                                                         true,
                                                                          tmp_access_cols_desc.at(i),
                                                                          tmp_access_cols_param.at(i),
                                                                          *cur_read_info))) {

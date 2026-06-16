@@ -101,13 +101,11 @@ public:
   // init with array memory from allocator
   int init(const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const int64_t schema_rowkey_cnt,
-           const bool is_oracle_mode,
            common::ObIAllocator &allocator,
            const bool is_column_store = false);
   // init with array memory on fixed size memory buffer
   int init(const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const int64_t schema_rowkey_cnt,
-           const bool is_oracle_mode,
            const int64_t arr_buf_len,
            char *arr_buf);
   int assign(const ObStorageDatumUtils &other_utils, common::ObIAllocator &allocator);
@@ -116,13 +114,12 @@ public:
   {
     return is_inited_ && cmp_funcs_.count() >= rowkey_cnt_ && hash_funcs_.count() >= rowkey_cnt_;
   }
-  OB_INLINE bool is_oracle_mode() const { return is_oracle_mode_; }
   OB_INLINE int64_t get_rowkey_count() const { return rowkey_cnt_; }
   OB_INLINE const ObStoreCmpFuncs &get_cmp_funcs() const { return cmp_funcs_; }
   OB_INLINE const ObStoreHashFuncs &get_hash_funcs() const { return hash_funcs_; }
   OB_INLINE const common::ObHashFunc &get_ext_hash_funcs() const { return ext_hash_func_; }
   int64_t get_deep_copy_size() const;
-  TO_STRING_KV(K_(is_oracle_mode), K_(rowkey_cnt), K_(is_inited), K_(is_oracle_mode));
+  TO_STRING_KV(K_(rowkey_cnt), K_(is_inited));
 private:
   //TODO to be removed by @hanhui
   int transform_multi_version_col_desc(const common::ObIArray<share::schema::ObColDesc> &col_descs,
@@ -130,14 +127,12 @@ private:
                                        common::ObIArray<share::schema::ObColDesc> &mv_col_descs);
   int inner_init(
       const common::ObIArray<share::schema::ObColDesc> &mv_col_descs,
-      const int64_t mv_rowkey_col_cnt,
-      const bool is_oracle_mode);
+      const int64_t mv_rowkey_col_cnt);
 private:
   int32_t rowkey_cnt_;  // multi version rowkey
   ObStoreCmpFuncs cmp_funcs_; // multi version rowkey cmp funcs
   ObStoreHashFuncs hash_funcs_;  // multi version rowkey cmp funcs
   common::ObHashFunc ext_hash_func_;
-  bool is_oracle_mode_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObStorageDatumUtils);
 };

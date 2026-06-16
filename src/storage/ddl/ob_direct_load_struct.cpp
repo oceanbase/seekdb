@@ -3120,7 +3120,6 @@ int ObDirectLoadSliceWriter::report_unique_key_dumplicated(
       LOG_WARN("fail to get rowkey column ids", KR(ret));
     } else if (OB_FAIL(datum_utils.init(col_descs,
                                         rowkey_column_num,
-                                        false,
                                         allocator,
                                         true/*no need compare multiple version cols*/))) {
       LOG_WARN("fail to init datum utils", KR(ret), K(col_descs), K(rowkey_column_num));

@@ -276,7 +276,6 @@ int ObColDataStoreDesc::init(
   const int64_t major_working_cluster_version)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_FAIL(merge_schema.get_store_column_count(full_stored_col_cnt_, true))) {
     STORAGE_LOG(WARN, "failed to get store column count", K(ret), K(merge_schema));
   } else {
@@ -307,37 +306,13 @@ int ObColDataStoreDesc::init(
     if (FAILEDx(gene_col_default_checksum_array(merge_schema))) {
       STORAGE_LOG(WARN, "failed to init default column checksum", KR(ret), K(merge_schema));
     } else if (FALSE_IT(fresh_col_meta(merge_schema))) {
-    } else if (OB_FAIL(get_compat_mode_from_schema(merge_schema, is_oracle_mode))) {
-      STORAGE_LOG(WARN, "failed to get compat mode", KR(ret), K(merge_schema));
     } else if (OB_FAIL(datum_utils_.init(
-        col_desc_array_, schema_rowkey_col_cnt_, is_oracle_mode, allocator_))) {
+        col_desc_array_, schema_rowkey_col_cnt_, allocator_))) {
       STORAGE_LOG(WARN, "Failed to init datum utils", K(ret));
     } else {
       STORAGE_LOG(TRACE, "success to init col data desc", K(ret), KPC(this), K(merge_schema), K(table_cg_idx),
-        K(is_oracle_mode), K(col_desc_array_));
+        K(col_desc_array_));
     }
-  }
-  return ret;
-}
-
-int ObColDataStoreDesc::get_compat_mode_from_schema(
-  const share::schema::ObMergeSchema &merge_schema,
-  bool &is_oracle_mode)
-{
-  int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-  if (typeid(merge_schema) == typeid(storage::ObStorageSchema)) {
-    compat_mode = static_cast<const storage::ObStorageSchema *>(&merge_schema)->get_compat_mode();
-  } else if (typeid(merge_schema) == typeid(ObTableSchema)) {
-    const int64_t table_id = static_cast<const ObTableSchema *>(&merge_schema)->get_table_id();
-    if (is_ls_reserved_table(table_id)) {
-      compat_mode = lib::Worker::CompatMode::MYSQL;
-    } else {
-      compat_mode = lib::Worker::CompatMode::MYSQL;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    is_oracle_mode = false;
   }
   return ret;
 }
@@ -381,7 +356,6 @@ int ObColDataStoreDesc::init(const bool is_major,
                              const int64_t major_working_cluster_version)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   if (OB_UNLIKELY(!merge_schema.is_valid() || !cg_schema.is_valid() || cg_schema.is_all_column_group() || !is_major)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "arguments is invalid", K(ret), K(merge_schema), K(cg_schema), K(is_major));
@@ -404,16 +378,14 @@ int ObColDataStoreDesc::init(const bool is_major,
       STORAGE_LOG(WARN, "failed to init default column checksum", KR(ret), K(merge_schema));
     } else if (OB_FAIL(generate_skip_index_meta(is_major, merge_schema, &cg_schema, major_working_cluster_version))) {
       STORAGE_LOG(WARN, "failed to generate skip index meta", K(ret), K(major_working_cluster_version), K(merge_schema), K(cg_schema));
-    } else if (OB_FAIL(get_compat_mode_from_schema(merge_schema, is_oracle_mode))) {
-      STORAGE_LOG(WARN, "failed to get compat mode", KR(ret), K(merge_schema));
     } else if (OB_FAIL(datum_utils_.init(col_desc_array_, schema_rowkey_col_cnt_,
-        is_oracle_mode, allocator_, !is_row_store_))) {
+        allocator_, !is_row_store_))) {
       STORAGE_LOG(WARN, "Failed to init datum utils", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
-    STORAGE_LOG(INFO, "success to init data desc", K(ret), KPC(this), K(is_oracle_mode), K(cg_schema));
+    STORAGE_LOG(INFO, "success to init data desc", K(ret), KPC(this), K(cg_schema));
   }
   return ret;
 }

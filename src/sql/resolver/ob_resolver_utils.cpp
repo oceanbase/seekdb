@@ -5111,8 +5111,7 @@ int ObResolverUtils::resolve_check_constraint_expr(
 
 int ObResolverUtils::create_not_null_expr_str(const ObString &column_name,
                                               common::ObIAllocator &allocator,
-                                              ObString &expr_str,
-                                              const bool is_oracle_mode)
+                                              ObString &expr_str)
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
@@ -5122,7 +5121,7 @@ int ObResolverUtils::create_not_null_expr_str(const ObString &column_name,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(column_name));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-              is_oracle_mode ? "\"%.*s\" IS NOT NULL" : "`%.*s` IS NOT NULL",
+              "`%.*s` IS NOT NULL",
               column_name.length(), column_name.ptr()))) {
     LOG_WARN("print not null constraint expr str failed", K(ret));
   } else if (OB_UNLIKELY(buf_len != pos + 1)) {
@@ -5907,7 +5906,6 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
                                                            ObSchemaChecker &schema_checker,
                                                            const ObIArray<ObString> &parent_columns,
                                                            const ObSArray<ObCreateIndexArg> &index_arg_list,
-                                                           const bool is_oracle_mode,
                                                            share::schema::ObForeignKeyRefType &fk_ref_type,
                                                            uint64_t &ref_cst_id,
                                                            bool &is_match)
@@ -5955,14 +5953,6 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
         // Completely match all columns of a primary key
         fk_ref_type = FK_REF_TYPE_PRIMARY_KEY;
         is_pk_uk_match = true;
-        if (is_oracle_mode) {
-          for (ObTableSchema::const_constraint_iterator iter = parent_table_schema.constraint_begin(); iter != parent_table_schema.constraint_end(); ++iter) {
-            if (CONSTRAINT_TYPE_PRIMARY_KEY == (*iter)->get_constraint_type()) {
-              ref_cst_id = (*iter)->get_constraint_id();
-              break;
-            }
-          }
-        }
       } else {
         fk_ref_type = FK_REF_TYPE_NON_UNIQUE_KEY;
         ref_cst_id = parent_table_schema.get_table_id();

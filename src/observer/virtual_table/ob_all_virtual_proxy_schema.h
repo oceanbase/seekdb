@@ -132,7 +132,6 @@ private:
       const uint64_t tenant_id,
       const common::ObString &tenant_name,
       const common::ObString &view_definition,
-      const bool is_oracle_mode,
       const share::schema::ObTableSchema *&new_table_schema,
       const common::ObString &database_name);
   int inner_get_next_row_();
@@ -170,7 +169,7 @@ private:
   int init_convert_ctx();
   int convert_output_row(ObNewRow *&cur_row);
   int gen_column_value(char *&buf, int64_t len,
-                       const ObString &str, const bool is_oracle_mode);
+                       const ObString &str);
   int convert_to_actual_tablet_id_(
       const share::schema::ObTableSchema &table_schema,
       const common::ObTabletID &tablet_id);

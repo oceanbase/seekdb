@@ -365,7 +365,7 @@ int ObSplitPartitionHelper::prepare_start_args_(
 
   // prepare mds args
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(start_src_arg.init_split_start_src(tenant_id, false/*is_oracle_mode*/, ls_id, new_table_schemas, upd_table_schemas, src_tablet_ids, dst_tablet_ids))) {
+  } else if (OB_FAIL(start_src_arg.init_split_start_src(tenant_id, ls_id, new_table_schemas, upd_table_schemas, src_tablet_ids, dst_tablet_ids))) {
     LOG_WARN("failed to init split start src", KR(ret));
   } else if (OB_FAIL(start_dst_arg.init_split_start_dst(tenant_id, ls_id, inc_table_schemas, src_tablet_ids, dst_tablet_ids, dst_high_bound_vals))) {
     LOG_WARN("failed to init split start dst", KR(ret));

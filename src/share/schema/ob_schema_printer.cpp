@@ -94,12 +94,11 @@ int ObSchemaPrinter::print_table_definition(const uint64_t tenant_id,
     ObString new_db_name;
     if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(allocator,
                                                                 table_schema->get_table_name_str(),
-                                                                new_table_name,
-                                                                false))) {
+                                                                new_table_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(table_schema->get_table_name()));
     } else if (agent_mode && OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                                      allocator, db_schema->get_database_name_str(),
-                                     new_db_name, false))) {
+                                     new_db_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(db_schema->get_database_name_str()));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "CREATE%s TABLE ", prefix_arr[prefix_idx]))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print create table prefix", K(ret));
@@ -195,8 +194,7 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
         } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                    allocator,
                    col->get_column_name_str(),
-                   new_col_name,
-                   false))) {
+                   new_col_name))) {
           SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(col->get_column_name_str()));
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "  "))) {
           SHARE_SCHEMA_LOG(WARN, "fail to print column", K(ret), K(*col));
@@ -584,7 +582,7 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
                 ObString::make_string(index_schema->get_table_name()), index_name))) {
       SHARE_SCHEMA_LOG(WARN, "get index table name failed");
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(allocator,
-               index_name, new_index_name, false))) {
+               index_name, new_index_name))) {
      SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(index_name));
     } else if ((is_unique_index && index_schema->is_unique_index()) ||
         (!is_unique_index && !index_schema->is_unique_index())) {
@@ -890,8 +888,7 @@ int ObSchemaPrinter::print_table_definition_constraints(const ObTableSchema &tab
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                allocator,
                cst->get_constraint_name_str(),
-               new_cst_name,
-               false))) {
+               new_cst_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(cst->get_constraint_name_str()));
     } else if (CONSTRAINT_TYPE_NOT_NULL != cst->get_constraint_type()) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, ",\n  CONSTRAINT "))) {
@@ -960,8 +957,7 @@ int ObSchemaPrinter::print_vector_index_column(const ObTableSchema &table_schema
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                  allocator,
                  ctxcat_column->get_column_name_str(),
-                 new_col_name,
-                 false))) {
+                 new_col_name))) {
         SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(ctxcat_column->get_column_name_str()));
       } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print column name", K(ret), K(column));
@@ -1000,8 +996,7 @@ int ObSchemaPrinter::print_fulltext_index_column(const ObTableSchema &table_sche
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                  allocator,
                  ctxcat_column->get_column_name_str(),
-                 new_col_name,
-                 false))) {
+                 new_col_name))) {
         SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(ctxcat_column->get_column_name_str()));
       } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print column name", K(ret), K(column));
@@ -1056,7 +1051,7 @@ int ObSchemaPrinter::print_spatial_index_column(const ObTableSchema &table_schem
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("The geo column schema is null, ", K(ret), K(geo_col_id));
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-        allocator, geo_col->get_column_name_str(), new_col_name, false))) {
+        allocator, geo_col->get_column_name_str(), new_col_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character",
         K(ret), K(column.get_column_name_str()));
     } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
@@ -1124,8 +1119,7 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                   allocator,
                   column_name,
-                  new_col_name,
-                  false))) {
+                  new_col_name))) {
         SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(column_name));
       }else {
         const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
@@ -1228,8 +1222,7 @@ int ObSchemaPrinter::print_index_column(const ObTableSchema &table_schema,
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
              allocator,
              column.get_column_name_str(),
-             new_col_name,
-             false))) {
+             new_col_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(column.get_column_name_str()));
   } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to print column name", K(ret), K(column));
@@ -1258,8 +1251,7 @@ int ObSchemaPrinter::print_table_definition_fulltext_indexs(
     if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                 allocator,
                 ft_name,
-                new_col_name,
-                false))) {
+                new_col_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(ft_name));
     } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
       LOG_WARN("print fulltext column name failed", K(ret), K(ft_name));
@@ -1272,8 +1264,7 @@ int ObSchemaPrinter::print_table_definition_fulltext_indexs(
     if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                 allocator,
                 ft_name,
-                new_col_name,
-                false))) {
+                new_col_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(ft_name));
     } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
       LOG_WARN("print fulltext column name failed", K(ret), K(ft_name));
@@ -1311,8 +1302,7 @@ int ObSchemaPrinter::print_table_definition_rowkeys(const ObTableSchema &table_s
           } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                       allocator,
                       (*iter)->get_constraint_name_str(),
-                      new_cst_name,
-                      false))) {
+                      new_cst_name))) {
             SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K((*iter)->get_constraint_name_str()));
           } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                      ",\n  CONSTRAINT \"%s\" PRIMARY KEY (", new_cst_name.ptr()))) {
@@ -1377,8 +1367,7 @@ int ObSchemaPrinter::print_rowkey_info(
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                 allocator,
                 col->get_column_name_str(),
-                new_col_name,
-                false))) {
+                new_col_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret),
                         K(col->get_column_name_str()));
     } else if (!col->is_shadow_column()) {
@@ -1421,14 +1410,12 @@ int ObSchemaPrinter::print_referenced_table_info(
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
              allocator,
              parent_db_schema->get_database_name_str(),
-             new_parent_db_name,
-             false))) {
+             new_parent_db_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(foreign_key_info->foreign_key_name_));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
              allocator,
              parent_table_schema->get_table_name_str(),
-             new_parent_table_name,
-             false))) {
+             new_parent_table_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(foreign_key_info->foreign_key_name_));
   } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_parent_db_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to print database name", K(ret),
@@ -1482,8 +1469,7 @@ int ObSchemaPrinter::print_table_definition_foreign_keys(const ObTableSchema &ta
         } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                    allocator,
                    foreign_key_info->foreign_key_name_,
-                   new_fk_name,
-                   false))) {
+                   new_fk_name))) {
          SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(foreign_key_info->foreign_key_name_));
         } else if (!foreign_key_info->foreign_key_name_.empty() &&
                    OB_FAIL(print_identifier(buf, buf_len, pos, new_fk_name))) {
@@ -1627,8 +1613,7 @@ int ObSchemaPrinter::print_column_list(const T &table_schema,
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                allocator,
                ori_col_name,
-               new_col_name,
-               false))) {
+               new_col_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(ori_col_name));
     } else if (true == is_first_col) {
       if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
@@ -4734,11 +4719,11 @@ int ObSchemaPrinter::print_unique_cst_definition(
   const bool is_oracle_mode = true;
 
   if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(allocator,
-              db_schema.get_database_name_str(), new_db_name, is_oracle_mode))) {
+              db_schema.get_database_name_str(), new_db_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to generate new db_name with escape character",
                      K(ret), K(db_schema.get_database_name_str()));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(allocator,
-             table_schema.get_table_name_str(), new_data_table_name, is_oracle_mode))) {
+             table_schema.get_table_name_str(), new_data_table_name))) {
     SHARE_SCHEMA_LOG(WARN, "fail to generate new data_table_name with escape character",
                      K(ret), K(table_schema.get_table_name_str()));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
@@ -4786,8 +4771,7 @@ int ObSchemaPrinter::print_constraint_definition(const ObDatabaseSchema &db_sche
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                      allocator,
                      cst->get_constraint_name_str(),
-                     cst_name,
-                     false))) {
+                     cst_name))) {
     LOG_WARN("generate new name with escape name str failed", K(ret));
   } else if (CONSTRAINT_TYPE_NOT_NULL == cst->get_constraint_type()) {
     // can't add not null constraint with "alter table add constraint"
@@ -5371,8 +5355,7 @@ int ObSchemaPrinter::print_heap_table_pk_info(const ObTableSchema &table_schema,
         if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator,
                     column->get_column_name_str(),
-                    new_col_name,
-                    false))) {
+                    new_col_name))) {
           SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret),K(column->get_column_name_str()));
         } else if (!column->is_shadow_column()) {
           if (is_first_col) {

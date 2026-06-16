@@ -36,7 +36,6 @@ namespace sql
 using namespace common;
 
 #define IS_FIXED_DOUBLE                                         \
-  !is_oracle_mode &&                                            \
   ob_is_double_type(type1) && ob_is_double_type(type2) &&       \
   SCALE_UNKNOWN_YET < scale1 && SCALE_UNKNOWN_YET < scale2 &&   \
   MAX(scale1, scale2) <= OB_MAX_DOUBLE_FLOAT_SCALE              \
@@ -547,7 +546,6 @@ struct ObRelationalExtraFunc
     bool with_end_space = is_calc_with_end_space(
         expr.args_[0]->datum_meta_.type_,
         expr.args_[1]->datum_meta_.type_,
-        false,
         expr.args_[0]->datum_meta_.cs_type_,
         expr.args_[1]->datum_meta_.cs_type_);
     return def_relational_eval_batch_func<StrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
@@ -588,7 +586,6 @@ struct ObRelationalExtraFunc
     bool with_end_space = is_calc_with_end_space(
         expr.args_[0]->datum_meta_.type_,
         expr.args_[1]->datum_meta_.type_,
-        false,
         expr.args_[0]->datum_meta_.cs_type_,
         expr.args_[1]->datum_meta_.cs_type_);
     return def_relational_eval_batch_func<TextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
@@ -623,7 +620,6 @@ struct ObRelationalExtraFunc
     bool with_end_space = is_calc_with_end_space(
         expr.args_[0]->datum_meta_.type_,
         expr.args_[1]->datum_meta_.type_,
-        false,
         expr.args_[0]->datum_meta_.cs_type_,
         expr.args_[1]->datum_meta_.cs_type_);
     return def_relational_eval_batch_func<TextStrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
@@ -658,7 +654,6 @@ struct ObRelationalExtraFunc
     bool with_end_space = is_calc_with_end_space(
         expr.args_[0]->datum_meta_.type_,
         expr.args_[1]->datum_meta_.type_,
-        false,
         expr.args_[0]->datum_meta_.cs_type_,
         expr.args_[1]->datum_meta_.cs_type_);
     return def_relational_eval_batch_func<StrTextCmp>(BATCH_EVAL_FUNC_ARG_LIST,

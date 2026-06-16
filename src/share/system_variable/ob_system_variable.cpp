@@ -1484,7 +1484,7 @@ int ObTimeZoneSysVar::do_check_and_convert(ObExecContext &ctx,
     CHECK_COMPATIBILITY_MODE(ctx.get_my_session());
     int ret_more = OB_SUCCESS;
     if (OB_SUCC(ret) && OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset,
-                                                          ret_more, is_oracle_compatible, true))) {
+                                                          ret_more, true))) {
       if (OB_ERR_UNKNOWN_TIME_ZONE != ret) {
         LOG_WARN("fail to conver time zone", K(ret), K(str_val), K(is_oracle_compatible));
       } else if (OB_FAIL(find_pos_time_zone(ctx, str_val, is_oracle_compatible))) {

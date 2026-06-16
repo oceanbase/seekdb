@@ -606,7 +606,7 @@ int ObSPIService::spi_pad_char_or_varchar(ObSQLSessionInfo *session_info,
         int32_t length = accuracy.get_length(); // byte or char length
         int32_t cell_strlen = 0; // byte or char length
         int32_t pad_whitespace_length = 0; // pad whitespace length
-        if (OB_FAIL(result->get_char_length(accuracy, cell_strlen, false))) {
+        if (OB_FAIL(result->get_char_length(accuracy, cell_strlen))) {
           LOG_WARN("Fail to get char length, ", K(ret));
         } else {
           if (cell_strlen < length) {

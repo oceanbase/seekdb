@@ -176,7 +176,6 @@ private:
   int append_paren(bool is_left);
 private:
   ObGeoStringBuffer *wkt_buf_;
-  bool is_oracle_mode_;
   bool is_mpt_visit_;
   bool has_scale_;
   int64_t scale_;

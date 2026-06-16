@@ -78,7 +78,6 @@ private:
   ObMLogPurgeParam purge_param_;
   ObMViewTransaction trans_;
   share::schema::ObMLogInfo mlog_info_;
-  bool is_oracle_mode_;
   bool need_purge_;
   share::SCN purge_scn_;
   ObSqlString purge_sql_;

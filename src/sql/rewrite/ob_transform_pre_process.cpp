@@ -5196,8 +5196,7 @@ int ObTransformPreProcess::check_set_stmt_need_preserve_order(ObSelectStmt* stmt
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null stmt", K(ret));
-  } else if (OB_FAIL(ctx_->session_info_->is_serial_set_order_forced(force_serial_set_order, 
-                                                                     false))) {
+  } else if (OB_FAIL(ctx_->session_info_->is_serial_set_order_forced(force_serial_set_order))) {
     LOG_WARN("fail to get force_serial_set_order value", K(ret));
   } else if (!force_serial_set_order) {
     //do nothing

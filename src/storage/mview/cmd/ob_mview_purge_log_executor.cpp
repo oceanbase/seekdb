@@ -81,7 +81,7 @@ int ObMViewPurgeLogExecutor::resolve_arg(const ObMViewPurgeLogArg &arg)
     bool has_synonym = false;
     ObString new_db_name, new_tbl_name;
     const ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(ObMViewExecutorUtil::resolve_table_name(cs_type, case_mode, false,
+    if (OB_FAIL(ObMViewExecutorUtil::resolve_table_name(cs_type, case_mode,
                                                         arg.master_, database_name, table_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode), K(arg.master_));
       LOG_USER_ERROR(OB_WRONG_TABLE_NAME, static_cast<int>(arg.master_.length()),

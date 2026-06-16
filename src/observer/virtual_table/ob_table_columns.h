@@ -87,8 +87,7 @@ public:
                                                  bool &nullable,
                                                  bool &has_default,
                                                  bool &is_string_lob);
-  static int deduce_column_attributes(const bool is_oracle_mode,
-                                      const ObTableSchema &table_schema,
+  static int deduce_column_attributes(const ObTableSchema &table_schema,
                                       const sql::ObSelectStmt *select_stmt,
                                       const sql::SelectItem &select_item,
                                       share::schema::ObSchemaGetterGuard *schema_guard,

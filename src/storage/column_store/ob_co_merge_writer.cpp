@@ -503,7 +503,6 @@ int ObCOMergeRowWriter::choose_read_info_for_old_major(
   if (cg_schema.is_single_column_group()) {
     single_read_info_.reset();
     if (OB_FAIL(ObTenantCGReadInfoMgr::construct_cg_read_info(allocator_,
-                                                              full_read_info.is_oracle_mode(),
                                                               write_helper_.get_col_desc_array().at(0),
                                                               nullptr,
                                                               single_read_info_))) {

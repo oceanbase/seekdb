@@ -119,7 +119,6 @@ class ObITableReadInfo
 public:
   ObITableReadInfo() = default;
   virtual ~ObITableReadInfo() = default;
-  virtual bool is_oracle_mode() const = 0;
   virtual int64_t get_schema_column_count() const = 0;
   virtual int64_t get_seq_read_column_count() const = 0;
   virtual int64_t get_request_count() const = 0;
@@ -149,7 +148,6 @@ public:
   ObReadInfoStruct(const bool rowkey_mode = false)
     : ObITableReadInfo(),
       is_inited_(false),
-      is_oracle_mode_(false),
       allocator_(nullptr),
       schema_column_count_(0),
       compat_version_(READ_INFO_VERSION_V5),
@@ -175,7 +173,6 @@ public:
   }
   virtual void reset() override;
 
-  OB_INLINE virtual bool is_oracle_mode() const override { return is_oracle_mode_; }
   OB_INLINE virtual int64_t get_schema_column_count() const override { return schema_column_count_; }
   OB_INLINE virtual int64_t get_schema_rowkey_count() const override { return schema_rowkey_cnt_; }
   OB_INLINE virtual int64_t get_rowkey_count() const override { return rowkey_cnt_; }
@@ -240,11 +237,9 @@ public:
   OB_INLINE bool is_delete_insert_table() const { return is_delete_insert_table_; }
   DECLARE_VIRTUAL_TO_STRING;
   int generate_for_column_store(ObIAllocator &allocator,
-                                const ObColDesc &desc,
-                                const bool is_oracle_mode);
+                                const ObColDesc &desc);
   void init_basic_info(const int64_t schema_column_count,
                        const int64_t schema_rowkey_cnt,
-                       const bool is_oracle_mode,
                        const bool is_cg_sstable,
                        const bool is_cs_replica_compat,
                        const bool is_delete_insert_table,
@@ -260,7 +255,6 @@ protected:
   static const int32_t READ_INFO_RESERVED_BITS = 13;
 
   bool is_inited_;
-  bool is_oracle_mode_;
   ObIAllocator *allocator_;
   // distinguish schema changed by schema column count
   union {
@@ -300,7 +294,6 @@ public:
       common::ObIAllocator &allocator,
       const int64_t schema_column_count,
       const int64_t schema_rowkey_cnt,
-      const bool is_oracle_mode,
       const common::ObIArray<ObColDesc> &cols_desc,
       const common::ObIArray<int32_t> *storage_cols_index,
       const common::ObIArray<ObColumnParam *> *cols_param = nullptr,
@@ -314,7 +307,6 @@ public:
     common::ObIAllocator &allocator,
     const int64_t schema_column_count,
     const int64_t schema_rowkey_cnt,
-    const bool is_oracle_mode,
     const common::ObIArray<ObColDesc> &cols_desc,
     const common::ObIArray<int32_t> &storage_cols_index,
     const common::ObIArray<ObColumnParam *> &cols_param,
@@ -412,7 +404,6 @@ public:
       common::ObIAllocator &allocator,
       const int64_t schema_column_count,
       const int64_t schema_rowkey_cnt,
-      const bool is_oracle_mode,
       const common::ObIArray<ObColDesc> &rowkey_col_descs,
       const bool is_cg_sstable = false,
       const bool use_default_compat_version = false,
@@ -473,7 +464,6 @@ public:
     local_max_cg_read_info_cnt = (tenant_memory_limit / CG_READ_INFO_MEMORY_BASE) * LOCAL_MAX_CG_READ_INFO_CNT;
     return MAX(static_cast<uint64_t>(local_max_cg_read_info_cnt), LOCAL_MAX_CG_READ_INFO_CNT);
   }
-  OB_INLINE virtual bool is_oracle_mode() const override { return cg_basic_info_->is_oracle_mode(); }
   OB_INLINE virtual int64_t get_schema_column_count() const override { return CG_COL_CNT; }
   OB_INLINE virtual int64_t get_schema_rowkey_count() const override { return CG_ROWKEY_COL_CNT; }
   OB_INLINE virtual int64_t get_rowkey_count() const override { return CG_ROWKEY_COL_CNT; }
@@ -550,7 +540,6 @@ public:
     : rowkey_read_info_(rowkey_read_info)
   {}
   virtual ~ObCGRowkeyReadInfo() = default;
-  virtual bool is_oracle_mode() const override { return rowkey_read_info_.is_oracle_mode(); }
   virtual int64_t get_schema_column_count() const override { return rowkey_read_info_.get_schema_rowkey_count(); }
   virtual int64_t get_seq_read_column_count() const override
   {
@@ -649,7 +638,6 @@ public:
   static int construct_index_read_info(common::ObIAllocator &allocator, ObRowkeyReadInfo &index_read_info);
   static int construct_cg_read_info(
       common::ObIAllocator &allocator,
-      const bool is_oracle_mode,
       const ObColDesc &col_desc,
       ObColumnParam *cols_param,
       ObTableReadInfo &cg_read_info);

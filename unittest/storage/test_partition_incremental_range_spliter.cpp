@@ -747,7 +747,7 @@ void TestPartitionIncrementalRangeSliter::SetUp()
     void *ptr = nullptr;
     ASSERT_NE(nullptr, ptr = allocator_.alloc(sizeof(ObRowkeyReadInfo)));
     tablet_.rowkey_read_info_ = new (ptr) ObRowkeyReadInfo();
-    ASSERT_EQ(OB_SUCCESS, tablet_.rowkey_read_info_->init(allocator_, col_descs_.count(), 1, lib::is_oracle_mode(), col_descs_));
+    ASSERT_EQ(OB_SUCCESS, tablet_.rowkey_read_info_->init(allocator_, col_descs_.count(), 1, col_descs_));
 
     // buf
     buf_ = static_cast<char *>(allocator_.alloc(MAX_BUF_LENGTH));

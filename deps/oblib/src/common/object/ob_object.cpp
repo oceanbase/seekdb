@@ -1996,7 +1996,7 @@ int ObObj::get_set_str_val(ObSqlString &str_val, const ObIArray<ObString> &type_
 // When the tenant mode is mysql, return the character length of char
 // When the tenant mode is oracle, if the len type of char is char, return the character length of char
 // When the tenant mode is oracle, if the len type of char is byte, return the byte length of char
-int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len, bool is_oracle_mode) const
+int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len) const
 {
   int ret = OB_SUCCESS;
 

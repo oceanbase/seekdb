@@ -126,7 +126,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
         if (OB_FAIL((ObStoreFormat::find_store_format_type(default_format, store_format_)))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("default compress not found!", K(ret), K_(store_format), K(default_format));
-        } else if (!ObStoreFormat::is_store_format_valid(store_format_, false)) {
+        } else if (!ObStoreFormat::is_store_format_valid(store_format_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected store format type", K_(store_format), K(ret));
         } else if (OB_FAIL(ObDDLResolver::get_row_store_type(tenant_id, store_format_, row_store_type_))) {

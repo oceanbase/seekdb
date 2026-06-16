@@ -1731,7 +1731,6 @@ int ObRowScan::build_rowkey_read_info(
   } else if (OB_FAIL(rowkey_read_info_->init(allocator_,
                                              full_stored_col_cnt,
                                              param.storage_schema_->get_rowkey_column_num(),
-                                             param.storage_schema_->is_oracle_mode(),
                                              cols_desc,
                                              false /*is_cg_sstable*/,
                                              false /*use_default_compat_version*/,
@@ -1884,7 +1883,6 @@ int ObSnapshotRowScan::init(
     const ObIArray<ObColDesc> &schema_store_col_descs,
     const int64_t schema_column_cnt,
     const int64_t schema_rowkey_cnt,
-    const bool is_oracle_mode,
     const ObTabletHandle &tablet_handle,
     const int64_t snapshot_version)
 {
@@ -1918,7 +1916,6 @@ int ObSnapshotRowScan::init(
     } else if (OB_FAIL(read_info_.init(allocator_,
                                        schema_column_cnt,
                                        schema_rowkey_cnt,
-                                       is_oracle_mode,
                                        schema_store_col_descs,
                                        nullptr/*storage_cols_index*/))) {
       LOG_WARN("failed to init read info", K(ret), K(schema_column_cnt), K(schema_rowkey_cnt), K(schema_store_col_descs));

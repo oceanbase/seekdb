@@ -264,7 +264,6 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
                                ObISQLClient *client_addr, /* = NULL */
                                ObRestoreSQLModifier *sql_modifier /* = NULL */,
                                const bool use_static_engine /* = false */,
-                               const bool is_oracle_mode /* = false */,
                                const int32_t group_id /* = 0*/,
                                const bool is_resource_conn /* =false*/)
 {
@@ -294,10 +293,8 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
     associated_client_ = client_addr;
     if (NULL != client_addr) {
       oracle_mode_ = client_addr->is_oracle_mode();
-    } else if (NULL != extern_session) {
-      oracle_mode_ = false;
     } else {
-      oracle_mode_ = is_oracle_mode;
+      oracle_mode_ = false;
     }
     if (OB_FAIL(init_session(extern_session, use_static_engine))) {
       LOG_WARN("init session failed", K(ret));
@@ -446,9 +443,9 @@ ERRSIM_POINT_DEF(NOT_SPEED_UP_INIT_SESSION_INFO);
 int ObInnerSQLConnection::init_session_info(
     sql::ObSQLSessionInfo *session,
     const bool is_extern_session,
-    const bool is_oracle_mode,
     const bool is_ddl)
 {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   if (NULL == session) {
     ret = OB_INVALID_ARGUMENT;
@@ -556,7 +553,7 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(init_session_info(inner_session_, is_extern_session, oracle_mode_, is_ddl))) {
+      if (OB_FAIL(init_session_info(inner_session_, is_extern_session, is_ddl))) {
         LOG_WARN("fail to init session info", K(ret), KPC(inner_session_));
       }
     }

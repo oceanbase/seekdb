@@ -74,8 +74,7 @@ int ObTabletSplitMdsUserData::init_no_split(const int64_t auto_part_size)
 int ObTabletSplitMdsUserData::init_range_part_split_src(
     const ObIArray<ObTabletID> &dst_tablet_ids,
     const ObIArray<uint64_t> &partkey_projector,
-    const ObTableSchema &table_schema,
-    const bool is_oracle_mode)
+    const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
   reset();

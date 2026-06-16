@@ -40,7 +40,6 @@ public:
     common::ObIAllocator &allocator,
     const int64_t schema_column_count,
     const int64_t schema_rowkey_cnt,
-    const bool is_oracle_mode,
     const common::ObIArray<ObColDesc> &cols_desc,
     const common::ObIArray<int32_t> *storage_cols_index = nullptr,
     const common::ObIArray<ObColumnParam *> *cols_param = nullptr);
@@ -49,7 +48,6 @@ public:
 int MockObTableReadInfo::init(common::ObIAllocator &allocator,
     const int64_t schema_column_count,
     const int64_t schema_rowkey_cnt,
-    const bool is_oracle_mode,
     const common::ObIArray<ObColDesc> &cols_desc,
     const common::ObIArray<int32_t> *storage_cols_index,
     const common::ObIArray<ObColumnParam *> *cols_param)
@@ -59,7 +57,7 @@ int MockObTableReadInfo::init(common::ObIAllocator &allocator,
 
   const int64_t extra_rowkey_col_cnt = storage::ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
   const bool is_cg_sstable = (schema_rowkey_cnt == 0 && schema_column_count == 1);
-  init_basic_info(schema_column_count, schema_rowkey_cnt, is_oracle_mode, is_cg_sstable,
+  init_basic_info(schema_column_count, schema_rowkey_cnt, is_cg_sstable,
     false /*is_cs_replica_compat*/, false /*is_delete_insert_table*/, false/*is_global_index_table*/); // init basic info
   if (OB_FAIL(prepare_arrays(allocator, cols_desc, out_cols_cnt))) {
     STORAGE_LOG(WARN, "failed to prepare arrays", K(ret), K(out_cols_cnt));

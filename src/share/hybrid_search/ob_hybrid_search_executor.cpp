@@ -175,7 +175,7 @@ int ObHybridSearchExecutor::parse_search_params(
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     LOG_WARN("fail to get collation_connection", KR(ret));
   } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-              cs_type, case_mode, false, search_arg_.table_name_,
+              cs_type, case_mode, search_arg_.table_name_,
               database_name, table_name))) {
     LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode), K(search_arg_.table_name_));
   } else if (database_name.empty() && FALSE_IT(database_name = session_info_->get_database_name())) {
@@ -270,8 +270,7 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
                 } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                           alloc,
                           cascaded_column->get_column_name_str(),
-                          new_col_name,
-                          false))) {
+                          new_col_name))) {
                   LOG_WARN("fail to generate new name with escape character", K(ret), K(cascaded_column->get_column_name_str()));
                 } else if (OB_FAIL(column_names.append(new_col_name))) {
                   LOG_WARN("fail to print column name", K(ret), K(new_col_name));

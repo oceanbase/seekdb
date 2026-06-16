@@ -242,7 +242,6 @@ int ObExprNotBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                                       val_meta.type_, left_meta.type_,
                                                       val_meta.scale_, left_meta.scale_,
                                                       val_meta.precision_, left_meta.precision_,
-                                                      false,
                                                       cmp_cs_type,
                                                       has_lob_header1))) {
       ret = OB_ERR_UNEXPECTED;
@@ -251,7 +250,6 @@ int ObExprNotBetween::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                                         right_meta.type_, val_meta.type_,
                                                         right_meta.scale_, val_meta.scale_,
                                                         right_meta.precision_, val_meta.precision_,
-                                                        false,
                                                         cmp_cs_type,
                                                         has_lob_header2))) {
       ret = OB_ERR_UNEXPECTED;

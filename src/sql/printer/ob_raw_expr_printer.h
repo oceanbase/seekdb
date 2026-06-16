@@ -49,8 +49,7 @@ class ObRawExprPrinter
   do {                                                                                \
     if (OB_SUCC(ret) && OB_FAIL(ObSQLUtils::print_identifier(buf_, buf_len_, (*pos_), \
                                                              print_params_.cs_type_,  \
-                                                             ident_str,               \
-                                                             false))) {               \
+                                                             ident_str))) {           \
       LOG_WARN("fail to print ident str", K(ret), K(ident_str));                      \
     }                                                                                 \
   } while(0)

@@ -281,7 +281,7 @@ void TestPartitionMajorSSTableRangeSliter::SetUp()
     ASSERT_EQ(OB_SUCCESS, col_descs_.push_back(col_desc));
     ASSERT_EQ(OB_SUCCESS, col_descs_.push_back(col_desc));
     ASSERT_EQ(OB_SUCCESS, storage::ObMultiVersionRowkeyHelpper::add_extra_rowkey_cols(col_descs_));
-    ASSERT_EQ(OB_SUCCESS, idx_read_info_.init(allocator_, 2, 1, lib::is_oracle_mode(), col_descs_, nullptr/*storage_cols_index*/));
+    ASSERT_EQ(OB_SUCCESS, idx_read_info_.init(allocator_, 2, 1, col_descs_, nullptr/*storage_cols_index*/));
 
     // buf
     buf_ = static_cast<char *>(allocator_.alloc(MAX_BUF_LENGTH));

@@ -925,7 +925,7 @@ int ObBasicTabletMergeCtx::init_read_info()
   if (OB_FAIL(get_schema()->get_store_column_count(schema_stored_col_cnt, true/*full_col*/))) {
     LOG_WARN("failed to get storage count", KR(ret), KPC(this));
   } else if (OB_FAIL(read_info_.init(mem_ctx_.get_allocator(), schema_stored_col_cnt, get_schema()->get_rowkey_column_num(),
-            get_schema()->is_oracle_mode(), static_param_.multi_version_column_descs_))) {
+            static_param_.multi_version_column_descs_))) {
     LOG_WARN("failed to init read info", KR(ret), KPC(this));
   } 
   return ret;

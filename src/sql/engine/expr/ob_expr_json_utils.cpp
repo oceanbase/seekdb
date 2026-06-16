@@ -345,7 +345,7 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
   if (ObStringTC == dest_tc) {
     // parser will abort all negative number
     // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
-    accuracy.set_full_length(node.int32_values_[1], length_semantics, false);
+    accuracy.set_full_length(node.int32_values_[1], length_semantics);
   } else if (ObRawTC == dest_tc) {
     accuracy.set_length(node.int32_values_[1]);
   } else if(ObTextTC == dest_tc || ObJsonTC == dest_tc) {

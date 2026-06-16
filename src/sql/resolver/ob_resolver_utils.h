@@ -552,7 +552,7 @@ public:
              const share::schema::ObColumnSchemaV2 *column_schema = NULL,
              ObIArray<ObQualifiedName> *res_columns = NULL);
   static int create_not_null_expr_str(const ObString &column_name, common::ObIAllocator &allocator,
-                                      ObString &expr_str, const bool is_oracle_mode);
+                                      ObString &expr_str);
   static int build_partition_key_expr(ObResolverParams &params,
                                       const share::schema::ObTableSchema &table_schema,
                                       ObRawExpr *&partition_key_expr,
@@ -614,7 +614,6 @@ public:
                                                    ObSchemaChecker &schema_checker,
                                                    const common::ObIArray<common::ObString> &parent_columns,
                                                    const common::ObSArray<obcall::ObCreateIndexArg> &index_arg_list,
-                                                   const bool is_oracle_mode,
                                                    share::schema::ObForeignKeyRefType &fk_ref_type,
                                                    uint64_t &ref_cst_id,
                                                    bool &is_match);

@@ -32,10 +32,10 @@ public:
   static int split_table_list(const common::ObString &table_list,
                               common::ObIArray<common::ObString> &tables);
   static int resolve_table_name(const common::ObCollationType cs_type,
-                                const ObNameCaseMode case_mode, const bool is_oracle_mode,
+                                const ObNameCaseMode case_mode,
                                 const common::ObString &name, common::ObString &database_name,
                                 common::ObString &table_name);
-  static void upper_db_table_name(const ObNameCaseMode case_mode, const bool is_oracle_mode,
+  static void upper_db_table_name(const ObNameCaseMode case_mode,
                                   common::ObString &name);
 
   static int to_refresh_method(const char c, share::schema::ObMVRefreshMethod &refresh_method);

@@ -49,7 +49,6 @@ public:
   int check_alter_table_partition_attr(
       const obcall::ObAlterTableArg &alter_table_arg,
       const share::schema::ObTableSchema &orig_table_schema,
-      const bool is_oracle_mode,
       share::ObDDLType &ddl_type);
   int alter_table_partition_attr(
       obcall::ObAlterTableArg &alter_table_arg,

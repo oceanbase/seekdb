@@ -425,7 +425,7 @@ int ObSelectResolver::do_resolve_set_query_in_normal(const ParseNode &parse_tree
 
   if (OB_FAIL(ret)) {
     //do nothing
-  } else if (OB_FAIL(session_info_->is_serial_set_order_forced(force_serial_set_order, false))) {
+  } else if (OB_FAIL(session_info_->is_serial_set_order_forced(force_serial_set_order))) {
     LOG_WARN("fail to get explicit_defaults_for_timestamp", K(ret));
   } else if (force_serial_set_order && T_SET_UNION_ALL == parse_tree.children_[PARSE_SELECT_SET]->type_) {
     // for set query except union-all/recursive, when force serial set order, will add select expr as order by expr

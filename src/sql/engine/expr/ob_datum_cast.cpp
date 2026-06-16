@@ -10329,8 +10329,7 @@ int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObStringTC == dest_tc) {
       // parser will abort all negative number
       // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
-      accuracy.set_full_length(node.int32_values_[1], expr.datum_meta_.length_semantics_,
-                               false);
+      accuracy.set_full_length(node.int32_values_[1], expr.datum_meta_.length_semantics_);
     } else if (ObRawTC == dest_tc) {
       accuracy.set_length(node.int32_values_[1]);
     } else if(ObTextTC == dest_tc || ObJsonTC == dest_tc) {

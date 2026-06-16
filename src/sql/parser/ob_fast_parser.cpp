@@ -84,7 +84,7 @@ int ObFastParser::parse(const common::ObString &stmt,
 }
 
 ObFastParserBase::ObFastParserBase(ObIAllocator &allocator, const FPContext fp_ctx) :
-  no_param_sql_(nullptr), no_param_sql_len_(0), param_num_(0), is_oracle_mode_(false),
+  no_param_sql_(nullptr), no_param_sql_len_(0), param_num_(0),
   is_batched_multi_stmt_split_on_(fp_ctx.enable_batched_multi_stmt_),
   cur_token_begin_pos_(0),
   copy_begin_pos_(0), copy_end_pos_(0), tmp_buf_(nullptr), tmp_buf_len_(0),
@@ -443,7 +443,7 @@ inline int64_t ObFastParserBase::is_identifier_flags(const int64_t pos)
     // Most of the time, if it is not an identifier character, it maybe a space,
     // comma, opening parenthesis, or closing parenthesis. This judgment logic is
     // added here to avoid the next judgment whether it is utf8 char or gbk char
-  } else if (!is_oracle_mode_) {
+  } else if (!false) {
     idf_pos = notascii_gb_char(pos);
   } else if (CHARSET_UTF8MB4 == charset_type_ || CHARSET_UTF16 == charset_type_) {
     idf_pos = is_utf8_char(pos);
@@ -651,7 +651,7 @@ inline int64_t ObFastParserBase::is_single_byte_char(const int64_t pos)
 inline int64_t ObFastParserBase::is_utf8_char(const int64_t pos)
 {
   int64_t idf_pos = -1;
-  if (is_oracle_mode_ &&
+  if (false &&
      pos + 3 < raw_sql_.raw_sql_len_ &&
      (-1 != is_utf8_multi_byte_space(raw_sql_.raw_sql_, pos) ||
       -1 != is_utf8_multi_byte_comma(raw_sql_.raw_sql_, pos) ||
@@ -838,7 +838,7 @@ inline int64_t ObFastParserBase::is_gbk_multi_byte_right_parenthesis(
 inline int64_t ObFastParserBase::is_gbk_char(const int64_t pos)
 {
   int64_t idf_pos = -1;
-  if (is_oracle_mode_ &&
+  if (false &&
      pos + 2 < raw_sql_.raw_sql_len_ &&
      (-1 != is_gbk_multi_byte_space(raw_sql_.raw_sql_, pos) ||
       -1 != is_gbk_multi_byte_comma(raw_sql_.raw_sql_, pos) ||
@@ -854,7 +854,7 @@ inline int64_t ObFastParserBase::is_gbk_char(const int64_t pos)
 inline int64_t ObFastParserBase::is_hk_char(const int64_t pos)
 {
   int64_t idf_pos = -1;
-  if (is_oracle_mode_ &&
+  if (false &&
      pos + 2 < raw_sql_.raw_sql_len_ &&
      (-1 != is_hk_multi_byte_space(raw_sql_.raw_sql_, pos) ||
       -1 != is_hk_multi_byte_comma(raw_sql_.raw_sql_, pos) ||
@@ -1260,7 +1260,7 @@ int ObFastParserBase::process_hex_number(bool is_quote)
       }
     } else {
       // Values written using 0xval notation NOTE: 0Xval (use upper case 'X') notation is illegal in MySQL
-      if (!is_oracle_mode_ && raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'X') {
+      if (!false && raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'X') {
         LOG_WARN("parser syntax error", K(ret));
         return OB_ERR_PARSER_SYNTAX;
       }
@@ -1342,7 +1342,7 @@ int ObFastParserBase::process_binary(bool is_quote)
       --str_len;
     } else {
       // Values written using 0bval notation NOTE: 0Bval (use upper case 'B') notation is illegal in MySQL
-      if (!is_oracle_mode_ && raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'B') {
+      if (!false && raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'B') {
         LOG_WARN("parser syntax error", K(ret));
         return OB_ERR_PARSER_SYNTAX;
       }
@@ -1388,7 +1388,7 @@ inline int64_t ObFastParserBase::is_first_identifier_flags(const int64_t pos)
     // Most of the time, if it is not an identifier character, it maybe a space,
     // comma, opening parenthesis, or closing parenthesis. This judgment logic is
     // added here to avoid the next judgment whether it is utf8 char or gbk char
-  } else if (!is_oracle_mode_) {
+  } else if (!false) {
     idf_pos = notascii_gb_char(pos);
   } else if (CHARSET_UTF8MB4 == charset_type_ || CHARSET_UTF16 == charset_type_) {
     idf_pos = is_utf8_char(pos);
@@ -1417,7 +1417,7 @@ int ObFastParserBase::process_time_relate_type(bool &need_process_ws, ObItemType
   char ch = raw_sql_.char_at(raw_sql_.cur_pos_);
   int64_t idf_end_pos = raw_sql_.cur_pos_;
   // deal with the'[^']*' part, the part after quote may be parameterized or ignored
-  if ('\'' == ch || (!is_oracle_mode_ && '\"' == ch)) {
+  if ('\'' == ch || (!false && '\"' == ch)) {
     if (T_TIME == type || T_DATE == type || T_TIMESTAMP_TZ == type ||
         T_DATETIME == type || T_TIMESTAMP == type) {
       OZ (process_date_related_type(ch, type));
@@ -1767,7 +1767,7 @@ void ObFastParserBase::parse_integer(ParseNode *node)
     }
   } else {
     uint64_t value = 0;
-    if (is_oracle_mode_) {
+    if (false) {
       value = ob_strntoll(node->str_value_, node->str_len_, 10, NULL, &err_no);
     } else {
       value = ob_strntoull(node->str_value_, node->str_len_, 10, NULL, &err_no);
@@ -1775,7 +1775,7 @@ void ObFastParserBase::parse_integer(ParseNode *node)
     node->value_ = value;
     if (ERANGE == err_no) {
       node->type_ = T_NUMBER;
-    } else if (!is_oracle_mode_ && value > INT64_MAX) {
+    } else if (!false && value > INT64_MAX) {
       node->type_ = T_UINT64;
     }
   }
@@ -1807,7 +1807,7 @@ int ObFastParserBase::process_negative()
   }
   char next_char = raw_sql_.peek();
   if (is_digit(ch)) {
-    if (!is_oracle_mode_ &&
+    if (!false &&
        ('x' == next_char || 'X' == next_char || 'b' == next_char || 'B' == next_char)) {
       cur_token_type_ = NORMAL_TOKEN;
     } else if (OB_FAIL(process_number(true/*has_minus*/))) {
@@ -1971,8 +1971,8 @@ int ObFastParserBase::process_identifier_begin_with_t(bool &need_process_ws)
     ObItemType item_type = T_INVALID;
     if (CHECK_EQ_STRNCASECMP("imestamp", 8)) {
       raw_sql_.scan(8);
-      item_type = is_oracle_mode_ ? T_TIMESTAMP_TZ : T_TIMESTAMP;
-    } else if (!is_oracle_mode_ && CHECK_EQ_STRNCASECMP("ime", 3)) {
+      item_type = false ? T_TIMESTAMP_TZ : T_TIMESTAMP;
+    } else if (!false && CHECK_EQ_STRNCASECMP("ime", 3)) {
       raw_sql_.scan(3);
       item_type = T_TIME;
     }
@@ -1996,7 +1996,7 @@ int ObFastParserBase::process_number(bool has_minus)
 
 #define CHECK_AND_PROCESS_NUMBER(default_type) \
   do {  \
-    if (is_oracle_mode_) { \
+    if (false) { \
       if ('D' == ch || 'd' == ch) { \
         raw_sql_.scan(); \
         ADD_PARAMETERIC_NODE(T_DOUBLE); \
@@ -2068,7 +2068,7 @@ int ObFastParserBase::process_number(bool has_minus)
           if (has_flag_after_euler) {
             raw_sql_.reverse_scan();
           }
-          if (!is_oracle_mode_) {
+          if (!false) {
             if (has_minus) {
               copy_end_pos_ = num_begin_pos;
               cur_token_begin_pos_ = num_begin_pos;
@@ -2101,7 +2101,7 @@ int ObFastParserBase::process_number(bool has_minus)
         ADD_PARAMETERIC_NODE(T_NUMBER);
       }
     } else { // has number after euler
-      if (is_oracle_mode_) {
+      if (false) {
         CHECK_AND_PROCESS_NUMBER(T_NUMBER);
       } else {
         CHECK_AND_PROCESS_NUMBER(T_DOUBLE);
@@ -2366,7 +2366,7 @@ int ObFastParserMysql::process_values(const char *str)
 {
   int ret = OB_SUCCESS;
   if (found_insert_status_ == FOUND_INSERT_TOKEN_ONCE) {
-    if (!is_oracle_mode_) {
+    if (!false) {
       // mysql support: insert ... values / value (xx, ...);
       if (CHECK_EQ_STRNCASECMP("alues", 5)) {
         if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
@@ -2384,7 +2384,7 @@ int ObFastParserMysql::process_values(const char *str)
       }
     }
   } else {
-    if (!is_oracle_mode_) {
+    if (!false) {
       if (CHECK_EQ_STRNCASECMP("alues", 5)) {
         if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
                     cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
@@ -2843,7 +2843,7 @@ int ObFastParserOracle::process_values(const char *str)
 {
   int ret = OB_SUCCESS;
   if (found_insert_status_ == FOUND_INSERT_TOKEN_ONCE) {
-    if (is_oracle_mode_) {
+    if (false) {
       if (CHECK_EQ_STRNCASECMP("alues", 5)) {
         values_token_pos_ = raw_sql_.cur_pos_;
         raw_sql_.scan(5);

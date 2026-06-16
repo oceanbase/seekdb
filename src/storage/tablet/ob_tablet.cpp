@@ -5519,7 +5519,6 @@ int ObTablet::build_read_info(
   } else if (OB_FAIL(rowkey_read_info_->init(allocator,
                                              full_stored_col_cnt,
                                              storage_schema->get_rowkey_column_num(),
-                                             storage_schema->is_oracle_mode(),
                                              cols_desc,
                                              false /*is_cg_sstable*/,
                                              false /*use_default_compat_version*/,

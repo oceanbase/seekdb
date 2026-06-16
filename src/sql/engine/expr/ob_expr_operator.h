@@ -549,7 +549,6 @@ public:
   static int aggregate_max_length_for_string_result(ObExprResType &type,
                                              const ObExprResType *types,
                                              int64_t param_num,
-                                             bool is_oracle_mode,
                                              const common::ObLengthSemantics default_length_semantics,
                                              bool need_merge_type = TRUE,
                                              bool skip_null = FALSE,
@@ -572,7 +571,6 @@ public:
     ObExprResType &type,
     const ObExprResType *types,
     int64_t param_num,
-    bool is_oracle_mode,
     common::ObExprTypeCtx &type_ctx,
     bool need_merge_type = TRUE,
     bool skip_null = FALSE,
@@ -581,7 +579,6 @@ public:
     ObExprResType &type,
     const ObExprResType *types,
     int64_t param_num,
-    bool is_oracle_mode,
     common::ObExprTypeCtx &type_ctx,
     bool need_merge_type = TRUE,
     bool skip_null = FALSE,
@@ -634,8 +631,7 @@ public:
   static int is_same_kind_type_for_case(const ObExprResType &type1, const ObExprResType &type2, bool &match);
   static int aggregate_numeric_accuracy_for_merge(ObExprResType &type,
                                                   const ObExprResType *types,
-                                                  int64_t param_num,
-                                                  bool is_oracle_mode);
+                                                  int64_t param_num);
 
   static int aggregate_temporal_accuracy_for_merge(ObExprResType &type,
                                                    const ObExprResType *types,

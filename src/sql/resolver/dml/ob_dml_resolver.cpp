@@ -16083,7 +16083,7 @@ int ObDMLResolver::get_values_res_types(const ObIArray<ObRawExprResType> &cur_va
       } else if (OB_FAIL(session_info_->get_collation_connection(coll_type))) {
         LOG_WARN("fail to get_collation_connection", K(ret));
       } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type, &tmp_types.at(0),
-                                                                  tmp_types.count(), false,
+                                                                  tmp_types.count(),
                                                                   type_ctx))) {
         LOG_WARN("failed to aggregate result type for merge", K(ret));
       } else {

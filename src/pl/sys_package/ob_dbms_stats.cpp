@@ -3595,8 +3595,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                                                           allocator,
                                                           col->get_column_name_str(),
-                                                          new_col_name,
-                                                          false))) {
+                                                          new_col_name))) {
       LOG_WARN("fail to generate new name with escape character", K(ret), K(col->get_column_name_str()));
     } else if (OB_FAIL(ob_write_string(allocator,
                                        new_col_name,
@@ -3800,8 +3799,7 @@ int ObDbmsStats::parse_set_column_stats(ObExecContext &ctx,
         if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                                                           *param.allocator_,
                                                           tmp_col->get_column_name_str(),
-                                                          new_col_name,
-                                                          false))) {
+                                                          new_col_name))) {
           LOG_WARN("fail to generate new name with escape character", K(ret), K(tmp_col->get_column_name_str()));
         } else if (OB_FAIL(ob_write_string(*param.allocator_,
                                     new_col_name,

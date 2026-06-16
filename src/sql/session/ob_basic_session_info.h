@@ -1089,7 +1089,7 @@ public:
   int is_transformation_enabled(bool &transformation_enabled) const;
   int get_query_rewrite_enabled(int64_t &query_rewrite_enabled) const;
   int get_query_rewrite_integrity(int64_t &query_rewrite_integrity) const;
-  int is_serial_set_order_forced(bool &force_set_order, bool is_oracle_mode) const;
+  int is_serial_set_order_forced(bool &force_set_order) const;
   int is_old_charset_aggregation_enabled(bool &is_enable) const;
   int is_storage_estimation_enabled(bool &storage_estimation_enabled) const;
   bool is_use_trace_log() const

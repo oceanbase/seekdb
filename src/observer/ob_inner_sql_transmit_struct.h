@@ -63,21 +63,21 @@ public:
 
   ObInnerSQLTransmitArg() : ctrl_svr_(), runner_svr_(), tenant_id_(OB_INVALID_ID),
       conn_id_(OB_INVALID_ID), inner_sql_(NULL), operation_type_(OPERATION_TYPE_INVALID),
-      is_oracle_mode_(false), source_cluster_id_(OB_INVALID_CLUSTER_ID),
+      source_cluster_id_(OB_INVALID_CLUSTER_ID),
       worker_timeout_(OB_DEFAULT_SESSION_TIMEOUT),
       query_timeout_(OB_DEFAULT_SESSION_TIMEOUT), trx_timeout_(OB_DEFAULT_SESSION_TIMEOUT),
       sql_mode_(0), tz_info_wrap_(), ddl_info_(), is_load_data_exec_(false), nls_formats_{},
       use_external_session_(false), consumer_group_id_(0) {};
   ObInnerSQLTransmitArg(common::ObAddr ctrl_svr, common::ObAddr runner_svr,
                         uint64_t tenant_id, uint64_t conn_id, common::ObString inner_sql,
-                        InnerSQLOperationType operation_type, bool is_oracle_mode,
+                        InnerSQLOperationType operation_type,
                         const int64_t source_cluster_id, const int64_t worker_timeout,
                         const int64_t query_timeout, const int64_t trx_timeout,
                         ObSQLMode sql_mode, ObSessionDDLInfo ddl_info, const bool is_load_data_exec,
                         const bool use_external_session, const int64_t consumer_group_id = 0)
         : ctrl_svr_(ctrl_svr), runner_svr_(runner_svr),
           tenant_id_(tenant_id), conn_id_(conn_id), inner_sql_(inner_sql),
-          operation_type_(operation_type), is_oracle_mode_(is_oracle_mode),
+          operation_type_(operation_type),
           source_cluster_id_(source_cluster_id), worker_timeout_(worker_timeout),
           query_timeout_(query_timeout), trx_timeout_(trx_timeout), sql_mode_(sql_mode),
           tz_info_wrap_(), ddl_info_(ddl_info), is_load_data_exec_(is_load_data_exec), nls_formats_{},
@@ -103,8 +103,6 @@ public:
   void set_operation_type(const InnerSQLOperationType operation_type)
   { operation_type_ = operation_type; }
 
-  bool get_is_oracle_mode() const { return is_oracle_mode_; }
-  void set_is_oracle_mode(const bool is_oracle_mode) { is_oracle_mode_ = is_oracle_mode; }
   void set_source_cluster_id(const int64_t source_cluster_id) {
     source_cluster_id_ = source_cluster_id;
   }
@@ -159,7 +157,6 @@ public:
                K_(conn_id),
                K_(inner_sql),
                K_(operation_type),
-               K_(is_oracle_mode),
                K_(source_cluster_id),
                K_(worker_timeout),
                K_(query_timeout),
@@ -179,7 +176,6 @@ private:
   uint64_t conn_id_;
   common::ObString inner_sql_;
   InnerSQLOperationType operation_type_;
-  bool is_oracle_mode_;
   int64_t source_cluster_id_;
   int64_t worker_timeout_;
   int64_t query_timeout_;

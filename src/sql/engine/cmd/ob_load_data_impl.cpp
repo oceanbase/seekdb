@@ -2620,7 +2620,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
   formats.init(file_formats);
   self_addr = ctx.get_task_executor_ctx()->get_self_addr();
   //batch_row_count = DEFAULT_BUFFERRED_ROW_COUNT;
-  is_oracle_mode = false;
   tenant_id = load_args.tenant_id_;
   wait_secs_for_mem_release = 0;
   affected_rows = 0;

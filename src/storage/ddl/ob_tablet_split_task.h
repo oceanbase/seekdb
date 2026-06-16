@@ -321,7 +321,6 @@ public:
       const ObIArray<share::schema::ObColDesc> &schema_store_col_descs,
       const int64_t schema_column_cnt,
       const int64_t schema_rowkey_cnt,
-      const bool is_oracle_mode,
       const ObTabletHandle &tablet_handle,
       const int64_t snapshot_version);
   int construct_access_param(

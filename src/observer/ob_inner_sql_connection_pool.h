@@ -83,8 +83,7 @@ public:
   virtual int release(common::sqlclient::ObISQLConnection *conn, const bool success);
   int acquire_spi_conn(sql::ObSQLSessionInfo *session_info, observer::ObInnerSQLConnection *&conn);
   int acquire(sql::ObSQLSessionInfo *session_info,
-      common::sqlclient::ObISQLConnection *&conn,
-      const bool is_oracle_mode = false);
+      common::sqlclient::ObISQLConnection *&conn);
 
   virtual int on_client_inactive(common::ObISQLClient *client_addr) override;
   virtual common::sqlclient::ObSQLConnPoolType get_type() override { return common::sqlclient::INNER_POOL; }

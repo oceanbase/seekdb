@@ -60,7 +60,7 @@ public:
 struct RangePartCmp {
 public:
   RangePartCmp() : row_cmp_func_(nullptr), ret_(OB_SUCCESS),
-      part_expr_obj_meta_(), part_array_obj_meta_(), is_oracle_mode_(false) {}
+      part_expr_obj_meta_(), part_array_obj_meta_() {}
   ~RangePartCmp() = default;
   bool operator()(const ObDatum &l, const RangePartition &r);
 
@@ -68,7 +68,6 @@ public:
   int ret_;
   common::ObObjMeta part_expr_obj_meta_;
   common::ObObjMeta part_array_obj_meta_;
-  bool is_oracle_mode_;
 };
 
 struct PartValKey

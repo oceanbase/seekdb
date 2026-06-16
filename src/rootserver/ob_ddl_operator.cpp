@@ -8136,7 +8136,7 @@ int ObDDLOperator::revise_not_null_constraint_info(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("duplicate name constraint already exists", K(ret), KPC(ori_table_schema));
       } else if (OB_FAIL(ObResolverUtils::create_not_null_expr_str(
-                  col_schema->get_column_name_str(), allocator, check_expr_str, false/*is_oracle_mode*/))) {
+                  col_schema->get_column_name_str(), allocator, check_expr_str))) {
         LOG_WARN("create not null expr str failed", K(ret));
       } else if (OB_FAIL(schema_service->fetch_new_constraint_id(tenant_id, new_cst_id))) {
         LOG_WARN("failed to fetch new constraint id", K(ret));

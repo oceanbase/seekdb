@@ -78,7 +78,6 @@ public:
 
   int init_split_start_src(
     const uint64_t tenant_id,
-    const bool is_oracle_mode,
     const share::ObLSID &ls_id,
     const ObIArray<share::schema::ObTableSchema *> &new_table_schemas,
     const ObIArray<share::schema::ObTableSchema *> &upd_table_schemas,

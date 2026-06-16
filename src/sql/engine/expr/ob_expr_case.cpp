@@ -71,7 +71,6 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
                   type,
                   types_stack + cond_type_count,
                   val_type_count,
-                  false,
                   type_ctx,
                   true, false,
                   is_called_in_sql_))) {

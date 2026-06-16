@@ -212,7 +212,6 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                                           rt_expr.args_[1]->datum_meta_.scale_,
                                                           rt_expr.args_[0]->datum_meta_.precision_,
                                                           rt_expr.args_[1]->datum_meta_.precision_,
-                                                          false,
                                                           rt_expr.args_[0]->datum_meta_.cs_type_,
                                                           has_lob_header);
         }
@@ -232,7 +231,6 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                                                             cmp_meta.get_scale(),
                                                             raw_expr.get_extra_calc_precision(),
                                                             raw_expr.get_extra_calc_precision(),
-                                                            false,
                                                             cmp_meta.get_collation_type(),
                                                             has_lob_header))){
             ret = OB_INVALID_ARGUMENT;

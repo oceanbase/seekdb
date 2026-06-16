@@ -229,7 +229,6 @@ public:
       const common::ObCollationType table_collation_type);
   static int check_string_column_length(
       const share::schema::ObColumnSchemaV2 &column,
-      const bool is_oracle_mode,
       const bool is_prepare_stage=false);
   static int check_default_value_length(
       const bool is_mysql_mode,
@@ -353,8 +352,7 @@ public:
                                         ObSchemaChecker *schema_checker,
                                         obcall::ObDDLArg &ddl_arg);
   static int adjust_string_column_length_within_max(
-      share::schema::ObColumnSchemaV2 &column,
-      const bool is_oracle_mode);
+      share::schema::ObColumnSchemaV2 &column);
   static int adjust_number_decimal_column_accuracy_within_max(share::schema::ObColumnSchemaV2 &column);
   static int fill_column_with_subschema(const ObRawExpr &expr,
                                         sql::ObSQLSessionInfo &session_info,
@@ -519,7 +517,6 @@ public:
       const share::schema::ObColumnSchemaV2 &column_schema,
       int64_t column_num,
       const int64_t index_keyname_value,
-      bool is_oracle_mode,
       bool is_explicit_order,
       bool is_prefix_index = false);
   int resolve_fts_index_constraint(
@@ -544,7 +541,6 @@ public:
       ParseNode *node);
   static int get_partition_keys_by_part_func_expr(
       const ObString &part_func_expr_str,
-      const bool is_oracle_mode,
       ObIAllocator &allocator,
       ObIArray<ObString> &partkey_strs);
 protected:
@@ -579,7 +575,6 @@ protected:
       ObIAllocator *allocator);
 
   static int get_part_str_with_type(
-      const bool is_oracle_mode,
       share::schema::ObPartitionFuncType part_func_type,
       common::ObString &func_str,
       common::ObSqlString &part_str);

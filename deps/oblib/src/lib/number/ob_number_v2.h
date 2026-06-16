@@ -606,7 +606,7 @@ protected:
   inline static void calc_positive_num_desc(Desc &desc, const int64_t exp,
                                               const uint8_t len);
   inline static int calc_desc_and_check(const uint32_t base_desc, const int64_t exp, const uint8_t len,
-                                        Desc &desc, const bool is_oracle_mode);
+                                        Desc &desc);
   int add_v2_(const ObNumber &other, ObNumber &value, IAllocator &allocator) const;
   int sub_(const ObNumber &other, ObNumber &value, IAllocator &allocator) const;
   int sub_v2_(const ObNumber &other, ObNumber &value, IAllocator &allocator) const;
@@ -646,8 +646,8 @@ protected:
   int round_scale_v3_(const int64_t scale, const bool using_floating_scale,
       const bool for_oracle_to_char,
       int16_t *res_precision = NULL, int16_t *res_scale = NULL);
-  inline bool need_round_after_arithmetic(const bool is_oracle_mode) const
-  { return d_.len_ >= MIN_ROUND_DIGIT_COUNT[is_oracle_mode]; }
+  inline bool need_round_after_arithmetic() const
+  { return d_.len_ >= MIN_ROUND_DIGIT_COUNT[0]; }
   int round_scale_oracle_(const int64_t scale, const bool using_floating_scale,
       int16_t *res_precision = NULL, int16_t *res_scale = NULL);
   int round_integer_(
@@ -679,7 +679,7 @@ protected:
   inline static Desc exp_rem_(const Desc d1, const Desc d2) __attribute__((always_inline));
   inline static bool is_ge_1_(const Desc d) __attribute__((always_inline));
   inline static bool is_lt_1_(const Desc d) __attribute__((always_inline));
-  inline static int exp_check_(const ObNumber::Desc &desc, const bool is_oracle_mode = false) __attribute__((always_inline));
+  inline static int exp_check_(const ObNumber::Desc &desc) __attribute__((always_inline));
   inline static bool is_valid_sci_tail_(const char *str,
                                         const int64_t length,
                                         const int64_t e_pos) __attribute__((always_inline));
@@ -2618,11 +2618,11 @@ inline bool ObNumber::is_ge_1_(const Desc d)
   return bret;
 }
 
-inline int ObNumber::exp_check_(const ObNumber::Desc &desc, const bool is_oracle_mode/*false*/)
+inline int ObNumber::exp_check_(const ObNumber::Desc &desc)
 {
   int ret = OB_SUCCESS;
   const int64_t exp = labs(desc.exp_ - EXP_ZERO);
-  if (OB_UNLIKELY(is_ge_1_(desc) && (is_oracle_mode ? (MAX_INTEGER_EXP <= exp) : (MAX_INTEGER_EXP < exp)))) {
+  if (OB_UNLIKELY(is_ge_1_(desc) && (MAX_INTEGER_EXP < exp))) {
     ret = OB_INTEGER_PRECISION_OVERFLOW;
   } else if (OB_UNLIKELY(MAX_DECIMAL_EXP < exp
       && is_lt_1_(desc))) {
@@ -2632,7 +2632,7 @@ inline int ObNumber::exp_check_(const ObNumber::Desc &desc, const bool is_oracle
 }
 
 inline int ObNumber::calc_desc_and_check(const uint32_t base_desc, const int64_t exp, const uint8_t len,
-    Desc &desc, const bool is_oracle_mode)
+    Desc &desc)
 {
   desc.desc_ = base_desc;
   desc.len_ = len;
@@ -2642,7 +2642,7 @@ inline int ObNumber::calc_desc_and_check(const uint32_t base_desc, const int64_t
     desc.exp_ = (0x7f & (~desc.exp_));
     ++desc.exp_;
   }
-  return exp_check_(desc, is_oracle_mode);
+  return exp_check_(desc);
 }
 
 // ATTENTION: performance critical, no defensive check.

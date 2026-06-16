@@ -509,7 +509,7 @@ int ObNumber::from_v2_(const char *str, const int64_t length, IAllocator &alloca
     LIB_LOG(WARN, "number build from fail", K(ret), K(length), "str", ObString(length, str));
   } else if (do_rounding && OB_FAIL(nb.number_.round_scale_v3_(FLOATING_SCALE, true, false))) {
     _LIB_LOG(WARN, "round scale fail, ret=%d str=[%.*s]", ret, static_cast<int32_t>(length), str);
-  } else if (OB_FAIL(exp_check_(nb.number_.get_desc(), false))) {
+  } else if (OB_FAIL(exp_check_(nb.number_.get_desc()))) {
     LIB_LOG(WARN, "exponent precision check fail", K(nb.number_), K(ret));
     if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
       set_zero();
@@ -722,7 +722,7 @@ int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &alloca
       /* Step 6: normalize to 72 digits and check */
       if (do_rounding && OB_FAIL(round_scale_v3_(FLOATING_SCALE, true, false))) {
         LOG_WARN("round scale fail", K(ret));
-      } else if (OB_FAIL(exp_check_(d_, false))) {
+      } else if (OB_FAIL(exp_check_(d_))) {
         LOG_WARN("exponent precision check fail", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           set_zero();
@@ -773,7 +773,7 @@ int ObNumber::from_v2_(const uint32_t desc, const ObCalcVector &vector, IAllocat
       _OB_LOG(WARN, "normalize [%s] fail, ret=%d", helper.convert(*this), ret);
     } else if (OB_FAIL(round_scale_v3_(FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(*this));
-    } else if (OB_FAIL(exp_check_(d_, false))) {
+    } else if (OB_FAIL(exp_check_(d_))) {
       LOG_WARN("exponent precision check fail", K(ret), K(*this));
       if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
         set_zero();
@@ -3958,7 +3958,7 @@ int ObNumber::calc_desc_and_check_(const uint32_t base_desc, Desc &desc, int64_t
     d.exp_ = (0x7f & (~d.exp_));
     ++d.exp_;
   }
-  if (OB_FAIL(exp_check_(d, false))) {
+  if (OB_FAIL(exp_check_(d))) {
   } else {
     desc = d;
   }
@@ -4168,7 +4168,7 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
 
         Desc sum_desc;
         uint32_t *digit_mem = NULL;
-        if (OB_FAIL(calc_desc_and_check(d_.desc_, sum_exp, sum_len, sum_desc, use_oracle_mode))) {
+        if (OB_FAIL(calc_desc_and_check(d_.desc_, sum_exp, sum_len, sum_desc))) {
           LOG_WARN("fail to calc_desc_and_check_", K(ret));
           if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
             res.set_zero();
@@ -4192,7 +4192,7 @@ int ObNumber::add_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && res.need_round_after_arithmetic(use_oracle_mode)
+    if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
@@ -4458,7 +4458,7 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
             uint32_t *digit_mem = NULL;
             Desc sum_desc(d_);
             sum_desc.sign_ = ((NEGATIVE == minuend_desc.sign_) == sub_negative ? POSITIVE : NEGATIVE);
-            if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, new_sum_exp, sum_len, sum_desc, use_oracle_mode))) {
+            if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, new_sum_exp, sum_len, sum_desc))) {
               LOG_WARN("fail to assign desc part", K(ret));
               if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
                 res.set_zero();
@@ -4484,7 +4484,7 @@ int ObNumber::sub_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && res.need_round_after_arithmetic(use_oracle_mode)
+    if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
@@ -4813,7 +4813,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
       Desc sum_desc(d_);
       sum_desc.sign_ = (multiplicand_desc.sign_ == multiplier_desc.sign_ ? POSITIVE : NEGATIVE);
       uint32_t *digit_mem = NULL;
-      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)digits_len, sum_desc, use_oracle_mode))) {
+      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)digits_len, sum_desc))) {
         LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
@@ -4834,7 +4834,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   }
 
   if (OB_SUCC(ret)) {
-    if (do_rounding && res.need_round_after_arithmetic(use_oracle_mode)
+    if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
@@ -5039,7 +5039,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
       uint32_t *digit_mem = NULL;
       Desc sum_desc(d_);
       sum_desc.sign_ = (dividend_desc.sign_ == divisor_desc.sign_ ? POSITIVE : NEGATIVE);
-      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc, use_oracle_mode))) {
+      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc))) {
         LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
@@ -5056,7 +5056,7 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   }
   if (OB_SUCC(ret)) {
     LOG_DEBUG("round scale before", K(res));
-    if (do_rounding && res.need_round_after_arithmetic(use_oracle_mode)
+    if (do_rounding && res.need_round_after_arithmetic()
         && OB_FAIL(res.round_scale_v3_(use_oracle_mode ? MAX_SCALE : FLOATING_SCALE, true, false))) {
       LOG_WARN("round scale fail", K(ret), K(res));
     } else {
@@ -5228,7 +5228,7 @@ int ObNumber::rem_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
       }
       uint32_t *digit_mem = NULL;
       Desc sum_desc = exp_rem_(dividend_desc, divisor_desc);
-      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc, false))) {
+      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc))) {
         LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();
@@ -5311,7 +5311,7 @@ int ObNumber::rem_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
       }
       uint32_t *digit_mem = NULL;
       Desc sum_desc = exp_rem_(dividend_desc, divisor_desc);
-      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc, false))) {
+      if (OB_FAIL(calc_desc_and_check(sum_desc.desc_, sum_exp, (uint8_t)sum_len, sum_desc))) {
         LOG_WARN("fail to assign desc part", K(ret));
         if (OB_DECIMAL_PRECISION_OVERFLOW == ret) {
           res.set_zero();

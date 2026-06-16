@@ -446,7 +446,7 @@ int ObInListResolver::resolve_access_param_values_table(const ParseNode &in_list
         } else if (OB_FAIL(tmp_res_types.push_back(res_type))) {
           LOG_WARN("failed to push back res type", K(ret));
         } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
-                           &tmp_res_types.at(0), 2, false, type_ctx,
+                           &tmp_res_types.at(0), 2, type_ctx,
                            true, false, is_called_in_sql))) {
           LOG_WARN("failed to aggregate result type for merge", K(ret));
         } else {
@@ -559,7 +559,7 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
           } else if (OB_FAIL(tmp_res_types.push_back(res_type))) {
             LOG_WARN("failed to push back res type", K(ret));
           } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
-                            &tmp_res_types.at(0), 2, false,
+                            &tmp_res_types.at(0), 2,
                             type_ctx, true, false, is_called_in_sql))) {
             LOG_WARN("failed to aggregate result type for merge", K(ret));
           } else {

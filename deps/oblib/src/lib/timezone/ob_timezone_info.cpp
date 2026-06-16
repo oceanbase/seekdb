@@ -39077,7 +39077,7 @@ int ObTimeZoneInfo::set_timezone(const ObString &str)
 {
   int ret = OB_SUCCESS;
   int ret_more = OB_SUCCESS;
-  if (OB_FAIL(ObTimeConverter::str_to_offset(str, offset_, ret_more, true, true))) {
+  if (OB_FAIL(ObTimeConverter::str_to_offset(str, offset_, ret_more, true))) {
     LOG_WARN("invalid time zone offset", K(ret), K(str));
   } else {
     tz_id_ = 0;
@@ -39951,7 +39951,7 @@ int ObTimeZoneInfoWrap::init_time_zone(const ObString &str_val, const int64_t cu
   cur_version_ = curr_version;
   int ret_more = OB_SUCCESS;
 
-  if (OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset, ret_more, true, true))) {
+  if (OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset, ret_more, true))) {
     if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
       LOG_WARN("fail to convert time zone", K(str_val), K(ret));
     }

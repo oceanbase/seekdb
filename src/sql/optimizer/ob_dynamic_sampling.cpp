@@ -634,8 +634,7 @@ int ObDSStatItem::gen_expr(common::ObIAllocator &allocator, char *buf, const int
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                                                           allocator,
                                                           column_expr_->get_column_name(),
-                                                          new_col_name,
-                                                          false))) {
+                                                          new_col_name))) {
         LOG_WARN("fail to generate new name with escape character", K(ret), K(column_expr_->get_column_name()));
       } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                          "APPROX_COUNT_DISTINCT(`%.*s`)",
@@ -652,8 +651,7 @@ int ObDSStatItem::gen_expr(common::ObIAllocator &allocator, char *buf, const int
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                                                           allocator,
                                                           column_expr_->get_column_name(),
-                                                          new_col_name,
-                                                          false))) {
+                                                          new_col_name))) {
         LOG_WARN("fail to generate new name with escape character", K(ret), K(column_expr_->get_column_name()));
       } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                          "SUM(CASE WHEN `%.*s` IS NULL THEN 1 ELSE 0 END)",
@@ -730,20 +728,17 @@ int ObDynamicSampling::add_table_info(const ObString &db_name,
   if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator_,
               db_name,
-              new_db_name,
-              false))) {
+              new_db_name))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(db_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator_,
                     table_name,
-                    new_tbl_name,
-                    false))) {
+                    new_tbl_name))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(table_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator_,
                     alias_name,
-                    new_alias_name,
-                    false))) {
+                    new_alias_name))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(alias_name));
   } else {
     db_name_ = new_db_name;
@@ -1063,7 +1058,7 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
       if (OB_UNLIKELY(raw_sql.empty())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret));
-      } else if (OB_FAIL(pool->acquire(session_info, conn, false))) {
+      } else if (OB_FAIL(pool->acquire(session_info, conn))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1304,8 +1299,7 @@ int ObDynamicSampling::gen_partition_str(const ObIArray<PartInfo> &partition_inf
         LOG_WARN("failed to append", K(ret));
       } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(allocator,
                                                                              partition_infos.at(i).part_name_,
-                                                                             print_name,
-                                                                             false))) {
+                                                                             print_name))) {
         LOG_WARN("failed to generate new name with escape character", K(ret));
       } else if (OB_FAIL(partition_str.append(print_name))) {
         LOG_WARN("failed to append", K(ret));

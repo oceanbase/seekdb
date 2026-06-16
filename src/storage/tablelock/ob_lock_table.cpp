@@ -93,7 +93,7 @@ int ObLockTable::restore_lock_table_(ObITable &sstable)
     LOG_WARN("failed to push back key", K(ret), K(key));
   } else if (OB_FAIL(columns.push_back(value))) {
     LOG_WARN("failed to push back value", K(ret), K(value));
-  } else if (OB_FAIL(read_info.init(allocator, LOCKTABLE_SCHEMA_COLUMN_CNT, LOCKTABLE_SCHEMA_ROEKEY_CNT, false, columns, nullptr/*storage_cols_index*/))) {
+  } else if (OB_FAIL(read_info.init(allocator, LOCKTABLE_SCHEMA_COLUMN_CNT, LOCKTABLE_SCHEMA_ROEKEY_CNT, columns, nullptr/*storage_cols_index*/))) {
     LOG_WARN("Fail to init read_info", K(ret));
   } else if (FALSE_IT(iter_param.read_info_ = &read_info)) {
   } else if (OB_FAIL(sstable.scan(iter_param,

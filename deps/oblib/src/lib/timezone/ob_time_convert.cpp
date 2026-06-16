@@ -630,7 +630,6 @@ int ObTimeConverter::str_to_scn_value(const ObString &str,
                                       const ObTimeZoneInfo *sys_tz_info,
                                       const ObTimeZoneInfo *session_tz_info,
                                       const ObString &nlf_format,
-                                      const bool is_oracle_mode,
                                       uint64_t &scn_value)
 {
   int ret = OB_SUCCESS;
@@ -1697,15 +1696,15 @@ int ObTimeConverter::check_leading_precision(const ObTimeDigits &digits)
 // Throw OB_ERR_INVALID_TIME_ZONE_MINUTE.
 // ret_more records this error code and returns it, the upper layer determines whether to use ret_more to override ret after failing to find time_zone_map based on the mode
 int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret_more,
-                                  const bool is_oracle_mode, const bool need_check_valid/* false */)
+                                  const bool need_check_valid/* false */)
 {
   int ret = OB_SUCCESS;
+  const bool is_oracle_mode = false;
   ret_more = OB_SUCCESS;
   // Format of time_zone in mysql mode is more strict.
-  // For example, must start with '+'/'-' and redundant chars in the end not allowed.
-  // When init or deserialize session, is_oracle_mode may be not reliable.
+  // When init or deserialize session, need_check_valid may be false.
   // So when need_check_valid is false, use the loose format limit.
-  const bool use_strict_format = need_check_valid && !is_oracle_mode;
+  const bool use_strict_format = need_check_valid;
   const ObString tmp_str = (!use_strict_format ? const_cast<ObString &>(str).trim() : str);
 
   if (0 == str.compare(ObString(5, "+8:00"))) {
@@ -6044,11 +6043,10 @@ OB_INLINE int ObTimeConverter::add_timezone_offset(const ObTimeZoneInfo *tz_info
 OB_INLINE int ObTimeConverter::sub_timezone_offset(const ObTimeZoneInfo *tz_info,
                                                    bool is_timestamp,
                                                    const ObString &tz_abbr_str,
-                                                   int64_t &value,
-                                                   const bool is_oracle_mode)
+                                                   int64_t &value)
 {
   int ret = OB_SUCCESS;
-  if (tz_info != NULL && (ZERO_DATETIME != value || is_oracle_mode)) {
+  if (tz_info != NULL && (ZERO_DATETIME != value)) {
     if (is_timestamp) {
       int32_t offset_sec = 0;
       int32_t tz_id = OB_INVALID_INDEX;

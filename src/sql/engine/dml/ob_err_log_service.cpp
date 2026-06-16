@@ -234,8 +234,7 @@ int ObErrLogService::catch_err_and_gen_sql(ObIAllocator &alloc, const ObSQLSessi
         LOG_WARN("failed to print QUOTATION_MARK", K(ret), K(QUOTATION_MARK));
       } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(alloc,
                                                                              col_name,
-                                                                             dst_column_name,
-                                                                             true))) {
+                                                                             dst_column_name))) {
 
       } else if (OB_FAIL(databuff_printf(column_name_buf, column_name_size,
                                          column_name_pos, dst_column_name))) {

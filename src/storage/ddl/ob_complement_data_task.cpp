@@ -1914,7 +1914,6 @@ int ObLocalScan::construct_access_param(
   } else if (OB_FAIL(read_info_.init(allocator_,
                                      data_table_schema.get_column_count(),
                                      data_table_schema.get_rowkey_column_num(),
-                                     false/*is_oracle_mode*/,
                                      extended_gc_.extended_col_ids_, // TODO @yiren, remove column id.
                                      &cols_index,
                                      &col_params_,
@@ -2306,10 +2305,10 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
           const bool is_part_table = orig_table_schema->is_partitioned_table();
           const char *split_char = "`";
           if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-              allocator_, orig_db_schema->get_database_name_str(), orig_database_name_with_escape, false/*is_oracle_mode*/))) {
+              allocator_, orig_db_schema->get_database_name_str(), orig_database_name_with_escape))) {
             LOG_WARN("generate new name failed", K(ret));
           } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-              allocator_, orig_table_schema->get_table_name_str(), orig_table_name_with_escape, false/*is_oracle_mode*/))) {
+              allocator_, orig_table_schema->get_table_name_str(), orig_table_name_with_escape))) {
             LOG_WARN("generate new name failed", K(ret));
           } else if (is_part_table) {
             ObString partition_name_with_escape;
@@ -2317,7 +2316,7 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
             if (OB_FAIL(fetch_source_part_info(src_tablet_id_, *orig_table_schema, source_partition))) {
               LOG_WARN("fetch source part info failed", K(ret));
             } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-              allocator_, source_partition->get_part_name(), partition_name_with_escape, false/*is_oracle_mode*/))) {
+              allocator_, source_partition->get_part_name(), partition_name_with_escape))) {
               LOG_WARN("generate new name failed", K(ret), KPC(source_partition));
             } else if (OB_FAIL(query_partition_sql.assign_fmt("%s%.*s%s.%s%.*s%s partition (%s%.*s%s)",
                 split_char, static_cast<int>(orig_database_name_with_escape.length()), orig_database_name_with_escape.ptr(), split_char,
@@ -2337,7 +2336,7 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
                             static_cast<int>(query_column_sql_string.length()), query_column_sql_string.ptr(),
                             static_cast<int>(query_partition_sql.length()), query_partition_sql.ptr()))) {
             LOG_WARN("fail to assign sql string", K(ret), K(query_column_sql_string), K(query_partition_sql));
-          } else if (OB_FAIL(generate_range_condition(*datum_range_, false/*is_oracle_mode*/, sql_string))) {
+          } else if (OB_FAIL(generate_range_condition(*datum_range_, sql_string))) {
             LOG_WARN("fail to generate range condition sql", K(ret), KPC(datum_range_), K(query_partition_sql));
           } else if (OB_FAIL(sql_string.append(" order by "))) {
             LOG_WARN("append failed", K(ret));
@@ -2358,7 +2357,6 @@ int ObRemoteScan::generate_build_select_sql(ObSqlString &sql_string)
 
 int ObRemoteScan::convert_rowkey_to_sql_literal(
     const ObRowkey &rowkey,
-    bool is_oracle_mode,
     char *buf,
     int64_t &pos,
     int64_t buf_len)
@@ -2401,7 +2399,6 @@ int ObRemoteScan::convert_rowkey_to_sql_literal(
 
 int ObRemoteScan::generate_range_condition(
     const ObDatumRange &datum_range,
-    bool is_oracle_mode,
     ObSqlString &sql)
 {
   /*
@@ -2453,7 +2450,6 @@ int ObRemoteScan::generate_range_condition(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("val str is nullptr", K(ret), K(low_val_str));
         } else if (OB_FAIL(convert_rowkey_to_sql_literal(start_key,
-                                                         is_oracle_mode,
                                                          low_val_str,
                                                          low_val_len,
                                                          OB_MAX_ROW_KEY_LENGTH))) {
@@ -2482,7 +2478,6 @@ int ObRemoteScan::generate_range_condition(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("val str is nullptr", K(ret), K(low_val_str));
         } else if (OB_FAIL(convert_rowkey_to_sql_literal(end_key,
-                                                         is_oracle_mode,
                                                          high_val_str,
                                                          high_val_len,
                                                          OB_MAX_ROW_KEY_LENGTH))) {

@@ -90,12 +90,9 @@ public:
   OB_INLINE void set_length(const ObLength length) { length_ = length; }
 
   //set both length and length_semantics in case of someone forget it
-  OB_INLINE void set_full_length(const ObLength length, const ObLengthSemantics length_semantics, const bool is_oracle_mode)
+  OB_INLINE void set_full_length(const ObLength length, const ObLengthSemantics length_semantics)
   {
     length_ = length;
-    if (is_oracle_mode) {
-      length_semantics_ = length_semantics;
-    }
   }
   OB_INLINE void set_precision(const ObPrecision precision) { precision_ = precision; }
   OB_INLINE void set_length_semantics(const ObLengthSemantics length_semantics) { length_semantics_ = length_semantics; }

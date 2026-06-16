@@ -53,7 +53,7 @@ typedef union{
   uint32_t uint32_val[4];
 } LongDoubleUnion;
 
-static int float2decimal(double x, const bool is_oracle_mode, ob_gcvt_arg_type arg_type,
+static int float2decimal(double x, ob_gcvt_arg_type arg_type,
                          const ObPrecision target_precision, const ObScale target_scale,
                          const ObCastMode cast_mode, ObDecimalIntBuilder &dec_builder,
                          const ObUserLoggingCtx *user_logging_ctx, ObDecimalInt *&decint);

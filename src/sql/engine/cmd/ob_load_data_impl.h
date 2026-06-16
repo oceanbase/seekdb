@@ -706,7 +706,6 @@ public:
     common::ObSEArray<ObLoadServerInfo*, 16> server_infos;
 
     //exec params
-    bool is_oracle_mode;
     int64_t tenant_id;
     int64_t max_cpus; //real cpu num of a tenant
     int64_t num_of_file_column;

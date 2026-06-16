@@ -111,7 +111,7 @@ void TestRootBlockInfo::prepare_tablet_read_info()
     desc.col_order_ = ObOrderType::ASC;
     ASSERT_EQ(OB_SUCCESS, columns.push_back(desc));
   }
-  ASSERT_EQ(OB_SUCCESS, table_read_info_.init(allocator_, schema_version, ROWKEY_COL_CNT, lib::is_oracle_mode(), columns, nullptr/*storage_cols_index*/));
+  ASSERT_EQ(OB_SUCCESS, table_read_info_.init(allocator_, schema_version, ROWKEY_COL_CNT, columns, nullptr/*storage_cols_index*/));
 }
 
 void TestRootBlockInfo::prepare_block_root()

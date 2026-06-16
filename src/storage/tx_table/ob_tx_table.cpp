@@ -555,7 +555,6 @@ int ObTxTable::restore_tx_ctx_table_(ObITable &trans_sstable)
               allocator,
               LS_TX_CTX_SCHEMA_COLUMN_CNT,
               LS_TX_CTX_SCHEMA_ROWKEY_CNT,
-              false,
               columns,
               nullptr/*storage_cols_index*/))) {
     LOG_WARN("Fail to init read_info", K(ret));

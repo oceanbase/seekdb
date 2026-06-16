@@ -84,7 +84,7 @@ int pad_column(const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, c
     ObLength length = accuracy.get_length(); // byte or char length
     int32_t cell_strlen = 0; // byte or char length
     const ObString space_pattern = get_padding_str(cell.get_collation_type());
-    if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen)), false))) {
+    if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen))))) {
       STORAGE_LOG(WARN, "Fail to get char length, ", K(ret));
     } else {
       if (cell_strlen < length) {

@@ -1024,7 +1024,6 @@ int ObCOTabletMergeCtx::mock_row_store_table_read_info()
           mem_ctx_.get_allocator(),
           storage_schema->get_column_count(),
           schema_rowkey_cnt,
-          storage_schema->is_oracle_mode(),
           all_column_ids,
           tmp_cols_index,
           tmp_cols,

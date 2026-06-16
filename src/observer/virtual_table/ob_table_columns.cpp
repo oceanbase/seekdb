@@ -793,8 +793,7 @@ int ObTableColumns::fill_row_cells(
   } else if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_FAIL(deduce_column_attributes(is_oracle_mode,
-                                              table_schema,
+  } else if (OB_FAIL(deduce_column_attributes(table_schema,
                                               select_stmt,
                                               select_item,
                                               schema_guard_,
@@ -901,7 +900,6 @@ const ObRawExpr *ObTableColumns::skip_inner_added_expr(const ObRawExpr *expr)
 }
 
 int ObTableColumns::deduce_column_attributes(
-    const bool is_oracle_mode,
     const ObTableSchema &table_schema,
     const ObSelectStmt *select_stmt,
     const SelectItem &select_item,
@@ -912,6 +910,7 @@ int ObTableColumns::deduce_column_attributes(
     ColumnAttributes &column_attributes,
     bool skip_type_str,
     ObIAllocator &allocator) {
+  const bool is_oracle_mode = false;
   int ret = OB_SUCCESS;
   // nullable = YES:  if some binaryref expr is nullable
   // nullable = NO, other cases

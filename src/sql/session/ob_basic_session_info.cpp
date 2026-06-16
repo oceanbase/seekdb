@@ -4012,15 +4012,10 @@ int ObBasicSessionInfo::get_query_rewrite_integrity(int64_t &query_rewrite_integ
   return get_int64_sys_var(SYS_VAR_QUERY_REWRITE_INTEGRITY, query_rewrite_integrity);
 }
 
-int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order, bool is_oracle_mode) const
+int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order) const
 {
   int ret = OB_SUCCESS;
   force_set_order = false;
-  if (!is_oracle_mode) {
-    //do nothing
-  } else {
-    ret = get_bool_sys_var(SYS_VAR__FORCE_ORDER_PRESERVE_SET, force_set_order);
-  }
   return ret;
 }
 
@@ -6703,7 +6698,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
   int ret_more = OB_SUCCESS;
 
   if (OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset, ret_more,
-                                                    is_oralce_mode, check_timezone_valid))) {
+                                                    check_timezone_valid))) {
     if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
       LOG_WARN("fail to convert time zone", K(str_val), K(ret));
     }
@@ -6748,7 +6743,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
           LOG_INFO("ignore unknow time zone, perhaps in remote/distribute task processer when server start_time is zero", K(str_val));
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
-                                                    is_oralce_mode, check_timezone_valid))) {
+                                                    check_timezone_valid))) {
             if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
               LOG_WARN("fail to convert time zone", K(str_val), K(ret));
             }
@@ -6761,7 +6756,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
           // The reason is that px use tenant_id_ and das/remote use effective_tenant_id_ create session.
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
-                                                    is_oralce_mode, check_timezone_valid))) {
+                                                    check_timezone_valid))) {
             LOG_WARN("fail to convert time zone", K(str_val), K(ret));
           } else {
             tz_info_wrap_.set_tz_info_offset(offset);

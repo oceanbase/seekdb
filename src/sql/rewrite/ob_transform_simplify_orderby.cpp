@@ -55,7 +55,7 @@ int ObTransformSimplifyOrderby::transform_one_stmt(common::ObIArray<ObParentDMLS
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null stmt", K(ret), K(stmt), K(ctx_), K(ctx_->session_info_));
-  } else if (OB_FAIL(ctx_->session_info_->is_serial_set_order_forced(force_serial_set_order, false))) {
+  } else if (OB_FAIL(ctx_->session_info_->is_serial_set_order_forced(force_serial_set_order))) {
     LOG_WARN("fail to get force_serial_set_order value", K(ret));
   } else if (OB_FAIL(remove_order_by_for_subquery(stmt, subquery_happened))) {
     LOG_WARN("remove order by for subquery failed");

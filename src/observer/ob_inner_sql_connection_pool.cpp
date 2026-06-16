@@ -106,7 +106,7 @@ int ObInnerSQLConnectionPool::acquire(const uint64_t tenant_id, common::sqlclien
     LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_,
                                           config_, nullptr /* session_info */, client_addr, nullptr/*sql modifer*/, is_ddl_,
-                                          false /*is_oracle_mode*/, group_id, is_resource_conn_pool_))) {
+                                          group_id, is_resource_conn_pool_))) {
     LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
     LOG_WARN("add_to_used_conn_list failed", K(ret));
@@ -169,8 +169,7 @@ int ObInnerSQLConnectionPool::acquire_spi_conn(sql::ObSQLSessionInfo *session_in
 
 int ObInnerSQLConnectionPool::acquire(
     sql::ObSQLSessionInfo *session_info,
-    common::sqlclient::ObISQLConnection *&conn,
-    const bool is_oracle_mode/* = false */)
+    common::sqlclient::ObISQLConnection *&conn)
 {
   int ret = OB_SUCCESS;
   ObInnerSQLConnection *inner_sql_conn = NULL;
@@ -180,7 +179,7 @@ int ObInnerSQLConnectionPool::acquire(
   } else if (OB_FAIL(alloc_conn(inner_sql_conn))) {
     LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_, config_,
-                     session_info, NULL, NULL, false, is_oracle_mode, 0/*group_id*/ , is_resource_conn_pool_))) {
+                     session_info, NULL, NULL, false, 0/*group_id*/ , is_resource_conn_pool_))) {
     LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
     LOG_WARN("add_to_used_conn_list failed", K(ret));

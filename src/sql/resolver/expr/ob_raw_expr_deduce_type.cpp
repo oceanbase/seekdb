@@ -2550,7 +2550,6 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       } else if (OB_FAIL(ObExprOperator::aggregate_result_type_for_merge(res_type,
                                                                   &types.at(0),
                                                                   types.count(),
-                                                                  false,
                                                                   type_ctx))) {
         LOG_WARN("fail to aggregate_result_type_for_merge", K(ret), K(types));
       } else {

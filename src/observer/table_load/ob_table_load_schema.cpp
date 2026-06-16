@@ -544,14 +544,13 @@ int ObTableLoadSchema::init_table_schema(const ObTableSchema *table_schema)
       LOG_WARN("fail to prepare column descs", KR(ret));
     } else if (OB_FAIL(datum_utils_.init(column_descs_,
                                          rowkey_column_count_,
-                                         false,
                                          allocator_))) {
       LOG_WARN("fail to init datum utils", KR(ret));
     } else if (OB_FAIL(init_lob_storage(column_descs_))) {
       LOG_WARN("fail to check lob storage", KR(ret));
     } else if (OB_FAIL(gen_lob_meta_datum_utils())) {
       LOG_WARN("fail to gen lob meta datum utils", KR(ret));
-    } else if (OB_FAIL(init_cmp_funcs(column_descs_, false))) {
+    } else if (OB_FAIL(init_cmp_funcs(column_descs_))) {
       LOG_WARN("fail to init cmp funcs", KR(ret));
     }
     if (OB_SUCC(ret)) {
@@ -610,11 +609,10 @@ int ObTableLoadSchema::init_lob_storage(const ObIArray<ObColDesc> &column_descs)
   return ret;
 }
 
-int ObTableLoadSchema::init_cmp_funcs(const ObIArray<ObColDesc> &col_descs,
-                                      const bool is_oracle_mode)
+int ObTableLoadSchema::init_cmp_funcs(const ObIArray<ObColDesc> &col_descs)
 {
   int ret = OB_SUCCESS;
-  const bool is_null_last = is_oracle_mode;
+  const bool is_null_last = false;
   ObCmpFunc cmp_func;
   if (OB_FAIL(cmp_funcs_.init(col_descs.count(), allocator_))) {
     LOG_WARN("fail to init cmp funcs array", KR(ret), K(col_descs.count()));
@@ -624,7 +622,7 @@ int ObTableLoadSchema::init_cmp_funcs(const ObIArray<ObColDesc> &col_descs,
     const bool has_lob_header = is_lob_storage(col_desc.col_type_.get_type());
     ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
       col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type(),
-      col_desc.col_type_.get_scale(), is_oracle_mode, has_lob_header);
+      col_desc.col_type_.get_scale(), false, has_lob_header);
     if (OB_UNLIKELY(nullptr == basic_funcs || nullptr == basic_funcs->null_last_cmp_ ||
                     nullptr == basic_funcs->murmur_hash_)) {
       ret = OB_ERR_SYS;
@@ -655,7 +653,7 @@ int ObTableLoadSchema::gen_lob_meta_datum_utils()
     LOG_WARN("fail to push back col_desc", KR(ret));
   } else if (OB_FAIL(lob_meta_column_descs_.push_back(col_desc2))) {
     LOG_WARN("fail to push back col_desc", KR(ret));
-  } else if (OB_FAIL(lob_meta_datum_utils_.init(lob_meta_column_descs_, ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT, false, allocator_))) {
+  } else if (OB_FAIL(lob_meta_datum_utils_.init(lob_meta_column_descs_, ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT, allocator_))) {
     LOG_WARN("fail to init", KR(ret));
   }
   return ret;

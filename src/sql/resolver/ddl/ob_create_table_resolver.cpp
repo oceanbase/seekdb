@@ -1757,7 +1757,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
             if (OB_SUCC(ret) && ob_is_geometry(expr->get_result_type().get_type())) {
               column.set_geo_type(static_cast<uint64_t>(expr->get_geo_expr_result_type()));
             }
-            OZ (adjust_string_column_length_within_max(column, false));
+            OZ (adjust_string_column_length_within_max(column));
             LOG_DEBUG("column expr debug", K(*expr));
           }
           if (OB_FAIL(ret)) { // do nothing.
@@ -1819,7 +1819,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                   if (OB_FAIL(check_text_column_length_and_promote(column, table_id_, true))) {
                     LOG_WARN("fail to check text or blob column length", K(ret), K(column));
                   }
-                } else if (OB_FAIL(check_string_column_length(column, false, params_.is_prepare_stage_))) {
+                } else if (OB_FAIL(check_string_column_length(column, params_.is_prepare_stage_))) {
                   LOG_WARN("fail to check string column length", K(ret), K(column));
                 }
               }

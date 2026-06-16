@@ -231,7 +231,6 @@ int ObMViewRefresher::prepare_for_refresh()
           ret = OB_ERR_MVIEW_NOT_EXIST;
           LOG_WARN("mview may dropped", KR(ret), K(tenant_id), K(mview_id));
         }
-      } else if (FALSE_IT(refresh_ctx_->is_oracle_mode_ = false)) {
       } else if (OB_FAIL(ObDependencyInfo::collect_ref_infos(tenant_id,
                          mview_id, trans, previous_dependency_infos))) {
         LOG_WARN("fail to parse mview ref infos", KR(ret), K(tenant_id), K(mview_id));
@@ -750,7 +749,6 @@ int ObMViewRefresher::set_session_dml_dop_(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   has_updated_dml_dop = false;
   orig_dml_dop = 0;
-  const bool is_oracle_mode = refresh_ctx_->is_oracle_mode_;
 
   if (OB_ISNULL(exec_session_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -760,11 +758,7 @@ int ObMViewRefresher::set_session_dml_dop_(const uint64_t tenant_id,
     int64_t affected_rows = 0;
     if (OB_FAIL(exec_session_info->get_force_parallel_dml_dop(orig_dml_dop))) {
       LOG_WARN("fail to get force parallel dml dop", KR(ret));
-    } else if (is_oracle_mode &&
-               OB_FAIL(sql.assign_fmt("SET \"_force_parallel_dml_dop\" = %lu", parallelism))) {
-      LOG_WARN("fail to assign sql", KR(ret), K(parallelism));
-    } else if (!is_oracle_mode &&
-               OB_FAIL(sql.assign_fmt("SET _force_parallel_dml_dop = %lu", parallelism))) {
+    } else if (OB_FAIL(sql.assign_fmt("SET _force_parallel_dml_dop = %lu", parallelism))) {
       LOG_WARN("fail to assign sql", KR(ret), K(parallelism));
     } else if (OB_FAIL(trans.write(tenant_id, sql.ptr(), affected_rows))) {
       LOG_WARN("fail to set force parallel dml dop", KR(ret), K(sql));
@@ -783,16 +777,11 @@ int ObMViewRefresher::restore_session_dml_dop_(const uint64_t tenant_id,
                                                ObMViewTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const bool is_oracle_mode = refresh_ctx_->is_oracle_mode_;
 
   if (has_updated_dml_dop) {
     ObSqlString sql;
     int64_t affected_rows = 0;
-    if (is_oracle_mode &&
-        OB_FAIL(sql.assign_fmt("SET \"_force_parallel_dml_dop\" = %lu", orig_dml_dop))) {
-      LOG_WARN("fail to assign sql", KR(ret), K(orig_dml_dop));
-    } else if (!is_oracle_mode &&
-               OB_FAIL(sql.assign_fmt("SET _force_parallel_dml_dop = %lu", orig_dml_dop))) {
+    if (OB_FAIL(sql.assign_fmt("SET _force_parallel_dml_dop = %lu", orig_dml_dop))) {
       LOG_WARN("fail to assign sql", KR(ret), K(orig_dml_dop));
     } else if (OB_FAIL(trans.write(tenant_id, sql.ptr(), affected_rows))) {
       LOG_WARN("fail to set force parallel dml dop", KR(ret), K(sql));

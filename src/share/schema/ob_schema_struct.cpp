@@ -466,30 +466,19 @@ int ObSysTableChecker::check_inner_table_exist(
     // case 1: sys table in sys tenant only
     exist = is_sys_tenant(tenant_id);
   } else {
-    compat_mode = lib::Worker::CompatMode::MYSQL;
-    const bool is_oracle_mode = false;
     // case 2: sys table in tenant space
     if (is_oceanbase_sys_database_id(database_id)) {
       if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
         // case 2.1: sys/meta tenant has all inner tables in oceanbase.
         exist = true;
-      } else if (is_oracle_mode) {
-        // case 2.2: oracle tenant has non cluster private inner tables in oceanbase.
-        // mysql sys view in oracle tenant is not accessable.
-        exist = !is_mysql_sys_view_table(table_id) && !is_cluster_private_tenant_table(table_id);
       } else {
         // case 2.3: mysql tenant has non cluster private inner tables in oceanbase.
         exist = !is_cluster_private_tenant_table(table_id);
       }
     } else {
       // information_schema、mysql、sys
-      if (is_oracle_mode) {
-        // case 2.4: In Oracle tenant mode, there is no need to add MySQL related internal tables
-        exist = is_oracle_sys_database_id(database_id);
-      } else {
-        // case 2.5: In the MySQL tenant mode, there is no need to add Oracle related internal tables,
-        exist = is_mysql_sys_database_id(database_id);
-      }
+      // case 2.5: In the MySQL tenant mode, there is no need to add Oracle related internal tables,
+      exist = is_mysql_sys_database_id(database_id);
     }
   }
   return ret;
@@ -11105,7 +11094,6 @@ ObIndexSchemaHashWrapper GetIndexNameKey<ObIndexSchemaHashWrapper, ObIndexNameIn
   const ObIndexNameInfo *index_name_info) const
 {
   if (OB_NOT_NULL(index_name_info)) {
-    bool is_oracle_mode = false;
     if (is_recyclebin_database_id(index_name_info->get_database_id())) {
       ObIndexSchemaHashWrapper index_schema_hash_wrapper(
           index_name_info->get_tenant_id(),
@@ -11117,7 +11105,7 @@ ObIndexSchemaHashWrapper GetIndexNameKey<ObIndexSchemaHashWrapper, ObIndexNameIn
       ObIndexSchemaHashWrapper index_schema_hash_wrapper(
           index_name_info->get_tenant_id(),
           index_name_info->get_database_id(),
-          is_oracle_mode ? common::OB_INVALID_ID : index_name_info->get_data_table_id(),
+          index_name_info->get_data_table_id(),
           index_name_info->get_original_index_name());
       return index_schema_hash_wrapper;
     }

@@ -346,7 +346,7 @@ void TestDataBlockWriter::check_row(const ObDirectLoadDatumRow *next_row, const 
   ObArray<ObColDesc> col_descs;
   ObStorageDatumUtils datum_utils;
   ASSERT_EQ(OB_SUCCESS, table_schema_.get_column_ids(col_descs));
-  datum_utils.init(col_descs, rowkey_column_count, lib::is_oracle_mode(), allocator_);
+  datum_utils_.init(col_descs, rowkey_column_count, allocator_);
   ASSERT_EQ(OB_SUCCESS, next_key.compare(curr_key, datum_utils, cmp_ret));
   ASSERT_TRUE(cmp_ret == 0);
 }
@@ -406,7 +406,7 @@ void TestDataBlockWriter::SetUp()
   // init datum_utils_
   ObArray<ObColDesc> col_descs;
   ASSERT_EQ(OB_SUCCESS, table_schema_.get_column_ids(col_descs));
-  ASSERT_EQ(OB_SUCCESS, datum_utils_.init(col_descs, rowkey_column_count, lib::is_oracle_mode(), allocator_));
+  ASSERT_EQ(OB_SUCCESS, datum_utils_.init(col_descs, rowkey_column_count, allocator_));
   // init table_data_desc_
   table_data_desc_.rowkey_column_num_ = table_schema_.get_rowkey_column_num();
   table_data_desc_.column_count_ = column_num;

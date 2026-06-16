@@ -106,7 +106,7 @@ private:
   OB_INLINE void init_block_size(const share::schema::ObMergeSchema &merge_schema);
   static const int64_t DEFAULT_RESERVE_PERCENT = 90;
   static const int64_t MIN_RESERVED_SIZE = 1024; //1KB;
-  static const ObCompressorType DEFAULT_MINOR_COMPRESSOR_TYPE = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
+  static const ObCompressorType DEFAULT_MINOR_COMPRESSOR_TYPE = ObCompressorType::LZ4_COMPRESSOR;
   bool operator==(const ObStaticDataStoreDesc &other) const; // for unittest
 public:
   bool is_ddl_; // only used to print ERROR or WARN log
@@ -191,9 +191,6 @@ private:
   int add_col_desc_from_cg_schema(
     const share::schema::ObMergeSchema &merge_schema,
     const storage::ObStorageColumnGroupSchema &cg_schema);
-  static int get_compat_mode_from_schema(
-    const share::schema::ObMergeSchema &merge_schema,
-    bool &is_oracle_mode);
 public:
   bool is_row_store_;
   bool default_col_checksum_array_valid_;

@@ -128,19 +128,16 @@ int ObVectorRefreshIndexExecutor::execute_rebuild_inner(
 }
 
 void ObVectorRefreshIndexExecutor::upper_db_table_name(
-    const ObNameCaseMode case_mode, const bool is_oracle_mode, ObString &name) {
-  if (is_oracle_mode) {
-    str_toupper(name.ptr(), name.length());
-  } else {
-    if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
-      str_tolower(name.ptr(), name.length());
-    }
+    const ObNameCaseMode case_mode, ObString &name) {
+  // MySQL mode
+  if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
+    str_tolower(name.ptr(), name.length());
   }
 }
 
 int ObVectorRefreshIndexExecutor::resolve_table_name(
     const ObCollationType cs_type, const ObNameCaseMode case_mode,
-    const bool is_oracle_mode, const ObString &name, ObString &database_name,
+    const ObString &name, ObString &database_name,
     ObString &table_name) {
   int ret = OB_SUCCESS;
   static const char split_character = '.';
@@ -165,17 +162,16 @@ int ObVectorRefreshIndexExecutor::resolve_table_name(
     }
     if (OB_SUCC(ret)) {
       const bool preserve_lettercase =
-          is_oracle_mode ? true : (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
-      upper_db_table_name(case_mode, is_oracle_mode, database_name);
-      upper_db_table_name(case_mode, is_oracle_mode, table_name);
+          (case_mode != OB_LOWERCASE_AND_INSENSITIVE);
+      upper_db_table_name(case_mode, database_name);
+      upper_db_table_name(case_mode, table_name);
       if (!database_name.empty() &&
           OB_FAIL(ObSQLUtils::check_and_convert_db_name(
               cs_type, preserve_lettercase, database_name))) {
         LOG_WARN("fail to check and convert database name", KR(ret),
                  K(database_name));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(
-                     cs_type, preserve_lettercase, table_name,
-                     is_oracle_mode))) {
+                     cs_type, preserve_lettercase, table_name))) {
         LOG_WARN("fail to check and convert table name", KR(ret), K(cs_type),
                  K(preserve_lettercase), K(table_name));
       }
@@ -318,7 +314,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     uint64_t base_table_id = -1;
     ObString base_vector_index_col_name;
     if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-            cs_type, case_mode, false, arg_base_name,
+            cs_type, case_mode, arg_base_name,
             base_db_name, base_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
               K(arg_base_name));
@@ -326,7 +322,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                     static_cast<int>(arg_base_name.length()),
                     arg_base_name.ptr());
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-                  cs_type, case_mode, false, arg_idx_name,
+                  cs_type, case_mode, arg_idx_name,
                   index_db_name, index_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
               K(arg_idx_name));

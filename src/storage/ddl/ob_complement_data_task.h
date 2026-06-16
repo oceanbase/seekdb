@@ -488,21 +488,17 @@ private:
   int generate_build_select_sql(ObSqlString &sql_string);
   // to fetch partiton/subpartition name for select sql.
   int generate_range_condition(const ObDatumRange &datum_range,
-                               bool is_oracle_mode,
                                ObSqlString &sql);
   int fetch_source_part_info(
       const common::ObTabletID &src_tablet_id,
       const share::schema::ObTableSchema &src_table_schema,
       const ObBasePartition*& source_partition);
-  int generate_column_name_str(const bool is_oracle_mode,
-                               ObSqlString &sql_string);
+  int generate_column_name_str(ObSqlString &sql_string);
   int generate_column_name_str(const ObString &column_name_info,
                                const bool with_comma,
-                               const bool is_oracle_mode,
                                ObSqlString &sql_string);
   int convert_rowkey_to_sql_literal(
       const ObRowkey &rowkey,
-      bool is_oracle_mode,
       char *buf,
       int64_t &pos,
       int64_t buf_len);

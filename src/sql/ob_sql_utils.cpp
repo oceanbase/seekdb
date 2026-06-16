@@ -851,16 +851,6 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
                                              const stmt::StmtType stmt_type,
                                              const bool is_index_table)
 {
-  return check_and_convert_table_name(cs_type, preserve_lettercase, name, false, stmt_type, is_index_table);
-}
-
-int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
-                                             const bool preserve_lettercase,
-                                             ObString &name,
-                                             const bool is_oracle_mode,
-                                             const stmt::StmtType stmt_type,
-                                             const bool is_index_table)
-{
   /**
    * MYSQL mode
    *  If the byte number of table name is greater than 192, report OB_WRONG_TABLE_NAME;
@@ -877,8 +867,7 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
   int ret = OB_SUCCESS;
   int64_t name_len = name.length();
   const char *name_str = name.ptr();
-  const int64_t max_user_table_name_length = is_oracle_mode
-              ? OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE : OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
+  const int64_t max_user_table_name_length = OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
   const int64_t max_index_name_prefix_len = 30;
   if (0 == name_len
       || (!is_index_table && (name_len > (max_user_table_name_length * OB_MAX_CHAR_LEN)))
@@ -3197,13 +3186,12 @@ bool ObSQLUtils::is_same_type_for_compare(const ObObjMeta &meta1, const ObObjMet
 int ObSQLUtils::generate_new_name_with_escape_character(
     common::ObIAllocator &allocator,
     const ObString &src,
-    ObString &dst,
-    bool is_oracle_mode)
+    ObString &dst)
 {
   int ret = OB_SUCCESS;
   const ObString::obstr_size_t src_len = src.length();
   ObString::obstr_size_t dst_len = src_len;
-  const char escape_character = is_oracle_mode ? '"' : '`';
+  const char escape_character = '`';
   char *ptr = NULL;
 
   if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
@@ -3585,8 +3573,7 @@ int ObSQLUtils::convert_sql_text_to_schema_for_storing(ObIAllocator &allocator,
 
 int ObSQLUtils::print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
                                  ObCollationType connection_collation,
-                                 const common::ObString &identifier_name,
-                                 bool is_oracle_mode)
+                                 const common::ObString &identifier_name)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("PrintIdentifier");
@@ -3596,8 +3583,7 @@ int ObSQLUtils::print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(generate_new_name_with_escape_character(allocator,
                                                       identifier_name,
-                                                      print_name,
-                                                      is_oracle_mode))) {
+                                                      print_name))) {
     LOG_WARN("failed to generate new name with escape character", K(ret));
   } else if (ObCharset::charset_type_by_coll(connection_collation)
       == CHARSET_UTF8MB4) {

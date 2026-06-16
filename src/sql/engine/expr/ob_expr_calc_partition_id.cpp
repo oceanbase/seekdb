@@ -1353,7 +1353,7 @@ bool RangePartCmp::operator()(const ObDatum &l, const RangePartition &r) {
   } else if (l.is_null()) {
     // In part calc, MySQL treats null values as infinitely small,
     // while Oracle treats them as infinitely large.
-    res = is_oracle_mode_ ? false : true;
+    res = true;
   } else {
     ret_ = (row_cmp_func_)(part_expr_obj_meta_,
                           part_array_obj_meta_,
@@ -1400,7 +1400,6 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
       part_cmp_.part_expr_obj_meta_ = part_expr.obj_meta_;
       part_cmp_.part_array_obj_meta_ =
           part_array[0]->get_high_bound_val().get_obj_ptr()->get_meta();
-      part_cmp_.is_oracle_mode_ = false;
     }
   }
   return ret;

@@ -786,7 +786,7 @@ int ObExprJsonQuery::get_clause_param_value(const ObExpr &expr,
   if (val_type == ObNullType) {
     if (ob_is_string_type(type) || json_param->json_path_->is_last_func()) {
       json_param->dst_type_ = ObVarcharType;
-      json_param->accuracy_.set_full_length(VARCHAR2_DEFAULT_LEN, 1, false);
+      json_param->accuracy_.set_full_length(VARCHAR2_DEFAULT_LEN, 1);
     } else {
       json_param->dst_type_ = ObJsonType;
       json_param->accuracy_.set_length(0);

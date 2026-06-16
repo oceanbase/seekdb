@@ -780,12 +780,11 @@ int ObDDLUtil::generate_mview_ddl_schema_hint_str(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, database schema must not be nullptr", KR(ret));
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-                 allocator, database_schema->get_database_name_str(), database_name,
-                 false))) {
+                 allocator, database_schema->get_database_name_str(), database_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(database_schema->get_database_name_str()));
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-                 allocator, table_schema->get_table_name_str(), table_name, false))) {
+                 allocator, table_schema->get_table_name_str(), table_name))) {
       LOG_WARN("fail to generate new name with escape character", KR(ret),
                K(table_schema->get_table_name_str()));
     } else {
@@ -1152,29 +1151,25 @@ int ObDDLUtil::generate_build_replica_sql(
         if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator,
               dest_database_name,
-              new_dest_database_name,
-              oracle_mode))) {
+              new_dest_database_name))) {
           LOG_WARN("fail to generate new name with escape character",
                     K(ret), K(dest_database_name));
         } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator,
               dest_table_name,
-              new_dest_table_name,
-              oracle_mode))) {
+              new_dest_table_name))) {
           LOG_WARN("fail to generate new name with escape character",
                     K(ret), K(dest_table_name));
         } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator,
               source_database_name,
-              new_source_database_name,
-              oracle_mode))) {
+              new_source_database_name))) {
           LOG_WARN("fail to generate new name with escape character",
                     K(ret), K(source_database_name));
         } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
               allocator,
               source_table_name,
-              new_source_table_name,
-              oracle_mode))) {
+              new_source_table_name))) {
           LOG_WARN("fail to generate new name with escape character",
                     K(ret), K(source_table_name));
         } else if (use_schema_version_hint_for_src_table) {
@@ -1278,12 +1273,11 @@ int ObDDLUtil::generate_build_mview_replica_sql(
       ObSqlString src_table_schema_version_hint;
       ObSqlString rowkey_column_sql_string;
       if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-            allocator, database_schema->get_database_name_str(), database_name, is_oracle_mode))) {
+            allocator, database_schema->get_database_name_str(), database_name))) {
         LOG_WARN("fail to generate new name with escape character", KR(ret),
                  K(database_schema->get_database_name_str()), K(is_oracle_mode));
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
-                   allocator, container_table_schema->get_table_name_str(), container_table_name,
-                   is_oracle_mode))) {
+                   allocator, container_table_schema->get_table_name_str(), container_table_name))) {
         LOG_WARN("fail to generate new name with escape character", KR(ret),
                  K(container_table_schema->get_table_name_str()), K(is_oracle_mode));
       } else if (use_schema_version_hint_for_src_table) {
@@ -3905,7 +3899,7 @@ int ObDDLUtil::generate_partition_names(const common::ObIArray<ObString> &partit
       for (int64_t i = 0; i < partition_nums && OB_SUCC(ret); i++) {
         ObString part_name;
         tmp_allocator.reuse();
-        if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(tmp_allocator, partition_names_array.at(i), part_name, false))) {
+        if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(tmp_allocator, partition_names_array.at(i), part_name))) {
           LOG_WARN("failed to generate new name", K(ret), K(partition_names_array.at(i)));
         } else if (i == partition_nums - 1) {
           if (OB_FAIL(sql_partition_names.append_fmt("%c%.*s%c)", quote, static_cast<int>(part_name.length()), part_name.ptr(), quote))) {
@@ -3942,7 +3936,7 @@ int ObDDLUtil::check_target_partition_is_running(const ObString &running_sql_inf
   if (OB_UNLIKELY(running_sql_info.empty() || partition_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(running_sql_info), K(partition_name));
-  } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(tmp_allocator, partition_name, escaped_partition_name, false))) {
+  } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(tmp_allocator, partition_name, escaped_partition_name))) {
     LOG_WARN("failed to generate new name", K(ret), K(partition_name));
   } else if (OB_FAIL(sql_partition_name.append_fmt("%c%.*s%c,", quote, static_cast<int>(escaped_partition_name.length()), escaped_partition_name.ptr(), quote))) {
     LOG_WARN("append partition names failed", K(ret), K(escaped_partition_name), K(sql_partition_name));
@@ -4709,15 +4703,13 @@ int ObDDLUtil::check_table_empty(
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                   allocator,
                   database_name,
-                  new_database_name,
-                  false))) {
+                  new_database_name))) {
         LOG_WARN("fail to generate new name with escape character",
                   K(ret), K(database_name));
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                          allocator,
                          table_name,
-                         new_table_name,
-                         false))) {
+                         new_table_name))) {
         LOG_WARN("fail to generate new name with escape character",
                   K(ret), K(table_name));
       } else if (OB_FAIL(session_param.ddl_info_.init(ddl_info, table_schema.get_session_id()))) {

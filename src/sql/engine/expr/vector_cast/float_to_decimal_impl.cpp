@@ -48,12 +48,13 @@ namespace sql
     1. - 3. are the same as mysql mode.
     4. Generate max digits of type_precision and then fix them up.
  */
-int ObFloatToDecimal::float2decimal(double x, const bool is_oracle_mode, ob_gcvt_arg_type arg_type,
+int ObFloatToDecimal::float2decimal(double x, ob_gcvt_arg_type arg_type,
                                     const ObPrecision target_precision, const ObScale target_scale,
                                     const ObCastMode cast_mode, ObDecimalIntBuilder &dec_builder,
                                     const ObUserLoggingCtx *user_logging_ctx,
                                     ObDecimalInt *&decint){
   int ret = OB_SUCCESS;
+  const bool is_oracle_mode = false;
   dec_builder.set_zero(sizeof(int512_t));
   /* if is_oracle_mode and arg_type is OB_GCVT_ARG_FLOAT, type_precision is MAX_DIGITS_FLOAT
     else type_precision is MAX_DIGITS_DOUBLE */

@@ -831,7 +831,7 @@ struct VecTCCmpCalc<VEC_TC_UDT, VEC_TC_UDT>
     cmp_ret = 0;
     int ret = OB_SUCCESS;
     bool calc_end_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(), false,
+      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
                              l_meta.get_collation_type(), r_meta.get_collation_type());
     if (l_meta.get_collation_type() != CS_TYPE_BINARY
         || r_meta.get_collation_type() != CS_TYPE_BINARY
@@ -966,7 +966,7 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_STRING>
   {
     OB_ASSERT(l_meta.get_collation_type() == r_meta.get_collation_type());
     bool end_with_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(), false,
+      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
                              l_meta.get_collation_type(), r_meta.get_collation_type());
     cmp_ret =
       ObCharset::strcmpsp(l_meta.get_collation_type(), reinterpret_cast<const char *>(l_v), l_len,
@@ -988,7 +988,7 @@ struct VecTCCmpCalc<VEC_TC_LOB, VEC_TC_LOB>
     OB_ASSERT(l_meta.get_collation_type() == r_meta.get_collation_type());
     int ret = OB_SUCCESS;
     bool end_with_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(), false,
+      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
                              l_meta.get_collation_type(), r_meta.get_collation_type());
     bool has_lob_header = (l_meta.has_lob_header() || r_meta.has_lob_header());
 
@@ -1046,7 +1046,7 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_LOB>
     int ret = OB_SUCCESS;
     ObString r_data;
     bool end_with_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(), false,
+      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
                              l_meta.get_collation_type(), r_meta.get_collation_type());
     bool has_lob_header = (l_meta.has_lob_header() || r_meta.has_lob_header());
     if (has_lob_header) {

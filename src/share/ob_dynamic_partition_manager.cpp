@@ -1378,7 +1378,7 @@ int ObDynamicPartitionManager::update_dynamic_partition_policy_with_str_(
             LOG_WARN("not support to alter dynamic partition time zone", KR(ret));
           } else {
             if (0 != v.case_compare(DEFAULT_DYNAMIC_PARTITION_TIME_ZONE_STR)
-                && OB_FAIL(ObTimeConverter::str_to_offset(v, offset, ret_more, false/*is_oracle_mode*/, true/*need_check_valid*/))) {
+                && OB_FAIL(ObTimeConverter::str_to_offset(v, offset, ret_more, true/*need_check_valid*/))) {
               LOG_WARN("fail to convert str to offset", KR(ret), K(k), K(v));
             } else {
               policy.time_zone_ = v;

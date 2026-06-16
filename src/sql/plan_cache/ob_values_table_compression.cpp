@@ -519,7 +519,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
                                                                   &res_types.at(0),
                                                                   res_types.count(),
-                                                                  false,
                                                                   type_ctx))) {
               LOG_WARN("failed to aggregate result type for merge", K(ret));
             }
@@ -672,7 +671,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
                                                                         &res_types.at(0),
                                                                         res_types.count(),
-                                                                        false,
                                                                         type_ctx))) {
               LOG_WARN("failed to aggregate result type for merge", K(ret));
             } else {

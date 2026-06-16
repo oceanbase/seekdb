@@ -52,7 +52,6 @@ public:
   // get_xxx_str will call print_sql_literal func
   // get_xxx_bin_str will call serialize func
   int get_rowkey_str(
-      const bool is_oracle_mode,
       const common::ObRowkey &rowkey,
       common::ObObj &out_obj);
   int get_rowkey_bin_str(const common::ObRowkey &rowkey, common::ObObj &out_obj);
@@ -60,12 +59,10 @@ public:
   int get_obj_str(const common::ObObj &obj, common::ObObj &out_obj);
   int get_obj_bin_str(const common::ObObj &obj, common::ObObj &out_obj);
   int get_rows_str(
-      const bool is_oracle_mode,
       const common::ObIArray<common::ObNewRow>& rows,
       common::ObObj &out_obj);
   int get_rows_bin_str(const common::ObIArray<common::ObNewRow>& rows, common::ObObj &out_obj);
   int get_partition_value_str(
-      const bool is_oracle_mode,
       const share::schema::ObPartitionFuncType type,
       const share::schema::ObBasePartition &partition,
       common::ObObj &out_obj);

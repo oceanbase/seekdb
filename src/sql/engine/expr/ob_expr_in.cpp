@@ -807,7 +807,7 @@ int ObExprInOrNotIn::cg_expr_without_row(ObExprCGCtx &expr_cg_ctx,
       DatumCmpFunc func_ptr;
       // hash table use self as left, so here right param is left for cmp func
       func_ptr = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-        right_type, left_type, scale2, scale1, prec2, prec1, false, left_cs, has_lob_header);
+        right_type, left_type, scale2, scale1, prec2, prec1, left_cs, has_lob_header);
       for (int i = 0; i < rt_expr.inner_func_cnt_; i++) {
         rt_expr.inner_functions_[i] = (void *)func_ptr;
       }
@@ -911,7 +911,7 @@ int ObExprInOrNotIn::cg_expr_with_row(ObExprCGCtx &expr_cg_ctx,
           // hash table use self as left, so here right param is left for cmp func
           func_ptr = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
             right_types.at(i), left_types.at(i), right_scales.at(i), left_scales.at(i),
-            rigth_precs.at(i), left_precs.at(i), false, left_cs_arr.at(i),
+            rigth_precs.at(i), left_precs.at(i), left_cs_arr.at(i),
             has_lob_headers.at(i));
           func_buf[i] = (void *)func_ptr;
           is_string_text_cmp |= (ob_is_string_tc(left_types.at(i)) && ob_is_text_tc(right_types.at(i))) ||
@@ -984,7 +984,7 @@ int ObExprInOrNotIn::cg_expr_with_subquery(ObExprCGCtx &expr_cg_ctx,
           // hash table use self as left, so here right param is left for cmp func
           funcs[i] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
             r.get_type(), l.get_type(), r_datum_meta_.scale_, l.get_scale(), r_datum_meta_.precision_,
-            l.get_precision(), false, l.get_collation_type(),
+            l.get_precision(), l.get_collation_type(),
             has_lob_header);
           CK(NULL != funcs[i]);
         }
@@ -1551,7 +1551,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                                   LEFT_ROW_ELE(j)->datum_meta_.scale_,
                                   RIGHT_ROW_ELE(0, j)->datum_meta_.precision_,
                                   LEFT_ROW_ELE(j)->datum_meta_.precision_,
-                                  false,
                                   LEFT_ROW_ELE(j)->datum_meta_.cs_type_,
                                   LEFT_ROW_ELE(j)->obj_meta_.has_lob_header() ||
                                   RIGHT_ROW_ELE(0, j)->obj_meta_.has_lob_header());
@@ -1657,7 +1656,6 @@ int ObExprInOrNotIn::eval_in_without_row(const ObExpr &expr,
                                 expr.args_[0]->datum_meta_.scale_,
                                 expr.args_[1]->args_[0]->datum_meta_.precision_,
                                 expr.args_[0]->datum_meta_.precision_,
-                                false,
                                 expr.args_[0]->datum_meta_.cs_type_,
                                 expr.args_[0]->obj_meta_.has_lob_header() ||
                                 expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
@@ -1759,7 +1757,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
                                 expr.args_[0]->datum_meta_.scale_,
                                 expr.args_[1]->args_[0]->datum_meta_.precision_,
                                 expr.args_[0]->datum_meta_.precision_,
-                                false,
                                 expr.args_[0]->datum_meta_.cs_type_,
                                 expr.args_[0]->obj_meta_.has_lob_header() ||
                                 expr.args_[1]->args_[0]->obj_meta_.has_lob_header());
@@ -1888,7 +1885,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row(const ObExpr &expr,
                                   expr.args_[0]->datum_meta_.scale_,
                                   expr.args_[1]->args_[0]->datum_meta_.precision_,
                                   expr.args_[0]->datum_meta_.precision_,
-                                  false,
                                   expr.args_[0]->datum_meta_.cs_type_,
                                   expr.args_[0]->obj_meta_.has_lob_header() ||
                                   expr.args_[1]->args_[0]->obj_meta_.has_lob_header());

@@ -173,7 +173,7 @@ int ObExprOracleDecode::calc_result_typeN(ObExprResType &type,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected result type count", K(ret));
       } else if (OB_FAIL(aggregate_numeric_accuracy_for_merge(type, &res_types.at(0),
-                                                              res_types.count(), false))) {
+                                                              res_types.count()))) {
         LOG_WARN("fail to merge numeric accuracy", K(ret));
       }
     } else {
