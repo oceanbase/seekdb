@@ -232,7 +232,6 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"decimal", DECIMAL},
   {"declare", DECLARE},
   {"decrypt", DECRYPT},
-  {"decryption", DECRYPTION},
   {"default", DEFAULT},
   {"default_auth", DEFAULT_AUTH},
   {"default_lob_inrow_threshold", DEFAULT_LOB_INROW_THRESHOLD},
