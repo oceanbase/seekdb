@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-// put top to use macro tricks
 #include "mtlenv/mock_tenant_module_env.h"
-// put top to use macro tricks
 
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"

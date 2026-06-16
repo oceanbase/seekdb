@@ -22,7 +22,7 @@
 #include "mock_logservice_container/mock_log_engine.h"
 #include "mock_logservice_container/mock_log_mode_mgr.h"
 #include "mock_logservice_container/mock_log_reconfirm.h"
-#include "mittest/logservice/env/mock_ob_locality_manager.h"
+#include "logservice/env/mock_ob_locality_manager.h"
 #undef private
 namespace oceanbase
 {

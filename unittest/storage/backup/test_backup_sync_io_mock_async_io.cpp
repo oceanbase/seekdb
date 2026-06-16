@@ -18,7 +18,7 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
-#include "mittest/mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/backup/ob_backup_device_wrapper.h"
 #include "share/backup/ob_backup_io_adapter.h"
 

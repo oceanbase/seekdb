@@ -33,7 +33,7 @@
 #include "share/ob_storage_format.h"
 #include "share/schema/ob_table_param.h"
 #include "storage/mockcontainer/mock_ob_iterator.h"
-#include "mittest/mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_service.h"

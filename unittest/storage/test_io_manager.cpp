@@ -21,7 +21,7 @@
 #define private public
 #define protected public
 #include "share/resource_manager/ob_cgroup_ctrl.h"
-#include "mittest/mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 #undef private
 #undef protected
 #ifdef _WIN32

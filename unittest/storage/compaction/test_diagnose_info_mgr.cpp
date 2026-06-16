@@ -18,7 +18,7 @@
 #define private public
 #define protected public
 #include "src/storage/ob_i_store.h"
-#include "mittest/mtlenv/mock_tenant_module_env.h"
+#include "mtlenv/mock_tenant_module_env.h"
 namespace oceanbase
 {
 using namespace common;

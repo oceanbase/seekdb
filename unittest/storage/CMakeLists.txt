@@ -12,7 +12,7 @@ add_dependencies(mock_access_service oblib_grpc)
 
 add_library(truncate_info_helper ob_truncate_info_helper.cpp)
 target_include_directories(truncate_info_helper PUBLIC
-  ${CMAKE_SOURCE_DIR}/unittest ${CMAKE_SOURCE_DIR}/mittest)
+  ${CMAKE_SOURCE_DIR}/unittest)
 target_link_libraries(truncate_info_helper PUBLIC ob_base mockcontainer)
 add_dependencies(truncate_info_helper oblib_grpc)
 
