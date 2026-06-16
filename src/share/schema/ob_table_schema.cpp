@@ -4258,24 +4258,10 @@ int ObTableSchema::check_alter_column_in_foreign_key(const ObColumnSchemaV2 &src
   const ObAccuracy &dst_accuracy = dst_column.get_accuracy();
   if (is_column_in_foreign_key(src_column.get_column_id())) {
     char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE] = {0};
-    if (false) {
-    // in oracle mode, only VARCHAR or NVARCHAR can be changed to large or small, and other types are not supported
-      if (src_col_type != dst_col_type) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter the type of foreign key columns");
-      } else {
-        if (!src_column.get_meta_type().is_varying_len_char_type() ||
-            !dst_column.get_meta_type().is_varying_len_char_type()) {
-          ret = OB_NOT_SUPPORTED;
-          (void)snprintf(err_msg, sizeof(err_msg), "Alter the precision of foreign key columns,"
-          "column type %s", ob_obj_type_str(src_col_type));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg);
-        }
-      }
-    } else {
     // if the column type class is ObFloatTC or ObDoubleTC, which supports changing the precision
     // if the column type class is VARCHAR, which supports changing to a larger size, but does
     // not support changing to a smaller size
+    {
       if (dst_column.get_data_type_class() == ObFloatTC ||
           dst_column.get_data_type_class() == ObDoubleTC) {
         if (src_column.get_meta_type().is_float() || src_column.get_meta_type().is_double()) {
@@ -4368,69 +4354,39 @@ int ObTableSchema::check_alter_column_accuracy(const ObColumnSchemaV2 &src_colum
               src_col_byte_len > dst_col_byte_len)) {
       is_type_reduction = true;
     }
-    if (false) {
-      if (ob_is_float_tc(src_col_type)
-       || ob_is_double_tc(src_col_type)
-       || src_meta.is_datetime()
-       || src_meta.is_blob()
-       || src_meta.is_clob()) {
-         // online, do nothing
-      } else if (is_type_reduction) {
-        if (src_meta.is_varchar()) {
-          is_offline = true;
-        } else {
-          ret = OB_ERR_DECREASE_COLUMN_LENGTH;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "Can not decrease precision or scale");
-        }
-      } else {
-        // increase column length
-        if (ob_is_number_tc(src_col_type) || src_meta.is_char() || src_meta.is_varchar()
-         || src_meta.is_json()) {
-          // online, do nothing
-        } else if (src_meta.is_decimal_int()) {
-          // if scale or decimal int width is not equal, offline ddl is need.
-          is_offline = (dst_accuracy.get_scale() != src_accuracy.get_scale()) ||
-            (get_decimalint_type(dst_accuracy.get_precision()) != get_decimalint_type(src_accuracy.get_precision()));
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "Can not increase precision or scale");
-        }
-      }
-    } else {
-      // in mysql mode
-      if (src_meta.is_date()
-       || src_meta.is_year()) {
-         // online, do nothing
-      } else if (ObEnumSetTC == src_column.get_data_type_class()) {
-        bool is_incremental = true;
-        if (src_column.get_extended_type_info().count() >
-            dst_column.get_extended_type_info().count()) {
-          is_offline = true;
-        } else if (src_column.get_collation_type() != dst_column.get_collation_type()) {
-          is_offline = true;
-        } else if (OB_FAIL(ObDDLResolver::check_type_info_incremental_change(
-                   src_column, dst_column, is_incremental))) {
-          LOG_WARN("failed to check type info incremental change", K(ret));
-        } else if (!is_incremental) {
-          is_offline = true;
-        }
-      } else if (is_type_reduction) {
+    // in mysql mode
+    if (src_meta.is_date()
+     || src_meta.is_year()) {
+       // online, do nothing
+    } else if (ObEnumSetTC == src_column.get_data_type_class()) {
+      bool is_incremental = true;
+      if (src_column.get_extended_type_info().count() >
+          dst_column.get_extended_type_info().count()) {
         is_offline = true;
+      } else if (src_column.get_collation_type() != dst_column.get_collation_type()) {
+        is_offline = true;
+      } else if (OB_FAIL(ObDDLResolver::check_type_info_incremental_change(
+                 src_column, dst_column, is_incremental))) {
+        LOG_WARN("failed to check type info incremental change", K(ret));
+      } else if (!is_incremental) {
+        is_offline = true;
+      }
+    } else if (is_type_reduction) {
+      is_offline = true;
+    } else {
+      // increase column length
+      if (ob_is_number_tc(src_col_type) || src_meta.is_bit() || src_meta.is_char()
+       || src_meta.is_varchar() || src_meta.is_varbinary() || src_meta.is_text()
+       || src_meta.is_blob() || src_meta.is_timestamp() || src_meta.is_datetime()
+       || src_meta.is_integer_type() || src_meta.is_json()) {
+         // online, do nothing
+      } else if (ob_is_decimal_int_tc(src_col_type)
+                   && dst_accuracy.get_scale() == src_accuracy.get_scale()
+                   && (get_decimalint_type(dst_accuracy.get_precision())
+                        == get_decimalint_type(src_accuracy.get_precision()))) {
+        // online, do nothing
       } else {
-        // increase column length
-        if (ob_is_number_tc(src_col_type) || src_meta.is_bit() || src_meta.is_char()
-         || src_meta.is_varchar() || src_meta.is_varbinary() || src_meta.is_text()
-         || src_meta.is_blob() || src_meta.is_timestamp() || src_meta.is_datetime()
-         || src_meta.is_integer_type() || src_meta.is_json()) {
-           // online, do nothing
-        } else if (ob_is_decimal_int_tc(src_col_type)
-                     && dst_accuracy.get_scale() == src_accuracy.get_scale()
-                     && (get_decimalint_type(dst_accuracy.get_precision())
-                          == get_decimalint_type(src_accuracy.get_precision()))) {
-          // online, do nothing
-        } else {
-          is_offline = true;
-        }
+        is_offline = true;
       }
     }
   }
@@ -4517,20 +4473,10 @@ int ObTableSchema::check_alter_column_type(const ObColumnSchemaV2 &src_column,
     } else {
       if ((dst_meta.is_json() && src_meta.is_string_type()) ||
           (src_meta.is_json() && dst_meta.is_string_type())) {
-        if (false) {
-          is_offline = true;
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter non string type");
-        }
-      } else if (!false) {
-        is_offline = true;
-      } else {
-        // in oracle mode
         ret = OB_NOT_SUPPORTED;
-        (void)snprintf(err_msg, sizeof(err_msg), "Alter the column type, src column type %s,"
-        "dst column type %s", ob_obj_type_str(src_col_type), ob_obj_type_str(dst_col_type));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg);
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter non string type");
+      } else {
+        is_offline = true;
       }
     }
   } else if (src_column.is_collection()) {
@@ -4599,9 +4545,8 @@ int ObTableSchema::check_prohibition_rules(const ObColumnSchemaV2 &src_schema,
     // do nothing
   } else if (OB_FAIL(check_alter_column_in_foreign_key(src_schema, dst_schema))) {
     LOG_WARN("failed to check alter column in foreign key", K(ret));
-  } else if (!false
-            && (is_column_in_check_constraint(src_schema.get_column_id())
-              && !common::is_match_alter_integer_column_online_ddl_rules(src_schema.get_meta_type(), dst_schema.get_meta_type()))) {
+  } else if (is_column_in_check_constraint(src_schema.get_column_id())
+            && !common::is_match_alter_integer_column_online_ddl_rules(src_schema.get_meta_type(), dst_schema.get_meta_type())) {
   // The column contains the check constraint to prohibit modification of the type in mysql mode
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter column with check constraint");
@@ -4616,7 +4561,7 @@ int ObTableSchema::check_prohibition_rules(const ObColumnSchemaV2 &src_schema,
   // It is forbidden to modify the type when the modified column is referenced by the generated column
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter column that the generated column depends on");
-  } else if (!false && is_offline
+  } else if (is_offline
     && OB_FAIL(check_prefix_index_columns_depend(src_schema, schema_guard, has_prefix_idx_col_deps))) {
     LOG_WARN("check prefix index columns cascaded failed", K(ret));
   } else if (has_prefix_idx_col_deps) {
@@ -5045,10 +4990,7 @@ int ObTableSchema::check_column_can_be_altered_online(
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Truncate large text/lob column");
         LOG_WARN("The data of large text/lob column can not be truncated", K(ret), KPC(dst_schema), KPC(src_schema));
-      } else if (((!false && src_schema->is_string_type())
-                  || (false && src_schema->get_meta_type().is_lob())
-                  || (false && src_schema->get_meta_type().is_character_type()
-                      && src_schema->get_length_semantics() == dst_schema->get_length_semantics()))
+      } else if (src_schema->is_string_type()
                 && (dst_schema->get_data_length() < src_schema->get_data_length())) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Truncate the data of column schema");

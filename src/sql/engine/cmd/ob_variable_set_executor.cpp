@@ -783,7 +783,6 @@ int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx
   int32_t sec_val = 0;
   int ret_more = OB_SUCCESS;
   bool check_timezone_valid = false;
-  bool is_oralce_mode = false; // seekdb is MySQL-only
   ObSQLSessionInfo *session = ctx.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;

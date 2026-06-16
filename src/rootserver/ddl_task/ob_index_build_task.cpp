@@ -1748,10 +1748,6 @@ int ObIndexBuildTask::clean_on_failed()
           if (!create_index_arg_.ddl_stmt_str_.empty()) { // means create index syntax.
             // 1. rollback of alter table add index is completed by the following splicing sql.
             // 2. rollback of create index does nothing here because the stmt only be recorded when enabling index.
-          } else if (false) {
-            if (OB_FAIL(drop_index_sql.append_fmt("drop index \"%.*s\"", index_name.length(), index_name.ptr()))) {
-              LOG_WARN("generate drop index sql failed", K(ret));
-            }
           } else {
             if (OB_FAIL(drop_index_sql.append_fmt("drop index %.*s on %.*s", index_name.length(), index_name.ptr(),
                     data_table_schema->get_table_name_str().length(), data_table_schema->get_table_name_str().ptr()))) {

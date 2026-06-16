@@ -934,9 +934,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           }
             // index_type
           case OB_APP_MIN_COLUMN_ID + 13: {
-            if (false) {
-              cells[cell_idx].set_varchar(ObString("FULLTEXT"));
-            } else if (index_schema->is_spatial_index()) {
+            if (index_schema->is_spatial_index()) {
               cells[cell_idx].set_varchar(ObString("SPATIAL"));
             } else {
               cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME Is it definitely BTREE?

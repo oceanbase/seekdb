@@ -85,64 +85,11 @@ int ObPLRecompileTaskHelper::init_tenant_recompile_job(const share::schema::ObSy
                                        uint64_t tenant_id,
                                        ObMySQLTransaction &trans)
 {
-    int ret = OB_SUCCESS;
-    ObDMLSqlSplicer dml;
-    ObDMLExecHelper exec(trans, tenant_id);
-    bool is_job_exists = false;
-    ObString job_action("dbms_utility.POLLING_ASK_JOB()");
-    char buf[OB_MAX_PROC_ENV_LENGTH] = {0};
-    int64_t pos = 0;
-    int64_t job_id = OB_INVALID_INDEX;
-    const int64_t latency = 30 * 60 * 1000000LL;
-    int64_t current_time = ObTimeUtility::current_time() + latency;
-    ObString job_name("POLLING_ASK_JOB_FOR_PL_RECOMPILE");
-    if (false) {
-        if (OB_FAIL(check_job_exists(trans, tenant_id, job_name, is_job_exists))) {
-            LOG_WARN("fail to check ncomp dll job", K(ret));
-        } else if (is_job_exists) {
-            // do nothing
-            LOG_WARN("job has existed", KR(ret), K(tenant_id), K(is_job_exists), K(job_name));
-        } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
-            LOG_WARN("failed to gen exec env", KR(ret));
-        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(
-                          tenant_id, job_id))) {
-            LOG_WARN("get new job_id failed", KR(ret), K(tenant_id));
-        } else {
-            ObString exec_env(pos, buf);
-            HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-                job_info.tenant_id_ = tenant_id;
-                job_info.job_ = job_id;
-                job_info.job_name_ = job_name;
-                job_info.job_action_ = job_action;
-                job_info.lowner_ = ObString("root@%");
-                job_info.powner_ = ObString("root@%");
-                job_info.cowner_ = ObString("oceanbase");
-                job_info.job_style_ = ObString("regular");
-                job_info.job_type_ = ObString("STORED_PROCEDURE");
-                job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");
-                job_info.start_date_ = current_time;
-                job_info.end_date_ = 64060560000000000;
-                job_info.repeat_interval_ = ObString("FREQ=MINUTELY; INTERVAL=30");
-                job_info.enabled_ = true;
-                job_info.auto_drop_ = false;
-                job_info.max_run_duration_ = SECS_PER_HOUR * 2;
-                job_info.exec_env_ = exec_env;
-                job_info.comments_ = ObString("used to check if need create pl recompile job");
-                job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::POLLING_ASK_JOB_FOR_PL_RECOMPILE;
-                if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(trans,
-                                                                                        tenant_id,
-                                                                                        job_id,
-                                                                                        job_info))) {
-                    LOG_WARN("[PLRECOMPILE]: failed to create pl background recomp task", KR(ret), K(job_action));
-                } else {
-                    LOG_INFO("[PLRECOMPILE]: finish create pl background recomp task", K(ret), K(tenant_id),
-                        K(job_id), K(exec_env), K(current_time), K(job_action));
-                }
-            }
-        } 
-  } else {
-    // TODO: mysql mode 
-  }
+  int ret = OB_SUCCESS;
+  // TODO: mysql mode
+  UNUSED(sys_variable);
+  UNUSED(tenant_id);
+  UNUSED(trans);
   return ret;
 }
 #define SET_ITERATE_END_RET \

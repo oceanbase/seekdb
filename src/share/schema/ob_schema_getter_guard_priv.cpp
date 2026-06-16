@@ -1127,10 +1127,6 @@ int ObSchemaGetterGuard::check_catalog_priv(const ObSessionPrivInfo &session_pri
     LOG_WARN("fail to check tenant schema guard", K(ret), K(tenant_id), K_(tenant_id));
   } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
     LOG_WARN("fail to check lazy guard", K(ret), K(tenant_id));
-  } else if (false) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "catalog level privilege in oracle mode");
-    LOG_WARN("catalog level privilege is not supported in oracle mode", K(ret));
   } else {
     const ObPrivMgr &priv_mgr = mgr->priv_mgr_;
     ObCatalogPrivSortKey catalog_priv_key(session_priv.tenant_id_, session_priv.user_id_, need_priv.catalog_);

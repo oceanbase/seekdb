@@ -1549,36 +1549,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       LOG_WARN("Table Column is not supported in Mysql mode now", K(type), K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Table Column in Mysql mode");
     }
-    if (false) {
-      const ObTableSchema* table_info = NULL;
-      ObRecordType *record_type = NULL;
-      const ObPLDataType *member_type = NULL;
-      const uint64_t tenant_id = session_info.get_effective_tenant_id();
-      OZ (schema_guard.get_table_schema(tenant_id, parent_id, table_info));
-      CK (OB_NOT_NULL(table_info));
-      OZ (ObPLResolver::build_record_type_by_schema(resolve_ctx_, table_info, record_type));
-      CK (OB_NOT_NULL(record_type));
-      int64_t i = 0;
-      for (; OB_SUCC(ret) && i < record_type->get_member_count(); ++i) {
-        const ObString *record_name = record_type->get_record_member_name(i);
-        CK (OB_NOT_NULL(record_name));
-        if (OB_SUCC(ret) && 0 == record_name->case_compare(name)) {
-          CK (OB_NOT_NULL(member_type = record_type->get_record_member_type(i)));
-          break;
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_ISNULL(member_type)) {
-          type = ObPLExternalNS::INVALID_VAR;
-          LOG_WARN("table column not found", K(ret), K(name), K(parent_id));
-        } else {
-          ObSchemaObjVersion obj_version;
-          ObDataType col_type;
-          OX (var_idx = i);
-          OX (data_type = *member_type);
-        }
-      }
-    }
   }
     break;
   case USER_VAR: {

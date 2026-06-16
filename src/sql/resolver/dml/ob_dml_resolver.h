@@ -553,7 +553,6 @@ public:
                                             common::ObIArray<uint64_t> &ref_obj_ids);
 
 protected:
-  int check_resolve_oracle_sys_view(const ParseNode *node, bool &is_oracle_sys_view);
   bool is_oracle_sys_view(const ObString &table_name);
   int inner_resolve_sys_view(const ParseNode *table_node,
                              uint64_t &database_id,

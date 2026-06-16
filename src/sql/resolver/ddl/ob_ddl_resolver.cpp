@@ -5072,7 +5072,7 @@ int ObDDLResolver::resolve_part_func(ObResolverParams &params,
 
 
 
-int ObDDLResolver::check_partition_name_duplicate(ParseNode *node, bool is_oracle_modle)
+int ObDDLResolver::check_partition_name_duplicate(ParseNode *node)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node)) {
@@ -5102,9 +5102,8 @@ int ObDDLResolver::check_partition_name_duplicate(ParseNode *node, bool is_oracl
           || OB_ISNULL(element_node->children_[PARTITION_ELEMENT_NODE])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("partition expr list node is null", K(ret), K(element_node));
-      } else if ((OB_ISNULL(element_node->children_[PARTITION_NAME_NODE])
-            || OB_ISNULL(element_node->children_[PARTITION_NAME_NODE]->children_[NAMENODE]))
-          && !is_oracle_modle) {
+      } else if (OB_ISNULL(element_node->children_[PARTITION_NAME_NODE])
+            || OB_ISNULL(element_node->children_[PARTITION_NAME_NODE]->children_[NAMENODE])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("partition expr list node is null", K(ret), K(element_node));
       } else {
@@ -9597,7 +9596,7 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
       }
       partition_option->set_part_num(partition_num);
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(check_partition_name_duplicate(node->children_[RANGE_ELEMENTS_NODE], false))) {
+        if (OB_FAIL(check_partition_name_duplicate(node->children_[RANGE_ELEMENTS_NODE]))) {
           SQL_RESV_LOG(WARN, "duplicate partition name", K(ret));
         } else if (is_subpartition) {
           if (OB_FAIL(resolve_range_subpartition_elements(stmt,
@@ -10212,7 +10211,7 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
     }
     partition_option->set_part_num(partition_num);
     if (OB_SUCC(ret) && !table_schema.is_external_table()) {
-      if (OB_FAIL(check_partition_name_duplicate(node->children_[LIST_ELEMENTS_NODE], false))) {
+      if (OB_FAIL(check_partition_name_duplicate(node->children_[LIST_ELEMENTS_NODE]))) {
         SQL_RESV_LOG(WARN, "duplicate partition name", K(ret));
       } else if (is_subpartition) {
         if (OB_FAIL(resolve_list_subpartition_elements(stmt,

@@ -1364,21 +1364,6 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
           OV (OB_NOT_NULL(ref_trg_info));
         }
         if (OB_FAIL(ret)) {
-        } else if (false) {
-          OZ (recursive_check_trigger_ref_cyclic(schema_guard, trigger_info, trg_list,
-                                                 trigger_info.get_trigger_name(), trigger_info.get_ref_trg_name()));
-          if (OB_SUCC(ret)) {
-            if (NULL != ref_trg_info) {
-              uint64_t ref_db_id = OB_INVALID_ID;
-              OZ (schema_guard.get_database_id(tenant_id, trigger_info.get_ref_trg_db_name(), ref_db_id));
-              OZ (schema_guard.get_trigger_info(tenant_id, ref_db_id, trigger_info.get_ref_trg_name(), ref_trg_info));
-              if (OB_SUCC(ret) && trigger_info.is_order_follows()) {
-                action_order = ref_trg_info->get_action_order() + 1;
-                }
-            }
-            OZ (recursive_alter_ref_trigger(schema_guard, trans, pl_operator, trigger_info,
-                                            trg_list, trigger_info.get_trigger_name(), action_order));
-          }
         } else {
           if (NULL == ref_trg_info) {
             for (int64_t i = 0; OB_SUCC(ret) && i < trg_list.count(); i++) {

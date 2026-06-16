@@ -2610,17 +2610,6 @@ int ObDMLResolver::resolve_win_func_exprs(ObRawExpr *&expr, common::ObIArray<ObW
   return OB_ERR_INVALID_WINDOW_FUNC_USE;
 }
 
-int ObDMLResolver::check_resolve_oracle_sys_view(const ParseNode *node, bool &is_oracle_view)
-{
-  int ret = OB_SUCCESS;
-  is_oracle_view = false;
-  ObString table_name;
-  ParseNode *db_node = node->children_[0];
-  ParseNode *relation_node = node->children_[1];
-  int32_t table_len = static_cast<int32_t>(relation_node->str_len_);
-  table_name.assign_ptr(const_cast<char*>(relation_node->str_value_), table_len);
-  return ret;
-}
 
 int ObDMLResolver::inner_resolve_sys_view(const ParseNode *table_node,
                                           uint64_t &database_id,
@@ -2655,7 +2644,6 @@ int ObDMLResolver::inner_resolve_sys_view(const ParseNode *table_node,
   UNUSED(tmp_catalog_name);
   ObString tmp_db_name;
   ObString tmp_tbl_name;
-  bool is_oracle_sys_view = false;
   use_sys_tenant = false; // won't find table in sys tenant
   if (OB_SUCCESS != (tmp_ret = resolve_table_relation_node_v2(table_node,
                                                               tmp_tbl_name,
@@ -2665,51 +2653,12 @@ int ObDMLResolver::inner_resolve_sys_view(const ParseNode *table_node,
     LOG_WARN("fail to resolve table relation node", K(tmp_ret));
     tmp_ret = OB_SUCCESS;
   }
-  // try resovle sys view in oracle mode
-  if (!use_sys_tenant && (OB_SUCCESS != (tmp_ret = check_resolve_oracle_sys_view(table_node, is_oracle_sys_view)))) {
-    LOG_WARN("fail to check resolve oracle sys view", K(tmp_ret));
-  } else if (is_oracle_sys_view) {
-    // resolve sys view in oracle mode
-    if (OB_SUCCESS != (tmp_ret = resolve_table_relation_node_v2(table_node,
-                                                                tmp_tbl_name,
-                                                                tmp_db_name,
-                                                                tmp_catalog_name,
-                                                                is_db_explicit,
-                                                                false,
-                                                                is_oracle_sys_view))) {
-      LOG_WARN("fail to resolve table relation node", K(tmp_ret));
-    } else {
-      const bool is_index_table = false;
-      const ObTableSchema *table_schema = NULL;
-      if (OB_SUCCESS != (tmp_ret = schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
-                                                                      tmp_db_name,
-                                                                      tmp_tbl_name,
-                                                                      is_index_table,
-                                                                      table_schema))) {
-        LOG_WARN("fail to get table schema", K(tmp_ret), K(tmp_db_name), K(tmp_tbl_name));
-      } else if (NULL == table_schema) {
-        tmp_ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("table_schema should not be NULL", K(tmp_ret));
-      } else if (!table_schema->is_sys_view()) {
-        is_oracle_sys_view = false;
-      } else if (OB_SUCCESS != (tmp_ret = schema_checker_->get_database_id(session_info_->get_effective_tenant_id(), tmp_db_name, database_id))) {
-        LOG_WARN("fail to get database id", K(tmp_ret));
-      }
-    }
-  }
 
-  if (tmp_ret != OB_SUCCESS) {
-    is_oracle_sys_view = false;
-    ret = tmp_ret;
-  } else if (is_oracle_sys_view) {
-    ret = OB_SUCCESS;
-    db_name = tmp_db_name;
-    tbl_name = tmp_tbl_name;
-    SQL_RESV_LOG(INFO, "table found in sys tenant", K(tmp_db_name), K(tmp_tbl_name));
-  } else {
-    ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("fail to resolve table", K(ret));
-  }
+  UNUSED(database_id);
+  UNUSED(tbl_name);
+  UNUSED(db_name);
+  ret = OB_TABLE_NOT_EXIST;
+  LOG_WARN("fail to resolve table", K(ret));
   return ret;
 }
 // This function gets the library name and table name, and checks for the existence of the table

@@ -20,26 +20,25 @@ namespace oceanbase
 {
 namespace unittest
 {
-class ObLogRestoreOracleProxy : public ObLogRestoreProxyTest
+class ObLogRestoreMySQLProxy : public ObLogRestoreProxyTest
 {
 };
 
-TEST_F(ObLogRestoreOracleProxy, test_oracle_connector)
+TEST_F(ObLogRestoreMySQLProxy, test_mysql_connector)
 {
-  const char *user = ORACLE_USER;
+  const char *user = MYSQL_USER;
   const char *passwd = PASSWD;
   const char *passwd_new = PASSWD_NEW;
-  const char *oracle_db_name = ORACLE_DB;
-  const char *mysql_db_name = MYSQL_DB;
-  const bool oracle_mode = false;
+  const char *db_name = MYSQL_DB;
   const uint64_t fake_tenant_id = 1002;
   int64_t tenant_id = 0;
   common::ObMySQLProxy *mysql_proxy = NULL;
 
   // create tenant and user
-  create_test_tenant(oracle_mode);
+  create_test_tenant();
   create_user();
   grant_user();
+
   common::ObAddr addr1(common::ObAddr::VER::IPV4, "127.0.0.1", 100010);
   common::ObAddr addr2;
   common::ObAddr addr3(common::ObAddr::VER::IPV4, "127.0.0.1", 31033);
@@ -51,27 +50,26 @@ TEST_F(ObLogRestoreOracleProxy, test_oracle_connector)
 
   // init proxy and test it
   share::ObLogRestoreProxyUtil proxy;
-  ASSERT_EQ(OB_SUCCESS, proxy.init(fake_tenant_id, list, user, passwd, oracle_db_name));
+  ASSERT_EQ(OB_SUCCESS, proxy.init(fake_tenant_id, list, user, passwd, db_name));
   ASSERT_EQ(OB_SUCCESS, proxy.get_sql_proxy(mysql_proxy));
   ASSERT_EQ(OB_ITER_END, query(mysql_proxy, tenant_id));
   ASSERT_EQ(1002, tenant_id);
 
   // modify user passwd and test connection refresh
   modify_passwd();
-  ASSERT_EQ(OB_SUCCESS, proxy.refresh_conn(list, user, passwd_new, oracle_db_name));
+  ASSERT_EQ(OB_SUCCESS, proxy.refresh_conn(list, user, passwd_new, db_name));
   tenant_id = 0;
   ASSERT_EQ(OB_ITER_END, query(mysql_proxy, tenant_id));
   ASSERT_EQ(1002, tenant_id);
 }
-
 } // namespace unittest
 } // namespace oceanbase
 
 int main(int argc, char **argv)
 {
-  OB_LOGGER.set_file_name("test_restore_oracle_proxy.log");
+  OB_LOGGER.set_file_name("test_restore_mysql_proxy.log");
   OB_LOGGER.set_log_level("INFO");
-  CLOG_LOG(INFO, "begin unittest::test_restore_oracle_proxy");
+  CLOG_LOG(INFO, "begin unittest::test_restore_mysql_proxy");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

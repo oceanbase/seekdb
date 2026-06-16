@@ -215,8 +215,7 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::RANGE_ELEMENTS_NODE],
-                                                                false))) {
+      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::RANGE_ELEMENTS_NODE]))) {
         LOG_WARN("duplicate partition name", K(ret));
       }
     }
@@ -379,8 +378,7 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::LIST_ELEMENTS_NODE],
-                                                                false))) {
+      if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::LIST_ELEMENTS_NODE]))) {
         LOG_WARN("duplicate partition name", K(ret));
       }
     }

@@ -38,14 +38,11 @@ namespace oceanbase
 namespace unittest
 {
 
-const char *ORACLE_TENANT_NAME = "";
 const char *MYSQL_TENANT_NAME = "";
 const char *USER_NAME = "";
-const char *ORACLE_USER = "";
 const char *MYSQL_USER = "";
 const char *PASSWD = "";
 const char *PASSWD_NEW = "";
-const char *ORACLE_DB = "SYS";
 const char *MYSQL_DB = "OCEANBASE";
 const char *QUERY_SQL = "SELECT TENANT_ID, LS_ID from GV$OB_LOG_STAT";
 const char *MEMORY_SIZE = "20G";
@@ -56,11 +53,10 @@ static const char *TEST_FILE_NAME = "log_restore_proxy";
 class ObLogRestoreProxyTest : public ObSimpleClusterTestBase
 {
 public:
-  ObLogRestoreProxyTest() : ObSimpleClusterTestBase(TEST_FILE_NAME, MEMORY_SIZE, LOG_DISK_SIZE), oracle_mode_(false) {}
+  ObLogRestoreProxyTest() : ObSimpleClusterTestBase(TEST_FILE_NAME, MEMORY_SIZE, LOG_DISK_SIZE) {}
 
-  void create_test_tenant(const bool oracle_mode = false)
+  void create_test_tenant()
   {
-    oracle_mode_ = false;
     const char *tenant_name = MYSQL_TENANT_NAME;
     const char *db_name = MYSQL_DB;
     CLOG_LOG(INFO, "create_tenant start", K(tenant_name));
@@ -100,7 +96,7 @@ public:
     addr.set_ip_addr(get_curr_simple_server().local_ip_.c_str(), get_curr_simple_server().mysql_port_);
   }
 
-  void delete_test_tenant(const bool oracle_mode = false)
+  void delete_test_tenant()
   {
     const char *tenant_name = MYSQL_TENANT_NAME;
     ASSERT_EQ(OB_SUCCESS, delete_tenant(tenant_name));
@@ -133,8 +129,6 @@ public:
     return ret;
   }
 
-private:
-  bool oracle_mode_;
 };
 }
 }

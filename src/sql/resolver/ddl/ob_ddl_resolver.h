@@ -379,7 +379,7 @@ public:
   static int cast_enum_or_set_default_value(
       const share::schema::ObColumnSchemaV2 &column,
       common::ObObjCastParams &params, common::ObObj &def_val);
-  int check_partition_name_duplicate(ParseNode *node, bool is_oracle_modle = false);
+  int check_partition_name_duplicate(ParseNode *node);
   static int check_hbase_tbl_auto_partkey(const ObIArray<ObString> &part_keys);
   static int check_hbase_tbl_auto_partkey(const ObTableSchema &table_schema);
   static int check_text_column_length_and_promote(share::schema::ObColumnSchemaV2 &column,

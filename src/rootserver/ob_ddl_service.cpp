@@ -3195,36 +3195,6 @@ int ObDDLService::get_add_pk_index_name(const ObTableSchema &origin_table_schema
 {
   int ret = OB_SUCCESS;
 
-  bool is_exist = false;
-
-  if (false) {
-    // find pk name;
-    ObIndexArg *tmp_index_arg = nullptr;
-    bool found = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !found && i < index_arg_list.count(); i++) {
-      if (OB_ISNULL(tmp_index_arg = index_arg_list.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get index arg", K(ret));
-      } else if (tmp_index_arg->index_action_type_ == ObIndexArg::ADD_PRIMARY_KEY) {
-        found = true;
-      }
-    }
-    if (OB_SUCC(ret) && found && tmp_index_arg->index_name_.length() != 0) {
-      index_name.assign_ptr(tmp_index_arg->index_name_.ptr(),
-                            tmp_index_arg->index_name_.length());
-      // check constraint name is not duplicated.
-      if (OB_FAIL(check_constraint_name_is_exist(schema_guard,
-                                                 origin_table_schema,
-                                                 index_name,
-                                                 false,
-                                                 is_exist))) {
-        LOG_WARN("fail to check constraint exist", K(ret));
-      } else if (is_exist) {
-        ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-        LOG_WARN("check constraint name is duplicate", K(ret), K(index_name));
-      }
-    }
-  }
   return ret;
 }
 

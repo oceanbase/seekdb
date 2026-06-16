@@ -2728,7 +2728,6 @@ class ObPartitionSchema : public ObSchema
   OB_UNIS_VERSION(1);
 public:
   constexpr const static char * const MYSQL_NON_PARTITIONED_TABLE_PART_NAME = "p0";
-  constexpr const static char * const ORACLE_NON_PARTITIONED_TABLE_PART_NAME = "P0";
 
   const static int64_t SUBPART_TEMPLATE_DEF_EXIST_SHIFT = 0;
   const static int64_t SUBPART_TEMPLATE_DEF_VALID_SHIFT = 1;
