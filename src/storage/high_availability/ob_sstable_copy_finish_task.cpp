@@ -243,42 +243,6 @@ int ObCopiedSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTab
   return ret;
 }
 
-// ObCopiedSharedSSTableCreator
-int ObCopiedSharedSSTableCreator::create_sstable()
-{
-  int ret = OB_SUCCESS;
-  ObSSTableMergeRes res;
-  ObTableHandleV2 table_handle;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObCopiedSSTableCreator not init", K(ret));
-  } else {
-    SMART_VAR(ObTabletCreateSSTableParam, param) {
-      if (OB_FAIL(init_create_sstable_param_(param))) {
-        LOG_WARN("fail to init create sstable param", K(ret));
-      } else if (OB_FAIL(do_create_sstable_(param, table_handle))) {
-        LOG_WARN("failed to create sstable", K(ret), K(param));
-      } else if (OB_FAIL(finish_task_->add_sstable(table_handle))) {
-        LOG_WARN("fail to add sstable", K(ret), K(table_handle));
-      }
-    }
-  }
-  LOG_INFO("create shared sstable with index builder", K(ret), K(table_handle));
-  return ret;
-}
-
-int ObCopiedSharedSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const
-{
-  int ret = OB_SUCCESS;
-  if (!src_sstable_param->is_shared_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sstable is not shared", K(ret), KPC(src_sstable_param));
-  }
-
-  return ret;
-}
-
 
 // ObSSTableCopyFinishTask
 ObSSTableCopyFinishTask::ObSSTableCopyFinishTask()
@@ -688,15 +652,7 @@ bool ObSSTableCopyFinishTask::is_sstable_should_rebuild_index_(const ObMigration
 {
   // Non-empty SSTable whose macro blocks should be copied needs rebuild index after
   // macros are copied.
-  return !sstable_param->is_empty_sstable() 
-         && !is_shared_sstable_without_copy_(sstable_param);
-}
-
-bool ObSSTableCopyFinishTask::is_shared_sstable_without_copy_(const ObMigrationSSTableParam *sstable_param) const
-{
-  // In standby restore from primary, always treat as "need copy" to avoid skipping.
-  UNUSED(sstable_param);
-  return false;
+  return !sstable_param->is_empty_sstable();
 }
 
 int ObSSTableCopyFinishTask::prepare_sstable_index_builder_(
@@ -842,11 +798,7 @@ int ObSSTableCopyFinishTask::alloc_and_init_sstable_creator_(ObCopiedSSTableCrea
   if (sstable_param_->is_empty_sstable()) {
     tmp_creator = MTL_NEW(ObCopiedEmptySSTableCreator, "CopySSTCreator");
   } else {
-    if (sstable_param_->is_shared_sstable() && is_shared_sstable_without_copy_(sstable_param_)) {
-      tmp_creator = MTL_NEW(ObCopiedSharedSSTableCreator, "CopySSTCreator");
-    } else {
-      tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
-    }
+    tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
   }
 
   if (OB_ISNULL(tmp_creator)) {
