@@ -44,7 +44,6 @@ void TestObjCast::SetUp()
 TEST_F(TestObjCast, test_number_range_check_mysql_old)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::MYSQL);
   ObNumber zero_number;
   zero_number.set_zero();
   ObObj obj1;
@@ -68,7 +67,6 @@ TEST_F(TestObjCast, test_number_range_check_mysql_old)
 TEST_F(TestObjCast, test_number_range_check_mysql_new)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard tmp_mode(lib::Worker::CompatMode::MYSQL);
   ObNumber zero_number;
   zero_number.set_zero();
   ObObj obj1;

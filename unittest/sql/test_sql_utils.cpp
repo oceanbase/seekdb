@@ -386,7 +386,7 @@ void TestSqlUtils::do_resolve(
     int64_t case_line)
 {
   UNUSED(need_replace_param_expr);
-  ObSQLMode mode = lib::is_oracle_mode() ? (SMO_ORACLE | DEFAULT_ORACLE_MODE) : SMO_DEFAULT;
+  ObSQLMode mode = SMO_DEFAULT;
   ObParser parser(allocator_, mode);
   ObString query = ObString::make_string(query_str);
   ParseResult parse_result;

@@ -75,7 +75,6 @@ TestDDLOperator::TestDDLOperator()
     srv_rpc_proxy_(),
     ddl_operator_(multi_schema_service_, db_initer_.get_sql_proxy())
 {
-  ObCompatModeGetter::instance().init(&db_initer_.get_sql_proxy());
 }
 
 void TestDDLOperator::TearDown()

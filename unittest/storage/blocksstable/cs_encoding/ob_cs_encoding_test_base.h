@@ -132,9 +132,7 @@ int ObCSEncodingTestBase::prepare(const ObObjType *col_types, const int64_t rowk
         || ObTextType == type){
       col.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
       if (ObCharType == type) {
-        const int64_t max_char_length = lib::is_oracle_mode()
-                                        ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE
-                                        : OB_MAX_CHAR_LENGTH;
+        const int64_t max_char_length = OB_MAX_CHAR_LENGTH;
         col.set_data_length(max_char_length);
       }
     } else {
@@ -169,7 +167,7 @@ int ObCSEncodingTestBase::prepare(const ObObjType *col_types, const int64_t rowk
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(read_info_.init(allocator_, row_generate_.get_schema().get_column_count(),
-               row_generate_.get_schema().get_rowkey_column_num(), lib::is_oracle_mode(),
+               row_generate_.get_schema().get_rowkey_column_num(),
                col_descs_, nullptr))) {
     LOG_WARN("fail to init read_info", K(ret));
   } else {
@@ -423,7 +421,7 @@ int ObCSEncodingTestBase::part_transform_check_row(const ObMicroBlockHeader *hea
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(read_info.init(allocator_, row_generate_.get_schema().get_column_count(),
-               row_generate_.get_schema().get_rowkey_column_num(), lib::is_oracle_mode(),
+               row_generate_.get_schema().get_rowkey_column_num(),
                col_descs, &storage_cols_index))) {
       LOG_WARN("fail to init read_info", K(ret), K(col_descs), K(storage_cols_index));
     } else if (OB_FAIL(decoder.init(part_transformed_data, read_info))) {

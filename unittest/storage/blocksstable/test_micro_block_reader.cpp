@@ -154,7 +154,7 @@ TEST_F(TestMicroBlockReader, test_success)
   ObArray<ObColDesc> columns;
   ASSERT_EQ(OB_SUCCESS, row_generate_.get_schema().get_column_ids(columns));
   ASSERT_EQ(OB_SUCCESS, read_info_.init(
-          allocator_, 16000, row_generate_.get_schema().get_rowkey_column_num(), lib::is_oracle_mode(), columns, nullptr/*storage_cols_index*/));
+          allocator_, 16000, row_generate_.get_schema().get_rowkey_column_num(), columns, nullptr/*storage_cols_index*/));
   /*** init reader ***/
   ObMicroBlockReader reader;
   ObMicroBlockData block(buf, size);

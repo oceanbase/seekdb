@@ -150,7 +150,6 @@ void TestSkipIndexFilter::SetUp()
       allocator_,
       table.get_column_count(),
       table.get_rowkey_column_num(),
-      lib::is_oracle_mode(),
       col_descs_,
       nullptr));
   const int64_t extra_rowkey_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();

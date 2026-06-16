@@ -42,13 +42,11 @@ public:
   static void TearDownTestCase();
 private:
   void prepare_datum_util(const int64_t rowkey_cnt, ObStorageDatumUtils &datum_util);
-  bool is_oracle_mode_;
   ObArenaAllocator allocator_;
 };
 
 ObDatumRowkeyVectorTest::ObDatumRowkeyVectorTest()
 {
-  is_oracle_mode_ = false;
 }
 
 void ObDatumRowkeyVectorTest::SetUpTestCase()
@@ -81,7 +79,7 @@ void ObDatumRowkeyVectorTest::prepare_datum_util(const int64_t rowkey_cnt, ObSto
     ret = cols_desc.push_back(col_desc);
     ASSERT_EQ(ret, OB_SUCCESS);
   }
-  datum_util.init(cols_desc, rowkey_cnt, false, allocator_);
+  datum_util.init(cols_desc, rowkey_cnt, allocator_);
   ASSERT_EQ(ret, OB_SUCCESS);
 }
 
@@ -106,7 +104,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key)
   ObStorageDatum datum_key;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 2);
   ASSERT_EQ(end, 2);
@@ -116,7 +114,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 2);
   ASSERT_EQ(end, 5);
@@ -126,7 +124,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 8);
   ASSERT_EQ(end, 10);
@@ -140,7 +138,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 0);
   ASSERT_EQ(end, 1);
@@ -171,7 +169,7 @@ TEST_F(ObDatumRowkeyVectorTest, datum_vector_locate_key)
   int64_t end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 2);
   ASSERT_EQ(end, 2);
@@ -181,7 +179,7 @@ TEST_F(ObDatumRowkeyVectorTest, datum_vector_locate_key)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 2);
   ASSERT_EQ(end, 5);
@@ -191,7 +189,7 @@ TEST_F(ObDatumRowkeyVectorTest, datum_vector_locate_key)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 8);
   ASSERT_EQ(end, 10);
@@ -211,7 +209,7 @@ TEST_F(ObDatumRowkeyVectorTest, datum_vector_locate_key)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = datum_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 0);
   ASSERT_EQ(end, 1);
@@ -240,7 +238,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key_with_null)
   int64_t end = row_count;
   datum_key.reuse();
   datum_key.set_null();
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 0);
   ASSERT_EQ(end, 0);
@@ -251,7 +249,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key_with_null)
   int_vec.has_null_ = true;
   begin = 0;
   end = row_count;
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 0);
   ASSERT_EQ(end, 0);
@@ -259,7 +257,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key_with_null)
   need_upper_bound = true;
   begin = 0;
   end = row_count;
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 0);
   ASSERT_EQ(end, 5);
@@ -270,7 +268,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key_with_null)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 5);
   ASSERT_EQ(end, 5);
@@ -280,7 +278,7 @@ TEST_F(ObDatumRowkeyVectorTest, int_vector_locate_key_with_null)
   end = row_count;
   datum_key.reuse();
   datum_key.set_int(key);
-  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func, is_oracle_mode_);
+  ret = int_vec.locate_key(need_upper_bound, begin, end, datum_key, cmp_func);
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_EQ(begin, 8);
   ASSERT_EQ(end, 8);

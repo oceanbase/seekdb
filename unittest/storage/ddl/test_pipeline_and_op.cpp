@@ -190,9 +190,7 @@ void TestCGMicroMacroWriteOp::prepare_table_schema(const ObObjType *col_obj_type
         || ObTextType == obj_type) {
       column.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
       if (ObCharType == obj_type) {
-        const int64_t max_char_length = lib::is_oracle_mode()
-                                        ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE
-                                        : OB_MAX_CHAR_LENGTH;
+        const int64_t max_char_length = OB_MAX_CHAR_LENGTH;
         column.set_data_length(max_char_length);
       }
     } else {

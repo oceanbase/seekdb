@@ -105,7 +105,6 @@ void TestIColumnEncoder::SetUp()
   ASSERT_EQ(OB_SUCCESS, read_info_.init(allocator_,
                                       row_generate_.get_schema().get_column_count(),
                                       row_generate_.get_schema().get_rowkey_column_num(),
-                                      lib::is_oracle_mode(),
                                       col_descs_));
 
   ctx_.micro_block_size_ = 1L << 20; // 1MB, maximum micro block size;

@@ -187,13 +187,8 @@ int TestFastParser::parse(const ObString &sql)
   ObSQLMode mode = SMO_DEFAULT;
   ParseResult parse_result;
   ObCharsets4Parser charsets4parser;
-  if (lib::is_oracle_mode()) {
-    parse_result.sql_mode_ = (DEFAULT_ORACLE_MODE | SMO_ORACLE);
-    mode = (DEFAULT_ORACLE_MODE | SMO_ORACLE);
-  } else {
-    parse_result.sql_mode_ = DEFAULT_MYSQL_MODE;
-    mode = DEFAULT_MYSQL_MODE;
-  }
+  parse_result.sql_mode_ = DEFAULT_MYSQL_MODE;
+  mode = DEFAULT_MYSQL_MODE;
   ObParser parser(allocator_, mode, charsets4parser);
   MEMSET(&parse_result, 0, sizeof(parse_result));
   int ret1 = parser.parse(sql, parse_result, FP_MODE);
@@ -240,8 +235,6 @@ int main(int argc, char **argv)
   OB_LOGGER.set_log_level("ERROR");
   OB_LOGGER.set_file_name("test_fast_parser.log", false);
   set_compat_mode(lib::Worker::CompatMode::MYSQL);
-  ::test::run();
-  set_compat_mode(lib::Worker::CompatMode::ORACLE);
   ::test::run();
   return 0;
 }

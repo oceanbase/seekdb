@@ -497,7 +497,7 @@ void TestIndexBlockAggregator::get_cmp_func(const ObColDesc &col_desc, ObStorage
 {
   sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
       col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type());
-  cmp_func.cmp_func_.cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+  cmp_func.cmp_func_.cmp_func_ = basic_funcs->null_first_cmp_;
 }
 
 void TestIndexBlockAggregator::str_datum_to_lob_data(const ObDatum &str_datum, ObDatum &lob_datum, ObIAllocator &alloc)

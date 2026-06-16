@@ -259,7 +259,6 @@ public:
                                                                 field_collation.null_pos_,
                                                                 field_collation.cs_type_,
                                                                 SCALE_UNKNOWN_YET,
-                                                                lib::is_oracle_mode(),
                                                                 false);
         ObHashFunc hash_func;
         if (0 == i) {
@@ -358,7 +357,6 @@ public:
                                                               field_collation.null_pos_,
                                                               field_collation.cs_type_,
                                                               SCALE_UNKNOWN_YET,
-                                                              lib::is_oracle_mode(),
                                                               false);
       if (OB_FAIL(spec.sort_cmp_funs_.push_back(cmp_func))) {
         LOG_WARN("failed to push back sort function", K(ret));

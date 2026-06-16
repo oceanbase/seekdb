@@ -160,7 +160,7 @@ void TestIndexBlockDataPrepare::prepare_query_param(const bool is_reverse_scan, 
   iter_param_.tablet_id_ = table_schema_.get_table_id();
   read_info_.reset();
   ASSERT_EQ(OB_SUCCESS, read_info_.init(
-      *test_allocator, 10, table_schema_.get_rowkey_column_num(), lib::is_oracle_mode(), schema_cols_, nullptr/*storage_cols_index*/));
+      *test_allocator, 10, table_schema_.get_rowkey_column_num(), schema_cols_, nullptr/*storage_cols_index*/));
   iter_param_.read_info_ = &read_info_;
   iter_param_.has_lob_column_out_ = false;
   //jsut for test
