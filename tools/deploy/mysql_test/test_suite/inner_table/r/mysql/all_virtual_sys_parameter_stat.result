@@ -25,7 +25,6 @@ alert_log_level
 all_server_list
 arbitration_degradation_policy
 arbitration_timeout
-archive_lag_target
 autoinc_cache_refresh_interval
 auto_split_tablet_size
 backup_data_file_size
