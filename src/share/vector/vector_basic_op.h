@@ -830,16 +830,12 @@ struct VecTCCmpCalc<VEC_TC_UDT, VEC_TC_UDT>
   {
     cmp_ret = 0;
     int ret = OB_SUCCESS;
-    bool calc_end_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
-                             l_meta.get_collation_type(), r_meta.get_collation_type());
     if (l_meta.get_collation_type() != CS_TYPE_BINARY
-        || r_meta.get_collation_type() != CS_TYPE_BINARY
-        || calc_end_space) {
+        || r_meta.get_collation_type() != CS_TYPE_BINARY) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       cmp_ret = ObCharset::strcmpsp(l_meta.get_collation_type(), static_cast<const char *>(l_v),
-                                    l_len, static_cast<const char *>(r_v), r_len, calc_end_space);
+                                    l_len, static_cast<const char *>(r_v), r_len, false);
       cmp_ret = (cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0));
     }
     return ret;
@@ -965,12 +961,9 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_STRING>
   OB_INLINE static int cmp(CMP_ARG_LIST)
   {
     OB_ASSERT(l_meta.get_collation_type() == r_meta.get_collation_type());
-    bool end_with_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
-                             l_meta.get_collation_type(), r_meta.get_collation_type());
     cmp_ret =
       ObCharset::strcmpsp(l_meta.get_collation_type(), reinterpret_cast<const char *>(l_v), l_len,
-                          reinterpret_cast<const char *>(r_v), r_len, end_with_space);
+                          reinterpret_cast<const char *>(r_v), r_len, false);
     cmp_ret = (cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0));
     return OB_SUCCESS;
   }
@@ -987,9 +980,6 @@ struct VecTCCmpCalc<VEC_TC_LOB, VEC_TC_LOB>
   {
     OB_ASSERT(l_meta.get_collation_type() == r_meta.get_collation_type());
     int ret = OB_SUCCESS;
-    bool end_with_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
-                             l_meta.get_collation_type(), r_meta.get_collation_type());
     bool has_lob_header = (l_meta.has_lob_header() || r_meta.has_lob_header());
 
     if (has_lob_header) {
@@ -999,7 +989,7 @@ struct VecTCCmpCalc<VEC_TC_LOB, VEC_TC_LOB>
           l_len != 0 && !llob->is_mem_loc_ && llob->in_row_) {
         cmp_ret = ObCharset::strcmpsp(l_meta.get_collation_type(),
                   llob->get_inrow_data_ptr(), static_cast<int32_t>(llob->get_byte_size(l_len)),
-                  rlob->get_inrow_data_ptr(), static_cast<int32_t>(rlob->get_byte_size(r_len)), end_with_space);
+                  rlob->get_inrow_data_ptr(), static_cast<int32_t>(rlob->get_byte_size(r_len)), false);
       } else {
         ObString l_data;
         ObString r_data;
@@ -1021,12 +1011,12 @@ struct VecTCCmpCalc<VEC_TC_LOB, VEC_TC_LOB>
                      K(r_meta), K(r_instr_iter));
         } else {
           cmp_ret = ObCharset::strcmpsp(l_meta.get_collation_type(), l_data.ptr(), l_data.length(),
-                                        r_data.ptr(), r_data.length(), end_with_space);
+                                        r_data.ptr(), r_data.length(), false);
         }
       }
     } else {
       cmp_ret = ObCharset::strcmpsp(l_meta.get_collation_type(), (const char *)l_v, l_len,
-                                    (const char *)r_v, r_len, end_with_space);
+                                    (const char *)r_v, r_len, false);
     }
     if (OB_SUCC(ret)) {
       // if error occur when reading outrow lobs, the compare result is wrong.
@@ -1045,9 +1035,6 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_LOB>
     OB_ASSERT(l_meta.get_collation_type() == r_meta.get_collation_type());
     int ret = OB_SUCCESS;
     ObString r_data;
-    bool end_with_space =
-      is_calc_with_end_space(l_meta.get_type(), r_meta.get_type(),
-                             l_meta.get_collation_type(), r_meta.get_collation_type());
     bool has_lob_header = (l_meta.has_lob_header() || r_meta.has_lob_header());
     if (has_lob_header) {
       common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
@@ -1066,7 +1053,7 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_LOB>
       }
     } else {
       cmp_ret = ObCharset::strcmpsp(l_meta.get_collation_type(), (const char *)l_v, l_len,
-                                    (const char *)r_v, r_len, end_with_space);
+                                    (const char *)r_v, r_len, false);
     }
     if (OB_SUCC(ret)) { cmp_ret = cmp_ret > 0 ? 1 : (cmp_ret < 0 ? -1 : 0); }
     return ret;

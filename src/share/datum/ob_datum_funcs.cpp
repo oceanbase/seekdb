@@ -98,18 +98,16 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
   ObDatumCmpFuncType func_ptr = NULL;
   int null_pos_idx = NULL_LAST == null_pos ? 0 : 1;
   if (is_string_type(type1) && is_string_type(type2)) {
-    int64_t calc_with_end_space_idx =
-        (is_calc_with_end_space(type1, type2, cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
-        func_ptr = NULLSAFE_TEXT_CMP_FUNCS[cs_type][calc_with_end_space_idx][null_pos_idx];
+        func_ptr = NULLSAFE_TEXT_CMP_FUNCS[cs_type][0][null_pos_idx];
       } else if (ob_is_large_text(type1)) { // type2 not large text
-        func_ptr = NULLSAFE_TEXT_STR_CMP_FUNCS[cs_type][calc_with_end_space_idx][null_pos_idx];
+        func_ptr = NULLSAFE_TEXT_STR_CMP_FUNCS[cs_type][0][null_pos_idx];
       } else if (ob_is_large_text(type2)) { // type1 not large text
-        func_ptr = NULLSAFE_STR_TEXT_CMP_FUNCS[cs_type][calc_with_end_space_idx][null_pos_idx];
+        func_ptr = NULLSAFE_STR_TEXT_CMP_FUNCS[cs_type][0][null_pos_idx];
       }
     } else { // no lob header or tinytext use original str cmp func
-      func_ptr = NULLSAFE_STR_CMP_FUNCS[cs_type][calc_with_end_space_idx][null_pos_idx];
+      func_ptr = NULLSAFE_STR_CMP_FUNCS[cs_type][0][null_pos_idx];
     }
   } else if (is_json(type1) && is_json(type2)) {
     func_ptr = NULLSAFE_JSON_CMP_FUNCS[null_pos_idx][has_lob_header];

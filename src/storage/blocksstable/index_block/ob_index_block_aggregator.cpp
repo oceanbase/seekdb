@@ -462,9 +462,8 @@ int ObColMaxAggregator::cmp_with_prefix(
           const ObString &long_str = left_shorter ? right_str : left_str;
           const int64_t prefix_length = ObCharset::charpos(coll, long_str.ptr(), long_str.length(), prefix_char_num);
           ObString prefix_str(prefix_length, long_str.ptr());
-          const bool end_with_space = common::is_calc_with_end_space(obj_type, obj_type, coll, coll);
           const bool prefix_match = (0 == ObCharset::strcmpsp(
-              coll, long_str.ptr(), prefix_length, short_str.ptr(), short_str.length(), end_with_space));
+              coll, long_str.ptr(), prefix_length, short_str.ptr(), short_str.length(), false));
           if (!prefix_match) {
             cmp_res = tmp_res;
           } else {

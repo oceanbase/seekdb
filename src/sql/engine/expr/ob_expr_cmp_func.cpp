@@ -174,18 +174,16 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
     func_ptr = EVAL_TYPE_CMP_FUNCS[type1][type2][cmp_op];
   } else {
     OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2,
-                                                              cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
-        func_ptr = EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx];
+        func_ptr = EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][0];
       } else if (ob_is_large_text(type1)) { // type2 not large text
-        func_ptr = EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx];
+        func_ptr = EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][0];
       } else { // type1 not large text
-        func_ptr = EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx];
+        func_ptr = EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][0];
       }
     } else { // no lob header or tinytext use original str cmp func
-      func_ptr = EVAL_STR_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx];
+      func_ptr = EVAL_STR_CMP_FUNCS[cs_type][cmp_op][0];
     }
   }
   return func_ptr;
@@ -237,24 +235,22 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
     func_ptr = EVAL_BATCH_TYPE_CMP_FUNCS[type1][type2][cmp_op];
   } else {
     OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2,
-                                                              cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
-        if (NULL != EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx]) {
+        if (NULL != EVAL_TEXT_CMP_FUNCS[cs_type][cmp_op][0]) {
           func_ptr = EVAL_BATCH_TEXT_CMP_FUNCS[cmp_op];
         }
       } else if (ob_is_large_text(type1)) { // type2 not large text
-        if (NULL != EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx]) {
+        if (NULL != EVAL_TEXT_STR_CMP_FUNCS[cs_type][cmp_op][0]) {
           func_ptr = EVAL_BATCH_TEXT_STR_CMP_FUNCS[cmp_op];
         }
       } else { // type1 not large text
-        if (NULL != EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx]) {
+        if (NULL != EVAL_STR_TEXT_CMP_FUNCS[cs_type][cmp_op][0]) {
           func_ptr = EVAL_BATCH_STR_TEXT_CMP_FUNCS[cmp_op];
         }
       }
     } else { // no lob header or tinytext use original str cmp func
-      if (NULL != EVAL_STR_CMP_FUNCS[cs_type][cmp_op][calc_with_end_space_idx]) {
+      if (NULL != EVAL_STR_CMP_FUNCS[cs_type][cmp_op][0]) {
         func_ptr = EVAL_BATCH_STR_CMP_FUNCS[cmp_op];
       }
     }
@@ -300,18 +296,16 @@ DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1
     }
   } else {
     OB_ASSERT(cs_type > CS_TYPE_INVALID && cs_type < CS_TYPE_MAX);
-    int64_t calc_with_end_space_idx = (is_calc_with_end_space(type1, type2,
-                                                              cs_type, cs_type) ? 1 : 0);
     if (has_lob_header && (ob_is_large_text(type1) || ob_is_large_text(type2))) {
       if (ob_is_large_text(type1) && ob_is_large_text(type2)) {
-        func_ptr = DATUM_TEXT_CMP_FUNCS[cs_type][calc_with_end_space_idx];
+        func_ptr = DATUM_TEXT_CMP_FUNCS[cs_type][0];
       } else if (ob_is_large_text(type1)) { // type2 not large text
-        func_ptr = DATUM_TEXT_STR_CMP_FUNCS[cs_type][calc_with_end_space_idx];
+        func_ptr = DATUM_TEXT_STR_CMP_FUNCS[cs_type][0];
       } else { // type1 not large text
-        func_ptr = DATUM_STR_TEXT_CMP_FUNCS[cs_type][calc_with_end_space_idx];
+        func_ptr = DATUM_STR_TEXT_CMP_FUNCS[cs_type][0];
       }
     } else { // no lob header or tinytext use original str cmp func
-      func_ptr = DATUM_STR_CMP_FUNCS[cs_type][calc_with_end_space_idx];
+      func_ptr = DATUM_STR_CMP_FUNCS[cs_type][0];
     }
   }
   return func_ptr;

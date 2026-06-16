@@ -327,11 +327,6 @@ private:
       const char *r_str, const ObLength r_len, int &cmp_ret, ObLength &equal_prefix_length)
   {
     int ret = OB_SUCCESS;
-    const bool end_with_space = common::is_calc_with_end_space(
-        obj_meta.get_type(),
-        obj_meta.get_type(),
-        obj_meta.get_collation_type(),
-        obj_meta.get_collation_type());
     const ObCollationType &coll = obj_meta.get_collation_type();
     const int64_t l_char_num = ObCharset::strlen_char(coll, l_str, l_len);
     const int64_t r_char_num = ObCharset::strlen_char(coll, r_str, r_len);
@@ -350,7 +345,7 @@ private:
 
     const int64_t prefix_char_num = MIN(l_char_num, r_char_num);
     const ObLength prefix_length = ObCharset::charpos(coll, long_str, long_len, prefix_char_num);
-    const int p_cmp_ret = ObCharset::strcmpsp(coll, long_str, prefix_length, short_str, short_len, end_with_space);
+    const int p_cmp_ret = ObCharset::strcmpsp(coll, long_str, prefix_length, short_str, short_len, false);
     if (0 != p_cmp_ret) {
       // prefix not match
       cmp_ret = l_shorter ? -p_cmp_ret : p_cmp_ret;

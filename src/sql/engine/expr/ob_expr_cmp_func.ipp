@@ -543,11 +543,7 @@ struct ObRelationalExtraFunc
 
   inline static int str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<StrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                   expr.args_[0]->datum_meta_.cs_type_,
                                                   with_end_space);
@@ -583,11 +579,7 @@ struct ObRelationalExtraFunc
 
   inline static int text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<TextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                    expr.args_[0]->datum_meta_.cs_type_,
                                                    with_end_space);
@@ -617,11 +609,7 @@ struct ObRelationalExtraFunc
 
   inline static int text_str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<TextStrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                       expr.args_[0]->datum_meta_.cs_type_,
                                                       with_end_space);
@@ -651,11 +639,7 @@ struct ObRelationalExtraFunc
 
   inline static int str_text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
-    bool with_end_space = is_calc_with_end_space(
-        expr.args_[0]->datum_meta_.type_,
-        expr.args_[1]->datum_meta_.type_,
-        expr.args_[0]->datum_meta_.cs_type_,
-        expr.args_[1]->datum_meta_.cs_type_);
+    bool with_end_space = false;
     return def_relational_eval_batch_func<StrTextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
                                                       expr.args_[0]->datum_meta_.cs_type_,
                                                       with_end_space);

@@ -2043,19 +2043,7 @@ bool ObRelationalExprOperator::can_cmp_without_cast(ObExprResType type1,
     if (ObDatumFuncs::is_string_type(type1.get_type())
         && ObDatumFuncs::is_string_type(type2.get_type())) {
       need_no_cast = (ObCharset::charset_type_by_coll(type1.get_collation_type())
-                       == ObCharset::charset_type_by_coll(type2.get_collation_type()))
-//For cmp between padding type(char) and no-padding type(varchar)
-//we used to treat both as no-padding type without cast, but if it is equal cond in a hash join op
-//we will got different hash value from (char : 'a') and (varchar : 'a  ') and a empty result set
-//which is not cpmpat with oracle. So we check if left && right both need/no need calc end space.
-//If left is same as right, we can process equal cond without cast,
-//otherwise we have to cast one to another
-                    && (common::is_calc_with_end_space(type1.get_type(), type1.get_type(),
-                                                        type1.get_collation_type(),
-                                                        type1.get_collation_type())
-                        == common::is_calc_with_end_space(type2.get_type(), type2.get_type(),
-                                                          type2.get_collation_type(),
-                                                          type2.get_collation_type()));
+                       == ObCharset::charset_type_by_coll(type2.get_collation_type()));
     } else if (ob_is_decimal_int_tc(type1.get_type()) && ob_is_decimal_int_tc(type2.get_type())) {
       // if scale1 != scale2 or int_bytes1 != int_bytes2
       need_no_cast = (type1.get_scale() == type2.get_scale()
