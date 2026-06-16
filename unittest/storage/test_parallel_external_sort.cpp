@@ -20,6 +20,7 @@
 #undef private
 #include "./blocksstable/ob_data_file_prepare.h"
 #include "mtlenv/mock_tenant_module_env.h"
+#include "storage/ob_parallel_external_sort.h"
 
 namespace oceanbase
 {
