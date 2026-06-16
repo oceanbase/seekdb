@@ -134,8 +134,6 @@ int ObGAISRequestRpc::next_autoinc_val(const ObAddr &server,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
-    // single-replica: target is always local; dispatch in-process
-    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -152,8 +150,6 @@ int ObGAISRequestRpc::next_autoinc_val(const ObAddr &server,
         LOG_TRACE("post local require autoinc request success", K(msg), K(rpc_result));
       }
     }
-    return ret;
-    });
   }
   return ret;
 }
@@ -171,8 +167,6 @@ int ObGAISRequestRpc::curr_autoinc_val(const ObAddr &server,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
-    // single-replica: target is always local; dispatch in-process
-    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -185,8 +179,6 @@ int ObGAISRequestRpc::curr_autoinc_val(const ObAddr &server,
         LOG_TRACE("post local get autoinc request success", K(msg), K(rpc_result));
       }
     }
-    return ret;
-    });
   }
   return ret;
 }
@@ -204,8 +196,6 @@ int ObGAISRequestRpc::push_autoinc_val(const ObAddr &server,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
-    // single-replica: target is always local; dispatch in-process
-    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -218,8 +208,6 @@ int ObGAISRequestRpc::push_autoinc_val(const ObAddr &server,
         LOG_TRACE("post local gais push global request request success", K(msg), K(sync_value));
       }
     }
-    return ret;
-    });
   }
   return ret;
 }
@@ -235,8 +223,6 @@ int ObGAISRequestRpc::clear_autoinc_cache(const ObAddr &server, const ObGAISAuto
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
-    // single-replica: target is always local; dispatch in-process (resource RPC removed)
-    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
     MTL_SWITCH(tenant_id) {
@@ -249,8 +235,6 @@ int ObGAISRequestRpc::clear_autoinc_cache(const ObAddr &server, const ObGAISAuto
         LOG_TRACE("clear autoinc cache success", K(server), K(msg));
       }
     }
-    return ret;
-    });
   }
   return ret;
 }
@@ -283,8 +267,6 @@ int ObGAISRequestRpc::next_sequence_val(const common::ObAddr &server,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
-    // single-replica: target is always local; dispatch in-process
-    ex_rpc::sync_call([&]{
     ObGlobalAutoIncService *gais = nullptr;
     const uint64_t tenant_id = msg.schema_.get_tenant_id();
     MTL_SWITCH(tenant_id) {
@@ -297,8 +279,6 @@ int ObGAISRequestRpc::next_sequence_val(const common::ObAddr &server,
         LOG_TRACE("post local require autoinc request success", K(msg), K(rpc_result));
       }
     }
-    return ret;
-    });
   }
   return ret;
 }

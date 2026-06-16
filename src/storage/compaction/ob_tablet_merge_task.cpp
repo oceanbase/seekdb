@@ -984,36 +984,6 @@ int ObTabletMergeFinishTask::init()
   return ret;
 }
 
-int ObTabletMergeFinishTask::report_checkpoint_diagnose_info(ObTabletMergeCtx &ctx)
-{
-  int ret = OB_SUCCESS;
-  ObITable *table = nullptr;
-  storage::ObTablesHandleArray &tables_handle = ctx.static_param_.tables_handle_;
-  for (int64_t i = 0; i < tables_handle.get_count() && OB_SUCC(ret); i++) {
-    if (OB_ISNULL(table = tables_handle.get_table(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table is null", K(ret), K(tables_handle), KP(table));
-    } else if (OB_UNLIKELY(!table->is_memtable())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table is not memtable", K(ret), K(tables_handle), KPC(table));
-    } else {
-      const ObSSTableMergeHistory &merge_history = ctx.get_merge_info().get_merge_history();
-      if (table->is_data_memtable()) {
-        ObMemtable *memtable = nullptr;
-        memtable = static_cast<ObMemtable*>(table);
-        memtable->report_memtable_diagnose_info(ObMemtable::UpdateMergeInfoForMemtable(
-              merge_history.running_info_.merge_start_time_, merge_history.running_info_.merge_finish_time_, 
-              merge_history.block_info_.occupy_size_, merge_history.static_info_.concurrent_cnt_));
-      } else {
-        storage::ObIMemtable *memtable = nullptr;
-        memtable = static_cast<storage::ObIMemtable*>(table);
-        REPORT_CHECKPOINT_DIAGNOSE_INFO(update_merge_info_for_checkpoint_unit, memtable)
-      }
-    }
-  }
-  return ret;
-}
-
 int ObTabletMergeFinishTask::process()
 {
   int ret = OB_SUCCESS;
@@ -1054,12 +1024,7 @@ int ObTabletMergeFinishTask::process()
 
 void ObTabletMergeFinishTask::report_checkpoint_info(ObTabletMergeCtx &ctx)
 {
-  int tmp_ret = OB_SUCCESS;
-  if (is_mini_merge(ctx.get_merge_type())) {
-    if (OB_TMP_FAIL(report_checkpoint_diagnose_info(ctx))) {
-      STORAGE_LOG_RET(WARN, 0, "failed to report_checkpoint_diagnose_info", K(tmp_ret), K(ctx));
-    }
-  }
+  UNUSED(ctx);
 }
 
 void ObTabletMergeFinishTask::record_tx_data_info(ObTabletMergeCtx &ctx)

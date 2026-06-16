@@ -1944,8 +1944,8 @@ int ObLS::diagnose(DiagnoseInfo &info) const
     STORAGE_LOG(WARN, "ls is not inited", K(ret));
   } else if (FALSE_IT(info.ls_id_ = ls_id.id()) ||
              FALSE_IT(info.rc_diagnose_info_.id_ = ls_id.id())) {
-  } else if (OB_FAIL(checkpoint_executor_.diagnose(info.checkpoint_diagnose_info_))) {
-    STORAGE_LOG(WARN, "diagnose checkpoint failed", K(ret), K(ls_id));
+  } else if (OB_FAIL(checkpoint_executor_.get_clog_checkpoint_stat(info.ls_clog_checkpoint_stat_))) {
+    STORAGE_LOG(WARN, "get clog checkpoint stat failed", K(ret), K(ls_id));
   } else if (OB_FAIL(log_service->diagnose_apply(ls_id, info.apply_diagnose_info_))) {
     STORAGE_LOG(WARN, "diagnose apply failed", K(ret), K(ls_id));
   } else if (OB_FAIL(log_service->diagnose_replay(ls_id, info.replay_diagnose_info_))) {

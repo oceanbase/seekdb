@@ -472,9 +472,6 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 12430	__all_virtual_column_group_mapping	2	201001	1
 12431	__all_virtual_column_group_history	2	201001	1
 12432	__all_virtual_column_group_mapping_history	2	201001	1
-12437	__all_virtual_checkpoint_diagnose_memtable_info	2	201001	1
-12438	__all_virtual_checkpoint_diagnose_checkpoint_unit_info	2	201001	1
-12439	__all_virtual_checkpoint_diagnose_info	2	201001	1
 12440	__all_virtual_wr_system_event	2	201001	1
 12441	__all_virtual_wr_event_name	2	201001	1
 12442	__all_virtual_tenant_scheduler_running_job	2	201001	1

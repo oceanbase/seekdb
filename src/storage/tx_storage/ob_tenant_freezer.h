@@ -29,6 +29,7 @@
 #include "storage/multi_data_source/runtime_utility/mds_factory.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/ls/ob_freezer_define.h"
+#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
@@ -253,6 +254,9 @@ public:
 
   void get_freezer_stat_from_history(int64_t pos, ObTenantFreezerStat& stat);
 
+  // Tenant-wide monotonic id for checkpoint/freeze batch log correlation (not persisted).
+  int acquire_checkpoint_batch_trace_id(int64_t &trace_id);
+
   // record major frozen scn and reset freeze cnt
   int update_frozen_scn(const int64_t frozen_scn);
 
@@ -345,6 +349,7 @@ ObAddr self_;
   ObTenantFreezerStatHistory freezer_history_;
   PeriodicalUpdateValueCache throttle_is_skipping_cache_;
   PeriodicalUpdateValueCache memstore_remain_memory_is_exhausting_cache_;
+  int64_t next_checkpoint_batch_trace_id_;
 };
 
 class ObTenantTxDataFreezeGuard
@@ -384,6 +389,11 @@ private:
   bool can_freeze_;
   ObTenantFreezer *tenant_freezer_;
 };
-}
-}
+
+// Validates ls_id and allocates a tenant-wide monotonic checkpoint batch trace id (via MTL).
+int acquire_checkpoint_batch_trace_id(const share::ObLSID &ls_id, int64_t &trace_id);
+
+}  // namespace storage
+}  // namespace oceanbase
+
 #endif

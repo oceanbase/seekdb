@@ -651,9 +651,6 @@ public:
   static int all_virtual_column_group_mapping_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_column_group_history_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_column_group_mapping_history_schema(share::schema::ObTableSchema &table_schema);
-  static int all_virtual_checkpoint_diagnose_memtable_info_schema(share::schema::ObTableSchema &table_schema);
-  static int all_virtual_checkpoint_diagnose_checkpoint_unit_info_schema(share::schema::ObTableSchema &table_schema);
-  static int all_virtual_checkpoint_diagnose_info_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_wr_system_event_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_wr_event_name_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_tenant_scheduler_running_job_schema(share::schema::ObTableSchema &table_schema);
@@ -2078,9 +2075,6 @@ const schema_create_func virtual_table_schema_creators [] = {
   ObInnerTableSchema::all_virtual_column_group_mapping_schema,
   ObInnerTableSchema::all_virtual_column_group_history_schema,
   ObInnerTableSchema::all_virtual_column_group_mapping_history_schema,
-  ObInnerTableSchema::all_virtual_checkpoint_diagnose_memtable_info_schema,
-  ObInnerTableSchema::all_virtual_checkpoint_diagnose_checkpoint_unit_info_schema,
-  ObInnerTableSchema::all_virtual_checkpoint_diagnose_info_schema,
   ObInnerTableSchema::all_virtual_wr_system_event_schema,
   ObInnerTableSchema::all_virtual_wr_event_name_schema,
   ObInnerTableSchema::all_virtual_tenant_scheduler_running_job_schema,
@@ -2988,9 +2982,6 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_VIRTUAL_COLUMN_GROUP_MAPPING_TID,
   OB_ALL_VIRTUAL_COLUMN_GROUP_HISTORY_TID,
   OB_ALL_VIRTUAL_COLUMN_GROUP_MAPPING_HISTORY_TID,
-  OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_MEMTABLE_INFO_TID,
-  OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TID,
-  OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_INFO_TID,
   OB_ALL_VIRTUAL_WR_SYSTEM_EVENT_TID,
   OB_ALL_VIRTUAL_WR_EVENT_NAME_TID,
   OB_ALL_VIRTUAL_SQLSTAT_TID,
@@ -4130,9 +4121,6 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_VIRTUAL_COLUMN_GROUP_MAPPING_TNAME,
   OB_ALL_VIRTUAL_COLUMN_GROUP_HISTORY_TNAME,
   OB_ALL_VIRTUAL_COLUMN_GROUP_MAPPING_HISTORY_TNAME,
-  OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_MEMTABLE_INFO_TNAME,
-  OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TNAME,
-  OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_INFO_TNAME,
   OB_ALL_VIRTUAL_WR_SYSTEM_EVENT_TNAME,
   OB_ALL_VIRTUAL_WR_EVENT_NAME_TNAME,
   OB_ALL_VIRTUAL_SQLSTAT_TNAME,
