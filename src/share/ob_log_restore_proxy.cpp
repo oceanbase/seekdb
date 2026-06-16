@@ -199,8 +199,7 @@ ObLogRestoreProxyUtil::ObLogRestoreProxyUtil() :
   connection_(),
   user_name_(),
   user_password_(),
-  sql_proxy_(),
-  is_oracle_mode_(false)
+  sql_proxy_()
 {}
 
 ObLogRestoreProxyUtil::~ObLogRestoreProxyUtil()
@@ -296,7 +295,6 @@ void ObLogRestoreProxyUtil::destroy()
   server_prover_.destroy();
   user_name_.reset();
   user_password_.reset();
-  is_oracle_mode_ = false;
 }
 
 
@@ -316,7 +314,7 @@ int ObLogRestoreProxyUtil::try_init(const uint64_t tenant_id,
     LOG_WARN("tmp_server_prover_ init failed", K(tenant_id), K(server_list));
   } else if (OB_FAIL(detect_tenant_mode_(&tmp_server_prover, user_name, user_password, &fixed_server_list))) {
     LOG_WARN("detect tenant mode failed", KR(ret), K_(user_name));
-  } else if (OB_FALSE_IT(db_name = is_oracle_mode_ ? OB_ORA_SYS_SCHEMA_NAME : OB_SYS_DATABASE_NAME)) {
+  } else if (OB_FALSE_IT(db_name = OB_SYS_DATABASE_NAME)) {
   } else if (OB_FAIL(init(tenant_id, fixed_server_list, user_name, user_password, db_name))) {
     LOG_WARN("[RESTORE PROXY] fail to init restore proxy");
   }
@@ -522,7 +520,6 @@ int ObLogRestoreProxyUtil::detect_tenant_mode_(common::sqlclient::ObMySQLServerP
               }
               LOG_WARN("[RESTORE PROXY] mysql connect failed", "mysql_error", mysql_error(mysql), K(mysql_error_code), K(host), K(port));
             } else {
-              is_oracle_mode_ = false;
               detect_succ = true;
               LOG_INFO("[RESTORE PROXY] detect tenant mode success", KR(ret), K(host), K(port));
             }

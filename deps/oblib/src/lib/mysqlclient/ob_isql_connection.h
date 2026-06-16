@@ -90,8 +90,7 @@ public:
 class ObISQLConnection
 {
 public:
-  ObISQLConnection() : 
-       oracle_mode_(false),
+  ObISQLConnection() :
        is_inited_(false),
        sessid_(-1),
        consumer_group_id_(0),
@@ -193,9 +192,6 @@ public:
   virtual ObCommonServerConnectionPool *get_common_server_pool() = 0;
   void set_sessid(uint32_t sessid) { sessid_ = sessid; }
   uint32_t get_sessid() { return sessid_; }
-  void set_mysql_compat_mode() { oracle_mode_ = false; }
-  void set_oracle_compat_mode() { oracle_mode_ = true; }
-  bool is_oracle_compat_mode() const { return oracle_mode_; }
   virtual int set_ddl_info(const void *ddl_info) { UNUSED(ddl_info); return OB_NOT_SUPPORTED; }
   virtual int set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wrap) { UNUSED(tz_info_wrap); return OB_NOT_SUPPORTED; }
   virtual void set_nls_formats(const ObString *nls_formats) { UNUSED(nls_formats); }
@@ -217,7 +213,6 @@ public:
   void set_check_priv(bool on) { check_priv_ = on; }
   bool is_check_priv() { return check_priv_; }
 protected:
-  bool oracle_mode_;
   bool is_inited_; // for oracle dblink, we have to init remote env with some sql
   uint32_t sessid_;
   uint64_t consumer_group_id_; //for resource isolation

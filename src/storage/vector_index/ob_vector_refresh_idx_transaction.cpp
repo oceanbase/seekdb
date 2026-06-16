@@ -132,7 +132,6 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
       sql_client_ = sql_client;
       pool_ = pool;
       conn_ = conn;
-      oracle_mode_ = session_info->is_oracle_compatible();
     }
   }
   return ret;

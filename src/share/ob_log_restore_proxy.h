@@ -176,7 +176,6 @@ private:
   common::ObFixedLengthString<common::OB_MAX_USER_NAME_BUF_LENGTH> user_name_;
   common::ObFixedLengthString<common::OB_MAX_PASSWORD_LENGTH + 1> user_password_;
   common::ObMySQLProxy sql_proxy_;
-  bool is_oracle_mode_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogRestoreProxyUtil);

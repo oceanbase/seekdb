@@ -264,13 +264,13 @@ int ObErrLogService::execute_write(uint64_t tenant_id, char *sql_str)
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  common::ObOracleSqlProxy oracle_sql_proxy;
+  common::ObCommonSqlProxy inner_sql_proxy;
   if (OB_ISNULL(sql_proxy) || OB_ISNULL(sql_str)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy or sql_str should not be null");
-  } else if (OB_FAIL(oracle_sql_proxy.init(sql_proxy->get_pool()))) {
-    LOG_WARN("init oracle sql proxy failed", K(ret));
-  } else if (OB_FAIL(oracle_sql_proxy.write(tenant_id, sql_str, affected_rows))) {
+  } else if (OB_FAIL(inner_sql_proxy.init(sql_proxy->get_pool()))) {
+    LOG_WARN("init inner sql proxy failed", K(ret));
+  } else if (OB_FAIL(inner_sql_proxy.write(tenant_id, sql_str, affected_rows))) {
     LOG_WARN("execute sql failed", K(ret), K(sql_str));
   }
   return ret;

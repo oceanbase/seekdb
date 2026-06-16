@@ -55,7 +55,7 @@ public:
   int init(int64_t data_version,
            UpgradeMode mode,
            common::ObMySQLProxy &sql_proxy,
-           common::ObOracleSqlProxy &oracle_sql_proxy,
+           common::ObCommonSqlProxy &oracle_sql_proxy,
            share::schema::ObMultiVersionSchemaService &schema_service,
            share::ObCheckStopProvider &check_server_provider);
   int64_t get_version() const { return data_version_; }
@@ -78,7 +78,7 @@ protected:
   uint64_t tenant_id_;
   UpgradeMode mode_;
   common::ObMySQLProxy *sql_proxy_;
-  common::ObOracleSqlProxy *oracle_sql_proxy_;
+  common::ObCommonSqlProxy *oracle_sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   share::ObCheckStopProvider *check_stop_provider_;
 private:
@@ -92,7 +92,7 @@ public:
   virtual ~ObUpgradeProcesserSet();
   int init(ObBaseUpgradeProcessor::UpgradeMode mode,
            common::ObMySQLProxy &sql_proxy,
-           common::ObOracleSqlProxy &oracle_sql_proxy,
+           common::ObCommonSqlProxy &oracle_sql_proxy,
            share::schema::ObMultiVersionSchemaService &schema_service,
            share::ObCheckStopProvider &check_server_provider);
   int get_processor_by_idx(const int64_t idx,

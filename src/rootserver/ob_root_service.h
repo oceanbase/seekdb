@@ -177,6 +177,11 @@ public:
 
   int merge_finish(const obcall::ObMergeFinishArg &arg);
 
+  // 4.0 backup
+  // balance over
+  int receive_backup_over(const obcall::ObBackupTaskRes &res);
+  int receive_backup_clean_over(const obcall::ObBackupTaskRes &res);
+
   int broadcast_ds_action(const obcall::ObDebugSyncActionArg &arg);
   int check_dangling_replica_finish(const obcall::ObCheckDanglingReplicaFinishArg &arg);
   int get_tenant_schema_versions(const obcall::ObGetSchemaArg &arg,
@@ -252,6 +257,8 @@ public:
   int purge_database(const obcall::ObPurgeDatabaseArg &arg);
   int flashback_database(const obcall::ObFlashBackDatabaseArg &arg);
 
+  int create_restore_point(const obcall::ObCreateRestorePointArg &arg);
+  int drop_restore_point(const obcall::ObDropRestorePointArg &arg);
   int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
 
   //for inner table monitor, purge in fixed time
@@ -412,6 +419,15 @@ public:
   int get_recycle_schema_versions(
       const obcall::ObGetRecycleSchemaVersionsArg &arg,
       obcall::ObGetRecycleSchemaVersionsResult &result);
+  int handle_archive_log(const obcall::ObArchiveLogArg &arg);
+  int handle_backup_database(const obcall::ObBackupDatabaseArg &arg);
+  int handle_backup_manage(const obcall::ObBackupManageArg &arg);
+  int handle_backup_delete(const obcall::ObBackupCleanArg &arg);
+  int handle_delete_policy(const obcall::ObDeletePolicyArg &arg);
+  int handle_validate_database(const obcall::ObBackupManageArg &arg);
+  int handle_validate_backupset(const obcall::ObBackupManageArg &arg);
+  int handle_cancel_validate(const obcall::ObBackupManageArg &arg);
+  int handle_recover_table(const obcall::ObRecoverTableArg &arg);
   int standby_upgrade_virtual_schema(const obcall::ObDDLNopOpreatorArg &arg);
   int check_backup_scheduler_working(obcall::Bool &is_working);
   int purge_recyclebin_objects(int64_t purge_each_time);
@@ -458,9 +474,12 @@ private:
   int query_ddl_table_after_major_freeze(int &row_cnt, int64_t &schema_version_cursor,
                                          ObArray<uint64_t> &tenant_ids);
   bool continue_check(const int ret);
+  int handle_backup_database_cancel(const obcall::ObBackupManageArg &arg);
   inline static bool cmp_tenant_id(const uint64_t lhs, const uint64_t tenant_id) {
     return lhs < tenant_id;
   }
+  int handle_cancel_backup_backup(const obcall::ObBackupManageArg &arg);
+  int handle_cancel_all_backup_force(const obcall::ObBackupManageArg &arg);
 
   int table_allow_ddl_operation(const obcall::ObAlterTableArg &arg);
   int get_table_schema(uint64_t tenant_id,
@@ -503,7 +522,7 @@ private:
   common::ObConfigManager *config_mgr_;
 
   common::ObMySQLProxy sql_proxy_;
-  common::ObOracleSqlProxy oracle_sql_proxy_;
+  common::ObCommonSqlProxy oracle_sql_proxy_;
   observer::ObRestoreCtx *restore_ctx_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
 

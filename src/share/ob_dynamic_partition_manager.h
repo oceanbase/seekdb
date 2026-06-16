@@ -81,8 +81,7 @@ public:
       tenant_id_(OB_INVALID_ID),
       table_schema_(NULL),
       session_(NULL),
-      policy_(),
-      is_oracle_mode_(false) {}
+      policy_() {}
 
   int init(const schema::ObTableSchema *table_schema, sql::ObSQLSessionInfo *session);
   int execute(const ObString &specified_precreate_time, const ObIArray<ObString> &specified_time_unit_array, bool &skipped);
@@ -154,7 +153,6 @@ private:
   const schema::ObTableSchema *table_schema_;
   sql::ObSQLSessionInfo *session_;
   ObDynamicPartitionPolicy policy_;
-  bool is_oracle_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(ObDynamicPartitionManager);
 };

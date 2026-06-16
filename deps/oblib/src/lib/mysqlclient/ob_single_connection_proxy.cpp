@@ -25,8 +25,7 @@ ObSingleConnectionProxy::ObSingleConnectionProxy()
      statement_count_(0),
      conn_(NULL),
      pool_(NULL),
-     sql_client_(NULL),
-     oracle_mode_(false)
+     sql_client_(NULL)
 {
 }
 
@@ -45,7 +44,6 @@ int ObSingleConnectionProxy::connect(const uint64_t tenant_id, const int32_t gro
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("transaction can only be started once", K(tenant_id), K(pool_), K(conn_));
   } else {
-    oracle_mode_ =  sql_client->is_oracle_mode();
     pool_ = sql_client->get_pool();
 
     if (OB_FAIL(pool_->acquire(tenant_id, conn_, sql_client, group_id))) {

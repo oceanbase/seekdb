@@ -291,11 +291,6 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
     }
     config_ = config;
     associated_client_ = client_addr;
-    if (NULL != client_addr) {
-      oracle_mode_ = client_addr->is_oracle_mode();
-    } else {
-      oracle_mode_ = false;
-    }
     if (OB_FAIL(init_session(extern_session, use_static_engine))) {
       LOG_WARN("init session failed", K(ret));
       int tmp_ret = OB_SUCCESS;

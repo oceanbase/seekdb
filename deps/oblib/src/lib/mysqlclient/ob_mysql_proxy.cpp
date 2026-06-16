@@ -197,11 +197,6 @@ int ObCommonSqlProxy::write(const uint64_t tenant_id, const ObString sql,
                && OB_FAIL(conn->set_session_variable("ob_compatibility_mode", compatibility_mode))) {
       LOG_WARN("fail to set inner connection compatibility mode", K(ret), K(compatibility_mode));
     } else {
-      if (is_oracle_compatible(static_cast<ObCompatibilityMode>(compatibility_mode))) {
-        conn->set_oracle_compat_mode();
-      } else {
-        conn->set_mysql_compat_mode();
-      }
       LOG_TRACE("compatibility mode switch successfully!",
                 K(old_compatibility_mode), K(compatibility_mode));
     }
@@ -247,11 +242,6 @@ int ObCommonSqlProxy::write(const uint64_t tenant_id, const ObString sql,
     /*} else if (nullptr != sql_mode && old_sql_mode != *sql_mode && OB_FAIL(conn->set_session_variable("sql_mode", old_sql_mode))) {
       LOG_WARN("set inner connection sql mode failed", K(ret));*/
     } else {
-      if (is_oracle_compatible(static_cast<ObCompatibilityMode>(old_compatibility_mode))) {
-        conn->set_oracle_compat_mode();
-      } else {
-        conn->set_mysql_compat_mode();
-      }
       LOG_TRACE("compatibility mode switch successfully!",
                 K(compatibility_mode), K(old_compatibility_mode));
     }

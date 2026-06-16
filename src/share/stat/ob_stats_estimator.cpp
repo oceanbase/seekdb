@@ -400,7 +400,6 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
                                   ObIArray<ObOptStat> &dst_opt_stats)
 {
   int ret = OB_SUCCESS;
-  common::ObOracleSqlProxy oracle_proxy; // TODO, check the usage, is there any postprocess
   ObCommonSqlProxy *sql_proxy = ctx_.get_sql_proxy();
   ObArenaAllocator tmp_alloc("OptStatGather", OB_MALLOC_NORMAL_BLOCK_SIZE, gather_param.tenant_id_);
   sql::ObSQLSessionInfo::StmtSavedValue *session_value = NULL;

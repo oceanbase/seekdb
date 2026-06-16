@@ -239,23 +239,6 @@ protected:
 
 class ObMySQLProxy : public ObCommonSqlProxy
 {
-public:
-  virtual bool is_oracle_mode() const override { return false; }
-};
-
-class ObOracleSqlProxy : public ObCommonSqlProxy
-{
-public:
-  virtual bool is_oracle_mode() const override { return true; }
-
-  ObOracleSqlProxy() : ObCommonSqlProxy()
-  {
-  }
-
-  explicit ObOracleSqlProxy(ObMySQLProxy &sql_proxy)
-  {
-    pool_ = sql_proxy.get_pool();
-  }
 };
 
 // SQLXXX_APPEND macros for appending class member to insert sql

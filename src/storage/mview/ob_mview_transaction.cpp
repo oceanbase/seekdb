@@ -318,7 +318,6 @@ int ObMViewTransaction::connect(ObSQLSessionInfo *session_info, ObISQLClient *sq
       sql_client_ = sql_client;
       pool_ = pool;
       conn_ = conn;
-      oracle_mode_ = session_info->is_oracle_compatible();
     }
   }
   return ret;
@@ -470,12 +469,6 @@ int ObMViewTransaction::set_compact_mode(ObCompatibilityMode compact_mode)
     if (OB_FAIL(conn->set_session_variable(OB_SV_COMPATIBILITY_MODE,
                                            static_cast<int64_t>(compact_mode)))) {
       LOG_WARN("fail to set inner connection compact mode", KR(ret), K(compact_mode));
-    } else {
-      if (is_oracle_compatible(compact_mode)) {
-        conn->set_oracle_compat_mode();
-      } else {
-        conn->set_mysql_compat_mode();
-      }
     }
   }
   return ret;

@@ -653,11 +653,6 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_ERROR("acquire new connection but it's null", KR(ret), KPC(session_info));
   } else {
     inner_conn = static_cast<observer::ObInnerSQLConnection *>(conn);
-    // we must use mysql_mode connection to write inner_table
-    if (OB_UNLIKELY(inner_conn->is_oracle_compat_mode())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("create an oracle mode inner connection", K(ret));
-    }
   }
 
   if (current_mode != mysql_mode && current_mode.get_int() != -1 && OB_NOT_NULL(session_info)
@@ -1069,9 +1064,6 @@ int ObInnerConnectionLockUtil::set_to_mysql_compat_mode_(observer::ObInnerSQLCon
   } else if (need_reset_sess_mode
              && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
     LOG_WARN("update compat_mode to mysql_mode failed");
-  } else if (conn->is_oracle_compat_mode()) {
-    need_reset_conn_mode = true;
-    conn->set_mysql_compat_mode();
   }
   return ret;
 }
@@ -1085,9 +1077,6 @@ int ObInnerConnectionLockUtil::reset_compat_mode_(observer::ObInnerSQLConnection
   if (need_reset_sess_mode
       && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, oracle_mode))) {
     LOG_WARN("failed to update sys variable for compatibility mode", K(ret));
-  }
-  if (need_reset_conn_mode) {
-    conn->set_oracle_compat_mode();
   }
   return ret;
 }

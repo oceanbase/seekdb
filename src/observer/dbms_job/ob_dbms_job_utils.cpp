@@ -391,7 +391,7 @@ int ObDBMSJobUtils::calc_execute_at(
 
   if (delay < 0 && !interval.empty()) {
     ObSqlString sql;
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(sql_proxy_)));
+    ObMySQLProxy *inner_proxy = static_cast<ObMySQLProxy *>(sql_proxy_);
     // NOTE: we need utc timestamp.
     OZ (sql.append_fmt(
       "select to_date(to_char(sys_extract_utc(to_timestamp(to_char(sysdate, 'YYYY-MM-DD HH24:MI:SS'),"
@@ -401,7 +401,7 @@ int ObDBMSJobUtils::calc_execute_at(
       interval.length(), interval.ptr()));
     if (OB_SUCC(ret)) {
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-        if (OB_FAIL(oracle_proxy.read(result, job_info.get_tenant_id(), sql.ptr()))) {
+        if (OB_FAIL(inner_proxy->read(result, job_info.get_tenant_id(), sql.ptr()))) {
           LOG_WARN("execute query failed", K(ret), K(sql), K(job_info));
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_FAIL(result.get_result()->next())) {

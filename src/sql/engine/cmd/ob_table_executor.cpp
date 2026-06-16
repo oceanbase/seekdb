@@ -332,7 +332,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
   int64_t affected_rows = 0;
   ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
   common::ObCommonSqlProxy *user_sql_proxy;
-  common::ObOracleSqlProxy oracle_sql_proxy;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ObArenaAllocator allocator("CreateTableExec");
@@ -362,8 +361,6 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
       if (OB_ISNULL(pool)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pool is null", K(ret));
-      } else if (OB_FAIL(oracle_sql_proxy.init(pool))) {
-        LOG_WARN("init oracle sql proxy failed", K(ret));
       } else if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
         LOG_WARN("failed to prepare stmt", K(ret));
       } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &plan_ctx->get_param_store(), ins_sql))) { //1, parameter preparation;

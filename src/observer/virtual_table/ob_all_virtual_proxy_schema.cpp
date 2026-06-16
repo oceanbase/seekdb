@@ -428,14 +428,9 @@ int ObAllVirtualProxySchema::inner_open()
         }
       }
       if (OB_SUCC(ret)) {
-        common::ObCommonSqlProxy *user_sql_proxy = NULL;
-        common::ObOracleSqlProxy oracle_sql_proxy;
+        common::ObCommonSqlProxy *user_sql_proxy = GCTX.sql_proxy_;
         common::ObMySQLProxy::MySQLResult *sql_res = NULL;
-        if (OB_FAIL(oracle_sql_proxy.init(GCTX.sql_proxy_->get_pool()))) {
-          LOG_WARN("fail to init oracle sql proxy", K(ret));
-        } else if (FALSE_IT(user_sql_proxy = is_oracle_tenant ?
-                            (common::ObCommonSqlProxy*)&oracle_sql_proxy : GCTX.sql_proxy_)) {
-        } else if (OB_ISNULL(sql_res = OB_NEWx(ObMySQLProxy::MySQLResult, (&inner_alloc_)))) {
+        if (OB_ISNULL(sql_res = OB_NEWx(ObMySQLProxy::MySQLResult, (&inner_alloc_)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate result failed", K(ret));
         } else if (OB_FAIL(user_sql_proxy->read(*sql_res, exec_tenant_id, sql.ptr()))) {

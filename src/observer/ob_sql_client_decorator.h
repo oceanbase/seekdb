@@ -47,10 +47,6 @@ public:
 
   void set_retry_limit(int32_t retry_limit) { retry_limit_ = retry_limit; }
   int32_t get_retry_limit() const { return retry_limit_; }
-  bool is_oracle_mode() const override
-  {
-    return NULL == sql_client_ ? false : sql_client_->is_oracle_mode();
-  }
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObSQLClientRetry);
@@ -104,10 +100,6 @@ public:
   virtual sqlclient::ObISQLConnectionPool *get_pool() override;
   virtual sqlclient::ObISQLConnection *get_connection() override;
 
-  bool is_oracle_mode() const override
-  {
-    return NULL == sql_client_ ? false : sql_client_->is_oracle_mode();
-  }
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObSQLClientRetryWeak);

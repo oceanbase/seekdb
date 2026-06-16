@@ -4669,7 +4669,6 @@ int ObDDLUtil::check_table_empty(
     ObTimeoutCtx timeout_ctx;
     const char* format_str = nullptr;
     const uint64_t tenant_id = table_schema.get_tenant_id();
-    ObOracleSqlProxy oracle_sql_proxy(*GCTX.sql_proxy_);
     ObSingleConnectionProxy single_conn_proxy;
     sqlclient::ObISQLConnection *connection = nullptr;
     const ObSysVarSchema *var_schema = nullptr;

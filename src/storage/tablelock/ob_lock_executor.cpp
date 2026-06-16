@@ -250,8 +250,7 @@ int ObLockContext::open_inner_conn_()
     session->set_inner_conn(inner_conn);
     LOG_DEBUG("ObLockFuncContext::open_inner_conn_ successfully",
               KP(inner_conn_),
-              KP(store_inner_conn_),
-              K(inner_conn_->is_oracle_compat_mode()));
+              KP(store_inner_conn_));
   }
   return ret;
 }

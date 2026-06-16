@@ -53,7 +53,6 @@ public:
   virtual sqlclient::ObISQLConnectionPool *get_pool() override { return pool_; }
   virtual sqlclient::ObISQLConnection *get_connection() override { return conn_; }
 
-  virtual bool is_oracle_mode() const override { return oracle_mode_; }
   // in some situation, it allows continuation of SQL execution after failure in transaction,
   // and last_error should be reset.
   // 
@@ -71,7 +70,6 @@ protected:
   sqlclient::ObISQLConnection *conn_;
   sqlclient::ObISQLConnectionPool *pool_;
   ObISQLClient *sql_client_;
-  bool oracle_mode_;
   DISALLOW_COPY_AND_ASSIGN(ObSingleConnectionProxy);
 };
 

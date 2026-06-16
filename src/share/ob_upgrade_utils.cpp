@@ -116,7 +116,7 @@ ObUpgradeProcesserSet::~ObUpgradeProcesserSet()
 int ObUpgradeProcesserSet::init(
     ObBaseUpgradeProcessor::UpgradeMode mode,
     common::ObMySQLProxy &sql_proxy,
-    common::ObOracleSqlProxy &oracle_sql_proxy,
+    common::ObCommonSqlProxy &oracle_sql_proxy,
     share::schema::ObMultiVersionSchemaService &schema_service,
     share::ObCheckStopProvider &check_server_provider)
 {
@@ -337,7 +337,7 @@ int ObBaseUpgradeProcessor::init(
     int64_t data_version,
     UpgradeMode mode,
     common::ObMySQLProxy &sql_proxy,
-    common::ObOracleSqlProxy &oracle_sql_proxy,
+    common::ObCommonSqlProxy &oracle_sql_proxy,
     share::schema::ObMultiVersionSchemaService &schema_service,
     share::ObCheckStopProvider &check_server_provider)
 {
