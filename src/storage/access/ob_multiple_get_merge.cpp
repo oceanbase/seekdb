@@ -239,7 +239,8 @@ int ObMultipleGetMerge::inner_get_next_row(ObDatumRow &row)
           // When the index lookups the rowkeys from the main table, it should exists
           // and if we find that it does not exist, there must be an anomaly
           if (GCONF.enable_defensive_check()
-              && access_ctx_->query_flag_.is_lookup_for_4377()) {
+              && access_ctx_->query_flag_.is_lookup_for_4377()
+              && !fuse_row.row_flag_.is_delete()) {
             ret = handle_4377("[index lookup]ObMultipleGetMerge::inner_get_next_row");
             STORAGE_LOG(WARN,"[index lookup] row not found", K(ret),
                         K(rowkeys_),
