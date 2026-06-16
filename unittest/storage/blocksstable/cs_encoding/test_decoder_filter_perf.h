@@ -663,7 +663,7 @@ int TestDecoderFilterPerf::prepare(
   } else if (!is_multi_version && OB_FAIL(row_generate_.get_schema().get_column_ids(col_descs_))) {
     STORAGE_LOG(WARN, "fail to get column ids", KR(ret));
   } else if (OB_FAIL(read_info_.init(allocator_, pax_table.get_column_count(),
-            pax_table.get_rowkey_column_num(), lib::is_oracle_mode(), col_descs_))) {
+            pax_table.get_rowkey_column_num(), col_descs_))) {
     STORAGE_LOG(WARN, "fail to init read info", KR(ret));
   } else if (OB_FAIL(cs_row_generate_.init(cs_table, is_multi_version))) {
     STORAGE_LOG(WARN, "fail to init row_generate", KR(ret));
@@ -672,7 +672,7 @@ int TestDecoderFilterPerf::prepare(
   } else if (!is_multi_version && OB_FAIL(cs_row_generate_.get_schema().get_column_ids(cs_col_descs_))) {
     STORAGE_LOG(WARN, "fail to get column ids", KR(ret));
   } else if (OB_FAIL(cs_read_info_.init(cs_allocator_, cs_table.get_column_count(),
-            cs_table.get_rowkey_column_num(), lib::is_oracle_mode(), cs_col_descs_))) {
+            cs_table.get_rowkey_column_num(), cs_col_descs_))) {
     STORAGE_LOG(WARN, "fail to init read info", KR(ret));
   } else {
     STORAGE_LOG(INFO, "read info", K(read_info_), K(cs_read_info_));
@@ -843,10 +843,7 @@ int TestDecoderFilterPerf::add_column_into_table(ObTableSchema &table_schema)
         || ObTextType == type){
       col.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
       if (ObCharType == type) {
-        const int64_t max_char_length = lib::is_oracle_mode()
-                                        ? OB_MAX_ORACLE_CHAR_LENGTH_BYTE
-                                        : OB_MAX_CHAR_LENGTH;
-        col.set_data_length(max_char_length);
+        col.set_data_length(OB_MAX_CHAR_LENGTH);
       }
     } else {
       col.set_collation_type(CS_TYPE_BINARY);

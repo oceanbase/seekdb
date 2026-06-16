@@ -130,7 +130,6 @@ int TestNewRowReader::init_read_columns(
           allocator_,
           writer_row.count_,
           row_generate_.get_schema().get_rowkey_column_num(),
-          lib::is_oracle_mode(),
           cols_desc,
           &projector))) {
     STORAGE_LOG(WARN, "failed to init column map");
@@ -167,7 +166,7 @@ int TestNewRowReader::init_read_columns(
     ret = cols_desc.push_back(col_desc);
   }
   if (OB_FAIL(read_info_.init(allocator_, writer_row.count_,
-          row_generate_.get_schema().get_rowkey_column_num(), lib::is_oracle_mode(),
+          row_generate_.get_schema().get_rowkey_column_num(),
           cols_desc))) {
     STORAGE_LOG(WARN, "failed to init column map");
   }

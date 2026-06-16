@@ -185,7 +185,6 @@ TEST_F(ObRawExprEqualTest, equal_compare_func)
                                                                     type1.get_scale(),
                                                                     type2.get_scale(),
                                                                     CO_EQ,
-                                                                    false,
                                                                     CS_TYPE_BINARY,
                                                                     has_lob_header);
         bool has_cmp_func = NULL != func_ptr;

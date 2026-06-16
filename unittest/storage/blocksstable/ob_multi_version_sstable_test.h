@@ -339,7 +339,6 @@ void ObMultiVersionSSTableTest::prepare_table_schema(
   OK(full_read_info_.init(allocator_,
                           column_cnt - extra_rowkey_cnt,
                           schema_rowkey_cnt,
-                          lib::is_oracle_mode(),
                           tmp_col_descs));
 
   //init table schema

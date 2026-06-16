@@ -223,7 +223,6 @@ int FakeObTableScanRange::init_table_datum_desc()
   int ret = OB_SUCCESS;
   ObColDesc col_desc;
   ObSEArray<ObColDesc, 2> col_descs;
-  const bool is_oracle_mode = false;
   // two columns
   for (int64_t i = 0; i < 2; i++) {
     col_desc.col_type_.set_int32();

@@ -544,7 +544,7 @@ int ObTxNode::read(const ObTxReadSnapshot &snapshot,
     ObArenaAllocator allocator;
     ObTableReadInfo read_info;
     const int64_t schema_version = 100;
-    read_info.init(allocator, schema_version, 1, false, columns_, nullptr/*storage_cols_index*/);
+    read_info.init(allocator, schema_version, 1, columns_, nullptr/*storage_cols_index*/);
     iter_param.table_id_ = 1;
     iter_param.tablet_id_ = 100;
     iter_param.read_info_ = &read_info;
@@ -659,7 +659,7 @@ int ObTxNode::write(ObTxDesc &tx,
   ObTableReadInfo read_info;
 
   const int64_t schema_version = 100;
-  read_info.init(allocator, 2, 1, false, columns_, nullptr/*storage_cols_index*/);
+  read_info.init(allocator, 2, 1, columns_, nullptr/*storage_cols_index*/);
 
   trans_version_range.base_version_ = 0;
   trans_version_range.multi_version_start_ = 0;
@@ -716,7 +716,7 @@ int ObTxNode::write_one_row(ObStoreCtx& write_store_ctx, const int64_t key, cons
   ObArenaAllocator allocator;
   ObTableReadInfo read_info;
   const int64_t schema_version = 100;
-  read_info.init(allocator, 2, 1, false, columns_, nullptr/*storage_cols_index*/);
+  read_info.init(allocator, 2, 1, columns_, nullptr/*storage_cols_index*/);
   ObDatumRow row;
   ObStorageDatum cols[2] = {ObStorageDatum(), ObStorageDatum()};
   cols[0].set_int(key);

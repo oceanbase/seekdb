@@ -1,0 +1,95 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include "observer/ob_server.h"
+#include "lib/net/ob_addr.h"
+#include "share/ob_srv_rpc_proxy.h"
+#include "rpc/obrpc/ob_net_client.h"
+#include "share/ob_rpc_struct.h"
+#include "lib/mysqlclient/ob_single_mysql_connection_pool.h"
+
+namespace oceanbase
+{
+namespace observer
+{
+  
+
+class ObSimpleServer
+{
+public:
+  static const int64_t MAX_WAIT_TENANT_SCHEMA_TIME = 20_s;
+
+public:
+  ObSimpleServer(const std::string &env_prefix,
+                 const char *log_disk_size = "10G",
+                 const char *memory_limit = "10G",
+                 const char *datafile_size = "10G",
+                 ObServer &server = ObServer::get_instance(),
+                 const std::string &dir_prefix = "./store_");
+  ~ObSimpleServer() { reset(); }
+  ObServer& get_observer() { return server_; }
+  int simple_init();
+  int simple_start();
+  int simple_close();
+  std::string get_local_ip();
+  int get_mysql_port() { return mysql_port_; }
+  int bootstrap();
+  void reset();
+  common::ObMySQLProxy &get_sql_proxy() { return sql_proxy_; }
+  common::ObMySQLProxy &get_sql_proxy2() { return sql_proxy2_; }
+  common::ObMySQLProxy &get_sql_proxy_with_short_wait() { return sql_proxy_with_short_wait_; }
+  common::ObAddr get_addr() {
+    common::ObAddr addr;
+    addr.set_ip_addr(local_ip_.c_str(), rpc_port_);
+    return addr;
+  }
+
+  int init_sql_proxy2(const char *tenant_name = "tt1", const char *db_name="test",
+      const ObMySQLConnection::Mode connection_mode = ObMySQLConnection::DEBUG_MODE);
+  int init_sql_proxy_with_short_wait();
+  void set_extra_optstr(const char *extra_optstr) { extra_optstr_ = extra_optstr; }
+protected:
+  int init_sql_proxy();
+
+private:
+  ObServer &server_;
+  std::thread th_;
+  std::string local_ip_;
+  int rpc_port_;
+  int mysql_port_;
+  const char *log_disk_size_;
+  const char *memory_limit_;
+  const char *datafile_size_;
+  std::string data_dir_;
+  std::string rs_list_;
+  std::string optstr_;
+  std::string extra_optstr_;
+  std::string run_dir_;
+  common::sqlclient::ObSingleMySQLConnectionPool sql_conn_pool_;
+  common::ObMySQLProxy sql_proxy_;
+  common::sqlclient::ObSingleMySQLConnectionPool sql_conn_pool2_;
+  common::ObMySQLProxy sql_proxy2_;
+  common::sqlclient::ObSingleMySQLConnectionPool sql_conn_pool_with_short_wait_;
+  common::ObMySQLProxy sql_proxy_with_short_wait_;
+  int server_fd_;
+  bool set_bootstrap_warn_log_;
+};
+
+
+} // end observer
+} // end oceanbase

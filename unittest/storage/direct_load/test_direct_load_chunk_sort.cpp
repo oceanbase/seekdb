@@ -390,7 +390,7 @@ int TestChunkSort::prepare_utils(const ObTableSchema &table_schema,
   //prepare util
   if (OB_FAIL(table_schema.get_column_ids(col_descs))) {
     STORAGE_LOG(WARN, "fail to get column ids", KR(ret));
-  } else if (OB_FAIL(datum_util.init(col_descs, table_schema.get_rowkey_column_num(), false, allocator))) {
+  } else if (OB_FAIL(datum_util.init(col_descs, table_schema.get_rowkey_column_num(), allocator))) {
     STORAGE_LOG(WARN, "fail to init datum util", KR(ret));
   //prepare compare
   } else if (OB_FAIL(compare.init(datum_util, dup_action, ignore_seq_no))) {

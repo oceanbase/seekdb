@@ -208,7 +208,7 @@ public:
     // iter_param_.rowkey_cnt_ = rowkey_cnt_;
     iter_param_.tablet_id_ = tablet_id_;
     iter_param_.table_id_ = tablet_id_.id();
-    int ret = read_info_.init(allocator_, 16000, rowkey_cnt_, false, columns_, nullptr/*storage_cols_index*/);
+    int ret = read_info_.init(allocator_, 16000, rowkey_cnt_, columns_, nullptr/*storage_cols_index*/);
     iter_param_.read_info_ = &read_info_;
 
     return ret;

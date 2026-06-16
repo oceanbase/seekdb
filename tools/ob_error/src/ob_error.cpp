@@ -211,7 +211,7 @@ void ObErrorInfoMgr::print_ob_error()
       printf("\t\tMySQL: %d(%s)\n", mysql_errno, sqlstate);
     }
     bool need_oracle_print = false;
-    int oracle_errno = ob_errpkt_errno(ob_error_code, true);
+    int oracle_errno = ob_errpkt_errno(ob_error_code);
     if (oracle_errno != -ob_error_code) {
       if (ORACLE_SPECIAL_ERROR_CODE == oracle_errno) {
         // Compatible error for ORA-00600
@@ -222,7 +222,7 @@ void ObErrorInfoMgr::print_ob_error()
         need_oracle_print = true;
       }
       if (need_oracle_print) {
-        const char *oracle_err_msg = ob_errpkt_strerror(ob_error_code, true);
+        const char *oracle_err_msg = ob_errpkt_strerror(ob_error_code);
         if (nullptr != oracle_err_msg) {
           if (false == is_compat_header_printed) {
             printf("\t%s\n", compatiable_header);
@@ -396,9 +396,9 @@ bool add_ob_info(int error_code, ObErrorInfoMgr* mgr)
         bret = true;
       }
     } else {
-      const char* error_usr_msg = ob_errpkt_str_user_error(-error_code, false);
+      const char* error_usr_msg = ob_errpkt_str_user_error(-error_code);
       if (nullptr != error_usr_msg) {
-        const char* error_msg = ob_errpkt_strerror(-error_code, false);
+        const char* error_msg = ob_errpkt_strerror(-error_code);
         const char* error_name = ob_error_name(-error_code);
         const char* error_cause = ob_error_cause(-error_code);
         const char* error_solution = ob_error_solution(-error_code);
@@ -425,9 +425,9 @@ static bool add_error_info(int error_code, Fac facility, int g_error[][OB_MAX_SA
         break;
       } else {
         ob_error = g_error[error_code][i];
-        const char* error_usr_msg = ob_errpkt_str_user_error(-ob_error, MY > facility);
+        const char* error_usr_msg = ob_errpkt_str_user_error(-ob_error);
         if (nullptr != error_usr_msg) {
-          const char* error_msg = ob_errpkt_strerror(-ob_error, MY > facility);
+          const char* error_msg = ob_errpkt_strerror(-ob_error);
           const char* error_name = ob_error_name(-ob_error);
           const char* error_cause = ob_error_cause(-ob_error);
           const char* error_solution = ob_error_solution(-ob_error);
@@ -495,12 +495,12 @@ bool add_oracle_info(Fac oracle_facility, int error_code, int argument, ObErrorI
             bret = add_error_info(error_code, ORA, g_oracle_ora, mgr);
           } else {
             ob_error = argument;
-            const char* error_usr_msg = ob_errpkt_str_user_error(-ob_error, true);
+            const char* error_usr_msg = ob_errpkt_str_user_error(-ob_error);
             if (nullptr != error_usr_msg) {
               // verify that the error is ora-00600
-              if (-OB_ERR_PROXY_REROUTE == ob_errpkt_errno(-ob_error, true) ||
-                  ORACLE_SPECIAL_ERROR_CODE == ob_errpkt_errno(-ob_error, true)) {
-                const char* error_msg = ob_errpkt_strerror(-ob_error, true);
+              if (-OB_ERR_PROXY_REROUTE == ob_errpkt_errno(-ob_error) ||
+                  ORACLE_SPECIAL_ERROR_CODE == ob_errpkt_errno(-ob_error)) {
+                const char* error_msg = ob_errpkt_strerror(-ob_error);
                 const char* error_name = ob_error_name(-ob_error);
                 const char* error_cause = ob_error_cause(-ob_error);
                 const char* error_solution = ob_error_solution(-ob_error);

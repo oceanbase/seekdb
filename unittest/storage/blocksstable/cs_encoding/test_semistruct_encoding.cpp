@@ -327,7 +327,7 @@ int TestSemiStructEncoding::check_part_transform(
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(read_info.init(allocator, col_cnt, rowkey_cnt, false, col_descs, &storage_cols_index))) {
+  } else if (OB_FAIL(read_info.init(allocator, col_cnt, rowkey_cnt, col_descs, &storage_cols_index))) {
     LOG_WARN("init read info fail", K(ret));
   } else if (OB_FAIL(decoder.init(part_transformed_data, read_info))) {
     LOG_WARN("init decoder fail", K(ret));
@@ -1653,7 +1653,7 @@ TEST_F(TestSemiStructEncoding, test_complex_situation)
       ASSERT_EQ(OB_SUCCESS, storage_cols_index.push_back(store_id));
       ASSERT_EQ(OB_SUCCESS, col_descs.push_back(col_descs_.at(store_id)));
     }
-    ASSERT_EQ(OB_SUCCESS, read_info.init(allocator, col_cnt, rowkey_cnt, false, col_descs, &storage_cols_index));
+    ASSERT_EQ(OB_SUCCESS, read_info.init(allocator, col_cnt, rowkey_cnt, col_descs, &storage_cols_index));
     ASSERT_EQ(OB_SUCCESS, decoder.init(part_transformed_data, read_info));
     for (int32_t i = 0; i < row_cnt; ++i) {
       ASSERT_EQ(OB_SUCCESS, decoder.get_row(i, row));
@@ -3489,7 +3489,7 @@ TEST_F(TestSemiStructEncoding, test_zero_stream)
         ASSERT_EQ(OB_SUCCESS, storage_cols_index.push_back(store_id));
         ASSERT_EQ(OB_SUCCESS, col_descs.push_back(col_descs_.at(store_id)));
       }
-      ASSERT_EQ(OB_SUCCESS, read_info.init(allocator, col_cnt, rowkey_cnt, false, col_descs, &storage_cols_index));
+      ASSERT_EQ(OB_SUCCESS, read_info.init(allocator, col_cnt, rowkey_cnt, col_descs, &storage_cols_index));
       ASSERT_EQ(OB_SUCCESS, decoder.init(part_transformed_data, read_info));
       for (int32_t i = 0; i < row_cnt; ++i) {
         ASSERT_EQ(OB_SUCCESS, decoder.get_row(i, row));
