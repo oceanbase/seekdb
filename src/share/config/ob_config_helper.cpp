@@ -21,8 +21,6 @@
 #include "share/table/ob_ttl_util.h"
 #include "src/observer/ob_server.h"
 #include "share/config/ob_config_mode_name_def.h"
-#include "share/backup/ob_archive_persist_helper.h"
-#include "share/backup/ob_tenant_archive_mgr.h"
 #include "plugin/sys/ob_plugin_load_param.h"
 #include "share/table/ob_table_config_util.h"
 
@@ -1325,24 +1323,6 @@ bool ObConfigDDLNoLoggingChecker::check(const uint64_t tenant_id, const obcall::
 
   if (OB_SYS_TENANT_ID == tenant_id) {
     /* sys tenant not no allow archive */
-  } else {
-    ObArchivePersistHelper archive_op;
-    ObArchiveMode archive_mode;
-    common::ObMySQLProxy *sql_proxy = nullptr;
-    if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_))  {
-      is_valid = false;
-      ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "invalid sql proxy", K(ret), KP(sql_proxy));
-    } else if (OB_FAIL(archive_op.init(tenant_id))) {
-      is_valid = false;
-      OB_LOG(WARN, "failed to init archive op", K(ret), K(tenant_id));
-    } else if (OB_FAIL(archive_op.get_archive_mode(*sql_proxy, archive_mode))) {
-      is_valid = false;
-      OB_LOG(WARN, "failed to get archive mode", K(ret));
-    } else if (value && archive_mode.is_archivelog()) {
-      is_valid = false;
-      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "it's no allowded to set no logging during archive");
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -1356,36 +1336,6 @@ bool ObConfigMigrationChooseSourceChecker::check(const ObConfigItem &t) const
   ObString v_str(t.str());
   return 0 == v_str.case_compare("idc")
       || 0 == v_str.case_compare("region");
-}
-
-bool ObConfigArchiveLagTargetChecker::check(const uint64_t tenant_id, const ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int ret = OB_SUCCESS;
-  int64_t value = ObConfigTimeParser::get(t.value_.ptr(), is_valid);
-  ObArchivePersistHelper archive_op;
-  ObBackupPathString archive_dest_str;
-  ObBackupDest archive_dest;
-  ObStorageType device_type;
-  const int64_t dest_no = 0;
-  const bool lock = false;
-  if (is_valid) {
-    if (OB_FAIL(archive_op.init(tenant_id))) {
-      OB_LOG(WARN, "fail to init archive persist helper", K(ret), K(tenant_id));
-    } else if (OB_FAIL(archive_op.get_archive_dest(*GCTX.sql_proxy_, lock, dest_no, archive_dest_str))) {
-      if (OB_ENTRY_NOT_EXIST != ret) {
-        OB_LOG(WARN, "failed to get archive dest", K(ret), K(tenant_id));
-      } else { // no dest exist, set archive_lag_target is disallowed
-        is_valid =  false;
-        LOG_USER_ERROR(OB_OP_NOT_ALLOW, "log_archive_dest has not been set, set archive_lag_target is");
-      }
-    } else if (OB_FAIL(archive_dest.set(archive_dest_str))) {
-      OB_LOG(WARN, "fail to set archive dest", K(ret), K(archive_dest_str));
-    } else {
-      is_valid = true;
-    }
-  }
-  return is_valid;
 }
 
 bool ObConfigSQLSpillCompressionCodecChecker::check(const ObConfigItem &t) const

@@ -1951,12 +1951,6 @@ int get_sys_tenant_alter_system_priv(
              stmt::T_FREEZE != basic_stmt->get_stmt_type() &&
              stmt::T_CLEAR_MERGE_ERROR != basic_stmt->get_stmt_type() &&
              stmt::T_ADMIN_MERGE != basic_stmt->get_stmt_type() &&
-             stmt::T_ARCHIVE_LOG != basic_stmt->get_stmt_type() &&
-             stmt::T_BACKUP_DATABASE != basic_stmt->get_stmt_type() && 
-             stmt::T_BACKUP_MANAGE != basic_stmt->get_stmt_type() &&
-             stmt::T_BACKUP_CLEAN != basic_stmt->get_stmt_type() &&
-             stmt::T_DELETE_POLICY != basic_stmt->get_stmt_type() &&
-             stmt::T_BACKUP_KEY != basic_stmt->get_stmt_type() &&
              stmt::T_RECOVER != basic_stmt->get_stmt_type() &&
              stmt::T_TABLE_TTL != basic_stmt->get_stmt_type() &&
              stmt::T_ALTER_SYSTEM_RESET_PARAMETER != basic_stmt->get_stmt_type() &&
@@ -2278,28 +2272,6 @@ int get_purge_database_stmt_need_privs(
   }
   return ret;
 
-}
-
-int get_restore_point_priv(
-    const ObSessionPrivInfo &session_priv,
-    const ObStmt *basic_stmt,
-    ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_SYS_TENANT_ID == session_priv.tenant_id_) {
-    ret = OB_ERR_NO_PRIVILEGE;
-    LOG_WARN("Only non sys tenant can do this operation",
-             K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else {
-    ObNeedPriv need_priv;
-    need_priv.priv_set_ = OB_PRIV_SELECT;
-    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
-    ADD_NEED_PRIV(need_priv);
-  }
-  return ret;
 }
 
 int get_lock_table_priv(

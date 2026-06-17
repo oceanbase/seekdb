@@ -188,8 +188,6 @@
 #include "observer/virtual_table/ob_all_virtual_cgroup_config.h"
 #include "observer/virtual_table/ob_virtual_flt_config.h"
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
-#include "observer/virtual_table/ob_tenant_show_restore_preview.h"
-#include "observer/virtual_table/ob_tenant_show_restore_preview.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit_detail.h"
 #include "observer/virtual_table/ob_all_virtual_res_mgr_sys_stat.h"
@@ -1068,18 +1066,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               ObShowCreateTrigger *create_tg = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowCreateTrigger, create_tg))) {
               vt_iter = static_cast<ObVirtualTableIterator *>(create_tg);
-            }
-            break;
-          }
-          case OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TID:
-          {
-            ObTenantShowRestorePreview *restore_preview = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTenantShowRestorePreview, restore_preview))) {
-              if (OB_FAIL(restore_preview->init())) {
-                SERVER_LOG(WARN, "failed to init restore preview", K(ret));
-              } else {
-                vt_iter = static_cast<ObVirtualTableIterator *>(restore_preview);
-              }
             }
             break;
           }

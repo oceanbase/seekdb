@@ -295,7 +295,6 @@ ob_set_subtarget(ob_share common_mixed
   restore/ob_physical_restore_table_operator.cpp
   restore/ob_log_restore_source.cpp
   restore/ob_log_restore_source_mgr.cpp
-  restore/ob_restore_table_operator.cpp
   restore/ob_recover_table_persist_helper.cpp
   restore/ob_restore_persist_helper.cpp
   restore/ob_import_table_persist_helper.cpp

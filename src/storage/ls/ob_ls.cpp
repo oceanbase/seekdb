@@ -21,7 +21,6 @@
 #include "observer/ob_srv_network_frame.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
-#include "rootserver/backup/ob_archive_scheduler_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "observer/ob_sys_tenant_load_sys_package_service.h" // for ObSysTenantLoadSysPackageService
@@ -803,8 +802,6 @@ int ObLS::register_sys_service()
     REGISTER_TO_RESTORESERVICE(STANDBY_TIMESTAMP_LOG_BASE_TYPE, MTL(transaction::ObStandbyTimestampService *));
   }
   if (ls_id.is_sys_ls()) {
-    REGISTER_TO_LOGSERVICE(BACKUP_ARCHIVE_SERVICE_LOG_BASE_TYPE, MTL(ObArchiveSchedulerService *));
-
     if (is_sys_tenant(tenant_id)) {
       ObIngressBWAllocService *ingress_service = GCTX.net_frame_->get_ingress_service();
       REGISTER_TO_LOGSERVICE(NET_ENDPOINT_INGRESS_LOG_BASE_TYPE, ingress_service);
@@ -914,8 +911,6 @@ void ObLS::unregister_sys_service_()
     UNREGISTER_FROM_RESTORESERVICE(STANDBY_TIMESTAMP_LOG_BASE_TYPE, MTL(transaction::ObStandbyTimestampService *));
   }
   if (ls_meta_.ls_id_.is_sys_ls()) {
-    ObArchiveSchedulerService* backup_archive_service = MTL(ObArchiveSchedulerService*);
-    UNREGISTER_FROM_LOGSERVICE(BACKUP_ARCHIVE_SERVICE_LOG_BASE_TYPE, backup_archive_service);
     if (is_sys_tenant(MTL_ID())) {
       ObIngressBWAllocService *ingress_service = GCTX.net_frame_->get_ingress_service();
       UNREGISTER_FROM_LOGSERVICE(NET_ENDPOINT_INGRESS_LOG_BASE_TYPE, ingress_service);

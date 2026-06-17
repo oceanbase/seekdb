@@ -4202,21 +4202,7 @@ bool ObNotifyTenantSnapshotSchedulerArg::is_valid() const
 
 OB_SERIALIZE_MEMBER(ObNotifyTenantSnapshotSchedulerArg, tenant_id_);
 
-bool ObFlushLSArchiveArg::is_valid() const
-{
-  return tenant_id_ != OB_INVALID_TENANT_ID;
-}
 
-int ObFlushLSArchiveArg::assign(const ObFlushLSArchiveArg &other)
-{
-  int ret = OB_SUCCESS;
-  if (this != &other) {
-    tenant_id_ = other.tenant_id_;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObFlushLSArchiveArg, tenant_id_);
 OB_SERIALIZE_MEMBER(ObCancelTaskArg, task_id_);
 OB_SERIALIZE_MEMBER(ObReportSingleReplicaArg, tenant_id_, ls_id_);
 OB_SERIALIZE_MEMBER(ObSetDiskValidArg);
@@ -4637,213 +4623,8 @@ int ObCheckServerEmptyResult::init(const bool &server_empty, const ObZone &zone)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObArchiveLogArg, enable_, tenant_id_, archive_tenant_ids_);
-
-OB_SERIALIZE_MEMBER(ObLSBackupCleanArg, trace_id_, job_id_, tenant_id_, incarnation_, task_id_, ls_id_, task_type_, id_, dest_id_, round_id_);
-
-bool ObLSBackupCleanArg::is_valid() const
-{
-  return !trace_id_.is_invalid()
-      && tenant_id_ > 0
-      && task_id_ > 0
-      && incarnation_ > 0
-      && ls_id_.is_valid()
-      && id_ > 0
-      && dest_id_ >= 0
-      && round_id_ >= 0
-      && job_id_ > 0;
-}
 
 
-OB_SERIALIZE_MEMBER(ObBackupDataArg, trace_id_, job_id_, tenant_id_, task_id_, backup_set_id_,
-    incarnation_id_, backup_type_, backup_date_, ls_id_, turn_id_, retry_id_, dst_server_, backup_path_, backup_data_type_);
-
-bool ObBackupDataArg::is_valid() const
-{
-  return !trace_id_.is_invalid()
-      && job_id_ > 0
-      && tenant_id_ > 0
-      && task_id_ > 0
-      && backup_set_id_ > 0
-      && incarnation_id_ > 0
-      && backup_date_ > 0
-      && ls_id_.is_valid()
-      && turn_id_ > 0
-      && retry_id_ >= 0
-      && dst_server_.is_valid()
-      && !backup_path_.is_empty()
-      && backup_data_type_.is_valid();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupTaskRes, task_id_, job_id_, tenant_id_, ls_id_, src_server_, result_, trace_id_, dag_id_);
-
-bool ObBackupTaskRes::is_valid() const
-{
-  return task_id_ > 0
-      && job_id_ > 0
-      && tenant_id_ > 0
-      && src_server_.is_valid()
-      && ls_id_.is_valid()
-      && !trace_id_.is_invalid()
-      && !dag_id_.is_invalid();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupComplLogArg, trace_id_, job_id_, tenant_id_, task_id_, backup_set_id_,
-    incarnation_id_, backup_type_, backup_date_, ls_id_, dst_server_, backup_path_, start_scn_, end_scn_,
-    is_only_calc_stat_);
-
-bool ObBackupComplLogArg::is_valid() const
-{
-  return !trace_id_.is_invalid()
-      && job_id_ > 0
-      && tenant_id_ > 0
-      && task_id_ > 0
-      && backup_set_id_ > 0
-      && incarnation_id_ > 0
-      && backup_date_ > 0
-      && ls_id_.is_valid()
-      && dst_server_.is_valid()
-      && !backup_path_.is_empty()
-      && start_scn_.is_valid_and_not_min()
-      && end_scn_.is_valid_and_not_min();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupBuildIdxArg, job_id_, task_id_, trace_id_, backup_path_, tenant_id_,
-    backup_set_id_, incarnation_id_, backup_date_, backup_type_, turn_id_, retry_id_, start_turn_id_, dst_server_,
-    backup_data_type_);
-
-bool ObBackupBuildIdxArg::is_valid() const
-{
-  return !trace_id_.is_invalid()
-      && job_id_ > 0
-      && tenant_id_ > 0
-      && task_id_ > 0
-      && backup_set_id_ > 0
-      && incarnation_id_ > 0
-      && backup_date_ > 0
-      && !backup_path_.is_empty()
-      && turn_id_ > 0
-      && retry_id_ >= 0
-      && dst_server_.is_valid()
-      && backup_data_type_.is_valid();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupFuseTabletMetaArg, job_id_, task_id_, trace_id_, tenant_id_, backup_set_id_, backup_path_,
-  backup_type_, ls_id_, turn_id_, retry_id_, dst_server_);
-
-ObBackupFuseTabletMetaArg::ObBackupFuseTabletMetaArg()
-  : job_id_(),
-    task_id_(),
-    trace_id_(),
-    tenant_id_(),
-    backup_set_id_(),
-    backup_path_(),
-    backup_type_(),
-    ls_id_(),
-    turn_id_(),
-    retry_id_(),
-    dst_server_()
-{
-}
-
-bool ObBackupFuseTabletMetaArg::is_valid() const
-{
-  return job_id_ > 0
-      && task_id_ > 0
-      && trace_id_.is_valid()
-      && OB_INVALID_ID != tenant_id_
-      && backup_set_id_ > 0
-      && ObBackupType::is_valid(backup_type_)
-      && !backup_path_.is_empty()
-      && dst_server_.is_valid()
-      && ls_id_.is_valid()
-      && turn_id_ > 0
-      && retry_id_ >= 0
-      && dst_server_.is_valid();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupCheckTaskArg, tenant_id_, trace_id_);
-
-bool ObBackupCheckTaskArg::is_valid() const
-{
-  return !trace_id_.is_invalid() && tenant_id_ != OB_INVALID_TENANT_ID;
-}
-
-
-
-OB_SERIALIZE_MEMBER(ObBackupMetaArg, trace_id_, job_id_, tenant_id_, task_id_, backup_set_id_,
-    incarnation_id_, backup_type_, backup_date_, ls_id_, turn_id_, retry_id_, start_scn_, dst_server_, backup_path_);
-
-bool ObBackupMetaArg::is_valid() const
-{
-  return !trace_id_.is_invalid()
-      && job_id_ > 0
-      && tenant_id_ > 0
-      && task_id_ > 0
-      && backup_set_id_ > 0
-      && incarnation_id_ > 0
-      && backup_date_ > 0
-      && ls_id_.is_valid()
-      && turn_id_ > 0
-      && retry_id_ >= 0
-      && start_scn_.is_valid()
-      && dst_server_.is_valid()
-      && !backup_path_.is_empty();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupCheckTabletArg, tenant_id_, ls_id_, backup_scn_, tablet_ids_);
-
-bool ObBackupCheckTabletArg::is_valid() const
-{
-  return tenant_id_ > 0 && ls_id_.is_valid() && !tablet_ids_.empty() && backup_scn_.is_valid();
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupDatabaseArg, tenant_id_, initiator_tenant_id_, initiator_job_id_, backup_tenant_ids_, is_incremental_,
-    is_compl_log_, backup_dest_, backup_description_, encryption_mode_, passwd_);
-
-ObBackupDatabaseArg::ObBackupDatabaseArg()
-	: tenant_id_(OB_INVALID_TENANT_ID),
-    initiator_tenant_id_(OB_INVALID_TENANT_ID),
-    initiator_job_id_(0),
-    backup_tenant_ids_(),
-    is_incremental_(false),
-    is_compl_log_(false),
-    backup_dest_(),
-    backup_description_(),
-    encryption_mode_(share::ObBackupEncryptionMode::NONE),
-    passwd_()
-{
-}
-
-bool ObBackupDatabaseArg::is_valid() const
-{
-  return share::ObBackupEncryptionMode::is_valid(encryption_mode_);
-}
-
-
-OB_SERIALIZE_MEMBER(ObBackupManageArg, tenant_id_, managed_tenant_ids_, type_, value_, copy_id_);
-
-
-OB_SERIALIZE_MEMBER(ObBackupCleanArg, tenant_id_, initiator_tenant_id_, initiator_job_id_, type_, value_, dest_id_, description_, clean_tenant_ids_);
-
-
-OB_SERIALIZE_MEMBER(ObNotifyArchiveArg, tenant_id_);
-
-bool ObNotifyArchiveArg::is_valid() const
-{
-  return is_user_tenant(tenant_id_);
-}
-
-
-OB_SERIALIZE_MEMBER(ObDeletePolicyArg, initiator_tenant_id_, type_, policy_name_, recovery_window_,
-    redundancy_, backup_copies_, clean_tenant_ids_);
 
 
 OB_SERIALIZE_MEMBER(CheckLeaderRpcIndex, switchover_timestamp_, epoch_,
@@ -4890,12 +4671,6 @@ OB_SERIALIZE_MEMBER(ObTrxToolArg, trans_id_, status_,
 OB_SERIALIZE_MEMBER(ObTrxToolRes, trans_info_);
 
 OB_SERIALIZE_MEMBER(ObRefreshTimezoneArg, tenant_id_);
-OB_SERIALIZE_MEMBER(ObCreateRestorePointArg,
-                   tenant_id_,
-                   name_);
-OB_SERIALIZE_MEMBER(ObDropRestorePointArg,
-                   tenant_id_,
-                   name_);
 
 OB_SERIALIZE_MEMBER(ObCheckBuildIndexTaskExistArg,
                     tenant_id_, task_id_, scheduler_id_);
@@ -6252,19 +6027,8 @@ int ObTenantConfigArg::assign(const ObTenantConfigArg &other)
 
 OB_SERIALIZE_MEMBER(ObTenantConfigArg, tenant_id_, config_str_);
 
-OB_SERIALIZE_MEMBER(ObCheckBackupConnectivityArg, tenant_id_, backup_path_, check_path_);
-ObCheckBackupConnectivityArg::ObCheckBackupConnectivityArg()
-    : tenant_id_(OB_INVALID_TENANT_ID)
-{
-  backup_path_[0] = '\0';
-  check_path_[0] = '\0';
-}
 
 
-bool ObCheckBackupConnectivityArg::is_valid() const
-{
-  return (OB_INVALID_TENANT_ID != tenant_id_) && (0 != strlen(backup_path_)) && (0 != strlen(check_path_));
-}
 
 OB_SERIALIZE_MEMBER(ObReportBackupJobResultArg, tenant_id_, job_id_, result_);
 ObReportBackupJobResultArg::ObReportBackupJobResultArg()
@@ -6768,19 +6532,6 @@ int ObTTLRequestArg::assign(const ObTTLRequestArg &other)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObRecoverTableArg, tenant_id_, tenant_name_, import_arg_, restore_tenant_arg_, action_);
-
-ObRecoverTableArg::ObRecoverTableArg()
- : tenant_id_(OB_INVALID_TENANT_ID), tenant_name_(), import_arg_(), restore_tenant_arg_(), action_() {}
-
-bool ObRecoverTableArg::is_valid() const
-{
-  bool ret = OB_INVALID_TENANT_ID != tenant_id_
-          && (Action::CANCEL == action_ || !restore_tenant_arg_.restore_option_.empty());
-  return ret;
-}
-
-
 OB_SERIALIZE_MEMBER(ObBroadcastConsensusVersionRes, ret_);
 
 
@@ -6908,11 +6659,7 @@ bool ObBroadcastConfigVersionArg::is_valid() const
   return 0 < global_config_version_ || 0 < tenant_config_version_map_.count();
 }
 
-OB_SERIALIZE_MEMBER(ObNotifyStartArchiveArg, tenant_id_);
-bool ObNotifyStartArchiveArg::is_valid() const
-{
-  return is_user_tenant(tenant_id_);
-}
+
 
 OB_SERIALIZE_MEMBER(ObCheckNestedMViewMdsArg, tenant_id_, mview_id_, refresh_id_, target_data_sync_scn_);
 OB_SERIALIZE_MEMBER(ObCheckNestedMViewMdsRes, target_data_sync_scn_, ret_);

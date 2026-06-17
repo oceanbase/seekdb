@@ -4161,13 +4161,6 @@ id	field	type	length	precision	nullable
 22	gmt_modified	18	0	25	0
 23	retry_cnt	5	0	20	0
 24	warning_info	22	512	-1	0
-table oceanbase.__tenant_virtual_show_restore_preview column_count 4 table_id 11102
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=11102 order by column_id;
-id	field	type	length	precision	nullable
-16	backup_type	22	20	-1	0
-17	backup_id	5	0	20	0
-18	backup_dest	22	2048	-1	1
-19	description	22	2048	-1	1
 table oceanbase.__all_virtual_dag column_count 10 table_id 11105
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=11105 order by column_id;
 id	field	type	length	precision	nullable

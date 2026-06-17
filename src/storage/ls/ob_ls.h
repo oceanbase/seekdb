@@ -26,9 +26,7 @@
 #include "storage/ls/ob_ls_tx_service.h"
 #include "storage/ls/ob_ls_role_handler.h"
 #include "storage/ls/ob_ls_fo_handler.h"
-#include "storage/ls/ob_ls_backup_handler.h"
 #include "storage/ls/ob_ls_rebuild_handler.h"
-#include "storage/ls/ob_ls_archive_handler.h"
 #include "storage/ls/ob_ls_meta.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/ls/ob_ls_sync_tablet_seq_handler.h"
@@ -927,12 +925,8 @@ private:
   ObFreezer ls_freezer_;
   // for FO
   // ObLSFailoverHandler ls_failover_handler_;
-  // for Backup
-  // ObLSBackupHandler ls_backup_handler_;
   // for rebuild
   // ObLSRebuildHandler ls_rebuild_handler_;
-  // for log archive
-  // ObLSArchiveHandler ls_archive_handler_;
   // for restore
   restore::ObRestoreHandler ls_restore_handler_;
   ObTxTable tx_table_;

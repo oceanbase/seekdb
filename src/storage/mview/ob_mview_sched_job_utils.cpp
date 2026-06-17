@@ -20,7 +20,6 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_executor.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/backup/ob_backup_data_table_operator.h"
 #include "share/schema/ob_mview_info.h"
 #include "share/schema/ob_mlog_info.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"

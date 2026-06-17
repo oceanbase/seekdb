@@ -66,7 +66,6 @@
 #include "lib/xml/ob_libxml2_sax_handler.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
-#include "storage/backup/ob_backup_meta_cache.h"
 #include "lib/stat/ob_diagnostic_info_container.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "common/ob_target_specific.h"
@@ -461,10 +460,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 #endif
     } else if (OB_FAIL(init_px_target_mgr())) {
       LOG_ERROR("init px target mgr failed", KR(ret));
-    } else if (OB_FAIL(OB_BACKUP_INDEX_CACHE.init())) {
-      LOG_ERROR("init backup index cache failed", KR(ret));
-    } else if (OB_FAIL(OB_BACKUP_META_CACHE.init())) {
-      LOG_ERROR("init backup meta cache failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
       LOG_ERROR("init dict cache failed", KR(ret));
     } else if (OB_FAIL(ObActiveSessHistList::get_instance().init())) {
@@ -707,14 +702,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy server startup task handler");
     startup_accel_handler_.destroy();
     FLOG_INFO("server startup task handler destroyed");
-
-    FLOG_INFO("begin to destroy backup index cache");
-    OB_BACKUP_INDEX_CACHE.destroy();
-    FLOG_INFO("backup index cache destroyed");
-
-    FLOG_INFO("begin to destroy backup meta cache");
-    OB_BACKUP_META_CACHE.destroy();
-    FLOG_INFO("backup meta cache destroyed");
 
     FLOG_INFO("begin to destroy dict cache");
     ObDictCache::get_instance().destroy();

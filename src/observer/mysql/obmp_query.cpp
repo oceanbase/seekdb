@@ -1529,7 +1529,6 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
     case stmt::T_SHOW_TRIGGERS:
     case stmt::T_SHOW_ENGINES:
     case stmt::T_SHOW_PRIVILEGES:
-    case stmt::T_SHOW_RESTORE_PREVIEW:
     case stmt::T_SHOW_GRANTS:
     case stmt::T_SHOW_QUERY_RESPONSE_TIME:
     case stmt::T_SHOW_RECYCLEBIN:

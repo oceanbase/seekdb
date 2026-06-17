@@ -40,7 +40,6 @@ class ObTableLoadExecCtx;
 class ObTableLoadCoordinator;
 class ObITableLoadTaskScheduler;
 class ObTableLoadInstance;
-class ObTableLoadBackupTable;
 } // namespace observer
 namespace sql
 {
@@ -453,50 +452,6 @@ private:
   };
 
   class MultiFilesLoadTaskProcessor;
-
-private:
-  /**
-   * BackupLoadExecutor
-   */
-  class BackupLoadExecutor
-  {
-    const int64_t MIN_TASK_PER_WORKER = 4;
-  public:
-    BackupLoadExecutor();
-    ~BackupLoadExecutor();
-    int init(const LoadExecuteParam &execute_param, LoadExecuteContext &execute_ctx,
-             const ObString &path);
-    int execute();
-    int get_next_partition_task(int64_t &partition_idx, int64_t &subpart_count,
-                                int64_t &subpart_idx);
-    int process_partition(int32_t session_id, int64_t partition_idx, int64_t subpart_count = 1,
-                          int64_t subpart_idx = 0);
-    void task_finished(observer::ObTableLoadTask *task, int ret_code);
-    int64_t get_total_line_count() const { return total_line_count_; }
-    int check_status();
-  private:
-    int check_support_direct_load();
-  private:
-    ObArenaAllocator allocator_;
-    const LoadExecuteParam *execute_param_;
-    LoadExecuteContext *execute_ctx_;
-    observer::ObTableLoadBackupTable *backup_table_;
-    observer::ObTableLoadObjectAllocator<observer::ObTableLoadTask> task_allocator_;
-    observer::ObITableLoadTaskScheduler *task_scheduler_;
-    ObParallelTaskController task_controller_;
-    int64_t worker_count_;
-    int64_t partition_count_;
-    int64_t subpart_count_;
-    lib::ObMutex mutex_;
-    int64_t next_partition_idx_;
-    int64_t next_subpart_idx_;
-    int64_t total_line_count_;
-    int task_error_code_;
-    bool is_inited_;
-  };
-
-  class BackupLoadTaskProcessor;
-  class BackupLoadTaskCallback;
 
 private:
   int init_file_iter();

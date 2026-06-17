@@ -25,9 +25,7 @@
 #include "share/location_cache/ob_location_service.h"
 #include "rootserver/ob_table_creator.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/backup/ob_backup_config.h"
 #include "share/ob_schema_status_proxy.h"
-#include "share/backup/ob_log_restore_config.h"//ObLogRestoreSourceServiceConfigParser
 #include "storage/tx/ob_ts_mgr.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "observer/ob_sql_client_decorator.h"
