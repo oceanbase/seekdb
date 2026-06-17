@@ -91,7 +91,7 @@ zypper install git wget rpm cpio make glibc-devel binutils m4 python3
 
 ```shell
 brew install git cmake pkg-config openssl@3 ncurses googletest
-brew install zstd lz4 utf8proc thrift re2 brotli snappy
+brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 > **Tip**: If Homebrew downloads are slow, see [Homebrew Optimization](homebrew.md) for mirror configuration.
