@@ -975,18 +975,9 @@ int ObTextStringResult::fill_temp_lob_header(const int64_t res_len)
     LOG_WARN("Lob: allocate memory for lob result failed", K(type_), K(buff_len_), K(ret));
   } else if (!(is_lob_storage(type_))) { // do nothing
   } else if (res_len <= OB_MAX_LONGTEXT_LENGTH - MAX_TMP_LOB_HEADER_LEN) {
-    ObLobLocatorV2 locator(buffer_, static_cast<uint32_t>(buff_len_), has_lob_header_);
-    // temp lob in oracle mode not need extern neither, for it does not have rowkey
-    // However we mock extern failed in case of return it to old client
-    ObMemLobExternFlags extern_flags(false);
-    ObString rowkey_str;
-    ObString empty_str;
     ObLobCommon lob_common;
     // for mysql mode temp lob, we can mock it as disk inrow lob
     MEMCPY(buffer_, &lob_common, sizeof(ObLobCommon));
-    if (OB_FAIL((locator.set_payload_data(&lob_common, empty_str)))) {
-      LOG_WARN("Lob: set temp lob locator payload failed", K(type_), K(ret));
-    }
     pos_ = buff_len_ - res_len; // only res_len could be used later
   } else { // outrow
     ret = OB_NOT_IMPLEMENT;

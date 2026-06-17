@@ -10064,14 +10064,17 @@ OB_SERIALIZE_MEMBER(ObSimpleConstraintInfo,
 int ObCompareNameWithTenantID::compare(const common::ObString &str1, const common::ObString &str2)
 {
   common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (tenant_id_ != OB_INVALID_ID &&
       database_id_ != OB_INVALID_ID &&
       is_mysql_sys_database_id(database_id_)) {
     // If it is the oceanbase database, no matter what the tenant, I hope that it is not case sensitive
     cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
+  } else if (tenant_id_ == OB_INVALID_ID) {
+    // tenant_id unknown, keep default case-insensitive
   } else {
-    cs_type = common::CS_TYPE_UTF8MB4_BIN;
+    if (name_case_mode_ != OB_NAME_CASE_INVALID) {
+      cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
+    }
   }
   return common::ObCharset::strcmp(cs_type, str1, str2);
 }
