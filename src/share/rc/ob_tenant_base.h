@@ -33,7 +33,6 @@ namespace oceanbase
 {
 namespace common {
   class ObTenantIOManager;
-  class ObDiagnosticInfoContainer;
   template<typename T> class ObServerObjectPool;
   class ObOptStatMonitorManager;
   class ObRbMemMgr;
@@ -46,7 +45,6 @@ namespace omt {
  class ObTenantAiService;
 }
 namespace obmysql {
-  class ObMySQLRequestManager;
   class ObSqlNioServer;
 }
 namespace sql {
@@ -202,7 +200,7 @@ class ObTenantErrsimEventMgr;
 class ObSharedMemAllocMgr;
 class ObIndexUsageInfoMgr;
 class ObResourceLimitCalculator;
-class ObWorkloadRepositoryContext;
+
 class ObPluginVectorIndexService;
 class ObAutoSplitTaskCache;
 class ObChangeStreamMgr;
@@ -239,7 +237,6 @@ using ObPartTransCtxObjPool = common::ObServerObjectPool<transaction::ObPartTran
 using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage::ObTableScanIterator>;
 #define MTL_MEMBERS                                  \
   MTL_LIST(                                          \
-      common::ObDiagnosticInfoContainer*,            \
       omt::ObSharedTimer*,                           \
       oceanbase::sql::ObTenantSQLSessionMgr*,        \
       storage::ObTenantMetaMemMgr*,                  \
@@ -290,7 +287,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       sql::dtl::ObTenantDfc*,                        \
       omt::ObPxPools*,                               \
       lib::Worker::CompatMode,                       \
-      obmysql::ObMySQLRequestManager*,               \
       transaction::ObTenantWeakReadService*,         \
       sql::ObTenantSqlMemoryManager*,                \
       sql::dtl::ObDTLIntermResultManager*,           \
@@ -340,7 +336,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       share::ObPluginVectorIndexService*,            \
       storage::ObTenantRestoreInfoMgr*,              \
       share::ObAutoSplitTaskCache*    ,              \
-      share::ObWorkloadRepositoryContext*,           \
       observer::ObTenantQueryRespTimeCollector*,     \
       table::ObTableGroupCommitMgr*,                 \
       observer::ObTableQueryASyncMgr*,               \

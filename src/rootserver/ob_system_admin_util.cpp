@@ -26,7 +26,6 @@
 #include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "observer/mysql/ob_mysql_request_manager.h"
 #include "share/rc/ob_tenant_base.h"
 #include "pl/ob_pl.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
@@ -344,6 +343,7 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
     } else {
       ObConfigItem *ci = nullptr;
       ObString config_name(item->name_.size(), item->name_.ptr());
+      bool is_default_table_organization_config = (0 == config_name.case_compare(DEFAULT_TABLE_ORGANIZATION));
       if (OB_SYS_TENANT_ID != item->exec_tenant_id_ || item->tenant_name_.size() > 0) {
         // tenants(user or sys tenants) modify tenant level configuration
         item->want_to_set_tenant_config_ = true;
@@ -390,6 +390,7 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
                       ret = OB_ERR_UNEXPECTED;
                       LOG_WARN("tenant_schema is null", KR(ret), K(tenant_id));
                     } else if (condition_func(tenant_id) &&
+                              (is_default_table_organization_config ? !tenant_schema->is_oracle_tenant() : true) &&
                               OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
                       LOG_WARN("add tenant_id failed", K(tenant_id), KR(ret));
                       break;
@@ -423,7 +424,9 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
               } else if (OB_ISNULL(tenant_schema)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("tenant_schema is null", KR(ret), K(tenant_id));
-              } else if (OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
+              } else if ((is_default_table_organization_config ?
+                          !tenant_schema->is_oracle_tenant()
+                          : true) && OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
                 LOG_WARN("add tenant_id failed", K(tenant_id), KR(ret));
               }
             } // else
@@ -923,44 +926,6 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
         MTL_SWITCH(arg.tenant_id_) {
           ObPlanCache* plan_cache = MTL(ObPlanCache*);
           ret = plan_cache->flush_plan_cache();
-        }
-      }
-      break;
-    }
-    case CACHE_TYPE_SQL_AUDIT: {
-      if (arg.is_all_tenant_) { // flush all tenant sql audit
-        ObArray<uint64_t> id_list;
-        if (OB_ISNULL(GCTX.omt_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null of omt", K(ret));
-        } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(id_list))) {
-          LOG_WARN("get tenant ids", K(ret));
-        }
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCC(ret)) {
-          for (int64_t i = 0; i < id_list.size(); i++) { // ignore ret
-            MTL_SWITCH(id_list.at(i)) {
-              ObMySQLRequestManager *req_mgr = MTL(ObMySQLRequestManager*);
-              if (nullptr == req_mgr) {
-                // do-nothing
-                // virtual tenant such as 50x do not maintain tenant local object, hence req_mgr could be null.
-              } else {
-                req_mgr->clear_queue();
-              }
-            }
-            // ignore errors at switching tenant
-            ret = OB_SUCCESS;
-          }
-        }
-      } else { // flush specified tenant sql audit
-        MTL_SWITCH(arg.tenant_id_) {
-          ObMySQLRequestManager *req_mgr = MTL(ObMySQLRequestManager*);
-          if (nullptr == req_mgr) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to get request manager", K(ret), K(req_mgr));
-          } else {
-            req_mgr->clear_queue();
-          }
         }
       }
       break;

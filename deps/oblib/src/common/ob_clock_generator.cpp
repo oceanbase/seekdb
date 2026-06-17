@@ -19,7 +19,6 @@
 #include "ob_clock_generator.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/utility.h"
-#include "lib/ash/ob_active_session_guard.h"
 
 
 using namespace oceanbase::lib;

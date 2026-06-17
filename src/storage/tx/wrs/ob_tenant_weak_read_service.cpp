@@ -22,7 +22,7 @@
 #include "ob_weak_read_service_rpc.h"                           // ObIWrsRpc
 #include "ob_weak_read_util.h"                                  // ObWeakReadUtil
 #include "storage/tx_storage/ob_ls_service.h"
-#include "lib/ash/ob_active_session_guard.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 #define MOD_STR "[WRS] [TENANT_WEAK_READ_SERVICE] "
 
@@ -655,7 +655,6 @@ void ObTenantWeakReadService::run1()
     int64_t wait_interval = std::min(ObWeakReadUtil::replica_keepalive_interval(),
                                      weak_read_refresh_interval - (end_tstamp - begin_tstamp));
     if (wait_interval > 0) {
-      common::ObBKGDSessInActiveGuard inactive_guard;
       thread_cond_.timedwait(wait_interval);
     }
   }

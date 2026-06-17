@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "deps/oblib/src/lib/mysqlclient/ob_isql_client.h"
 
@@ -199,6 +199,8 @@ public:
 
   sqlclient::ObISQLConnectionPool *get_pool() { return nullptr; }
   sqlclient::ObISQLConnection *get_connection() { return nullptr; }
+
+  virtual bool is_oracle_mode() const { return false; }
 };
 
 TEST_F(TestDMLSqlSplicer, exec)

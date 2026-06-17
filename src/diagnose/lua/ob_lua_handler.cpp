@@ -232,7 +232,6 @@ void ObUnixDomainListener::run1()
         int ret = OB_SUCCESS;
         int64_t event_cnt = 0;
         {
-          common::ObBKGDSessInActiveGuard inactive_guard;
           event_cnt = ob_epoll_wait(epoll_fd, events, EPOLL_EVENT_BUFFER_SIZE, TIMEOUT);
         }
         if (event_cnt < 0) {

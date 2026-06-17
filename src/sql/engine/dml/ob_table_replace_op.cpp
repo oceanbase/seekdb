@@ -682,7 +682,6 @@ int ObTableReplaceOp::do_replace_into()
     } else if (!check_is_duplicated()) {
       LOG_DEBUG("try insert is not duplicated", K(ret));
     }
-    GET_DIAGNOSTIC_INFO->get_ash_stat().in_duplicate_conflict_resolve_=true;
     if (OB_FAIL(ret) || !check_is_duplicated()) {
     } else if (OB_FAIL(fetch_conflict_rowkey(replace_row_store_.get_row_cnt()))) {
       LOG_WARN("fail to fetch conflict row", K(ret));
@@ -703,7 +702,6 @@ int ObTableReplaceOp::do_replace_into()
     } else if (OB_FAIL(ObDMLService::handle_after_row_processing(this, &dml_modify_rows_))) {
       LOG_WARN("try insert is duplicated, failed to process foreign key handle", K(ret));
     }
-    GET_DIAGNOSTIC_INFO->get_ash_stat().in_duplicate_conflict_resolve_=false;
     if (OB_SUCC(ret) && !is_iter_end) {
       // Only need to do reuse if there is a next batch, if there is no next batch, memory will be released in close and destroy
       // The previous logic executed successfully, this batch successfully completed replace, reuse environment, prepare for the next batch

@@ -17707,10 +17707,9 @@ int ObJoinOrder::check_inner_path_valid(const ObIArray<ObRawExpr *> &join_condit
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(stmt), K(table_item));
   } else if (!force_inner_nl && (is_virtual_table(table_item->ref_id_) &&
-              table_item->ref_id_ != OB_ALL_VIRTUAL_SQL_AUDIT_TID &&
               table_item->ref_id_ != OB_ALL_VIRTUAL_PLAN_CACHE_PLAN_EXPLAIN_TID &&
               table_item->ref_id_ != OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID)) {
-    /* __all_virtual_sql_audit and GV$OB_PLAN_CACHE_PLAN_EXPLAIN can do table get*/
+    /* GV$OB_PLAN_CACHE_PLAN_EXPLAIN can do table get*/
     LOG_TRACE("OPT:skip adding inner access path due to virtual table",
                 K(table_id), K(table_item->ref_id_),
                 K(is_virtual_table(table_item->ref_id_)));
@@ -18745,18 +18744,9 @@ int ObJoinOrder::extract_naaj_join_conditions(const ObIArray<ObRawExpr*> &join_q
 
 
 
-static uint64_t virtual_table_index_scan_white_list[1]{
-    OB_ALL_VIRTUAL_ASH_ALL_VIRTUAL_ASH_I1_TID};
-
 bool ObJoinOrder::virtual_table_index_can_range_scan(uint64_t table_id) {
-  bool bret = false;
-  for (int i = 0; i < ARRAYSIZEOF(virtual_table_index_scan_white_list); i++) {
-    if (table_id == virtual_table_index_scan_white_list[i]) {
-      bret = true;
-      break;
-    }
-  }
-  return bret;
+  UNUSED(table_id);
+  return false;
 }
 
 int ValuesTablePath::assign(const ValuesTablePath &other, common::ObIAllocator *allocator)

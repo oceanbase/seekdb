@@ -164,8 +164,6 @@ namespace share
   static const char* const OB_SV_ENABLE_JIT = "ob_enable_jit";
   static const char* const OB_SV_TEMP_TABLESPACE_SIZE_PERCENTAGE = "ob_temp_tablespace_size_percentage";
   static const char* const OB_SV_PLUGIN_DIR = "plugin_dir";
-  static const char* const OB_SV_SQL_AUDIT_PERCENTAGE = "ob_sql_audit_percentage";
-  static const char* const OB_SV_ENABLE_SQL_AUDIT = "ob_enable_sql_audit";
   static const char* const OB_SV_OPTIMIZER_USE_SQL_PLAN_BASELINES = "optimizer_use_sql_plan_baselines";
   static const char* const OB_SV_OPTIMIZER_CAPTURE_SQL_PLAN_BASELINES = "optimizer_capture_sql_plan_baselines";
   static const char* const OB_SV_PARALLEL_SERVERS_TARGET = "parallel_servers_target";

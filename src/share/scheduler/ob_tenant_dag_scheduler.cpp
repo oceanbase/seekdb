@@ -2114,7 +2114,6 @@ void ObTenantDagWorker::run1()
     } else {
       ObThreadCondGuard guard(cond_);
       while (NULL == task_ && DWS_FREE == status_ && !has_set_stop()) {
-        ObBKGDSessInActiveGuard inactive_guard;
         cond_.wait(SLEEP_TIME_MS);
       }
     }
@@ -2137,7 +2136,6 @@ int ObTenantDagWorker::yield()
       } else if (DWS_RUNNING == status_ && MTL(ObTenantDagScheduler*)->try_switch(*this)) {
         status_ = DWS_WAITING;
         while (DWS_WAITING == status_) {
-          ObBKGDSessInActiveGuard guard;
           cond_.wait(SLEEP_TIME_MS);
         }
         ObCurTraceId::set(task_->get_dag()->get_dag_id());
@@ -5008,7 +5006,6 @@ void ObTenantDagScheduler::run1()
             ObThreadCondGuard guard(scheduler_sync_);
             if (OB_SUCC(guard.get_ret())) {
               try_reclaim_threads();
-              ObBKGDSessInActiveGuard inactive_guard;
               scheduler_sync_.wait(SCHEDULER_WAIT_TIME_MS);
             }
           } else {

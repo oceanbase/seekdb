@@ -24,7 +24,6 @@
 #include "lib/atomic/ob_atomic.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/thread/thread_pool.h"
-#include "lib/ash/ob_ash_bkgd_sess_inactive_guard.h"
 
 // Windows nanosleep implementation with improved precision
 #ifdef _WIN32

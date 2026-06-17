@@ -68,7 +68,6 @@ public:
                         sql::ObSqlCtx &ctx,
                         ObMySQLResultSet &result,
                         ObQueryRetryCtrl &retry_ctrl,
-                        const bool enable_perf_event,
                         bool &need_response_error,
                         bool &is_diagnostics_stmt,
                         int64_t &execution_id,

@@ -102,7 +102,6 @@ ObSQLSessionInfo::ObSQLSessionInfo(const uint64_t tenant_id) :
       trans_type_(transaction::ObTxClass::USER),
       version_provider_(NULL),
       config_provider_(NULL),
-      request_manager_(NULL),
       flt_span_mgr_(NULL),
       plan_cache_(NULL),
       ps_cache_(NULL),
@@ -268,7 +267,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     trans_type_ = transaction::ObTxClass::USER;
     version_provider_ = NULL;
     config_provider_ = NULL;
-    request_manager_ = NULL;
     flt_span_mgr_ = NULL;
     MEMSET(tenant_buff_, 0, sizeof(share::ObTenantSpaceFetcher));
     ps_cache_ = NULL;
@@ -586,10 +584,7 @@ bool ObSQLSessionInfo::enable_parallel_das_dml() const
 bool ObSQLSessionInfo::is_sqlstat_enabled()
 {
   bool bret = false;
-  if (lib::is_diagnose_info_enabled()) {
-    bret = get_tenant_ob_sqlstat_enable();
-    // sqlstat has a dependency on the statistics mechanism, so turning off perf event will turn off sqlstat at the same time.
-  }
+  bret = get_tenant_ob_sqlstat_enable();
   return bret;
 }
 
@@ -854,17 +849,6 @@ void ObSQLSessionInfo::refresh_temp_tables_sess_active_time()
 }
 
 
-ObMySQLRequestManager* ObSQLSessionInfo::get_request_manager()
-{
-  int ret = OB_SUCCESS;
-  if (NULL == request_manager_) {
-    MTL_SWITCH(get_effective_tenant_id()) {
-      request_manager_ = MTL(obmysql::ObMySQLRequestManager*);
-    }
-  }
-
-  return request_manager_;
-}
 
 
 void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
@@ -874,7 +858,7 @@ void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
   // if no error at all,
   //    clear err.
   if (OB_SUCCESS != error_code && strlen(warnings_buf_.get_err_msg()) <= 0) {
-    warnings_buf_.set_error(ob_errpkt_strerror(error_code), error_code);
+    warnings_buf_.set_error(ob_errpkt_strerror(error_code, false), error_code);
   } else if (OB_SUCCESS == error_code) {
     warnings_buf_.reset_err();
   }
@@ -1203,7 +1187,7 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
     LOG_TRACE("will add session info", K(proxy_version_), K(min_proxy_version_ps_),
               K(inner_stmt_id), K(client_stmt_id), K(next_client_ps_stmt_id_),
               K(is_new_proxy), K(ret), K(is_inner_sql));
-    if(OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
+    if(lib::is_mysql_mode() && OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
       LOG_WARN("fail create in use ps stmt id", K(ret));
     } else if (OB_FAIL(try_create_ps_session_info_map())) {
       LOG_WARN("fail create map", K(ret));
@@ -1415,7 +1399,7 @@ int ObSQLSessionInfo::add_non_session_cursor(pl::ObPLCursorInfo *cursor)
   ObSQLSessionInfo::LockGuard lock_guard(get_thread_data_lock());
   if (OB_FAIL(pl_cursor_cache_.pl_non_session_cursor_map_.set_refactored((int64_t)cursor, cursor))) {
     LOG_WARN("fail insert non session cursor to hash map", K(cursor), K(*cursor), K(ret));
-  } else if (lib::is_diagnose_info_enabled()) {
+  } else {
     EVENT_INC(SQL_OPEN_CURSORS_CURRENT);
     EVENT_INC(SQL_OPEN_CURSORS_CUMULATIVE);
   }
@@ -1435,7 +1419,7 @@ void ObSQLSessionInfo::del_non_session_cursor(pl::ObPLCursorInfo *cursor)
     LOG_WARN("fail delete non session cursor from hash map", K(cursor), K(*cursor), K(ret));
 #endif
   //ingore ret
-  } else if (lib::is_diagnose_info_enabled()) {
+  } else {
     EVENT_DEC(SQL_OPEN_CURSORS_CURRENT);
   }
 }
@@ -1702,84 +1686,6 @@ int ObSQLSessionInfo::set_query_deadlocked()
   update_last_active_time();
   set_session_state(QUERY_DEADLOCKED);
   return OB_SUCCESS;
-}
-
-const ObAuditRecordData &ObSQLSessionInfo::get_final_audit_record(
-                                           ObExecuteMode mode)
-{
-  int ret = OB_SUCCESS;
-  audit_record_.trace_id_ = *ObCurTraceId::get_trace_id();
-  audit_record_.request_type_ = mode;
-  audit_record_.session_id_ = get_sid();
-  audit_record_.proxy_session_id_ = get_proxy_sessid();
-  // sql audit don't distinguish between two tenant IDs
-  audit_record_.tenant_id_ = get_effective_tenant_id();
-  audit_record_.user_id_ = get_user_id();
-  audit_record_.effective_tenant_id_ = get_effective_tenant_id();
-  if (EXECUTE_INNER == mode
-      || EXECUTE_LOCAL == mode
-      || EXECUTE_PS_PREPARE == mode
-      || EXECUTE_PS_EXECUTE == mode
-      || EXECUTE_PS_SEND_PIECE == mode
-      || EXECUTE_PS_GET_PIECE == mode
-      || EXECUTE_PS_SEND_LONG_DATA == mode
-      || EXECUTE_PS_FETCH == mode
-      || EXECUTE_PL_EXECUTE == mode) {
-    // consistency between tenant_id_ and tenant_name_
-    audit_record_.tenant_name_ = const_cast<char *>(get_effective_tenant_name().ptr());
-    audit_record_.tenant_name_len_ = min(get_effective_tenant_name().length(),
-                                         OB_MAX_TENANT_NAME_LENGTH);
-    audit_record_.user_name_ = const_cast<char *>(get_user_name().ptr());
-    audit_record_.user_name_len_ = min(get_user_name().length(),
-                                       OB_MAX_USER_NAME_LENGTH);
-    audit_record_.db_name_ = const_cast<char *>(get_database_name().ptr());
-    audit_record_.db_name_len_ = min(get_database_name().length(),
-                                     OB_MAX_DATABASE_NAME_LENGTH);
-
-    if (EXECUTE_PS_EXECUTE == mode
-        || EXECUTE_PS_SEND_PIECE == mode
-        || EXECUTE_PS_GET_PIECE == mode
-        || EXECUTE_PS_SEND_LONG_DATA == mode
-        || EXECUTE_PS_FETCH == mode
-        || (EXECUTE_PL_EXECUTE == mode && audit_record_.sql_len_ > 0)) {
-      // spi_cursor_open may not use process_record to set audit_record_.sql_
-      // so only EXECUTE_PL_EXECUTE == mode && audit_record_.sql_len_ > 0 do not set sql
-      // ps mode corresponding sql is set in the protocol layer, session's current_query_ has no value
-      // do nothing
-    } else {
-      ObString sql = get_current_query_string();
-      audit_record_.sql_ = const_cast<char *>(sql.ptr());
-      audit_record_.sql_len_ = min(sql.length(), get_tenant_query_record_size_limit());
-      audit_record_.sql_cs_type_ = get_local_collation_connection();
-    }
-
-    if (OB_FAIL(get_database_id(audit_record_.db_id_))) {
-      LOG_WARN("fail to get database id", K(ret));
-    } else if (audit_record_.db_id_ == OB_INVALID_ID) {
-      audit_record_.db_id_ = OB_MOCK_DEFAULT_DATABASE_ID;
-    }
-  } else if (EXECUTE_REMOTE == mode || EXECUTE_DIST == mode) {
-    audit_record_.tenant_name_ = NULL;
-    audit_record_.tenant_name_len_ = 0;
-    audit_record_.user_name_ = NULL;
-    audit_record_.user_name_len_ = 0;
-    audit_record_.db_name_ = NULL;
-    audit_record_.db_name_len_ = 0;
-    audit_record_.sql_ = NULL;
-    audit_record_.sql_len_ = 0;
-    audit_record_.sql_cs_type_ = CS_TYPE_INVALID;
-  }
-
-  trace::UUID trc_uuid = OBTRACE->get_trace_id();
-  int64_t pos = 0;
-  if (trc_uuid.is_inited()) {
-    trc_uuid.tostring(audit_record_.flt_trace_id_, OB_MAX_UUID_STR_LENGTH + 1, pos);
-  } else {
-    // do nothing
-  }
-  audit_record_.flt_trace_id_[pos] = '\0';
-  audit_record_.stmt_type_ = get_stmt_type();
-  return audit_record_;
 }
 
 void ObSQLSessionInfo::update_stat_from_exec_record()
@@ -2768,12 +2674,6 @@ int ObSQLSessionInfo::set_module_name(const common::ObString &mod) {
   MEMSET(module_buf_, 0x00, common::OB_MAX_MOD_NAME_LENGTH);
   MEMCPY(module_buf_, mod.ptr(), size);
   client_app_info_.module_name_.assign(&module_buf_[0], size);
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    MEMCPY(di->get_ash_stat().module_, mod.ptr(),
-        min(static_cast<int64_t>(sizeof(di->get_ash_stat().module_)), size));
-    di->get_ash_stat().has_user_module_ = true;
-  }
   return ret;
 }
 
@@ -2783,12 +2683,6 @@ int ObSQLSessionInfo::set_action_name(const common::ObString &act) {
   MEMSET(action_buf_, 0x00, common::OB_MAX_ACT_NAME_LENGTH);
   MEMCPY(action_buf_, act.ptr(), size);
   client_app_info_.action_name_.assign(&action_buf_[0], size);
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    MEMCPY(di->get_ash_stat().action_, act.ptr(),
-        min(static_cast<int64_t>(sizeof(di->get_ash_stat().action_)), size));
-    di->get_ash_stat().has_user_action_ = true;
-  }
   return ret;
 }
 
@@ -2798,12 +2692,6 @@ int ObSQLSessionInfo::set_client_info(const common::ObString &client_info) {
   MEMSET(client_info_buf_, 0x00, common::OB_MAX_CLIENT_INFO_LENGTH);
   MEMCPY(client_info_buf_, client_info.ptr(), size);
   client_app_info_.client_info_.assign(&client_info_buf_[0], size);
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    int64_t length = min(static_cast<int64_t>(sizeof(di->get_ash_stat().client_id_)), size);
-    MEMCPY(di->get_ash_stat().client_id_, client_info.ptr(), length);
-    di->get_ash_stat().client_id_[length > 0 ? length - 1 : 0] = '\0';
-  }
   return ret;
 }
 
@@ -4036,11 +3924,6 @@ int ObSQLSessionInfo::sql_sess_record_sql_stat_start_value(ObExecutingSqlStatRec
   int ret = OB_SUCCESS;
   if (OB_FAIL(executing_sql_stat_record_.assign(executing_sqlstat))) {
     LOG_WARN("failed to assign executing sql stat record");
-  } else {
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      di->get_ash_stat().record_cur_query_start_ts(get_is_in_retry());
-    }
   }
   return ret;
 }
@@ -4054,35 +3937,4 @@ int ObSQLSessionInfo::check_service_name_and_failover_mode() const
 {
   uint64_t tenant_id = get_effective_tenant_id();
   return check_service_name_and_failover_mode(tenant_id);
-}
-
-
-void ObSQLSessionInfo::set_ash_stat_value(ObActiveSessionStat &ash_stat)
-{
-  ObBasicSessionInfo::set_ash_stat_value(ash_stat);
-  if (!get_module_name().empty()) {
-    int64_t size = get_module_name().length() >= ASH_MODULE_STR_LEN
-                      ? ASH_MODULE_STR_LEN - 1
-                      : get_module_name().length();
-    MEMCPY(ash_stat.module_, get_module_name().ptr(), size);
-    ash_stat.module_[size] = '\0';
-  }
-
-  // fill action for user session
-  if (!get_action_name().empty()) {
-    int64_t size = get_action_name().length() >= ASH_ACTION_STR_LEN
-                      ? ASH_ACTION_STR_LEN - 1
-                      : get_action_name().length();
-    MEMCPY(ash_stat.action_, get_action_name().ptr(), size);
-    ash_stat.action_[size] = '\0';
-  }
-
-  // fill client id for user session
-  if (!get_client_identifier().empty()) {
-    int64_t size = get_client_identifier().length() >= ASH_CLIENT_ID_STR_LEN
-                      ? ASH_CLIENT_ID_STR_LEN - 1
-                      : get_client_identifier().length();
-    MEMCPY(ash_stat.client_id_, get_client_identifier().ptr(), size);
-    ash_stat.client_id_[size] = '\0';
-  }
 }

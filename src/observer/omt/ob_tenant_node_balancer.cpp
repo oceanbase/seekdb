@@ -23,7 +23,6 @@
 #include "share/resource_manager/ob_resource_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "lib/ash/ob_active_session_guard.h"
 
 using namespace oceanbase::obsys;
 using namespace oceanbase::lib;
@@ -107,10 +106,6 @@ void ObTenantNodeBalancer::handle()
   }
 
   FLOG_INFO("refresh tenant config", K(ret));
-
-  {
-    common::ObBKGDSessInActiveGuard inactive_guard;
-  }
 }
 
 int ObTenantNodeBalancer::notify_create_tenant()

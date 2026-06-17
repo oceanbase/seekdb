@@ -18,8 +18,8 @@
 
 #include "ob_2_0_protocol_utils.h"
 #include "lib/checksum/ob_crc16.h"
-#include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 
 using namespace oceanbase::common;
 

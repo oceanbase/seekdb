@@ -120,10 +120,6 @@ DEF_PARAM(enable_record_trace_log, BOOL, OB_CLUSTER_PARAMETER, "True",
 DEF_PARAM(max_string_print_length, INT, OB_CLUSTER_PARAMETER, "500", "[0,]",
         "truncate very long string when printing to log file. Range:[0,]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(enable_sql_audit, BOOL, OB_CLUSTER_PARAMETER, "true",
-         "specifies whether SQL audit is turned on. "
-         "The default value is TRUE. Value: TRUE: turned on FALSE: turned off",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_record_trace_id, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specifies whether record app trace id is turned on.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1860,16 +1856,6 @@ DEF_PARAM(_ha_tablet_info_batch_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_ha_rpc_timeout, TIME, OB_CLUSTER_PARAMETER, "0", "[0,120s]",
          "the rpc timeout for storage high availability. Range:[0, 120s]",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_ob_ash_size, CAP, OB_CLUSTER_PARAMETER, "0M", "[0,1G]",
-        "to limit the memory size for ash buffer. Range: [0,1G] 0 means using default ash size"
-        ", 30MB in normal case, 10M in mini mode",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_ob_ash_enable, BOOL, OB_CLUSTER_PARAMETER, "False",
-         "enable active session history",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_ob_ash_disk_write_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "enable active session history early flush",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_diagnostic_info_cache, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable diagnostic info cache",

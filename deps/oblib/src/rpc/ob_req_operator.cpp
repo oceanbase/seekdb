@@ -19,8 +19,6 @@
 #endif
 #include "ob_req_operator.h"
 #include "rpc/frame/ob_req_packet_code.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
 
 namespace oceanbase
 {
@@ -42,10 +40,6 @@ common::ObAddr g_rpc_self_addr;
 // local address as the "peer".
 void ObReqOperator::response_result(ObRequest* req)
 {
-  common::ObDiagnosticInfo *di = req->get_diagnostic_info();
-  if (OB_NOT_NULL(di)) {
-    req->reset_diagnostic_info();
-  }
 }
 
 void* ObReqOperator::alloc_response_buffer(ObRequest* /*req*/, int64_t /*size*/)

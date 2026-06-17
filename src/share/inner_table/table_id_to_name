@@ -155,10 +155,6 @@
 # 450: __all_external_table_file
 # 451: __all_task_opt_stat_gather_history
 # 452: __all_table_opt_stat_gather_history
-# 455: __wr_active_session_history
-# 456: __wr_snapshot
-# 457: __wr_statname
-# 458: __wr_sysstat
 # 463: __all_mlog
 # 464: __all_mview
 # 465: __all_mview_refresh_stats_sys_defaults
@@ -168,21 +164,16 @@
 # 469: __all_mview_refresh_change_stats
 # 470: __all_mview_refresh_stmt_stats
 # 471: __all_dbms_lock_allocated
-# 472: __wr_control
 # 474: __all_tenant_scheduler_job_class
 # 482: __all_tablet_reorganize_history
-# 487: __wr_system_event
-# 488: __wr_event_name
 # 490: __all_routine_privilege
 # 491: __all_routine_privilege_history
 # 491: __all_routine_privilege  # BASE_TABLE_NAME
-# 492: __wr_sqlstat
 # 493: __all_ncomp_dll
 # 494: __all_aux_stat
 # 495: __all_index_usage_info
 # 496: __all_detect_lock_info
 # 497: __all_client_to_server_session_info
-# 501: __wr_sqltext
 # 505: __all_column_privilege
 # 506: __all_column_privilege_history
 # 506: __all_column_privilege  # BASE_TABLE_NAME
@@ -192,10 +183,7 @@
 # 522: __all_pkg_type
 # 523: __all_pkg_type_attr
 # 524: __all_pkg_coll_type
-# 525: __wr_sql_plan
-# 526: __wr_res_mgr_sysstat
 # 528: __all_ncomp_dll_v2
-# 530: __wr_sql_plan_aux_key2snapshot
 # 531: __ft_dict_ik_utf8
 # 532: __ft_stopword_ik_utf8
 # 533: __ft_quantifier_ik_utf8
@@ -233,32 +221,22 @@
 # 10010: __tenant_virtual_current_tenant
 # 10011: __tenant_virtual_database_status
 # 10012: __tenant_virtual_tenant_status
-# 10015: __tenant_virtual_statname
-# 10016: __tenant_virtual_event_name
 # 10017: __tenant_virtual_global_variable
 # 10018: __tenant_virtual_show_tables
 # 10019: __tenant_virtual_show_create_procedure
 # 11003: __all_virtual_plan_cache_stat
 # 11004: __all_virtual_plan_stat
 # 11006: __all_virtual_mem_leak_checker_info
-# 11007: __all_virtual_latch
 # 11008: __all_virtual_kvcache_info
 # 11009: __all_virtual_data_type_class
 # 11010: __all_virtual_data_type
-# 11013: __all_virtual_session_event
-# 11014: __all_virtual_session_wait
-# 11015: __all_virtual_session_wait_history
-# 11017: __all_virtual_system_event
 # 11018: __all_virtual_tenant_memstore_info
 # 11019: __all_virtual_concurrency_object_pool
-# 11020: __all_virtual_sesstat
-# 11021: __all_virtual_sysstat
 # 11023: __all_virtual_disk_stat
 # 11024: __all_virtual_memstore_info
 # 11027: __all_virtual_trans_stat
 # 11028: __all_virtual_trans_ctx_mgr_stat
 # 11029: __all_virtual_trans_scheduler
-# 11031: __all_virtual_sql_audit
 # 11035: __all_virtual_core_all_table
 # 11035: __all_table  # BASE_TABLE_NAME
 # 11036: __all_virtual_core_column_table
@@ -305,7 +283,6 @@
 # 11117: __all_virtual_tablet_stat
 # 11118: __all_virtual_ddl_sim_point
 # 11119: __all_virtual_ddl_sim_point_stat
-# 11120: __all_virtual_res_mgr_sysstat
 # 12001: SESSION_VARIABLES
 # 12006: GLOBAL_STATUS
 # 12008: SESSION_STATUS
@@ -583,7 +560,6 @@
 # 12293: __all_virtual_transaction_freeze_checkpoint
 # 12294: __all_virtual_transaction_checkpoint
 # 12295: __all_virtual_checkpoint
-# 12302: __all_virtual_ash
 # 12303: __all_virtual_dml_stats
 # 12315: __all_virtual_tablet_ddl_kv_info
 # 12316: __all_virtual_privilege
@@ -628,14 +604,6 @@
 # 12383: __all_virtual_opt_stat_gather_monitor
 # 12384: __all_virtual_thread
 # 12386: __all_virtual_server_storage
-# 12388: __all_virtual_wr_active_session_history
-# 12388: __wr_active_session_history  # BASE_TABLE_NAME
-# 12389: __all_virtual_wr_snapshot
-# 12389: __wr_snapshot  # BASE_TABLE_NAME
-# 12390: __all_virtual_wr_statname
-# 12390: __wr_statname  # BASE_TABLE_NAME
-# 12391: __all_virtual_wr_sysstat
-# 12391: __wr_sysstat  # BASE_TABLE_NAME
 # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
 # 12393: __all_virtual_long_ops_status  # BASE_TABLE_NAME
 # 12395: __all_virtual_timestamp_service
@@ -661,8 +629,6 @@
 # 12412: __all_mview_refresh_change_stats  # BASE_TABLE_NAME
 # 12413: __all_virtual_mview_refresh_stmt_stats
 # 12413: __all_mview_refresh_stmt_stats  # BASE_TABLE_NAME
-# 12414: __all_virtual_wr_control
-# 12414: __wr_control  # BASE_TABLE_NAME
 # 12419: __all_virtual_cgroup_config
 # 12420: __all_virtual_flt_config
 # 12421: __all_virtual_tenant_scheduler_job_class
@@ -676,11 +642,6 @@
 # 12432: __all_virtual_column_group_mapping_history
 # 12432: __all_column_group_mapping  # BASE_TABLE_NAME
 # 12432: __all_column_group_mapping_history  # BASE_TABLE_NAME1
-# 12437-12439: checkpoint diagnose virtual tables (removed)
-# 12440: __all_virtual_wr_system_event
-# 12440: __wr_system_event  # BASE_TABLE_NAME
-# 12441: __all_virtual_wr_event_name
-# 12441: __wr_event_name  # BASE_TABLE_NAME
 # 12442: __all_virtual_tenant_scheduler_running_job
 # 12443: __all_virtual_routine_privilege
 # 12443: __all_routine_privilege  # BASE_TABLE_NAME
@@ -688,8 +649,6 @@
 # 12444: __all_routine_privilege  # BASE_TABLE_NAME
 # 12444: __all_routine_privilege_history  # BASE_TABLE_NAME1
 # 12445: __all_virtual_sqlstat
-# 12446: __all_virtual_wr_sqlstat
-# 12446: __wr_sqlstat  # BASE_TABLE_NAME
 # 12447: __all_virtual_aux_stat
 # 12447: __all_aux_stat  # BASE_TABLE_NAME
 # 12448: __all_virtual_detect_lock_info
@@ -697,8 +656,6 @@
 # 12449: __all_virtual_client_to_server_session_info
 # 12449: __all_client_to_server_session_info  # BASE_TABLE_NAME
 # 12450: __all_virtual_sys_variable_default_value
-# 12454: __all_virtual_wr_sqltext
-# 12454: __wr_sqltext  # BASE_TABLE_NAME
 # 12456: __all_virtual_dbms_lock_allocated
 # 12456: __all_dbms_lock_allocated  # BASE_TABLE_NAME
 # 12459: __all_virtual_index_usage_info
@@ -733,16 +690,10 @@
 # 12498: __all_pkg_type_attr  # BASE_TABLE_NAME
 # 12499: __all_virtual_pkg_coll_type
 # 12499: __all_pkg_coll_type  # BASE_TABLE_NAME
-# 12501: __all_virtual_wr_sql_plan
-# 12501: __wr_sql_plan  # BASE_TABLE_NAME
-# 12502: __all_virtual_wr_res_mgr_sysstat
-# 12502: __wr_res_mgr_sysstat  # BASE_TABLE_NAME
 # 12504: __all_virtual_function_io_stat
 # 12505: __all_virtual_temp_file
 # 12506: __all_virtual_ncomp_dll_v2
 # 12506: __all_ncomp_dll_v2  # BASE_TABLE_NAME
-# 12511: __all_virtual_wr_sql_plan_aux_key2snapshot
-# 12511: __wr_sql_plan_aux_key2snapshot  # BASE_TABLE_NAME
 # 12513: __all_virtual_cs_replica_tablet_stats
 # 12514: __all_virtual_ddl_diagnose_info
 # 12515: __all_virtual_plugin_info
@@ -764,8 +715,6 @@
 # 12525: __all_vector_index_task_history  # BASE_TABLE_NAME
 # 12526: __tenant_virtual_show_create_catalog
 # 12527: __tenant_virtual_show_catalog_databases
-# 12529: __all_virtual_storage_cache_task
-# 12530: __all_virtual_tablet_local_cache
 # 12533: __all_virtual_ccl_rule
 # 12533: __all_ccl_rule  # BASE_TABLE_NAME
 # 12534: __all_virtual_ccl_status
@@ -825,22 +774,6 @@
 # 20021: INNODB_FT_CONFIG
 # 20022: INNODB_FT_DELETED
 # 20023: INNODB_FT_INDEX_CACHE
-# 21000: GV$SESSION_EVENT
-# 21001: GV$SESSION_WAIT
-# 21002: GV$SESSION_WAIT_HISTORY
-# 21003: GV$SYSTEM_EVENT
-# 21004: GV$SESSTAT
-# 21005: GV$SYSSTAT
-# 21006: V$STATNAME
-# 21007: V$EVENT_NAME
-# 21008: V$SESSION_EVENT
-# 21009: V$SESSION_WAIT
-# 21010: V$SESSION_WAIT_HISTORY
-# 21011: V$SESSTAT
-# 21012: V$SYSSTAT
-# 21013: V$SYSTEM_EVENT
-# 21014: GV$OB_SQL_AUDIT
-# 21015: GV$LATCH
 # 21016: GV$OB_MEMORY
 # 21017: V$OB_MEMORY
 # 21018: GV$OB_MEMSTORE
@@ -851,8 +784,6 @@
 # 21023: V$OB_PLAN_CACHE_PLAN_STAT
 # 21024: GV$OB_PLAN_CACHE_PLAN_EXPLAIN
 # 21025: V$OB_PLAN_CACHE_PLAN_EXPLAIN
-# 21026: V$OB_SQL_AUDIT
-# 21027: V$LATCH
 # 21036: GV$SQL_PLAN_MONITOR
 # 21037: V$SQL_PLAN_MONITOR
 # 21038: DBA_RECYCLEBIN
@@ -976,8 +907,6 @@
 # 21257: DBA_SUBPART_HISTOGRAMS
 # 21258: DBA_TAB_STATS_HISTORY
 # 21259: DBA_IND_STATISTICS
-# 21267: GV$ACTIVE_SESSION_HISTORY
-# 21268: V$ACTIVE_SESSION_HISTORY
 # 21269: GV$DML_STATS
 # 21270: V$DML_STATS
 # 21271: DBA_TAB_MODIFICATIONS
@@ -1040,14 +969,6 @@
 # 21381: V$OB_THREAD
 # 21385: GV$OB_SERVER_STORAGE
 # 21386: V$OB_SERVER_STORAGE
-# 21389: DBA_WR_ACTIVE_SESSION_HISTORY
-# 21390: CDB_WR_ACTIVE_SESSION_HISTORY
-# 21391: DBA_WR_SNAPSHOT
-# 21392: CDB_WR_SNAPSHOT
-# 21393: DBA_WR_STATNAME
-# 21394: CDB_WR_STATNAME
-# 21395: DBA_WR_SYSSTAT
-# 21396: CDB_WR_SYSSTAT
 # 21399: GV$OB_LOCKS
 # 21400: V$OB_LOCKS
 # 21404: V$OB_TIMESTAMP_SERVICE
@@ -1061,8 +982,6 @@
 # 21424: V$OB_LS_LOG_RESTORE_STATUS
 # 21425: CDB_OB_EXTERNAL_TABLE_FILES
 # 21426: DBA_DB_LINKS
-# 21443: DBA_WR_CONTROL
-# 21444: CDB_WR_CONTROL
 # 21447: DBA_OB_TENANT_EVENT_HISTORY
 # 21449: GV$OB_FLT_TRACE_CONFIG
 # 21459: GV$OB_SESSION
@@ -1073,30 +992,18 @@
 # 21478: V$OB_TENANT_RUNTIME_INFO
 # 21479: GV$OB_CGROUP_CONFIG
 # 21480: V$OB_CGROUP_CONFIG
-# 21481: DBA_WR_SYSTEM_EVENT
-# 21482: CDB_WR_SYSTEM_EVENT
-# 21483: DBA_WR_EVENT_NAME
-# 21484: CDB_WR_EVENT_NAME
 # 21485: DBA_OB_FORMAT_OUTLINES
 # 21486: procs_priv
 # 21487: GV$OB_SQLSTAT
 # 21488: V$OB_SQLSTAT
-# 21489: DBA_WR_SQLSTAT
-# 21490: CDB_WR_SQLSTAT
 # 21491: GV$OB_SESS_TIME_MODEL
 # 21492: V$OB_SESS_TIME_MODEL
 # 21493: GV$OB_SYS_TIME_MODEL
 # 21494: V$OB_SYS_TIME_MODEL
-# 21495: DBA_WR_SYS_TIME_MODEL
-# 21496: CDB_WR_SYS_TIME_MODEL
 # 21497: DBA_OB_AUX_STATISTICS
 # 21498: CDB_OB_AUX_STATISTICS
 # 21499: DBA_INDEX_USAGE
 # 21500: DBA_OB_SYS_VARIABLES
-# 21505: DBA_WR_SQLTEXT
-# 21506: CDB_WR_SQLTEXT
-# 21507: GV$OB_ACTIVE_SESSION_HISTORY
-# 21508: V$OB_ACTIVE_SESSION_HISTORY
 # 21511: role_edges
 # 21512: default_roles
 # 21513: CDB_INDEX_USAGE
@@ -1170,12 +1077,6 @@
 # 21603: INNODB_SYS_FIELDS
 # 21604: INNODB_SYS_FOREIGN
 # 21605: INNODB_SYS_FOREIGN_COLS
-# 21610: GV$OB_RES_MGR_SYSSTAT
-# 21611: V$OB_RES_MGR_SYSSTAT
-# 21612: DBA_WR_SQL_PLAN
-# 21613: CDB_WR_SQL_PLAN
-# 21614: DBA_WR_RES_MGR_SYSSTAT
-# 21615: CDB_WR_RES_MGR_SYSSTAT
 # 21620: GV$OB_FUNCTION_IO_STAT
 # 21621: V$OB_FUNCTION_IO_STAT
 # 21622: DBA_OB_TEMP_FILES
@@ -1189,10 +1090,6 @@
 # 21641: CDB_OB_VECTOR_INDEX_TASKS
 # 21642: DBA_OB_VECTOR_INDEX_TASK_HISTORY
 # 21643: CDB_OB_VECTOR_INDEX_TASK_HISTORY
-# 21644: GV$OB_STORAGE_CACHE_TASKS
-# 21645: V$OB_STORAGE_CACHE_TASKS
-# 21646: GV$OB_TABLET_LOCAL_CACHE
-# 21647: V$OB_TABLET_LOCAL_CACHE
 # 21648: DBA_OB_CCL_RULES
 # 21649: CDB_OB_CCL_RULES
 # 21650: GV$OB_SQL_CCL_STATUS
@@ -1211,30 +1108,12 @@
 # 21666: CDB_OB_AI_MODEL_ENDPOINTS
 # 21667: DBA_OB_ROOTSERVICE_JOBS
 # 21668: DBA_OB_CHANGE_STREAM_REFRESH_STAT
-# 14999: __idx_11013_all_virtual_session_event_i1
-# 14999: all_virtual_session_event_i1  # INDEX_NAME
-# 14999: __all_virtual_session_event  # DATA_BASE_TABLE_NAME
-# 14998: __idx_11014_all_virtual_session_wait_i1
-# 14998: all_virtual_session_wait_i1  # INDEX_NAME
-# 14998: __all_virtual_session_wait  # DATA_BASE_TABLE_NAME
-# 14997: __idx_11015_all_virtual_session_wait_history_i1
-# 14997: all_virtual_session_wait_history_i1  # INDEX_NAME
-# 14997: __all_virtual_session_wait_history  # DATA_BASE_TABLE_NAME
-# 14996: __idx_11020_all_virtual_sesstat_i1
-# 14996: all_virtual_sesstat_i1  # INDEX_NAME
-# 14996: __all_virtual_sesstat  # DATA_BASE_TABLE_NAME
-# 14995: __idx_11031_all_virtual_sql_audit_i1
-# 14995: all_virtual_sql_audit_i1  # INDEX_NAME
-# 14995: __all_virtual_sql_audit  # DATA_BASE_TABLE_NAME
-# 14994: __idx_12185_all_virtual_sql_plan_monitor_i1
-# 14994: all_virtual_sql_plan_monitor_i1  # INDEX_NAME
-# 14994: __all_virtual_sql_plan_monitor  # DATA_BASE_TABLE_NAME
-# 14993: __idx_12302_all_virtual_ash_i1
-# 14993: all_virtual_ash_i1  # INDEX_NAME
-# 14993: __all_virtual_ash  # DATA_BASE_TABLE_NAME
-# 14992: __idx_12514_all_virtual_ddl_diagnose_info_i1
-# 14992: all_virtual_ddl_diagnose_info_i1  # INDEX_NAME
-# 14992: __all_virtual_ddl_diagnose_info  # DATA_BASE_TABLE_NAME
+# 14999: __idx_12185_all_virtual_sql_plan_monitor_i1
+# 14999: all_virtual_sql_plan_monitor_i1  # INDEX_NAME
+# 14999: __all_virtual_sql_plan_monitor  # DATA_BASE_TABLE_NAME
+# 14998: __idx_12514_all_virtual_ddl_diagnose_info_i1
+# 14998: all_virtual_ddl_diagnose_info_i1  # INDEX_NAME
+# 14998: __all_virtual_ddl_diagnose_info  # DATA_BASE_TABLE_NAME
 # 100001: __idx_3_idx_data_table_id
 # 100001: idx_data_table_id  # INDEX_NAME
 # 100001: __all_table  # DATA_BASE_TABLE_NAME

@@ -63,7 +63,6 @@ void ObInitSqcP::destroy()
 
 int ObInitSqcP::process()
 {
-  GET_DIAGNOSTIC_INFO->get_ash_stat().in_px_execution_ = true;
   int ret = OB_SUCCESS;
   LOG_TRACE("receive dfo", K_(arg));
   ObPxSqcHandler *sqc_handler = arg_.sqc_handler_;
@@ -228,6 +227,9 @@ int ObInitSqcP::after_process(int error_code)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Session can't be null", K(ret));
   } else {
+    lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
+        lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
+
     sqc_handler->set_tenant_id(sqc_handler->get_exec_ctx().get_my_session()->get_effective_tenant_id());
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     /**
@@ -238,7 +240,6 @@ int ObInitSqcP::after_process(int error_code)
     session->set_session_sleep();
   }
 
-  GET_DIAGNOSTIC_INFO->get_ash_stat().in_px_execution_ = false;
   /**
    * Here we need to clean up interrupts and release the allocated number of threads and handler.
    * After the worker starts normally, its reference count is updated to
@@ -380,7 +381,6 @@ void ObInitFastSqcP::destroy()
 
 int ObInitFastSqcP::process()
 {
-  GET_DIAGNOSTIC_INFO->get_ash_stat().in_sql_execution_ = true;
   int ret = OB_SUCCESS;
   LOG_TRACE("receive dfo", K_(arg));
   ObPxSqcHandler *sqc_handler = arg_.sqc_handler_;
@@ -408,6 +408,8 @@ int ObInitFastSqcP::process()
     if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
       LOG_WARN("fast sqc failed to SET_INTERRUPTABLE");
     } else {
+      lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
+      lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
       sqc_handler->set_tenant_id(session->get_effective_tenant_id());
       LOG_TRACE("process dfo",
                 K(arg),
@@ -424,7 +426,6 @@ int ObInitFastSqcP::process()
     ObInterruptUtil::update_schema_error_code(&(sqc_handler->get_exec_ctx()), ret);
   }
 
-  GET_DIAGNOSTIC_INFO->get_ash_stat().in_sql_execution_ = false;
   if (OB_NOT_NULL(sqc_handler)) {
     // link channel before or during the link process may fail.
     // If sqc and qc ARE linked, the qc learns the outcome via the dtl

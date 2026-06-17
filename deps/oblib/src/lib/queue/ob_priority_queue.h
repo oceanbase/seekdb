@@ -18,8 +18,9 @@
 #define OCEANBASE_QUEUE_OB_PRIORITY_QUEUE_
 
 #include "lib/queue/ob_link_queue.h"
+#include "lib/alloc/alloc_struct.h"
 #include "lib/lock/ob_scond.h"
-#include "lib/ash/ob_active_session_guard.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
 namespace oceanbase
@@ -98,7 +99,6 @@ public:
       if (OB_FAIL(ret)) {
         auto key = sem_.get_key();
         {
-          common::ObBKGDSessInActiveGuard inactive_guard;
           sem_.wait(key, timeout_us);
         }
         data = NULL;
@@ -335,8 +335,6 @@ private:
     return ret;
   }
   inline int wait_queue(int to_pop_idx, int64_t timeout_us) {
-    ObBKGDSessInActiveGuard inactive_guard;
-
     return mq_[to_pop_idx]->cond.wait(timeout_us);
   }
   inline int try_steal(ObLink*& data, int64_t plimit, int start_idx, int &pop_success_idx) {

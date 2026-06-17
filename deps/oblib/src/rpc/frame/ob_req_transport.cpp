@@ -20,7 +20,6 @@
 #include "ob_req_transport.h"
 #include "util/easy_mod_stat.h"
 #include "rpc/frame/ob_net_easy.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::rpc;

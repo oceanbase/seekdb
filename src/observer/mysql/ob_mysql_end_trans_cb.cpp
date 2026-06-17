@@ -138,7 +138,6 @@ void ObSqlEndTransCb::callback(int cb_param)
       }
     }
 
-    GET_DIAGNOSTIC_INFO->get_ash_stat().in_sql_execution_ = false;
     session_info->reset_cur_sql_id();
     session_info->reset_current_plan_hash();
     session_info->reset_current_plan_id();

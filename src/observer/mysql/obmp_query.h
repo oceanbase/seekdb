@@ -24,7 +24,6 @@
 #include "observer/mysql/obmp_base.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
 #include "observer/mysql/ob_mysql_result_set.h"
-#include "observer/mysql/ob_mysql_request_manager.h"
 namespace oceanbase
 {
 namespace sql

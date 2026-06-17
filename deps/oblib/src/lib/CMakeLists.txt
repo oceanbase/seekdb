@@ -28,7 +28,6 @@ ob_set_subtarget(oblib_lib_extra ALONE
   geo/ob_geo_func_overlaps1.cpp
   geo/ob_geo_func_overlaps2.cpp
   geo/ob_geo_func_overlaps3.cpp
-  stat/ob_diagnostic_info_util.cpp
 )
 
 ob_set_subtarget(oblib_lib charset
@@ -245,16 +244,10 @@ ob_set_subtarget(oblib_lib common_mixed
   rc/context.cpp
   rc/ob_rc.cpp
   stat/ob_di_tls.cpp
-  stat/ob_di_cache.cpp
   stat/ob_diagnose_info.cpp
   stat/ob_latch_define.cpp
-  stat/ob_session_stat.cpp
   stat/ob_stat_template.cpp
   statistic_event/ob_stat_event.cpp
-  stat/ob_diagnostic_info.cpp
-  stat/ob_diagnostic_info_summary.cpp
-  stat/ob_diagnostic_info_container.cpp
-  stat/ob_diagnostic_info_guard.cpp
   string/ob_hex_utils_base.cpp
   string/ob_sql_string.cpp
   string/ob_string.cpp
@@ -388,11 +381,6 @@ ob_set_subtarget(oblib_lib utility
   utility/ob_proto_trans_util.cpp
   utility/ob_unify_serialize.cpp
   utility/ob_hyperloglog.cpp
-)
-
-ob_set_subtarget(oblib_lib ash
-  ash/ob_active_session_guard.cpp
-  ash/ob_ash_bkgd_sess_inactive_guard.cpp
 )
 
 ob_set_subtarget(oblib_lib ssl

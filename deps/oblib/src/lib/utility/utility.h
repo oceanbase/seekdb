@@ -218,7 +218,6 @@ inline void ob_usleep(const useconds_t v, const bool /*is_idle_sleep*/)
 
 inline void ob_throttle_usleep(const useconds_t v, int errcode, int64_t p3 = 0)
 {
-  ObSleepEventGuard<ObWaitEventIds::TASK_THROTTLE_SLEEP> wait_guard((int64_t)v, (int64_t)v, (int64_t)errcode, p3);
   ::usleep(v);
 }
 
@@ -237,7 +236,6 @@ template <oceanbase::common::ObWaitEventIds::ObWaitEventIdEnum event_id =
 inline void ob_usleep(const useconds_t v, const int64_t p1, const int64_t p2, const int64_t p3, const bool is_idle_sleep)
 {
   if (is_idle_sleep) {
-    ObBKGDSessInActiveGuard inactive_guard;
     ob_usleep(v, p1, p2, p3);
   } else {
     ob_usleep(v, p1, p2, p3);

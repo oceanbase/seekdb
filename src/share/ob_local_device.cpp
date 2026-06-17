@@ -205,7 +205,6 @@ static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io
 #endif
 #include "share/ob_resource_limit.h"
 #include "storage/slog/ob_storage_logger_manager.h"
-#include "lib/ash/ob_active_session_guard.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 
 using namespace oceanbase::common;
@@ -1332,7 +1331,6 @@ int ObLocalDevice::io_getevents(
   } else {
     int sys_ret = 0;
     {
-      common::ObBKGDSessInActiveGuard inactive_guard;
       while ((sys_ret = ::io_getevents(
           local_io_context->io_context_,
           min_nr,

@@ -28,7 +28,6 @@
 #include "lib/objectpool/ob_pool.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/timezone/ob_timezone_info.h"
-#include "lib/ash/ob_active_session_guard.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "share/ob_compatibility_control.h"
 #include "share/ob_debug_sync.h"
@@ -56,9 +55,6 @@ namespace oceanbase
 {
 namespace observer {
 class ObSMConnection;
-}
-namespace common {
-class ObDiagnosticInfo;
 }
 namespace share {
 class ObSwitchCatalogHelper;
@@ -225,7 +221,6 @@ public:
     }
     inline void set_stmt_type(stmt::StmtType stmt_type)
     {
-      GET_DIAGNOSTIC_INFO->get_ash_stat().stmt_type_ = stmt_type;
       stmt_type_ = stmt_type;
     }
     TO_STRING_KV(K(table_id_),
@@ -489,7 +484,6 @@ public:
   void set_local_ob_enable_plan_cache(bool v) { sys_vars_cache_.set_ob_enable_plan_cache(v); }
   bool get_local_ob_enable_pl_cache() const;
   bool get_local_ob_enable_plan_cache() const;
-  bool get_local_ob_enable_sql_audit() const;
   bool get_local_ob_enable_parameter_anonymous_block() const;
   bool get_local_ob_enable_ps_parameter_anonymous_block() const;
   bool get_local_cursor_sharing_mode() const;
@@ -665,6 +659,7 @@ public:
   {
     return ob_sql_mode_to_compatibility_mode(get_sql_mode());
   }
+  bool is_oracle_compatible() const { return ORACLE_MODE == get_compatibility_mode(); }
   ObSQLMode get_sql_mode() const { return sys_vars_cache_.get_sql_mode(); }
   int get_div_precision_increment(int64_t &div_precision_increment) const;
   int get_character_set_client(common::ObCharsetType &character_set_client) const;
@@ -1062,7 +1057,6 @@ public:
   void set_cur_sql_id(char *sql_id);
   void reset_cur_sql_id() { sql_id_[0] = '\0'; }
   int set_cur_phy_plan(const ObPhysicalPlan *cur_phy_plan);
-  virtual void set_ash_stat_value(ObActiveSessionStat &ash_stat);
   void reset_cur_phy_plan_to_null();
 
   void get_flt_span_id(ObString &span_id) const;
@@ -1088,7 +1082,7 @@ public:
   int is_transformation_enabled(bool &transformation_enabled) const;
   int get_query_rewrite_enabled(int64_t &query_rewrite_enabled) const;
   int get_query_rewrite_integrity(int64_t &query_rewrite_integrity) const;
-  int is_serial_set_order_forced(bool &force_set_order) const;
+  int is_serial_set_order_forced(bool &force_set_order, bool is_oracle_mode) const;
   int is_old_charset_aggregation_enabled(bool &is_enable) const;
   int is_storage_estimation_enabled(bool &storage_estimation_enabled) const;
   bool is_use_trace_log() const
@@ -1366,13 +1360,11 @@ public:
   void reset_current_plan_id()
   {
     plan_id_ = 0;
-    GET_DIAGNOSTIC_INFO->get_ash_stat().plan_id_ = 0;
   }
   uint64_t get_current_plan_hash() const { return plan_hash_; }
   void reset_current_plan_hash()
   {
     plan_hash_ = 0;
-    GET_DIAGNOSTIC_INFO->get_ash_stat().plan_hash_ = 0;
   }
   uint64_t get_last_plan_id() const { return last_plan_id_; }
   void set_last_plan_id(uint64_t plan_id) { last_plan_id_ = plan_id; }
@@ -1493,7 +1485,6 @@ public:
   void set_stmt_type(stmt::StmtType stmt_type)
   {
     stmt_type_ = stmt_type;
-    GET_DIAGNOSTIC_INFO->get_ash_stat().stmt_type_ = stmt_type;
   }
   stmt::StmtType get_stmt_type() const { return stmt_type_; }
 
@@ -1763,7 +1754,6 @@ public:
         default_lob_inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD),
         autocommit_(false),
         ob_enable_trace_log_(false),
-        ob_enable_sql_audit_(false),
         nls_length_semantics_(LS_BYTE),
         ob_org_cluster_id_(0),
         ob_query_timeout_(0),
@@ -1831,7 +1821,6 @@ public:
       ob_query_timeout_ = 0;
       ob_trx_timeout_ = 0;
       collation_connection_ = 0;
-      ob_enable_sql_audit_ = false;
       nls_length_semantics_ = LS_BYTE;
       sql_mode_ = DEFAULT_OCEANBASE_MODE;
       for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
@@ -1894,7 +1883,6 @@ public:
             ob_query_timeout_ == other.ob_query_timeout_ &&
             ob_trx_timeout_ == other.ob_trx_timeout_ &&
             collation_connection_ == other.collation_connection_ &&
-            ob_enable_sql_audit_ == other.ob_enable_sql_audit_ &&
             nls_length_semantics_ == other.nls_length_semantics_ &&
             sql_mode_ == other.sql_mode_ &&
             ob_trx_idle_timeout_ == other.ob_trx_idle_timeout_ &&
@@ -2024,7 +2012,7 @@ public:
       return default_lob_inrow_threshold_;
     }
 
-    TO_STRING_KV(K(autocommit_), K(ob_enable_trace_log_), K(ob_enable_sql_audit_), K(nls_length_semantics_),
+    TO_STRING_KV(K(autocommit_), K(ob_enable_trace_log_), K(nls_length_semantics_),
                  K(ob_org_cluster_id_), K(ob_query_timeout_), K(ob_trx_timeout_), K(collation_connection_),
                  K(sql_mode_), K(nls_formats_[0]), K(nls_formats_[1]), K(nls_formats_[2]),
                  K(ob_trx_idle_timeout_), K(ob_trx_lock_timeout_), K(nls_collation_), K(nls_nation_collation_),
@@ -2071,7 +2059,6 @@ public:
     //==========  need serialization  ============
     bool autocommit_;
     bool ob_enable_trace_log_;
-    bool ob_enable_sql_audit_;
     ObLengthSemantics nls_length_semantics_;
     int64_t ob_org_cluster_id_;
     int64_t ob_query_timeout_;
@@ -2191,7 +2178,6 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(transaction::ObTxIsolationLevel, tx_isolation);
     DEF_SYS_VAR_CACHE_FUNCS(bool, autocommit);
     DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_trace_log);
-    DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_sql_audit);
     DEF_SYS_VAR_CACHE_FUNCS(ObLengthSemantics, nls_length_semantics);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_org_cluster_id);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, ob_query_timeout);
@@ -2269,7 +2255,6 @@ private:
         bool inc_tx_isolation_:1;
         bool inc_autocommit_:1;
         bool inc_ob_enable_trace_log_:1;
-        bool inc_ob_enable_sql_audit_;
         bool inc_nls_length_semantics_:1;
         bool inc_ob_org_cluster_id_:1;
         bool inc_ob_query_timeout_:1;
@@ -2647,11 +2632,6 @@ inline bool ObBasicSessionInfo::get_local_ob_enable_pl_cache() const
 inline bool ObBasicSessionInfo::get_local_ob_enable_plan_cache() const
 {
   return sys_vars_cache_.get_ob_enable_plan_cache();
-}
-
-inline bool ObBasicSessionInfo::get_local_ob_enable_sql_audit() const
-{
-  return sys_vars_cache_.get_ob_enable_sql_audit();
 }
 
 inline bool ObBasicSessionInfo::get_local_ob_enable_parameter_anonymous_block() const

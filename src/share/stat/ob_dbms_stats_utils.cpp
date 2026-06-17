@@ -290,7 +290,6 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_TENANT_VIRTUAL_CURRENT_TENANT_TID ||
          table_id == share::OB_TENANT_VIRTUAL_SHOW_TABLES_TID ||
          table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_PROCEDURE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SESSTAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_PROXY_SCHEMA_TID ||
          table_id == share::OB_ALL_VIRTUAL_PROXY_PARTITION_INFO_TID ||
          table_id == share::OB_ALL_VIRTUAL_PROXY_PARTITION_TID ||
@@ -300,12 +299,10 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_TRIGGER_TID ||
          table_id == share::OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID ||
          table_id == share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SESSION_EVENT_TID ||
          table_id == share::OB_ALL_VIRTUAL_PROXY_ROUTINE_TID ||
          table_id == share::OB_ALL_VIRTUAL_TX_DATA_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_LOCK_STAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_SCHEDULER_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SQL_AUDIT_TID ||
          table_id == share::OB_ALL_VIRTUAL_MDS_NODE_STAT_TID ||
 #if defined(__APPLE__) || defined(__ANDROID__)
          table_id == share::OB_ALL_VIRTUAL_THREAD_TID ||
@@ -316,13 +313,7 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)
 {
-  return table_id == share::OB_ALL_VIRTUAL_SESSION_EVENT_ALL_VIRTUAL_SESSION_EVENT_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SESSION_WAIT_ALL_VIRTUAL_SESSION_WAIT_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SESSION_WAIT_HISTORY_ALL_VIRTUAL_SESSION_WAIT_HISTORY_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SESSTAT_ALL_VIRTUAL_SESSTAT_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SQL_AUDIT_ALL_VIRTUAL_SQL_AUDIT_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_ALL_VIRTUAL_SQL_PLAN_MONITOR_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_ASH_ALL_VIRTUAL_ASH_I1_TID;
+  return table_id == share::OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_ALL_VIRTUAL_SQL_PLAN_MONITOR_I1_TID;
 }
 
 int ObDbmsStatsUtils::parse_granularity(const ObString &granularity, ObGranularityType &granu_type)

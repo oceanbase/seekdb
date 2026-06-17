@@ -25,7 +25,6 @@
 #include "share/ob_io_device_helper.h"
 #include "share/ob_unit_getter.h"
 #include "lib/statistic_event/ob_stat_event.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::storage;

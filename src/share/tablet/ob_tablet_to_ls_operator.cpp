@@ -19,6 +19,7 @@
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "src/share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_dml_sql_splicer.h" // ObDMLSqlSplicer
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/ob_sql_client_decorator.h" // ObSQLClientRetryWeak
 
 namespace oceanbase

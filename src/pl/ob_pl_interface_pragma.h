@@ -27,7 +27,6 @@
 #include "pl/sys_package/ob_dbms_xplan.h"
 #include "pl/sys_package/ob_dbms_session.h"
 #include "pl/sys_package/ob_dbms_space.h"
-#include "pl/sys_package/ob_dbms_workload_repository.h"
 #include "pl/sys_package/ob_dbms_mview_mysql.h"
 #include "pl/sys_package/ob_dbms_mview_stats_mysql.h"
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
@@ -176,13 +175,6 @@
 
 #undef DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE
   // end of dbms_mview_stats_mysql
-
-  // start of dbms_workload_repository
-  INTERFACE_DEF(INTERFACE_DBMS_WR_CREATE_SNAPSHOT, "WR_CREATE_SNAPSHOT", (ObDbmsWorkloadRepository::create_snapshot))
-  INTERFACE_DEF(INTERFACE_DBMS_WR_DROP_SNAPSHOT_RANGE, "WR_DROP_SNAPSHOT_RANGE", (ObDbmsWorkloadRepository::drop_snapshot_range))
-  INTERFACE_DEF(INTERFACE_DBMS_WR_MODIFY_SNAPSHOT_SETTINGS, "WR_MODIFY_SNAPSHOT_SETTINGS", (ObDbmsWorkloadRepository::modify_snapshot_settings))
-  INTERFACE_DEF(INTERFACE_DBMS_GENERATE_ASH_REPORT_TEXT, "GENERATE_ASH_REPORT_TEXT", (ObDbmsWorkloadRepository::generate_ash_report_text))
-  // end of dbms_workload_repository
 
 
     // start of dbms_vector_mysql

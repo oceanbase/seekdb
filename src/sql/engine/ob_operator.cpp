@@ -1104,9 +1104,7 @@ bool ObOperator::match_rt_monitor_condition(int64_t rows)
 int ObOperator::try_register_rt_monitor_node(int64_t rows)
 {
   int ret = OB_SUCCESS;
-  if (!GCONF.enable_sql_audit) {
-    // do nothing
-  } else if (!ctx_.is_rt_monitor_node_registered() &&
+  if (!ctx_.is_rt_monitor_node_registered() &&
               match_rt_monitor_condition(rows)) {
     ObPlanMonitorNodeList *list = MTL(ObPlanMonitorNodeList*);
     const ObOpSpec *root_spec = spec_.plan_->get_root_op_spec();
@@ -1238,10 +1236,10 @@ int ObOperator::setup_op_feedback_info()
 int ObOperator::submit_op_monitor_node()
 {
   int ret = OB_SUCCESS;
-  if (GCONF.enable_sql_audit) {
+  {
     // Record monitor info in sql_plan_monitor
     // Some records that meets the conditions needs to be archived
-    // Reference document: 
+    // Reference document:
     op_monitor_info_.close_time_ = oceanbase::common::ObClockGenerator::getClock();
     ObPlanMonitorNodeList *list = MTL(ObPlanMonitorNodeList*);
     if (list && spec_.plan_ && ctx_.get_physical_plan_ctx()) {

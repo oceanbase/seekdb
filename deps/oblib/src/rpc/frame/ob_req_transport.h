@@ -22,7 +22,6 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/statistic_event/ob_stat_event.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "rpc/ob_packet.h"
 #include "lib/allocator/ob_malloc.h"
 

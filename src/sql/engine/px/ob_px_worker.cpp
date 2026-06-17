@@ -131,7 +131,6 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   }
   ObDIActionGuard action_guard(px_parallel_rule_str);
   ObCurTraceId::set(env_arg_.get_trace_id());
-  GET_DIAGNOSTIC_INFO->get_ash_stat().trace_id_ = env_arg_.get_trace_id();
   /**
    * The interrupt must cover the release handler, because its process involves sqc sending messages to qc,
    * requiring a check for interrupts. The interrupt itself is thread-local and should not depend on tenant space.
@@ -168,6 +167,8 @@ void PxWorkerFunctor::operator ()(bool need_exec)
         ObThreadLogLevelUtils::init(env_arg_.get_log_level());
       }
     }
+    // When deserialize expr, sql mode will affect basic function of expr.
+    CompatModeGuard mode_guard(Worker::CompatMode::MYSQL);
     MTL_SWITCH(sqc_handler->get_tenant_id()) {
       CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, sqc_handler->get_tenant_id()) {
         if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context,

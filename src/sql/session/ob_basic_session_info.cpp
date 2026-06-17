@@ -25,7 +25,6 @@
 #include "pl/ob_pl_package_state.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
 #include "observer/ob_server.h"
 #include "share/catalog/ob_catalog_utils.h"
 #include "lib/number/ob_number_v2.h"
@@ -215,7 +214,7 @@ int ObBasicSessionInfo::test_init(uint32_t sessid, uint64_t proxy_sessid,
     LOG_WARN("fail to init debug sync actions", K(ret));
   } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
     LOG_WARN("fail to set session stat", K(ret));
-  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), false/*is_oracle_mode*/,
+  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), is_oracle_compatible(),
                                    true/* check_timezone_valid */))) {
     LOG_WARN("fail to set time zone", K(ret));
   } else {
@@ -338,6 +337,8 @@ int ObBasicSessionInfo::reset_sys_vars()
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
+  ObObj oracle_mode;
+  ObObj oracle_sql_mode;
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   // Clean up sys_var information
@@ -690,7 +691,6 @@ int ObBasicSessionInfo::set_user(const ObString &user_name, const ObString &host
       LOG_WARN("fail to write user_at_host_name to string_buf_", K(tmp_string), K(ret));
     } else {
       user_id_ = user_id;
-      GET_DIAGNOSTIC_INFO->get_ash_stat().user_id_ = get_user_id();
     }
   }
   return ret;
@@ -2353,32 +2353,8 @@ int ObBasicSessionInfo::set_cur_phy_plan(const ObPhysicalPlan *cur_phy_plan)
     int64_t len = cur_phy_plan->stat_.sql_id_.length();
     MEMCPY(sql_id_, cur_phy_plan->stat_.sql_id_.ptr(), len);
     sql_id_[len] = '\0';
-
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      di->get_ash_stat().plan_id_ = plan_id_;
-      di->get_ash_stat().plan_hash_ = plan_hash_;
-      MEMMOVE(di->get_ash_stat().sql_id_, sql_id_,
-          min(static_cast<int64_t>(sizeof(di->get_ash_stat().sql_id_)), static_cast<int64_t>(sizeof(sql_id_))));
-      di->get_ash_stat().fixup_last_stat(*ObCurTraceId::get_trace_id(), di->get_ash_stat().session_id_, sql_id_, plan_id_, plan_hash_, stmt_type_);
-    }
   }
   return ret;
-}
-
-void ObBasicSessionInfo::set_ash_stat_value(ObActiveSessionStat &ash_stat)
-{
-  ash_stat.stmt_type_ = get_stmt_type();
-  ash_stat.plan_id_ = plan_id_;
-  ash_stat.plan_hash_ = plan_hash_;
-  MEMMOVE(ash_stat.sql_id_, sql_id_,
-      min(static_cast<int64_t>(sizeof(ash_stat.sql_id_)), static_cast<int64_t>(sizeof(sql_id_))));
-  ash_stat.tenant_id_ = tenant_id_;
-  ash_stat.user_id_ = get_user_id();
-  ash_stat.trace_id_ = get_current_trace_id();
-  ash_stat.tid_ = GETTID();
-  ash_stat.group_id_ = THIS_WORKER.get_group_id();
-  ash_stat.fixup_last_stat(*ObCurTraceId::get_trace_id(), ash_stat.session_id_, sql_id_, plan_id_, plan_hash_, stmt_type_);
 }
 
 void ObBasicSessionInfo::set_current_trace_id(common::ObCurTraceId::TraceId *trace_id)
@@ -2403,12 +2379,6 @@ void ObBasicSessionInfo::set_cur_sql_id(char *sql_id)
   } else {
     MEMCPY(sql_id_, sql_id, common::OB_MAX_SQL_ID_LENGTH);
     sql_id_[32] = '\0';
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      MEMMOVE(di->get_ash_stat().sql_id_, sql_id_,
-          min(static_cast<int64_t>(sizeof(di->get_ash_stat().sql_id_)), static_cast<int64_t>(sizeof(sql_id_))));
-      di->get_ash_stat().fixup_last_stat(*ObCurTraceId::get_trace_id(), di->get_ash_stat().session_id_, sql_id_, 0, 0, 0);
-    }
   }
 }
 
@@ -2751,12 +2721,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       int64_t int_val = 0;
       OZ (val.get_int(int_val), val);
       OX (sys_vars_cache_.set_cursor_sharing_mode(static_cast<ObCursorSharingMode>(int_val)));
-      break;
-    }
-    case SYS_VAR_OB_ENABLE_SQL_AUDIT: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache_.set_ob_enable_sql_audit(int_val != 0));
       break;
     }
     case SYS_VAR_NLS_LENGTH_SEMANTICS: {
@@ -3358,12 +3322,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       OX (sys_vars_cache.set_base_cursor_sharing_mode(static_cast<ObCursorSharingMode>(int_val)));
       break;
     }
-    case SYS_VAR_OB_ENABLE_SQL_AUDIT: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache.set_base_ob_enable_sql_audit(int_val != 0));
-      break;
-    }
     case SYS_VAR_NLS_LENGTH_SEMANTICS: {
       ObString str_val;
       ObLengthSemantics nls_length_semantics = LS_BYTE;
@@ -3703,16 +3661,17 @@ int ObBasicSessionInfo::process_session_sql_mode_value(const ObObj &value)
 int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &value)
 {
   int ret = OB_SUCCESS;
-  // seekdb is MySQL-only; Oracle mode is not supported.
-  ObCompatibilityMode comp_mode = ObCompatibilityMode::MYSQL_MODE;
+  ObCompatibilityMode comp_mode = ObCompatibilityMode::OCEANBASE_MODE;
   if (value.is_string_type()) {
     const ObString &comp_mode_str = value.get_string();
-    if (0 == comp_mode_str.case_compare("MYSQL")) {
+    if (comp_mode_str.case_compare("ORACLE")) {
+      comp_mode = ObCompatibilityMode::ORACLE_MODE;
+    } else if (comp_mode_str.case_compare("MYSQL")) {
       comp_mode = ObCompatibilityMode::MYSQL_MODE;
     } else {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "compatibility mode");
-      LOG_WARN("not supported compatibility mode", K(ret), K(value), K(comp_mode_str));
+      LOG_WARN("not supported sql mode", K(ret), K(value), K(comp_mode_str));
     }
   } else if (ObUInt64Type == value.get_type()) {
     comp_mode = static_cast<ObCompatibilityMode>(value.get_uint64());
@@ -3720,7 +3679,7 @@ int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &va
     comp_mode = static_cast<ObCompatibilityMode>(value.get_int());
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid compatibility mode val type", K(value.get_type()), K(value), K(ret));
+    LOG_WARN("invalid sql mode val type", K(value.get_type()), K(value), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -3735,11 +3694,11 @@ int ObBasicSessionInfo::process_session_time_zone_value(const ObObj &value,
 {
   int ret = OB_SUCCESS;
   ObString str_val;
-  const bool is_oralce_mode = false;
+  const bool is_oralce_mode = is_oracle_compatible();
   if (OB_FAIL(value.get_string(str_val))) {
     LOG_WARN("fail to get string value", K(value), K(ret));
   } else if (OB_FAIL(set_time_zone(str_val, is_oralce_mode, check_timezone_valid))) {
-    LOG_WARN("failed to set time zone", K(str_val), K(is_oralce_mode), K(ret));
+    LOG_WARN("failed to set time zone", K(str_val), K(is_oralce_mode), "is_oracle_compatible", is_oracle_compatible(), K(ret));
   }
   return ret;
 }
@@ -3987,9 +3946,14 @@ int ObBasicSessionInfo::get_init_connect(ObString &str) const
 int ObBasicSessionInfo::get_locale_name(common::ObString &str) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_string_sys_var(SYS_VAR_LC_TIME_NAMES, str))) {
+  if (lib::is_mysql_mode()) {
+    if(OB_FAIL(get_string_sys_var(SYS_VAR_LC_TIME_NAMES, str))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to load sys variables", "var_name",SYS_VAR_LC_TIME_NAMES, K(ret));
+    }
+   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to load sys variables", "var_name", SYS_VAR_LC_TIME_NAMES, K(ret));
+    LOG_WARN("oracle mode does not support lc_time_names", K(ret));
   }
   return ret;
 }
@@ -4009,10 +3973,15 @@ int ObBasicSessionInfo::get_query_rewrite_integrity(int64_t &query_rewrite_integ
   return get_int64_sys_var(SYS_VAR_QUERY_REWRITE_INTEGRITY, query_rewrite_integrity);
 }
 
-int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order) const
+int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order, bool is_oracle_mode) const
 {
   int ret = OB_SUCCESS;
   force_set_order = false;
+  if (!is_oracle_mode) {
+    //do nothing
+  } else {
+    ret = get_bool_sys_var(SYS_VAR__FORCE_ORDER_PRESERVE_SET, force_set_order);
+  }
   return ret;
 }
 
@@ -4679,7 +4648,6 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               ob_trx_idle_timeout_,
               nls_collation_,
               nls_nation_collation_,
-              ob_enable_sql_audit_,
               nls_length_semantics_,
               nls_formats_[NLS_DATE],
               nls_formats_[NLS_TIMESTAMP],
@@ -4712,7 +4680,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo::SysVarsCacheData)
               ob_trx_idle_timeout_,
               nls_collation_,
               nls_nation_collation_,
-              ob_enable_sql_audit_,
               nls_length_semantics_,
               nls_formats_[NLS_DATE],
               nls_formats_[NLS_TIMESTAMP],
@@ -4750,7 +4717,6 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo::SysVarsCacheData)
               ob_trx_idle_timeout_,
               nls_collation_,
               nls_nation_collation_,
-              ob_enable_sql_audit_,
               nls_length_semantics_,
               nls_formats_[NLS_DATE],
               nls_formats_[NLS_TIMESTAMP],
@@ -5622,7 +5588,6 @@ int ObBasicSessionInfo::is_sys_var_actully_changed(const ObSysVarClassType &sys_
       case SYS_VAR_TX_READ_ONLY:
       case SYS_VAR_OB_ENABLE_PL_CACHE:
       case SYS_VAR_OB_ENABLE_PLAN_CACHE:
-      case SYS_VAR_OB_ENABLE_SQL_AUDIT:
       case SYS_VAR_AUTOCOMMIT:
       case SYS_VAR_OB_ENABLE_SHOW_TRACE:
       case SYS_VAR_OB_ORG_CLUSTER_ID:
@@ -6450,11 +6415,6 @@ int ObBasicSessionInfo::set_session_active()
     LOG_WARN("fail to set session state", K(ret));
   } else {
     thread_data_.is_request_end_ = false;
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      set_ash_stat_value(di->get_ash_stat());
-      ObQueryRetryAshGuard::setup_info(get_retry_info_for_update().get_retry_ash_info());
-    }
   }
   return ret;
 }
@@ -6465,12 +6425,6 @@ void ObBasicSessionInfo::set_session_sleep()
   set_session_state_(SESSION_SLEEP);
   thread_data_.mysql_cmd_ = obmysql::COM_SLEEP;
   thread_id_ = 0;
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    di->get_ash_stat().end_retry_wait_event();
-    di->get_ash_stat().block_sessid_ = 0;
-    ObQueryRetryAshGuard::reset_info();
-  }
 }
 
 int ObBasicSessionInfo::base_save_session(BaseSavedValue &saved_value, bool skip_cur_stmt_tables)
@@ -6695,7 +6649,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
   int ret_more = OB_SUCCESS;
 
   if (OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset, ret_more,
-                                                    check_timezone_valid))) {
+                                                    is_oralce_mode, check_timezone_valid))) {
     if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
       LOG_WARN("fail to convert time zone", K(str_val), K(ret));
     }
@@ -6740,7 +6694,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
           LOG_INFO("ignore unknow time zone, perhaps in remote/distribute task processer when server start_time is zero", K(str_val));
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
-                                                    check_timezone_valid))) {
+                                                    is_oralce_mode, check_timezone_valid))) {
             if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
               LOG_WARN("fail to convert time zone", K(str_val), K(ret));
             }
@@ -6753,7 +6707,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
           // The reason is that px use tenant_id_ and das/remote use effective_tenant_id_ create session.
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
-                                                    check_timezone_valid))) {
+                                                    is_oralce_mode, check_timezone_valid))) {
             LOG_WARN("fail to convert time zone", K(str_val), K(ret));
           } else {
             tz_info_wrap_.set_tz_info_offset(offset);
@@ -6872,11 +6826,38 @@ int ObExecEnv::gen_exec_env(const share::schema::ObSysVariableSchema &sys_variab
 {
   int ret = OB_SUCCESS;
   ObObj val;
+  bool is_oracle_mode = false;
+  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
+    LOG_WARN("failed to get oracle mode", K(ret));
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     const ObSysVarSchema *sysvar_schema = nullptr;
     switch (i) {
       case PLSQL_CCFLAGS: {
-        // plsql_ccflags is Oracle-only; nothing to do in MySQL mode.
+        if (is_oracle_mode) { // plsql_ccflags only in oracle mode!
+          int64_t size = 0;
+          if (OB_FAIL(sys_variable.get_sysvar_schema(ExecEnvMap[i], sysvar_schema))) {
+            LOG_WARN("failed to get sysvar schema", K(ret));
+          } else if (OB_ISNULL(sysvar_schema)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("get unexpected null", K(ret), K(sysvar_schema));
+          } else {
+            ObString plsql_ccflags = sysvar_schema->get_value();
+            // print length of plsql_ccflags
+            OZ (databuff_printf(buf + pos, len - pos, size, "%d",
+                                static_cast<int32_t>(plsql_ccflags.length())));
+            OX (pos += size);
+            CK (pos < len);
+            OX (buf[pos++] = ',');
+            // print content of plsql_ccflags
+            OX (size = 0);
+            OZ (databuff_printf(buf + pos, len - pos, size, "%.*s",
+                                static_cast<int32_t>(plsql_ccflags.length()), plsql_ccflags.ptr()));
+            OX (pos += size);
+            CK (pos < len);
+            OX (buf[pos++] = ',');
+          }
+        }
       } break;
       case SQL_MODE:
       case CHARSET_CLIENT:
@@ -7005,9 +6986,12 @@ int ObExecEnv::load(ObBasicSessionInfo &session, ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   ObObj val;
+  bool is_mysql = lib::is_mysql_mode();
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
-    if (PLSQL_CCFLAGS == i) {
+    if (is_mysql && PLSQL_CCFLAGS == i) {
+      // do nothing ...
+    } else if (!is_mysql && SQL_MODE == i) {
       // do nothing ...
     } else if (OB_FAIL(session.get_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));
@@ -7056,6 +7040,7 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   ObObj val;
+  bool is_mysql = lib::is_mysql_mode();
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
     switch (i) {
@@ -7091,7 +7076,9 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
     break;
     }
     if (OB_FAIL(ret)) {
-    } else if (PLSQL_CCFLAGS == i) {
+    } else if (is_mysql && PLSQL_CCFLAGS == i) {
+      // do nothing ...
+    } else if (!is_mysql && SQL_MODE == i) {
       // do nothing ...
     } else if (OB_FAIL(session.update_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));

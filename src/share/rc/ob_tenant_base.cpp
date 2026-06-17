@@ -41,11 +41,6 @@ int64_t __attribute__((used)) get_mtl_id()
   return MTL_ID();
 }
 
-ObDiagnosticInfoContainer *__attribute__((used)) get_di_container()
-{
-  return MTL(ObDiagnosticInfoContainer *);
-}
-
 void __attribute__((used)) lib_mtl_switch(int64_t tenant_id, std::function<void(int)> fn)
 {
   int ret = OB_SUCCESS;

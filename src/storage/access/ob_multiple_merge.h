@@ -27,7 +27,6 @@
 #include "share/schema/ob_table_param.h"
 #include "ob_table_scan_range.h"
 #include "storage/tablet/ob_table_store_util.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "ob_table_access_context.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/lob/ob_lob_data_reader.h"

@@ -32,7 +32,6 @@
 #include "storage/ob_file_system_router.h"
 #include "share/rc/ob_tenant_module_init_ctx.h"
 #include "sql/engine/px/ob_px_worker.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "share/change_stream/ob_change_stream_mgr.h"
 
@@ -257,7 +256,6 @@ void ObPxPool::run(int64_t idx)
 void ObPxPool::run1()
 {
   int ret = OB_SUCCESS;
-  common::ObBackGroundSessionGuard backgroud_session_guard(tenant_id_, group_id_);
   ObDIActionGuard action_guard("PxPool", "PxWorker", "");
   set_px_thread_name();
   auto *pm = common::ObPageManager::thread_local_instance();

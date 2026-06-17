@@ -15,7 +15,8 @@
  */
 
 #include "ob_trans_event.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"   // EVENT_*
 
 namespace oceanbase
 {

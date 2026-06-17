@@ -20,7 +20,6 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/wait_event/ob_wait_event.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 namespace obutil
 {
@@ -89,8 +88,6 @@ Cond::wait_impl(const M& mutex) const
 
   LockState state;
   mutex.unlock(state);
-  oceanbase::common::ObWaitEventGuard
-      wait_guard(oceanbase::common::ObWaitEventIds::DEFAULT_COND_WAIT, 0, reinterpret_cast<uint64_t>(this));
   const int rc = pthread_cond_wait(&_cond, state.mutex);
   mutex.lock(state);
 
@@ -113,9 +110,6 @@ Cond::timed_wait_impl(const M& mutex, const ObSysTime& timeout) const
 
     LockState state;
     mutex.unlock(state);
-
-    oceanbase::common::ObWaitEventGuard
-        wait_guard(oceanbase::common::ObWaitEventIds::DEFAULT_COND_WAIT, timeout.toMicroSeconds(), reinterpret_cast<uint64_t>(this));
 
     // Use portable timed wait with relative timeout to avoid clock drift issues on macOS
     // Note: Cond class uses pthread_condattr_setclock(CLOCK_MONOTONIC) on Linux, so pass true

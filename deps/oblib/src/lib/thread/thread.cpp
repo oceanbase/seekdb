@@ -30,8 +30,7 @@
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/signal/ob_signal_struct.h"
-#include "lib/ash/ob_active_session_guard.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
 using namespace oceanbase;

@@ -20,7 +20,6 @@
 #include "share/ob_define.h"
 #include "lib/string/ob_string.h"
 #include "lib/atomic/ob_atomic.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/ob_sql_define.h"

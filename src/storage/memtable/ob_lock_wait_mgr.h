@@ -22,7 +22,6 @@
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/oblog/ob_log_module.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "lib/utility/utility.h"
 #include "ob_memtable_key.h"
 #include "observer/ob_server_struct.h"

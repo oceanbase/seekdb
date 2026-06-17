@@ -404,8 +404,6 @@ static inline ssize_t win32_sock_write(int fd, const void *buf, size_t count) {
 #include <sys/stat.h>
 #include <fcntl.h>
 #endif
-#include "lib/ash/ob_active_session_guard.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase::common;
 
@@ -1472,7 +1470,6 @@ public:
   }
 private:
   void handle_epoll_event() {
-    ObDIActionGuard ag("HandleEpollEvent");
     const int maxevents = 512;
     struct epoll_event events[maxevents];
 #ifdef _WIN32
@@ -1506,7 +1503,6 @@ private:
   }
 
   void handle_close_req_queue() {
-    ObDIActionGuard ag("HandleCloseReq");
     ObSqlSock* s = NULL;
     while((s = (ObSqlSock*)close_req_queue_.pop())) {
       prepare_destroy(s);
@@ -1520,7 +1516,6 @@ private:
   }
 
   void handle_pending_destroy_list() {
-    ObDIActionGuard ag("HandlePendingDestroy");
     ObDLink* head = pending_destroy_list_.head();
     ObLink* cur = head->next_;
     while(cur != head) {
@@ -1590,7 +1585,6 @@ private:
     return ret;
   }
   void handle_write_req_queue() {
-    ObDIActionGuard ag("HandleWriteReq");
     ObLink* p = NULL;
     while((p = (ObLink*)write_req_queue_.pop())) {
       ObSqlSock* s = CONTAINER_OF(p, ObSqlSock, write_task_link_);
@@ -1829,7 +1823,6 @@ int ObSqlNio::inject_accepted_fd(int fd, bool is_unix_socket)
 void ObSqlNio::run(int64_t idx)
 {
   if (NULL != impl_) {
-    common::ObBackGroundSessionGuard backgroud_session_guard(GET_TENANT_ID(), THIS_WORKER.get_group_id());
     lib::set_thread_name("sql_nio", idx);
     // SET_GROUP_ID(OBCG_SQL_NIO);
     while(!has_set_stop() && !(OB_NOT_NULL(&lib::Thread::current()) ? lib::Thread::current().has_set_stop() : false)) {

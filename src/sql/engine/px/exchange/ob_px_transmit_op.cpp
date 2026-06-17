@@ -358,7 +358,7 @@ int ObPxTransmitOp::init_channel(ObPxTransmitOpInput &trans_input)
     LOG_WARN("fail to init channels block info", K(ret));
   } else {
     uint64_t min_cluster_version = ctx_.get_physical_plan_ctx()->get_phy_plan()->get_min_cluster_version();
-    bool enable_audit = GCONF.enable_sql_audit && ctx_.get_my_session()->get_local_ob_enable_sql_audit();
+    bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels_;
     loop_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
@@ -1202,7 +1202,7 @@ int ObPxTransmitOp::send_eof_row()
     ObTransmitEofAsynSender eof_asyn_sender(task_channels_, ch_info_, true, phy_plan_ctx->get_timeout_timestamp(), &eval_ctx_, data_msg_type_);
     if (OB_FAIL(eof_asyn_sender.asyn_send())) {
       LOG_WARN("failed to asyn send drain", K(ret), K(lbt()));
-    } else if (GCONF.enable_sql_audit) {
+    } else {
       op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
       op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
       // It's the end time of sending all data
@@ -1364,7 +1364,7 @@ int ObPxTransmitOp::broadcast_eof_row()
     LOG_WARN("unexpected NULL ptr", K(ret));
   } else if (OB_FAIL(chs_agent_.flush())) {
     LOG_WARN("fail flush row to slice channel", K(ret));
-  } else if (GCONF.enable_sql_audit) {
+  } else {
     op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
     op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
     // It's the end time of sending all data

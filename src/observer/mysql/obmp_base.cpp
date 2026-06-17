@@ -111,8 +111,7 @@ int ObMPBase::update_proxy_and_client_sys_vars(ObSQLSessionInfo &session)
 int ObMPBase::after_process(int error_code)
 {
   int ret = OB_SUCCESS;
-  if (!lib::is_diagnose_info_enabled()) {
-  } else {
+  {
     NG_TRACE_EXT(process_end, OB_ID(run_ts), get_run_timestamp());
     const int64_t elapsed_time = common::ObTimeUtility::current_time() - get_receive_timestamp();
     bool is_slow = (elapsed_time > GCONF.trace_log_slow_query_watermark)
@@ -388,7 +387,7 @@ int ObMPBase::record_flt_trace(sql::ObSQLSessionInfo &session) const
 {
   int ret = OB_SUCCESS;
   //trace end
-  if (lib::is_diagnose_info_enabled()) {
+  {
     NG_TRACE(query_end);
 
     if (session.is_use_trace_log()) {
@@ -493,7 +492,8 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
       ObCharsetType charset_type = CHARSET_INVALID;
       ObCharsetType ncharset_type = CHARSET_INVALID;
       // need at ps mode
-      if (!is_packed && value.get_type() != fields->at(i).type_.get_type()) {
+      if (!is_packed && value.get_type() != fields->at(i).type_.get_type()
+          && !(value.is_geometry() && lib::is_oracle_mode())) {// oracle gis will do cast in process_sql_udt_results
         ObCastCtx cast_ctx(&allocator, NULL, CM_WARN_ON_FAIL, fields->at(i).type_.get_collation_type());
         if (ObDecimalIntType == fields->at(i).type_.get_type()) {
           cast_ctx.res_accuracy_ = const_cast<ObAccuracy*>(&fields->at(i).accuracy_);

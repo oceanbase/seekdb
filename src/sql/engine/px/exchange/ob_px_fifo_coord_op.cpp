@@ -191,7 +191,7 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
       // process end condition:
       // 1. all rows returned
       // 2. all SQC report worker execution finish
-      if (GCONF.enable_sql_audit) {
+      {
         op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
         op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
       }

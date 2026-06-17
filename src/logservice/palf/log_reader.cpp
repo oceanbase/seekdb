@@ -15,10 +15,10 @@
  */
 
 #include "log_reader.h"
-#include "lib/stat/ob_session_stat.h"     // Session
+#include "lib/stat/ob_diagnose_info.h"    // ObStatEventIds
+#include "lib/stat/ob_diagnostic_info_guard.h"    // EVENT_*
 #include "log_io_adapter.h"               // LogIOAdapter
 #include "share/rc/ob_tenant_base.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {

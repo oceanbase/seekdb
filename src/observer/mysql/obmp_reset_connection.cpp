@@ -53,9 +53,6 @@ int ObMPResetConnection::process()
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     int64_t execution_id = 0;
     int64_t query_timeout = 0;
-    ObWaitEventStat total_wait_desc;
-    ObMaxWaitGuard max_wait_guard(nullptr);
-    ObTotalWaitGuard total_wait_guard(nullptr);
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     session->update_last_active_time();
     session->set_query_start_time(ObTimeUtility::current_time());

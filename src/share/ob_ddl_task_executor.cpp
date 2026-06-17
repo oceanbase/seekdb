@@ -235,7 +235,6 @@ void ObDDLTaskExecutor::run1()
     }
     cond_.lock();
     {
-      ObBKGDSessInActiveGuard inactive_guard;
       cond_.wait(CHECK_TASK_INTERVAL);
     }
     cond_.unlock();

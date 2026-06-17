@@ -16,6 +16,7 @@
 
 #include "ob_log_replay_service.h"
 #include "logservice/ob_ls_adapter.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif
@@ -1340,8 +1341,9 @@ int ObLogReplayService::handle_replay_task_(ObReplayServiceReplayTask *task_queu
           ret = OB_ERR_UNEXPECTED;
           CLOG_LOG(ERROR, "replay_task is NULL", KPC(replay_status), K(ret));
         } else {
-          char log_type_str[ASH_ACTION_STR_LEN] = "";
-          log_base_type_to_string(replay_task->log_type_, log_type_str, ASH_ACTION_STR_LEN);
+          static const int64_t LOG_TYPE_STR_LEN = 64;
+          char log_type_str[LOG_TYPE_STR_LEN] = "";
+          log_base_type_to_string(replay_task->log_type_, log_type_str, LOG_TYPE_STR_LEN);
           ObDIActionGuard ag(log_type_str);
           if (OB_FAIL(do_replay_task_(replay_task, replay_status, task_queue->idx()))) {
             (void)process_replay_ret_code_(ret, *replay_status, *task_queue, *replay_task);

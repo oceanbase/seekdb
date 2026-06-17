@@ -16,7 +16,6 @@
 
 #include "lib/queue/ob_dedup_queue.h"
 #include "lib/thread/ob_thread_name.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -443,7 +442,6 @@ void ObDedupQueue::run1()
   ThreadMeta &thread_meta = thread_metas_[thread_pos];
   thread_meta.init();
   COMMON_LOG(INFO, "dedup queue thread start", KP(this));
-  ObDIActionGuard("DedupQueueThreadPool", thread_name_, nullptr);
   if (OB_NOT_NULL(thread_name_)) {
     lib::set_thread_name(thread_name_);
   }
@@ -453,7 +451,6 @@ void ObDedupQueue::run1()
       if (OB_SUCCESS != (tmp_ret = task_queue_.pop(task2process)) && OB_UNLIKELY(tmp_ret != OB_ENTRY_NOT_EXIST)) {
         COMMON_LOG_RET(WARN, tmp_ret, "task_queue_.pop error", K(tmp_ret), K(task2process));
       } else if (NULL != task2process) {
-        ObDIActionGuard ag1(task2process->get_task_name());
         thread_meta.on_process_start(task2process);
         task2process->process();
         thread_meta.on_process_end();
@@ -483,7 +480,6 @@ void ObDedupQueue::run1()
       } else {
         ObThreadCondGuard guard(task_queue_sync_);
         if (0 == task_queue_.get_total()) {
-          ObBKGDSessInActiveGuard inactive_guard;
           if (OB_SUCCESS != (tmp_ret = task_queue_sync_.wait(QUEUE_WAIT_TIME_MS))) {
             if (OB_TIMEOUT != tmp_ret) {
               COMMON_LOG_RET(WARN, tmp_ret, "Fail to wait task queue sync, ", K(tmp_ret));

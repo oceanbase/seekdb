@@ -355,7 +355,6 @@ int ObAccessService::table_scan(
     ObVTableScanParam &vparam,
     ObNewRowIterator *&result)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
   int ret = OB_SUCCESS;
   const share::ObLSID &ls_id = vparam.ls_id_;
   const common::ObTabletID &data_tablet_id = vparam.tablet_id_;
@@ -421,7 +420,6 @@ int ObAccessService::table_rescan(
     ObVTableScanParam &vparam,
     ObNewRowIterator *result)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(vparam.tablet_id_.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, vparam.tablet_id_.id());
   int ret = OB_SUCCESS;
@@ -891,7 +889,6 @@ int ObAccessService::delete_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
@@ -947,7 +944,6 @@ int ObAccessService::put_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
@@ -1003,7 +999,6 @@ int ObAccessService::insert_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
@@ -1061,7 +1056,6 @@ int ObAccessService::insert_rows_with_fetch_dup(const share::ObLSID &ls_id,
                                                 int64_t &affected_rows,
                                                 blocksstable::ObDatumRowIterator *&duplicated_rows)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
@@ -1122,7 +1116,6 @@ int ObAccessService::update_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
@@ -1180,7 +1173,6 @@ int ObAccessService::lock_rows(
     blocksstable::ObDatumRowIterator *row_iter,
     int64_t &affected_rows)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_write);
   ObASHTabletIdSetterGuard ash_tablet_id_guard(tablet_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
@@ -1500,9 +1492,7 @@ int ObAccessService::inner_tablet_scan(
     ObTableScanParam &param,
     ObNewRowIterator *&result)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_storage_read);
   int ret = OB_SUCCESS;
-  GET_DIAGNOSTIC_INFO->get_ash_stat().tablet_id_ = tablet_id.id();
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(ls_id_, ls_id.id());
   ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(tablet_id_, tablet_id.id());
   if (IS_NOT_INIT) {

@@ -35,12 +35,10 @@ static inline ssize_t process_vm_readv(pid_t pid, const struct iovec *local_iov,
 #include "lib/alloc/memory_dump.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "observer/omt/ob_tenant.h"
-#include "observer/virtual_table/ob_all_virtual_sys_stat.h"
 #include "observer/ob_server.h"
 #include "sql/engine/ob_tenant_sql_memory_manager.h"
 
 #include <lua.hpp>
-#include "share/ash/ob_di_util.h"
 
 
 using namespace oceanbase;
@@ -767,74 +765,8 @@ int select_sysstat(lua_State* L)
       "class",
       "can_visible"
     };
-    GCTX.omt_->get_tenant_ids(ids);
     LuaVtableGenerator gen(L, columns);
-    for (int64_t i = 0; i < ids.size() && !gen.is_end(); ++i) {
-      ObArenaAllocator diag_allocator;
-      HEAP_VAR(ObDiagnoseTenantInfo, diag_info, &diag_allocator) {
-        if (OB_FAIL(share::ObDiagnosticInfoUtil::get_the_diag_info(ids.at(i), diag_info))) {
-          OB_LOG(ERROR, "failed to get_the_diag_info", K(ids.at(i)), K(ret));
-        } else if (OB_FAIL(observer::ObAllVirtualSysStat::update_all_stats(ids.at(i), diag_info))) {
-          OB_LOG(ERROR, "failed to update_all_stats", K(ids.at(i)), K(ret));
-        } else {
-          for (int64_t stat_idx = 0;
-               stat_idx < ObStatEventIds::STAT_EVENT_SET_END && !gen.is_end();
-               ++stat_idx) {
-            if (ObStatEventIds::STAT_EVENT_ADD_END == stat_idx) {
-              // do nothing
-            } else {
-              gen.next_row();
-              // tenant_id
-              gen.next_column(ids.at(i));
-              // statistic
-              {
-                if (stat_idx < ObStatEventIds::STAT_EVENT_ADD_END) {
-                  gen.next_column(stat_idx);
-                } else {
-                  gen.next_column(stat_idx - 1);
-                }
-              }
-              // value
-              {
-                if (stat_idx < ObStatEventIds::STAT_EVENT_ADD_END) {
-                  if (OB_ISNULL(diag_info.get_add_stat_stats().get(stat_idx))) {
-                    gen.next_column();
-                    OB_LOG(ERROR, "invalid argument", K(stat_idx), K(ids.at(i)));
-                  } else {
-                    gen.next_column(diag_info.get_add_stat_stats().get(stat_idx)->stat_value_);
-                  }
-                } else {
-                  if (OB_ISNULL(diag_info.get_set_stat_stats().get(stat_idx - ObStatEventIds::STAT_EVENT_ADD_END - 1))) {
-                    gen.next_column();
-                    OB_LOG(ERROR, "invalid argument", K(stat_idx), K(ids.at(i)));
-                  } else {
-                    gen.next_column(diag_info.get_set_stat_stats().get(stat_idx - ObStatEventIds::STAT_EVENT_ADD_END - 1)->stat_value_);
-                  }
-                }
-              }
-              // value_type
-              {
-                if (stat_idx < ObStatEventIds::STAT_EVENT_ADD_END) {
-                  gen.next_column("ADD_VALUE");
-                } else {
-                  gen.next_column("SET_VALUE");
-                }
-              }
-              // stat_id
-              gen.next_column(OB_STAT_EVENTS[stat_idx].stat_id_);
-              // name
-              gen.next_column(OB_STAT_EVENTS[stat_idx].name_);
-              // class
-              gen.next_column(OB_STAT_EVENTS[stat_idx].stat_class_);
-              // can_visible
-              gen.next_column(OB_STAT_EVENTS[stat_idx].can_visible_);
-
-              gen.row_end();
-            }
-          }
-        }
-      }
-    }
+    UNUSED(ids);
   }
   return 1;
 }
@@ -1861,31 +1793,10 @@ int select_malloc_sample_info(lua_State *L)
 int get_tenant_sysstat(int64_t tenant_id, int64_t statistic, int64_t &value)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator diag_allocator;
-  HEAP_VAR(ObDiagnoseTenantInfo, diag_info, &diag_allocator) {
-    if (statistic < 0
-        || statistic >= ObStatEventIds::STAT_EVENT_SET_END
-        || ObStatEventIds::STAT_EVENT_ADD_END == statistic) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(share::ObDiagnosticInfoUtil::get_the_diag_info(tenant_id, diag_info))) {
-      // do nothing
-    } else if (OB_FAIL(observer::ObAllVirtualSysStat::update_all_stats(tenant_id, diag_info))) {
-      // do nothing
-    } else if (statistic < ObStatEventIds::STAT_EVENT_ADD_END) {
-      ObStatEventAddStat* stat = diag_info.get_add_stat_stats().get(statistic);
-      if (OB_ISNULL(stat)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        value = stat->stat_value_;
-      }
-    } else {
-      ObStatEventSetStat* stat = diag_info.get_set_stat_stats().get(statistic - ObStatEventIds::STAT_EVENT_ADD_END - 1);
-      if (OB_ISNULL(stat)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        value = stat->stat_value_;
-      }
-    }
+  UNUSED(tenant_id);
+  UNUSED(statistic);
+  value = 0;
+  {
   }
   return ret;
 }

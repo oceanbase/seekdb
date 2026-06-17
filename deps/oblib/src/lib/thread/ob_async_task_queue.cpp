@@ -18,7 +18,6 @@
 
 #include "lib/thread/ob_async_task_queue.h"
 #include "lib/profile/ob_trace_id.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
 {
 using namespace common;
@@ -116,7 +115,6 @@ void ObAsyncTaskQueue::run2()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    ObDIActionGuard ag("AsyncTaskThreadPool", get_thread_name(), "detect task");
     ObAddr zero_addr;
     while (!stop_) {
       IGNORE_RETURN lib::Thread::update_loop_ts(ObTimeUtility::fast_current_time());
@@ -149,7 +147,6 @@ void ObAsyncTaskQueue::run2()
         // generate trace id
         ObCurTraceId::init(zero_addr);
         // just do it
-        ObDIActionGuard ag(typeid(*task));
         ret = task->process();
         if (OB_FAIL(ret)) {
           LOG_WARN("task process failed, start retry", "max retry time",

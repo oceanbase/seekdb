@@ -17,7 +17,7 @@
 #include "ob_black_list.h"
 #include "storage/tx/wrs/ob_weak_read_util.h"               // ObWeakReadUtil
 #include "storage/tx/ob_ts_mgr.h"
-#include "lib/ash/ob_active_session_guard.h"                    // ObASHSetInnerSqlWaitGuard
+#include "lib/stat/ob_diagnostic_info_guard.h"                  // ObASHSetInnerSqlWaitGuard
 #include "share/ob_server_struct.h" // GCTX
 
 namespace oceanbase
@@ -205,7 +205,6 @@ void ObBLService::run1()
       int64_t wait_interval = BLACK_LIST_REFRESH_INTERVAL - cost_time;
       TRANS_LOG(INFO, "ls blacklist refresh finish", K(cost_time));
       if (wait_interval > 0) {
-        common::ObBKGDSessInActiveGuard inactive_guard;
         thread_cond_.timedwait(wait_interval);
       }
     }

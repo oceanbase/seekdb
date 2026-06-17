@@ -18,7 +18,6 @@
 #include "ob_tenant_thread_helper.h"
 #include "share/restore/ob_physical_restore_table_operator.h"//restore_job
 #include "src/logservice/applyservice/ob_log_apply_service.h"
-#include "lib/ash/ob_active_session_guard.h"
 
 namespace oceanbase
 {
@@ -213,8 +212,7 @@ void ObTenantThreadHelper::run1() {
 }
 void ObTenantThreadHelper::idle(const int64_t idle_time_us)
 {
-  ObThreadCondGuard guard(thread_cond_); 
-  ObBKGDSessInActiveGuard inactive_guard;
+  ObThreadCondGuard guard(thread_cond_);
   thread_cond_.wait_us(idle_time_us);
 }
 

@@ -15,12 +15,12 @@
  */
 
 #include "log_block_handler.h"
-#include "lib/stat/ob_session_stat.h"         // Session
+#include "lib/stat/ob_diagnose_info.h"        // EVENT_*
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/rc/ob_tenant_base.h"                    // mtl_malloc
 #include "log_writer_utils.h"                           // LogWriteBuf
 #include "log_io_utils.h"                               // close_with_ret
 #include "log_io_adapter.h"                             // LogIOAdapter
-#include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
 {
 using namespace common;

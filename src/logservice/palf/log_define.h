@@ -110,11 +110,7 @@ typedef common::ObFixedArray<LogWriteBuf *, ObIAllocator> LogWriteBufArray;
 
 // ====================== Consensus begin ===========================
 // follower's group buffer size is as same as leader's.
-#ifdef OB_BUILD_EMBED_MODE
 constexpr int64_t LEADER_DEFAULT_GROUP_BUFFER_SIZE = 1 << 22;
-#else
-constexpr int64_t LEADER_DEFAULT_GROUP_BUFFER_SIZE = 1 << 23;                           // leader's group buffer size is 8MB
-#endif
 constexpr int64_t FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE = LEADER_DEFAULT_GROUP_BUFFER_SIZE + 0L;
 const int64_t PALF_STAT_PRINT_INTERVAL_US = 1 * 1000 * 1000L;
 // The advance delay threshold for match lsn is 1s.

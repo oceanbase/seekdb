@@ -25,6 +25,7 @@
 #include "storage/blocksstable/ob_micro_block_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/blocksstable/ob_block_manager.h"
 
 

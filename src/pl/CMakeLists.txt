@@ -53,7 +53,6 @@ ob_set_subtarget(ob_pl pl_cache
   pl_cache/ob_pl_cache.cpp
   pl_cache/ob_pl_cache_mgr.cpp
   pl_cache/ob_pl_cache_object.cpp
-  diagnosis/ob_pl_sql_audit_guard.cpp
 )
 
 
@@ -69,7 +68,6 @@ ob_set_subtarget(ob_pl sys_package
   sys_package/ob_dbms_space.cpp
   sys_package/ob_dbms_mview_mysql.cpp
   sys_package/ob_dbms_mview_stats_mysql.cpp
-  sys_package/ob_dbms_workload_repository.cpp
   sys_package/ob_dbms_limit_calculator_mysql.cpp
   sys_package/ob_dbms_vector_mysql.cpp
   sys_package/ob_dbms_hybrid_vector_mysql.cpp

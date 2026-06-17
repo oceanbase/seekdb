@@ -32,7 +32,7 @@
 #include "lib/lock/ob_recursive_mutex.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/mysqlclient/ob_server_connection_pool.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "sql/ob_sql_config_provider.h"
 #include "sql/ob_end_trans_callback.h"
@@ -47,6 +47,7 @@
 #include "sql/monitor/flt/ob_flt_span_mgr.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -69,15 +70,10 @@ class ObPLProfiler;
 
 } // namespace pl
 
-namespace obmysql
-{
-class ObMySQLRequestManager;
-} // namespace obmysql
 namespace share
 {
 struct ObSequenceValue;
 }
-namespace memtable { class ObBtreeIterCache; }
 using common::ObPsStmtId;
 namespace sql
 {
@@ -843,8 +839,6 @@ public:
   ObPlanCache *get_plan_cache();
   ObPlanCache *get_plan_cache_directly() const { return plan_cache_; };
   ObPsCache *get_ps_cache();
-  memtable::ObBtreeIterCache *get_btree_iter_cache() { return btree_iter_cache_; }
-  obmysql::ObMySQLRequestManager *get_request_manager();
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
   void set_show_warnings_buf(int error_code);
@@ -1031,15 +1025,11 @@ public:
   int close_cursor(pl::ObPLCursorInfo *&cursor);
   int close_cursor(int64_t cursor_id);
   inline void inc_session_cursor() {
-    if (lib::is_diagnose_info_enabled()) {
-      EVENT_INC(SQL_OPEN_CURSORS_CURRENT);
-      EVENT_INC(SQL_OPEN_CURSORS_CUMULATIVE);
-    }
+    EVENT_INC(SQL_OPEN_CURSORS_CURRENT);
+    EVENT_INC(SQL_OPEN_CURSORS_CUMULATIVE);
   };
   inline void dec_session_cursor() {
-    if (lib::is_diagnose_info_enabled()) {
-      EVENT_DEC(SQL_OPEN_CURSORS_CURRENT);
-    }
+    EVENT_DEC(SQL_OPEN_CURSORS_CURRENT);
   };
   int make_cursor(pl::ObPLCursorInfo *&cursor);
   int add_non_session_cursor(pl::ObPLCursorInfo *cursor);
@@ -1107,11 +1097,9 @@ public:
   // When finally need to push record to audit buffer, use this method,
   // This method will retrieve some session data that can be obtained and will not change during the retry process
   // Field initialization
-  const ObAuditRecordData &get_final_audit_record(ObExecuteMode mode);
   ObSessionStat &get_session_stat() { return session_stat_; }
   void update_stat_from_exec_record();
   void update_stat_from_exec_timestamp();
-  void handle_audit_record(bool need_retry, ObExecuteMode exec_mode);
 
   void set_is_remote(bool is_remote) { is_remote_session_ = is_remote; }
   bool is_remote_session() const { return is_remote_session_; }
@@ -1181,7 +1169,6 @@ public:
   }
 
   int set_client_id(const common::ObString &client_identifier);
-  virtual void set_ash_stat_value(ObActiveSessionStat &ash_stat);
   bool has_sess_info_modified() const;
   int set_module_name(const common::ObString &mod);
   int set_action_name(const common::ObString &act);
@@ -1558,7 +1545,6 @@ private:
   const common::ObVersionProvider *version_provider_;
   const ObSQLConfigProvider *config_provider_;
   char tenant_buff_[sizeof(share::ObTenantSpaceFetcher)];
-  obmysql::ObMySQLRequestManager *request_manager_;
   sql::ObFLTSpanMgr *flt_span_mgr_;
   ObPlanCache *plan_cache_;
   ObPsCache *ps_cache_;
@@ -1760,7 +1746,6 @@ private:
   bool is_session_sync_support_; // session_sync_support flag.
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
-  memtable::ObBtreeIterCache *btree_iter_cache_;
   bool failover_mode_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;

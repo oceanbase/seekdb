@@ -42,7 +42,6 @@ static int sigtimedwait(const sigset_t *set, siginfo_t *info, const struct times
 #include "observer/ob_dump_task_generator.h"
 #include "sql/ob_sql_init.h"
 #include "storage/tx_storage/ob_tenant_memory_printer.h"
-#include "lib/ash/ob_active_session_guard.h"
 
 extern void switch_check_io_hang_errsim();
 
@@ -70,7 +69,6 @@ void ObSignalHandle::run1()
     struct timespec timeout = {1, 0};
     while (!has_set_stop()) {//need not to check ret
       {
-        common::ObBKGDSessInActiveGuard inactive_guard;
         signum = sigtimedwait(&waitset, NULL, &timeout);
       }
       if (-1 == signum) {

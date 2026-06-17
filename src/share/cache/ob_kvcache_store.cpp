@@ -23,7 +23,6 @@
 #include "share/config/ob_server_config.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "ob_kvcache_store.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {

@@ -118,8 +118,6 @@ public:
     }
 
     uint64_t timeout = 10000;  // 10s
-    common::ObWaitEventGuard wait_guard(
-        common::ObWaitEventIds::MEMSTORE_MEM_PAGE_ALLOC_WAIT, timeout, 0, 0, left_interval);
 
     while (throttle_tool.still_throttling<ALLOCATOR>(share_ti_guard, module_ti_guard) &&
            (left_interval > 0)) {

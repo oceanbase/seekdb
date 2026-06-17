@@ -15,6 +15,7 @@
  */
 
 #include "storage/tmp_file/ob_tmp_file_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "storage/blocksstable/ob_storage_object_handle.h"

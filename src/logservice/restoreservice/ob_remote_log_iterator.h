@@ -32,8 +32,8 @@
 #include "lib/profile/ob_trace_id.h"
 #include "lib/utility/ob_tracepoint.h"                  // EventTable
 #include "lib/restore/ob_storage.h"                     // is_io_error
-#include "lib/stat/ob_session_stat.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"  // EVENT_TENANT_ADD
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/restore/ob_log_restore_source.h"
 #include "share/backup/ob_backup_struct.h"
 #include "share/rc/ob_tenant_base.h"

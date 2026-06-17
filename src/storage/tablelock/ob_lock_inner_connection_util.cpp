@@ -446,7 +446,7 @@ int ObInnerConnectionLockUtil::replace_lock(
 
   const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
     if (OB_INVALID_ID == tenant_id) {
       ret = OB_INVALID_ARGUMENT;
@@ -502,7 +502,7 @@ int ObInnerConnectionLockUtil::replace_lock(const uint64_t tenant_id,
 
   const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
     if (OB_INVALID_ID == tenant_id) {
       ret = OB_INVALID_ARGUMENT;
@@ -630,6 +630,7 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
   observer::ObInnerSQLConnectionPool *pool = nullptr;
   common::sqlclient::ObISQLConnection *conn = nullptr;
 
+  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session or sql_proxy is NULL", KP(session_info), KP(sql_proxy));
@@ -640,19 +641,32 @@ int ObInnerConnectionLockUtil::create_inner_conn(sql::ObSQLSessionInfo *session_
     LOG_WARN("connection pool is NULL", K(ret));
   } else if (OB_FAIL(session_info->get_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
     LOG_WARN("can not get the compat_mode", KPC(session_info));
+  } else if (current_mode != mysql_mode
+             && OB_FAIL(session_info->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
+    LOG_WARN("update session_info to msyql_mode failed", KR(ret), KPC(session_info));
   } else if (common::sqlclient::INNER_POOL != pool->get_type()) {
     LOG_WARN("connection pool type is not inner", K(ret), K(pool->get_type()));
-    // NOTICE: the pool acquire no longer takes is_oracle_mode, it's always false internally
-  } else if (OB_FAIL(pool->acquire(session_info, conn))) {
+    // NOTICE: although we can set is_oracle_mode here, internally it will prioritize referencing
+    // the system variables on the session, so this parameter actually has no effect
+  } else if (OB_FAIL(pool->acquire(session_info, conn, false /* is_oracle_mode */))) {
     LOG_WARN("acquire connection from inner sql connection pool failed", KR(ret), KPC(session_info));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("acquire new connection but it's null", KR(ret), KPC(session_info));
   } else {
     inner_conn = static_cast<observer::ObInnerSQLConnection *>(conn);
+    // we must use mysql_mode connection to write inner_table
+    if (OB_UNLIKELY(inner_conn->is_oracle_compat_mode())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("create an oracle mode inner connection", K(ret));
+    }
   }
 
-  // seekdb is MySQL-only; no need to save/restore compatibility mode
+  if (current_mode != mysql_mode && current_mode.get_int() != -1 && OB_NOT_NULL(session_info)
+      && OB_TMP_FAIL(session_info->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
+    ret = OB_SUCCESS == ret ? tmp_ret : ret;
+    LOG_WARN("failed to update sys variable for compatibility mode", K(current_mode), KPC(session_info));
+  }
 
   return ret;
 }
@@ -668,6 +682,7 @@ int ObInnerConnectionLockUtil::execute_write_sql(observer::ObInnerSQLConnection 
 
   // NOTICE: This will be overwritten by the oracle_made_ field on connection,
   // but for safety reason, we still set up a compat_guard here.
+  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -697,6 +712,7 @@ int ObInnerConnectionLockUtil::execute_read_sql(observer::ObInnerSQLConnection *
 
   // NOTICE: This will be overwritten by the oracle_made_ field on connection,
   // but for safety reason, we still set up a compat_guard here.
+  lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
 
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
@@ -782,7 +798,7 @@ int ObInnerConnectionLockUtil::request_lock_(
 
   const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
     if (OB_INVALID_ID == tenant_id) {
       ret = OB_INVALID_ARGUMENT;
@@ -850,7 +866,7 @@ int ObInnerConnectionLockUtil::request_lock_(
 
   const bool local_execute = conn->is_local_execute(GCONF.cluster_id, tenant_id);
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), conn->get_diagnostic_info())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session(), nullptr)
   {
     if (OB_INVALID_ID == tenant_id) {
       ret = OB_INVALID_ARGUMENT;
@@ -1053,18 +1069,31 @@ int ObInnerConnectionLockUtil::set_to_mysql_compat_mode_(observer::ObInnerSQLCon
 
   if (OB_FAIL(conn->get_session().get_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, current_mode))) {
     LOG_WARN("can not get the compat_mode", );
+  } else if (FALSE_IT(need_reset_sess_mode = (current_mode != mysql_mode))) {
+  } else if (need_reset_sess_mode
+             && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
+    LOG_WARN("update compat_mode to mysql_mode failed");
+  } else if (conn->is_oracle_compat_mode()) {
+    need_reset_conn_mode = true;
+    conn->set_mysql_compat_mode();
   }
-  // seekdb is MySQL-only; need_reset_sess_mode is always false
   return ret;
 }
 
 int ObInnerConnectionLockUtil::reset_compat_mode_(observer::ObInnerSQLConnection *conn, const bool need_reset_sess_mode, const bool need_reset_conn_mode)
 {
-  // seekdb is MySQL-only; need_reset_sess_mode is always false, nothing to do
-  UNUSED(conn);
-  UNUSED(need_reset_sess_mode);
-  UNUSED(need_reset_conn_mode);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  ObObj oracle_mode;
+  oracle_mode.set_int(1);
+
+  if (need_reset_sess_mode
+      && OB_FAIL(conn->get_session().update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, oracle_mode))) {
+    LOG_WARN("failed to update sys variable for compatibility mode", K(ret));
+  }
+  if (need_reset_conn_mode) {
+    conn->set_oracle_compat_mode();
+  }
+  return ret;
 }
 } // tablelock
 } // transaction

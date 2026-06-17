@@ -19,7 +19,6 @@
 #include "lib/hash/ob_hashutils.h"
 #endif
 #include "lib/lock/ob_thread_cond.h"
-#include "lib/stat/ob_diagnose_info.h"
 
 namespace oceanbase
 {
@@ -85,7 +84,6 @@ int ObThreadCond::wait_us(const uint64_t time_us)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The thread cond has not been inited, ", K(ret), KCSTRING(lbt()));
   } else {
-    ObWaitEventGuard guard(event_no_, time_us / 1000, reinterpret_cast<int64_t>(this), 0, 0, true);
     if (0 == time_us) {
       if (OB_UNLIKELY(0 != (tmp_ret = pthread_cond_wait(&cond_, &mutex_)))) {
         ret = OB_ERR_SYS;

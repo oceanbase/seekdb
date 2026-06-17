@@ -50,14 +50,9 @@
 #include "observer/virtual_table/ob_information_check_constraints_table.h"
 #include "observer/virtual_table/ob_information_referential_constraints_table.h"
 #include "observer/virtual_table/ob_information_partitions_table.h"
-#include "observer/virtual_table/ob_all_virtual_session_event.h"
-#include "observer/virtual_table/ob_all_virtual_session_wait.h"
-#include "observer/virtual_table/ob_all_virtual_session_wait_history.h"
-#include "observer/virtual_table/ob_all_virtual_session_stat.h"
 #include "observer/virtual_table/ob_all_disk_stat.h"
 #include "observer/virtual_table/ob_mem_leak_checker_info.h"
 #include "observer/virtual_table/ob_all_virtual_malloc_sample_info.h"
-#include "observer/virtual_table/ob_all_latch.h"
 #include "observer/virtual_table/ob_all_data_type_class_table.h"
 #include "observer/virtual_table/ob_all_data_type_table.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_memstore_info.h"
@@ -67,18 +62,13 @@
 #include "observer/virtual_table/ob_all_virtual_sys_parameter_stat.h"
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
 #include "observer/virtual_table/ob_all_virtual_minor_freeze_info.h"
-#include "observer/virtual_table/ob_gv_sql_audit.h"
 #include "observer/virtual_table/ob_gv_sql.h"
 #include "observer/virtual_table/ob_show_database_status.h"
 #include "observer/virtual_table/ob_show_tenant_status.h"
-#include "observer/virtual_table/ob_all_virtual_sys_stat.h"
-#include "observer/virtual_table/ob_all_virtual_sys_event.h"
 #include "observer/virtual_table/ob_all_virtual_tx_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tx_lock_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tx_ctx_mgr_stat.h"
-#include "observer/virtual_table/ob_tenant_virtual_statname.h"
-#include "observer/virtual_table/ob_tenant_virtual_event_name.h"
 #include "observer/virtual_table/ob_all_virtual_engine_table.h"
 #include "observer/virtual_table/ob_all_virtual_files_table.h"
 #include "observer/virtual_table/ob_all_virtual_ls_info.h"
@@ -94,7 +84,6 @@
 #include "observer/virtual_table/ob_virtual_proxy_sys_variable.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_sstable_macro_info.h"
 #include "observer/virtual_table/ob_virtual_sql_plan_monitor.h"
-#include "observer/virtual_table/ob_virtual_ash.h"
 #include "observer/virtual_table/ob_virtual_sql_monitor_statname.h"
 #include "observer/virtual_table/ob_tenant_virtual_concurrent_limit_sql.h"
 #include "observer/virtual_table/ob_all_virtual_proxy_partition_info.h"
@@ -190,7 +179,6 @@
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_resource_limit_detail.h"
-#include "observer/virtual_table/ob_all_virtual_res_mgr_sys_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tracepoint_info.h"
 #include "observer/virtual_table/ob_all_virtual_nic_info.h"
 #include "observer/virtual_table/ob_all_virtual_sys_variable_default_value.h"
@@ -240,6 +228,9 @@ namespace observer
           allocator.free(tmp_ptr);                                                      \
           SERVER_LOG(WARN, "fail to set key ranges", K(ret), K(params));                \
       } else {                                                                          \
+        if (lib::is_oracle_mode() && is_oracle_mapping_virtual_table(data_table_id)) {  \
+          vt_iter->set_convert_flag();                                                  \
+        }                                                                               \
         vt_iter->set_session(session);                                                  \
         vt_iter->set_effective_tenant_id(real_tenant_id);                               \
         vt_iter->set_schema_guard(&schema_guard);                                       \
@@ -450,8 +441,9 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    KP(GCTX.sql_engine_),
                    KP(GCTX.schema_service_),
                    KP(GCTX.sql_proxy_));
-      } else if (is_ora_sys_view_table(pure_tid)
-                 || is_ora_virtual_table(pure_tid)) {
+      } else if (!lib::is_oracle_mode()
+                 && (is_ora_sys_view_table(pure_tid)
+                     || is_ora_virtual_table(pure_tid))) {
         ret = OB_NOT_SUPPORTED;
         SERVER_LOG(WARN, "access oracle's virtual table/sys view in mysql mode",
                    K(ret), K(pure_tid));
@@ -1310,15 +1302,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_LATCH_TID: {
-            ObAllLatch *all_latch = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllLatch, all_latch))) {
-              all_latch->set_allocator(&allocator);
-              all_latch->set_addr(addr_);
-              vt_iter = all_latch;
-            }
-            break;
-          }
           case OB_TENANT_VIRTUAL_WARNING_TID: {
             ObTenantVirtualWarning *warning = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObTenantVirtualWarning,
@@ -1393,148 +1376,11 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_SESSION_EVENT_TID: {
-            ObAllVirtualSessionEvent *session_table = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_session_event table using tenant_id",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSessionEventI1, session_table))) {
-                LOG_WARN("new virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualSessionEvent, session_table));
-            }
-
-            if (OB_SUCC(ret)) {
-              session_table->set_addr(addr_);
-              session_table->set_session_mgr(GCTX.session_mgr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(session_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_SESSION_WAIT_TID: {
-            ObAllVirtualSessionWait *session_wait_table = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_session_wait table using tenant_id",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSessionWaitI1, session_wait_table))) {
-                LOG_WARN("new virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualSessionWait, session_wait_table));
-            }
-
-            if (OB_SUCC(ret)) {
-              session_wait_table->set_addr(addr_);
-              session_wait_table->set_session_mgr(GCTX.session_mgr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(session_wait_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_SESSION_WAIT_HISTORY_TID: {
-            ObAllVirtualSessionWaitHistory *session_wait_history_table = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_session_wait_history table using tenant_id",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSessionWaitHistoryI1,
-                                            session_wait_history_table))) {
-                LOG_WARN("new virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualSessionWaitHistory, session_wait_history_table));
-            }
-
-            if (OB_SUCC(ret)) {
-              session_wait_history_table->set_addr(addr_);
-              session_wait_history_table->set_session_mgr(GCTX.session_mgr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(session_wait_history_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_SESSTAT_TID: {
-            ObAllVirtualSessionStat *session_stat_table = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_session_stat table using tenant_id",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSessionStatI1, session_stat_table))) {
-                LOG_WARN("new virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualSessionStat, session_stat_table));
-            }
-
-            if (OB_SUCC(ret)) {
-              session_stat_table->set_addr(addr_);
-              session_stat_table->set_session_mgr(GCTX.session_mgr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(session_stat_table);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_DISK_STAT_TID: {
             ObInfoSchemaDiskStatTable *disk_stat_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaDiskStatTable, disk_stat_table))) {
               disk_stat_table->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(disk_stat_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_SYSSTAT_TID: {
-            ObAllVirtualSysStat *sys_stat_table = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_sys_stat table using tenant_id",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSysStatI1, sys_stat_table))) {
-                LOG_WARN("new virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualSysStat, sys_stat_table));
-            }
-
-            if (OB_SUCC(ret)) {
-              sys_stat_table->set_addr(addr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(sys_stat_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_SYSTEM_EVENT_TID: {
-            ObAllVirtualSysEvent *sys_event_table = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_sys_event table using tenant_id",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSysEventI1, sys_event_table))) {
-                LOG_WARN("new virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObAllVirtualSysEvent, sys_event_table));
-            }
-
-            if (OB_SUCC(ret)) {
-              sys_event_table->set_addr(addr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(sys_event_table);
             }
             break;
           }
@@ -1546,47 +1392,11 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_SQL_AUDIT_TID: {
-            ObGvSqlAudit *sql_audit_table = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObGvSqlAudit, sql_audit_table))) {
-              sql_audit_table->set_allocator(&allocator);
-              sql_audit_table->set_addr(addr_);
-
-              // optimizer choose to use index i1('tenant_id', 'request_id') to scan
-              bool is_index = false;
-              if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-                LOG_WARN("check is index failed", K(ret));
-              } else if (is_index) {
-                sql_audit_table->use_index_scan();
-              }
-
-              if (OB_SUCC(ret)) {
-                vt_iter = static_cast<ObVirtualTableIterator *>(sql_audit_table);
-              }
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_SERVER_OBJECT_POOL_TID: {
             ObAllVirtualServerObjectPool *server_object_pool = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualServerObjectPool, server_object_pool))) {
               server_object_pool->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(server_object_pool);
-            }
-            break;
-          }
-          case OB_TENANT_VIRTUAL_STATNAME_TID: {
-            ObTenantVirtualStatname *stat_name = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTenantVirtualStatname, stat_name))) {
-              stat_name->set_tenant_id(real_tenant_id);
-              vt_iter = static_cast<ObVirtualTableIterator *>(stat_name);
-            }
-            break;
-          }
-          case OB_TENANT_VIRTUAL_EVENT_NAME_TID: {
-            ObTenantVirtualEventName *event_name = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTenantVirtualEventName, event_name))) {
-              event_name->set_tenant_id(real_tenant_id);
-              vt_iter = static_cast<ObVirtualTableIterator *>(event_name);
             }
             break;
           }
@@ -1710,30 +1520,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               }
               if (OB_SUCC(ret)) {
                 vt_iter = static_cast<ObVirtualTableIterator *>(plan_monitor);
-              }
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_ASH_TID: {
-            ObVirtualASH *ash = NULL;
-            bool is_index = false;
-            if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
-              LOG_WARN("check is index failed", K(ret));
-            } else if (is_index) {
-              SERVER_LOG(DEBUG,
-                          "scan __all_virtual_ash table using index",
-                          K(pure_tid));
-              if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualASHI1, ash))) {
-                LOG_WARN("new ash index virtual table failed", K(ret));
-              }
-            } else {
-              OZ(NEW_VIRTUAL_TABLE(ObVirtualASH, ash));
-            }
-            if (OB_SUCC(ret)) {
-              ash->set_allocator(&allocator);
-              ash->set_addr(addr_);
-              if (OB_SUCC(ret)) {
-                vt_iter = static_cast<ObVirtualTableIterator *>(ash);
               }
             }
             break;
@@ -2566,16 +2352,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             } else {
               all_virtual_log_transport_dest_stat->set_allocator(&allocator);
               vt_iter = all_virtual_log_transport_dest_stat;
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_RES_MGR_SYSSTAT_TID:
-          {
-            ObAllVirtualResMgrSysStat *all_virtual_res_mgr_sysstat = nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualResMgrSysStat,
-                                          all_virtual_res_mgr_sysstat))) {
-              vt_iter = static_cast<ObAllVirtualResMgrSysStat *>(all_virtual_res_mgr_sysstat);
-              all_virtual_res_mgr_sysstat->set_addr(addr_);
             }
             break;
           }

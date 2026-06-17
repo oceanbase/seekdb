@@ -225,19 +225,12 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
   ObExecutingSqlStatRecord sqlstat_record;
   ObAuditRecordData &audit_record = session.get_raw_audit_record();
   audit_record.try_cnt_++;
-  const bool enable_perf_event = lib::is_diagnose_info_enabled();
-  const bool enable_sql_audit = GCONF.enable_sql_audit
-                                && session.get_local_ob_enable_sql_audit();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
   single_process_timestamp_ = ObTimeUtility::current_time();
   bool is_diagnostics_stmt = false;
 
-  ObWaitEventStat total_wait_desc;
   {
-    ObMaxWaitGuard max_wait_guard(enable_perf_event
-                                    ? &audit_record.exec_record_.max_wait_event_ : nullptr);
-    ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : nullptr);
-    if (enable_perf_event) {
+    {
       audit_record.exec_record_.record_start();
     }
     if (enable_sqlstat) {
@@ -269,10 +262,8 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
     }
   } // diagnose end
 
-  if (enable_perf_event) {
+  {
     audit_record.exec_record_.record_end();
-    audit_record.exec_record_.wait_time_end_ = total_wait_desc.time_waited_;
-    audit_record.exec_record_.wait_count_end_ = total_wait_desc.total_waits_;
     audit_record.update_event_stage_state();
     const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
     EVENT_INC(SQL_PS_PREPARE_COUNT);
@@ -298,32 +289,6 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
       LOG_WARN("send error packet failed", K(ret), K(err));
     }
   }
-  if (enable_sql_audit) {
-    audit_record.status_ = ret;
-    audit_record.client_addr_ = session.get_peer_addr();
-    audit_record.user_client_addr_ = session.get_user_client_addr();
-    audit_record.user_group_ = THIS_WORKER.get_group_id();
-    audit_record.plan_id_ = param_id_;
-    audit_record.return_rows_ = buffer_len_;
-    audit_record.is_perf_event_closed_ = !lib::is_diagnose_info_enabled();
-    audit_record.ps_stmt_id_ = stmt_id_;
-    if (OB_NOT_NULL(session.get_ps_cache())) {
-      ObPsStmtInfoGuard guard;
-      ObPsStmtInfo *ps_info = NULL;
-      ObPsStmtId inner_stmt_id = OB_INVALID_ID;
-      if (OB_SUCC(session.get_inner_ps_stmt_id(stmt_id_, inner_stmt_id))
-            && OB_SUCC(session.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))
-            && OB_NOT_NULL(ps_info = guard.get_stmt_info())) {
-        audit_record.ps_inner_stmt_id_ = inner_stmt_id;
-        audit_record.sql_ = const_cast<char *>(ps_info->get_ps_sql().ptr());
-        audit_record.sql_len_ = min(ps_info->get_ps_sql().length(), OB_MAX_SQL_LENGTH);
-      } else {
-        LOG_WARN("get sql fail in send piece data", K(stmt_id_));
-      }
-    }
-  }
-  ObSQLUtils::handle_audit_record(false, EXECUTE_PS_SEND_PIECE, session, ctx_.is_sensitive_);
-
   clear_wb_content(session);
   return ret;
 }
@@ -637,7 +602,9 @@ int ObPieceCache::get_buffer(int32_t stmt_id,
                              uint64_t &length, 
                              common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
                              char *is_null_map) {
-  int ret = get_mysql_buffer(stmt_id, param_id, length, str_buf.at(0));
+  int ret = lib::is_oracle_mode() 
+    ? get_oracle_buffer(stmt_id, param_id, count, length, str_buf, is_null_map)
+    : get_mysql_buffer(stmt_id, param_id, length, str_buf.at(0));
   return ret;
 }
 
@@ -774,7 +741,17 @@ int ObPieceCache::add_piece_buffer(ObPiece *piece,
     ObPieceBufferArray *buffer_array = piece->get_buffer_array();
     if (OB_FAIL(buffer_array->push_back(*piece_buffer))) {
       LOG_WARN("push buffer array fail.", K(ret));
-    }
+    } else if (lib::is_oracle_mode()) {
+      // 1. pos ++
+      if (ObInvalidPiece != piece_mode) {
+        // fetch do not need 
+        piece->add_position();
+      }
+      // 2. if is last piece, set position = 0, use for new row piece
+      if (ObLastPiece == piece_mode) {
+        piece->set_position(0);
+      }
+    } else { /* mysql do nothing */ }
   }
   LOG_DEBUG("add piece buffer.", K(ret), K(piece_mode));
   return ret;

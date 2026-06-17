@@ -18,7 +18,6 @@
 #include "threads.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/worker.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "lib/utility/ob_platform_utils.h"
 using namespace oceanbase;
@@ -255,7 +254,6 @@ int Threads::start()
 
 void Threads::run(int64_t idx)
 {
-  common::ObBackGroundSessionGuard backgroud_session_guard(GET_TENANT_ID(), THIS_WORKER.get_group_id());
   thread_idx_ = static_cast<uint64_t>(idx);
   Worker worker;
   Worker::set_worker_to_thread_local(&worker);

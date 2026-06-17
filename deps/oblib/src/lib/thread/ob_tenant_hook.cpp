@@ -19,8 +19,6 @@
 
 #define _GNU_SOURCE 1
 #include "lib/thread/ob_thread_name.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "lib/ash/ob_active_session_guard.h"
 #ifdef _WIN32
 #include <sys/timeb.h>
 #else
@@ -37,7 +35,6 @@ extern "C" {
 int ob_epoll_wait(int __epfd, struct epoll_event *__events,
                   int __maxevents, int __timeout)
 {
-  oceanbase::common::ObBKGDSessInActiveGuard inactive_guard;
   return epoll_wait(__epfd, __events, __maxevents, __timeout);
 }
 #elif defined(_WIN32)

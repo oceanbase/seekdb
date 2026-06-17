@@ -295,7 +295,6 @@ int ObMPConnect::process()
   } else if (OB_FAIL(conn->ret_)) {
     LOG_WARN("connection fail at obsm_handle process", K(conn->ret_));
   } else {
-    ObDiagnosticInfoSwitchGuard di_guard(conn->get_diagnostic_info());
     if (OB_FAIL(get_user_tenant(*conn))) {
       LOG_WARN("get user name and tenant name failed", K(ret));
     } else if ((SS_INIT == GCTX.status_ || SS_STARTING == GCTX.status_)
@@ -403,14 +402,14 @@ int ObMPConnect::process()
         case OB_PASSWORD_WRONG:
         case OB_ERR_INVALID_TENANT_NAME: {
           ret = OB_PASSWORD_WRONG;
-          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret),
+          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret, lib::is_oracle_mode()),
                    user_name_.length(), user_name_.ptr(),
                    host_name.length(), host_name.ptr(),
                    (hsr_.get_auth_response().empty() ? "NO" : "YES"));
           break;
         }
         case OB_CLUSTER_NO_MATCH: {
-          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret),
+          snprintf(buf, OB_MAX_ERROR_MSG_LEN, ob_errpkt_str_user_error(ret, lib::is_oracle_mode()),
                    GCONF.cluster.str());
           break;
         }
@@ -551,8 +550,10 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         login_info.client_ip_ = client_ip_;
         SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
         const ObUserInfo *user_info = NULL;
-        // Oracle mode login default schema removed (dead code)
-        if (!db_name_.empty()) {
+        // When in oracle mode, if the user login does not specify a schema_name, set it to the corresponding user_name by default
+        if (OB_SUCC(ret) && ORACLE_MODE == session.get_compatibility_mode()  && db_name_.empty()) {
+          login_info.db_ = user_name_;
+        } else if (!db_name_.empty()) {
           ObString db_name = db_name_;
           ObNameCaseMode mode = OB_NAME_CASE_INVALID;
           bool perserve_lettercase = true;
@@ -561,7 +562,8 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
             LOG_WARN("fail to get collation_connection", K(ret));
           } else if (OB_FAIL(session.get_name_case_mode(mode))) {
             LOG_WARN("fail to get name case mode", K(mode), K(ret));
-          } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
+          } else if (FALSE_IT(perserve_lettercase = ORACLE_MODE == session.get_compatibility_mode()
+                              ? true : (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
           } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                       cs_type, perserve_lettercase, db_name))) {
             LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
@@ -672,7 +674,8 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, ssl_st, user_info))) {
           int inner_ret = OB_SUCCESS;
           bool is_unlocked = false;
-          if (OB_ERR_USER_IS_LOCKED == ret) {
+          if (MYSQL_MODE == session.get_compatibility_mode()
+              && OB_ERR_USER_IS_LOCKED == ret) {
             if (OB_SUCCESS != (inner_ret = unlock_user_if_time_is_up_mysql(conn->tenant_id_,
                                                                            session_priv.user_id_,
                                                                            schema_guard,
@@ -728,7 +731,8 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         }
       }
 
-      if (OB_SUCC(ret) || OB_PASSWORD_WRONG == ret || OB_ERR_USER_IS_LOCKED == ret) {
+      if (MYSQL_MODE == session.get_compatibility_mode()
+          && (OB_SUCC(ret) || OB_PASSWORD_WRONG == ret || OB_ERR_USER_IS_LOCKED == ret)) {
         int login_ret = ret;
         bool is_unlocked_now = false;
         if (OB_FAIL(update_login_stat_mysql(conn->tenant_id_, is_valid_id(session_priv.user_id_),
@@ -751,6 +755,10 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
 
       if (OB_SUCC(ret)) {
         // Attention!! must set session capability firstly
+        if (ORACLE_MODE == session.get_compatibility_mode()) {
+          // 
+          hsr_.set_client_found_rows();
+        }
         session.set_capability(hsr_.get_capability_flags());
         session.set_user_priv_set(session_priv.user_priv_set_);
         session.set_db_priv_set(session_priv.db_priv_set_);
@@ -836,7 +844,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
 int ObMPConnect::switch_lock_status_for_current_login_user(const uint64_t tenant_id, bool do_lock)
 {
   int ret = OB_SUCCESS;
-  OZ(switch_lock_status_for_user(tenant_id, ObString::make_string("%"), MYSQL_MODE, do_lock),
+  OZ(switch_lock_status_for_user(tenant_id, ObString::make_string("%"), ORACLE_MODE, do_lock),
       tenant_id, do_lock);
   return ret;
 }
@@ -849,7 +857,7 @@ int ObMPConnect::switch_lock_status_for_user(const uint64_t tenant_id, const ObS
   ObSqlString lock_user_sql;
   common::ObMySQLProxy *sql_proxy = nullptr;
   int64_t affected_rows = 0;
-  const char *name_quote = "'";
+  const char *name_quote = ORACLE_MODE == compat_mode ? "\"" : "'";
 
   if (!is_valid_tenant_id(tenant_id)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1683,12 +1691,9 @@ int ObMPConnect::check_common_property(ObSMConnection &conn, ObMySQLCapabilityFl
     conn.client_addr_port_ = client_addr_port;
     conn.client_create_time_ = client_create_time;
     conn.sess_create_time_ = sess_create_time;
-    if (conn.get_diagnostic_info() != nullptr) {
-      conn.get_diagnostic_info()->get_ash_stat().proxy_sid_ = proxy_sessid;
-    }
     int64_t code = 0;
     LOG_INFO("construct session id", K(conn.client_sessid_), K(conn.sessid_),
-      K(conn.client_addr_port_), K(conn.client_create_time_) ,K(conn.proxy_sessid_), KPC(ObLocalDiagnosticInfo::get()));
+      K(conn.client_addr_port_), K(conn.client_create_time_) ,K(conn.proxy_sessid_));
     if (conn.proxy_cap_flags_.is_ob_protocol_v2_support()) {
       // when used 2.0 protocol, do not use mysql compress
       client_cap.cap_flags_.OB_CLIENT_COMPRESS = 0;
@@ -1826,8 +1831,14 @@ int ObMPConnect::verify_connection(const uint64_t tenant_id) const
       // sys tenant or root(SYS) user is considered as vip
       bool check_max_sess = tenant_id != OB_SYS_TENANT_ID;
       if (check_max_sess) {
-        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-        check_max_sess = user_name_.compare(OB_SYS_USER_NAME) != 0;
+        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+        if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
+          LOG_WARN("get_compat_mode failed", K(ret), K(tenant_id));
+        } else if (Worker::CompatMode::MYSQL == compat_mode) {
+          check_max_sess = user_name_.compare(OB_SYS_USER_NAME) != 0;
+        } else if (Worker::CompatMode::ORACLE == compat_mode) {
+          check_max_sess = user_name_.case_compare(OB_ORA_SYS_USER_NAME) != 0;
+        }
       }
       if (OB_SUCC(ret) && check_max_sess) {
         omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
@@ -1874,7 +1885,16 @@ int ObMPConnect::check_update_tenant_id(ObSMConnection &conn, uint64_t &tenant_i
     conn.tenant_id_ = tenant_id;
     conn.resource_group_id_ = tenant_id;
     if (OBCG_DIAG_TENANT == conn.group_id_) {
-      user_name_ = ObString::make_string(OB_SYS_USER_NAME);
+      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+      if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
+        LOG_WARN("get_compat_mode failed", K(ret), K(tenant_id));
+      } else if (Worker::CompatMode::MYSQL == compat_mode) {
+        user_name_ = ObString::make_string(OB_SYS_USER_NAME);
+      } else if (Worker::CompatMode::ORACLE == compat_mode) {
+        user_name_ = ObString::make_string(OB_ORA_SYS_USER_NAME);
+      } else {
+        LOG_WARN("invalid compat mode", K(ret), K(tenant_id), K(compat_mode));
+      }
     }
   }
   return ret;
@@ -1895,6 +1915,10 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
       ret = OB_SERVER_IS_INIT;
     }
     LOG_WARN("load privilege info fail", K(pre_ret), K(ret), K(GCTX.status_));
+  } else if (ORACLE_MODE == session.get_compatibility_mode()
+             && 0 == hsr_.get_capability_flags().cap_flags_.OB_CLIENT_SUPPORT_ORACLE_MODE) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Oracle tenant for current client driver is");
   } else {
     session.update_last_active_time();
     SQL_REQ_OP.get_sock_desc(req_, session.get_sock_desc());
@@ -2002,9 +2026,26 @@ int ObMPConnect::verify_ip_white_list(const uint64_t tenant_id) const
 int ObMPConnect::convert_oracle_object_name(const uint64_t tenant_id, ObString &object_name)
 {
   int ret = OB_SUCCESS;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (object_name.empty()) {
     //Here the obj_name passed in may be empty, so no error code is assigned
     LOG_DEBUG("object name is null when try to convert it");
+  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
+    LOG_WARN("fail to get tenant mode in convert_oracle_object_name", K(ret));
+  } else if (compat_mode == lib::Worker::CompatMode::ORACLE) {
+    if (object_name.length() > 1 &&
+        '\"' == object_name[0]   &&
+        '\"' == object_name[object_name.length() - 1]) {
+      //If object_name is enclosed in double quotes, then no conversion is made
+      //If it is only "", then the name is set to empty
+      if (2 != object_name.length()) {
+        object_name.assign_ptr(object_name.ptr() + 1, object_name.length() - 2);
+      } else {
+        object_name.reset();
+      }
+    } else {
+      ObCharset::caseup(CS_TYPE_UTF8MB4_BIN, object_name);
+    }
   }
   return ret;
 }

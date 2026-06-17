@@ -20,8 +20,9 @@
 #include "lib/atomic/ob_atomic.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
+#include "observer/mysql/ob_ra_queue.h"
 #include "sql/monitor/ob_monitor_info_elimination_task.h"
-#include "observer/mysql/ob_mysql_request_manager.h"
+#include "sql/monitor/ob_phy_plan_monitor_info.h"
 namespace oceanbase
 {
 namespace sql

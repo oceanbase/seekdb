@@ -114,8 +114,6 @@ enum ObLogBaseType
   // only use role change service, do not write clog
   LS_BLOCK_TX_SERVICE_LOG_BASE_TYPE = 37,
 
-  // for workload repository service
-  WORKLOAD_REPOSITORY_SERVICE_LOG_BASE_TYPE = 38,
 
   TTL_LOG_BASE_TYPE = 39,
   
@@ -243,8 +241,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"BLOCK_TX_SERVICE", str_len);
   } else if (log_type == DBMS_SCHEDULER_LOG_BASE_TYPE) {
     strncpy(str ,"DBMS_SCHEDULER", str_len);
-  } else if (log_type == WORKLOAD_REPOSITORY_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"WORKLOAD_REPOSITORY_SERVICE", str_len);
   } else if (log_type == TTL_LOG_BASE_TYPE) {
     strncpy(str ,"TTL_SERVICE", str_len);
   } else if (log_type == SNAPSHOT_SCHEDULER_LOG_BASE_TYPE) {

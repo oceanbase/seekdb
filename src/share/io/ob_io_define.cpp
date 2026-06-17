@@ -1739,7 +1739,6 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
                 ? result_->time_log_.begin_ts_ + result_->timeout_us_ - ObTimeUtility::current_time()
                 : 0)) /
         1000L;
-    ObWaitEventGuard wait_guard(result_->flag_.get_wait_event(), timeout_ms);
     const int64_t real_wait_timeout = (result_->is_object_device_req_
                                        ? timeout_ms
                                        : min(OB_IO_MANAGER.get_io_config().data_storage_io_timeout_ms_, timeout_ms));
@@ -1760,14 +1759,8 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
             "real_wait_timeout is unexpected < 0", K(ret), K(real_wait_timeout), K(timeout_ms), K(result_), K(lbt()));
       }
     }
-    ObLocalDiagnosticInfo::set_io_time(
-      get_io_interval(result_->time_log_.dequeue_ts_, result_->time_log_.enqueue_ts_),
-      get_io_interval(result_->time_log_.return_ts_, result_->time_log_.submit_ts_),
-      get_io_interval(static_cast<int64_t>(result_->time_log_.callback_finish_ts_), static_cast<int64_t>(result_->time_log_.callback_enqueue_ts_))
-    );
   } else {
     int64_t wait_ms = wait_timeout_ms;
-    ObWaitEventGuard wait_guard(result_->flag_.get_wait_event(), wait_ms);
     if (OB_FAIL(result_->wait(wait_ms))) {
       if (OB_TIMEOUT == ret) {
         const int64_t real_wait_timeout = min(OB_IO_MANAGER.get_io_config().data_storage_io_timeout_ms_, result_->timeout_us_ / 1000L);
@@ -1776,11 +1769,6 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
         }
       }
     }
-    ObLocalDiagnosticInfo::set_io_time(
-      get_io_interval(result_->time_log_.dequeue_ts_, result_->time_log_.enqueue_ts_),
-      get_io_interval(result_->time_log_.return_ts_, result_->time_log_.submit_ts_),
-      get_io_interval(static_cast<int64_t>(result_->time_log_.callback_finish_ts_), static_cast<int64_t>(result_->time_log_.callback_enqueue_ts_))
-    );
   }
 
   if (OB_SUCC(ret)) {

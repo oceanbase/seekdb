@@ -309,43 +309,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
         }
         break;
       }
-      case CACHE_TYPE_SQL_AUDIT: {
-        if (0 == tenant_num) {
-          common::ObArray<uint64_t> tenant_ids;
-          if (OB_ISNULL(GCTX.omt_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null of GCTX.omt_", K(ret));
-          } else if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-            LOG_WARN("fail to get_mtl_tenant_ids", K(ret));
-          }
-          if (OB_SUCC(ret)) {
-            for (int64_t i = 0; i < tenant_ids.size(); i++) { // ignore internal error
-              const uint64_t tenant_id = tenant_ids.at(i);
-              MTL_SWITCH(tenant_id) {
-                ObMySQLRequestManager *req_mgr = MTL(ObMySQLRequestManager*);
-                req_mgr->clear_queue();
-              } else if (OB_TENANT_NOT_IN_SERVER == ret) {
-                ret = OB_SUCCESS;
-              } else {
-                LOG_WARN("fail to switch to tenant", K(ret), K(tenant_id));
-              }
-            }
-          }
-        } else {
-          for (int64_t i = 0; i < tenant_num; i++) { // ignore ret
-            const uint64_t tenant_id = stmt.flush_cache_arg_.tenant_ids_.at(i);
-            MTL_SWITCH(tenant_id) {
-              ObMySQLRequestManager *req_mgr = MTL(ObMySQLRequestManager*);
-              req_mgr->clear_queue();
-            } else if (OB_TENANT_NOT_IN_SERVER == ret) {
-              ret = OB_SUCCESS;
-            } else {
-              LOG_WARN("fail to switch to tenant", K(ret), K(tenant_id));
-            }
-          }
-        }
-        break;
-      }
       case CACHE_TYPE_PL_OBJ: {
         if (stmt.flush_cache_arg_.is_fine_grained_) {
           // purge in sql_id level, aka. fine-grained plan evict

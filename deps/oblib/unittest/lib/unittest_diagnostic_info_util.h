@@ -30,7 +30,6 @@ namespace lib
 
 class ObUnitTestEnableDiagnoseGuard
 {
-  friend class common::ObBackGroundSessionGuard;
   friend class common::ObDiagnosticInfoSwitchGuard;
   friend bool is_diagnose_info_enabled();
   friend bool is_trace_log_enabled();

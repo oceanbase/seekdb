@@ -30,7 +30,6 @@
 #include "sql/engine/expr/ob_expr_obj_access.h"
 #include "pl/ob_pl_exception_handling.h"
 #include "sql/dblink/ob_tm_service.h"
-#include "pl/diagnosis/ob_pl_sql_audit_guard.h"
 
 namespace oceanbase
 {
@@ -359,7 +358,12 @@ int ObSPIResultSet::check_nested_stmt_legal(ObExecContext &exec_ctx, const ObStr
        * select func() from dual;
        * this function is allowed in mysql, but not allowed in oracle
        */
-      // select func() from dual is allowed in mysql mode
+      if (!(lib::is_mysql_mode())) {
+        ret = OB_ERR_CANNOT_PERFORM_DML_INSIDE_QUERY;
+        LOG_WARN("OBE-14551: cannot perform a DML operation inside a query",
+                 K(ret), K(stmt_type), K(exec_ctx.get_sql_ctx()),
+                 K(&exec_ctx), K(exec_ctx.get_my_session()->get_cur_exec_ctx()));
+      }
     } else if (ObStmt::is_ddl_stmt(stmt_type, has_global_variable) || ObStmt::is_tcl_stmt(stmt_type)) {
       ret = OB_ER_COMMIT_NOT_ALLOWED_IN_SF_OR_TRG;
       LOG_WARN("OBE-14552: Cannot Perform a DDL Commit or Rollback Inside a Query or DML tips",
@@ -606,7 +610,7 @@ int ObSPIService::spi_pad_char_or_varchar(ObSQLSessionInfo *session_info,
         int32_t length = accuracy.get_length(); // byte or char length
         int32_t cell_strlen = 0; // byte or char length
         int32_t pad_whitespace_length = 0; // pad whitespace length
-        if (OB_FAIL(result->get_char_length(accuracy, cell_strlen))) {
+        if (OB_FAIL(result->get_char_length(accuracy, cell_strlen, false))) {
           LOG_WARN("Fail to get char length, ", K(ret));
         } else {
           if (cell_strlen < length) {
@@ -922,7 +926,7 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
       bool explicit_trans = ctx->exec_ctx_->get_my_session()->has_explicit_start_trans();
       ObPLContext *pl_ctx = ctx->exec_ctx_->get_pl_stack_ctx();
       CK (OB_NOT_NULL(pl_ctx));
-      if (OB_SUCC(ret) && !pl_ctx->is_function_or_trigger()) {
+      if (OB_SUCC(ret) && lib::is_mysql_mode() && !pl_ctx->is_function_or_trigger()) {
         if (ctx->exec_ctx_->get_my_session()->is_in_transaction()) {
           OZ (ObSqlTransControl::create_savepoint(*ctx->exec_ctx_, PL_INNER_EXPR_SAVEPOINT));
           OX (has_implicit_savepoint = true);
@@ -938,7 +942,7 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
         /* If this layer is udf, the expression being calculated in this session contains udf;
           If the inner udf fails, it will be rolled back by the internal mechanism of the udf; if the inner udf succeeds, but issues such as strong conversion failure occur, no rollback will be performed here,
           The rollback will be ensured by the destroy interface of this layer's udf, compatible with mysql */
-        if (!pl_ctx->is_function_or_trigger()) {
+        if (lib::is_mysql_mode() && !pl_ctx->is_function_or_trigger()) {
           if (OB_SUCCESS != ret && ctx->exec_ctx_->get_my_session()->is_in_transaction()) {
             int tmp_ret = OB_SUCCESS;
             if (has_implicit_savepoint) {
@@ -977,7 +981,7 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
   if (OB_SUCC(ret)
       && result->is_character_type()) {
     ObObjType type = result->get_type();
-    if (T_QUESTIONMARK == get_expression_type(*expr) &&
+    if (lib::is_mysql_mode() && T_QUESTIONMARK == get_expression_type(*expr) &&
         ObCharType == type) {
       if (is_pad_char_to_full_length(ctx->exec_ctx_->get_my_session()->get_sql_mode())) {
         OZ (spi_pad_char_or_varchar(
@@ -1058,7 +1062,7 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
   }
   if (OB_SUCC(ret)) {
     result->set_is_pl_mock_default_param(expr->get_is_pl_mock_default_expr());
-  } else {
+  } else if (lib::is_mysql_mode()) {
     ctx->exec_ctx_->get_my_session()->set_show_warnings_buf(ret);
   }
   SET_SPI_STATUS;
@@ -1663,7 +1667,6 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
       if (OB_SUCC(ret)) {
 
-        ObPLSqlAuditRecord audit_record(sql::PLSql);
         ObQueryRetryCtrl retry_ctrl;
         ObSPIExecEnvGuard env_guard(*session, spi_result);
         int save_sqlcode = session->get_pl_sqlcode_info()->get_sqlcode();
@@ -1677,13 +1680,11 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
           {
             ObPLSPITraceIdGuard trace_id_guard(sql, ps_sql, *session, ret);
             ObPLSubPLSqlTimeGuard guard(ctx);
-            ObPLSqlAuditGuard audit_guard(
-              *(ctx->exec_ctx_), *(session), spi_result, audit_record, ret, (sql != NULL ? sql : ps_sql), retry_ctrl, trace_id_guard, static_cast<stmt::StmtType>(type));
             ObSPIRetryCtrlGuard retry_guard(retry_ctrl, spi_result, *session, ret);
 
             OX (session->get_pl_sqlcode_info()->set_sqlcode(OB_SUCCESS));
 
-            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type)) {
+            if (OB_SUCC(ret) && !ObStmt::is_diagnostic_stmt(stmt_type) && lib::is_mysql_mode()) {
               ob_reset_tsi_warning_buffer();
             }
 
@@ -1754,7 +1755,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
       if (OB_SUCC(ret)
           && (ObStmt::is_ddl_stmt(stmt_type, true)
               || ObStmt::is_tcl_stmt(stmt_type)
-              || session->get_local_autocommit())) {
+              || (lib::is_mysql_mode() && session->get_local_autocommit()))) {
         OX (session->set_pl_can_retry(false));
       }
 
@@ -2331,7 +2332,7 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
       OX (ret = OB_E(EventTable::EN_SPI_SQL_EXEC) OB_SUCCESS);
 #endif
       OZ (GCTX.sql_engine_->handle_pl_prepare(sql_str.string(), pl_prepare_ctx, pl_prepare_result,
-                                              nullptr));
+                                              lib::is_mysql_mode() ? nullptr : params));
 
       OX (stmt_type = static_cast<stmt::StmtType>(pl_prepare_result.result_set_->get_stmt_type()));
       OZ (ob_write_string(allocator, pl_prepare_result.result_set_->get_stmt_ps_sql(), ps_sql, true));
@@ -2352,10 +2353,12 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
       
       if (OB_SUCC(ret)) {
         int64_t exec_param_cnt = 0;
-        {
+        if (lib::is_mysql_mode() || !is_prepare_with_param) {
           exec_param_cnt = ObStmt::is_dml_stmt(stmt_type)
                             ? pl_prepare_result.result_set_->get_external_params().count()
                             : pl_prepare_result.result_set_->get_param_fields()->count();
+        } else {
+          exec_param_cnt = pl_prepare_result.question_mark_cnt_;
         }
         if (pl_prepare_result.result_set_->is_returning() && 0 == into_cnt) {
             ret = OB_ERR_MISSING_INTO_KEYWORD;
@@ -2372,8 +2375,20 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
             need_exec_param_cnt = need_exec_param_cnt + (is_returning ? 0 : into_cnt);
           }
           if (param_cnt != need_exec_param_cnt) {
-            ret = OB_ERR_WRONG_DYNAMIC_PARAM;
-            LOG_USER_ERROR(OB_ERR_WRONG_DYNAMIC_PARAM, exec_param_cnt, param_cnt);
+            if (lib::is_mysql_mode()) {
+              ret = OB_ERR_WRONG_DYNAMIC_PARAM;
+              LOG_USER_ERROR(OB_ERR_WRONG_DYNAMIC_PARAM, exec_param_cnt, param_cnt);
+            } else if (param_cnt < need_exec_param_cnt) {
+              ret = OB_ERR_NOT_ALL_VARIABLE_BIND;
+              LOG_WARN("OBE-01008: not all variables bound",
+                        K(ret), K(param_cnt),
+                        K(need_exec_param_cnt), K(into_cnt), K(is_returning), K(stmt_type));
+            } else {
+              ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
+              LOG_WARN("OBE-01006: bind variable does not exist",
+                        K(ret), K(param_cnt),
+                        K(need_exec_param_cnt), K(into_cnt), K(is_returning), K(stmt_type));
+            }
           }
         }
       }
@@ -3349,7 +3364,6 @@ int ObSPIService::streaming_cursor_open(ObPLExecCtx *ctx,
 
   if (OB_SUCC(ret)) {
 
-    ObPLSqlAuditRecord audit_record(sql::PLSql);
     ObQueryRetryCtrl retry_ctrl;
     ObSPIExecEnvGuard env_guard(session_info, *spi_result, cursor.is_ps_cursor());
 
@@ -3357,8 +3371,6 @@ int ObSPIService::streaming_cursor_open(ObPLExecCtx *ctx,
       {
         ObPLSubPLSqlTimeGuard guard(ctx);
         ObPLSPITraceIdGuard trace_id_guard(sql, ps_sql, session_info, ret);
-        ObPLSqlAuditGuard audit_guard(
-          *(ctx->exec_ctx_), session_info, *spi_result, audit_record, ret, (sql != NULL ? sql : ps_sql), retry_ctrl, trace_id_guard, static_cast<stmt::StmtType>(type));
         ObSPIRetryCtrlGuard retry_guard(retry_ctrl, *spi_result, session_info, ret);
 
         if (OB_FAIL(ret)) {
@@ -3480,7 +3492,6 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
 
     if (OB_SUCC(ret)) {
 
-      ObPLSqlAuditRecord audit_record(sql::PLSql);
       ObQueryRetryCtrl retry_ctrl;
       ObSPIExecEnvGuard env_guard(session_info, spi_result, cursor.is_ps_cursor());
 
@@ -3490,8 +3501,6 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
         {
           ObPLSubPLSqlTimeGuard guard(ctx);
           ObPLSPITraceIdGuard trace_id_guard(sql, ps_sql, session_info, ret);
-          ObPLSqlAuditGuard audit_guard(
-            *(ctx->exec_ctx_), session_info, spi_result, audit_record, ret, (sql != NULL ? sql : ps_sql), retry_ctrl, trace_id_guard, static_cast<stmt::StmtType>(type));
           ObSPIRetryCtrlGuard retry_guard(retry_ctrl, spi_result, session_info, ret);
 
           CK (OB_NOT_NULL(spi_result.get_memory_ctx()));
@@ -3675,7 +3684,7 @@ int ObSPIService::spi_cursor_open(ObPLExecCtx *ctx,
       OZ (spi_update_package_change_info(ctx, package_id, cursor_index));
     }
   }
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && lib::is_mysql_mode()) {
     ctx->exec_ctx_->get_my_session()->set_show_warnings_buf(ret);
   }
   SET_SPI_STATUS;
@@ -3849,12 +3858,9 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
       } else {                                                                        \
         sql = spi_result->get_sql_ctx().cur_sql_;                                     \
       }                                                                               \
-      ObPLSqlAuditRecord audit_record(sql::CursorFetch);                              \
       ObQueryRetryCtrl retry_ctrl;                                                    \
       ObPLSPITraceIdGuard trace_id_guard(sql, ps_sql, *session, ret, cursor->get_sql_trace_id()); \
       ObPLSubPLSqlTimeGuard guard(ctx);                                               \
-      ObPLSqlAuditGuard audit_guard(                                                  \
-        *(ctx->exec_ctx_), *session, *spi_result, audit_record, ret, ps_sql, retry_ctrl, trace_id_guard, spi_result->get_sql_ctx().stmt_type_); \
       if (cursor->get_sql_trace_id()->is_invalid()                                    \
             && OB_NOT_NULL(ObCurTraceId::get_trace_id())) {                           \
         cursor->get_sql_trace_id()->set(*ObCurTraceId::get_trace_id());               \
@@ -3979,11 +3985,12 @@ int ObSPIService::spi_cursor_fetch(ObPLExecCtx *ctx,
                       return_type_count,
                       is_type_record));
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && lib::is_mysql_mode()) {
     ctx->exec_ctx_->get_my_session()->set_show_warnings_buf(ret);
   }
 
-  {
+  if (lib::is_mysql_mode() || OB_READ_NOTHING != ret) {
+    // Oracle mode cursor throws NOT FOUND error, but does not report it externally; instead, it logs the error information on the CURSOR, and PL's CG will swallow this error
     SET_SPI_STATUS;
   }
   return ret;
@@ -4119,7 +4126,7 @@ int ObSPIService::spi_set_pl_exception_code(
       LOG_ORACLE_USER_ERROR(OB_SP_RAISE_APPLICATION_ERROR, code, 0, "");
     }
   }
-  if (is_pop_warning_buf && sqlcode_info->get_stack_warning_buf().count() > 0) {
+  if (is_pop_warning_buf && lib::is_mysql_mode() && sqlcode_info->get_stack_warning_buf().count() > 0) {
     int64_t idx = sqlcode_info->get_stack_warning_buf().count() - 1;
     OX (sqlcode_info->get_stack_warning_buf().at(idx).~ObWarningBuffer());
     OX (sqlcode_info->get_stack_warning_buf().pop_back());
@@ -4140,11 +4147,13 @@ int ObSPIService::spi_get_pl_exception_code(pl::ObPLExecCtx *ctx, int64_t *code)
   CK (OB_NOT_NULL(ctx->exec_ctx_->get_my_session()));
   CK (OB_NOT_NULL(sqlcode_info = ctx->exec_ctx_->get_my_session()->get_pl_sqlcode_info()));
   CK (OB_NOT_NULL(code));
-  if (OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer())) {
+  if (lib::is_mysql_mode()
+      && OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer())) {
     OX (wb->reset_warning());
   }
   OX (*code = sqlcode_info->get_sqlcode());
-  if (OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer())) {
+  if (lib::is_mysql_mode()
+      && OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer())) {
     OZ (sqlcode_info->get_stack_warning_buf().push_back(*wb));
   }
   return ret;

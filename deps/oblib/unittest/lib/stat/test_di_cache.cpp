@@ -15,7 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/coro/testing.h"
 #include "lib/container/ob_se_array.h"

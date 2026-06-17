@@ -20,7 +20,7 @@
 #define private public
 #define protected public
 
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "../share/schema/db_initializer.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_define.h"

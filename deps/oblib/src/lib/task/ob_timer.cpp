@@ -18,8 +18,6 @@
 #include <cstdio>
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/thread/ob_thread_name.h"
-#include "lib/stat/ob_diagnose_info.h"
-#include "lib/ash/ob_active_session_guard.h"
 #include "lib/allocator/ob_malloc.h"
 
 namespace oceanbase
@@ -177,7 +175,6 @@ int ObTimer::cancel_task(const ObTimerTask &task)
 int ObTimer::wait_task(const ObTimerTask &task)
 {
   int ret = OB_SUCCESS;
-  ObBKGDSessInActiveGuard inactive_guard;
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;

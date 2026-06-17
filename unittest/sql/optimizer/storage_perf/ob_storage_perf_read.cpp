@@ -17,7 +17,7 @@
 #include "ob_storage_perf_read.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/access/ob_table_scan_iterator.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "lib/stat/ob_di_cache.h"
 #include "lib/container/ob_se_array_iterator.h"
 #define private public

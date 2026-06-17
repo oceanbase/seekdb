@@ -18,7 +18,7 @@
 
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_sql_client_decorator.h"
-#include "lib/ash/ob_active_session_guard.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 
 using namespace oceanbase::obcall;

@@ -21,8 +21,6 @@
 #include "observer/ob_server.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "sql/executor/ob_memory_tracker.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/thread/threads.h"
 
 using namespace oceanbase;
@@ -234,10 +232,6 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
   }
   // need_retry_ can be set in procor_.process() via THIS_WORKER.set_need_retry()
   if (OB_UNLIKELY(need_retry_)) {
-    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      di->begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, 0, 0, 0);
-    }
     int32_t retry_times = req.get_retry_times();
     req.set_retry_times(retry_times + 1);
     if (need_wait_lock) {
@@ -272,9 +266,6 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
     }
 
     if (OB_FAIL(ret)) {
-      if (OB_NOT_NULL(di)) {
-        di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-      }
       can_retry_ = false;
       need_retry_ = false;
       if (OB_FAIL(procor_.process(req))) {
@@ -302,7 +293,6 @@ void ObThWorker::worker(int64_t &tenant_id, int64_t &req_recv_timestamp, int32_t
   int64_t wait_start_time = 0;
   int64_t wait_end_time = 0;
   procor_.th_created();
-  ObDisableDiagnoseGuard disable_guard;
   is_doing_ddl_ = &Thread::is_doing_ddl_;
   static constexpr int64_t POLL_INTERVAL = 100 * 1000L;
   // Avoid adding and deleting entities from the root node for every request, the parameters are meaningless
@@ -369,22 +359,6 @@ void ObThWorker::worker(int64_t &tenant_id, int64_t &req_recv_timestamp, int32_t
                 if (expand) {
                   tenant_->try_expand_one(tenant_->min_worker_cnt());
                 }
-                ObEnableDiagnoseGuard enable_guard;
-                ObDiagnosticInfo *di =
-                    req->get_type() == ObRequest::OB_MYSQL
-                        ? reinterpret_cast<ObSMConnection *>(SQL_REQ_OP.get_sql_session(req))->get_diagnostic_info()
-                        : req->get_diagnostic_info();
-                ObDiagnosticInfoSwitchGuard guard(di);
-                if (di) {
-                  di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-                }
-#ifdef ENABLE_DEBUG_LOG
-                if (OB_ISNULL(di)) {
-                  if (REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-                    LOG_TRACE("empty diagnostic info, disable it", KPC(req));
-                  }
-                }
-#endif
                 EVENT_INC(REQUEST_DEQUEUE_COUNT);
                 req_recv_timestamp = req->get_receive_timestamp();
                 EVENT_ADD(REQUEST_QUEUE_TIME, wait_end_time - req->get_enqueue_timestamp());

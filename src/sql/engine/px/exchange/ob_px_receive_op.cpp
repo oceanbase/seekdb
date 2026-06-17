@@ -209,8 +209,7 @@ int ObPxReceiveOp::init_channel(
     LOG_WARN("Fail to link data channel", K(ret));
   } else {
     uint64_t min_cluster_version = ctx_.get_physical_plan_ctx()->get_phy_plan()->get_min_cluster_version();
-    bool enable_audit = GCONF.enable_sql_audit
-                      && ctx_.get_my_session()->get_local_ob_enable_sql_audit();
+    bool enable_audit = true;
     metric_.init(enable_audit);
     common::ObIArray<dtl::ObDtlChannel*> &channels = task_channels;
     loop.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
@@ -692,7 +691,7 @@ int ObPxFifoReceiveOp::fetch_rows(const int64_t row_cnt)
         LOG_DEBUG("Got one row from channel", K(ret));
         break; // got one row
       } else if (OB_ITER_END == ret) {
-        if (GCONF.enable_sql_audit) {
+        {
           op_monitor_info_.otherstat_2_id_ = ObSqlMonitorStatIds::EXCHANGE_EOF_TIMESTAMP;
           op_monitor_info_.otherstat_2_value_ = oceanbase::common::ObClockGenerator::getClock();
         }

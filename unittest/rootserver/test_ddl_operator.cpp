@@ -19,7 +19,7 @@
 #define  private public
 #define  protected public
 
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "../share/schema/db_initializer.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -75,6 +75,7 @@ TestDDLOperator::TestDDLOperator()
     srv_rpc_proxy_(),
     ddl_operator_(multi_schema_service_, db_initer_.get_sql_proxy())
 {
+  ObCompatModeGetter::instance().init(&db_initer_.get_sql_proxy());
 }
 
 void TestDDLOperator::TearDown()

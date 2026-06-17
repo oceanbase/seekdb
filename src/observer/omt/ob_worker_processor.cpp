@@ -86,7 +86,7 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
     }
     translator_.release(processor);
     if (ObQueryRetryAshGuard::get_info_ptr() != nullptr) {
-      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "retry info ptr is not null, maybe crash", K(ObLocalDiagnosticInfo::get()->get_ash_stat()));
+      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "retry info ptr is not null, maybe crash");
     }
   }
 
@@ -106,11 +106,6 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
                OB_ID(receive_ts), req.get_receive_timestamp(),
                OB_ID(enqueue_ts), req.get_enqueue_timestamp());
   ObRequest::Type req_type = req.get_type(); // bugfix note: must be obtained in advance
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (di != nullptr && !di->get_ash_stat().has_user_module_) {
-    //di->get_ash_stat().has_user_module_ == true means these module and action specified by user, we can't rewrite it
-    ObLocalDiagnosticInfo::set_service_module(THIS_THWORKER.get_module_name());
-  }
   if (ObRequest::OB_RPC == req_type) {
     // obcall RPC transport removed (single-replica): OB_RPC requests are never
     // delivered. Keep the branch as a dead no-op for type completeness.
@@ -122,9 +117,6 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
       const obmysql::ObMySQLRawPacket &pkt
           = static_cast<const obmysql::ObMySQLRawPacket &>(req.get_packet());
     ObCurTraceId::set(req.generate_trace_id(myaddr_));
-    if (OB_NOT_NULL(di) && !di->get_ash_stat().has_user_action_) {
-      ObLocalDiagnosticInfo::get()->get_ash_stat().mysql_cmd_ = static_cast<int64_t>(pkt.get_cmd());
-    }
   }
   // record trace id
   ObTraceIdAdaptor trace_id_adaptor;

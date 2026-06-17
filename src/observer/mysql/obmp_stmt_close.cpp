@@ -111,7 +111,7 @@ int ObMPStmtClose::process()
       }
     }
   }
-  if (lib::is_diagnose_info_enabled()) {
+  {
     int64_t exec_end = ObTimeUtility::current_time();
     const int64_t time_cost = exec_end - get_receive_timestamp();
     EVENT_INC(SQL_PS_CLOSE_COUNT);

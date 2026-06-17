@@ -21,7 +21,7 @@
 #include <cctype>
 
 #include "share/ob_define.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #define private public
 #define protected public
 #include "lib/file/file_directory_utils.h"

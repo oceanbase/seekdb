@@ -21,11 +21,7 @@
 #include "sql/parser/parse_malloc.h"
 #include "share/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
-#ifndef SQL_PARSER_COMPILATION
-#include "lib/ash/ob_active_session_guard.h"
-#endif
 #include "sql/parser/parser_utility.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include <openssl/md5.h>
 
 
@@ -37,18 +33,11 @@ namespace sql
 int ObSQLParser::parse(const char * str_ptr, const int64_t str_len, ParseResult &result)
 {
   int ret = OB_SUCCESS;
-#ifndef SQL_PARSER_COMPILATION
-  // proxy don't need this, only for observer
-  GET_DIAGNOSTIC_INFO->get_ash_stat().in_parse_ = true;
-#endif
   if (OB_FAIL(parse_init(&result))) {
     // do nothing
   } else if (OB_FAIL(parse_sql(&result, str_ptr, static_cast<size_t>(str_len)))) {
     // do nothing
   }
-#ifndef SQL_PARSER_COMPILATION
-  GET_DIAGNOSTIC_INFO->get_ash_stat().in_parse_ = false;
-#endif
   return ret;
 }
 

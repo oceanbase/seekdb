@@ -20,7 +20,7 @@
 #include "sql/ob_sql_init.h"
 #include "sql/engine/aggregate/ob_hash_groupby.h"
 #include "sql/engine/aggregate/ob_aggregate_test_utils.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include "storage/memtable/ob_row_compactor.h"
 #include "sql/engine/test_engine_util.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"

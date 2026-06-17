@@ -86,6 +86,7 @@ int ObPxTaskProcess::check_inner_stat()
 void ObPxTaskProcess::run()
 {
   int ret = OB_SUCCESS;
+  lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
 
   LOG_TRACE("begin process task",
             KP(this));
@@ -109,7 +110,6 @@ void ObPxTaskProcess::run()
 
 int ObPxTaskProcess::process()
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_px_execution);
   int ret = OB_SUCCESS;
   common::ob_setup_default_tsi_warning_buffer();
   common::ob_reset_tsi_warning_buffer();
@@ -118,8 +118,6 @@ int ObPxTaskProcess::process()
   ObExecRecord exec_record;
   ObExecutingSqlStatRecord sqlstat_record;
   ObExecTimestamp exec_timestamp;
-  ObWaitEventDesc max_wait_desc;
-  ObWaitEventStat total_wait_desc;
   ObSQLSessionInfo *session = (NULL == arg_.exec_ctx_
                                ? NULL
                                : arg_.exec_ctx_->get_my_session());
@@ -133,9 +131,6 @@ int ObPxTaskProcess::process()
     // Set diagnostic function environment
     ObPxRpcInitSqcArgs &arg = arg_.sqc_handler_->get_sqc_init_arg();
     SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
-    const bool enable_perf_event = lib::is_diagnose_info_enabled();
-    const bool enable_sql_audit = 
-        GCONF.enable_sql_audit && session->get_local_ob_enable_sql_audit();
     const bool enable_sqlstat = session->is_sqlstat_enabled();
     ObAuditRecordData &audit_record = session->get_raw_audit_record();
     ObWorkerSessionGuard worker_session_guard(session);
@@ -154,14 +149,7 @@ int ObPxTaskProcess::process()
     arg_.exec_ctx_->set_px_sqc_id(arg_.task_.get_sqc_id());
     arg_.exec_ctx_->set_branch_id(arg_.task_.get_branch_id());
     {
-      // The lifecycle of the guard for statistics waiting events must be less than the logic for collecting statistics to ensure the accuracy of the subsequent time obtained
-      ObMaxWaitGuard max_wait_guard(enable_perf_event ? &max_wait_desc : NULL);
-      ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : NULL);
-      ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-      if (OB_NOT_NULL(di)) {
-        session->set_ash_stat_value(di->get_ash_stat());
-      }
-      if (enable_perf_event) {
+      {
         exec_record.record_start();
       }
       if (enable_sqlstat && OB_NOT_NULL(arg_.exec_ctx_->get_sql_ctx())) {
@@ -184,11 +172,8 @@ int ObPxTaskProcess::process()
     audit_record.exec_timestamp_ = exec_timestamp;
     audit_record.exec_timestamp_.update_stage_time();
 
-    if (enable_perf_event) {
+    {
       exec_record.record_end();
-      exec_record.max_wait_event_ = max_wait_desc;
-      exec_record.wait_time_end_ = total_wait_desc.time_waited_;
-      exec_record.wait_count_end_ = total_wait_desc.total_waits_;
       audit_record.exec_record_ = exec_record;
       audit_record.update_event_stage_state();
     }
@@ -200,16 +185,14 @@ int ObPxTaskProcess::process()
                             sql, NULL, true/*is_px_remote_exec*/);
     }
 
-    if (enable_sql_audit) {
-      if (OB_ISNULL(arg_.sqc_task_ptr_)){
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("the sqc task ptr is null", K(ret));
-      } else {
-        arg_.sqc_task_ptr_->set_memstore_read_row_count(exec_record.get_memstore_read_row_count());
-        arg_.sqc_task_ptr_->set_ssstore_read_row_count(exec_record.get_ssstore_read_row_count());
-      }
+    if (OB_ISNULL(arg_.sqc_task_ptr_)){
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("the sqc task ptr is null", K(ret));
+    } else {
+      arg_.sqc_task_ptr_->set_memstore_read_row_count(exec_record.get_memstore_read_row_count());
+      arg_.sqc_task_ptr_->set_ssstore_read_row_count(exec_record.get_ssstore_read_row_count());
     }
-    
+
     if (enable_sqlstat && OB_NOT_NULL(arg_.exec_ctx_->get_sql_ctx())) {
       sqlstat_record.record_sqlstat_end_value();
       const ObPhysicalPlan *phy_plan = arg_.des_phy_plan_;
@@ -219,7 +202,7 @@ int ObPxTaskProcess::process()
                             sql, phy_plan, true/*is_px_remote_exec*/);
     }
 
-    if (enable_sql_audit) {
+    {
       const ObPhysicalPlan *phy_plan = arg_.des_phy_plan_;
       if ( OB_ISNULL(phy_plan)) {
         ret = OB_ERR_UNEXPECTED;
@@ -228,7 +211,7 @@ int ObPxTaskProcess::process()
         audit_record.try_cnt_++;
         audit_record.seq_ = 0;  //don't use now
         audit_record.status_ = (OB_SUCCESS == ret || common::OB_ITER_END == ret)
-            ? obmysql::REQUEST_SUCC : ret;
+            ? 0 : ret;
         session->get_cur_sql_id(audit_record.sql_id_, OB_MAX_SQL_ID_LENGTH + 1);
         audit_record.db_id_ = session->get_database_id();
         audit_record.user_group_ = THIS_WORKER.get_group_id();
@@ -249,12 +232,10 @@ int ObPxTaskProcess::process()
         audit_record.is_inner_sql_ = session->is_inner();
         audit_record.is_hit_plan_cache_ = true;
         audit_record.is_multi_stmt_ = false;
-        audit_record.is_perf_event_closed_ = !lib::is_diagnose_info_enabled();
         audit_record.total_memstore_read_row_count_ = exec_record.get_memstore_read_row_count();
         audit_record.total_ssstore_read_row_count_ = exec_record.get_ssstore_read_row_count();
       }
     }
-    ObSQLUtils::handle_audit_record(false, EXECUTE_DIST, *session);
   }
   release();
   return ret;
@@ -570,7 +551,7 @@ int ObPxTaskProcess::record_user_error_msg(int retcode)
               && retcode <= OB_MAX_RAISE_APPLICATION_ERROR) {
             // do nothing ...
           } else {
-            (void)snprintf(rcode.msg_, common::OB_MAX_ERROR_MSG_LEN, "%s", ob_errpkt_strerror(retcode));
+            (void)snprintf(rcode.msg_, common::OB_MAX_ERROR_MSG_LEN, "%s", ob_errpkt_strerror(retcode, false));
           }
         }
         curr_len = STRLEN(rcode.msg_);

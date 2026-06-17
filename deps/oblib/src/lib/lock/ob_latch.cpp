@@ -15,8 +15,6 @@
  */
 
 #include "lib/lock/ob_latch.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
 #include "share/rc/ob_tenant_base.h"
 #include "deps/oblib/src/lib/rc/context.h"
 
@@ -29,7 +27,7 @@ thread_local uint32_t* ObLatch::current_locks[16];
 thread_local uint32_t* ObLatch::current_wait = nullptr;
 thread_local uint8_t ObLatch::max_lock_slot_idx = 0;
 
-class ObLatchWaitEventGuard : public ObWaitEventGuard
+class ObLatchWaitEventGuard
 {
 public:
   explicit ObLatchWaitEventGuard(
@@ -39,8 +37,9 @@ public:
     uint32_t* p2_addr = 0,
     const int64_t p3 = 0,
     const bool is_atomic = false
-  ) : ObWaitEventGuard(event_no, timeout_ms, p1, OB_ISNULL(p2_addr) ? 0 : *p2_addr, p3, is_atomic)
+  )
   {
+    UNUSED(event_no); UNUSED(timeout_ms); UNUSED(p1); UNUSED(p3); UNUSED(is_atomic);
     ObLatch::current_wait = p2_addr;
   }
   ~ObLatchWaitEventGuard() { ObLatch::current_wait = nullptr; }
@@ -160,7 +159,6 @@ int ObLatchMutex::wait(const int64_t abs_timeout_us, const uint32_t uid)
 {
   // performance critical, do not double check the parameters
   int ret = OB_SUCCESS;
-  ObDiagnosticInfo *dsi = (!record_stat_ ? NULL : ObLocalDiagnosticInfo::get());
   int64_t timeout = 0;
   int lock = 0;
 
@@ -170,9 +168,6 @@ int ObLatchMutex::wait(const int64_t abs_timeout_us, const uint32_t uid)
       ret = OB_TIMEOUT;
       COMMON_LOG(DEBUG, "wait latch mutex timeout, ", K(abs_timeout_us), KCSTRING(lbt()), K(get_wid()), K(ret));
     } else {
-      if (NULL != dsi) {
-        ++dsi->get_curr_wait().p3_;
-      }
       lock = lock_.val();
       if (WAIT_MASK == (lock & WAIT_MASK)
           || 0 != (lock = ATOMIC_CAS(&lock_.val(), (lock | WRITE_MASK), (lock | WAIT_MASK)))) {
@@ -251,7 +246,6 @@ int ObLatchWaitQueue::wait(
     int64_t timeout = 0;
     bool conflict = false;
     struct timespec ts;
-    ObDiagnosticInfo *dsi = ObLocalDiagnosticInfo::get();
 
     //check if need wait
     if (OB_FAIL(try_lock(bucket, proc, latch_id, uid, lock_func))) {
@@ -267,9 +261,6 @@ int ObLatchWaitQueue::wait(
         ret = OB_TIMEOUT;
         COMMON_LOG(DEBUG, "Wait latch timeout, ", K(abs_timeout_us), KCSTRING(lbt()), K(latch.get_wid()), K(ret));
       } else {
-        if (NULL != dsi) {
-          ++dsi->get_curr_wait().p3_;
-        }
 
         {
           // only record physical wait event from caller function

@@ -19,8 +19,6 @@
 
 #include "lib/time/ob_tsc_timestamp.h"
 #include "lib/container/ob_fixed_array.h"
-#include "lib/ash/ob_active_session_guard.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/basic/ob_batch_result_holder.h"
 #include "sql/engine/ob_phy_operator_type.h"
 #include "sql/engine/expr/ob_expr.h"
@@ -674,12 +672,7 @@ protected:
   }
   inline void end_ash_line_id_reg(int ret)
   {
-    ObDiagnosticInfo *di = common::ObLocalDiagnosticInfo::get();
-    if (OB_NOT_NULL(di)) {
-      if (OB_FAIL(ret) && -1 == di->get_ash_stat().retry_plan_line_id_) {
-        di->get_ash_stat().retry_plan_line_id_ = static_cast<int32_t>(spec_.id_);
-      }
-    }
+    UNUSED(ret);
   }
   #ifdef ENABLE_DEBUG_LOG
   inline int init_dummy_mem_context(uint64_t tenant_id);

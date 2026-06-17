@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_cache.h"
-#include "palf_env_impl.h" 
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "palf_env_impl.h"
 
 namespace oceanbase
 {

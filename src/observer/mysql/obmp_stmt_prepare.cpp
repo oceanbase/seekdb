@@ -165,6 +165,8 @@ int ObMPStmtPrepare::process()
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
+    lib::CompatModeGuard g(sess->get_compatibility_mode() == ORACLE_MODE ?
+                             lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     SQL_INFO_GUARD(ctx_.cur_sql_, ObString(ctx_.sql_id_));
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
@@ -391,9 +393,6 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
   ObAuditRecordData &audit_record = session.get_raw_audit_record();
   ObExecutingSqlStatRecord sqlstat_record;
   audit_record.try_cnt_++;
-  const bool enable_perf_event = lib::is_diagnose_info_enabled();
-  const bool enable_sql_audit = GCONF.enable_sql_audit
-                                && session.get_local_ob_enable_sql_audit();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
   single_process_timestamp_ = ObTimeUtility::current_time();
   bool is_diagnostics_stmt = false;
@@ -407,11 +406,8 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
    */
   ObReqTimeGuard req_timeinfo_guard;
   SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator()) {
-    ObWaitEventStat total_wait_desc;
     {
-      ObMaxWaitGuard max_wait_guard(enable_perf_event ? &audit_record.exec_record_.max_wait_event_ : nullptr);
-      ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : nullptr);
-      if (enable_perf_event) {
+      {
         audit_record.exec_record_.record_start();
       }
       if (enable_sqlstat) {
@@ -488,10 +484,8 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       }
     } // diagnose end
 
-    if (enable_perf_event) {
+    {
       audit_record.exec_record_.record_end();
-      audit_record.exec_record_.wait_time_end_ = total_wait_desc.time_waited_;
-      audit_record.exec_record_.wait_count_end_ = total_wait_desc.total_waits_;
       audit_record.update_event_stage_state();
       if (!THIS_THWORKER.need_retry()) {
         const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
@@ -548,18 +542,8 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         }
       }
     }
-    if (enable_sql_audit) {
-      audit_record.status_ = ret;
-      audit_record.client_addr_ = session.get_peer_addr();
-      audit_record.user_client_addr_ = session.get_user_client_addr();
-      audit_record.user_group_ = THIS_WORKER.get_group_id();
-      audit_record.ps_stmt_id_ = result.get_statement_id();
-      audit_record.ps_inner_stmt_id_ = inner_stmt_id;
-      audit_record.is_perf_event_closed_ = !lib::is_diagnose_info_enabled();
-    }
     bool need_retry = (THIS_THWORKER.need_retry()
                        || RETRY_TYPE_NONE != retry_ctrl_.get_retry_type());
-    ObSQLUtils::handle_audit_record(need_retry, EXECUTE_PS_PREPARE, session, ctx_.is_sensitive_);
   }
 
   // reset thread waring buffer in sync mode

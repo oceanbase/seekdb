@@ -49,9 +49,7 @@ ob_set_subtarget(ob_server dbms_job
 ob_set_subtarget(ob_server mysql
   mysql/ob_async_cmd_driver.cpp
   mysql/ob_async_plan_driver.cpp
-  mysql/ob_eliminate_task.cpp
   mysql/ob_mysql_end_trans_cb.cpp
-  mysql/ob_mysql_request_manager.cpp
   mysql/ob_mysql_result_set.cpp
   mysql/ob_query_driver.cpp
   mysql/ob_query_response_time.cpp
@@ -88,8 +86,6 @@ ob_set_subtarget(ob_server mysql
   mysql/obsm_utils.cpp
   mysql/obmp_set_option.cpp
   mysql/ob_feedback_proxy_utils.cpp
-  mysql/ob_dl_queue.cpp
-  mysql/ob_construct_queue.cpp
   mysql/ob_feedback_proxy_utils.cpp
 )
 
@@ -232,7 +228,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_data_type_class_table.cpp
   virtual_table/ob_all_data_type_table.cpp
   virtual_table/ob_all_disk_stat.cpp
-  virtual_table/ob_all_latch.cpp
   virtual_table/ob_all_plan_cache_stat.cpp
   virtual_table/ob_all_virtual_bad_block_table.cpp
   virtual_table/ob_all_virtual_compaction_diagnose_info.cpp
@@ -296,19 +291,12 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_server_schema_info.cpp
   virtual_table/ob_all_virtual_schema_memory.cpp
   virtual_table/ob_all_virtual_schema_slot.cpp
-  virtual_table/ob_all_virtual_session_event.cpp
   virtual_table/ob_all_virtual_session_info.cpp
-  virtual_table/ob_all_virtual_session_stat.cpp
-  virtual_table/ob_all_virtual_session_wait.cpp
-  virtual_table/ob_all_virtual_session_wait_history.cpp
   virtual_table/ob_all_virtual_sql_workarea_active.cpp
   virtual_table/ob_all_virtual_sql_workarea_histogram.cpp
   virtual_table/ob_all_virtual_sql_workarea_history_stat.cpp
   virtual_table/ob_all_virtual_sql_workarea_memory_info.cpp
-  virtual_table/ob_all_virtual_sys_event.cpp
   virtual_table/ob_all_virtual_sys_parameter_stat.cpp
-  virtual_table/ob_all_virtual_sys_stat.cpp
-  virtual_table/ob_all_virtual_res_mgr_sys_stat.cpp
   virtual_table/ob_all_virtual_sys_task_status.cpp
   virtual_table/ob_all_virtual_table_mgr.cpp
   virtual_table/ob_all_virtual_unit.cpp
@@ -337,7 +325,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_ha_diagnose.cpp
   virtual_table/ob_global_variables.cpp
   virtual_table/ob_gv_sql.cpp
-  virtual_table/ob_gv_sql_audit.cpp
   virtual_table/ob_all_virtual_tenant_memstore_info.cpp
   virtual_table/ob_all_virtual_external_location_list_file.cpp
   virtual_table/ob_information_check_constraints_table.cpp
@@ -385,10 +372,8 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_virtual_collation.cpp
   virtual_table/ob_tenant_virtual_concurrent_limit_sql.cpp
   virtual_table/ob_tenant_virtual_current_tenant.cpp
-  virtual_table/ob_tenant_virtual_event_name.cpp
   virtual_table/ob_tenant_virtual_get_object_definition.cpp
   virtual_table/ob_tenant_virtual_outline.cpp
-  virtual_table/ob_tenant_virtual_statname.cpp
   virtual_table/ob_tenant_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
@@ -396,7 +381,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_virtual_sql_monitor.cpp
   virtual_table/ob_virtual_sql_monitor_statname.cpp
   virtual_table/ob_virtual_sql_plan_monitor.cpp
-  virtual_table/ob_virtual_ash.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp
   virtual_table/ob_all_virtual_dml_stats.cpp

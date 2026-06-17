@@ -18,7 +18,7 @@
 
 #include "share/ob_zone_merge_info.h"
 #include "share/ob_zone_merge_table_operator.h"
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #include <gtest/gtest.h>
 #include "schema/db_initializer.h"
 

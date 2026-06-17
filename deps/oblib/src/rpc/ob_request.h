@@ -27,20 +27,16 @@
 #include "lib/time/ob_time_utility.h"
 #include "lib/queue/ob_link.h"
 #include "lib/hash/ob_fixed_hash2.h"
+#include "lib/profile/ob_trace_id.h"
 #include "rpc/ob_packet.h"
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_reusable_mem.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
 namespace obmysql
 {
   int get_fd_from_sess(void *sess);
-}
-namespace common
-{
-class ObDiagnosticInfo;
 }
 
 namespace rpc
@@ -89,10 +85,10 @@ public:
         request_arrival_time_(0), traverse_index_(0), recv_mts_(), arrival_push_diff_(0),
         push_pop_diff_(0), pop_process_start_diff_(0),
         process_start_end_diff_(0), process_end_response_diff_(0),
-        trace_id_(), discard_flag_(false), large_retry_flag_(false), retry_times_(0), diagnostic_info_ptr_(nullptr)
+        trace_id_(), discard_flag_(false), large_retry_flag_(false), retry_times_(0)
   {
   }
-  virtual ~ObRequest() { reset_diagnostic_info(); }  // not guaranteed to call
+  virtual ~ObRequest() {}  // not guaranteed to call
 
   int get_nio_protocol() const { return nio_protocol_; }
   void set_server_handle_context(void* ctx) { handle_ctx_ = ctx; }
@@ -153,38 +149,6 @@ public:
 
   ObLockWaitNode &get_lock_wait_node() { return lock_wait_node_; }
   bool is_retry_on_lock() const { return lock_wait_node_.try_lock_times_ > 0;}
-  common::ObDiagnosticInfo *get_diagnostic_info()
-  {
-    return diagnostic_info_ptr_;
-  };
-  void set_diagnostic_info(common::ObDiagnosticInfo *ptr)
-  {
-    if (OB_NOT_NULL(ptr) && OB_ISNULL(diagnostic_info_ptr_)) {
-#ifdef ENABLE_DEBUG_LOG
-      const bool disable_defensive_check = false;
-#else
-      const bool disable_defensive_check = true;
-#endif
-      if (disable_defensive_check || ptr->set_mysql_ref()) {
-        common::ObLocalDiagnosticInfo::inc_ref(ptr);
-        diagnostic_info_ptr_ = ptr;
-      }
-    }
-  };
-  void reset_diagnostic_info()
-  {
-    if (OB_NOT_NULL(diagnostic_info_ptr_)) {
-#ifdef ENABLE_DEBUG_LOG
-      const bool disable_defensive_check = false;
-#else
-      const bool disable_defensive_check = true;
-#endif
-      if (disable_defensive_check || diagnostic_info_ptr_->reset_mysql_ref()) {
-        common::ObLocalDiagnosticInfo::dec_ref(diagnostic_info_ptr_);
-        diagnostic_info_ptr_ = nullptr;
-      }
-    }
-  };
   VIRTUAL_TO_STRING_KV("packet", pkt_, "type", type_, "group", group_id_, "sql_req_level", sql_req_level_, "connection_phase", connection_phase_, K(recv_timestamp_), K(enqueue_timestamp_), K(request_arrival_time_), K(trace_id_));
 
   ObLockWaitNode lock_wait_node_;
@@ -217,7 +181,6 @@ protected:
   bool large_retry_flag_;
   int32_t retry_times_;
 private:
-  common::ObDiagnosticInfo *diagnostic_info_ptr_;
   DISALLOW_COPY_AND_ASSIGN(ObRequest);
 }; // end of class ObRequest
 

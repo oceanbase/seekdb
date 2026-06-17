@@ -25,8 +25,6 @@
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "share/ash/ob_active_sess_hist_list.h"
-#include "lib/stat/ob_diagnostic_info_container.h"
 #include "rpc/frame/ob_net_consts.h"
 #include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
 
@@ -115,11 +113,7 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(ObSrvNetworkFrame::reload_rpc_auth_method())) {
       LOG_WARN("reload config for rpc auth method fail", K(tmp_ret));
     }
-    if (OB_TMP_FAIL(ObActiveSessHistList::get_instance().resize_ash_size())) {
-      LOG_WARN("failed to change ash size", K(tmp_ret));
-    }
-    ObDiagnosticInfoContainer::get_di_experimental_feature_flag().set_flags(
-        GCONF._enable_di_experimental_feature_flags);
+
   }
   {
     enable_malloc_v2(GCONF._enable_malloc_v2);
@@ -156,7 +150,7 @@ int ObServerReloadConfig::operator()()
 
       (void)reload_diagnose_info_config(GCONF.enable_perf_event);
       (void)reload_trace_log_config(GCONF.enable_record_trace_log);
-      (void)reload_ash_config(GCONF._ob_ash_enable);
+
 
       reload_tenant_freezer_config_();
       reload_tenant_scheduler_config_();

@@ -17,7 +17,7 @@
 
 #include "ob_log_restore_service.h"
 #include "logservice/ob_log_service.h"        // ObLogService
-#include "lib/ash/ob_active_session_guard.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -158,7 +158,6 @@ void ObLogRestoreService::run1()
       int64_t end_tstamp = ObTimeUtility::fast_current_time();
       int64_t wait_interval = thread_interval - (end_tstamp - begin_stamp);
       if (wait_interval > 0) {
-        common::ObBKGDSessInActiveGuard inactive_guard;
         cond_.timedwait(wait_interval);
       }
     }

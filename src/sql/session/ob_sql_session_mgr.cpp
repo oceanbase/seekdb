@@ -19,7 +19,6 @@
 #include "ob_sql_session_mgr.h"
 #include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
-#include "lib/ash/ob_active_session_guard.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 
 using namespace oceanbase::common;
@@ -417,7 +416,6 @@ int ObSQLSessionMgr::create_session(ObSMConnection *conn, ObSQLSessionInfo *&ses
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sess_info is null", K(ret));
   } else {
-    GET_DIAGNOSTIC_INFO->get_ash_stat().client_sid_ = conn->client_sessid_;
     sess_info->set_vid(conn->vid_);
     sess_info->set_vip(conn->vip_buf_);
     sess_info->set_vport(conn->vport_);
@@ -434,7 +432,6 @@ int ObSQLSessionMgr::create_session(const uint64_t tenant_id,
                                     const uint32_t client_sessid,
                                     const int64_t client_create_time)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_connection_mgr);
   int ret = OB_SUCCESS;
   int err = OB_SUCCESS;
   session_info = NULL;
@@ -538,7 +535,6 @@ int ObSQLSessionMgr::create_session(const uint64_t tenant_id,
 
 int ObSQLSessionMgr::free_session(const ObFreeSessionCtx &ctx)
 {
-  ACTIVE_SESSION_FLAG_SETTER_GUARD(in_connection_mgr);
   int ret = OB_SUCCESS;
   uint32_t sessid = ctx.sessid_;
   uint64_t proxy_sessid = ctx.proxy_sessid_;

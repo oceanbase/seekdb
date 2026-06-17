@@ -890,7 +890,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
     if (OB_FAIL(get_listenner().on_root_data_channel_setup())) {
       LOG_WARN("fail notify listener", K(ret));
     }
-    bool enable_audit = GCONF.enable_sql_audit && ctx.get_my_session()->get_local_ob_enable_sql_audit();
+    bool enable_audit = true;
     metric_.init(enable_audit);
     msg_loop_.set_tenant_id(ctx.get_my_session()->get_effective_tenant_id());
     msg_loop_.set_interm_result(enable_px_batch_rescan());
@@ -963,7 +963,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
     if (OB_FAIL(get_listenner().on_root_data_channel_setup())) {
       LOG_WARN("fail notify listener", K(ret));
     }
-    bool enable_audit = GCONF.enable_sql_audit && ctx.get_my_session()->get_local_ob_enable_sql_audit();
+    bool enable_audit = true;
     metric_.init(enable_audit);
     msg_loop_.set_tenant_id(ctx.get_my_session()->get_effective_tenant_id());
     msg_loop_.set_interm_result(enable_px_batch_rescan());

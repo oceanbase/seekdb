@@ -145,6 +145,7 @@ public:
            ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
            const bool use_static_engine = false,
+           const bool is_oracle_mode = false,
            const int32_t group_id = 0,
            const bool is_resource_conn = false);
   int destroy(void);
@@ -317,12 +318,12 @@ public:
 
   static int init_session_info(sql::ObSQLSessionInfo *session,
                                const bool is_extern_session,
+                               const bool is_oracle_mode,
                                const bool is_ddl);
 
   int64_t get_init_timestamp() const { return init_timestamp_; }
   int switch_tenant(const uint64_t tenant_id);
   bool is_local_execute(const int64_t cluster_id, const uint64_t tenant_id);
-  ObDiagnosticInfo *get_diagnostic_info() { return diagnostic_info_; }
 public:
   static const int64_t LOCK_RETRY_TIME = 1L * 1000 * 1000;
   static const int64_t TOO_MANY_REF_ALERT = 1024;
@@ -440,7 +441,6 @@ private:
   //support set user timeout of stream rpc but not depend on internal_sql_execute_timeout
   int64_t user_timeout_;
   sql::ObFreeSessionCtx free_session_ctx_;
-  ObDiagnosticInfo *diagnostic_info_;
   bool inner_sess_query_locked_;
   DISABLE_COPY_ASSIGN(ObInnerSQLConnection);
 };
@@ -458,7 +458,7 @@ private:
   bool need_record_;
   bool has_finish_switch_di_;
   int64_t prev_block_sessid_;
-  ObQueryRetryAshInfo *prev_info_;
+  sql::ObQueryRetryAshInfo *prev_info_;
 };
 
 class ObInnerSQLSessionGuard

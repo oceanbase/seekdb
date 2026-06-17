@@ -22,6 +22,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/stat/ob_diagnose_info.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/memtable/ob_memtable_key.h"
 #include "storage/memtable/ob_memtable_single_row_reader.h"

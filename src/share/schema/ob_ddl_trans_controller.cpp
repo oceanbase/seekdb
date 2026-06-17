@@ -115,7 +115,6 @@ void ObDDLTransController::run1()
         }
       }
     } else {
-      common::ObBKGDSessInActiveGuard inactive_guard;
       wait_cond_.wait();
     }
   }

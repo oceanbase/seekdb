@@ -23,7 +23,6 @@
 #include "lib/lock/ob_latch.h"
 #include "rpc/obmysql/ob_packet_record.h"
 #include "rpc/obmysql/ob_2_0_protocol_struct.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
@@ -34,10 +33,6 @@ class ObSQLSessionInfo;
 namespace omt
 {
 class ObTenant;
-}
-namespace common
-{
-class ObDiagnosticInfo;
 }
 namespace observer
 {
@@ -87,7 +82,6 @@ public:
     client_addr_port_ = 0;
     client_create_time_ = 0;
     has_service_name_ = false;
-    di_ = nullptr;
     logined_ = false;
   }
 
@@ -181,25 +175,6 @@ public:
   inline void set_connect_phase() { connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED; }
   inline bool is_logined() const { return logined_; }
   inline void set_logined(bool logined) { logined_ = logined; }
-  common::ObDiagnosticInfo *get_diagnostic_info()
-  {
-    return di_;
-  };
-  void set_diagnostic_info(common::ObDiagnosticInfo *ptr)
-  {
-    if (OB_NOT_NULL(ptr)) {
-      OB_ASSERT(di_ == nullptr);
-      common::ObLocalDiagnosticInfo::inc_ref(ptr);
-      di_ = ptr;
-    }
-  };
-  void reset_diagnostic_info()
-  {
-    if (OB_NOT_NULL(di_)) {
-      common::ObLocalDiagnosticInfo::dec_ref(di_);
-      di_ = nullptr;
-    }
-  };
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
   bool is_proxy_;
@@ -248,7 +223,6 @@ public:
   bool has_service_name_;
 private:
   bool logined_;
-  common::ObDiagnosticInfo *di_;
 };
 } // end of namespace observer
 } // end of namespace oceanbase

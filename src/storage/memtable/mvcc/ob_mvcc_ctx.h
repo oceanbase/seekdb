@@ -19,7 +19,6 @@
 
 #include "share/ob_define.h"
 #include "lib/container/ob_iarray.h"
-#include "lib/stat/ob_diagnose_info.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/utility.h"

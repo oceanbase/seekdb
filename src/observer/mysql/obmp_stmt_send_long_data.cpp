@@ -100,7 +100,10 @@ int ObMPStmtSendLongData::process()
   int64_t query_timeout = 0;
   ObSMConnection *conn = get_conn();
 
-  if (OB_ISNULL(req_) || OB_ISNULL(conn)) {
+  if (lib::is_oracle_mode()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("send long data not support oracle mode. use send_piece_data instead.",  K(ret));
+  } else if (OB_ISNULL(req_) || OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("req or conn is null", K_(req), K(conn), K(ret));
   } else if (OB_UNLIKELY(!conn->is_in_authed_phase())) {
@@ -231,19 +234,12 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
   ObExecutingSqlStatRecord sqlstat_record;
   ObAuditRecordData &audit_record = session.get_raw_audit_record();
   audit_record.try_cnt_++;
-  const bool enable_perf_event = lib::is_diagnose_info_enabled();
-  const bool enable_sql_audit = GCONF.enable_sql_audit
-                                && session.get_local_ob_enable_sql_audit();
   const bool enable_sqlstat = session.is_sqlstat_enabled();
   single_process_timestamp_ = ObTimeUtility::current_time();
   bool is_diagnostics_stmt = false;
 
-  ObWaitEventStat total_wait_desc;
   {
-    ObMaxWaitGuard max_wait_guard(enable_perf_event
-                                    ? &audit_record.exec_record_.max_wait_event_ : nullptr);
-    ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : nullptr);
-    if (enable_perf_event) {
+    {
       audit_record.exec_record_.record_start();
     }
     if (enable_sqlstat) {
@@ -275,10 +271,8 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     }
   } // diagnose end
 
-  if (enable_perf_event) {
+  {
     audit_record.exec_record_.record_end();
-    audit_record.exec_record_.wait_time_end_ = total_wait_desc.time_waited_;
-    audit_record.exec_record_.wait_count_end_ = total_wait_desc.total_waits_;
     audit_record.update_event_stage_state();
     const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
     EVENT_INC(SQL_PS_PREPARE_COUNT);
@@ -295,30 +289,6 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
   } else {
     session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
   }
-
-  if (enable_sql_audit) {
-    audit_record.status_ = ret;
-    audit_record.client_addr_ = session.get_peer_addr();
-    audit_record.user_client_addr_ = session.get_user_client_addr();
-    audit_record.user_group_ = THIS_WORKER.get_group_id();
-    audit_record.is_perf_event_closed_ = !lib::is_diagnose_info_enabled();
-    audit_record.ps_stmt_id_ = stmt_id_;
-    if (OB_NOT_NULL(session.get_ps_cache())) {
-      ObPsStmtInfoGuard guard;
-      ObPsStmtInfo *ps_info = NULL;
-      ObPsStmtId inner_stmt_id = OB_INVALID_ID;
-      if (OB_SUCC(session.get_inner_ps_stmt_id(stmt_id_, inner_stmt_id))
-            && OB_SUCC(session.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))
-            && OB_NOT_NULL(ps_info = guard.get_stmt_info())) {
-        audit_record.ps_inner_stmt_id_ = inner_stmt_id;
-        audit_record.sql_ = const_cast<char *>(ps_info->get_ps_sql().ptr());
-        audit_record.sql_len_ = min(ps_info->get_ps_sql().length(), OB_MAX_SQL_LENGTH);
-      } else {
-        LOG_WARN("get sql fail in send long data", K(stmt_id_));
-      }
-    }
-  }
-  ObSQLUtils::handle_audit_record(false, EXECUTE_PS_SEND_LONG_DATA, session, ctx_.is_sensitive_);
 
   clear_wb_content(session);
   return ret;

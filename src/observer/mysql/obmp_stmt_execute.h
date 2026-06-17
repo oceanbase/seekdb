@@ -184,7 +184,7 @@ public:
         is_support = true;
         break;
       case obmysql::MYSQL_TYPE_COMPLEX:
-        is_support = false;
+        is_support = lib::is_oracle_mode() ? true : false;
         break;
       default :
         is_support = false;
@@ -241,7 +241,6 @@ protected:
   int store_params_value_to_str(ObIAllocator &alloc, sql::ObSQLSessionInfo &session);
   int execute_response(sql::ObSQLSessionInfo &session,
                         ObMySQLResultSet &result,
-                        const bool enable_perf_event,
                         bool &need_response_error,
                         bool &is_diagnostics_stmt,
                         int64_t &execution_id,

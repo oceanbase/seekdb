@@ -33,6 +33,7 @@
 #include "lib/ob_running_mode.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
+#include "lib/profile/ob_trace_id.h"
 #include "lib/utility/serialization.h"
 #include "lib/net/ob_net_util.h"
 #include "grpc/ob_grpc_context.h"

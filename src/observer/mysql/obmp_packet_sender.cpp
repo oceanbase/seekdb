@@ -375,10 +375,11 @@ int ObMPPacketSender::send_error_packet(int err,
   sql::ObSQLSessionInfo *session = NULL;
   BACKTRACE(ERROR, (OB_SUCCESS == err), "BUG send error packet but err code is 0");
   if (OB_ERR_PROXY_REROUTE != err) {
-    int client_error = common::ob_mysql_errno(err);
+    int client_error = lib::is_oracle_mode() ? common::ob_oracle_errno(err) :
+                      common::ob_mysql_errno(err);
     // OB error codes that are not compatible with mysql will be displayed using
     // OB error codes
-    client_error = client_error == -1 ? err : client_error;
+    client_error = lib::is_mysql_mode() && client_error == -1 ? err : client_error;
     LOG_INFO("sending error packet", "ob_error", err, "client error", client_error,
             K(extra_err_info), K(lbt()));
   }
@@ -412,7 +413,7 @@ int ObMPPacketSender::send_error_packet(int err,
                  && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
         // do nothing ...
       } else {
-        snprintf(msg_buf, MAX_MSG_BUF_SIZE, "%s", ob_errpkt_strerror(err));
+        snprintf(msg_buf, MAX_MSG_BUF_SIZE, "%s", ob_errpkt_strerror(err, lib::is_oracle_mode()));
         message = ObString::make_string(msg_buf); // default error message
       }
     }
@@ -487,7 +488,7 @@ int ObMPPacketSender::send_error_packet(int err,
       message = ObString::make_string(msg_buf); // default error message
     }
     // TODO Negotiate a err for rerouting sql
-    if (OB_SP_RAISE_APPLICATION_ERROR == err) {
+    if (OB_SP_RAISE_APPLICATION_ERROR == err && lib::is_mysql_mode()) {
       epacket.set_errcode(static_cast<uint16_t>(wb->get_err_code()));
       if (strlen(wb->get_sql_state()) == 0) {
         if (OB_FAIL(epacket.set_sqlstate(ob_sqlstate(err)))) {
@@ -497,7 +498,7 @@ int ObMPPacketSender::send_error_packet(int err,
         LOG_WARN("set sql_state failed", K(ret));
       }
     } else {
-      epacket.set_errcode(static_cast<uint16_t>(ob_errpkt_errno(err)));
+      epacket.set_errcode(static_cast<uint16_t>(ob_errpkt_errno(err, lib::is_oracle_mode())));
       if (OB_FAIL(epacket.set_sqlstate(ob_sqlstate(err)))) {
         LOG_WARN("set sql_state failed", K(ret));
       }
@@ -514,6 +515,11 @@ int ObMPPacketSender::send_error_packet(int err,
           LOG_WARN("sql session info is null", K(ret));
         } else {
           ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+          if (lib::is_oracle_mode() && 0 < session->get_pl_exact_err_msg().length()) {
+            if (OB_FAIL(fin_msg.append(session->get_pl_exact_err_msg().string()))) {
+              LOG_WARN("append pl exact err msg fail", K(ret), K(session->get_pl_exact_err_msg().string()));
+            }
+          }
         }
       } else { /* do nothing */ }
 
@@ -784,7 +790,7 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
       flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = ok_param.send_last_row_ ? 1 : 0;
       flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = ok_param.has_pl_out_ ? 1 : 0;
       if (ok_param.is_on_connect_) {
-        flags.status_flags_.OB_SERVER_STATUS_RESERVED_OR_ORACLE_MODE = 0;
+        flags.status_flags_.OB_SERVER_STATUS_RESERVED_OR_ORACLE_MODE = (ORACLE_MODE == session.get_compatibility_mode() ? 1 : 0);
       }
       // todo: set OB_SERVER_STATUS_IN_TRANS_READONLY flag if need?
       okp.set_server_status(flags);
@@ -1212,7 +1218,6 @@ int ObMPPacketSender::update_transmission_checksum_flag(const ObSQLSessionInfo &
 void ObMPPacketSender::finish_sql_request()
 {
   if (conn_valid_ && !req_has_wokenup_) {
-    req_->reset_diagnostic_info();
     (void)release_read_handle();
     SQL_REQ_OP.finish_sql_request(req_);
     req_has_wokenup_ = true;

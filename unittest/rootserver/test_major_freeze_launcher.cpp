@@ -18,7 +18,7 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "lib/stat/ob_session_stat.h"
+#include "lib/stat/ob_diagnose_info.h"
 #define private public
 #include "rootserver/ob_major_freeze_launcher.h"
 #undef private

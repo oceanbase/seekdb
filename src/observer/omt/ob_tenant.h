@@ -74,7 +74,6 @@ public:
   void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
   void set_group_id(uint64_t group_id)
   {
-    GET_DIAGNOSTIC_INFO->get_ash_stat().group_id_ = THIS_WORKER.get_group_id();
     group_id_ = group_id;
   }
   int64_t get_pool_size() const { return get_thread_count(); }

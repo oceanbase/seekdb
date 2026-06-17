@@ -21,7 +21,6 @@
 #include "observer/omt/ob_multi_tenant.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"
-#include "share/ash/ob_di_util.h"
 #include "observer/ob_server_struct.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 
@@ -153,16 +152,10 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
 
     ObExecutingSqlStatRecord &executing_sql_stat_record = sess_info->get_executing_sql_stat_record();
     ObExecutedSqlStatRecord *value = nullptr;
-    SMART_VAR(common::ObDISessionCollect, session_collect) {
+    {
       if (!key.is_valid()) {
         // do nothing
-      } else if (OB_FAIL(share::ObDiagnosticInfoUtil::get_the_diag_info(sess_info->get_server_sid(), session_collect))) {
-        if (OB_ENTRY_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("Fail to get tenant latch stat", KR(ret));
-        }
-      } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value(&(session_collect.base_value_)))) {
+      } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value(nullptr))) {
         LOG_WARN("failed to record sqlstat end value in query virtual table", K(ret));
       } else if (OB_SUCC(tmp_sql_stat_map_.get_refactored(key, value))) {
         if (OB_FAIL(value->sum_stat_value(executing_sql_stat_record))) {

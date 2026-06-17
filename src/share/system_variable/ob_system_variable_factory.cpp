@@ -1106,7 +1106,6 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "ob_enable_ps_parameter_anonymous_block",
   "ob_enable_rich_error_msg",
   "ob_enable_show_trace",
-  "ob_enable_sql_audit",
   "ob_enable_transformation",
   "ob_enable_transmission_checksum",
   "ob_enable_truncate_flashback",
@@ -1135,7 +1134,6 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "ob_safe_weak_read_snapshot",
   "ob_security_version",
   "ob_sparse_drop_ratio_search",
-  "ob_sql_audit_percentage",
   "ob_sql_work_area_percentage",
   "ob_statement_trace_id",
   "ob_table_access_policy",
@@ -1947,7 +1945,6 @@ const ObSysVarClassType ObSysVarFactory::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR_OB_ENABLE_PS_PARAMETER_ANONYMOUS_BLOCK,
   SYS_VAR_OB_ENABLE_RICH_ERROR_MSG,
   SYS_VAR_OB_ENABLE_SHOW_TRACE,
-  SYS_VAR_OB_ENABLE_SQL_AUDIT,
   SYS_VAR_OB_ENABLE_TRANSFORMATION,
   SYS_VAR_OB_ENABLE_TRANSMISSION_CHECKSUM,
   SYS_VAR_OB_ENABLE_TRUNCATE_FLASHBACK,
@@ -1976,7 +1973,6 @@ const ObSysVarClassType ObSysVarFactory::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR_OB_SAFE_WEAK_READ_SNAPSHOT,
   SYS_VAR_OB_SECURITY_VERSION,
   SYS_VAR_OB_SPARSE_DROP_RATIO_SEARCH,
-  SYS_VAR_OB_SQL_AUDIT_PERCENTAGE,
   SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE,
   SYS_VAR_OB_STATEMENT_TRACE_ID,
   SYS_VAR_OB_TABLE_ACCESS_POLICY,
@@ -2390,8 +2386,6 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_ID[] = {
   "ob_enable_jit",
   "ob_temp_tablespace_size_percentage",
   "plugin_dir",
-  "ob_sql_audit_percentage",
-  "ob_enable_sql_audit",
   "optimizer_use_sql_plan_baselines",
   "optimizer_capture_sql_plan_baselines",
   "parallel_servers_target",
@@ -3437,8 +3431,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarObEnableJit)
         + sizeof(ObSysVarObTempTablespaceSizePercentage)
         + sizeof(ObSysVarPluginDir)
-        + sizeof(ObSysVarObSqlAuditPercentage)
-        + sizeof(ObSysVarObEnableSqlAudit)
         + sizeof(ObSysVarOptimizerUseSqlPlanBaselines)
         + sizeof(ObSysVarOptimizerCaptureSqlPlanBaselines)
         + sizeof(ObSysVarParallelServersTarget)
@@ -5433,24 +5425,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_PLUGIN_DIR))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarPluginDir));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObSqlAuditPercentage())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObSqlAuditPercentage", K(ret));
-      } else {
-        store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_OB_SQL_AUDIT_PERCENTAGE))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarObSqlAuditPercentage));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObEnableSqlAudit())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObEnableSqlAudit", K(ret));
-      } else {
-        store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_OB_ENABLE_SQL_AUDIT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarObEnableSqlAudit));
       }
     }
     if (OB_SUCC(ret)) {
@@ -13272,28 +13246,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, ObSysVarClassType 
       } else if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPluginDir())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarPluginDir", K(ret));
-      }
-      break;
-    }
-    case SYS_VAR_OB_SQL_AUDIT_PERCENTAGE: {
-      void *ptr = NULL;
-      if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSysVarObSqlAuditPercentage)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to alloc memory", K(ret), K(sizeof(ObSysVarObSqlAuditPercentage)));
-      } else if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObSqlAuditPercentage())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObSqlAuditPercentage", K(ret));
-      }
-      break;
-    }
-    case SYS_VAR_OB_ENABLE_SQL_AUDIT: {
-      void *ptr = NULL;
-      if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSysVarObEnableSqlAudit)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to alloc memory", K(ret), K(sizeof(ObSysVarObEnableSqlAudit)));
-      } else if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObEnableSqlAudit())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObEnableSqlAudit", K(ret));
       }
       break;
     }

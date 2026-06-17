@@ -16,7 +16,6 @@
 
 #include "lib/thread/ob_thread_name.h"
 #include "lib/thread/ob_simple_thread_pool.h"
-#include "lib/ash/ob_active_session_guard.h"
 #ifdef __APPLE__
 #include <unistd.h>
 #elif defined(_WIN32)

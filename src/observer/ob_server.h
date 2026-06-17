@@ -74,7 +74,6 @@
 #include "storage/ob_disk_usage_reporter.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
-#include "share/wr/ob_wr_service.h"
 
 #include "sql/engine/table/ob_external_table_access_service.h"
 #include "share/ob_device_credential_task.h"
@@ -335,7 +334,7 @@ private:
   obcall::ObStorageRpcProxy storage_rpc_proxy_;
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
-  common::ObCommonSqlProxy ddl_oracle_sql_proxy_;
+  common::ObOracleSqlProxy ddl_oracle_sql_proxy_;
   sql::ObExecutorRpcImpl executor_rpc_;
 
   // The OceanBase configuration relating to.
@@ -420,7 +419,6 @@ private:
   ObDiskUsageReportTask disk_usage_report_task_;
 
   logservice::ObServerLogBlockMgr log_block_mgr_;
-  share::ObWorkloadRepositoryService wr_service_;
 
   // This handler is used to process tasks during startup. it can speed up the startup process.
   // If you have tasks that need to be processed in parallel, you can use this handler,

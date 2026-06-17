@@ -32,7 +32,6 @@
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "share/stat/ob_opt_ds_stat_cache.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
-#include "lib/ash/ob_active_session_guard.h"
 
 namespace oceanbase
 {
@@ -349,6 +348,21 @@ struct ObInsertRewriteOptCtx
 
   bool can_do_opt_;
   int64_t row_count_;
+};
+
+// Stub: ASH diagnostic subsystem has been removed.
+struct ObQueryRetryAshInfo
+{
+  void reset() {}
+};
+
+// Stub: ObQueryRetryAshGuard was used for ASH retry diagnostics tracking.
+class ObQueryRetryAshGuard
+{
+public:
+  static ObQueryRetryAshInfo *get_info_ptr() { return nullptr; }
+  static void set_info(ObQueryRetryAshInfo *) {}
+  static void reset_info() {}
 };
 
 class ObQueryRetryInfo

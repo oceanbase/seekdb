@@ -17,7 +17,6 @@
 #ifndef OB_ALL_VIRTUAL_DIAG_INDEX_SCAN_H_
 #define OB_ALL_VIRTUAL_DIAG_INDEX_SCAN_H_
 
-#include "lib/stat/ob_session_stat.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
 #include "sql/session/ob_sql_session_mgr.h"

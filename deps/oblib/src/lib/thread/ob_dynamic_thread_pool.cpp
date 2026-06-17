@@ -16,7 +16,6 @@
 
 #include "ob_dynamic_thread_pool.h"
 #include "lib/thread/thread_mgr.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 extern "C" {
 int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg);
@@ -153,7 +152,6 @@ void ObDynamicThreadPool::run1()
 {
   int tmp_ret = OB_SUCCESS;
   const uint64_t idx = get_thread_idx();
-  ObDIActionGuard ag("DynamicThreadPool", thread_name_, "detect task");
   if (OB_NOT_NULL(thread_name_)) {
     lib::set_thread_name(thread_name_, idx);
   }
@@ -345,7 +343,6 @@ void *ObDynamicThreadPool::task_thread_func(void *data)
             COMMON_LOG_RET(WARN, tmp_ret, "failed to pop task", K(tmp_ret));
           }
         } else {
-          common::ObDIActionGuard ag(typeid(*task));
           if (OB_SUCCESS != (tmp_ret = task->process(thread_info->is_stop_))) {
             COMMON_LOG_RET(WARN, tmp_ret, "failed to process task", K(tmp_ret), K(*thread_info));
           }
@@ -407,7 +404,6 @@ ObSimpleThreadPoolDynamicMgr::~ObSimpleThreadPoolDynamicMgr()
 
 void ObSimpleThreadPoolDynamicMgr::run1()
 {
-  ObDIActionGuard ag("DynamicThreadPool", "DynamicMgrCheck", "detect task");
   lib::set_thread_name("qth_mgr");
   while (!has_set_stop()) {
     {
