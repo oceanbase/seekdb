@@ -303,6 +303,41 @@ ob_set_subtarget(ob_storage restore
   restore/ob_restore_compatibility_util.cpp
 )
 
+ob_set_subtarget(ob_storage backup
+  backup/ob_backup_ctx.cpp
+  backup/ob_backup_data_store.cpp
+  backup/ob_backup_factory.cpp
+  backup/ob_backup_file_writer_ctx.cpp
+  backup/ob_backup_index_cache.cpp
+  backup/ob_backup_iterator.cpp
+  backup/ob_backup_index_merger.cpp
+  backup/ob_backup_reader.cpp
+  backup/ob_backup_handler.cpp
+  backup/ob_backup_index_store.cpp
+  backup/ob_backup_data_struct.cpp
+  backup/ob_backup_task.cpp
+  backup/ob_backup_tmp_file.cpp
+  backup/ob_backup_utils.cpp
+  backup/ob_backup_index_compressor.cpp
+  backup/ob_backup_operator.cpp
+  backup/ob_backup_extern_info_mgr.cpp
+  backup/ob_backup_restore_util.cpp
+  backup/ob_backup_complement_log.cpp
+  backup/ob_ls_backup_clean_mgr.cpp
+  backup/ob_backup_linked_item.cpp
+  backup/ob_backup_linked_block_writer.cpp
+  backup/ob_backup_linked_block_reader.cpp
+  backup/ob_backup_other_blocks_mgr.cpp
+  backup/ob_backup_device_wrapper.cpp
+  backup/ob_backup_index_block_builder_mgr.cpp
+  backup/ob_backup_sstable_sec_meta_iterator.cpp
+  backup/ob_backup_tablet_meta_fuser.cpp
+  backup/ob_backup_fuse_tablet_ctx.cpp
+  backup/ob_backup_fuse_tablet_task.cpp
+  backup/ob_backup_fuse_tablet_dag.cpp
+  backup/ob_backup_meta_cache.cpp
+)
+
 ob_set_subtarget(ob_storage tablet
   tablet/ob_batch_create_tablet_pretty_arg.cpp
   tablet/ob_full_tablet_creator.cpp
@@ -678,6 +713,7 @@ ob_set_subtarget(ob_storage common
 )
 
 ob_set_subtarget(ob_storage common_mixed
+  checkpoint/ob_checkpoint_diagnose.cpp
   checkpoint/ob_checkpoint_executor.cpp
   checkpoint/ob_data_checkpoint.cpp
   checkpoint/ob_freeze_checkpoint.cpp
@@ -786,6 +822,7 @@ ob_set_subtarget(ob_storage memtable_mvcc
   memtable/mvcc/ob_mvcc_trans_ctx.cpp
   memtable/mvcc/ob_tx_callback_list.cpp
   memtable/mvcc/ob_query_engine.cpp
+  memtable/mvcc/ob_btree_iter_cache.cpp
   memtable/mvcc/ob_row_data.cpp
   memtable/mvcc/ob_mvcc_define.cpp
 )
