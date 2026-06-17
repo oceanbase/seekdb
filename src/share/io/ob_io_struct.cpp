@@ -21,6 +21,10 @@
 #include "observer/ob_server.h"
 #include "common/storage/ob_fd_simulator.h"
 
+#if defined(__APPLE__)
+#define OB_SKIP_BLOCKING_AIO_DETECT_READ
+#endif
+
 
 #ifdef _WIN32
 
@@ -2233,9 +2237,16 @@ int ObIOFaultDetector::set_detect_task_io_info_(
 
 bool ObIOFaultDetector::is_supported_detect_read_(const uint64_t tenant_id, const ObIOFd &fd)
 {
+#ifdef OB_SKIP_BLOCKING_AIO_DETECT_READ
+  UNUSED(tenant_id);
+  UNUSED(fd);
+  // macOS AIO emulation runs pread/pwrite inside io_submit, so detect IO can block.
+  return false;
+#else
   bool bret = true;
   int ret = OB_SUCCESS;
   return bret;
+#endif
 }
 
 void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORequest &req)
