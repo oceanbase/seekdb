@@ -37,7 +37,7 @@ public:
         tenant_id_(common::OB_INVALID_ID) {}
   virtual ~ObSqlNio() {}
   int start(int port, ObISqlSockHandler *handler, int n_thread,
-            const uint64_t tenant_id);
+            const uint64_t tenant_id, bool disable_tcp);
   bool has_error(void* sess);
   void destroy_sock(void* sess);
   void revert_sock(void* sess);

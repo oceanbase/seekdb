@@ -139,7 +139,7 @@ void ObSrvNetworkFrame::destroy()
   }
 }
 
-int ObSrvNetworkFrame::start()
+int ObSrvNetworkFrame::start(bool disable_tcp)
 {
   int ret = OB_SUCCESS;
   obmysql::global_sql_nio_server =
@@ -167,7 +167,7 @@ int ObSrvNetworkFrame::start()
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             GCONF.mysql_port, &deliver_, sql_net_thread_count,
-            GCONF._enable_numa_aware))) {
+            GCONF._enable_numa_aware, disable_tcp))) {
       LOG_ERROR("sql nio server start failed", K(ret));
     }
   }
