@@ -205,7 +205,7 @@ protected:
   inline int get_concat_str_max_len(RuntimeContext &agg_ctx, uint64_t &concat_str_max_len)
   {
     int ret = OB_SUCCESS;
-    concat_str_max_len = OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE;
+    concat_str_max_len = OB_DEFAULT_GROUP_CONCAT_MAX_LEN;
     if (OB_FAIL(agg_ctx.eval_ctx_.exec_ctx_.get_my_session()->get_group_concat_max_len(
            concat_str_max_len))) {
       SQL_LOG(WARN, "fail to get group concat max len", K(ret));
@@ -218,8 +218,8 @@ protected:
   {
     int ret = OB_SUCCESS;
     if (aggr_info.separator_expr_ == NULL) {
-      // Default sperator for not specific case.
-      sep_str = ObString::make_empty_string();
+      // default comma for MySQL mode
+      sep_str = ObCharsetUtils::get_const_str(aggr_info.expr_->datum_meta_.cs_type_, ',');
     } else if (aggr_info.separator_expr_->is_const_expr()) {
       // If user specific a seperator, and it is a const, use it directly.
       ObDatum *separator_result = NULL;

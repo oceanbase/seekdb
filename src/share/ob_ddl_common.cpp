@@ -1436,7 +1436,7 @@ int ObDDLUtil::find_table_scan_table_id(const ObOpSpec *spec, uint64_t &table_id
 
 bool ObDDLUtil::need_reshape(const ObObjMeta &col_type)
 {
-  return col_type.is_binary() || col_type.is_fixed_len_char_type() || col_type.is_character_type();
+  return col_type.is_binary() || col_type.is_fixed_len_char_type();
 }
 
 int ObDDLUtil::check_null_and_length(

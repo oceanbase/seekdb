@@ -1941,10 +1941,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_isolation(ObExecContext &ctx,
                    in_val.get_string().length(), in_val.get_string().ptr());
     LOG_WARN("invalid tx_isolation value", K(ret));
   } else if (ObTransIsolation::READ_UNCOMMITTED == isolation) {
-    // READ_UNCOMMITTED was only supported in oracle mode (now removed)
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "isolation level READ-UNCOMMITTED");
-    LOG_WARN("isolation level read-uncommitted not supported", K(ret), K(in_val));
+    // MySQL mode accepts READ_UNCOMMITTED without conversion
   } else {
     if (OB_FAIL(ob_write_obj(ctx.get_allocator(), in_val, out_val))) {
       LOG_WARN("deep copy out_val obj failed", K(ret));

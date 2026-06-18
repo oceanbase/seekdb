@@ -750,18 +750,7 @@ int ObExternalTableFileManager::calculate_odps_part_val_by_part_spec(const ObTab
               odps_part_row.get_cell(j).set_meta_type(part_col->get_meta_type());
               odps_part_row.get_cell(j).set_int(val);
             }
-          } else if (ObNumberType == part_key_type) {
-            number::ObNumber num;
-            if (OB_FAIL(num.from(part_spec.ptr(), part_spec.length(), allocator))) {
-              LOG_WARN("cast string to number failed", K(ret), K(part_spec),
-                       K(part_key_type));
-            } else {
-              LOG_INFO("cast string to number success", K(ret));
-              odps_part_row.get_cell(j).set_meta_type(part_col->get_meta_type());
-              odps_part_row.get_cell(j).set_number(num);
-            }
           } else {
-            // TODO(bitao): fix support to run in oracle mode and more types
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected part_key_type", K(part_spec), K(part_key_type),
                      K(j), K(ret));

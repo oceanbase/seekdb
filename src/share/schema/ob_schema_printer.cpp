@@ -829,7 +829,7 @@ int ObSchemaPrinter::print_constraint_stat(const bool rely_flag,
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, " NOVALIDATE"))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print constraint novalidate", K(ret));
       }
-    } else if (false == enable_flag == validate_flag) {
+    } else if (false == enable_flag && true == validate_flag) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, " VALIDATE"))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print constraint validate", K(ret));
       }

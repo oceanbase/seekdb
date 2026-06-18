@@ -52,7 +52,7 @@ int init_single_row_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "invalid null aggregate expr", K(ret));
     } else if (aggr_info.get_expr_type() == T_FUN_COUNT && aggr_info.param_exprs_.empty()) {
-      ret = init_agg_func<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_NUMBER>>(
+      ret = init_agg_func<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_INTEGER>>(
         agg_ctx, i, allocator, agg);
       if (OB_FAIL(ret)) {
         LOG_WARN("init single row aggregate failed", K(ret));

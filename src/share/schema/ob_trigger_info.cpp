@@ -424,9 +424,10 @@ int ObTriggerInfo::gen_package_source(const uint64_t tenant_id,
       OV (T_TG_SOURCE == trigger_source_node->type_, trigger_source_node->type_);
       OV (OB_NOT_NULL(trigger_define_node = trigger_source_node->children_[1]));
       if (OB_FAIL(ret)) {
-      OV (4 == trigger_define_node->num_child_);
-      OV (OB_NOT_NULL(trigger_body_node = trigger_define_node->children_[3]));
-      OZ (schema_guard.get_simple_table_schema(tenant_id, trigger_info->get_base_object_id(), table_schema));
+      } else if (trigger_info->is_dml_type()) {
+        OV (4 == trigger_define_node->num_child_);
+        OV (OB_NOT_NULL(trigger_body_node = trigger_define_node->children_[3]));
+        OZ (schema_guard.get_simple_table_schema(tenant_id, trigger_info->get_base_object_id(), table_schema));
         CK (OB_NOT_NULL(table_schema));
         OZ (schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), base_db_schema));
         CK (OB_NOT_NULL(base_db_schema));

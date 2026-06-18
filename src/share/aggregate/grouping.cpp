@@ -35,10 +35,10 @@ int init_grouping_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   ObExprOperatorType agg_func = aggr_info.get_expr_type();
   agg = nullptr;
   if (agg_func == T_FUN_GROUPING) {
-    ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING, VEC_TC_NUMBER>>(
+    ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING, VEC_TC_INTEGER>>(
       agg_ctx, agg_col_id, has_distinct, allocator, agg);
   } else if (agg_func == T_FUN_GROUPING_ID) {
-    ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING_ID, VEC_TC_NUMBER>>(
+    ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING_ID, VEC_TC_INTEGER>>(
       agg_ctx, agg_col_id, has_distinct, allocator, agg);
   } else {
     ret = OB_ERR_UNEXPECTED;

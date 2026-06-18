@@ -281,7 +281,7 @@ int init_count_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                              ObIAllocator &allocator, IAggregate *&agg)
 {
   int ret = OB_SUCCESS;
-  return init_agg_func<SumNumberAggregate>(
+  return init_agg_func<SumAggregate<VEC_TC_INTEGER, VEC_TC_INTEGER>>(
     agg_ctx, agg_col_id, agg_ctx.aggr_infos_.at(agg_col_id).has_distinct_, allocator, agg);
 }
 } // end helper
