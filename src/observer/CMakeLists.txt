@@ -524,7 +524,7 @@ if(WIN32)
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd/zstd_objs.lib
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/lz4/lz4-all.lib)  
-    # Itanium ABI _Unwind_* stubs (Windows uses SEH; PL unwinding non-functional)
+  # Itanium ABI _Unwind_* stubs (Windows uses SEH; PL unwinding non-functional)
   target_sources(observer_without_bolt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win32_unwind_stubs.c)
 endif()
 target_link_libraries(observer_without_bolt
