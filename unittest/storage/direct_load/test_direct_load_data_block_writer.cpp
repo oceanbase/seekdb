@@ -346,7 +346,7 @@ void TestDataBlockWriter::check_row(const ObDirectLoadDatumRow *next_row, const 
   ObArray<ObColDesc> col_descs;
   ObStorageDatumUtils datum_utils;
   ASSERT_EQ(OB_SUCCESS, table_schema_.get_column_ids(col_descs));
-  datum_utils_.init(col_descs, rowkey_column_count, allocator_);
+  datum_utils.init(col_descs, rowkey_column_count, allocator_);
   ASSERT_EQ(OB_SUCCESS, next_key.compare(curr_key, datum_utils, cmp_ret));
   ASSERT_TRUE(cmp_ret == 0);
 }

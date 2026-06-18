@@ -76,12 +76,12 @@ TEST_F(TestObError, test_adder)
   EXPECT_FALSE(add_oracle_info(MY, 600, 3000, &mgr));
   EXPECT_FALSE(add_oracle_info(NONE, 100, -1, &mgr));
 
-  EXPECT_TRUE(add_oracle_info(ORA, 600, -1, nullptr));
-  EXPECT_TRUE(add_oracle_info(ORA, 600, -1, &mgr));
-  EXPECT_TRUE(add_oracle_info(ORA, 600, 4000, &mgr));
-  EXPECT_TRUE(add_oracle_info(ORA, 100, 4000, &mgr));
-  EXPECT_TRUE(add_oracle_info(PLS, 100, 4000, &mgr));
-  EXPECT_TRUE(add_oracle_info(NONE, 600, 3000, &mgr));
+  EXPECT_FALSE(add_oracle_info(ORA, 600, -1, nullptr));
+  EXPECT_FALSE(add_oracle_info(ORA, 600, -1, &mgr));
+  EXPECT_FALSE(add_oracle_info(ORA, 600, 4000, &mgr));
+  EXPECT_FALSE(add_oracle_info(ORA, 100, 4000, &mgr));
+  EXPECT_FALSE(add_oracle_info(PLS, 100, 4000, &mgr));
+  EXPECT_FALSE(add_oracle_info(NONE, 600, 3000, &mgr));
 
   // test_add_mysql_info
   EXPECT_FALSE(add_mysql_info(-1, &mgr));

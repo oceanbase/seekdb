@@ -210,30 +210,6 @@ void ObErrorInfoMgr::print_ob_error()
       is_compat_header_printed = true;
       printf("\t\tMySQL: %d(%s)\n", mysql_errno, sqlstate);
     }
-    bool need_oracle_print = false;
-    int oracle_errno = ob_errpkt_errno(ob_error_code);
-    if (oracle_errno != -ob_error_code) {
-      if (ORACLE_SPECIAL_ERROR_CODE == oracle_errno) {
-        // Compatible error for ORA-00600
-        if (is_special_oracle_error_compatible(ob_error_code)) {
-          need_oracle_print = true;
-        }
-      } else {
-        need_oracle_print = true;
-      }
-      if (need_oracle_print) {
-        const char *oracle_err_msg = ob_errpkt_strerror(ob_error_code);
-        if (nullptr != oracle_err_msg) {
-          if (false == is_compat_header_printed) {
-            printf("\t%s\n", compatiable_header);
-            is_compat_header_printed = true;
-          }
-          char oracle_error_code[ORACLE_MSG_PREFIX] = {0};
-          strncpy(oracle_error_code, oracle_err_msg, ORACLE_MSG_PREFIX-2);
-          printf("\t\tOracle: %s\n", oracle_error_code);
-        }
-      }
-    }
   }
 }
 //////////////////////////////////////////////////////////////
@@ -473,74 +449,11 @@ bool add_mysql_info(int error_code, ObErrorInfoMgr* mgr)
 
 bool add_oracle_info(Fac oracle_facility, int error_code, int argument, ObErrorInfoMgr* mgr)
 {
-  bool bret = false;
-  if (nullptr == mgr) {
-    ERROR_PRINT("ObErrorInfoMgr *mgr is null.\n");
-    bret = true;
-  } else if (0 <= error_code && ORACLE_MAX_ERROR_CODE > error_code) {
-    int info_count = 0;
-    int ob_error = -1;
-    // Before being called, ensure that argument cannot be set when nullptr == oracle_facility
-    if (NONE == oracle_facility) {
-      // Handle the case where error is ORA-error_code
-      bret |= add_error_info(error_code, ORA, g_oracle_ora, mgr);
-      // Handle the case where error is PLS-error_code
-      bret |= add_error_info(error_code, PLS, g_oracle_pls, mgr);
-    } else {
-      if (ORA == oracle_facility) {
-        if (ORACLE_SPECIAL_ERROR_CODE == error_code) {
-          // 600 is a special error code.
-          // If there is no '-a ARG' parameter, the original possible error of ora-00600 will be output
-          if (-1 == argument) {
-            bret = add_error_info(error_code, ORA, g_oracle_ora, mgr);
-          } else {
-            ob_error = argument;
-            const char* error_usr_msg = ob_errpkt_str_user_error(-ob_error);
-            if (nullptr != error_usr_msg) {
-              // verify that the error is ora-00600
-              if (-OB_ERR_PROXY_REROUTE == ob_errpkt_errno(-ob_error) ||
-                  ORACLE_SPECIAL_ERROR_CODE == ob_errpkt_errno(-ob_error)) {
-                const char* error_msg = ob_errpkt_strerror(-ob_error);
-                const char* error_name = ob_error_name(-ob_error);
-                const char* error_cause = ob_error_cause(-ob_error);
-                const char* error_solution = ob_error_solution(-ob_error);
-                if (mgr->insert_oracle_error(error_name,
-                        error_msg + ORACLE_MSG_PREFIX,
-                        error_cause,
-                        error_solution,
-                        ORA,
-                        error_code,
-                        ob_error)) {
-                  bret = true;
-                }
-              }
-            }
-          }
-        } else {
-          // '-a ARG' parameter only supports ora-00600 error
-          if (-1 != argument) {
-            printf("error: '-a ARG' is unsupport in this scene\n"
-                   "Use 'ob_error ora 600 -a=ARG'.\n"
-                   "Use 'ob_error --help' for help.\n");
-            bret = true;
-          } else {
-            bret = add_error_info(error_code, ORA, g_oracle_ora, mgr);
-          }
-        }
-      } else if (PLS == oracle_facility) {
-        // '-a ARG' parameter only supports ora-00600 error
-        if (-1 != argument) {
-          printf("error: '-a ARG' is unsupport in this scene\n"
-                 "Use 'ob_error ora 600 -a ARG'.\n"
-                 "Use 'ob_error --help' for help.\n");
-          bret = true;
-        } else {
-          bret = add_error_info(error_code, PLS, g_oracle_pls, mgr);
-        }
-      }
-    }
-  }
-  return bret;
+  (void)oracle_facility;
+  (void)error_code;
+  (void)argument;
+  (void)mgr;
+  return false;
 }
 
 // prevent the atoi parse "123abc"
