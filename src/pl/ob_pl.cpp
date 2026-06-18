@@ -102,6 +102,8 @@ int ObPL::init(common::ObMySQLProxy &sql_proxy)
                                 WRAP_SPI_CALL(sql::ObSPIService::spi_cursor_close));
   jit::ObLLVMHelper::add_symbol(ObString("spi_process_resignal"),
                                 WRAP_SPI_CALL(sql::ObSPIService::spi_process_resignal));
+  jit::ObLLVMHelper::add_symbol(ObString("spi_pl_set_user_error_msg"),
+                                WRAP_SPI_CALL(sql::ObSPIService::spi_pl_set_user_error_msg));
   jit::ObLLVMHelper::add_symbol(ObString("spi_destruct_collection"),
                                 WRAP_SPI_CALL(sql::ObSPIService::spi_destruct_collection));
   jit::ObLLVMHelper::add_symbol(ObString("spi_reset_composite"),

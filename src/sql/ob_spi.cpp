@@ -4448,6 +4448,34 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
 }
 
 #undef GET_INTEGER_FROM_OBJ
+int ObSPIService::spi_pl_set_user_error_msg(pl::ObPLExecCtx *ctx,
+                                            int64_t err_code,
+                                            const char *sql_state,
+                                            const char *msg,
+                                            int64_t msg_len)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ctx);
+  if (OB_NOT_NULL(msg) && msg_len > 0) {
+    ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
+    if (OB_NOT_NULL(wb)) {
+      // ObWarningBuffer caps each item at WarningItem::STR_LEN, so truncation
+      // here matches the runtime behaviour of LOG_USER_ERROR.
+      char buf[ObWarningBuffer::WarningItem::STR_LEN] = {0};
+      int64_t copy_len = msg_len < (ObWarningBuffer::WarningItem::STR_LEN - 1)
+                       ? msg_len
+                       : (ObWarningBuffer::WarningItem::STR_LEN - 1);
+      MEMCPY(buf, msg, copy_len);
+      buf[copy_len] = '\0';
+      wb->set_error(buf, static_cast<int>(err_code));
+      if (OB_NOT_NULL(sql_state)) {
+        wb->set_sql_state(sql_state);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSPIService::spi_destruct_collection(ObPLExecCtx *ctx, int64_t idx)
 {
   int ret = OB_SUCCESS;

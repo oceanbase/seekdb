@@ -611,6 +611,27 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           && lib::is_mysql_mode()) {
         ObPLSignalStmt *signal_stmt = NULL;
         int save_ret = ret;
+        // Capture the formatted user error message from the thread-local
+        // warning buffer before we destroy the failed stmt. Some deferred
+        // errors (e.g. OB_ERR_BAD_TABLE) embed object names in the message
+        // template via LOG_USER_ERROR; without preserving the formatted text
+        // here, the runtime SIGNAL would only carry the bare error template
+        // and the object name (e.g. "'t.notable'") would be lost.
+        common::ObString saved_user_msg;
+        {
+          common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
+          if (OB_NOT_NULL(wb) && wb->get_err_code() == save_ret) {
+            const char *err_msg = wb->get_err_msg();
+            if (OB_NOT_NULL(err_msg) && '\0' != err_msg[0]) {
+              const int64_t msg_len = STRLEN(err_msg);
+              char *buf = static_cast<char *>(resolve_ctx_.allocator_.alloc(msg_len));
+              if (OB_NOT_NULL(buf)) {
+                MEMCPY(buf, err_msg, msg_len);
+                saved_user_msg.assign_ptr(buf, static_cast<int32_t>(msg_len));
+              }
+            }
+          }
+        }
         if (NULL != stmt) {
           stmt->~ObPLStmt();
           stmt = NULL;
@@ -630,6 +651,9 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           signal_stmt->set_ob_error_code(save_ret);
           signal_stmt->set_sql_state(ob_sqlstate(save_ret));
           signal_stmt->set_str_len(STRLEN(ob_sqlstate(save_ret)));
+          if (!saved_user_msg.empty()) {
+            signal_stmt->set_user_msg(saved_user_msg);
+          }
           func.set_has_incomplete_rt_dep_error(true);
           func.set_is_all_sql_stmt(false);
           if (lib::is_mysql_mode() && !func.is_reads_sql_data() && !func.is_modifies_sql_data()) {

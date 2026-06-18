@@ -100,6 +100,7 @@ public:
     jit::ObLLVMFunction spi_update_package_change_info_;
     jit::ObLLVMFunction spi_check_composite_not_null_;
     jit::ObLLVMFunction spi_process_resignal_error_;
+    jit::ObLLVMFunction spi_pl_set_user_error_msg_;
     jit::ObLLVMFunction spi_check_autonomous_trans_;
     jit::ObLLVMFunction spi_opaque_assign_null_;
     jit::ObLLVMFunction spi_pl_profiler_before_record_;

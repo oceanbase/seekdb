@@ -2051,6 +2051,38 @@ int ObPLCodeGenerateVisitor::visit(const ObPLSignalStmt &s)
       OZ (generator_.get_helper().get_int64(s.get_stmt_id(), stmt_id));
       // Temporarily use stmtid, this id is the combination of col and line
       OZ (generator_.get_helper().get_int64(s.get_stmt_id(), loc));
+      // For deferred resolver errors (e.g. OB_ERR_BAD_TABLE captured in a
+      // trigger/SP body), the formatted user message — which embeds the
+      // offending object name — was preserved on the stmt. Push it back into
+      // the thread-local warning buffer before raising so the runtime error
+      // text matches the original LOG_USER_ERROR output instead of the bare
+      // error template.
+      if (s.has_user_msg()) {
+        ObLLVMValue user_err_code;
+        ObLLVMValue user_sql_state;
+        ObLLVMValue user_sql_state_len;
+        ObLLVMValue user_msg_val;
+        ObLLVMValue user_msg_len;
+        ObSEArray<ObLLVMValue, 5> set_msg_args;
+        ObLLVMValue set_msg_ret;
+        OZ (set_msg_args.push_back(generator_.get_vars().at(generator_.CTX_IDX)));
+        // Use the OB-internal error code (e.g. -5201) so the value matches the
+        // err code that ObMPPacketSender::send_error_packet compares against
+        // ObWarningBuffer::get_err_code() when deciding whether to read the
+        // formatted user message.
+        OZ (generator_.get_helper().get_int64(s.get_ob_error_code(), user_err_code));
+        OZ (set_msg_args.push_back(user_err_code));
+        OZ (generator_.generate_global_string(ObString(s.get_str_len(), s.get_sql_state()),
+                                              user_sql_state, user_sql_state_len));
+        OZ (set_msg_args.push_back(user_sql_state));
+        OZ (generator_.generate_global_string(s.get_user_msg(), user_msg_val, user_msg_len));
+        OZ (set_msg_args.push_back(user_msg_val));
+        OZ (set_msg_args.push_back(user_msg_len));
+        OZ (generator_.get_helper().create_call(ObString("spi_pl_set_user_error_msg"),
+                                                generator_.get_spi_service().spi_pl_set_user_error_msg_,
+                                                set_msg_args,
+                                                set_msg_ret));
+      }
       OZ (generator_.generate_destruct_out_params());
       OZ (generator_.generate_exception(type, ob_err_code, err_code, sql_state, str_len, stmt_id,
                                         normal, loc, s.get_block()->in_notfound(),
@@ -3461,6 +3493,17 @@ int ObPLCodeGenerator::init_spi_service()
     OZ (arg_types.push_back(bool_type));
     OZ (ObLLVMFunctionType::get(int32_type, arg_types, ft));
     OZ (helper_.create_function(ObString("spi_process_resignal"), ft, spi_service_.spi_process_resignal_error_));
+  }
+  if (OB_SUCC(ret)) {
+    // spi_pl_set_user_error_msg(ctx, err_code, sql_state, msg, msg_len)
+    arg_types.reset();
+    OZ (arg_types.push_back(pl_exec_context_pointer_type));
+    OZ (arg_types.push_back(int64_type));
+    OZ (arg_types.push_back(char_type));
+    OZ (arg_types.push_back(char_type));
+    OZ (arg_types.push_back(int64_type));
+    OZ (ObLLVMFunctionType::get(int32_type, arg_types, ft));
+    OZ (helper_.create_function(ObString("spi_pl_set_user_error_msg"), ft, spi_service_.spi_pl_set_user_error_msg_));
   }
   if (OB_SUCC(ret)) {
     arg_types.reset();

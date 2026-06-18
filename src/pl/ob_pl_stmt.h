@@ -2592,7 +2592,8 @@ public:
       item_to_expr_idx_(),
       ob_error_code_(0),
       is_signal_null_(false),
-      is_resignal_stmt_(false) {}
+      is_resignal_stmt_(false),
+      user_msg_() {}
   virtual ~ObPLSignalStmt() { item_to_expr_idx_.destroy(); }
 
   int accept(ObPLStmtVisitor &visitor) const;
@@ -2622,6 +2623,13 @@ public:
   inline void set_is_resignal_stmt() { is_resignal_stmt_ = true; }
   inline bool is_resignal_stmt() const { return is_resignal_stmt_; }
 
+  // Carries a pre-formatted user error message captured at PL resolve time
+  // for deferred errors (e.g. OB_ERR_BAD_TABLE) that were turned into a
+  // PL_SIGNAL stub. Empty when the SIGNAL was written by the user.
+  inline const common::ObString &get_user_msg() const { return user_msg_; }
+  inline void set_user_msg(const common::ObString &msg) { user_msg_ = msg; }
+  inline bool has_user_msg() const { return !user_msg_.empty(); }
+
   TO_STRING_KV(K_(type), K_(label), K_(value));
 
 private:
@@ -2630,6 +2638,9 @@ private:
   int ob_error_code_;
   bool is_signal_null_; // In Oracle mode, RAISE; statement without specifying an exception name, in this case, the current exception needs to be thrown
   bool is_resignal_stmt_;
+  // Pre-formatted user error message preserved across compile->runtime for
+  // deferred errors. Memory is owned by the PL function's allocator.
+  common::ObString user_msg_;
 };
 
 class ObPLCallStmt : public ObPLStmt
