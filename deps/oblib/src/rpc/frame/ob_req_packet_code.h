@@ -90,6 +90,11 @@ enum ObReqPacketCode : int32_t
 // obcall transport header so the config path keeps compiling. The accessor names
 // keep the rpc_checksum wording because they mirror the _rpc_checksum config.
 // ---------------------------------------------------------------------------
+// `OPTIONAL` is an (empty) macro in the Windows SDK (winnt.h). Undefine it so
+// the enumerator below is not eaten by the preprocessor on MSVC/clang-cl.
+#ifdef OPTIONAL
+#undef OPTIONAL
+#endif
 enum class ObReqCheckSumCheckLevel
 {
   INVALID,
