@@ -63,6 +63,7 @@
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_multi_data_source.h"
 #include "share/unit/ob_unit_info.h" //ObUnit*
+#include "share/backup/ob_backup_clean_struct.h"
 #include "logservice/palf/palf_options.h"//access mode
 #include "logservice/palf/palf_base_info.h"//PalfBaseInfo
 #include "logservice/palf/log_define.h"//INVALID_PROPOSAL_ID
@@ -2482,7 +2483,7 @@ public:
         index_table_id_(common::OB_INVALID_ID),
         if_not_exist_(false),
         with_rowid_(false),
-        index_schema_(),
+        index_schema_(&allocator_),
         is_inner_(false),
         nls_date_format_(),
         nls_timestamp_format_(),
@@ -3752,6 +3753,262 @@ public:
   uint64_t tenant_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCalcColumnChecksumResponseArg);
+};
+
+struct ObBackupTaskRes
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupTaskRes() :
+    task_id_(0),
+    job_id_(0),
+    tenant_id_(0),
+    ls_id_(),
+    src_server_(),
+    result_(OB_SUCCESS) {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(task_id), K_(job_id), K_(tenant_id), K_(src_server), K_(ls_id), K_(result), K_(trace_id), K_(dag_id));
+public:
+  int64_t task_id_;
+  int64_t job_id_;
+  uint64_t tenant_id_;
+  share::ObLSID ls_id_;
+  common::ObAddr src_server_;
+  int result_;
+  share::ObTaskId trace_id_;
+  share::ObTaskId dag_id_;
+};
+struct ObBackupDataArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupDataArg()
+    : trace_id_(),
+      job_id_(0),
+      tenant_id_(0),
+      task_id_(0),
+      backup_set_id_(0),
+      incarnation_id_(0),
+      backup_type_(),
+      backup_date_(0),
+      ls_id_(0),
+      turn_id_(0),
+      retry_id_(0),
+      dst_server_(),
+      backup_path_(),
+      backup_data_type_() {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(trace_id), K_(job_id), K_(tenant_id), K_(task_id), K_(backup_set_id), K_(incarnation_id),
+      K_(backup_type), K_(backup_date), K_(ls_id), K_(turn_id), K_(retry_id), K_(dst_server), K_(backup_path),
+      K_(backup_data_type));
+public:
+  share::ObTaskId trace_id_;
+  int64_t job_id_;
+  uint64_t tenant_id_;
+  int64_t task_id_;
+  int64_t backup_set_id_;
+  int64_t incarnation_id_;
+  share::ObBackupType::BackupType backup_type_;
+  int64_t backup_date_;
+  share::ObLSID ls_id_;
+  int64_t turn_id_;
+  int64_t retry_id_;
+  common::ObAddr dst_server_;
+  share::ObBackupPathString backup_path_;
+  share::ObBackupDataType backup_data_type_;
+};
+
+struct ObBackupComplLogArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupComplLogArg()
+    : trace_id_(),
+      job_id_(0),
+      tenant_id_(0),
+      task_id_(0),
+      backup_set_id_(0),
+      incarnation_id_(0),
+      backup_type_(),
+      backup_date_(0),
+      ls_id_(),
+      dst_server_(),
+      backup_path_(),
+      start_scn_(),
+      end_scn_(),
+      is_only_calc_stat_(false) {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(trace_id), K_(job_id), K_(tenant_id), K_(task_id), K_(backup_set_id), K_(incarnation_id),
+    K_(backup_type), K_(backup_date), K_(ls_id), K_(dst_server), K_(backup_path), K_(start_scn), K_(end_scn), K_(is_only_calc_stat));
+public:
+  share::ObTaskId trace_id_;
+  int64_t job_id_;
+  uint64_t tenant_id_;
+  int64_t task_id_;
+  int64_t backup_set_id_;
+  int64_t incarnation_id_;
+  share::ObBackupType::BackupType backup_type_;
+  int64_t backup_date_;
+  share::ObLSID ls_id_;
+  common::ObAddr dst_server_;
+  share::ObBackupPathString backup_path_;
+  share::SCN start_scn_;
+  share::SCN end_scn_;
+  bool is_only_calc_stat_;
+};
+
+struct ObBackupBuildIdxArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupBuildIdxArg()
+    : job_id_(0),
+      task_id_(0),
+      trace_id_(),
+      backup_path_(),
+      tenant_id_(0),
+      backup_set_id_(0),
+      incarnation_id_(0),
+      backup_date_(),
+      backup_type_(),
+      turn_id_(-1),
+      retry_id_(-1),
+      start_turn_id_(),
+      dst_server_(),
+      backup_data_type_() {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(job_id), K_(task_id), K_(trace_id), K_(backup_path), K_(tenant_id), K_(backup_set_id),
+    K_(incarnation_id), K_(backup_date), K_(backup_type), K_(turn_id), K_(retry_id), K_(start_turn_id), K_(dst_server),
+    K_(backup_data_type));
+public:
+  int64_t job_id_;
+  int64_t task_id_;
+  share::ObTaskId trace_id_;
+  share::ObBackupPathString backup_path_;
+  uint64_t tenant_id_;
+  int64_t backup_set_id_;
+  int64_t incarnation_id_;
+  int64_t backup_date_;
+  share::ObBackupType::BackupType backup_type_;
+  int64_t turn_id_;
+  int64_t retry_id_;
+  int64_t start_turn_id_;
+  common::ObAddr dst_server_;
+  share::ObBackupDataType backup_data_type_;
+};
+
+struct ObBackupFuseTabletMetaArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupFuseTabletMetaArg();
+  bool is_valid() const;
+  TO_STRING_KV(K_(job_id), K_(task_id), K_(trace_id), K_(tenant_id), K_(backup_set_id), K_(backup_path),
+      K_(backup_type), K_(ls_id), K_(turn_id), K_(retry_id), K_(dst_server));
+public:
+  int64_t job_id_;
+  int64_t task_id_;
+  share::ObTaskId trace_id_;
+  uint64_t tenant_id_;
+  int64_t backup_set_id_;
+  share::ObBackupPathString backup_path_;
+  share::ObBackupType::BackupType backup_type_;
+  share::ObLSID ls_id_;
+  int64_t turn_id_;
+  int64_t retry_id_;
+  common::ObAddr dst_server_;
+  DISALLOW_COPY_AND_ASSIGN(ObBackupFuseTabletMetaArg);
+};
+
+struct ObBackupCheckTaskArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupCheckTaskArg()
+    : tenant_id_(OB_INVALID_TENANT_ID),
+      trace_id_() {}
+  ~ObBackupCheckTaskArg() {}
+  bool is_valid() const;
+  TO_STRING_KV(K_(tenant_id), K_(trace_id));
+public:
+  uint64_t tenant_id_;
+  share::ObTaskId trace_id_;
+};
+
+struct ObBackupMetaArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupMetaArg()
+    : trace_id_(),
+      job_id_(0),
+      tenant_id_(0),
+      task_id_(0),
+      backup_set_id_(0),
+      incarnation_id_(0),
+      backup_type_(),
+      backup_date_(0),
+      ls_id_(),
+      turn_id_(0),
+      retry_id_(0),
+      start_scn_(),
+      dst_server_(),
+      backup_path_() {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(trace_id), K_(job_id), K_(tenant_id), K_(task_id), K_(backup_set_id), K_(incarnation_id),
+      K_(backup_type), K_(backup_date), K_(ls_id), K_(turn_id), K_(retry_id), K_(start_scn), K_(dst_server), K_(backup_path));
+public:
+  share::ObTaskId trace_id_;
+  int64_t job_id_;
+  uint64_t tenant_id_;
+  int64_t task_id_;
+  int64_t backup_set_id_;
+  int64_t incarnation_id_;
+  share::ObBackupType::BackupType backup_type_;
+  int64_t backup_date_;
+  share::ObLSID ls_id_;
+  int64_t  turn_id_;
+  int64_t  retry_id_;
+  share::SCN  start_scn_;
+  common::ObAddr dst_server_;
+  share::ObBackupPathString backup_path_;
+};
+
+struct ObBackupCheckTabletArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupCheckTabletArg()
+    : tenant_id_(OB_INVALID_TENANT_ID),
+      ls_id_(),
+      backup_scn_(),
+      tablet_ids_() {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(backup_scn), K_(tablet_ids));
+public:
+  uint64_t tenant_id_;
+  share::ObLSID ls_id_;
+  share::SCN backup_scn_;
+  ObSArray<ObTabletID> tablet_ids_;
+};
+
+struct ObBackupBatchArg //TODO(xiuming): delete it after ob_rebalance_task not use it anymore
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupBatchArg() :  timeout_ts_(0), task_id_() {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(timeout_ts), K_(task_id));
+public:
+  int64_t timeout_ts_;
+  share::ObTaskId task_id_;
 };
 
 enum ObReplicaMovingType : int8_t
@@ -5634,6 +5891,21 @@ private:
   uint64_t tenant_id_;
 };
 
+struct ObFlushLSArchiveArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObFlushLSArchiveArg()
+    : tenant_id_(common::OB_INVALID_TENANT_ID)
+  {}
+  virtual ~ObFlushLSArchiveArg() {}
+  bool is_valid() const;
+  int assign(const ObFlushLSArchiveArg &other);
+  TO_STRING_KV(K_(tenant_id));
+public:
+  uint64_t tenant_id_;
+};
+
 struct ObCancelTaskArg : public ObServerZoneArg
 {
   OB_UNIS_VERSION(2);
@@ -6799,6 +7071,175 @@ private:
   ObZone zone_;
 };
 
+struct ObArchiveLogArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObArchiveLogArg(): enable_(true), tenant_id_(OB_INVALID_TENANT_ID), archive_tenant_ids_() {}
+
+
+  TO_STRING_KV(K_(enable), K_(tenant_id), K_(archive_tenant_ids));
+  bool enable_;
+  uint64_t tenant_id_;
+  common::ObSArray<uint64_t> archive_tenant_ids_;
+};
+
+struct ObBackupDatabaseArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupDatabaseArg();
+  bool is_valid() const;
+	TO_STRING_KV(K_(tenant_id), K_(initiator_tenant_id), K_(initiator_job_id), K_(backup_tenant_ids),
+      K_(is_incremental), K_(backup_dest), K_(backup_description), K_(is_compl_log), K_(encryption_mode),
+      K_(passwd));
+  uint64_t tenant_id_; // target tenant to do backup
+  uint64_t initiator_tenant_id_; // the tenant id who initiate the backup
+  int64_t initiator_job_id_; // only used when sys tenant send rpc to user teannt to insert a backup job
+  common::ObSArray<uint64_t> backup_tenant_ids_; // tenants which need to backup
+  bool is_incremental_;
+  bool is_compl_log_;
+  share::ObBackupPathString backup_dest_;
+  share::ObBackupDescription backup_description_;
+  share::ObBackupEncryptionMode::EncryptionMode encryption_mode_;
+  common::ObFixedLengthString<common::OB_MAX_PASSWORD_LENGTH> passwd_;
+};
+
+struct ObBackupManageArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  enum Type
+  {
+    CANCEL_BACKUP = 0,
+    SUSPEND_BACKUP = 1,
+    RESUME_BACKUP = 2,
+    VALIDATE_DATABASE = 4,
+    VALIDATE_BACKUPSET = 5,
+    CANCEL_VALIDATE = 6,
+    CANCEL_BACKUP_BACKUPSET = 7,
+    CANCEL_BACKUP_BACKUPPIECE = 8,
+    CANCEL_ALL_BACKUP_FORCE = 9,
+    MAX_TYPE
+  };
+  ObBackupManageArg(): tenant_id_(common::OB_INVALID_TENANT_ID), managed_tenant_ids_(), type_(MAX_TYPE), value_(0), copy_id_(0) {}
+  TO_STRING_KV(K_(tenant_id), K_(managed_tenant_ids) ,K_(type), K_(value), K_(copy_id));
+  uint64_t tenant_id_;
+  common::ObSArray<uint64_t> managed_tenant_ids_;
+  Type type_;
+  int64_t value_;
+  int64_t copy_id_;
+};
+
+struct ObBackupCleanArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBackupCleanArg() :
+      tenant_id_(common::OB_INVALID_TENANT_ID),
+      initiator_tenant_id_(common::OB_INVALID_TENANT_ID),
+      initiator_job_id_(0),
+      type_(share::ObNewBackupCleanType::MAX),
+      value_(0),
+      dest_id_(0),
+      description_(),
+      clean_tenant_ids_()
+  {
+
+  }
+  TO_STRING_KV(K_(type), K_(tenant_id), K_(initiator_tenant_id), K_(initiator_job_id), K_(value), K_(dest_id), K_(description), K_(clean_tenant_ids));
+  uint64_t tenant_id_;
+  uint64_t initiator_tenant_id_;
+  int64_t initiator_job_id_;
+  share::ObNewBackupCleanType::TYPE type_;
+  int64_t value_;
+  int64_t dest_id_;
+  share::ObBackupDescription description_;
+  common::ObSArray<uint64_t> clean_tenant_ids_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObBackupCleanArg);
+};
+
+struct ObNotifyArchiveArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObNotifyArchiveArg() :
+      tenant_id_(common::OB_INVALID_TENANT_ID)
+  {
+  }
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(tenant_id));
+public:
+  uint64_t tenant_id_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObNotifyArchiveArg);
+};
+
+struct ObLSBackupCleanArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObLSBackupCleanArg()
+    : trace_id_(),
+      job_id_(0),
+      tenant_id_(0),
+      incarnation_(0),
+      task_id_(0),
+      ls_id_(0),
+      task_type_(),
+      id_(),
+      dest_id_(0),
+      round_id_(0)
+  {
+  }
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(trace_id), K_(job_id), K_(tenant_id), K_(incarnation), K_(task_id), K_(ls_id), K_(task_type), K_(id), K_(dest_id), K_(round_id));
+public:
+  share::ObTaskId trace_id_;
+  int64_t job_id_;
+  uint64_t tenant_id_;
+  int64_t incarnation_;
+  uint64_t task_id_;
+  share::ObLSID ls_id_;
+  share::ObBackupCleanTaskType::TYPE task_type_;
+  uint64_t id_;
+  int64_t dest_id_;
+  int64_t round_id_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObLSBackupCleanArg);
+};
+
+struct ObDeletePolicyArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDeletePolicyArg() :
+      initiator_tenant_id_(common::OB_INVALID_TENANT_ID),
+      type_(share::ObPolicyOperatorType::MAX),
+      policy_name_(),
+      recovery_window_(),
+      redundancy_(0),
+      backup_copies_(0),
+      clean_tenant_ids_()
+  {
+  }
+  TO_STRING_KV(K_(initiator_tenant_id), K_(type), K_(policy_name),
+      K_(recovery_window), K_(redundancy),  K_(backup_copies), K_(clean_tenant_ids));
+
+  uint64_t initiator_tenant_id_;
+  share::ObPolicyOperatorType type_;
+  char policy_name_[share::OB_BACKUP_DELETE_POLICY_NAME_LENGTH];
+  char recovery_window_[share::OB_BACKUP_RECOVERY_WINDOW_LENGTH];
+  int64_t redundancy_;
+  int64_t backup_copies_;
+  common::ObSArray<uint64_t> clean_tenant_ids_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDeletePolicyArg);
+};
+
 struct CheckLeaderRpcIndex
 {
   OB_UNIS_VERSION(1);
@@ -6922,6 +7363,54 @@ public:
   bool is_valid() const { return common::OB_INVALID_TENANT_ID != tenant_id_; }
   TO_STRING_KV(K_(tenant_id));
   uint64_t tenant_id_;
+};
+
+struct ObCreateRestorePointArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCreateRestorePointArg() :
+      tenant_id_(0),
+      name_()
+   { }
+  int assign(const ObCreateRestorePointArg &arg)
+  {
+    int ret = common::OB_SUCCESS;
+    tenant_id_ = arg.tenant_id_;
+    name_ = arg.name_;
+    return ret;
+  }
+  bool is_valid() const
+  {
+    return tenant_id_ > 0 && !name_.empty();
+  }
+  int64_t tenant_id_;
+  common::ObString name_;
+  TO_STRING_KV(K(tenant_id_), K(name_));
+};
+
+struct ObDropRestorePointArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDropRestorePointArg() :
+      tenant_id_(0),
+      name_()
+   { }
+  int assign(const ObDropRestorePointArg &arg)
+  {
+    int ret = common::OB_SUCCESS;
+    tenant_id_ = arg.tenant_id_;
+    name_ = arg.name_;
+    return ret;
+  }
+  bool is_valid() const
+  {
+    return tenant_id_ > 0 && !name_.empty();
+  }
+  int64_t tenant_id_;
+  common::ObString name_;
+  TO_STRING_KV(K(tenant_id_), K(name_));
 };
 
 struct ObCheckBuildIndexTaskExistArg
@@ -7792,6 +8281,21 @@ public:
   common::ObString config_str_;
   TO_STRING_KV(K_(tenant_id), K_(config_str));
 };
+
+struct ObCheckBackupConnectivityArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCheckBackupConnectivityArg();
+  ~ObCheckBackupConnectivityArg() {}
+public:
+  bool is_valid() const;
+  TO_STRING_KV(K_(tenant_id), K_(backup_path), K_(check_path));
+public:
+  uint64_t tenant_id_;
+  char backup_path_[share::OB_MAX_BACKUP_PATH_LENGTH];
+  char check_path_[share::OB_MAX_BACKUP_CHECK_FILE_LENGTH];
+};
 struct ObModifyPlanBaselineArg
 {
   OB_UNIS_VERSION(1);
@@ -8394,6 +8898,29 @@ private:
   int ret_;
 };
 
+struct ObRecoverTableArg
+{
+public:
+  OB_UNIS_VERSION(1);
+public:
+  enum Action
+  {
+    INITIATE = 0,
+    CANCEL,
+    MAX
+  };
+  ObRecoverTableArg();
+  ~ObRecoverTableArg() {}
+  bool is_valid() const;
+  TO_STRING_KV(K_(tenant_id), K_(tenant_name), K_(import_arg), K_(restore_tenant_arg), K_(action));
+public:
+  uint64_t tenant_id_; // tenant which is the table recover to.
+  common::ObString tenant_name_;
+  share::ObImportArg import_arg_;
+  ObPhysicalRestoreTenantArg restore_tenant_arg_;
+  Action action_;
+};
+
 struct ObSwitchoverToPrimaryArg
 {
 public:
@@ -8783,6 +9310,24 @@ public:
 private:
   int64_t global_config_version_;
   common::ObSEArray<std::pair<uint64_t, int64_t>, 200> tenant_config_version_map_;
+};
+
+struct ObNotifyStartArchiveArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObNotifyStartArchiveArg()
+    : tenant_id_(common::OB_INVALID_TENANT_ID)
+  {}
+  ~ObNotifyStartArchiveArg() {}
+  bool is_valid() const;
+  uint64_t get_tenant_id() const { return tenant_id_; }
+  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  TO_STRING_KV(K_(tenant_id));
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObNotifyStartArchiveArg);
+private:
+  uint64_t tenant_id_;
 };
 
 struct ObCheckNestedMViewMdsArg final

@@ -118,20 +118,31 @@ int ObNetEndpointIngressManager::collect_predict_bw(ObNetEndpointKVArray &update
       }
     }
   }
-  // single-replica: every endpoint is local; dispatch directly to the local
-  // network frame instead of the removed ObNetEndpointPredictIngressProxy.
-  for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
-    const ObNetEndpointKey &endpoint_key = update_kvs[i].key_;
-    ObNetEndpointValue *endpoint_value = update_kvs[i].value_;
-    int64_t predicted_bw = -1;
-    int tmp_ret = OB_SUCCESS;
-    if (OB_ISNULL(GCTX.net_frame_)) {
-      LOG_WARN("net frame is null", K(endpoint_key));  // ignore error
-    } else if (OB_TMP_FAIL(ex_rpc::sync_call([&]{
-                 return GCTX.net_frame_->net_endpoint_predict_ingress(endpoint_key, predicted_bw); }))) {
-      LOG_WARN("fail to predict ingress bw", KR(tmp_ret), K(endpoint_key));  // ignore error
-    } else {
-      endpoint_value->predicted_bw_ = predicted_bw;
+  if (OB_ISNULL(GCTX.net_frame_)) {
+    LOG_WARN("net frame is null");  // ignore error
+  } else {
+    ObSEArray<ex_rpc::HandleRef<int64_t>, 4> handles;
+    for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
+      const ObNetEndpointKey endpoint_key = update_kvs[i].key_;  // copy: outlives async run
+      ex_rpc::HandleRef<int64_t> handle =
+          ex_rpc::async_call<int64_t>([endpoint_key](int64_t &predicted_bw) -> int {
+            predicted_bw = -1;
+            return GCTX.net_frame_->net_endpoint_predict_ingress(endpoint_key, predicted_bw);
+          });
+      if (!handle) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to dispatch predict ingress", K(ret), K(endpoint_key));
+      } else if (OB_FAIL(handles.push_back(handle))) {
+        LOG_WARN("fail to push handle", K(ret), K(endpoint_key));
+      }
+    }
+    for (int64_t i = 0; i < handles.count(); i++) {
+      int tmp_ret = handles.at(i)->wait();
+      if (OB_TMP_FAIL(tmp_ret)) {
+        LOG_WARN("fail to predict ingress bw", KR(tmp_ret), K(update_kvs[i].key_));  // ignore error
+      } else {
+        update_kvs[i].value_->predicted_bw_ = handles.at(i)->result();
+      }
     }
   }
 
@@ -213,17 +224,29 @@ int ObNetEndpointIngressManager::commit_bw_limit_plan(ObNetEndpointKVArray &upda
 {
   int ret = OB_SUCCESS;
 
-  // single-replica: every endpoint is local; dispatch directly to the local
-  // network frame instead of the removed ObNetEndpointSetIngressProxy.
-  for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
-    const ObNetEndpointKey &endpoint_key = update_kvs[i].key_;
-    ObNetEndpointValue *endpoint_value = update_kvs[i].value_;
-    int tmp_ret = OB_SUCCESS;
-    if (OB_ISNULL(GCTX.net_frame_)) {
-      LOG_WARN("net frame is null", K(endpoint_key));  // ignore error
-    } else if (OB_TMP_FAIL(ex_rpc::sync_call([&]{
-                 return GCTX.net_frame_->net_endpoint_set_ingress(endpoint_key, endpoint_value->assigned_bw_); }))) {
-      LOG_WARN("fail to set ingress bw", KR(tmp_ret), K(endpoint_key));  // ignore error
+  if (OB_ISNULL(GCTX.net_frame_)) {
+    LOG_WARN("net frame is null");  // ignore error
+  } else {
+    ObSEArray<ex_rpc::HandleRef<void>, 4> handles;
+    for (int64_t i = 0; OB_SUCC(ret) && i < update_kvs.count(); i++) {
+      const ObNetEndpointKey endpoint_key = update_kvs[i].key_;  // copy: outlives async run
+      const int64_t assigned_bw = update_kvs[i].value_->assigned_bw_;
+      ex_rpc::HandleRef<void> handle =
+          ex_rpc::async_call([endpoint_key, assigned_bw]() -> int {
+            return GCTX.net_frame_->net_endpoint_set_ingress(endpoint_key, assigned_bw);
+          });
+      if (!handle) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to dispatch set ingress", K(ret), K(endpoint_key));
+      } else if (OB_FAIL(handles.push_back(handle))) {
+        LOG_WARN("fail to push handle", K(ret), K(endpoint_key));
+      }
+    }
+    for (int64_t i = 0; i < handles.count(); i++) {
+      int tmp_ret = handles.at(i)->wait();
+      if (OB_TMP_FAIL(tmp_ret)) {
+        LOG_WARN("fail to set ingress bw", KR(tmp_ret), K(update_kvs[i].key_));  // ignore error
+      }
     }
   }
   return ret;

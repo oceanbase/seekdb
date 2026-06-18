@@ -21,6 +21,7 @@
 #include <functional>
 #include <mutex>
 #include <memory>
+#include <atomic>
 #include <type_traits>
 #include "lib/lock/ob_futex.h"
 #include "lib/utility/serialization.h"
@@ -63,8 +64,8 @@ template<> struct HandleStorage<void> {};
 template<typename Res = void>
 class AsyncHandle : detail::HandleStorage<Res> {
 public:
-    void mark_done(int ret) { ret_ = ret; done_ = 1; futex_wake(const_cast<int*>(&done_), 1); }
-    int wait() { while (done_ == 0) futex_wait(const_cast<int*>(&done_), 0, nullptr); return ret_; }
+    void mark_done(int ret) { ret_ = ret; done_.store(1, std::memory_order_release); futex_wake(reinterpret_cast<int*>(&done_), 1); }
+    int wait() { while (done_.load(std::memory_order_acquire) == 0) futex_wait(reinterpret_cast<int*>(&done_), 0, nullptr); return ret_; }
 
     template<typename T = Res>
     std::enable_if_t<!std::is_void_v<T>, T>& result() { return this->result_; }
@@ -75,37 +76,54 @@ private:
     template<typename R, typename W> friend auto async_call_impl(W&&);
     template<typename F> friend auto async_call(F&&);
     template<typename R, typename A, typename F> friend auto async_call(const A&, F&&);
-    volatile int done_{0};
+    std::atomic<int> done_{0};
     int ret_{0};
+};
+
+// Deriving from shared_ptr (public non-virtual dtor) is safe HERE because HandleRef
+// adds NO extra state and is never deleted polymorphically through a shared_ptr*
+// (only value / container semantics) -- so the missing virtual dtor can never bite.
+template<typename Res = void>
+class HandleRef : public std::shared_ptr<AsyncHandle<Res>> {
+public:
+    HandleRef() = default;
+    HandleRef(std::shared_ptr<AsyncHandle<Res>> p)
+        : std::shared_ptr<AsyncHandle<Res>>(std::move(p)) {}
+    int64_t to_string(char *, const int64_t) const { return 0; }
 };
 
 // Internal: create handle, dispatch, handle lifecycle.
 template<typename Res, typename Work>
-auto async_call_impl(Work &&work) -> std::shared_ptr<AsyncHandle<Res>> {
+auto async_call_impl(Work &&work) -> HandleRef<Res> {
     auto h = std::make_shared<AsyncHandle<Res>>();
     async_call_internal([h, work = std::forward<Work>(work)]() mutable {
         if constexpr (std::is_void_v<Res>) {
             int ret = work();
             h->mark_done(ret);
         } else {
-            Res res;
-            int ret = work(res);
+            int ret = work(h->result());
             h->mark_done(ret);
         }
     });
-    return h;
+    return HandleRef<Res>(std::move(h));
 }
 
 // 1. async_call(fn) -- no arg, wait only
 template<typename Fn>
-auto async_call(Fn &&fn) -> std::shared_ptr<AsyncHandle<void>> {
-    return async_call_impl<void>([fn = std::forward<Fn>(fn)]() mutable -> int { fn(); return 0; });
+auto async_call(Fn &&fn) -> HandleRef<void> {
+    return async_call_impl<void>([fn = std::forward<Fn>(fn)]() mutable -> int {
+        if constexpr (std::is_void_v<decltype(fn())>) { fn(); return 0; }
+        else { return fn(); }
+    });
 }
 
 // 2. async_call<Res>(fn) -- no arg, wait + result
 template<typename Res, typename Fn>
-auto async_call(Fn &&fn) -> std::shared_ptr<AsyncHandle<Res>> {
-    return async_call_impl<Res>([fn = std::forward<Fn>(fn)](Res& res) mutable -> int { fn(res); return 0; });
+auto async_call(Fn &&fn) -> HandleRef<Res> {
+    return async_call_impl<Res>([fn = std::forward<Fn>(fn)](Res& res) mutable -> int {
+        if constexpr (std::is_void_v<decltype(fn(res))>) { fn(res); return 0; }
+        else { return fn(res); }
+    });
 }
 
 // 3. async_call<Res>(arg, fn) -- serialized arg, wait [+ result if Res != void]
@@ -114,7 +132,7 @@ auto async_call(Fn &&fn) -> std::shared_ptr<AsyncHandle<Res>> {
 // arg is serialized into an owned buffer and decoded on the worker, so it is
 // lifecycle-safe even when Arg holds shallow references (e.g. ObString/ObIArray).
 template<typename Res, typename Arg, typename Fn>
-auto async_call(const Arg &arg, Fn &&fn) -> std::shared_ptr<AsyncHandle<Res>> {
+auto async_call(const Arg &arg, Fn &&fn) -> HandleRef<Res> {
     int64_t len = common::serialization::encoded_length(arg);
     auto buf = std::make_shared<char[]>(len + common::OB_MALLOC_BIG_BLOCK_SIZE);
     int64_t pos = 0;
