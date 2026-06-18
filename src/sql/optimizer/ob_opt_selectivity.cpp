@@ -442,8 +442,20 @@ int OptTableMeta::init_column_meta(const OptSelectivityCtx &ctx,
   } else if (!column_ids.empty()) {
     // batch get column stats
     if ((OB_ISNULL(ctx.get_opt_stat_manager()) || OB_ISNULL(ctx.get_session_info()))) {
+      #ifdef _WIN32
+      LOG_WARN("opt stat manager or session info is null, fall back to default", K(ret), KPC(this));
+      ret = OB_SUCCESS;
+      for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
+        ObGlobalColumnStat s;
+        column_metas.at(i).set_default_meta(rows_);
+        if (OB_FAIL(col_stats.push_back(s))) {
+          LOG_WARN("failed to push back column id", K(ret));
+        }
+      }
+#else
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(ctx.get_opt_stat_manager()), K(ctx.get_session_info()));
+#endif
     } else if (OB_FAIL(ctx.get_opt_stat_manager()->batch_get_column_stats(
                    ctx.get_session_info()->get_effective_tenant_id(),
                    ref_table_id_,
@@ -495,7 +507,7 @@ int OptTableMeta::refine_column_meta(const OptSelectivityCtx &ctx,
                                    const uint64_t column_id,
                                    const ObGlobalColumnStat &stat,
                                    OptColumnMeta &col_meta)
-{ 
+{
   int ret = OB_SUCCESS;
   bool is_single_pkey = (1 == pk_ids_.count() && pk_ids_.at(0) == column_id) ||
                          column_id == OB_HIDDEN_PK_INCREMENT_COLUMN_ID;
@@ -1019,9 +1031,11 @@ int OptTableMetas::get_set_stmt_output_ndv(const ObSelectStmt &stmt,
 const OptTableMeta* OptTableMetas::get_table_meta_by_table_id(const uint64_t table_id) const
 {
   const OptTableMeta *table_meta = NULL;
-  for (int64_t i = 0; NULL == table_meta && i < table_metas_.count(); ++i) {
+  for (int64_t i = 0; i < table_metas_.count(); ++i) {
     if (table_id == table_metas_.at(i).get_table_id()) {
-      table_meta = &table_metas_.at(i);
+      if (NULL == table_meta || table_metas_.at(i).get_rows() > table_meta->get_rows()) {
+        table_meta = &table_metas_.at(i);
+      }
     }
   }
   return table_meta;
@@ -1030,9 +1044,11 @@ const OptTableMeta* OptTableMetas::get_table_meta_by_table_id(const uint64_t tab
 OptTableMeta* OptTableMetas::get_table_meta_by_table_id(const uint64_t table_id)
 {
   OptTableMeta *table_meta = NULL;
-  for (int64_t i = 0; NULL == table_meta && i < table_metas_.count(); ++i) {
+  for (int64_t i = 0; i < table_metas_.count(); ++i) {
     if (table_id == table_metas_.at(i).get_table_id()) {
-      table_meta = &table_metas_.at(i);
+      if (NULL == table_meta || table_metas_.at(i).get_rows() > table_meta->get_rows()) {
+        table_meta = &table_metas_.at(i);
+      }
     }
   }
   return table_meta;

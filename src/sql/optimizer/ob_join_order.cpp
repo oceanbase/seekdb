@@ -15868,8 +15868,13 @@ int ObJoinOrder::get_used_stat_partitions(const uint64_t ref_table_id,
       OB_ISNULL(session_info = OPT_CTX.get_session_info()) ||
       OB_ISNULL(OPT_CTX.get_exec_ctx()) ||
       OB_ISNULL(opt_stat_manager = OPT_CTX.get_opt_stat_manager())) {
+    #ifdef _WIN32
+    LOG_WARN("opt stat manager is null on Windows, fall back to default stats");
+    get_stat = true;
+    #else
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
+    #endif
   } else if (OPT_CTX.use_default_stat()) {
     get_stat = true;
   } else if (OB_FAIL(get_partition_infos(ref_table_id, schema, all_used_part_ids,
