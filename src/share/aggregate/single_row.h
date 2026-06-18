@@ -45,8 +45,7 @@ public:
     int64_t output_idx = agg_ctx.eval_ctx_.get_batch_idx();
     ResultFmt *res_vec = static_cast<ResultFmt *>(agg_expr.get_vector(agg_ctx.eval_ctx_));
     if (notnulls.at(agg_col_id) && T_FUN_COUNT == agg_func) {
-      static const uint32_t constexpr one_val[2] = {3221225473, 1};
-      res_vec->set_number(output_idx, *reinterpret_cast<const number::ObCompactNumber *>(one_val));
+      res_vec->set_int(output_idx, 1);
     } else if (notnulls.at(agg_col_id)) {
       if (agg_func != T_FUN_SUM || in_tc == out_tc) {
         const char *agg_data = agg_cell;
@@ -81,10 +80,7 @@ public:
                                            output_idx, nullptr);
       }
     } else if (agg_func == T_FUN_COUNT) {
-      static const uint32_t constexpr zero_val[1] = {2147483648};
-      // number::ObNumber tmp_nmb;
-      // tmp_nmb.set_zero();
-      res_vec->set_number(output_idx, *reinterpret_cast<const number::ObCompactNumber *>(zero_val));
+      res_vec->set_int(output_idx, 0);
     } else {
       res_vec->set_null(output_idx);
     }

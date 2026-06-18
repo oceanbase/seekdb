@@ -938,9 +938,7 @@ int Processor::collect_empty_set(bool collect_for_third_stage) const
       case T_FUN_KEEP_COUNT:
       case T_FUN_GROUP_PERCENT_RANK:
       case T_FUN_SUM_OPNSIZE: {
-        number::ObNumber zero_nmb;
-        zero_nmb.set_zero();
-        res_vec->set_number(output_idx, zero_nmb);
+        res_vec->set_int(output_idx, 0);
         break;
       }
       case T_FUN_GROUP_RANK:

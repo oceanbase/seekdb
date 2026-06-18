@@ -29,8 +29,8 @@
 
 #define INIT_COUNT_CASE(vec_tc)                                                                    \
   case (vec_tc): {                                                                                 \
-    ret = init_agg_func<SingleRowAggregate<T_FUN_COUNT, vec_tc, VEC_TC_NUMBER>>(agg_ctx, col_id,      \
-                                                                                allocator, agg); \
+    ret = init_agg_func<SingleRowAggregate<T_FUN_COUNT, vec_tc, VEC_TC_INTEGER>>(                   \
+      agg_ctx, col_id, allocator, agg);                                                            \
     if (OB_FAIL(ret)) { SQL_LOG(WARN, "init aggregate failed", K(vec_tc), K(*aggr_info.expr_)); }  \
   } break
 

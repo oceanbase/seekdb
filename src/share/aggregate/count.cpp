@@ -33,8 +33,8 @@ int init_count_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id, ObIA
   ObAggrInfo &aggr_info = agg_ctx.locate_aggr_info(agg_col_id);
   agg = nullptr;
   bool has_distinct = aggr_info.has_distinct_;
-  ret = init_agg_func<CountAggregate<VEC_TC_NUMBER>>(agg_ctx, agg_col_id, has_distinct, allocator,
-                                                     agg);
+  ret = init_agg_func<CountAggregate<VEC_TC_INTEGER>>(agg_ctx, agg_col_id, has_distinct, allocator,
+                                                      agg);
   return ret;
 #undef INIT_COUNT_CASE
 }
@@ -76,7 +76,7 @@ int quick_add_batch_rows_for_count(IAggregate *agg, RuntimeContext &agg_ctx,
     data += diff;
 
   } else {
-    auto &count_agg = *static_cast<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_NUMBER> *>(agg);
+    auto &count_agg = *static_cast<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_INTEGER> *>(agg);
     if (OB_LIKELY(row_sel.is_empty() && bound.get_all_rows_active())) {
       for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
         ret =

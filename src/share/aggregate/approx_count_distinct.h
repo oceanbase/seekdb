@@ -214,19 +214,10 @@ public:
       int64_t tmp_result = OB_INVALID_COUNT;
       ObExprEstimateNdv::llc_estimate_ndv(tmp_result, llc_str);
       if (tmp_result >= 0) {
-        ObNumStackOnceAlloc tmp_alloc;
-        number::ObNumber res_nmb;
-        if (OB_FAIL(res_nmb.from(tmp_result, tmp_alloc))) {
-          SQL_LOG(WARN, "convert int to number failed", K(ret));
-        } else {
-          res_vec->set_number(output_idx, res_nmb);
-        }
+        res_vec->set_int(output_idx, tmp_result);
       }
     } else {
-      // set zero number
-      number::ObNumber zero_nmb;
-      zero_nmb.set_zero();
-      res_vec->set_payload(output_idx, &zero_nmb, sizeof(ObNumberDesc));
+      res_vec->set_int(output_idx, 0);
     }
     return ret;
   }

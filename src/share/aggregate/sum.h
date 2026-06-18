@@ -166,9 +166,17 @@ public:
     if (OB_LIKELY(not_nulls.at(agg_col_id))) {
       CellWriter<ResultType>::set(agg_cell, agg_cell_len, res_vec, output_idx, nullptr);
     } else if (agg_ctx.locate_aggr_info(agg_col_id).get_expr_type() == T_FUN_COUNT_SUM) {
-      number::ObNumber zero;
-      zero.set_zero();
-      res_vec->set_payload(output_idx, &zero, sizeof(ObNumberDesc));
+      if (VEC_TC_INTEGER == out_tc) {
+        int64_t res = 0;
+        res_vec->set_payload(output_idx, &res, sizeof(int64_t));
+      } else if (VEC_TC_NUMBER == out_tc) {
+        number::ObNumber zero;
+        zero.set_zero();
+        res_vec->set_payload(output_idx, &zero, sizeof(ObNumberDesc));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        SQL_LOG(WARN, "unexpected output result type", K(ret), K(out_tc));
+      }
     } else {
       res_vec->set_null(output_idx);
     }
@@ -588,9 +596,16 @@ public:
         }
       }
     } else if (agg_ctx.locate_aggr_info(agg_col_id).get_expr_type() == T_FUN_COUNT_SUM) {
-      number::ObNumber res_nmb;
-      res_nmb.set_zero();
-      res_vec->set_number(output_idx, res_nmb);
+      if (out_tc == VEC_TC_NUMBER) {
+        number::ObNumber res_nmb;
+        res_nmb.set_zero();
+        res_vec->set_number(output_idx, res_nmb);
+      } else if (wide::IsIntegral<ResultType>::value) { // decimal int is used
+        set_decint_zero<ColumnFmt, sizeof(ResultType)>(res_vec, output_idx);
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        SQL_LOG(WARN, "invalid result type of count sum", K(ret), K(out_tc));
+      }
     } else {
       static_cast<ColumnFmt *>(agg_expr.get_vector(ctx))->set_null(output_idx);
     }
