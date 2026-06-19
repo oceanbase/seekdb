@@ -34,47 +34,116 @@ else()
   option(protobuf_MODULE_COMPATIBLE TRUE)
   set(_PROTOC "${DEVEL_PATH}/bin/protoc")
   set(_GRPC_CPP_PLUGIN "${DEVEL_PATH}/bin/grpc_cpp_plugin")
-  set(_PROTOC_LD_PATH "${DEVTOOLS_DIR}/lib64")
+  if(APPLE)
+    set(_PROTOC_LD_PATH "${DEVTOOLS_DIR}/lib")
+    set(_PROTOC_DYLIB_ENV "DYLD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{DYLD_LIBRARY_PATH}")
+  else()
+    set(_PROTOC_LD_PATH "${DEVTOOLS_DIR}/lib64")
+    set(_PROTOC_DYLIB_ENV "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}")
+  endif()
   include_directories(
     ${DEP_3RD_DIR}/usr/include
     ${DEVEL_PATH}/include
   )
 endif()
 
-# Generate .pb.cc/.pb.h and .grpc.pb.cc/.grpc.pb.h from .proto files at build time
+# Generate .pb.cc/.pb.h and .grpc.pb.cc/.grpc.pb.h from .proto files at build time.
 set(GENERATED_SRCS)
-foreach(PROTO_NAME ${PROTO_NAMES})
-  set(PROTO_FILE "${PROTO_SRC_DIR}/${PROTO_NAME}.proto")
-  set(PB_CC   "${PROTO_GEN_DIR}/${PROTO_NAME}.pb.cc")
-  set(PB_H    "${PROTO_GEN_DIR}/${PROTO_NAME}.pb.h")
-  set(GRPC_CC "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.cc")
-  set(GRPC_H  "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.h")
+if(APPLE AND NOT WIN32)
+  # Parallel protoc/grpc_cpp_plugin under make -jN can be SIGKILL'd on macOS
+  # (see oceanbase/seekdb#778); one rule runs all invocations sequentially.
+  set(_ALL_PROTO_OUTPUTS)
+  set(_ALL_PROTO_FILES)
+  set(_PROTO_GEN_COMMANDS)
+
+  foreach(PROTO_NAME ${PROTO_NAMES})
+    set(PROTO_FILE "${PROTO_SRC_DIR}/${PROTO_NAME}.proto")
+    set(PB_CC   "${PROTO_GEN_DIR}/${PROTO_NAME}.pb.cc")
+    set(PB_H    "${PROTO_GEN_DIR}/${PROTO_NAME}.pb.h")
+    set(GRPC_CC "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.cc")
+    set(GRPC_H  "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.h")
+
+    list(APPEND _ALL_PROTO_OUTPUTS ${PB_CC} ${PB_H} ${GRPC_CC} ${GRPC_H})
+    list(APPEND _ALL_PROTO_FILES ${PROTO_FILE})
+    list(APPEND GENERATED_SRCS ${PB_CC} ${GRPC_CC})
+
+    list(APPEND _PROTO_GEN_COMMANDS
+      COMMAND ${CMAKE_COMMAND} -E env "${_PROTOC_DYLIB_ENV}"
+        ${_PROTOC}
+        --cpp_out=${PROTO_GEN_DIR}
+        -I${PROTO_SRC_DIR}
+        ${PROTO_FILE}
+      COMMAND ${CMAKE_COMMAND} -E env "${_PROTOC_DYLIB_ENV}"
+        ${_PROTOC}
+        --grpc_out=${PROTO_GEN_DIR}
+        --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
+        -I${PROTO_SRC_DIR}
+        ${PROTO_FILE}
+    )
+  endforeach()
 
   add_custom_command(
-    OUTPUT ${PB_CC} ${PB_H}
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}"
-      ${_PROTOC}
-      --cpp_out=${PROTO_GEN_DIR}
-      -I${PROTO_SRC_DIR}
-      ${PROTO_FILE}
-    DEPENDS ${PROTO_FILE}
-    COMMENT "Generating protobuf C++ from ${PROTO_NAME}.proto"
+    OUTPUT ${_ALL_PROTO_OUTPUTS}
+    ${_PROTO_GEN_COMMANDS}
+    DEPENDS ${_ALL_PROTO_FILES}
+    COMMENT "Generating protobuf/gRPC C++ from .proto files"
+    VERBATIM
   )
+else()
+  foreach(PROTO_NAME ${PROTO_NAMES})
+    set(PROTO_FILE "${PROTO_SRC_DIR}/${PROTO_NAME}.proto")
+    set(PB_CC   "${PROTO_GEN_DIR}/${PROTO_NAME}.pb.cc")
+    set(PB_H    "${PROTO_GEN_DIR}/${PROTO_NAME}.pb.h")
+    set(GRPC_CC "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.cc")
+    set(GRPC_H  "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.h")
 
-  add_custom_command(
-    OUTPUT ${GRPC_CC} ${GRPC_H}
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}"
-      ${_PROTOC}
-      --grpc_out=${PROTO_GEN_DIR}
-      --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
-      -I${PROTO_SRC_DIR}
-      ${PROTO_FILE}
-    DEPENDS ${PROTO_FILE}
-    COMMENT "Generating gRPC C++ from ${PROTO_NAME}.proto"
-  )
+    if(WIN32)
+      add_custom_command(
+        OUTPUT ${PB_CC} ${PB_H}
+        COMMAND ${_PROTOC}
+          --cpp_out=${PROTO_GEN_DIR}
+          -I${PROTO_SRC_DIR}
+          ${PROTO_FILE}
+        DEPENDS ${PROTO_FILE}
+        COMMENT "Generating protobuf C++ from ${PROTO_NAME}.proto"
+      )
+      add_custom_command(
+        OUTPUT ${GRPC_CC} ${GRPC_H}
+        COMMAND ${_PROTOC}
+          --grpc_out=${PROTO_GEN_DIR}
+          --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
+          -I${PROTO_SRC_DIR}
+          ${PROTO_FILE}
+        DEPENDS ${PROTO_FILE}
+        COMMENT "Generating gRPC C++ from ${PROTO_NAME}.proto"
+      )
+    else()
+      add_custom_command(
+        OUTPUT ${PB_CC} ${PB_H}
+        COMMAND ${CMAKE_COMMAND} -E env "${_PROTOC_DYLIB_ENV}"
+          ${_PROTOC}
+          --cpp_out=${PROTO_GEN_DIR}
+          -I${PROTO_SRC_DIR}
+          ${PROTO_FILE}
+        DEPENDS ${PROTO_FILE}
+        COMMENT "Generating protobuf C++ from ${PROTO_NAME}.proto"
+      )
+      add_custom_command(
+        OUTPUT ${GRPC_CC} ${GRPC_H}
+        COMMAND ${CMAKE_COMMAND} -E env "${_PROTOC_DYLIB_ENV}"
+          ${_PROTOC}
+          --grpc_out=${PROTO_GEN_DIR}
+          --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
+          -I${PROTO_SRC_DIR}
+          ${PROTO_FILE}
+        DEPENDS ${PROTO_FILE}
+        COMMENT "Generating gRPC C++ from ${PROTO_NAME}.proto"
+      )
+    endif()
 
-  list(APPEND GENERATED_SRCS ${PB_CC} ${GRPC_CC})
-endforeach()
+    list(APPEND GENERATED_SRCS ${PB_CC} ${GRPC_CC})
+  endforeach()
+endif()
 
 add_library(oblib_grpc STATIC
   ${GENERATED_SRCS}

@@ -244,6 +244,20 @@ elseif(APPLE)
     OUTPUT_STRIP_TRAILING_WHITESPACE
   )
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${MACOS_VERSION}" CACHE STRING "Minimum macOS deployment version")
+  # Bundled clang++ needs an explicit SDK sysroot to locate libc++ on modern macOS
+  # where /usr/include is not directly available without CommandLineTools SDK.
+  execute_process(
+    COMMAND xcrun --show-sdk-path
+    OUTPUT_VARIABLE MACOS_SDK_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE MACOS_SDK_RESULT
+  )
+  if(MACOS_SDK_RESULT EQUAL 0 AND MACOS_SDK_PATH)
+    set(CMAKE_OSX_SYSROOT "${MACOS_SDK_PATH}" CACHE PATH "macOS SDK sysroot" FORCE)
+    message(STATUS "Using macOS SDK: ${CMAKE_OSX_SYSROOT}")
+  else()
+    message(FATAL_ERROR "Failed to detect macOS SDK path via 'xcrun --show-sdk-path'. Please install Xcode Command Line Tools.")
+  endif()
   # extract major version like 15.6.1 -> 15
   string(REPLACE "." ";" MACOS_VERSION_LISTS "${MACOS_VERSION}")
   list(GET MACOS_VERSION_LISTS 0 MACOS_MAJOR)
