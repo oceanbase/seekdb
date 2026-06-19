@@ -6684,19 +6684,10 @@ int ObPartitionUtils::calc_hash_part_idx(const uint64_t val,
   int64_t N = 0;
   int64_t powN = 0;
   const static int64_t max_part_num_log2 = 64;
-  //
-  // It will not be a negative number, so use forced conversion instead of floor
-  N = static_cast<int64_t>(std::log(part_num) / std::log(2));
-  if (N >= max_part_num_log2) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("result is too big", K(N), K(part_num), K(val));
-  } else {
-    powN = (1ULL << N);
-    partition_idx = val & (powN - 1); //pow(2, N));
-    if (partition_idx + powN < part_num && (val & powN) == powN) {
-      partition_idx += powN;
-    }
-  }
+  UNUSED(N);
+  UNUSED(powN);
+  UNUSED(max_part_num_log2);
+  partition_idx = val % part_num;
   return ret;
 }
 
