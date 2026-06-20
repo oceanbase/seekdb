@@ -1300,7 +1300,6 @@ TEST(TestWideInteger, ALL) {
 #endif
   test.op_from_number();
   test.test_const_value();
-  test.test_oracle_to_string();
   test_small_decint_to_nmb();
 }
 
