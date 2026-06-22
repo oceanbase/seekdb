@@ -74,6 +74,7 @@ namespace share
 {
 struct ObSequenceValue;
 }
+namespace memtable { class ObBtreeIterCache; }
 using common::ObPsStmtId;
 namespace sql
 {
@@ -839,6 +840,7 @@ public:
   ObPlanCache *get_plan_cache();
   ObPlanCache *get_plan_cache_directly() const { return plan_cache_; };
   ObPsCache *get_ps_cache();
+  memtable::ObBtreeIterCache *get_btree_iter_cache() { return btree_iter_cache_; }
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
   void set_show_warnings_buf(int error_code);
@@ -1746,6 +1748,7 @@ private:
   bool is_session_sync_support_; // session_sync_support flag.
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
+  memtable::ObBtreeIterCache *btree_iter_cache_;
   bool failover_mode_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
