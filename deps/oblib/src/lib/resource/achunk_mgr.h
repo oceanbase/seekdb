@@ -121,6 +121,30 @@ public:
     }
     return chunk;
   }
+  inline AChunk *pop_expired(const int64_t now, const int64_t expire_us)
+  {
+    AChunk *chunk = NULL;
+    if (!OB_ISNULL(header_)) {
+      ObDisableDiagnoseGuard disable_diagnose_guard;
+      if (with_mutex_) {
+        mutex_.lock();
+      }
+      DEFER(if (with_mutex_) {mutex_.unlock();});
+      if (!OB_ISNULL(header_) && header_->cache_ts_ > 0 && now - header_->cache_ts_ >= expire_us) {
+        chunk = header_;
+        hold_ -= chunk->hold();
+        pops_++;
+        if (header_->next_ != header_) {
+          header_->prev_->next_ = header_->next_;
+          header_->next_->prev_ = header_->prev_;
+          header_ = header_->next_;
+        } else {
+          header_ = NULL;
+        }
+      }
+    }
+    return chunk;
+  }
   inline AChunk *popall(int64_t &hold)
   {
     AChunk *chunk = NULL;
@@ -220,6 +244,7 @@ private:
   static constexpr int32_t MIN_LARGE_ACHUNK_INDEX = MAX_NORMAL_ACHUNK_INDEX + 1;
   static constexpr int32_t MAX_LARGE_ACHUNK_INDEX = MIN_LARGE_ACHUNK_INDEX + ARRAYSIZEOF(LARGE_ACHUNK_SIZE_MAP) - 1;
   static constexpr int32_t HUGE_ACHUNK_INDEX = MAX_LARGE_ACHUNK_INDEX + 1;
+  static constexpr int64_t CACHE_EXPIRE_US = 30L * 1000L * 1000L;
 public:
   static AChunkMgr &instance();
 public:
@@ -305,6 +330,20 @@ private:
     AChunk *chunk = slots_[idx]->pop();
     if (NULL != chunk) {
       int64_t hold_size = chunk->hold();
+      chunk->cache_ts_ = 0;
+      if (idx >= MIN_LARGE_ACHUNK_INDEX) {
+        ATOMIC_FAA(&large_cache_hold_, -hold_size);
+      }
+      ATOMIC_FAA(&cache_hold_, -hold_size);
+    }
+    return chunk;
+  }
+  AChunk* pop_expired_chunk_with_index(const int32_t idx, const int64_t now)
+  {
+    AChunk *chunk = slots_[idx]->pop_expired(now, CACHE_EXPIRE_US);
+    if (NULL != chunk) {
+      int64_t hold_size = chunk->hold();
+      chunk->cache_ts_ = 0;
       if (idx >= MIN_LARGE_ACHUNK_INDEX) {
         ATOMIC_FAA(&large_cache_hold_, -hold_size);
       }
@@ -348,7 +387,9 @@ private:
   {
     return slots_[idx].free_list_;
   }
+  void evict_expired_chunk(const int64_t now);
 protected:
+  virtual int64_t current_time_us() const;
   int64_t limit_;
   int64_t hard_limit_;
   int64_t hold_; // Including the memory occupied by free_list, limited by memory_limit
@@ -356,6 +397,9 @@ protected:
   int64_t cache_hold_;
   int64_t large_cache_hold_;
   int64_t max_chunk_cache_size_;
+  int64_t expired_unmaps_;
+  int64_t evict_cursor_;
+  int64_t evicting_;
   Slot slots_[HUGE_ACHUNK_INDEX + 1];
 }; // end of class AChunkMgr
 

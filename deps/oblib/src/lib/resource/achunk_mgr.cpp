@@ -19,6 +19,7 @@
 #include "achunk_mgr.h"
 #include "lib/utility/utility.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#include "lib/time/ob_time_utility.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -100,10 +101,16 @@ AChunkMgr &AChunkMgr::instance()
 AChunkMgr::AChunkMgr()
   : limit_(DEFAULT_LIMIT), hard_limit_(INT64_MAX), hold_(0),
     total_hold_(0), cache_hold_(0), large_cache_hold_(0),
-    max_chunk_cache_size_(limit_)
+    max_chunk_cache_size_(limit_),
+    expired_unmaps_(0), evict_cursor_(0), evicting_(0)
 {
   // not to cache huge_chunk
     slots_[HUGE_ACHUNK_INDEX]->set_max_chunk_cache_size(0);
+}
+
+int64_t AChunkMgr::current_time_us() const
+{
+  return oceanbase::common::ObTimeUtility::current_time();
 }
 
 void *AChunkMgr::direct_alloc(const uint64_t size, const bool can_use_huge_page, bool &huge_page_used, const bool alloc_shadow)
@@ -324,6 +331,7 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
 void AChunkMgr::free_chunk(AChunk *chunk)
 {
   if (OB_NOT_NULL(chunk)) {
+    const int64_t now = current_time_us();
     const int64_t hold_size = chunk->hold();
     const uint64_t all_size = chunk->aligned();
     const double max_large_cache_ratio = 0.5;
@@ -332,12 +340,35 @@ void AChunkMgr::free_chunk(AChunk *chunk)
     if (cache_hold_ + hold_size <= max_chunk_cache_size_
         && (NORMAL_ACHUNK_SIZE == all_size || large_cache_hold_ <= max_large_cache_size)
         && 0 == chunk->washed_size_) {
+      chunk->cache_ts_ = now;
       freed = !push_chunk(chunk, all_size, hold_size);
     }
     if (freed) {
       direct_free(chunk, all_size);
       dec_hold(hold_size);
     }
+    evict_expired_chunk(now);
+  }
+}
+
+void AChunkMgr::evict_expired_chunk(const int64_t now)
+{
+  if (OB_UNLIKELY(now <= 0) ||
+      OB_UNLIKELY(ATOMIC_LOAD(&cache_hold_) <= 0) ||
+      OB_UNLIKELY(!ATOMIC_BCAS(&evicting_, 0, 1))) {
+    return;
+  }
+  DEFER(ATOMIC_STORE(&evicting_, 0));
+
+  const uint64_t cursor = static_cast<uint64_t>(ATOMIC_FAA(&evict_cursor_, 1));
+  const int32_t idx = static_cast<int32_t>(cursor % NORMAL_ACHUNK_NWAY);
+  AChunk *chunk = pop_expired_chunk_with_index(idx, now);
+  if (OB_NOT_NULL(chunk)) {
+    const uint64_t all_size = chunk->aligned();
+    const int64_t hold_size = chunk->hold();
+    direct_free(chunk, all_size);
+    dec_hold(hold_size);
+    ATOMIC_FAA(&expired_unmaps_, 1);
   }
 }
 
@@ -493,15 +524,15 @@ int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
 
   ret = databuff_printf(buf, buf_len, pos,
 #ifdef _WIN32
-      "[chunk_mgr] limit=%15ld hold=%15ld total_hold=%15ld used=%15ld freelists_hold=%15ld"
+      "[chunk_mgr] limit=%15ld hold=%15ld total_hold=%15ld used=%15ld freelists_hold=%15ld expired_unmaps=%15ld"
       " total_maps=%15ld total_unmaps=%15ld large_maps=%15ld large_unmaps=%15ld huge_maps=%15ld huge_unmaps=%15ld"
       " resident_size=%15ld virtual_memory_used=%15ld",
 #else
-      "[chunk_mgr] limit=%'15ld hold=%'15ld total_hold=%'15ld used=%'15ld freelists_hold=%'15ld"
+      "[chunk_mgr] limit=%'15ld hold=%'15ld total_hold=%'15ld used=%'15ld freelists_hold=%'15ld expired_unmaps=%'15ld"
       " total_maps=%'15ld total_unmaps=%'15ld large_maps=%'15ld large_unmaps=%'15ld huge_maps=%'15ld huge_unmaps=%'15ld"
       " resident_size=%'15ld virtual_memory_used=%'15ld",
 #endif
-      limit_, hold_, total_hold_, get_used(), cache_hold_,
+      limit_, hold_, total_hold_, get_used(), cache_hold_, expired_unmaps_,
       total_maps, total_unmaps, large_maps, large_unmaps, huge_maps, huge_unmaps,
       resident_size, virtual_memory_used);
   if (OB_SUCC(ret)) {
