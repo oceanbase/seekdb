@@ -303,11 +303,8 @@ TEST_F(TestLogSlidingWindow, test_submit_log)
   buf_len = 1 * 1024 * 1024;
   EXPECT_EQ(OB_SUCCESS, log_sw_.submit_log(buf, buf_len, ref_scn, lsn, scn));
   buf_len = 2 * 1024 * 1024;
-  for (int i = 0; i < 2; ++i) {
-    EXPECT_EQ(OB_SUCCESS, log_sw_.submit_log(buf, buf_len, ref_scn, lsn, scn));
-  }
   PALF_LOG(INFO, "current lsn", K(lsn), K(buf_len));
-  // 8M filled with 7M, unable to continue submit 2M log
+  // 4M group buffer has been filled with 3M, unable to continue submit 2M log.
   EXPECT_EQ(OB_EAGAIN, log_sw_.submit_log(buf, buf_len, ref_scn, lsn, scn));
 }
 
@@ -469,7 +466,8 @@ TEST_F(TestLogSlidingWindow, test_receive_log)
   EXPECT_EQ(OB_EAGAIN, log_sw_.receive_log(src_server, push_log_type, prev_lsn, prev_log_proposal_id, lsn, data_buf_, group_entry_size, true, truncate_log_info));
   // test cache log case
   log_id = 102;
-  lsn.val_ += 4096 * 1024;
+  const int64_t cache_log_lsn_gap = 1024 * 1024;
+  lsn.val_ += cache_log_lsn_gap;
   EXPECT_EQ(OB_SUCCESS, group_header.generate(false, false, write_buf, log_entry_size, max_scn, log_id,
       committed_end_lsn, log_proposal_id, group_data_checksum));
   // calculate header parity flag
@@ -482,7 +480,7 @@ TEST_F(TestLogSlidingWindow, test_receive_log)
   EXPECT_EQ(OB_SUCCESS, log_sw_.receive_log(src_server, push_log_type, prev_lsn, prev_log_proposal_id, lsn, data_buf_, group_entry_size, true, truncate_log_info));
   // test need truncate cached log_task case
   log_id = 3;
-  lsn.val_ -= 4096 * 1024;
+  lsn.val_ -= cache_log_lsn_gap;
   prev_lsn = old_lsn;
   prev_log_proposal_id = log_proposal_id;
   EXPECT_EQ(OB_SUCCESS, group_header.generate(false, false, write_buf, log_entry_size, max_scn, log_id,

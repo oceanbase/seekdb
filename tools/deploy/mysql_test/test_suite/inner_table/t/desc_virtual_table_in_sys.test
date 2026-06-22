@@ -45,6 +45,7 @@ when "$table_name" in (
 "__all_virtual_sysstat",
 "__all_virtual_sesstat",
 "__all_virtual_session_event",
+"__all_virtual_shared_storage_quota",
 "__all_virtual_storage_leak_info") then 4
 when "$table_name" in (
 "__all_virtual_tx_data") then 5
@@ -103,4 +104,3 @@ if ($query_type == 5)
 
 inc $idx;
 }
-

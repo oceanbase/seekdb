@@ -931,10 +931,6 @@ public:
   static int procs_priv_schema(share::schema::ObTableSchema &table_schema);
   static int gv_ob_sqlstat_schema(share::schema::ObTableSchema &table_schema);
   static int v_ob_sqlstat_schema(share::schema::ObTableSchema &table_schema);
-  static int gv_ob_sess_time_model_schema(share::schema::ObTableSchema &table_schema);
-  static int v_ob_sess_time_model_schema(share::schema::ObTableSchema &table_schema);
-  static int gv_ob_sys_time_model_schema(share::schema::ObTableSchema &table_schema);
-  static int v_ob_sys_time_model_schema(share::schema::ObTableSchema &table_schema);
   static int dba_ob_aux_statistics_schema(share::schema::ObTableSchema &table_schema);
   static int cdb_ob_aux_statistics_schema(share::schema::ObTableSchema &table_schema);
   static int dba_index_usage_schema(share::schema::ObTableSchema &table_schema);
@@ -2247,10 +2243,6 @@ const schema_create_func sys_view_schema_creators [] = {
   ObInnerTableSchema::procs_priv_schema,
   ObInnerTableSchema::gv_ob_sqlstat_schema,
   ObInnerTableSchema::v_ob_sqlstat_schema,
-  ObInnerTableSchema::gv_ob_sess_time_model_schema,
-  ObInnerTableSchema::v_ob_sess_time_model_schema,
-  ObInnerTableSchema::gv_ob_sys_time_model_schema,
-  ObInnerTableSchema::v_ob_sys_time_model_schema,
   ObInnerTableSchema::dba_ob_aux_statistics_schema,
   ObInnerTableSchema::cdb_ob_aux_statistics_schema,
   ObInnerTableSchema::dba_index_usage_schema,
@@ -2975,10 +2967,6 @@ const uint64_t tenant_space_tables [] = {
   OB_PROCS_PRIV_TID,
   OB_GV_OB_SQLSTAT_TID,
   OB_V_OB_SQLSTAT_TID,
-  OB_GV_OB_SESS_TIME_MODEL_TID,
-  OB_V_OB_SESS_TIME_MODEL_TID,
-  OB_GV_OB_SYS_TIME_MODEL_TID,
-  OB_V_OB_SYS_TIME_MODEL_TID,
   OB_DBA_OB_AUX_STATISTICS_TID,
   OB_DBA_INDEX_USAGE_TID,
   OB_DBA_OB_SYS_VARIABLES_TID,
@@ -4013,10 +4001,6 @@ const char* const tenant_space_table_names [] = {
   OB_PROCS_PRIV_TNAME,
   OB_GV_OB_SQLSTAT_TNAME,
   OB_V_OB_SQLSTAT_TNAME,
-  OB_GV_OB_SESS_TIME_MODEL_TNAME,
-  OB_V_OB_SESS_TIME_MODEL_TNAME,
-  OB_GV_OB_SYS_TIME_MODEL_TNAME,
-  OB_V_OB_SYS_TIME_MODEL_TNAME,
   OB_DBA_OB_AUX_STATISTICS_TNAME,
   OB_DBA_INDEX_USAGE_TNAME,
   OB_DBA_OB_SYS_VARIABLES_TNAME,
@@ -6058,10 +6042,10 @@ static inline int get_sys_table_lob_aux_schema(const uint64_t tid,
 const int64_t OB_CORE_TABLE_COUNT = 4;
 const int64_t OB_SYS_TABLE_COUNT = 165;
 const int64_t OB_VIRTUAL_TABLE_COUNT = 342;
-const int64_t OB_SYS_VIEW_COUNT = 356;
-const int64_t OB_SYS_TENANT_TABLE_COUNT = 868;
+const int64_t OB_SYS_VIEW_COUNT = 352;
+const int64_t OB_SYS_TENANT_TABLE_COUNT = 864;
 const int64_t OB_CORE_SCHEMA_VERSION = 1;
-const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = 871;
+const int64_t OB_BOOTSTRAP_SCHEMA_VERSION = 867;
 
 } // end namespace share
 } // end namespace oceanbase

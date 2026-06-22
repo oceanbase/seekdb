@@ -105,7 +105,6 @@ enable_rich_error_msg
 enable_rpc_authentication_bypass
 enable_rpc_service
 enable_rpc_tls
-enable_sql_audit
 enable_sql_extension
 enable_sql_operator_dump
 enable_sys_table_ddl
@@ -482,9 +481,6 @@ _no_logging
 _object_storage_io_timeout
 _obkv_enable_distributed_execution
 _obkv_feature_mode
-_ob_ash_disk_write_enable
-_ob_ash_enable
-_ob_ash_size
 _ob_ddl_temp_file_compress_func
 _ob_ddl_timeout
 _ob_elr_fast_freeze_threshold

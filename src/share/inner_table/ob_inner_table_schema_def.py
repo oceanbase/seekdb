@@ -22310,91 +22310,10 @@ PLAN_CACHE_HIT_DELTA FROM oceanbase.gv$ob_sqlstat
   )
 # 21489: DBA_WR_SQLSTAT # removed
 # 21490: CDB_WR_SQLSTAT # removed
-def_table_schema(
-  owner = 'roland.qk',
-  table_name      = 'GV$OB_SESS_TIME_MODEL',
-  table_id        = '21491',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    SID AS SID,
-    STAT_ID AS STAT_ID,
-    NAME AS STAT_NAME,
-    VALUE AS VALUE
-  FROM
-    oceanbase.GV$SESSTAT
-  left join
-    oceanbase.v$statname
-  on gv$sesstat.`statistic#`=v$statname.`statistic#`
-  WHERE
-    STAT_ID in (200001, 200002, 200010, 200011, 200005, 200006);
-""".replace("\n", " ")
-  )
-
-def_table_schema(
-  owner = 'roland.qk',
-  table_name      = 'V$OB_SESS_TIME_MODEL',
-  table_id        = '21492',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT SID,
-    STAT_ID,
-    STAT_NAME,
-    VALUE
-  FROM
-    oceanbase.GV$OB_SESS_TIME_MODEL
-
-""".replace("\n", " ")
-  )
-
-def_table_schema(
-  owner = 'roland.qk',
-  table_name      = 'GV$OB_SYS_TIME_MODEL',
-  table_id        = '21493',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    STAT_ID AS STAT_ID,
-    NAME AS STAT_NAME,
-    VALUE AS VALUE
-  FROM
-    oceanbase.GV$SYSSTAT
-  WHERE
-    STAT_ID in (200001, 200002, 200010, 200011, 200005, 200006);
-""".replace("\n", " ")
-  )
-
-def_table_schema(
-  owner = 'roland.qk',
-  table_name      = 'V$OB_SYS_TIME_MODEL',
-  table_id        = '21494',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    STAT_ID,
-    STAT_NAME,
-    VALUE
-  FROM
-    oceanbase.GV$OB_SYS_TIME_MODEL
-""".replace("\n", " ")
-  )
-
+# 21491: GV$OB_SESS_TIME_MODEL # removed
+# 21492: V$OB_SESS_TIME_MODEL # removed
+# 21493: GV$OB_SYS_TIME_MODEL # removed
+# 21494: V$OB_SYS_TIME_MODEL # removed
 # 21495: DBA_WR_SYS_TIME_MODEL # removed
 
 # 21496: CDB_WR_SYS_TIME_MODEL # removed

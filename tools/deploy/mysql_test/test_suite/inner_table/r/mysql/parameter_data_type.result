@@ -15,9 +15,9 @@ ZONE	SCOPE	NAME	DATA_TYPE	VALUE	INFO	SECTION	EDIT_LEVEL	DEFAULT_VALUE	ISDEFAULT
 select * from V$OB_PARAMETERS where data_type = 'UNKNOWN';
 ZONE	SCOPE	NAME	DATA_TYPE	VALUE	INFO	SECTION	EDIT_LEVEL	DEFAULT_VALUE	ISDEFAULT
 ===============  [2] check data_tpye for __all_virtual_sys_parameter_stat  ===============
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -37,9 +37,9 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = '_obkv
 name	data_type
 _obkv_feature_mode	MODE
 ========  [4] check data_tpye for __all_virtual_sys_parameter_stat  =========
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -83,9 +83,9 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'compa
 name	data_type
 compatible	VERSION
 =======  [5] check data_tpye for __all_virtual_sys_parameter_stat  =======
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -154,9 +154,9 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'compa
 name	data_type
 compatible	VERSION
 ================  [8] check data_tpye for GV$OB_PARAMETERS  ================
-select name, data_type from GV$OB_PARAMETERS where name = 'enable_sql_audit';
+select name, data_type from GV$OB_PARAMETERS where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from GV$OB_PARAMETERS where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -200,9 +200,9 @@ select name, data_type from GV$OB_PARAMETERS where name = 'compatible';
 name	data_type
 compatible	VERSION
 ================  [9] check data_tpye for V$OB_PARAMETERS  =================
-select name, data_type from V$OB_PARAMETERS where name = 'enable_sql_audit';
+select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -246,9 +246,9 @@ select name, data_type from V$OB_PARAMETERS where name = 'compatible';
 name	data_type
 compatible	VERSION
 ================  [10] check data_tpye for show parameters  =================
-show parameters where name = 'enable_sql_audit';
+show parameters where name = 'enable_perf_event';
 zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	True	specifies whether SQL audit is turned on. The default value is TRUE. Value: TRUE: turned on FALSE: turned off	value	info	DEFAULT	DYNAMIC_EFFECTIVE	true	1
+zone1	observer	server_ip	server_port	True	specifies whether to enable perf event feature. The default value is True.	value	info	DEFAULT	DYNAMIC_EFFECTIVE	True	1
 show parameters where name = 'max_string_print_length';
 zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	500	truncate very long string when printing to log file. Range:[0,]	value	info	DEFAULT	DYNAMIC_EFFECTIVE	500	1
@@ -296,9 +296,9 @@ ZONE	SCOPE	NAME	DATA_TYPE	VALUE	INFO	SECTION	EDIT_LEVEL	DEFAULT_VALUE	ISDEFAULT
 select * from V$OB_PARAMETERS where data_type = 'UNKNOWN';
 ZONE	SCOPE	NAME	DATA_TYPE	VALUE	INFO	SECTION	EDIT_LEVEL	DEFAULT_VALUE	ISDEFAULT
 =======  [2] check data_tpye for __all_virtual_sys_parameter_stat  =======
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -342,9 +342,9 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'compa
 name	data_type
 compatible	VERSION
 ================  [4] check data_tpye for GV$OB_PARAMETERS  ================
-select name, data_type from GV$OB_PARAMETERS where name = 'enable_sql_audit';
+select name, data_type from GV$OB_PARAMETERS where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from GV$OB_PARAMETERS where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -388,9 +388,9 @@ select name, data_type from GV$OB_PARAMETERS where name = 'compatible';
 name	data_type
 compatible	VERSION
 ================  [5] check data_tpye for V$OB_PARAMETERS  =================
-select name, data_type from V$OB_PARAMETERS where name = 'enable_sql_audit';
+select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';
 name	data_type
-enable_sql_audit	BOOL
+enable_perf_event	BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'max_string_print_length';
 name	data_type
 max_string_print_length	INT
@@ -434,9 +434,9 @@ select name, data_type from V$OB_PARAMETERS where name = 'compatible';
 name	data_type
 compatible	VERSION
 =================  [6] check data_tpye for show parameters  =================
-show parameters where name = 'enable_sql_audit';
+show parameters where name = 'enable_perf_event';
 zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	True	specifies whether SQL audit is turned on. The default value is TRUE. Value: TRUE: turned on FALSE: turned off	value	info	DEFAULT	DYNAMIC_EFFECTIVE	true	1
+zone1	observer	server_ip	server_port	True	specifies whether to enable perf event feature. The default value is True.	value	info	DEFAULT	DYNAMIC_EFFECTIVE	True	1
 show parameters where name = 'max_string_print_length';
 zone	svr_type	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	500	truncate very long string when printing to log file. Range:[0,]	value	info	DEFAULT	DYNAMIC_EFFECTIVE	500	1

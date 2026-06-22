@@ -12,7 +12,7 @@
 # +-----------+--------------------------+------------------------------+           #
 # | data_type | cluster-level            | tenant-level                 |           #
 # +-----------+--------------------------+------------------------------+           #
-# | BOOL      | enable_sql_audit         | plsql_debug                  |           #
+# | BOOL      | enable_perf_event         | plsql_debug                  |           #
 # | INT       | max_string_print_length  | open_cursors                 |           #
 # | DOUBLE    | location_cache_cpu_quota | cpu_quota_concurrency        |           #
 # | STRING    | default_row_format       | plsql_code_type              |           #
@@ -31,7 +31,7 @@ connection my_sys;
 
 # [step 0] set some parameters, and __all_virtual_sys_parameter_stat/__tenant_parameter will save the changes
 # [step 0.1] set cluster-level parameters
-let $para_name = enable_sql_audit;                                         # BOOL
+let $para_name = enable_perf_event;                                         # BOOL
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
 let $para_name = max_string_print_length;                                  # INT
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
@@ -64,7 +64,7 @@ let $para_name = major_freeze_duty_time;                                  # MOME
 # because the internal logic is already set.
 # [step 0.3] make sure parameters have been set
 # [setp 0.3.1] check cluster-level parameters
-let $para_name = enable_sql_audit;
+let $para_name = enable_perf_event;
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
 let $para_name = max_string_print_length;
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
@@ -108,7 +108,7 @@ select * from V$OB_PARAMETERS where data_type = 'UNKNOWN';
 
 # [step 2] check data_tpye for __all_virtual_sys_parameter_stat
 --echo ===============  [2] check data_tpye for __all_virtual_sys_parameter_stat  ===============
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';          # BOOL       
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';          # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';   # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';        # STRING
@@ -119,7 +119,7 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = '_obkv
 # [step 4] check data_tpye for __all_virtual_sys_parameter_stat
 --echo ========  [4] check data_tpye for __all_virtual_sys_parameter_stat  =========
 # [step 4.1] check cluster-level parameters
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';          # BOOL
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';          # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';   # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';        # STRING
@@ -139,7 +139,7 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'compa
 # [step 5] check data_tpye for __all_virtual_sys_parameter_stat
 --echo =======  [5] check data_tpye for __all_virtual_sys_parameter_stat  =======
 # [step 5.1] check cluster-level parameters
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';          # BOOL
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';          # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';   # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';        # STRING
@@ -170,7 +170,7 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'compa
 # [step 7] check data_tpye for GV$OB_PARAMETERS
 --echo ================  [8] check data_tpye for GV\$OB_PARAMETERS  ================
 # [step 7.1] check cluster-level parameters
-select name, data_type from GV$OB_PARAMETERS where name = 'enable_sql_audit';          # BOOL
+select name, data_type from GV$OB_PARAMETERS where name = 'enable_perf_event';          # BOOL
 select name, data_type from GV$OB_PARAMETERS where name = 'max_string_print_length';   # INT
 select name, data_type from GV$OB_PARAMETERS where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from GV$OB_PARAMETERS where name = 'default_row_format';        # STRING
@@ -190,7 +190,7 @@ select name, data_type from GV$OB_PARAMETERS where name = 'compatible';         
 # [step 8] check data_tpye for V$OB_PARAMETERS
 --echo ================  [9] check data_tpye for V\$OB_PARAMETERS  =================
 # [step 8.1] check cluster-level parameters
-select name, data_type from V$OB_PARAMETERS where name = 'enable_sql_audit';          # BOOL
+select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';          # BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'max_string_print_length';   # INT
 select name, data_type from V$OB_PARAMETERS where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';        # STRING
@@ -211,7 +211,7 @@ select name, data_type from V$OB_PARAMETERS where name = 'compatible';          
 --echo ================  [10] check data_tpye for show parameters  =================
 # [step 9.1] check cluster-level parameters
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
-show parameters where name = 'enable_sql_audit';          # BOOL
+show parameters where name = 'enable_perf_event';          # BOOL
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
 show parameters where name = 'max_string_print_length';   # INT
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
@@ -257,7 +257,7 @@ select * from V$OB_PARAMETERS where data_type = 'UNKNOWN';
 # [step 2] check data_tpye for __all_virtual_sys_parameter_stat
 --echo =======  [2] check data_tpye for __all_virtual_sys_parameter_stat  =======
 # [step 2.1] check cluster-level parameters
-select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_sql_audit';          # BOOL
+select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';          # BOOL
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'max_string_print_length';   # INT
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'default_row_format';        # STRING
@@ -277,7 +277,7 @@ select name, data_type from __all_virtual_sys_parameter_stat where name = 'compa
 # [step 4] check data_tpye for GV$OB_PARAMETERS
 --echo ================  [4] check data_tpye for GV\$OB_PARAMETERS  ================
 # [step 4.1] check cluster-level parameters
-select name, data_type from GV$OB_PARAMETERS where name = 'enable_sql_audit';          # BOOL
+select name, data_type from GV$OB_PARAMETERS where name = 'enable_perf_event';          # BOOL
 select name, data_type from GV$OB_PARAMETERS where name = 'max_string_print_length';   # INT
 select name, data_type from GV$OB_PARAMETERS where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from GV$OB_PARAMETERS where name = 'default_row_format';        # STRING
@@ -297,7 +297,7 @@ select name, data_type from GV$OB_PARAMETERS where name = 'compatible';         
 # [step 5] check data_tpye for V$OB_PARAMETERS
 --echo ================  [5] check data_tpye for V\$OB_PARAMETERS  =================
 # [step 5.1] check cluster-level parameters
-select name, data_type from V$OB_PARAMETERS where name = 'enable_sql_audit';          # BOOL
+select name, data_type from V$OB_PARAMETERS where name = 'enable_perf_event';          # BOOL
 select name, data_type from V$OB_PARAMETERS where name = 'max_string_print_length';   # INT
 select name, data_type from V$OB_PARAMETERS where name = 'location_cache_cpu_quota';  # DOUBLE
 select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';        # STRING
@@ -318,7 +318,7 @@ select name, data_type from V$OB_PARAMETERS where name = 'compatible';          
 --echo =================  [6] check data_tpye for show parameters  =================
 # [step 6.1] check cluster-level parameters
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
-show parameters where name = 'enable_sql_audit';          # BOOL
+show parameters where name = 'enable_perf_event';          # BOOL
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
 show parameters where name = 'max_string_print_length';   # INT
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1

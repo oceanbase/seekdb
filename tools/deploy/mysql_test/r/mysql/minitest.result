@@ -247,7 +247,6 @@ ob_enable_pl_cache	ON
 ob_enable_ps_parameter_anonymous_block	ON
 ob_enable_rich_error_msg	OFF
 ob_enable_show_trace	OFF
-ob_enable_sql_audit	ON
 ob_enable_transformation	ON
 ob_enable_transmission_checksum	ON
 ob_enable_truncate_flashback	ON
@@ -268,7 +267,6 @@ ob_read_consistency	STRONG
 ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
 ob_sparse_drop_ratio_search	0
-ob_sql_audit_percentage	1
 ob_sql_work_area_percentage	5
 ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
@@ -300,7 +298,6 @@ ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
 ob_enable_ps_parameter_anonymous_block	ON
 ob_enable_rich_error_msg	OFF
-ob_enable_sql_audit	ON
 ob_enable_transformation	ON
 ob_enable_transmission_checksum	ON
 ob_enable_truncate_flashback	ON
@@ -317,7 +314,6 @@ ob_query_timeout	10000000
 ob_read_consistency	STRONG
 ob_reserved_meta_memory_percentage	10
 ob_route_policy	READONLY_ZONE_FIRST
-ob_sql_audit_percentage	1
 ob_sql_work_area_percentage	5
 ob_table_access_policy	AUTO
 ob_tcp_invited_nodes	%
