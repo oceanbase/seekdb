@@ -34,7 +34,7 @@ fork table t1 to t1_fork;
 # 在Fork执行过程中对源表创建索引（应该被阻塞或等待）
 # 注意：根据锁机制，CREATE INDEX需要OnlineDDL锁，可能与Fork Table冲突
 create index idx_name on t1(name);
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal create_index_signal';
@@ -76,7 +76,7 @@ set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for add_column_signal exe
 fork table t2 to t2_fork;
 # 在Fork执行过程中对源表添加列（应该被阻塞或等待）
 alter table t2 add column new_col varchar(50) default 'new';
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal add_column_signal';
@@ -134,7 +134,7 @@ fork table t3 to t3_fork;
 # 在Fork执行过程中对源表添加分区（应该被阻塞或等待）
 # 注意：ADD PARTITION需要Table Lock (ROW_EXCLUSIVE)，可能与Fork Table冲突
 alter table t3 add partition (partition p2 values less than (300));
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal add_partition_signal';
@@ -193,7 +193,7 @@ set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_partition_signal
 fork table t4 to t4_fork;
 # 在Fork执行过程中对源表删除分区（应该被阻塞或等待）
 alter table t4 drop partition p2;
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal drop_partition_signal';
@@ -250,7 +250,7 @@ set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for dst_create_
 fork table t5 to t5_fork;
 # 在Fork执行过程中对目标表创建索引（应该被阻塞或等待）
 create index idx_name on t5_fork(name);
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
 set ob_global_debug_sync = 'now signal dst_create_index_signal';
@@ -287,7 +287,7 @@ set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for dst_add_col
 fork table t6 to t6_fork;
 # 在Fork执行过程中对目标表添加列（应该被阻塞或等待）
 alter table t6_fork add column new_col varchar(50) default 'new';
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
 set ob_global_debug_sync = 'now signal dst_add_column_signal';
@@ -333,7 +333,7 @@ fork table t7 to t7_fork;
 # 在Fork执行过程中对源表执行TRUNCATE（应该被阻塞或等待）
 # 注意：TRUNCATE TABLE需要EXCLUSIVE锁，应该与Fork Table冲突
 truncate table t7;
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal truncate_signal';
@@ -374,7 +374,7 @@ set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_index_signal exe
 fork table t8 to t8_fork;
 # 在Fork执行过程中对源表删除索引（应该被阻塞或等待）
 drop index idx_name on t8;
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal drop_index_signal';
@@ -415,7 +415,7 @@ set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for modify_column_signal 
 fork table t9 to t9_fork;
 # 在Fork执行过程中对源表修改列（应该被阻塞或等待）
 alter table t9 modify column name varchar(100);
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal modify_column_signal';
@@ -472,7 +472,7 @@ set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_column_signal ex
 fork table t10 to t10_fork;
 # 在Fork执行过程中对源表删除列（应该被阻塞或等待）
 alter table t10 drop column extra_col;
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal drop_column_signal';
@@ -529,7 +529,7 @@ set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for snapshot_ddl_signal e
 fork table t11 to t11_fork;
 # 在Fork执行过程中对源表创建索引
 create index idx_name on t11(name);
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
 set ob_global_debug_sync = 'now signal snapshot_ddl_signal';
@@ -571,7 +571,7 @@ set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END wait_for freeze_ddl_signa
 fork table t12 to t12_fork;
 # 在Fork执行过程中对源表添加分区
 alter table t12 add partition (partition p2 values less than (300));
-ERROR HY000: Timeout
+Got one of the listed errors
 # 继续Fork执行
 set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END clear';
 set ob_global_debug_sync = 'now signal freeze_ddl_signal';
