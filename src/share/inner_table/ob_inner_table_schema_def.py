@@ -9111,25 +9111,7 @@ def_table_schema(**gen_iterate_virtual_table_def(
   keywords = all_def_keywords['__all_column_privilege_history']))
 
 # 12464: __all_virtual_tenant_snapshot_ls_replica_history (abandoned)
-
-def_table_schema(
-  owner             = 'zz412656',
-  table_name        = '__all_virtual_shared_storage_quota',
-  table_id          = '12465',
-  table_type        = 'VIRTUAL_TABLE',
-  gm_columns        = [],
-  rowkey_columns    = [
-    ('module',              'varchar:32'),
-    ('class_id',            'int'),
-    ('storage_id',          'int'),
-    ('type',                'varchar:32')
-  ],
-  in_tenant_space   = True,
-  normal_columns    = [
-    ('requirement',         'int'),
-    ('assign',              'int')
-  ],  vtable_route_policy = 'local'
-  )
+# 12465: __all_virtual_shared_storage_quota (abandoned)
 
 def_table_schema(
   owner = 'jim.wjh',

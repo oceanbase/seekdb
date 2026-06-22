@@ -5123,6 +5123,25 @@ ISDEFAULT	varchar(3)	NO
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_SYS_VARIABLES limit 1);
 cnt
 1
+desc mysql.role_edges;
+Field	Type	Null	Key	Default	Extra
+FROM_HOST	varchar(255)	NO			
+FROM_USER	varchar(128)	NO		NULL	
+TO_HOST	varchar(255)	NO			
+TO_USER	varchar(128)	NO		NULL	
+WITH_ADMIN_OPTION	varchar(1)	NO			
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.role_edges limit 1);
+cnt
+1
+desc mysql.default_roles;
+Field	Type	Null	Key	Default	Extra
+HOST	varchar(255)	NO			
+USER	varchar(128)	NO		NULL	
+DEFAULT_ROLE_HOST	varchar(255)	NO			
+DEFAULT_ROLE_USER	varchar(128)	NO		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from mysql.default_roles limit 1);
+cnt
+1
 desc oceanbase.CDB_INDEX_USAGE;
 Field	Type	Null	Key	Default	Extra
 CON_ID	bigint(1)	NO			

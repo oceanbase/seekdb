@@ -19,7 +19,10 @@ select count(*) from oceanbase.__all_user where user_name='root';
 |        4 |
 +----------+
 
-call dbms_stats.gather_schema_stats('oceanbase');
+call dbms_stats.gather_table_stats('oceanbase', '__all_virtual_core_all_table');
+call dbms_stats.gather_table_stats('oceanbase', '__all_virtual_core_column_table');
+call dbms_stats.gather_table_stats('oceanbase', '__all_table');
+call dbms_stats.gather_table_stats('oceanbase', '__all_column');
 select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_core_table' and NUM_ROWS > 0;
 +-------+------------+----------+
 | OWNER | TABLE_NAME | NUM_ROWS |

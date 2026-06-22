@@ -91,6 +91,8 @@ insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long 
 --error 1406
 insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
 
+rollback;
+
 insert into t2_pqTly6tEb1 values(4, 'kkk');
 
 select * from t2_pqTly6tEb1;

@@ -1376,20 +1376,6 @@ select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all
 IF(count(*) >= 0, 1, 0)
 1
 select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_ddl_sim_point_stat limit 1;
-desc oceanbase.__all_virtual_res_mgr_sysstat;
-Field	Type	Null	Key	Default	Extra
-group_id	bigint(20)	NO	PRI	NULL	
-statistic#	bigint(20)	NO	PRI	NULL	
-value	bigint(20)	NO		NULL	
-value_type	varchar(16)	NO		NULL	
-stat_id	bigint(20)	NO		NULL	
-name	varchar(64)	NO		NULL	
-class	bigint(20)	NO		NULL	
-can_visible	tinyint(4)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_res_mgr_sysstat;
-IF(count(*) >= 0, 1, 0)
-1
-select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_res_mgr_sysstat limit 1;
 desc information_schema.SESSION_VARIABLES;
 Field	Type	Null	Key	Default	Extra
 VARIABLE_NAME	varchar(128)	NO			
@@ -5869,14 +5855,6 @@ select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all
 IF(count(*) >= 0, 1, 0)
 1
 select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_column_privilege_history limit 1;
-desc oceanbase.__all_virtual_shared_storage_quota;
-Field	Type	Null	Key	Default	Extra
-module	varchar(32)	NO	PRI	NULL	
-class_id	bigint(20)	NO	PRI	NULL	
-storage_id	bigint(20)	NO	PRI	NULL	
-type	varchar(32)	NO	PRI	NULL	
-requirement	bigint(20)	NO		NULL	
-assign	bigint(20)	NO		NULL	
 desc information_schema.ENABLED_ROLES;
 Field	Type	Null	Key	Default	Extra
 ROLE_NAME	varchar(128)	YES		NULL	

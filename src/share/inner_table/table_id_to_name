@@ -665,7 +665,7 @@
 # 12463: __all_virtual_column_privilege_history
 # 12463: __all_column_privilege  # BASE_TABLE_NAME
 # 12463: __all_column_privilege_history  # BASE_TABLE_NAME1
-# 12465: __all_virtual_shared_storage_quota
+# 12465: __all_virtual_shared_storage_quota (abandoned)
 # 12466: ENABLED_ROLES
 # 12468: __all_virtual_session_ps_info
 # 12469: __all_virtual_tracepoint_info

@@ -3894,17 +3894,6 @@ id	field	type	length	precision	nullable
 16	ddl_task_id	5	0	20	0
 17	sim_point_id	5	0	20	0
 18	trigger_count	5	0	20	0
-table oceanbase.__all_virtual_res_mgr_sysstat column_count 8 table_id 11120
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=11120 order by column_id;
-id	field	type	length	precision	nullable
-16	group_id	5	0	20	0
-17	statistic#	5	0	20	0
-18	value	5	0	20	0
-19	value_type	22	16	-1	0
-20	stat_id	5	0	20	0
-21	name	22	64	-1	0
-22	class	5	0	20	0
-23	can_visible	1	0	4	0
 table information_schema.SESSION_VARIABLES column_count 2 table_id 12001
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12001 order by column_id;
 id	field	type	length	precision	nullable
