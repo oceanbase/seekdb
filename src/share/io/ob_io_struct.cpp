@@ -35,11 +35,7 @@ static inline void usage_to_timeval(FILETIME *ft, struct timeval *tv)
     tv->tv_usec = (long)((time.QuadPart % 10000000) / 10);
 }
 
-#ifndef _WIN32
-static inline int getrusage(int who, struct rusage *usage)
-#else
-inline int getrusage(int who, struct rusage *usage)
-#endif
+int getrusage(int who, struct rusage *usage)
 {
     FILETIME ctime, etime, stime, utime;
     

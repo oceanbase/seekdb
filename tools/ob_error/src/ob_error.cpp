@@ -16,7 +16,88 @@
 
 #include "ob_error.h"
 #include <string.h>
+#ifndef _WIN32
 #include <getopt.h>
+#else
+// Windows shim for the subset of POSIX getopt_long used by ob_error.
+// Must use real (inline) globals — not macros — because ob_error.cpp later
+// re-declares `extern char *optarg;` and `extern int opterr;`.
+#define no_argument 0
+#define required_argument 1
+#define optional_argument 2
+struct option {
+  const char *name;
+  int has_arg;
+  int *flag;
+  int val;
+};
+inline char *optarg = nullptr;
+inline int optind = 1;
+inline int opterr = 1;
+inline int optopt = 0;
+inline int getopt_long(int argc, char *const argv[], const char *short_opts,
+                       const struct option *long_opts, int *long_index) {
+  (void)long_index;
+  optarg = nullptr;
+  // Skip leading ':' in short_opts (POSIX silent-error mode marker).
+  const char *shorts = short_opts;
+  if (shorts && shorts[0] == ':') {
+    shorts++;
+  }
+  if (optind >= argc || argv[optind] == nullptr) return -1;
+  char *arg = argv[optind];
+  if (arg[0] != '-' || arg[1] == '\0') return -1;
+  if (arg[1] == '-') {
+    arg += 2;
+    for (int i = 0; long_opts[i].name != nullptr; i++) {
+      const char *name = long_opts[i].name;
+      size_t nlen = strlen(name);
+      if (strncmp(arg, name, nlen) != 0) continue;
+      if (arg[nlen] == '=') {
+        if (long_opts[i].has_arg == required_argument) {
+          optarg = arg + nlen + 1;
+          optind++;
+          return long_opts[i].val;
+        }
+      } else if (arg[nlen] == '\0') {
+        if (long_opts[i].has_arg == required_argument && optind + 1 < argc) {
+          optarg = argv[optind + 1];
+          optind += 2;
+          return long_opts[i].val;
+        } else if (long_opts[i].has_arg == no_argument) {
+          optind++;
+          return long_opts[i].val;
+        }
+      }
+    }
+    optind++;
+    return '?';
+  }
+  char c = arg[1];
+  const char *p = strchr(shorts, c);
+  if (!p) {
+    optopt = (unsigned char)c;
+    optind++;
+    return '?';
+  }
+  if (p[1] == ':') {
+    if (arg[2] != '\0') {
+      optarg = arg + 2;
+      optind++;
+    } else if (optind + 1 < argc) {
+      optarg = argv[optind + 1];
+      optind += 2;
+    } else {
+      optopt = (unsigned char)c;
+      optind++;
+      return (short_opts && short_opts[0] == ':') ? ':' : '?';
+    }
+  } else {
+    optind++;
+  }
+  return (unsigned char)c;
+}
+#endif
 
 ObErrorInfoMgr::ObErrorInfoMgr() 
     : os_error_count_(0), 

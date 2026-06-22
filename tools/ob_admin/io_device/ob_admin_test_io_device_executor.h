@@ -16,7 +16,6 @@
 
 #ifndef OB_ADMIN_TEST_IO_DEVICE_EXECUTOR_H_
 #define OB_ADMIN_TEST_IO_DEVICE_EXECUTOR_H_
-#include <gtest/gtest.h>
 #include "share/backup/ob_backup_io_adapter.h"
 #include "../ob_admin_executor.h"
 #include "deps/oblib/src/lib/ob_define.h"                    // OB_MAX_URI_LENGTH

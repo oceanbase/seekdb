@@ -16,6 +16,21 @@
 
 #include "ob_admin_io_executor.h"
 
+#ifdef _WIN32
+#include <windows.h>
+// Windows shim: readlink for resolving the current executable path.
+// "/proc/self/exe" has no Windows analogue; ignore the path argument and use
+// GetModuleFileNameA(NULL, ...), which is the canonical Windows API for it.
+inline int readlink(const char * /*path*/, char *buf, size_t bufsize) {
+  DWORD n = GetModuleFileNameA(NULL, buf, static_cast<DWORD>(bufsize));
+  return (n == 0 || n == bufsize) ? -1 : static_cast<int>(n);
+}
+// On Windows, system() returns the child's exit status directly (no POSIX wait
+// encoding), so WIFEXITED is always true and WEXITSTATUS is the value itself.
+#define WIFEXITED(status)   (1)
+#define WEXITSTATUS(status) (status)
+#endif
+
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
