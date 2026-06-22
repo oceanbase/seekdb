@@ -179,6 +179,18 @@ int ObTenantMajorFreeze::set_freeze_info(const ObMajorFreezeReason freeze_reason
   return ret;
 }
 
+int ObTenantMajorFreeze::get_snapshot_gc_scn_from_mem(SCN &snapshot_gc_scn)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(major_merge_info_mgr_.get_snapshot_gc_scn_from_mem(snapshot_gc_scn))) {
+    LOG_WARN("failed to get snapshot_gc_scn from mem", KR(ret), K_(tenant_id));
+  }
+  return ret;
+}
+
 int ObTenantMajorFreeze::try_schedule_minor_before_major_()
 {
   /*

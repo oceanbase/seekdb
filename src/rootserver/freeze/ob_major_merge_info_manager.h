@@ -76,6 +76,7 @@ public:
   int check_need_broadcast(bool &need_broadcast);
   int broadcast_freeze_info();
   int get_local_latest_frozen_scn(share::SCN &frozen_scn);
+  int get_snapshot_gc_scn_from_mem(share::SCN &snapshot_gc_scn);
   int adjust_global_merge_info();
   int get_gts(share::SCN &gts_scn) const;
 

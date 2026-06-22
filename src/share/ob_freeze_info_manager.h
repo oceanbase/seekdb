@@ -90,6 +90,15 @@ public:
       common::ObMySQLProxy &sql_proxy,
       common::ObIArray<ObFreezeInfo> &freeze_infos,
       share::SCN &latest_snapshot_gc_scn);
+  static int fetch_new_freeze_info(
+      const int64_t tenant_id,
+      const share::SCN &min_frozen_scn,
+      common::ObMySQLProxy &sql_proxy,
+      common::ObIArray<ObFreezeInfo> &freeze_infos);
+  static int fetch_new_snapshot_gc_scn_from_table(
+      const int64_t tenant_id,
+      common::ObMySQLProxy &sql_proxy,
+      share::SCN &latest_snapshot_gc_scn);
 
   ObFreezeInfoManager()
     : is_inited_(false),

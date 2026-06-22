@@ -24,6 +24,8 @@
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
+#include "rootserver/freeze/ob_major_freeze_service.h"
+#include "rootserver/freeze/ob_major_freeze_util.h"
 
 namespace oceanbase
 {
@@ -616,6 +618,36 @@ int ObTenantFreezeInfoMgr::ReloadTask::refresh_merge_info()
   return ret;
 }
 
+int ObTenantFreezeInfoMgr::get_snapshot_gc_scn_from_rs_mem_(share::SCN &snapshot_gc_scn)
+{
+  int ret = OB_SUCCESS;
+  snapshot_gc_scn.reset();
+  rootserver::ObPrimaryMajorFreezeService *primary_major_freeze_service = MTL(rootserver::ObPrimaryMajorFreezeService*);
+  rootserver::ObRestoreMajorFreezeService *restore_major_freeze_service = MTL(rootserver::ObRestoreMajorFreezeService*);
+  rootserver::ObMajorFreezeService *major_freeze_service = nullptr;
+  bool is_primary_service = false;
+  if (OB_ISNULL(primary_major_freeze_service) || OB_ISNULL(restore_major_freeze_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "major freeze service is null", KR(ret),
+        KP(primary_major_freeze_service), KP(restore_major_freeze_service), K_(tenant_id));
+  } else if (OB_FAIL(rootserver::ObMajorFreezeUtil::get_major_freeze_service(
+                 primary_major_freeze_service,
+                 restore_major_freeze_service,
+                 major_freeze_service,
+                 is_primary_service))) {
+    STORAGE_LOG(WARN, "failed to get major freeze service", KR(ret), K_(tenant_id));
+  } else if (!is_primary_service) {
+    ret = OB_ENTRY_NOT_EXIST;
+    STORAGE_LOG(TRACE, "restore service does not expose primary snapshot_gc_scn", KR(ret), K_(tenant_id));
+  } else if (OB_ISNULL(major_freeze_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "major freeze service is null", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(major_freeze_service->get_snapshot_gc_scn_from_mem(snapshot_gc_scn))) {
+    STORAGE_LOG(WARN, "failed to get snapshot_gc_scn from rs mem", KR(ret), K_(tenant_id));
+  }
+  return ret;
+}
+
 int ObTenantFreezeInfoMgr::try_update_info()
 {
   int ret = OB_SUCCESS;
@@ -623,12 +655,39 @@ int ObTenantFreezeInfoMgr::try_update_info()
   DEBUG_SYNC(BEFORE_UPDATE_FREEZE_SNAPSHOT_INFO);
   ObSEArray<ObSnapshotInfo, 4> snapshots;
   ObSEArray<ObFreezeInfo, 4> freeze_infos;
+  share::SCN local_snapshot_gc_scn;
   share::SCN new_snapshot_gc_scn;
   share::ObSnapshotTableProxy snapshot_proxy;
-  
-  if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
-        MTL_ID(), share::SCN::base_scn(), *GCTX.sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
-    STORAGE_LOG(WARN, "failed to load updated info", K(ret));
+
+  {
+    RLockGuard lock_guard(lock_);
+    local_snapshot_gc_scn = freeze_info_mgr_.get_snapshot_gc_scn();
+  }
+
+  const int tmp_ret = get_snapshot_gc_scn_from_rs_mem_(new_snapshot_gc_scn);
+  if (OB_SUCCESS != tmp_ret) {
+    if (local_snapshot_gc_scn.is_valid()) {
+      new_snapshot_gc_scn = local_snapshot_gc_scn;
+      STORAGE_LOG(WARN, "reuse local snapshot_gc_scn when rs mem is unavailable",
+          KR(tmp_ret), K(new_snapshot_gc_scn), K_(tenant_id));
+    } else {
+      ret = tmp_ret;
+      STORAGE_LOG(WARN, "failed to load snapshot_gc_scn from rs mem",
+          KR(ret), K(local_snapshot_gc_scn), K_(tenant_id));
+    }
+  } else if (!new_snapshot_gc_scn.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "invalid snapshot_gc_scn from rs mem", KR(ret), K(new_snapshot_gc_scn), K_(tenant_id));
+  } else if (local_snapshot_gc_scn.is_valid() && new_snapshot_gc_scn < local_snapshot_gc_scn) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "regressive snapshot_gc_scn from rs mem",
+        KR(ret), K(local_snapshot_gc_scn), K(new_snapshot_gc_scn), K_(tenant_id));
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
+        MTL_ID(), share::SCN::base_scn(), *GCTX.sql_proxy_, freeze_infos))) {
+    STORAGE_LOG(WARN, "failed to load freeze info", K(ret),
+        K(new_snapshot_gc_scn), K(local_snapshot_gc_scn), K_(tenant_id));
   } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*GCTX.sql_proxy_, MTL_ID(), snapshots))) {
     STORAGE_LOG(WARN, "failed to get snapshots", K(ret));
   } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots))) {
