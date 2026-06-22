@@ -1244,9 +1244,6 @@ int ObMultiTenant::get_tenant_metas_for_ckpt(common::ObIArray<ObTenantMeta> &met
   return ret;
 }
 
-
-//Don't call this, please call ObCompatModeGetter::get_tenant_compat_mode
-
 int ObMultiTenant::modify_tenant_io(const uint64_t tenant_id, const ObUnitConfig &unit_config)
 {
   int ret = OB_SUCCESS;

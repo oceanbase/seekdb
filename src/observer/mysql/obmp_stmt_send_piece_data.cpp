@@ -602,9 +602,7 @@ int ObPieceCache::get_buffer(int32_t stmt_id,
                              uint64_t &length, 
                              common::ObFixedArray<ObSqlString, ObIAllocator> &str_buf,
                              char *is_null_map) {
-  int ret = lib::is_oracle_mode() 
-    ? get_oracle_buffer(stmt_id, param_id, count, length, str_buf, is_null_map)
-    : get_mysql_buffer(stmt_id, param_id, length, str_buf.at(0));
+  int ret = get_mysql_buffer(stmt_id, param_id, length, str_buf.at(0));
   return ret;
 }
 
@@ -741,17 +739,7 @@ int ObPieceCache::add_piece_buffer(ObPiece *piece,
     ObPieceBufferArray *buffer_array = piece->get_buffer_array();
     if (OB_FAIL(buffer_array->push_back(*piece_buffer))) {
       LOG_WARN("push buffer array fail.", K(ret));
-    } else if (lib::is_oracle_mode()) {
-      // 1. pos ++
-      if (ObInvalidPiece != piece_mode) {
-        // fetch do not need 
-        piece->add_position();
-      }
-      // 2. if is last piece, set position = 0, use for new row piece
-      if (ObLastPiece == piece_mode) {
-        piece->set_position(0);
-      }
-    } else { /* mysql do nothing */ }
+    }
   }
   LOG_DEBUG("add piece buffer.", K(ret), K(piece_mode));
   return ret;

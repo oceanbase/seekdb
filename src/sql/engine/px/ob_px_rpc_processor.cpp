@@ -227,9 +227,6 @@ int ObInitSqcP::after_process(int error_code)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Session can't be null", K(ret));
   } else {
-    lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
-        lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
-
     sqc_handler->set_tenant_id(sqc_handler->get_exec_ctx().get_my_session()->get_effective_tenant_id());
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     /**
@@ -408,8 +405,6 @@ int ObInitFastSqcP::process()
     if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
       LOG_WARN("fast sqc failed to SET_INTERRUPTABLE");
     } else {
-      lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
-      lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
       sqc_handler->set_tenant_id(session->get_effective_tenant_id());
       LOG_TRACE("process dfo",
                 K(arg),

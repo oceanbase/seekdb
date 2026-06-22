@@ -199,8 +199,6 @@ public:
 
   sqlclient::ObISQLConnectionPool *get_pool() { return nullptr; }
   sqlclient::ObISQLConnection *get_connection() { return nullptr; }
-
-  virtual bool is_oracle_mode() const { return false; }
 };
 
 TEST_F(TestDMLSqlSplicer, exec)

@@ -872,7 +872,7 @@ void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
   // if no error at all,
   //    clear err.
   if (OB_SUCCESS != error_code && strlen(warnings_buf_.get_err_msg()) <= 0) {
-    warnings_buf_.set_error(ob_errpkt_strerror(error_code, false), error_code);
+    warnings_buf_.set_error(ob_errpkt_strerror(error_code), error_code);
   } else if (OB_SUCCESS == error_code) {
     warnings_buf_.reset_err();
   }
@@ -1201,7 +1201,7 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
     LOG_TRACE("will add session info", K(proxy_version_), K(min_proxy_version_ps_),
               K(inner_stmt_id), K(client_stmt_id), K(next_client_ps_stmt_id_),
               K(is_new_proxy), K(ret), K(is_inner_sql));
-    if(lib::is_mysql_mode() && OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
+    if(OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
       LOG_WARN("fail create in use ps stmt id", K(ret));
     } else if (OB_FAIL(try_create_ps_session_info_map())) {
       LOG_WARN("fail create map", K(ret));

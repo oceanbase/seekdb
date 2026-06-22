@@ -86,7 +86,6 @@ int ObPxTaskProcess::check_inner_stat()
 void ObPxTaskProcess::run()
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
 
   LOG_TRACE("begin process task",
             KP(this));
@@ -551,7 +550,7 @@ int ObPxTaskProcess::record_user_error_msg(int retcode)
               && retcode <= OB_MAX_RAISE_APPLICATION_ERROR) {
             // do nothing ...
           } else {
-            (void)snprintf(rcode.msg_, common::OB_MAX_ERROR_MSG_LEN, "%s", ob_errpkt_strerror(retcode, false));
+            (void)snprintf(rcode.msg_, common::OB_MAX_ERROR_MSG_LEN, "%s", ob_errpkt_strerror(retcode));
           }
         }
         curr_len = STRLEN(rcode.msg_);

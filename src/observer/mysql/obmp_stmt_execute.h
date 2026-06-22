@@ -184,7 +184,7 @@ public:
         is_support = true;
         break;
       case obmysql::MYSQL_TYPE_COMPLEX:
-        is_support = lib::is_oracle_mode() ? true : false;
+        is_support = false;
         break;
       default :
         is_support = false;

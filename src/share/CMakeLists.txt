@@ -28,7 +28,6 @@ ob_set_subtarget(ob_share_extra ALONE
   aggregate/min.cpp
   aggregate/max.cpp
   aggregate/approx_count_distinct_mysql.cpp
-  aggregate/approx_count_distinct_oracle.cpp
   aggregate/sum_opnsize.cpp
   aggregate/group_concat.cpp
   aggregate/approx_count_distinct_synopsis.cpp
@@ -182,7 +181,6 @@ ob_set_subtarget(ob_share common
   ob_gais_client.cpp
   ob_gais_msg.cpp
   ob_gais_rpc.cpp
-  ob_get_compat_mode.cpp
   ob_global_autoinc_service.cpp
   ob_global_merge_table_operator.cpp
   ob_global_stat_proxy.cpp

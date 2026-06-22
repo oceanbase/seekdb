@@ -492,8 +492,7 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
       ObCharsetType charset_type = CHARSET_INVALID;
       ObCharsetType ncharset_type = CHARSET_INVALID;
       // need at ps mode
-      if (!is_packed && value.get_type() != fields->at(i).type_.get_type()
-          && !(value.is_geometry() && lib::is_oracle_mode())) {// oracle gis will do cast in process_sql_udt_results
+      if (!is_packed && value.get_type() != fields->at(i).type_.get_type()) {
         ObCastCtx cast_ctx(&allocator, NULL, CM_WARN_ON_FAIL, fields->at(i).type_.get_collation_type());
         if (ObDecimalIntType == fields->at(i).type_.get_type()) {
           cast_ctx.res_accuracy_ = const_cast<ObAccuracy*>(&fields->at(i).accuracy_);

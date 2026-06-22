@@ -94,8 +94,6 @@ int ObMPQuery::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(sql), K(sess), K(ret));
   } else {
-    lib::CompatModeGuard g(sess->get_compatibility_mode() == ORACLE_MODE ?
-                             lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
     THIS_WORKER.set_session(sess);
     ObSQLSessionInfo &session = *sess;
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());

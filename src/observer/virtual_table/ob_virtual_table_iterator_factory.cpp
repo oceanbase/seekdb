@@ -228,9 +228,6 @@ namespace observer
           allocator.free(tmp_ptr);                                                      \
           SERVER_LOG(WARN, "fail to set key ranges", K(ret), K(params));                \
       } else {                                                                          \
-        if (lib::is_oracle_mode() && is_oracle_mapping_virtual_table(data_table_id)) {  \
-          vt_iter->set_convert_flag();                                                  \
-        }                                                                               \
         vt_iter->set_session(session);                                                  \
         vt_iter->set_effective_tenant_id(real_tenant_id);                               \
         vt_iter->set_schema_guard(&schema_guard);                                       \
@@ -441,9 +438,8 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    KP(GCTX.sql_engine_),
                    KP(GCTX.schema_service_),
                    KP(GCTX.sql_proxy_));
-      } else if (!lib::is_oracle_mode()
-                 && (is_ora_sys_view_table(pure_tid)
-                     || is_ora_virtual_table(pure_tid))) {
+      } else if (is_ora_sys_view_table(pure_tid)
+                 || is_ora_virtual_table(pure_tid)) {
         ret = OB_NOT_SUPPORTED;
         SERVER_LOG(WARN, "access oracle's virtual table/sys view in mysql mode",
                    K(ret), K(pure_tid));

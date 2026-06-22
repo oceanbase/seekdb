@@ -257,7 +257,6 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
                                ObISQLClient *client_addr, /* = NULL */
                                ObRestoreSQLModifier *sql_modifier /* = NULL */,
                                const bool use_static_engine /* = false */,
-                               const bool is_oracle_mode /* = false */,
                                const int32_t group_id /* = 0*/,
                                const bool is_resource_conn /* =false*/)
 {
@@ -285,13 +284,6 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
     }
     config_ = config;
     associated_client_ = client_addr;
-    if (NULL != client_addr) {
-      oracle_mode_ = client_addr->is_oracle_mode();
-    } else if (NULL != extern_session) {
-      oracle_mode_ = ORACLE_MODE == extern_session->get_compatibility_mode();
-    } else {
-      oracle_mode_ = is_oracle_mode;
-    }
     if (OB_FAIL(init_session(extern_session, use_static_engine))) {
       LOG_WARN("init session failed", K(ret));
       int tmp_ret = OB_SUCCESS;
@@ -435,7 +427,6 @@ ERRSIM_POINT_DEF(NOT_SPEED_UP_INIT_SESSION_INFO);
 int ObInnerSQLConnection::init_session_info(
     sql::ObSQLSessionInfo *session,
     const bool is_extern_session,
-    const bool is_oracle_mode,
     const bool is_ddl)
 {
   int ret = OB_SUCCESS;
@@ -449,13 +440,9 @@ int ObInnerSQLConnection::init_session_info(
     ObPCMemPctConf pc_mem_conf;
     session->set_inner_session();
     ObObj mysql_mode;
-    ObObj oracle_mode;
     mysql_mode.set_int(0);
-    oracle_mode.set_int(1);
     ObObj mysql_sql_mode;
-    ObObj oracle_sql_mode;
     mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
-    oracle_sql_mode.set_uint(ObUInt64Type, DEFAULT_ORACLE_MODE);
     if (!NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_essential_sys_vars_only(print_info_log, is_sys_tenant))) {
       LOG_WARN("session load default system variable failed", K(ret));
     } else if (NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_default_sys_variable(print_info_log, is_sys_tenant))) {
@@ -480,10 +467,10 @@ int ObInnerSQLConnection::init_session_info(
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_SQL_MODE, is_oracle_mode ? oracle_sql_mode : mysql_sql_mode))) {
+            SYS_VAR_SQL_MODE, mysql_sql_mode))) {
           LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
-            SYS_VAR_OB_COMPATIBILITY_MODE, is_oracle_mode ? oracle_mode : mysql_mode))) {
+            SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
           LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_NLS_DATE_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT))) {
@@ -545,7 +532,7 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(init_session_info(inner_session_, is_extern_session, oracle_mode_, is_ddl))) {
+      if (OB_FAIL(init_session_info(inner_session_, is_extern_session, is_ddl))) {
         LOG_WARN("fail to init session info", K(ret), KPC(inner_session_));
       }
     }
@@ -853,7 +840,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
                                 ObVirtualTableIteratorFactory *vt_iter_factory)
 {
   int ret = OB_SUCCESS;
-  lib::CompatModeGuard g(get_compat_mode());
   ObExecRecord exec_record;
   ObExecTimestamp exec_timestamp;
   ObExecutingSqlStatRecord sqlstat_record;
@@ -1793,7 +1779,6 @@ int ObInnerSQLConnection::execute(
     } else if (OB_FAIL(query(executor, res))) {
       LOG_WARN("executor execute failed", K(ret), K(tenant_id), K(executor));
     } else {
-      lib::CompatModeGuard g(get_compat_mode());
       MTL_SWITCH(tenant_id) {
         WITH_CONTEXT(res.mem_context_) {
           if (OB_FAIL(executor.process_result(res.result_set()))) {
@@ -1834,8 +1819,7 @@ int ObInnerSQLConnection::switch_tenant(const uint64_t tenant_id)
       LOG_WARN("Init sys tenant in session error", K(ret));
     }
     if (OB_SUCC(ret)) {
-      const char *sys_user_name
-        = (ORACLE_MODE == tenant_schema->get_compatibility_mode()) ? OB_ORA_SYS_USER_NAME : OB_SYS_USER_NAME;
+      const char *sys_user_name = OB_SYS_USER_NAME;
       if (OB_FAIL(get_session().set_user(sys_user_name, OB_SYS_HOST_NAME, OB_SYS_USER_ID))) {
         LOG_WARN("Set sys user in session error", K(ret));
       } else {
@@ -2057,13 +2041,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
 
 lib::Worker::CompatMode ObInnerSQLConnection::get_compat_mode() const
 {
-  lib::Worker::CompatMode mode;
-  if (is_oracle_compat_mode()) {
-    mode = lib::Worker::CompatMode::ORACLE;
-  } else {
-    mode = lib::Worker::CompatMode::MYSQL;
-  }
-  return mode;
+  return lib::Worker::CompatMode::MYSQL;
 }
 
 // nested session and sql execute for foreign key.

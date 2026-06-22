@@ -145,7 +145,6 @@ public:
            ObISQLClient *client_addr = NULL,
            ObRestoreSQLModifier *sql_modifer = NULL,
            const bool use_static_engine = false,
-           const bool is_oracle_mode = false,
            const int32_t group_id = 0,
            const bool is_resource_conn = false);
   int destroy(void);
@@ -318,7 +317,6 @@ public:
 
   static int init_session_info(sql::ObSQLSessionInfo *session,
                                const bool is_extern_session,
-                               const bool is_oracle_mode,
                                const bool is_ddl);
 
   int64_t get_init_timestamp() const { return init_timestamp_; }

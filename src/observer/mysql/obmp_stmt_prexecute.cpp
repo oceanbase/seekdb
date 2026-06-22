@@ -126,8 +126,6 @@ int ObMPStmtPrexecute::before_process()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is NULL or invalid", K(ret), K(session));
     } else {
-      lib::CompatModeGuard g(session->get_compatibility_mode() == ORACLE_MODE ?
-                             lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL);
       uint32_t ps_stmt_checksum = DEFAULT_ITERATION_COUNT;
       ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
       bool need_response_error = false;
@@ -459,10 +457,7 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
                         NULL/*result*/, &ret, NULL/*func*/, true);
       get_ctx().cur_sql_ = sql_;
       int64_t orc_max_ret_rows = INT64_MAX;
-      if (lib::is_oracle_mode()
-          && OB_FAIL(session.get_oracle_sql_select_limit(orc_max_ret_rows))) {
-        LOG_WARN("failed to get sytem variable _oracle_sql_select_limit", K(ret));
-      } else if (
+      if (
 #ifdef ERRSIM
           OB_FAIL(common::EventTable::COM_STMT_PREXECUTE_PS_CURSOR_OPEN_ERROR) ||
 #endif
@@ -552,15 +547,6 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
           }
           if (has_result) {
             OZ (send_eof_packet(session, warning_count, false, !last_row, last_row));
-          }
-          if (OB_SUCC(ret) && (last_row && !cursor->is_scrollable())
-                           && lib::is_oracle_mode()
-                           && !cursor->is_streaming()
-                           && OB_NOT_NULL(cursor->get_spi_cursor())
-                           && cursor->get_spi_cursor()->row_store_.get_row_cnt() > 0) {
-            if (OB_FAIL(session.close_cursor(cursor->get_id()))) {
-              LOG_WARN("no scrollable cursor close cursor failed at last row.", K(ret));
-            }
           }
           if (OB_SUCC(ret)) {
             bool last_row_ok_param = last_row;
@@ -993,7 +979,7 @@ int ObMPStmtPrexecute::response_fail_result(sql::ObSQLSessionInfo &session, int 
   int ret = OB_SUCCESS;
   // arraybinding_row_.count() >= 3
   arraybinding_row_->get_cell(0).set_int(curr_sql_idx_);
-  arraybinding_row_->get_cell(1).set_int(static_cast<uint16_t>(ob_errpkt_errno(err_ret, lib::is_oracle_mode())));
+  arraybinding_row_->get_cell(1).set_int(static_cast<uint16_t>(ob_errpkt_errno(err_ret)));
   for (int64_t i = 2; i < (arraybinding_row_->get_count() - 1); i++) {
     arraybinding_row_->get_cell(i).set_null();
   }

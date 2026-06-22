@@ -214,7 +214,7 @@ int ObBasicSessionInfo::test_init(uint32_t sessid, uint64_t proxy_sessid,
     LOG_WARN("fail to init debug sync actions", K(ret));
   } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
     LOG_WARN("fail to set session stat", K(ret));
-  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), is_oracle_compatible(),
+  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), false/*is_oracle_mode*/,
                                    true/* check_timezone_valid */))) {
     LOG_WARN("fail to set time zone", K(ret));
   } else {
@@ -337,8 +337,6 @@ int ObBasicSessionInfo::reset_sys_vars()
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObObj oracle_mode;
-  ObObj oracle_sql_mode;
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
   // Clean up sys_var information
@@ -3661,17 +3659,16 @@ int ObBasicSessionInfo::process_session_sql_mode_value(const ObObj &value)
 int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &value)
 {
   int ret = OB_SUCCESS;
-  ObCompatibilityMode comp_mode = ObCompatibilityMode::OCEANBASE_MODE;
+  // seekdb is MySQL-only; Oracle mode is not supported.
+  ObCompatibilityMode comp_mode = ObCompatibilityMode::MYSQL_MODE;
   if (value.is_string_type()) {
     const ObString &comp_mode_str = value.get_string();
-    if (comp_mode_str.case_compare("ORACLE")) {
-      comp_mode = ObCompatibilityMode::ORACLE_MODE;
-    } else if (comp_mode_str.case_compare("MYSQL")) {
+    if (0 == comp_mode_str.case_compare("MYSQL")) {
       comp_mode = ObCompatibilityMode::MYSQL_MODE;
     } else {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "compatibility mode");
-      LOG_WARN("not supported sql mode", K(ret), K(value), K(comp_mode_str));
+      LOG_WARN("not supported compatibility mode", K(ret), K(value), K(comp_mode_str));
     }
   } else if (ObUInt64Type == value.get_type()) {
     comp_mode = static_cast<ObCompatibilityMode>(value.get_uint64());
@@ -3679,7 +3676,7 @@ int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &va
     comp_mode = static_cast<ObCompatibilityMode>(value.get_int());
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid sql mode val type", K(value.get_type()), K(value), K(ret));
+    LOG_WARN("invalid compatibility mode val type", K(value.get_type()), K(value), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -3694,11 +3691,11 @@ int ObBasicSessionInfo::process_session_time_zone_value(const ObObj &value,
 {
   int ret = OB_SUCCESS;
   ObString str_val;
-  const bool is_oralce_mode = is_oracle_compatible();
+  const bool is_oralce_mode = false;
   if (OB_FAIL(value.get_string(str_val))) {
     LOG_WARN("fail to get string value", K(value), K(ret));
   } else if (OB_FAIL(set_time_zone(str_val, is_oralce_mode, check_timezone_valid))) {
-    LOG_WARN("failed to set time zone", K(str_val), K(is_oralce_mode), "is_oracle_compatible", is_oracle_compatible(), K(ret));
+    LOG_WARN("failed to set time zone", K(str_val), K(is_oralce_mode), K(ret));
   }
   return ret;
 }
@@ -3946,14 +3943,9 @@ int ObBasicSessionInfo::get_init_connect(ObString &str) const
 int ObBasicSessionInfo::get_locale_name(common::ObString &str) const
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
-    if(OB_FAIL(get_string_sys_var(SYS_VAR_LC_TIME_NAMES, str))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to load sys variables", "var_name",SYS_VAR_LC_TIME_NAMES, K(ret));
-    }
-   } else {
+  if (OB_FAIL(get_string_sys_var(SYS_VAR_LC_TIME_NAMES, str))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("oracle mode does not support lc_time_names", K(ret));
+    LOG_WARN("failed to load sys variables", "var_name", SYS_VAR_LC_TIME_NAMES, K(ret));
   }
   return ret;
 }
@@ -3973,15 +3965,10 @@ int ObBasicSessionInfo::get_query_rewrite_integrity(int64_t &query_rewrite_integ
   return get_int64_sys_var(SYS_VAR_QUERY_REWRITE_INTEGRITY, query_rewrite_integrity);
 }
 
-int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order, bool is_oracle_mode) const
+int ObBasicSessionInfo::is_serial_set_order_forced(bool &force_set_order) const
 {
   int ret = OB_SUCCESS;
   force_set_order = false;
-  if (!is_oracle_mode) {
-    //do nothing
-  } else {
-    ret = get_bool_sys_var(SYS_VAR__FORCE_ORDER_PRESERVE_SET, force_set_order);
-  }
   return ret;
 }
 
@@ -6649,7 +6636,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
   int ret_more = OB_SUCCESS;
 
   if (OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset, ret_more,
-                                                    is_oralce_mode, check_timezone_valid))) {
+                                                    check_timezone_valid))) {
     if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
       LOG_WARN("fail to convert time zone", K(str_val), K(ret));
     }
@@ -6694,7 +6681,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
           LOG_INFO("ignore unknow time zone, perhaps in remote/distribute task processer when server start_time is zero", K(str_val));
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
-                                                    is_oralce_mode, check_timezone_valid))) {
+                                                    check_timezone_valid))) {
             if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
               LOG_WARN("fail to convert time zone", K(str_val), K(ret));
             }
@@ -6707,7 +6694,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
           // The reason is that px use tenant_id_ and das/remote use effective_tenant_id_ create session.
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
-                                                    is_oralce_mode, check_timezone_valid))) {
+                                                    check_timezone_valid))) {
             LOG_WARN("fail to convert time zone", K(str_val), K(ret));
           } else {
             tz_info_wrap_.set_tz_info_offset(offset);
@@ -6826,38 +6813,11 @@ int ObExecEnv::gen_exec_env(const share::schema::ObSysVariableSchema &sys_variab
 {
   int ret = OB_SUCCESS;
   ObObj val;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret));
-  }
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     const ObSysVarSchema *sysvar_schema = nullptr;
     switch (i) {
       case PLSQL_CCFLAGS: {
-        if (is_oracle_mode) { // plsql_ccflags only in oracle mode!
-          int64_t size = 0;
-          if (OB_FAIL(sys_variable.get_sysvar_schema(ExecEnvMap[i], sysvar_schema))) {
-            LOG_WARN("failed to get sysvar schema", K(ret));
-          } else if (OB_ISNULL(sysvar_schema)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret), K(sysvar_schema));
-          } else {
-            ObString plsql_ccflags = sysvar_schema->get_value();
-            // print length of plsql_ccflags
-            OZ (databuff_printf(buf + pos, len - pos, size, "%d",
-                                static_cast<int32_t>(plsql_ccflags.length())));
-            OX (pos += size);
-            CK (pos < len);
-            OX (buf[pos++] = ',');
-            // print content of plsql_ccflags
-            OX (size = 0);
-            OZ (databuff_printf(buf + pos, len - pos, size, "%.*s",
-                                static_cast<int32_t>(plsql_ccflags.length()), plsql_ccflags.ptr()));
-            OX (pos += size);
-            CK (pos < len);
-            OX (buf[pos++] = ',');
-          }
-        }
+        // plsql_ccflags is Oracle-only; nothing to do in MySQL mode.
       } break;
       case SQL_MODE:
       case CHARSET_CLIENT:
@@ -6986,12 +6946,9 @@ int ObExecEnv::load(ObBasicSessionInfo &session, ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   ObObj val;
-  bool is_mysql = lib::is_mysql_mode();
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
-    if (is_mysql && PLSQL_CCFLAGS == i) {
-      // do nothing ...
-    } else if (!is_mysql && SQL_MODE == i) {
+    if (PLSQL_CCFLAGS == i) {
       // do nothing ...
     } else if (OB_FAIL(session.get_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));
@@ -7040,7 +6997,6 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   ObObj val;
-  bool is_mysql = lib::is_mysql_mode();
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
     switch (i) {
@@ -7076,9 +7032,7 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
     break;
     }
     if (OB_FAIL(ret)) {
-    } else if (is_mysql && PLSQL_CCFLAGS == i) {
-      // do nothing ...
-    } else if (!is_mysql && SQL_MODE == i) {
+    } else if (PLSQL_CCFLAGS == i) {
       // do nothing ...
     } else if (OB_FAIL(session.update_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));

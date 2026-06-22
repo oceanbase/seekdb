@@ -84,7 +84,7 @@ int ObFastParser::parse(const common::ObString &stmt,
 }
 
 ObFastParserBase::ObFastParserBase(ObIAllocator &allocator, const FPContext fp_ctx) :
-  no_param_sql_(nullptr), no_param_sql_len_(0), param_num_(0), is_oracle_mode_(false),
+  no_param_sql_(nullptr), no_param_sql_len_(0), param_num_(0),
   is_batched_multi_stmt_split_on_(fp_ctx.enable_batched_multi_stmt_),
   cur_token_begin_pos_(0),
   copy_begin_pos_(0), copy_end_pos_(0), tmp_buf_(nullptr), tmp_buf_len_(0),
@@ -443,16 +443,8 @@ inline int64_t ObFastParserBase::is_identifier_flags(const int64_t pos)
     // Most of the time, if it is not an identifier character, it maybe a space,
     // comma, opening parenthesis, or closing parenthesis. This judgment logic is
     // added here to avoid the next judgment whether it is utf8 char or gbk char
-  } else if (!is_oracle_mode_) {
+  } else {
     idf_pos = notascii_gb_char(pos);
-  } else if (CHARSET_UTF8MB4 == charset_type_ || CHARSET_UTF16 == charset_type_) {
-    idf_pos = is_utf8_char(pos);
-  } else if (ObCharset::is_gb_charset(charset_type_)) {
-    idf_pos = is_gbk_char(pos);
-  } else if (charset_info_->mbmaxlen == 1) {
-    idf_pos = is_single_byte_char(pos);
-  } else if (CHARSET_HKSCS == charset_type_ || CHARSET_HKSCS31 == charset_type_) {
-    idf_pos = is_hk_char(pos);
   }
   return idf_pos;
 }
@@ -651,7 +643,7 @@ inline int64_t ObFastParserBase::is_single_byte_char(const int64_t pos)
 inline int64_t ObFastParserBase::is_utf8_char(const int64_t pos)
 {
   int64_t idf_pos = -1;
-  if (is_oracle_mode_ &&
+  if (false &&
      pos + 3 < raw_sql_.raw_sql_len_ &&
      (-1 != is_utf8_multi_byte_space(raw_sql_.raw_sql_, pos) ||
       -1 != is_utf8_multi_byte_comma(raw_sql_.raw_sql_, pos) ||
@@ -838,7 +830,7 @@ inline int64_t ObFastParserBase::is_gbk_multi_byte_right_parenthesis(
 inline int64_t ObFastParserBase::is_gbk_char(const int64_t pos)
 {
   int64_t idf_pos = -1;
-  if (is_oracle_mode_ &&
+  if (false &&
      pos + 2 < raw_sql_.raw_sql_len_ &&
      (-1 != is_gbk_multi_byte_space(raw_sql_.raw_sql_, pos) ||
       -1 != is_gbk_multi_byte_comma(raw_sql_.raw_sql_, pos) ||
@@ -854,7 +846,7 @@ inline int64_t ObFastParserBase::is_gbk_char(const int64_t pos)
 inline int64_t ObFastParserBase::is_hk_char(const int64_t pos)
 {
   int64_t idf_pos = -1;
-  if (is_oracle_mode_ &&
+  if (false &&
      pos + 2 < raw_sql_.raw_sql_len_ &&
      (-1 != is_hk_multi_byte_space(raw_sql_.raw_sql_, pos) ||
       -1 != is_hk_multi_byte_comma(raw_sql_.raw_sql_, pos) ||
@@ -1260,7 +1252,7 @@ int ObFastParserBase::process_hex_number(bool is_quote)
       }
     } else {
       // Values written using 0xval notation NOTE: 0Xval (use upper case 'X') notation is illegal in MySQL
-      if (!is_oracle_mode_ && raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'X') {
+      if (raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'X') {
         LOG_WARN("parser syntax error", K(ret));
         return OB_ERR_PARSER_SYNTAX;
       }
@@ -1342,7 +1334,7 @@ int ObFastParserBase::process_binary(bool is_quote)
       --str_len;
     } else {
       // Values written using 0bval notation NOTE: 0Bval (use upper case 'B') notation is illegal in MySQL
-      if (!is_oracle_mode_ && raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'B') {
+      if (raw_sql_.char_at(cur_token_begin_pos_ + 1) == 'B') {
         LOG_WARN("parser syntax error", K(ret));
         return OB_ERR_PARSER_SYNTAX;
       }
@@ -1388,16 +1380,8 @@ inline int64_t ObFastParserBase::is_first_identifier_flags(const int64_t pos)
     // Most of the time, if it is not an identifier character, it maybe a space,
     // comma, opening parenthesis, or closing parenthesis. This judgment logic is
     // added here to avoid the next judgment whether it is utf8 char or gbk char
-  } else if (!is_oracle_mode_) {
+  } else {
     idf_pos = notascii_gb_char(pos);
-  } else if (CHARSET_UTF8MB4 == charset_type_ || CHARSET_UTF16 == charset_type_) {
-    idf_pos = is_utf8_char(pos);
-  } else if (ObCharset::is_gb_charset(charset_type_)) {
-    idf_pos = is_gbk_char(pos);
-  } else if (charset_info_->mbmaxlen == 1) {
-    idf_pos = is_single_byte_char(pos);
-  } else if (CHARSET_HKSCS == charset_type_ || CHARSET_HKSCS31 == charset_type_) {
-    idf_pos = is_hk_char(pos);
   }
   return idf_pos;
 }
@@ -1417,7 +1401,7 @@ int ObFastParserBase::process_time_relate_type(bool &need_process_ws, ObItemType
   char ch = raw_sql_.char_at(raw_sql_.cur_pos_);
   int64_t idf_end_pos = raw_sql_.cur_pos_;
   // deal with the'[^']*' part, the part after quote may be parameterized or ignored
-  if ('\'' == ch || (!is_oracle_mode_ && '\"' == ch)) {
+  if ('\'' == ch || '\"' == ch) {
     if (T_TIME == type || T_DATE == type || T_TIMESTAMP_TZ == type ||
         T_DATETIME == type || T_TIMESTAMP == type) {
       OZ (process_date_related_type(ch, type));
@@ -1767,15 +1751,11 @@ void ObFastParserBase::parse_integer(ParseNode *node)
     }
   } else {
     uint64_t value = 0;
-    if (is_oracle_mode_) {
-      value = ob_strntoll(node->str_value_, node->str_len_, 10, NULL, &err_no);
-    } else {
-      value = ob_strntoull(node->str_value_, node->str_len_, 10, NULL, &err_no);
-    }
+    value = ob_strntoull(node->str_value_, node->str_len_, 10, NULL, &err_no);
     node->value_ = value;
     if (ERANGE == err_no) {
       node->type_ = T_NUMBER;
-    } else if (!is_oracle_mode_ && value > INT64_MAX) {
+    } else if (value > INT64_MAX) {
       node->type_ = T_UINT64;
     }
   }
@@ -1807,8 +1787,7 @@ int ObFastParserBase::process_negative()
   }
   char next_char = raw_sql_.peek();
   if (is_digit(ch)) {
-    if (!is_oracle_mode_ &&
-       ('x' == next_char || 'X' == next_char || 'b' == next_char || 'B' == next_char)) {
+    if ('x' == next_char || 'X' == next_char || 'b' == next_char || 'B' == next_char) {
       cur_token_type_ = NORMAL_TOKEN;
     } else if (OB_FAIL(process_number(true/*has_minus*/))) {
       LOG_WARN("failed to handle number", K(ret));
@@ -1971,8 +1950,8 @@ int ObFastParserBase::process_identifier_begin_with_t(bool &need_process_ws)
     ObItemType item_type = T_INVALID;
     if (CHECK_EQ_STRNCASECMP("imestamp", 8)) {
       raw_sql_.scan(8);
-      item_type = is_oracle_mode_ ? T_TIMESTAMP_TZ : T_TIMESTAMP;
-    } else if (!is_oracle_mode_ && CHECK_EQ_STRNCASECMP("ime", 3)) {
+      item_type = T_TIMESTAMP;
+    } else if (CHECK_EQ_STRNCASECMP("ime", 3)) {
       raw_sql_.scan(3);
       item_type = T_TIME;
     }
@@ -1996,30 +1975,18 @@ int ObFastParserBase::process_number(bool has_minus)
 
 #define CHECK_AND_PROCESS_NUMBER(default_type) \
   do {  \
-    if (is_oracle_mode_) { \
-      if ('D' == ch || 'd' == ch) { \
-        raw_sql_.scan(); \
-        ADD_PARAMETERIC_NODE(T_DOUBLE); \
-      } else if ('f' == ch || 'F' == ch) { \
-        raw_sql_.scan(); \
-        ADD_PARAMETERIC_NODE(T_FLOAT); \
-      } else { \
-        ADD_PARAMETERIC_NODE(default_type); \
+    int64_t next_idf_pos = is_identifier_flags(raw_sql_.cur_pos_); \
+    if (-1 != next_idf_pos && !has_flag_after_euler && !has_dot) { \
+      if (has_minus) { \
+        copy_end_pos_ = num_begin_pos; \
+        cur_token_begin_pos_ = num_begin_pos; \
+      } \
+      raw_sql_.cur_pos_ = next_idf_pos; \
+      if (OB_LIKELY(process_idf_func_ != nullptr)) { \
+        OZ ((this->*process_idf_func_)(true)); \
       } \
     } else { \
-      int64_t next_idf_pos = is_identifier_flags(raw_sql_.cur_pos_); \
-      if (-1 != next_idf_pos && !has_flag_after_euler && !has_dot) { \
-        if (has_minus) { \
-          copy_end_pos_ = num_begin_pos; \
-          cur_token_begin_pos_ = num_begin_pos; \
-        } \
-        raw_sql_.cur_pos_ = next_idf_pos; \
-        if (OB_LIKELY(process_idf_func_ != nullptr)) { \
-          OZ ((this->*process_idf_func_)(true)); \
-        } \
-      } else { \
-        ADD_PARAMETERIC_NODE(default_type); \
-      } \
+      ADD_PARAMETERIC_NODE(default_type); \
     } \
   } while (0)
   
@@ -2068,18 +2035,12 @@ int ObFastParserBase::process_number(bool has_minus)
           if (has_flag_after_euler) {
             raw_sql_.reverse_scan();
           }
-          if (!is_oracle_mode_) {
-            if (has_minus) {
-              copy_end_pos_ = num_begin_pos;
-              cur_token_begin_pos_ = num_begin_pos;
-            }
-            if (OB_LIKELY(process_idf_func_ != nullptr)) {
-              OZ ((this->*process_idf_func_)(true));
-            }
-          } else {
-            // after reverse scan, cur_ch == 'e'
-            raw_sql_.reverse_scan();
-            ADD_PARAMETERIC_NODE(T_INT);
+          if (has_minus) {
+            copy_end_pos_ = num_begin_pos;
+            cur_token_begin_pos_ = num_begin_pos;
+          }
+          if (OB_LIKELY(process_idf_func_ != nullptr)) {
+            OZ ((this->*process_idf_func_)(true));
           }
         } else {
           // If has_dot is true, it has a "." in front of it. It belongs to the double type, and if
@@ -2101,11 +2062,7 @@ int ObFastParserBase::process_number(bool has_minus)
         ADD_PARAMETERIC_NODE(T_NUMBER);
       }
     } else { // has number after euler
-      if (is_oracle_mode_) {
-        CHECK_AND_PROCESS_NUMBER(T_NUMBER);
-      } else {
-        CHECK_AND_PROCESS_NUMBER(T_DOUBLE);
-      }
+      CHECK_AND_PROCESS_NUMBER(T_DOUBLE);
     }
   } else {
     // not 'e' end, eg: 1.a, 1.1a, .1a
@@ -2366,32 +2323,28 @@ int ObFastParserMysql::process_values(const char *str)
 {
   int ret = OB_SUCCESS;
   if (found_insert_status_ == FOUND_INSERT_TOKEN_ONCE) {
-    if (!is_oracle_mode_) {
-      // mysql support: insert ... values / value (xx, ...);
-      if (CHECK_EQ_STRNCASECMP("alues", 5)) {
-        if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
-                    cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
-          LOG_WARN("failed to push back", K(ret));
-        } else {
-          values_token_pos_ = raw_sql_.cur_pos_;
-          raw_sql_.scan(5);
-        }
-      } else if (CHECK_EQ_STRNCASECMP("alue", 4)) {
-        values_token_pos_ = raw_sql_.cur_pos_;
-        raw_sql_.scan(4);
+    // mysql support: insert ... values / value (xx, ...);
+    if (CHECK_EQ_STRNCASECMP("alues", 5)) {
+      if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
+                  cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
+        LOG_WARN("failed to push back", K(ret));
       } else {
-        // do nothing
+        values_token_pos_ = raw_sql_.cur_pos_;
+        raw_sql_.scan(5);
       }
+    } else if (CHECK_EQ_STRNCASECMP("alue", 4)) {
+      values_token_pos_ = raw_sql_.cur_pos_;
+      raw_sql_.scan(4);
+    } else {
+      // do nothing
     }
   } else {
-    if (!is_oracle_mode_) {
-      if (CHECK_EQ_STRNCASECMP("alues", 5)) {
-        if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
-                    cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
-          LOG_WARN("failed to push back", K(ret));
-        } else {
-          raw_sql_.scan(5);
-        }
+    if (CHECK_EQ_STRNCASECMP("alues", 5)) {
+      if (OB_FAIL(values_tokens_.push_back(ObValuesTokenPos(no_param_sql_len_ +
+                  cur_token_begin_pos_ - copy_begin_pos_, param_num_)))) {
+        LOG_WARN("failed to push back", K(ret));
+      } else {
+        raw_sql_.scan(5);
       }
     }
   }
@@ -2656,7 +2609,7 @@ int ObFastParserMysql::parse_next_token()
           if (OB_LIKELY(process_idf_func_ != nullptr)) {
             OZ ((this->*process_idf_func_)(false));
           }
-        } else if (is_mysql_mode() && raw_sql_.char_at(raw_sql_.cur_pos_) == '\\') {
+        } else if (raw_sql_.char_at(raw_sql_.cur_pos_) == '\\') {
           raw_sql_.cur_pos_ += 1;
           if (OB_LIKELY(process_idf_func_ != nullptr)) {
             OZ ((this->*process_idf_func_)(false));
@@ -2842,14 +2795,6 @@ int ObFastParserOracle::process_identifier_begin_with_n()
 int ObFastParserOracle::process_values(const char *str)
 {
   int ret = OB_SUCCESS;
-  if (found_insert_status_ == FOUND_INSERT_TOKEN_ONCE) {
-    if (is_oracle_mode_) {
-      if (CHECK_EQ_STRNCASECMP("alues", 5)) {
-        values_token_pos_ = raw_sql_.cur_pos_;
-        raw_sql_.scan(5);
-      }
-    }
-  }
   return ret;
 }
 

@@ -755,7 +755,7 @@ int ObSQLUtils::check_and_convert_db_name(const ObCollationType cs_type, const b
 
     ObString last_name(name_len, name_str);
     if (!preserve_lettercase
-        || (lib::is_mysql_mode() && 0 == name.case_compare(OB_INFORMATION_SCHEMA_NAME))) {
+        || (0 == name.case_compare(OB_INFORMATION_SCHEMA_NAME))) {
       ObCharset::casedn(CS_TYPE_UTF8MB4_BIN, last_name);
     }
     if (OB_ERR_WRONG_IDENT_NAME == (ret = check_ident_name(cs_type, last_name, check_for_path_chars,
@@ -782,7 +782,7 @@ int ObSQLUtils::cvt_db_name_to_org(share::schema::ObSchemaGetterGuard &schema_gu
                                    ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode() && session != NULL && !session->is_inner()) {
+  if (session != NULL && !session->is_inner()) {
     ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
     if (OB_FAIL(session->get_name_case_mode(case_mode))) {
       LOG_WARN("fail to get name case mode", K(ret));
@@ -851,16 +851,6 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
                                              const stmt::StmtType stmt_type,
                                              const bool is_index_table)
 {
-  return check_and_convert_table_name(cs_type, preserve_lettercase, name, false, stmt_type, is_index_table);
-}
-
-int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
-                                             const bool preserve_lettercase,
-                                             ObString &name,
-                                             const bool is_oracle_mode,
-                                             const stmt::StmtType stmt_type,
-                                             const bool is_index_table)
-{
   /**
    * MYSQL mode
    *  If the byte number of table name is greater than 192, report OB_WRONG_TABLE_NAME;
@@ -877,8 +867,7 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
   int ret = OB_SUCCESS;
   int64_t name_len = name.length();
   const char *name_str = name.ptr();
-  const int64_t max_user_table_name_length = is_oracle_mode
-              ? OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE : OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
+  const int64_t max_user_table_name_length = OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL;
   const int64_t max_index_name_prefix_len = 30;
   if (0 == name_len
       || (!is_index_table && (name_len > (max_user_table_name_length * OB_MAX_CHAR_LEN)))
@@ -956,13 +945,9 @@ int ObSQLUtils::check_index_name(const ObCollationType cs_type, ObString &name)
     bool check_for_path_chars = false;
     if (OB_ERR_WRONG_IDENT_NAME == (ret = check_ident_name(CS_TYPE_UTF8MB4_GENERAL_CI, name, check_for_path_chars,
                                                            max_user_table_name_length))) {
-      if (lib::is_mysql_mode()) {
-        ret = OB_WRONG_NAME_FOR_INDEX;
-        LOG_USER_ERROR(OB_WRONG_NAME_FOR_INDEX, name.length(), name.ptr());
-        LOG_WARN("Incorrect index name", K(name), K(ret));
-      } else { // It allows the last char of index name is space in oracle mode.
-        ret = OB_SUCCESS;
-      }
+      ret = OB_WRONG_NAME_FOR_INDEX;
+      LOG_USER_ERROR(OB_WRONG_NAME_FOR_INDEX, name.length(), name.ptr());
+      LOG_WARN("Incorrect index name", K(name), K(ret));
     } else if (OB_ERR_TOO_LONG_IDENT == ret) {
       LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, name.length(), name.ptr());
       LOG_WARN("index name is too long", K(name), K(ret));
@@ -991,11 +976,7 @@ int ObSQLUtils::check_column_name(const ObCollationType cs_type, ObString &name,
       if (is_mb_char) {
         byte_length = ObCharset::charpos(CS_TYPE_UTF8MB4_GENERAL_CI, name_str, end - name_str, 1);
         name_str += byte_length;
-        if (lib::is_mysql_mode()) {
-          name_len++;
-        } else {
-          name_len += byte_length;
-        }
+        name_len++;
         continue;
       }
     }
@@ -1228,11 +1209,7 @@ int ObSQLUtils::check_ident_name(const ObCollationType cs_type, ObString &name,
       if (is_mb_char) {
         byte_length = ObCharset::charpos(CS_TYPE_UTF8MB4_GENERAL_CI, name_str, end - name_str, 1);
         name_str += byte_length;
-        if (lib::is_mysql_mode()) {
-          name_len++;
-        } else {
-          name_len += byte_length;
-        }
+        name_len++;
         continue;
       }
     }
@@ -1277,9 +1254,7 @@ int ObSQLUtils::check_enable_mysql_compatible_dates(const sql::ObSQLSessionInfo 
 {
   int ret = OB_SUCCESS;
   enabled = false;
-  if (!lib::is_mysql_mode()) {
-    // only support mysql dates in mysql mode now.
-  } else if (OB_ISNULL(session)) {
+  if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", K(ret));
   } else if ((const_cast<sql::ObSQLSessionInfo *>(session))->is_enable_mysql_compatible_dates()) {
@@ -1419,7 +1394,7 @@ bool ObSQLUtils::is_readonly_stmt(ParseResult &result)
                || T_XA_COMMIT == type
                || T_XA_ROLLBACK == type
                || T_XA_RECOVER == type
-               || (T_SET_ROLE == type && lib::is_mysql_mode())
+               || T_SET_ROLE == type
                || T_SET_CATALOG == type) {
       ret = true;
     }
@@ -1476,7 +1451,7 @@ int ObSQLUtils::set_compatible_cast_mode(const ObSQLSessionInfo *session, ObCast
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument in set_compatible_cast_mode ", K(session), K(ret), K(cast_mode), K(lbt()));
   } else {
-    cast_mode &= ~CM_ORACLE_MODE;
+    cast_mode &= ~CM_ORACLE_MODE; // seekdb is MySQL-only; ensure oracle cast mode is off
   }
   return ret;
 }
@@ -1507,7 +1482,7 @@ void ObSQLUtils::get_default_cast_mode(const stmt::StmtType &stmt_type,
              || is_ignore_stmt) {
     cast_mode = CM_WARN_ON_FAIL;
   }
-  if (is_mysql_mode()) {
+  {
     if (is_allow_invalid_dates(sql_mode)) {
       cast_mode |= CM_ALLOW_INVALID_DATES;
     }
@@ -1544,7 +1519,7 @@ void ObSQLUtils::get_default_cast_mode(const ObSQLMode sql_mode, ObCastMode &cas
   if (!is_strict_mode(sql_mode)) {
     cast_mode = CM_WARN_ON_FAIL;
   }
-  if (is_mysql_mode()) {
+  {
     if (is_allow_invalid_dates(sql_mode)) {
       cast_mode |= CM_ALLOW_INVALID_DATES;
     }
@@ -1597,7 +1572,7 @@ void ObSQLUtils::get_default_cast_mode(const bool is_explicit_cast,
     cast_mode |= CM_NONE;
     cast_mode |= CM_STRICT_MODE;
   }
-  if (is_mysql_mode()) {
+  {
     if (is_allow_invalid_dates(sql_mode)) {
       cast_mode |= CM_ALLOW_INVALID_DATES;
     }
@@ -1629,7 +1604,7 @@ int ObSQLUtils::get_cast_mode_for_replace(const ObRawExpr *expr,
   } else if (OB_FAIL(ObSQLUtils::set_cs_level_cast_mode(expr->get_collation_level(), cast_mode))) {
     LOG_WARN("failed to set cs level cast mode", K(ret));
   } else {
-    if (lib::is_mysql_mode() && dst_type.is_string_type() &&
+    if (dst_type.is_string_type() &&
         expr->get_result_type().has_result_flag(ZEROFILL_FLAG)) {
       cast_mode |= CM_ADD_ZEROFILL;
     }
@@ -1728,7 +1703,7 @@ int ObSQLUtils::check_well_formed_str(const ObString &src_str,
     } else {
       dst_str.assign_ptr(src_str.ptr(), static_cast<int32_t>(well_formed_length));
     }
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       LOG_USER_WARN(OB_ERR_INVALID_CHARACTER_STRING,
           static_cast<int>(charset_name_len), charset_name,
           static_cast<int>(hex_len), hex_buf);
@@ -2763,7 +2738,7 @@ int ObSQLUtils::wrap_column_convert_ctx(const ObExprCtx &expr_ctx, ObCastCtx &co
 int ObSQLUtils::merge_solidified_var_into_collation(const ObLocalSessionVar &session_vars_snapshot,
                                                      ObCollationType &cs_type) {
   int ret = OB_SUCCESS;
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     ObSessionSysVar *local_var = NULL;
     if (OB_FAIL(session_vars_snapshot.get_local_var(SYS_VAR_COLLATION_CONNECTION, local_var))) {
       LOG_WARN("get local session var failed", K(ret));
@@ -2977,10 +2952,8 @@ void ObSQLUtils::init_type_ctx(const ObSQLSessionInfo *session, ObExprTypeCtx &t
     // For type_ctx's collation_type, I understand that a default value needs to be initialized here,
     // For MySQL mode, we use collation_connection in our code, this is also the default collation of the constant,
     // But in Oracle mode, all constants are converted to nls_collation, so setting it to nls_collation is more reasonable in Oracle mode
-    if (lib::is_mysql_mode()) {
-      if (OB_SUCCESS == (session->get_collation_connection(coll_type))) {
-        type_ctx.set_coll_type(coll_type);
-      }
+    if (OB_SUCCESS == (session->get_collation_connection(coll_type))) {
+      type_ctx.set_coll_type(coll_type);
     }
 
     if (OB_SUCCESS == (session->get_div_precision_increment(div_precision_increment))) {
@@ -3213,13 +3186,12 @@ bool ObSQLUtils::is_same_type_for_compare(const ObObjMeta &meta1, const ObObjMet
 int ObSQLUtils::generate_new_name_with_escape_character(
     common::ObIAllocator &allocator,
     const ObString &src,
-    ObString &dst,
-    bool is_oracle_mode)
+    ObString &dst)
 {
   int ret = OB_SUCCESS;
   const ObString::obstr_size_t src_len = src.length();
   ObString::obstr_size_t dst_len = src_len;
-  const char escape_character = is_oracle_mode ? '"' : '`';
+  const char escape_character = '`';
   char *ptr = NULL;
 
   if (OB_ISNULL(src.ptr()) || OB_UNLIKELY(0 >= src_len)) {
@@ -3400,7 +3372,6 @@ int ObVirtualTableResultConverter::convert_key(const ObRowkey &src, ObRowkey &ds
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("keys are not match with columns", K(ret));
     }
-    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     for (int64_t nth_obj = 0; OB_SUCC(ret) && nth_obj < src.get_obj_cnt(); ++nth_obj) {
       const ObObj &src_obj = src_key_objs[nth_obj];
       if (pos == nth_obj && (src_obj.is_ext() || src_obj.is_null())) {
@@ -3602,8 +3573,7 @@ int ObSQLUtils::convert_sql_text_to_schema_for_storing(ObIAllocator &allocator,
 
 int ObSQLUtils::print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
                                  ObCollationType connection_collation,
-                                 const common::ObString &identifier_name,
-                                 bool is_oracle_mode)
+                                 const common::ObString &identifier_name)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("PrintIdentifier");
@@ -3613,8 +3583,7 @@ int ObSQLUtils::print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(generate_new_name_with_escape_character(allocator,
                                                       identifier_name,
-                                                      print_name,
-                                                      is_oracle_mode))) {
+                                                      print_name))) {
     LOG_WARN("failed to generate new name with escape character", K(ret));
   } else if (ObCharset::charset_type_by_coll(connection_collation)
       == CHARSET_UTF8MB4) {

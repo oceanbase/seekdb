@@ -445,8 +445,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("set sys task status self addr failed", KR(ret));
     } else if (OB_FAIL(ObServerAutoSplitScheduler::get_instance().init())) {
       LOG_ERROR("init auto split scheduler failed", KR(ret));
-    } else if (OB_FAIL(ObCompatModeGetter::instance().init(&sql_proxy_))) {
-      LOG_ERROR("init get compat mode server failed",KR(ret));
     } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
       LOG_ERROR("init timer monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {
@@ -2996,7 +2994,6 @@ int ObServer::clean_up_invalid_tables_by_tenant(
     drop_table_arg.to_recyclebin_ = false;
     // only OB_ISNULL(GCTX.session_mgr_) will exit the loop
     for (int64_t i = 0; i < table_ids.count() && OB_SUCC(tmp_ret); i++) {
-      bool is_oracle_mode = false;
       const ObSimpleTableSchemaV2 *table_schema = NULL;
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
@@ -3008,8 +3005,6 @@ int ObServer::clean_up_invalid_tables_by_tenant(
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("got invalid schema", KR(ret), K(i));
-      } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check table if oracle compat mode", KR(ret));
       } else if (0 == table_schema->get_session_id()) {
         //do nothing
       } else {
@@ -3042,7 +3037,7 @@ int ObServer::clean_up_invalid_tables_by_tenant(
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;
-          drop_table_arg.compat_mode_ = is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
+          drop_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
           table_item.table_name_ = table_schema->get_table_name_str();
           table_item.mode_ = table_schema->get_name_case_mode();
           if (OB_FAIL(schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), database_schema))) {

@@ -625,9 +625,7 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
     }
   }
   if (OB_ISNULL(session_info.get_pl_context())) {
-    if (lib::is_mysql_mode()) {
-      OX (session_info.set_show_warnings_buf(OB_SUCCESS));
-    }
+    OX (session_info.set_show_warnings_buf(OB_SUCCESS));
     OX (cursor_info_.reset());
     OX (cursor_info_.set_implicit());
     OX (sqlcode_info_.reset());
@@ -662,7 +660,7 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
     OX (session_info.set_pl_stack_ctx(this));
     OX (need_remove_top_stack = true);
     OX (session_info.set_pl_can_retry(true));
-  } else if (is_function_or_trigger && lib::is_mysql_mode()) {
+  } else if (is_function_or_trigger) {
     //mysql mode, inner function or trigger does not need to create an implicit savepoint, only need to reset ac
     //If it is a procedure calling UDF scenario:
     // When ac = 0, the DML operations inside the UDF need to be rolled back, an implicit savepoint needs to be created
@@ -683,7 +681,7 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
     }
   }
 
-  if (OB_SUCC(ret) && is_function_or_trigger && lib::is_mysql_mode() &&
+  if (OB_SUCC(ret) && is_function_or_trigger &&
       routine->get_has_parallel_affect_factor()) {
     // In parallel scenarios, stash savepoint cannot be created; stash savepoint is only meaningful when there are TCL statements inside udf/trigger
     // The flag is true when there are tcl statements inside the udf
@@ -691,7 +689,7 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
     OZ (ObSqlTransControl::create_stash_savepoint(ctx, stash_savepoint_name));
     OX (has_stash_savepoint_ = true);
   }
-  if (OB_SUCC(ret) && is_function_or_trigger && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret) && is_function_or_trigger) {
     last_insert_id_ = session_info.get_local_last_insert_id();
   }
 #ifdef ERRSIM
@@ -803,13 +801,12 @@ void ObPLContext::destory(
     }
   }
 
-  if (lib::is_mysql_mode()
-      && OB_NOT_NULL(ctx.get_physical_plan_ctx())
+  if (OB_NOT_NULL(ctx.get_physical_plan_ctx())
       && !is_function_or_trigger_) {
     ctx.get_physical_plan_ctx()->set_affected_rows(get_cursor_info().get_rowcount());
   }
 
-  if (lib::is_mysql_mode() && is_function_or_trigger_) {
+  if (is_function_or_trigger_) {
     uint64_t cur_last_insert_id = session_info.get_local_last_insert_id();
     if (cur_last_insert_id != last_insert_id_) {
       ObObj last_insert_id;
@@ -846,7 +843,7 @@ void ObPLContext::destory(
   bool is_dblink = (transaction::ObGlobalTxType::DBLINK_TRANS == global_tx_type);
 
       if (!in_nested_sql_ctrl() &&
-          lib::is_mysql_mode() && is_function_or_trigger_ &&
+          is_function_or_trigger_ &&
           OB_SUCCESS == ret &&
           reset_autocommit_ &&
           session_info.is_in_transaction()) {
@@ -859,15 +856,14 @@ void ObPLContext::destory(
         if (has_implicit_savepoint_) {
           // ORACLE: alreay rollback to PL/SQL start.
           // MYSQL : rollback only if OB_TRY_LOCK_ROW_CONFLICT==ret and PL/SQL can retry.
-          if ((lib::is_mysql_mode() &&
-              ((OB_TRY_LOCK_ROW_CONFLICT == ret && session_info.get_pl_can_retry()) ||
+          if ((              ((OB_TRY_LOCK_ROW_CONFLICT == ret && session_info.get_pl_can_retry()) ||
               is_function_or_trigger_))) {
             if (OB_SUCCESS !=
                   (tmp_ret = ObSqlTransControl::rollback_savepoint(ctx, PL_IMPLICIT_SAVEPOINT))) {
               LOG_WARN("failed to rollback current pl to implicit savepoint", K(ret), K(tmp_ret));
             }
             LOG_DEBUG("rollback pl to implicit savepoint", K(ret), K(tmp_ret));
-          } else if (lib::is_mysql_mode()) {
+          } else {
             session_info.set_pl_can_retry(false);
           }
         } else if (!in_nested_sql_ctrl() && session_info.get_in_transaction()) {
@@ -875,17 +871,16 @@ void ObPLContext::destory(
           // PL in nested statements will roll back with the top-level statement, no separate rollback is needed
           // ORACLE: alreay rollback to PL/SQL start.
           // MYSQL : rollback only if OB_TRY_LOCK_ROW_CONFLICT==ret and PL/SQL can retry.
-          if ((lib::is_mysql_mode() &&
-             ((OB_TRY_LOCK_ROW_CONFLICT == ret && session_info.get_pl_can_retry()) ||
+          if ((             ((OB_TRY_LOCK_ROW_CONFLICT == ret && session_info.get_pl_can_retry()) ||
              is_function_or_trigger_))) {
             tmp_ret = implicit_end_trans(session_info, ctx, true);
-          } else if (lib::is_mysql_mode()) {
+          } else {
             session_info.set_pl_can_retry(false);
           }
         }
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
       } else if (!is_autonomous_ && reset_autocommit_ && !in_nested_sql_ctrl() &&
-                ((lib::is_mysql_mode() && is_function_or_trigger_))) {
+                ((is_function_or_trigger_))) {
                 /* Non-DML trigger point UDF, such as set @a = f1(), needs to be committed within the UDF */
         if (has_implicit_savepoint_) {
           // reset_autocommit_ && has_implicit_savepoint_ equal to scene of ac=1 && explict transaction.
@@ -944,7 +939,7 @@ void ObPLContext::destory(
 
     IGNORE_RETURN ObPLContext::debug_stop(&session_info);
 #undef IS_DBLINK_TRANS
-  } else if (lib::is_mysql_mode() && is_function_or_trigger_) {
+  } else if (is_function_or_trigger_) {
     // Non-nested scenario: The inner udf must be inside the expression, submission is guaranteed by spi_calc_expr
     // Nested scenario: Inner UDF is triggered by DML statement, rollback or commit is guaranteed by the outer DML statement
     if (OB_SUCCESS != ret && session_info.is_in_transaction()) { // PL execution failed, need to rollback
@@ -1082,7 +1077,7 @@ int ObPLContext::check_routine_legal(ObPLFunction &routine, bool in_function, bo
   int ret = OB_SUCCESS;
   // Check the legality of statements in the routine
   if (in_function || in_tg) {
-    if (routine.get_contain_dynamic_sql() && lib::is_mysql_mode()) {
+    if (routine.get_contain_dynamic_sql()) {
       ret = OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG;
       LOG_WARN("Dynamic SQL is not allowed in stored function", K(ret));
       LOG_USER_ERROR(OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG, "Dynamic SQL");
@@ -1120,7 +1115,7 @@ int ObPLContext::set_exec_env(ObPLFunction &routine)
 
   // always restore sql_mode in mysql mode,
   // because sql_mode may be change inside PL.
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     OX (need_reset_exec_env_ = true);
   }
 
@@ -1135,7 +1130,7 @@ void ObPLContext::reset_exec_env(int &ret)
     if (OB_ISNULL(session_info_)) {
       ret = OB_SUCCESS != ret ? ret : OB_ERR_UNEXPECTED;
       LOG_ERROR("current session is null", K(ret), K(session_info_));
-    } else if (lib::is_mysql_mode()) {
+    } else {
       // check whether need to restore sql_mode in mysql mode,
       // because sql_mode may be change inside PL.
       ObExecEnv curr_env;
@@ -1148,11 +1143,6 @@ void ObPLContext::reset_exec_env(int &ret)
         ret = OB_SUCCESS == ret ? tmp_ret : ret; // Do not overwrite error code
         LOG_WARN("failed to set exec_env", K(ret), K(tmp_ret), K(exec_env_), K(curr_env));
       }
-    } else {  // oracle mode
-      if (OB_SUCCESS != (tmp_ret = exec_env_.store(*session_info_))) {
-        ret = OB_SUCCESS == ret ? tmp_ret : ret; // Do not overwrite error code
-        LOG_WARN("failed to set exec_env", K(ret), K(tmp_ret), K(exec_env_));
-      }
     }
   }
 }
@@ -1164,7 +1154,7 @@ int ObPLContext::set_role_id_array(ObPLFunction &routine,
   /* All roles are disabled in any named PL/SQL block (stored procedure, function, or trigger)
      that executes with definer's rights. Roles are not used for privilege checking
      and you cannot set roles within a definer's rights procedure. */
-if (lib::is_mysql_mode() && !routine.is_invoker_right() &&
+if (!routine.is_invoker_right() &&
              0 != routine.get_priv_user().length()
              /* Compatible with existing stored procedures, where the priv_user of existing stored procedures is empty. MySQL stored procedures default to definer behavior,
               after OB MySQL mode is made to default to invoker behavior, OB MySQL mode will also default to definer behavior after supporting definer */) {
@@ -1556,7 +1546,7 @@ int ObPL::execute(ObExecContext &ctx,
       OX (*result = local_result);
     }
 
-    if(OB_SUCC(ret) && lib::is_mysql_mode()
+    if(OB_SUCC(ret)
         && routine.has_incomplete_rt_dep_error()) {
       LOG_USER_WARN(OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE, routine.get_function_name().length(), routine.get_function_name().ptr());
     }
@@ -1874,9 +1864,8 @@ struct ObPLExecTraceIdGuard {
 
 bool ObPL::forbid_anony_parameter(ObSQLSessionInfo &session, bool is_ps_mode, bool forbid)
 {
-  bool ret = forbid || session.is_pl_debug_on()
-                    || session.get_pl_profiler() != nullptr
-                    || lib::is_mysql_mode();
+  bool ret = true;  // seekdb is MySQL-only: anony parameter is always forbidden
+  UNUSED(forbid);
   if (!is_ps_mode) {
     ret |= !session.get_local_ob_enable_parameter_anonymous_block();
   } else {
@@ -1943,7 +1932,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   ObPLFunction *routine = NULL;
   ObCacheObjGuard cacheobj_guard(PL_ANON_HANDLE);
   bool is_forbid_anony_parameter = false;
-  OX (is_forbid_anony_parameter = block->is_forbid_anony_parameter_ || (params.count() > 0) || lib::is_mysql_mode());
+  OX (is_forbid_anony_parameter = true);
 
   int64_t old_worker_timeout_ts = 0;
   ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
@@ -2338,7 +2327,7 @@ int ObPL::execute(ObExecContext &ctx,
       ObString db_name = "";
       ObSchemaGetterGuard *guard = ctx.get_sql_ctx()->schema_guard_;
       CK (OB_NOT_NULL(guard));
-      if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+      if (OB_SUCC(ret)) {
         OZ (guard->get_database_schema(ctx.get_my_session()->get_effective_tenant_id(),
                                       routine->get_database_id(),
                                       db_schema));
@@ -2383,7 +2372,7 @@ int ObPL::execute(ObExecContext &ctx,
     }
 
     //check mysql definer has execute priv
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       const ObDatabaseSchema *db_schema = NULL;
       ObString db_name = "";
       ObSchemaGetterGuard *guard = ctx.get_sql_ctx()->schema_guard_;
@@ -3659,10 +3648,7 @@ do {                                                                  \
        */
       need_free_.push_back(false);
       const ObPLDataType &pl_type = func_.get_variables().at(i);  // formal param type
-      if (lib::is_oracle_mode() && FAILEDx(defend_stored_routine_change(params->at(i), pl_type))) {
-        LOG_WARN("param type not match, procedure/function could have been replaced",
-                 K(ret), K(i), K(params->at(i)), K(pl_type));
-      } else if (func_.get_in_args().has_member(i)) {
+      if (func_.get_in_args().has_member(i)) {
         if (is_anonymous && !func_.get_params_info().at(i).flag_.need_to_check_type_) {
           if (!params->at(i).is_pl_extend() && params->at(i).need_deep_copy()) {
             OZ (deep_copy_obj(*ctx_.allocator_, params->at(i), get_params().at(i)));
@@ -3965,7 +3951,7 @@ int ObPLExecRecursionCtx::inc_and_check_depth(uint64_t package_id, uint64_t proc
   int64_t recursion_depth = 0;
   int64_t *depth_store = NULL;
   // Compatible with MySQL, function does not allow nesting
-  int64_t max_recursion_depth = is_function && lib::is_mysql_mode() ? 0 : max_recursion_depth_;
+  int64_t max_recursion_depth = is_function ? 0 : max_recursion_depth_;
   if (!init_) {
     ret = OB_NOT_INIT;
     LOG_WARN("recursion context not init", K(ret), K(init_));
@@ -4096,7 +4082,7 @@ int ObPL::check_exec_priv(
 
     CK (exec_ctx.get_my_session() != NULL);
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && pkg_id == OB_INVALID_ID) {
+  if (OB_SUCC(ret) && pkg_id == OB_INVALID_ID) {
     if (ObSchemaChecker::enable_mysql_pl_priv_check(tenant_id, *guard)) {
       share::schema::ObSessionPrivInfo session_priv;
       EnableRoleIdArray enable_role_id_array;
@@ -4131,7 +4117,7 @@ int ObPL::check_exec_priv(
     }
   }
   // add check trigger priv
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && ObTriggerInfo::is_trigger_package_id(pkg_id) &&
+  if (OB_SUCC(ret) && ObTriggerInfo::is_trigger_package_id(pkg_id) &&
       OB_FAIL(exec_ctx.get_my_session()->check_feature_enable(
       ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
     LOG_WARN("failed to check feature enable", K(ret));
@@ -4238,7 +4224,7 @@ int ObPL::simple_execute(ObPLExecCtx *ctx, int64_t argc, int64_t *argv)
           sql_info.bulk_,
           sql_info.forall_sql_));
       }
-      if (OB_READ_NOTHING == ret && lib::is_mysql_mode()) {
+      if (OB_READ_NOTHING == ret) {
         //ignore OB_READ_NOTHING error in mysql mode
         ret = OB_SUCCESS;
       }

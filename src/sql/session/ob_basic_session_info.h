@@ -659,7 +659,6 @@ public:
   {
     return ob_sql_mode_to_compatibility_mode(get_sql_mode());
   }
-  bool is_oracle_compatible() const { return ORACLE_MODE == get_compatibility_mode(); }
   ObSQLMode get_sql_mode() const { return sys_vars_cache_.get_sql_mode(); }
   int get_div_precision_increment(int64_t &div_precision_increment) const;
   int get_character_set_client(common::ObCharsetType &character_set_client) const;
@@ -1082,7 +1081,7 @@ public:
   int is_transformation_enabled(bool &transformation_enabled) const;
   int get_query_rewrite_enabled(int64_t &query_rewrite_enabled) const;
   int get_query_rewrite_integrity(int64_t &query_rewrite_integrity) const;
-  int is_serial_set_order_forced(bool &force_set_order, bool is_oracle_mode) const;
+  int is_serial_set_order_forced(bool &force_set_order) const;
   int is_old_charset_aggregation_enabled(bool &is_enable) const;
   int is_storage_estimation_enabled(bool &storage_estimation_enabled) const;
   bool is_use_trace_log() const
