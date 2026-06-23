@@ -275,9 +275,7 @@ private:
 public:
   ObSharedObjectReaderWriter();
   ~ObSharedObjectReaderWriter();
-  int init(
-      const bool need_align = true,
-      const bool need_cross = false);
+  int init();
   void reset();
   void get_cur_shared_block(blocksstable::MacroBlockId &macro_id);
   static int async_read(const ObSharedObjectReadInfo &read_info, ObSharedObjectReadHandle &shared_obj_handle);
@@ -310,12 +308,7 @@ private:
       const ObSharedObjectWriteInfo &write_info,
       const ObSharedObjectWriteArgs &write_args,
       ObSharedObjectBaseHandle &shared_obj_handle,
-      ObSharedObjectsWriteCtx &write_ctx); // not cross
-  int write_cross_block(
-      ObSharedObjectWriteSession &write_session,
-      const ObSharedObjectWriteInfo &write_info,
-      const ObSharedObjectWriteArgs &write_args,
-      ObSharedObjectBaseHandle &shared_obj_handle); // cross
+      ObSharedObjectsWriteCtx &write_ctx);
   int calc_store_size(
       const int64_t total_size,
       const bool need_align,
@@ -358,8 +351,6 @@ private:
   int64_t align_offset_;
   int64_t write_align_size_;
   bool hanging_;
-  bool need_align_;
-  bool need_cross_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObSharedObjectReaderWriter);
 };

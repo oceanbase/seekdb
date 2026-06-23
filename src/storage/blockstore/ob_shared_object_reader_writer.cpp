@@ -749,8 +749,7 @@ private:
 
 ObSharedObjectReaderWriter::ObSharedObjectReaderWriter()
     : mutex_(), object_handle_(), offset_(0), align_offset_(0),
-      write_align_size_(0), hanging_(false), need_align_(false),
-      need_cross_(false), is_inited_(false)
+      write_align_size_(0), hanging_(false), is_inited_(false)
 {}
 
 ObSharedObjectReaderWriter::~ObSharedObjectReaderWriter()
@@ -758,24 +757,17 @@ ObSharedObjectReaderWriter::~ObSharedObjectReaderWriter()
   reset();
 }
 
-int ObSharedObjectReaderWriter::init(
-    const bool need_align,
-    const bool need_cross)
+int ObSharedObjectReaderWriter::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("Init twice", K(ret));
-  } else if (!need_align || need_cross) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported", K(ret), K(need_align), K(need_cross));
   } else {
     offset_ = 0;
     align_offset_ = 0;
     write_align_size_ = DIO_READ_ALIGN_SIZE; // 4K
     hanging_ = false;
-    need_align_ = need_align;
-    need_cross_ = need_cross;
     is_inited_ = true;
   }
   return ret;
@@ -787,8 +779,6 @@ void ObSharedObjectReaderWriter::reset()
   align_offset_ = 0;
   write_align_size_ = 0;
   hanging_ = false;
-  need_align_ = false;
-  need_cross_ = false;
   is_inited_ = false;
 }
 
@@ -910,7 +900,7 @@ int ObSharedObjectReaderWriter::async_batch_write(
     for (int64_t i = 0; OB_SUCC(ret) && i < write_infos.count(); ++i) {
       // only the last need flush and align
       write_args.need_flush_ = (i == write_infos.count() - 1);
-      write_args.need_align_ = (i == write_infos.count() - 1) ? need_align_ : false;
+      write_args.need_align_ = (i == write_infos.count() - 1);
       write_args.object_opt_ = curr_opt;
       write_ctx.clear();
       if (OB_FAIL(inner_async_write(write_session, write_infos.at(i), write_args, shared_obj_handle, write_ctx))) {
@@ -946,7 +936,7 @@ int ObSharedObjectReaderWriter::async_link_write(
     ObSharedObjectsWriteCtx write_ctx;
     write_args.object_opt_ = curr_opt;
     write_args.need_flush_ = true;
-    write_args.need_align_ = need_align_;
+    write_args.need_align_ = true;
     write_args.is_linked_ = true;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
@@ -990,9 +980,7 @@ int ObSharedObjectReaderWriter::inner_async_write(
     ObSharedObjectsWriteCtx &write_ctx)
 {
   int ret = OB_SUCCESS;
-  if (need_cross_ && OB_FAIL(write_cross_block(write_session, write_info, write_args, shared_obj_handle))) {
-    LOG_WARN("Fail to write cross block", K(ret), K(write_info));
-  } else if (OB_FAIL(write_block(write_session, write_info, write_args, shared_obj_handle, write_ctx))) {
+  if (OB_FAIL(write_block(write_session, write_info, write_args, shared_obj_handle, write_ctx))) {
     LOG_WARN("Fail to write block", K(ret), K(write_info));
   }
   return ret;
@@ -1281,19 +1269,6 @@ int ObSharedObjectReaderWriter::write_block(
     }
   }
   return ret;
-}
-
-int ObSharedObjectReaderWriter::write_cross_block(
-    ObSharedObjectWriteSession &write_session,
-    const ObSharedObjectWriteInfo &write_info,
-    const ObSharedObjectWriteArgs &write_args,
-    ObSharedObjectBaseHandle &shared_obj_handle)
-{
-  UNUSED(write_session);
-  UNUSED(write_info);
-  UNUSED(write_args);
-  UNUSED(shared_obj_handle);
-  return OB_NOT_SUPPORTED;
 }
 
 int ObSharedObjectReaderWriter::async_read(
