@@ -134,7 +134,7 @@ private:
   typedef common::RWLock::WLockGuard WLockGuard;
   typedef common::RWLock::RLockGuardWithTimeout RLockGuardWithTimeout;
 
-  static const int64_t RELOAD_INTERVAL = 60L * 1000L * 1000L;
+  static const int64_t RELOAD_INTERVAL = 3L * 1000L * 1000L;
   static const int64_t UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL = 10L * 1000L * 1000L;
   static const int64_t MAX_GC_SNAPSHOT_TS_REFRESH_TS = 10L * 60L * 1000L * 1000L;
   static const int64_t FLUSH_GC_SNAPSHOT_TS_REFRESH_TS =
