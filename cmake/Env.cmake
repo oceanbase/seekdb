@@ -77,11 +77,8 @@ endif()
 message(STATUS "ARCHITECTURE: ${ARCHITECTURE}")
 
 if(WITH_COVERAGE)
-  # -ftest-coverage to generate .gcno file
-  # -fprofile-arcs to generate .gcda file
-  # -DDBUILD_COVERAGE marco use to mark 'coverage build type' and to handle some special case
-  set(CMAKE_COVERAGE_COMPILE_OPTIONS -ftest-coverage -fprofile-arcs -Xclang -coverage-version=408R -DBUILD_COVERAGE)
-  set(CMAKE_COVERAGE_EXE_LINKER_OPTIONS "-ftest-coverage -fprofile-arcs")
+  set(CMAKE_COVERAGE_COMPILE_OPTIONS -fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation -DWITH_COVERAGE)
+  set(CMAKE_COVERAGE_EXE_LINKER_OPTIONS "-fprofile-instr-generate -Wl,-u,__llvm_profile_reset_counters -Wl,-u,__llvm_profile_set_filename -Wl,-u,__llvm_profile_write_file")
 
   add_compile_options(${CMAKE_COVERAGE_COMPILE_OPTIONS})
   set(DEBUG_PREFIX "")

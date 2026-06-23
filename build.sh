@@ -26,6 +26,8 @@ ANDROID_BUILD=false
 LLD_OPTION=ON
 ASAN_OPTION=ON
 STATIC_LINK_LGPL_DEPS_OPTION=ON
+ENABLE_BOLT_OPTION=ON
+WITH_COVERAGE=OFF
 
 echo "$0 ${ALL_ARGS[@]}"
 
@@ -49,6 +51,7 @@ function usage
     echo -e "\nOPTIONS:"
     echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
     echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
+    echo -e "\t--coverage => turn ON clang source-based coverage (WITH_COVERAGE); omitting it = OFF; also disables BOLT"
     echo -e "\tMakeOptions => Options to make command, default: -j N"
 
     echo -e "\nExamples:"
@@ -85,6 +88,9 @@ function parse_args
         elif [[ "$i" == "-DBUILD_CDC_ONLY=ON" ]]
         then
             BUILD_ARGS+=("$i")
+        elif [[ "$i" == "--coverage" ]]
+        then
+            WITH_COVERAGE=ON
         elif [[ $NEED_MAKE == false ]]
         then
             BUILD_ARGS+=("$i")
@@ -97,6 +103,9 @@ function parse_args
         echo_log '[NOTICE] lld is disabled in kernel release 6'
         LLD_OPTION="OFF"
     fi
+
+    BUILD_ARGS+=("-DWITH_COVERAGE=$WITH_COVERAGE")
+    [[ "$WITH_COVERAGE" == "ON" ]] && BUILD_ARGS+=("-DENABLE_BOLT=OFF")
 }
 
 # try call command make, if use give --make in command line.
@@ -238,9 +247,6 @@ function build
       xrelease_asan)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DOB_USE_ASAN=$ASAN_OPTION -DOB_ENABLE_MCMODEL=OFF
         ;;
-      xrelease_coverage)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DWITH_COVERAGE=ON
-        ;;
       xrelease_embedded)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DBUILD_EMBED_MODE=ON
         ;;
@@ -281,9 +287,6 @@ function build
       xpackage) 
         # automatic determination of packaging type 
         build_package "$@"
-        ;;
-      xcoverage)
-        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DWITH_COVERAGE=ON
         ;;
       xsanity)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_SANITY=ON -DOB_ENABLE_MCMODEL=ON
