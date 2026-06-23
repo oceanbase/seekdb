@@ -33,7 +33,6 @@ namespace checkpoint
 int64_t ObCheckPointService::CHECK_CLOG_USAGE_INTERVAL = 2000 * 1000L;
 int64_t ObCheckPointService::CHECKPOINT_INTERVAL = 5000 * 1000L;
 int64_t ObCheckPointService::TRAVERSAL_FLUSH_INTERVAL = 5000 * 1000L;
-static const int64_t CS_MIN_DEP_LSN_RELOAD_INTERVAL = 60 * 1000 * 1000L;
 
 // Check if need flush all CLOG module each 1 minute
 int64_t ObCheckPointService::TRY_ADVANCE_CKPT_INTERVAL = 60LL * 1000LL * 1000LL;
@@ -140,25 +139,7 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
   ObLSService *ls_svr = MTL(ObLSService*);
-  const int64_t now = ObClockGenerator::getClock();
-
-  if (!has_cached_cs_min_dep_lsn_
-      || now - last_cs_min_dep_lsn_reload_ts_ >= CS_MIN_DEP_LSN_RELOAD_INTERVAL) {
-    int tmp_ret = OB_SUCCESS;
-    int64_t cs_min_dep_lsn_val = 0;
-    if (OB_ISNULL(GCTX.sql_proxy_)) {
-      tmp_ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "sql_proxy is null, skip reloading change stream min dep lsn", KR(tmp_ret));
-    } else if (OB_SUCCESS != (tmp_ret = ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-                   *GCTX.sql_proxy_, MTL_ID(), false/*for_update*/, cs_min_dep_lsn_val))) {
-      STORAGE_LOG(WARN, "get_change_stream_min_dep_lsn failed, use cached value", KR(tmp_ret),
-                  K_(has_cached_cs_min_dep_lsn), K_(cached_cs_min_dep_lsn_val));
-    } else {
-      cached_cs_min_dep_lsn_val_ = cs_min_dep_lsn_val;
-      last_cs_min_dep_lsn_reload_ts_ = now;
-      has_cached_cs_min_dep_lsn_ = true;
-    }
-  }
+  int64_t cs_min_dep_lsn_val = 0;
 
   if (OB_ISNULL(ls_svr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -192,16 +173,17 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
         STORAGE_LOG(WARN, "checkpoint_executor should not be null", K(ls->get_ls_id()));
       } else if (OB_FAIL(checkpoint_executor->update_clog_checkpoint())) {
         STORAGE_LOG(WARN, "update_clog_checkpoint failed", K(ret), K(ls->get_ls_id()));
+      } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
+              *GCTX.sql_proxy_, MTL_ID(), false/*for_update*/, cs_min_dep_lsn_val))) {
+        STORAGE_LOG(WARN, "get_change_stream_min_dep_lsn failed, skip constraint", KR(ret));
       } else {
         checkpoint_lsn = ls->get_clog_base_lsn();
-        if (has_cached_cs_min_dep_lsn_) {
-          palf::LSN cs_min_dep_lsn = palf::LSN(cached_cs_min_dep_lsn_val_);
-          if (cs_min_dep_lsn < checkpoint_lsn) {
-            FLOG_INFO("[CHECKPOINT] constrain base_lsn by change_stream_min_dep_lsn",
-                K(checkpoint_lsn), K(cs_min_dep_lsn));
-            checkpoint_lsn = cs_min_dep_lsn;
-          }
-        }
+	palf::LSN cs_min_dep_lsn = palf::LSN(cs_min_dep_lsn_val);
+	if (cs_min_dep_lsn < checkpoint_lsn) {
+          FLOG_INFO("[CHECKPOINT] constrain base_lsn by change_stream_min_dep_lsn",
+              K(checkpoint_lsn), K(cs_min_dep_lsn));
+          checkpoint_lsn = cs_min_dep_lsn;
+	}
 
         if (OB_FAIL(ls->get_log_handler()->advance_base_lsn(checkpoint_lsn))) {
           STORAGE_LOG(WARN, "advance base lsn failed", K(ret), K(checkpoint_lsn));

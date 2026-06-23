@@ -76,19 +76,10 @@ private:
   class ObCheckpointTask : public common::ObTimerTask
   {
   public:
-    ObCheckpointTask()
-      : has_cached_cs_min_dep_lsn_(false),
-        cached_cs_min_dep_lsn_val_(0),
-        last_cs_min_dep_lsn_reload_ts_(0)
-    {}
+    ObCheckpointTask() {}
     virtual ~ObCheckpointTask() {}
 
     virtual void runTimerTask();
-
-  private:
-    bool has_cached_cs_min_dep_lsn_;
-    int64_t cached_cs_min_dep_lsn_val_;
-    int64_t last_cs_min_dep_lsn_reload_ts_;
   };
 
   class ObTraversalFlushTask : public common::ObTimerTask
