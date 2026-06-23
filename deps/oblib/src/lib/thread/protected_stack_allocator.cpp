@@ -17,14 +17,12 @@
 #define USING_LOG_PREFIX LIB
 
 #include "lib/thread/protected_stack_allocator.h"
-#include "lib/alloc/alloc_struct.h"
+#include "lib/allocator/ob_malloc.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifdef ERROR
 #undef ERROR
 #endif
-#else
-#include <sys/mman.h>
 #endif
 
 namespace oceanbase
@@ -104,27 +102,22 @@ void *ProtectedStackAllocator::__alloc(const uint64_t tenant_id,
 {
   void *ptr = nullptr;
 
-  (void)ctx_id;
   const ssize_t ps = page_size();
-  const ssize_t mmap_size = align_up2(size, ps);
-#ifdef _WIN32
-  char *buffer = reinterpret_cast<char *>(
-      VirtualAlloc(nullptr, mmap_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+  ObMemAttr attr(tenant_id, "CoStack", ctx_id);
+  // page at bottom will be used as guard-page
+  char *buffer = (char *)ob_malloc(size, attr);
   if (OB_ISNULL(buffer)) {
-    LOG_ERROR_RET(OB_ALLOCATE_MEMORY_FAILED, "CO_STACK mmap failed", K(size), K(mmap_size), K(GetLastError()));
+    LOG_ERROR_RET(OB_ALLOCATE_MEMORY_FAILED, "CO_STACK alloc failed", K(size));
   } else {
-#else
-  char *buffer = static_cast<char *>(::mmap(nullptr, mmap_size, PROT_READ | PROT_WRITE,
-                                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-  if (MAP_FAILED == buffer) {
-    ptr = nullptr;
-    LOG_ERROR_RET(OB_ALLOCATE_MEMORY_FAILED, "CO_STACK mmap failed", K(size), K(mmap_size), K(errno));
-  } else {
-#endif
-    char *guard_page_addr = buffer + ps;
-    ObStackHeader *header = new (guard_page_addr - sizeof(ObStackHeader)) ObStackHeader;
+    uint64_t base = (uint64_t)buffer;
+    ObStackHeader *header = nullptr;
+    if (base + sizeof(ObStackHeader) > align_up2(base, ps)) {
+      base += ps;
+    }
+    base = align_up2(base, ps);
+    header = new ((char *)base - sizeof(ObStackHeader)) ObStackHeader;
     header->tenant_id_ = tenant_id;
-    header->size_ = mmap_size;
+    header->size_ = size;
     header->pth_ = 0;
     header->base_ = buffer;
     header->has_guarded_page_ = guard_page;
@@ -132,15 +125,15 @@ void *ProtectedStackAllocator::__alloc(const uint64_t tenant_id,
 
 #ifdef _WIN32
     DWORD old_prot;
-    if (guard_page && !VirtualProtect(guard_page_addr, ps, PAGE_NOACCESS, &old_prot)) {
-      LOG_WARN_RET(OB_ERR_SYS, "VirtualProtect failed", K(GetLastError()), KP(guard_page_addr), K(ps));
+    if (guard_page && !VirtualProtect((char*)base, ps, PAGE_NOACCESS, &old_prot)) {
+      LOG_WARN_RET(OB_ERR_SYS, "VirtualProtect failed", K(GetLastError()), K(base), K(ps));
     }
 #else
-    if (guard_page && 0 != mprotect(guard_page_addr, ps, PROT_NONE)) {
-      LOG_WARN_RET(OB_ERR_SYS, "mprotect failed", K(errno), KP(guard_page_addr), K(ps));
+    if (guard_page && 0 != mprotect((char*)base, ps, PROT_NONE)) {
+      LOG_WARN_RET(OB_ERR_SYS, "mprotect failed", K(errno), K(base), K(ps));
     }
 #endif
-    ptr = guard_page_addr + ps;
+    ptr = (char*)header + sizeof(ObStackHeader) + ps;
   }
   return ptr;
 }
@@ -169,15 +162,7 @@ void ProtectedStackAllocator::dealloc(void *ptr)
       const uint64_t tenant_id = header->tenant_id_;
       const ssize_t size = header->size_;
       g_stack_mgr.erase(header);
-#ifdef _WIN32
-      if (!VirtualFree(base, 0, MEM_RELEASE)) {
-        LOG_WARN_RET(OB_ERR_SYS, "VirtualFree failed", K(GetLastError()), KP(base), K(size), K(tenant_id));
-      }
-#else
-      if (0 != ::munmap(base, size)) {
-        LOG_WARN_RET(OB_ERR_SYS, "munmap failed", K(errno), KP(base), K(size), K(tenant_id));
-      }
-#endif
+      ob_free(base);
     }
   }
 }
