@@ -208,40 +208,14 @@ ABlock* BlockSet::get_free_block(const int cls, const ObMemAttr &attr)
 {
   ABlock *block = NULL;
 
-  int ffs = avail_bm_.find_first_significant(cls);
-  if (OB_UNLIKELY(ffs >= 0 && attr.ctx_id_ == ObCtxIds::CO_STACK)) {
-    int selected_nblocks = ffs;
-    int max_using_cnt = -1;
-    for (int nblocks = ffs; nblocks >= 0 && nblocks <= BLOCKS_PER_CHUNK;
-         nblocks = avail_bm_.find_first_significant(nblocks + 1)) {
-      ABlock *head = block_list_[nblocks];
-      if (OB_ISNULL(head)) {
-        continue;
-      }
-      ABlock *iter = head;
-      do {
-        const int using_cnt = iter->chunk()->using_cnt_;
-        if (using_cnt > max_using_cnt) {
-          block = iter;
-          selected_nblocks = nblocks;
-          max_using_cnt = using_cnt;
-        }
-        iter = iter->next_;
-      } while (iter != head);
-    }
-    ffs = selected_nblocks;
-  }
+  const int ffs = avail_bm_.find_first_significant(cls);
   if (ffs >= 0) {
     if (NULL != block_list_[ffs]) {  // exist
-      if (OB_LIKELY(attr.ctx_id_ != ObCtxIds::CO_STACK)) {
-        block = block_list_[ffs];
-      }
+      block = block_list_[ffs];
       if (block->next_ != block) {  // not the only one
         block->prev_->next_ = block->next_;
         block->next_->prev_ = block->prev_;
-        if (block_list_[ffs] == block) {
-          block_list_[ffs] = block->next_;
-        }
+        block_list_[ffs] = block->next_;
       } else {
         avail_bm_.unset(ffs);
         block_list_[ffs] = NULL;

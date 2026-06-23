@@ -15,17 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include <fcntl.h>
 #include <openssl/md4.h>
 #include <openssl/md5.h>
 #include <openssl/sha.h>
-#include <stdio.h>
-#include <sys/syscall.h>
-#include <time.h>
-#include <unistd.h>
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/atomic/atomic128.h"
-#include "lib/utility/ob_backtrace.h"
 
 namespace oceanbase
 {
@@ -33,28 +27,6 @@ using namespace common;
 using namespace sql;
 namespace share
 {
-
-namespace
-{
-int g_openssl_alloc_log_fd = -1;
-
-static void trace_openssl_alloc(const char *event, size_t nbyte, const void *ptr, const void *nptr,
-                                const char *file, int line)
-{
-  if (g_openssl_alloc_log_fd >= 0) {
-    char buf[512];
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    const int len = snprintf(buf, sizeof(buf),
-        "%ld.%09ld tid=%ld event=%s size=%zu ptr=%p nptr=%p file=%p line=%d\n",
-        static_cast<long>(ts.tv_sec), static_cast<long>(ts.tv_nsec),
-        static_cast<long>(syscall(SYS_gettid)), event, nbyte, ptr, nptr, file, line);
-    if (len > 0) {
-      IGNORE_RETURN write(g_openssl_alloc_log_fd, buf, len < static_cast<int>(sizeof(buf)) ? len : sizeof(buf));
-    }
-  }
-}
-}
 
 static const EVP_CIPHER *get_evp_cipher(const ObCipherOpMode mode)
 {
@@ -328,31 +300,26 @@ int ObBlockCipher::decrypt(const char *key, const int64_t key_len,
   return ret;
 }
 
-static void* ob_malloc_openssl(size_t nbyte, const char *file, int line)
+static void* ob_malloc_openssl(size_t nbyte, const char *, int)
 {
   ObMemAttr attr;
   attr.ctx_id_ = ObCtxIds::GLIBC;
   attr.label_ = ObModIds::OB_BUFFER;
   lib::ObMallocHookAttrGuard guard(attr);
-  void *ptr = malloc(nbyte);
-  trace_openssl_alloc("malloc", nbyte, nullptr, ptr, file, line);
-  return ptr;
+  return malloc(nbyte);
 }
 
-static void* ob_realloc_openssl(void *ptr, size_t nbyte, const char *file, int line)
+static void* ob_realloc_openssl(void *ptr, size_t nbyte, const char *, int)
 {
   ObMemAttr attr;
   attr.ctx_id_ = ObCtxIds::GLIBC;
   attr.label_ = ObModIds::OB_BUFFER;
   lib::ObMallocHookAttrGuard guard(attr);
-  void *nptr = realloc(ptr, nbyte);
-  trace_openssl_alloc("realloc", nbyte, ptr, nptr, file, line);
-  return nptr;
+  return realloc(ptr, nbyte);
 }
 
-static void ob_free_openssl(void *ptr, const char *file, int line)
+static void ob_free_openssl(void *ptr, const char *, int)
 {
-  trace_openssl_alloc("free", 0, ptr, nullptr, file, line);
   free(ptr);
 }
 
@@ -363,7 +330,6 @@ int ObEncryptionUtil::init_ssl_malloc()
   // CRYPTO_set_mem_functions fails if OpenSSL has already allocated memory
   // (e.g. via AWS SDK DLLs loaded at startup). Not critical on Windows.
 #else
-  g_openssl_alloc_log_fd = open("log/openssl_alloc.log", O_CREAT | O_WRONLY | O_APPEND, 0644);
   int tmp_ret = CRYPTO_set_mem_functions(ob_malloc_openssl, ob_realloc_openssl, ob_free_openssl);
   if (OB_UNLIKELY(tmp_ret != 1)) {
     ret = OB_ERR_UNEXPECTED;

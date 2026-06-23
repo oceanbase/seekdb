@@ -314,7 +314,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
     } else {
       th_->set_run_wrapper(tg_helper_);
-      th_->set_debug_name(attr_.name_);
       ret = th_->create(thread_cnt_, attr_.name_);
     }
     return ret;
@@ -404,7 +403,6 @@ public:
       th_->runnable_->set_stop(false);
       th_->set_thread_count(thread_cnt_);
       th_->set_run_wrapper(tg_helper_);
-      th_->set_debug_name(attr_.name_);
       ret = th_->start();
     }
     return ret;

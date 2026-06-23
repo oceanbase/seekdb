@@ -22,23 +22,10 @@
 #include "lib/alloc/memory_dump.h"
 #include "lib/alloc/memory_sanity.h"
 #include "lib/alloc/ob_malloc_callback.h"
-#include "lib/utility/ob_backtrace.h"
 #include "common/ob_smart_var.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
-
-namespace
-{
-thread_local bool glibc_malloc_free_log_guard = false;
-
-inline bool should_log_glibc_malloc_free(const uint64_t ctx_id, const char *label)
-{
-  return OB_UNLIKELY(ctx_id == ObCtxIds::GLIBC
-      || (OB_NOT_NULL(label) && 0 == STRCMP(label, "glibc_malloc"))
-      || (OB_NOT_NULL(label) && 0 == STRCMP(label, "glibc_malloc_v2")));
-}
-} // namespace
 
 ObTenantCtxAllocatorV2::ObTenantCtxAllocatorV2(uint64_t tenant_id, uint64_t ctx_id,
     ObTenantCtxAllocator *allocator)
@@ -462,18 +449,6 @@ void ObTenantCtxAllocator::on_free(AObject& obj, ABlock& block)
   int64_t ctx_id = blk_mgr->get_ctx_id();
   char label[lib::AOBJECT_LABEL_SIZE + 1];
   MEMCPY(label, obj.label_, sizeof(label));
-  if (OB_UNLIKELY(should_log_glibc_malloc_free(ctx_id, label) && !glibc_malloc_free_log_guard)) {
-    glibc_malloc_free_log_guard = true;
-    LIB_LOG(INFO,
-            "glibc ctx free",
-            "size", obj.alloc_bytes_,
-            "tenant_id", tenant_id,
-            "ctx_id", ctx_id,
-            KCSTRING(label),
-            KP(obj.data_),
-            KCSTRING(common::lbt()));
-    glibc_malloc_free_log_guard = false;
-  }
   ObMemAttr attr(tenant_id, label, ctx_id);
   if (OB_NOT_NULL(malloc_callback)) {
     const int64_t size = obj.alloc_bytes_;

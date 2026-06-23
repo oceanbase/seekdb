@@ -42,8 +42,7 @@ public:
         stack_size_(global_thread_stack_size),
         stop_(true),
         run_wrapper_(nullptr),
-        numa_info_(),
-        debug_name_("unknown")
+        numa_info_()
   {}
   virtual ~Threads();
   static IRunWrapper *&get_expect_run_wrapper();
@@ -86,16 +85,6 @@ public:
     IRunWrapper *run_wrapper = run_wrapper_;
     return OB_NOT_NULL(run_wrapper) ? run_wrapper : get_default_run_wrapper();
   }
-  void set_debug_name(const char *debug_name)
-  {
-    debug_name_ = nullptr != debug_name ? debug_name : "unknown";
-  }
-  const char *get_debug_name() const
-  {
-    return debug_name_;
-  }
-
-
   struct NumaInfo {
   public:
     NumaInfo(): numa_node_(OB_NUMA_SHARED_INDEX), num_nodes_(UINT32_MAX), interleave_(false) {}
@@ -170,7 +159,6 @@ private:
   // tenant ctx
   IRunWrapper *run_wrapper_;
   NumaInfo numa_info_;
-  const char *debug_name_;
 };
 
 class ObPThread : public Threads

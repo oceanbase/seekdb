@@ -144,7 +144,6 @@ bool ObSimpleThreadPoolBase<T>::do_add_worker()
     if (OB_ISNULL(w)) {
       return false;
     }
-    w->set_debug_name(name_);
     if (run_wrapper_ != nullptr) {
       w->set_run_wrapper(run_wrapper_);
     }

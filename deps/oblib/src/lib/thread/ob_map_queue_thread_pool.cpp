@@ -47,7 +47,6 @@ int ObMapQueueThreadPool::init(const uint64_t tenant_id, const int64_t thread_nu
     LIB_LOG(ERROR, "invalid argument", K(ret), K(thread_num));
   } else {
     set_thread_count(thread_num);
-    set_debug_name(label);
     name_ = label;
 
     for (int64_t index = 0; OB_SUCC(ret) && index < thread_num; index++) {

@@ -192,8 +192,19 @@ void init_proc_map_info()
 
 int64_t get_rel_offset(int64_t addr)
 {
-  // For malloc diagnostics, print the raw program counter. The previous
-  // process-map relative offset makes symbolization ambiguous for this build.
+  int64_t code_start_addr = -1;
+  int64_t code_end_addr = -1;
+  if (OB_UNLIKELY(!g_proc_map_info.is_inited_)) {
+    read_min_max_addr(code_start_addr, code_end_addr);
+  } else {
+    code_start_addr = g_proc_map_info.code_start_addr_;
+    code_end_addr = g_proc_map_info.code_end_addr_;
+  }
+  if (code_start_addr != -1) {
+    if (OB_LIKELY(addr >= code_start_addr && addr < code_end_addr)) {
+      addr -= code_start_addr;
+    }
+  }
   return addr;
 }
 

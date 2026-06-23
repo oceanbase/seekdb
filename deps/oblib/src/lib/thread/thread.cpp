@@ -26,7 +26,6 @@
 #include <process.h>
 #endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
-#include "lib/utility/ob_backtrace.h"
 #include "lib/rc/context.h"
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/utility/ob_hang_fatal_error.h"
@@ -93,13 +92,6 @@ int Thread::start()
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
 #endif
   } else {
-#if !defined(OB_USE_ASAN) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
-    LOG_INFO("[COSTACK_TRACE] thread stack allocated",
-             KP(this), KP(threads_), K_(idx), K_(stack_size), KP_(stack_addr),
-             "thread_name", nullptr != threads_ ? threads_->get_debug_name() : "unknown",
-             "tenant_id", 0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(),
-             KCSTRING(lbt()));
-#endif
     pthread_attr_t attr;
     bool need_destroy = false;
     int pret = pthread_attr_init(&attr);
@@ -167,11 +159,6 @@ int Thread::start()
   if (OB_FAIL(ret)) {
     ATOMIC_FAA(&total_thread_count_, -1);
     destroy();
-  } else {
-    LOG_INFO("[COSTACK_TRACE] thread created",
-             KP(this), KP(threads_), K_(idx), K_(stack_size), KP_(stack_addr),
-             "thread_name", nullptr != threads_ ? threads_->get_debug_name() : "unknown",
-             K_(pth), K_(tid), KCSTRING(lbt()));
   }
   return ret;
 }
@@ -369,11 +356,6 @@ void Thread::destroy_stack()
 #else
 #if !defined(OB_USE_ASAN)
   if (stack_addr_ != nullptr) {
-    LOG_INFO("[COSTACK_TRACE] thread stack released",
-             KP(this), KP(threads_), K_(idx), K_(stack_size), KP_(stack_addr),
-             "thread_name", nullptr != threads_ ? threads_->get_debug_name() : "unknown",
-             K_(pth), K_(tid), K_(pid_before_stop), K_(tid_before_stop),
-             KCSTRING(lbt()));
     g_stack_allocer.dealloc(stack_addr_);
     stack_addr_ = nullptr;
   }
