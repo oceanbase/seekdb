@@ -710,6 +710,7 @@ ObSharedObjectReaderWriter::ObSharedObjectReaderWriter()
     : mutex_(), data_("SHARE_BLOCK", 0, false, false/*use_fixed_blk*/),
       object_handle_(), offset_(0), align_offset_(0), write_align_size_(0),
       hanging_(false), need_align_(false), need_cross_(false),
+      auto_release_data_buffer_(false),
       is_inited_(false)
 {}
 
@@ -720,7 +721,8 @@ ObSharedObjectReaderWriter::~ObSharedObjectReaderWriter()
 
 int ObSharedObjectReaderWriter::init(
     const bool need_align,
-    const bool need_cross)
+    const bool need_cross,
+    const bool auto_release_data_buffer)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -729,10 +731,6 @@ int ObSharedObjectReaderWriter::init(
   } else if (!need_align || need_cross) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported", K(ret), K(need_align), K(need_cross));
-  } else if (OB_FAIL(data_.ensure_space(DEFAULT_MACRO_BLOCK_SIZE))) {
-    LOG_WARN("Fail to ensure space", K(ret));
-  } else if (OB_FAIL(data_.clean())) {
-    LOG_WARN("fail to memset 0 data_", KR(ret));
   } else {
     offset_ = 0;
     align_offset_ = 0;
@@ -740,11 +738,18 @@ int ObSharedObjectReaderWriter::init(
     hanging_ = false;
     need_align_ = need_align;
     need_cross_ = need_cross;
-    if (OB_FAIL(reserve_header())) {
-        LOG_WARN("fail to reserve header when init", K(ret));
-      } else {
-        is_inited_ = true;
-      }
+    auto_release_data_buffer_ = auto_release_data_buffer;
+    if (auto_release_data_buffer_) {
+      is_inited_ = true;
+    } else if (OB_FAIL(data_.ensure_space(DEFAULT_MACRO_BLOCK_SIZE))) {
+      LOG_WARN("Fail to ensure space", K(ret));
+    } else if (OB_FAIL(data_.clean())) {
+      LOG_WARN("fail to memset 0 data_", KR(ret));
+    } else if (OB_FAIL(reserve_header())) {
+      LOG_WARN("fail to reserve header when init", K(ret));
+    } else {
+      is_inited_ = true;
+    }
   }
   return ret;
 }
@@ -758,7 +763,49 @@ void ObSharedObjectReaderWriter::reset()
   hanging_ = false;
   need_align_ = false;
   need_cross_ = false;
+  auto_release_data_buffer_ = false;
   is_inited_ = false;
+}
+
+int ObSharedObjectReaderWriter::ensure_data_buffer_for_write_()
+{
+  int ret = OB_SUCCESS;
+  if (data_.is_valid()) {
+    if (OB_FAIL(data_.set_pos(offset_))) {
+      LOG_WARN("fail to restore data buffer position", K(ret), K_(offset), K(data_));
+    }
+  } else if (OB_FAIL(data_.ensure_space(DEFAULT_MACRO_BLOCK_SIZE))) {
+    LOG_WARN("Fail to ensure space", K(ret));
+  } else if (OB_FAIL(data_.clean())) {
+    LOG_WARN("fail to memset 0 data_", KR(ret));
+  } else if (0 == offset_) {
+    if (OB_FAIL(reserve_header())) {
+      LOG_WARN("fail to reserve header for shared object writer", K(ret));
+    }
+  } else if (hanging_ && 0 == align_offset_) {
+    ObMacroBlockCommonHeader common_header;
+    common_header.reset();
+    if (OB_FAIL(common_header.set_attr(ObMacroBlockCommonHeader::MacroBlockType::SharedMetaData))) {
+      LOG_WARN("fail to set type for common header", K(ret), K(common_header));
+    } else if (OB_UNLIKELY(offset_ != common_header.get_serialize_size())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected hanging shared object writer state", K(ret), K_(offset), K_(align_offset), K_(hanging));
+    } else if (OB_FAIL(common_header.build_serialized_header(data_.data(), common_header.get_serialize_size()))) {
+      LOG_WARN("fail to write common header", K(ret), K(common_header));
+    } else if (OB_FAIL(data_.set_pos(offset_))) {
+      LOG_WARN("fail to restore data buffer position", K(ret), K_(offset), K(data_));
+    }
+  } else if (OB_FAIL(data_.set_pos(offset_))) {
+    LOG_WARN("fail to restore data buffer position", K(ret), K_(offset), K(data_));
+  }
+  return ret;
+}
+
+void ObSharedObjectReaderWriter::release_data_buffer_if_needed_()
+{
+  if (auto_release_data_buffer_ && data_.is_valid()) {
+    data_.reset();
+  }
 }
 
 int callback_do_write_io(const ObSharedObjectWriteInfo &write_info) 
@@ -797,6 +844,7 @@ int ObSharedObjectReaderWriter::async_write(
   write_args.object_opt_ = curr_opt;
   ObSharedObjectHeader header;
   ObSharedObjectsWriteCtx tmp_write_ctx;
+  bool need_callback_do_write_io = true;
   {
     lib::ObMutexGuard guard(mutex_);
     if (IS_NOT_INIT) {
@@ -805,6 +853,8 @@ int ObSharedObjectReaderWriter::async_write(
     } else if (OB_UNLIKELY(!write_info.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arg", K(ret), K(write_info));
+    } else if (auto_release_data_buffer_ && OB_FAIL(ensure_data_buffer_for_write_())) {
+      LOG_WARN("fail to ensure shared object data buffer", K(ret), K_(offset), K_(align_offset));
     }
     if (FAILEDx(inner_write_block(
         header,
@@ -814,9 +864,17 @@ int ObSharedObjectReaderWriter::async_write(
         tmp_write_ctx))) {
       LOG_WARN("fail to write block", K(ret), K(write_info), K(write_args));
     }
+    if (auto_release_data_buffer_) {
+      need_callback_do_write_io = false;
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(callback_do_write_io(write_info))) {
+        LOG_WARN("failed to start write callback", K(ret));
+      }
+      release_data_buffer_if_needed_();
+    }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(callback_do_write_io(write_info))) {
+  } else if (need_callback_do_write_io && OB_FAIL(callback_do_write_io(write_info))) {
     LOG_WARN("failed to start write callback", K(ret));
   }
   return ret;

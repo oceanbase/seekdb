@@ -276,7 +276,8 @@ public:
   ~ObSharedObjectReaderWriter();
   int init(
       const bool need_align = true,
-      const bool need_cross = false);
+      const bool need_cross = false,
+      const bool auto_release_data_buffer = false);
   void reset();
   void get_cur_shared_block(blocksstable::MacroBlockId &macro_id);
   static int async_read(const ObSharedObjectReadInfo &read_info, ObSharedObjectReadHandle &shared_obj_handle);
@@ -327,6 +328,8 @@ private:
                     const blocksstable::ObStorageObjectOpt &next_opt);
   int do_switch(const blocksstable::ObStorageObjectOpt &opt);
   int reserve_header();
+  int ensure_data_buffer_for_write_();
+  void release_data_buffer_if_needed_();
 private:
 struct ObSharedObjectWriteArgs final
 {
@@ -352,6 +355,7 @@ private:
   bool hanging_;
   bool need_align_;
   bool need_cross_;
+  bool auto_release_data_buffer_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObSharedObjectReaderWriter);
 };
