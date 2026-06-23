@@ -65,8 +65,7 @@ int ObTenantStorageMetaService::init()
     LOG_WARN("fail to init replayer", K(ret));
   } else if (OB_FAIL(shared_object_rwriter_.init())) {
     LOG_WARN("fail to init shared block rwriter", K(ret));
-  } else if (OB_FAIL(shared_object_raw_rwriter_.init(
-      true /*need_align*/, false /*need_cross*/, true /*auto_release_data_buffer*/))) {
+  } else if (OB_FAIL(shared_object_raw_rwriter_.init())) {
     LOG_WARN("fail to init shared block raw rwriter", K(ret));
   } else {
     
