@@ -492,16 +492,21 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
           // post-link failure) or via an interrupt (pre-link failure, raised
           // inside px_init_sqc_fast_in_proc).
           int64_t ser_len = args.get_serialize_size();
-          std::shared_ptr<char[]> ser_buf(new (std::nothrow) char[ser_len]);
+          char *ser_buf = static_cast<char *>(exec_ctx.get_allocator().alloc(ser_len));
           int64_t ser_pos = 0;
-          if (OB_ISNULL(ser_buf.get())) {
+          if (OB_ISNULL(ser_buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to alloc serialize buffer", K(ret), K(ser_len));
-          } else if (OB_FAIL(args.serialize(ser_buf.get(), ser_len, ser_pos))) {
+          } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
+            // Capture ser_buf/ser_pos BY VALUE: the QC does not block, so a
+            // by-reference capture would dangle once dispatch_sqcs returns.
+            // ser_buf lives in exec_ctx's allocator, which outlives the async sqc
+            // (the QC blocks in wait_all_running_dfos_exit until all sqcs report),
+            // and is MEMCPY'd at decode time, so it is safe to pass by pointer.
             (void)ex_rpc::async_call([ser_buf, ser_pos]() {
-              return px_init_sqc_fast_in_proc(ser_buf.get(), ser_pos); });
+              return px_init_sqc_fast_in_proc(ser_buf, ser_pos); });
           }
         }
       }
