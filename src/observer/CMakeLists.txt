@@ -453,7 +453,12 @@ else()
     PRIVATE
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,-z,notext>
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--whole-archive>
-    "${ob_objects}" "${oblib_object_libraries}"
+    # oblib_extra_objects (zstd/lz4 prebuilt object archives, incl. ObZstdWrapper)
+    # used to reach liboceanbase.so transitively via objit -> oblib(STATIC). objit is
+    # gone with the LLVM-JIT removal, so add them explicitly; otherwise the shared lib
+    # has undefined ObZstdWrapper symbols and every unittest linking it fails under
+    # lld's --no-allow-shlib-undefined.
+    "${ob_objects}" "${oblib_object_libraries}" "${oblib_extra_objects}"
     ob_sql_static
     ob_storage_static
     ob_share_static
