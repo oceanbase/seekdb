@@ -270,45 +270,48 @@ int ObMajorMergeInfoManager::renew_snapshot_gc_scn()
 {
   int ret = OB_SUCCESS;
 
+  SCN cur_snapshot_gc_scn;
   SCN latest_snapshot_gc_scn;
   SCN new_snapshot_gc_scn;
+  int64_t affected_rows = 0;
+  ObMySQLTransaction trans;
   ObRecursiveMutexGuard guard(lock_);
 
   if (OB_FAIL(try_reload())) {
     LOG_WARN("inner error", KR(ret));
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_))) {
+    LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans, tenant_id_,
+      cur_snapshot_gc_scn))) {
+    LOG_WARN("fail to select snapshot_gc_scn for update", KR(ret), K_(tenant_id));
+  }
   // no need to minus max_stale_time_for_weak_consistency since 4.1, because the collection of
   // multi-version data no longer depends on snapshot_gc_scn since 4.1
-  } else if (OB_FAIL(get_gts(new_snapshot_gc_scn))) {
+  else if (OB_FAIL(get_gts(new_snapshot_gc_scn))) {
     LOG_WARN("fail to get gts", KR(ret));
   } else if (FALSE_IT(latest_snapshot_gc_scn = freeze_info_mgr_.get_snapshot_gc_scn())) {
-  } else if (new_snapshot_gc_scn <= latest_snapshot_gc_scn) {
+  } else if ((new_snapshot_gc_scn <= latest_snapshot_gc_scn)
+             || (cur_snapshot_gc_scn >= new_snapshot_gc_scn)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid snaptshot gc time", KR(ret), K(new_snapshot_gc_scn),
-      K(latest_snapshot_gc_scn), K_(tenant_id));
+    LOG_WARN("invalid snaptshot gc time", KR(ret), K(cur_snapshot_gc_scn), K(new_snapshot_gc_scn),
+      K(latest_snapshot_gc_scn));
+  } else if (OB_FAIL(ObGlobalStatProxy::update_snapshot_gc_scn(trans, tenant_id_, new_snapshot_gc_scn,
+      affected_rows))) {
+    LOG_WARN("fail to update snapshot_gc_scn", KR(ret), K_(tenant_id), K(new_snapshot_gc_scn));
+  } else if (!is_single_row(affected_rows)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("affected_rows expected to be one", KR(ret), K(affected_rows));
   } else if (OB_FAIL(freeze_info_mgr_.update_snapshot_gc_scn(new_snapshot_gc_scn))) {
-    LOG_WARN("fail to update snapshot_gc_scn in memory", KR(ret), K_(tenant_id), K(new_snapshot_gc_scn));
+    LOG_WARN("fail to update snapshot_gc_scn", KR(ret), K_(tenant_id), K(new_snapshot_gc_scn));
   }
+
+  ret = trans.handle_trans_in_the_end(ret);
 
   if (OB_FAIL(ret)) {
     freeze_info_mgr_.reset_freeze_info();
   }
   LOG_INFO("renew snapshot_gc_scn", K(ret), K(new_snapshot_gc_scn), K_(tenant_id));
 
-  return ret;
-}
-
-int ObMajorMergeInfoManager::get_snapshot_gc_scn_from_mem(SCN &snapshot_gc_scn)
-{
-  int ret = OB_SUCCESS;
-  ObRecursiveMutexGuard guard(lock_);
-  if (!freeze_info_mgr_.is_valid()) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("freeze info mgr is invalid", KR(ret), K_(tenant_id));
-  } else if (FALSE_IT(snapshot_gc_scn = freeze_info_mgr_.get_snapshot_gc_scn())) {
-  } else if (!snapshot_gc_scn.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid snapshot_gc_scn in memory", KR(ret), K_(tenant_id), K(snapshot_gc_scn));
-  }
   return ret;
 }
 

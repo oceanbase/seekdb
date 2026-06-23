@@ -20,6 +20,7 @@
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "common/ob_smart_var.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
+#include "lib/utility/ob_backtrace.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
@@ -44,6 +45,18 @@ namespace oceanbase
 {
 namespace lib
 {
+
+namespace
+{
+thread_local bool glibc_malloc_stack_log_guard = false;
+
+inline bool should_log_glibc_malloc_stack(const ObMemAttr &attr)
+{
+  return OB_UNLIKELY(attr.ctx_id_ == ObCtxIds::GLIBC
+      || (OB_NOT_NULL(attr.label_.str_) && 0 == STRCMP(attr.label_.str_, "glibc_malloc"))
+      || (OB_NOT_NULL(attr.label_.str_) && 0 == STRCMP(attr.label_.str_, "glibc_malloc_v2")));
+}
+} // namespace
 
 ObMallocAllocator::ObMallocAllocator()
   : allocator_(NULL),
@@ -82,11 +95,23 @@ void *ObMallocAllocator::realloc(
   ObMemAttr inner_attr = attr;
   inner_attr.tenant_id_ = OB_SYS_TENANT_ID;
   inner_attr.use_malloc_v2_ = is_malloc_v2_enabled();
+  const bool glibc_trace = should_log_glibc_malloc_stack(inner_attr);
   ObTenantCtxAllocatorGuard allocator = NULL;
   if (OB_ISNULL(allocator = get_tenant_ctx_allocator(inner_attr.tenant_id_, inner_attr.ctx_id_))) {
     // do nothing
   } else if (OB_ISNULL(nptr = allocator->realloc(ptr, size, inner_attr))) {
     // do nothing
+  }
+  if (OB_UNLIKELY(glibc_trace && !glibc_malloc_stack_log_guard)) {
+    glibc_malloc_stack_log_guard = true;
+    LIB_LOG(INFO,
+            "glibc ctx allocation",
+            K(size),
+            K(inner_attr),
+            KP(ptr),
+            KP(nptr),
+            KCSTRING(common::lbt()));
+    glibc_malloc_stack_log_guard = false;
   }
   return nptr;
 #endif
@@ -455,7 +480,8 @@ void *ObMallocHook::alloc(const int64_t size)
   } else {
     AObject *obj = NULL;
     static thread_local ObMallocSampleLimiter sample_limiter;
-    bool sample_allowed = sample_limiter.try_acquire(size);
+    const bool glibc_trace = should_log_glibc_malloc_stack(attr_);
+    bool sample_allowed = glibc_trace || sample_limiter.try_acquire(size);
     if (OB_UNLIKELY(sample_allowed)) {
       ObMemAttr inner_attr = attr_;
       inner_attr.alloc_extra_info_ = true;
@@ -475,7 +501,7 @@ void *ObMallocHook::alloc(const int64_t size)
       }
     }
     if (OB_LIKELY(NULL != obj)) {
-      if (OB_UNLIKELY(sample_allowed)) {
+      if (OB_UNLIKELY(glibc_trace || sample_allowed)) {
         void *addrs[100] = {nullptr};
 #ifndef _WIN32
         backtrace(addrs, ARRAYSIZEOF(addrs));
@@ -484,6 +510,16 @@ void *ObMallocHook::alloc(const int64_t size)
 #endif
         MEMCPY(obj->bt(), (char*)addrs, AOBJECT_BACKTRACE_SIZE);
         obj->on_malloc_sample_ = true;
+      }
+      if (OB_UNLIKELY(glibc_trace) && !glibc_malloc_stack_log_guard) {
+        glibc_malloc_stack_log_guard = true;
+        LIB_LOG(INFO,
+                "glibc_malloc allocation",
+                K(size),
+                K(attr_),
+                KP(obj),
+                KCSTRING(common::lbt()));
+        glibc_malloc_stack_log_guard = false;
       }
       MEMCPY(obj->label_, label_, AOBJECT_LABEL_SIZE + 1);
       SANITY_POISON(obj, AOBJECT_HEADER_SIZE);

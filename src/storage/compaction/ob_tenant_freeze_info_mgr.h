@@ -134,7 +134,7 @@ private:
   typedef common::RWLock::WLockGuard WLockGuard;
   typedef common::RWLock::RLockGuardWithTimeout RLockGuardWithTimeout;
 
-  static const int64_t RELOAD_INTERVAL = 3L * 1000L * 1000L;
+  static const int64_t RELOAD_INTERVAL = 60L * 1000L * 1000L;
   static const int64_t UPDATE_LS_RESERVED_SNAPSHOT_INTERVAL = 10L * 1000L * 1000L;
   static const int64_t MAX_GC_SNAPSHOT_TS_REFRESH_TS = 10L * 60L * 1000L * 1000L;
   static const int64_t FLUSH_GC_SNAPSHOT_TS_REFRESH_TS =
@@ -152,7 +152,6 @@ private:
       share::ObFreezeInfo &freeze_info);
   int try_update_reserved_snapshot();
   int try_update_info();
-  int get_snapshot_gc_scn_from_rs_mem_(share::SCN &snapshot_gc_scn);
   int inner_update_info(
       const share::SCN &new_snapshot_gc_scn,
       const common::ObIArray<share::ObFreezeInfo> &new_freeze_infos,

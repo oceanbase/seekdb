@@ -323,22 +323,6 @@ int ObMajorFreezeService::get_uncompacted_tablets(
   return ret;
 }
 
-int ObMajorFreezeService::get_snapshot_gc_scn_from_mem(SCN &snapshot_gc_scn)
-{
-  int ret = OB_SUCCESS;
-  SpinRLockGuard r_guard(rw_lock_);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(tenant_id));
-  } else if (OB_ISNULL(tenant_major_freeze_)) {
-    ret = OB_LEADER_NOT_EXIST;
-    LOG_WARN("tenant_major_freeze is null", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(tenant_major_freeze_->get_snapshot_gc_scn_from_mem(snapshot_gc_scn))) {
-    LOG_WARN("failed to get snapshot_gc_scn from mem", KR(ret), K_(tenant_id));
-  }
-  return ret;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 ObPrimaryMajorFreezeService::ObPrimaryMajorFreezeService() : ObMajorFreezeService()
 {}

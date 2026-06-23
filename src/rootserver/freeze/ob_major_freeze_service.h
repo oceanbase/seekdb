@@ -95,7 +95,6 @@ public:
   int get_uncompacted_tablets(
     common::ObArray<share::ObTabletReplica> &uncompacted_tablets,
     common::ObArray<uint64_t> &uncompacted_table_ids) const;
-  int get_snapshot_gc_scn_from_mem(share::SCN &snapshot_gc_scn);
 
 protected:
   virtual ObMajorFreezeServiceType get_service_type() const 

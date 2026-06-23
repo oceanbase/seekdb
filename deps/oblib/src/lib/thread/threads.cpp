@@ -16,16 +16,19 @@
 
 #define USING_LOG_PREFIX LIB
 #include "threads.h"
-#include "lib/signal/ob_signal_struct.h"
 #include "lib/worker.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "lib/utility/ob_platform_utils.h"
 using namespace oceanbase;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
-// Use 512KB stack size, OB has SMART_CALL mechanism to extend stack when needed
-int64_t global_thread_stack_size = (1L << 19) - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
+// Keep the protected stack allocation within the configured stack-size class.
+// This is not a sigaltstack reservation; no alternate signal stack is installed.
+const int64_t THREAD_STACK_RESERVED_SIZE = 16L << 10;
+// Use 256KB stack size by default. OB has SMART_CALL mechanism to extend stack when needed.
+int64_t global_thread_stack_size = (1L << 18) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 thread_local uint64_t ThreadPool::thread_idx_ = 0;
 static IRunWrapper *g_default_run_wrapper = nullptr;
 // Get the thread-local tenant context, for use when checking at thread pool startup
@@ -254,6 +257,7 @@ int Threads::start()
 
 void Threads::run(int64_t idx)
 {
+  common::ObBackGroundSessionGuard backgroud_session_guard(GET_TENANT_ID(), THIS_WORKER.get_group_id());
   thread_idx_ = static_cast<uint64_t>(idx);
   Worker worker;
   Worker::set_worker_to_thread_local(&worker);

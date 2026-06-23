@@ -518,20 +518,139 @@ int print_object_meta(AChunk *chunk, ABlock *block, AObject *object, char *buf,
   return ret;
 }
 
+int64_t calc_object_hold(AChunk *chunk, ABlock *block, AObject *object)
+{
+  int64_t hold = 0;
+  if (!object->is_large_) {
+    hold = object->nobjs_ * AOBJECT_CELL_BYTES;
+  } else if (!block->is_large_) {
+    hold = chunk->blk_nblocks(block) * ABLOCK_SIZE;
+  } else {
+    hold = align_up2(chunk->alloc_bytes_ + ACHUNK_HEADER_SIZE, get_page_size());
+  }
+  return hold;
+}
+
+struct CoStackChunkStat
+{
+  void reset(AChunk *chunk)
+  {
+    chunk_ = chunk;
+    chunk_hold_ = OB_NOT_NULL(chunk) ? chunk->hold() : 0;
+    using_cnt_ = OB_NOT_NULL(chunk) ? chunk->using_cnt_ : 0;
+    live_object_cnt_ = 0;
+    live_block_cnt_ = 0;
+    live_object_hold_ = 0;
+    live_object_used_ = 0;
+    block_hold_ = 0;
+    free_block_hold_ = 0;
+    max_free_block_hold_ = 0;
+    costack_cnt_ = 0;
+    costack_hold_ = 0;
+    costack_used_ = 0;
+    non_costack_cnt_ = 0;
+    non_costack_hold_ = 0;
+    non_costack_used_ = 0;
+  }
+
+  void add_block(AChunk *chunk, ABlock *block)
+  {
+    const int64_t hold = chunk->blk_nblocks(block) * ABLOCK_SIZE;
+    block_hold_ += hold;
+    if (!block->in_use_) {
+      free_block_hold_ += hold;
+      max_free_block_hold_ = max(max_free_block_hold_, hold);
+    }
+  }
+
+  void add_object(AChunk *chunk, ABlock *block, AObject *object)
+  {
+    if (object->in_use_) {
+      const int64_t object_hold = calc_object_hold(chunk, block, object);
+      live_object_cnt_++;
+      live_object_hold_ += object_hold;
+      live_object_used_ += object->alloc_bytes_;
+      if (block != last_live_block_) {
+        live_block_cnt_++;
+        last_live_block_ = block;
+      }
+      if (0 == STRNCMP(object->label_, "CoStack", AOBJECT_LABEL_SIZE)) {
+        costack_cnt_++;
+        costack_hold_ += object_hold;
+        costack_used_ += object->alloc_bytes_;
+      } else {
+        non_costack_cnt_++;
+        non_costack_hold_ += object_hold;
+        non_costack_used_ += object->alloc_bytes_;
+      }
+    }
+  }
+
+  AChunk *chunk_ = nullptr;
+  ABlock *last_live_block_ = nullptr;
+  int64_t chunk_hold_ = 0;
+  int64_t using_cnt_ = 0;
+  int64_t live_object_cnt_ = 0;
+  int64_t live_block_cnt_ = 0;
+  int64_t live_object_hold_ = 0;
+  int64_t live_object_used_ = 0;
+  int64_t block_hold_ = 0;
+  int64_t free_block_hold_ = 0;
+  int64_t max_free_block_hold_ = 0;
+  int64_t costack_cnt_ = 0;
+  int64_t costack_hold_ = 0;
+  int64_t costack_used_ = 0;
+  int64_t non_costack_cnt_ = 0;
+  int64_t non_costack_hold_ = 0;
+  int64_t non_costack_used_ = 0;
+};
+
+struct CoStackCtxStat
+{
+  void add(const CoStackChunkStat &stat)
+  {
+    chunk_cnt_++;
+    chunk_hold_ += stat.chunk_hold_;
+    live_object_cnt_ += stat.live_object_cnt_;
+    live_object_hold_ += stat.live_object_hold_;
+    live_object_used_ += stat.live_object_used_;
+    free_block_hold_ += stat.free_block_hold_;
+    costack_cnt_ += stat.costack_cnt_;
+    costack_hold_ += stat.costack_hold_;
+    costack_used_ += stat.costack_used_;
+    non_costack_cnt_ += stat.non_costack_cnt_;
+    non_costack_hold_ += stat.non_costack_hold_;
+    non_costack_used_ += stat.non_costack_used_;
+    if (0 == stat.using_cnt_ && 0 == stat.live_object_cnt_) {
+      free_chunk_cnt_++;
+    } else {
+      unreleasable_chunk_cnt_++;
+    }
+  }
+
+  int64_t chunk_cnt_ = 0;
+  int64_t free_chunk_cnt_ = 0;
+  int64_t unreleasable_chunk_cnt_ = 0;
+  int64_t chunk_hold_ = 0;
+  int64_t live_object_cnt_ = 0;
+  int64_t live_object_hold_ = 0;
+  int64_t live_object_used_ = 0;
+  int64_t free_block_hold_ = 0;
+  int64_t costack_cnt_ = 0;
+  int64_t costack_hold_ = 0;
+  int64_t costack_used_ = 0;
+  int64_t non_costack_cnt_ = 0;
+  int64_t non_costack_hold_ = 0;
+  int64_t non_costack_used_ = 0;
+};
+
 int label_stat(AChunk *chunk, ABlock *block, AObject *object,
                LabelMap &lmap, LabelItem *items, int64_t item_cap,
                int64_t &item_used)
 {
   int ret = OB_SUCCESS;
   if (object->in_use_) {
-    int64_t hold = 0;
-    if (!object->is_large_) {
-      hold = object->nobjs_ * AOBJECT_CELL_BYTES;
-    } else if (!block->is_large_) {
-      hold = chunk->blk_nblocks(block) * ABLOCK_SIZE;
-    } else {
-      hold = align_up2(chunk->alloc_bytes_ + ACHUNK_HEADER_SIZE, get_page_size());
-    }
+    const int64_t hold = calc_object_hold(chunk, block, object);
     LabelItem *litem = nullptr;
     auto key = std::make_pair(*(uint64_t*)object->label_, *((uint64_t*)object->label_ + 1));
     LabelInfoItem *linfoitem = lmap.get(key);
@@ -639,23 +758,35 @@ void ObMemoryDump::handle(void *task)
         auto &w_stat = w_stat_;
         auto &lmap = lmap_;
         lmap.clear();
+        CoStackCtxStat costack_ctx_stat;
         DumpSignalGuard guard;
         for (int i = 0; OB_SUCC(ret) && i < chunk_cnt; i++) {
           AChunk *chunk = chunks_[i];
+          CoStackChunkStat costack_chunk_stat;
+          if (ctx_id == ObCtxIds::CO_STACK) {
+            costack_chunk_stat.reset(chunk);
+          }
           auto func = [&, chunk] {
               int ret = parse_chunk_meta(chunk,
                   [] (AChunk *chunk) {
                     UNUSEDx(chunk);
                     return OB_SUCCESS;
                   },
-                  [] (AChunk *chunk, ABlock *block) {
-                    UNUSEDx(chunk, block);
+                  [ctx_id, &costack_chunk_stat] (AChunk *chunk, ABlock *block) {
+                    if (ctx_id == ObCtxIds::CO_STACK) {
+                      costack_chunk_stat.add_block(chunk, block);
+                    } else {
+                      UNUSEDx(chunk, block);
+                    }
                     return OB_SUCCESS;
                   },
-                  [tenant_id, ctx_id, &lmap, w_stat, &item_used]
+                  [tenant_id, ctx_id, &lmap, w_stat, &item_used, &costack_chunk_stat]
                   (AChunk *chunk, ABlock *block, AObject *object) {
                     int ret = OB_SUCCESS;
                     if (object->in_use_) {
+                      if (ctx_id == ObCtxIds::CO_STACK) {
+                        costack_chunk_stat.add_object(chunk, block, object);
+                      }
                      if (OB_FAIL(label_stat(chunk, block, object, lmap, w_stat->up2date_items_,
                                            ARRAYSIZEOF(w_stat->up2date_items_), item_used))) {
                         // do-nothing
@@ -677,8 +808,48 @@ void ObMemoryDump::handle(void *task)
             LOG_INFO("restore from sigsegv, let's goon~");
             segv_cnt++;
             continue;
+          } else if (ctx_id == ObCtxIds::CO_STACK) {
+            costack_ctx_stat.add(costack_chunk_stat);
+            LOG_INFO("[COSTACK_CHUNK_DETAIL]",
+                     K(tenant_id), K(ctx_id), "chunk_idx", i, KP(chunk),
+                     "chunk_hold", costack_chunk_stat.chunk_hold_,
+                     "using_cnt", costack_chunk_stat.using_cnt_,
+                     "live_object_cnt", costack_chunk_stat.live_object_cnt_,
+                     "live_block_cnt", costack_chunk_stat.live_block_cnt_,
+                     "live_object_hold", costack_chunk_stat.live_object_hold_,
+                     "live_object_used", costack_chunk_stat.live_object_used_,
+                     "chunk_internal_free", costack_chunk_stat.chunk_hold_ - costack_chunk_stat.live_object_hold_,
+                     "free_block_hold", costack_chunk_stat.free_block_hold_,
+                     "max_free_block_hold", costack_chunk_stat.max_free_block_hold_,
+                     "costack_cnt", costack_chunk_stat.costack_cnt_,
+                     "costack_hold", costack_chunk_stat.costack_hold_,
+                     "costack_used", costack_chunk_stat.costack_used_,
+                     "non_costack_cnt", costack_chunk_stat.non_costack_cnt_,
+                     "non_costack_hold", costack_chunk_stat.non_costack_hold_,
+                     "non_costack_used", costack_chunk_stat.non_costack_used_,
+                     "whole_chunk_free", 0 == costack_chunk_stat.using_cnt_ && 0 == costack_chunk_stat.live_object_cnt_,
+                     "unreleasable", 0 != costack_chunk_stat.using_cnt_ || 0 != costack_chunk_stat.live_object_cnt_);
           }
         } // iter chunk end
+        if (ctx_id == ObCtxIds::CO_STACK && chunk_cnt > 0) {
+          LOG_INFO("[COSTACK_CHUNK_SUMMARY]",
+                   K(tenant_id), K(ctx_id),
+                   "scanned_using_chunk_cnt", costack_ctx_stat.chunk_cnt_,
+                   "whole_free_chunk_cnt_in_using_list", costack_ctx_stat.free_chunk_cnt_,
+                   "unreleasable_chunk_cnt", costack_ctx_stat.unreleasable_chunk_cnt_,
+                   "chunk_hold", costack_ctx_stat.chunk_hold_,
+                   "live_object_cnt", costack_ctx_stat.live_object_cnt_,
+                   "live_object_hold", costack_ctx_stat.live_object_hold_,
+                   "live_object_used", costack_ctx_stat.live_object_used_,
+                   "chunk_internal_free", costack_ctx_stat.chunk_hold_ - costack_ctx_stat.live_object_hold_,
+                   "free_block_hold", costack_ctx_stat.free_block_hold_,
+                   "costack_cnt", costack_ctx_stat.costack_cnt_,
+                   "costack_hold", costack_ctx_stat.costack_hold_,
+                   "costack_used", costack_ctx_stat.costack_used_,
+                   "non_costack_cnt", costack_ctx_stat.non_costack_cnt_,
+                   "non_costack_hold", costack_ctx_stat.non_costack_hold_,
+                   "non_costack_used", costack_ctx_stat.non_costack_used_);
+        }
         if (OB_SUCC(ret)) {
           auto &tcr = w_stat_->tcrs_[w_stat_->tcr_cnt_++];
           tcr.tenant_id_ = tenant_id;

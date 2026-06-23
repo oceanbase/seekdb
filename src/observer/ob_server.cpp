@@ -29,11 +29,11 @@
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
-#include "observer/omt/ob_tenant.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "share/object_storage/ob_device_connectivity.h"
@@ -53,6 +53,8 @@
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/tablelock/ob_table_lock_rpc_client.h"
+#include "share/ash/ob_active_sess_hist_task.h"
+#include "share/ash/ob_active_sess_hist_list.h"
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
 #include "share/ob_server_blacklist.h"
 #include "share/stat/ob_opt_stat_manager.h" // for ObOptStatManager
@@ -65,6 +67,7 @@
 #include "lib/xml/ob_libxml2_sax_handler.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
+#include "lib/stat/ob_diagnostic_info_container.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "common/ob_target_specific.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
@@ -175,7 +178,8 @@ ObServer::ObServer()
     conn_res_mgr_(),
     unix_domain_listener_(),
     disk_usage_report_task_(),
-    log_block_mgr_()
+    log_block_mgr_(),
+    wr_service_()
 {
 }
 
@@ -445,6 +449,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("set sys task status self addr failed", KR(ret));
     } else if (OB_FAIL(ObServerAutoSplitScheduler::get_instance().init())) {
       LOG_ERROR("init auto split scheduler failed", KR(ret));
+    } else if (OB_FAIL(ObCompatModeGetter::instance().init(&sql_proxy_))) {
+      LOG_ERROR("init get compat mode server failed",KR(ret));
     } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
       LOG_ERROR("init timer monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {
@@ -459,7 +465,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init px target mgr failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
       LOG_ERROR("init dict cache failed", KR(ret));
-
+    } else if (OB_FAIL(ObActiveSessHistList::get_instance().init())) {
+      LOG_ERROR("init ASH failed", KR(ret));
 #ifndef OB_BUILD_LITE
     } else if (OB_FAIL(ObServerBlacklist::get_instance().init(self_addr_))) {
       LOG_ERROR("init server blacklist failed", KR(ret));
@@ -476,6 +483,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(ObDDLSimPointMgr::get_instance().init())) {
       LOG_WARN("init ddl sim point mgr fail", KR(ret));
 #endif
+    } else if (OB_FAIL(wr_service_.init())) {
+      LOG_WARN("failed to init wr service", K(ret));
     } else {
       // GDS direct dispatch through GCTX.root_service_
     }
@@ -545,6 +554,9 @@ void ObServer::destroy()
     ObOptStatManager::get_instance().destroy();
     FLOG_INFO("opt stat manager destroyed");
 
+    FLOG_INFO("begin to destroy active session history task");
+    ObActiveSessHistTask::get_instance().destroy();
+    FLOG_INFO("active session history task destroyed");
 
     FLOG_INFO("begin to destroy timer monitor");
     ObTimerMonitor::get_instance().destroy();
@@ -732,6 +744,11 @@ void ObServer::destroy()
     ObClockGenerator::destroy();
     FLOG_INFO("clock generator destroyed");
 
+    FLOG_INFO("begin to destroy WR service");
+    wr_service_.destroy();
+    FLOG_INFO("WR service destroyed");
+
+    common::ObDiagnosticInfoContainer::clear_global_di_container();
 
     FLOG_INFO("begin to destroy cgroup service");
     cgroup_ctrl_.destroy();
@@ -792,11 +809,15 @@ int ObServer::start(bool embed_mode)
       FLOG_INFO("success to start ts mgr");
     }
 
-    // Services are registered once; start() is triggered by reload_config().
-    grpc_server_.register_service(&storage_grpc_service_impl_);
-    grpc_server_.register_service(&log_service_grpc_impl_);
-    grpc_server_.register_service(&service_grpc_service_impl_);
-    gctx_.grpc_server_ = &grpc_server_;
+    // gRPC is disabled in embed mode to avoid protobuf/grpc initialization overhead.
+    if (!lib::is_embed_mode()) {
+      grpc_server_.register_service(&storage_grpc_service_impl_);
+      grpc_server_.register_service(&log_service_grpc_impl_);
+      grpc_server_.register_service(&service_grpc_service_impl_);
+      gctx_.grpc_server_ = &grpc_server_;
+    } else {
+      gctx_.grpc_server_ = nullptr;
+    }
 
     if (FAILEDx(ObMdsSchemaHelper::get_instance().init())) {
       LOG_ERROR("fail to init mds schema helper", K(ret));
@@ -822,7 +843,11 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to start multi tenant");
     }
-
+    if (FAILEDx(wr_service_.start())) {
+      LOG_ERROR("failed to start wr service", K(ret));
+    } else {
+      LOG_INFO("success to start wr service");
+    }
     if (FAILEDx(SERVER_STORAGE_META_SERVICE.start())) {
       LOG_ERROR("fail to start server storage meta service", KR(ret));
     } else {
@@ -898,6 +923,11 @@ int ObServer::start(bool embed_mode)
       FLOG_INFO("success to start ObPxTargetMgr");
     }
 
+    if (FAILEDx(ObActiveSessHistTask::get_instance().start())) {
+      LOG_ERROR("fail to init active session history task", KR(ret));
+    } else {
+      FLOG_INFO("success to init active session history task");
+    }
 
     if (FAILEDx(location_service_.start())) {
       LOG_ERROR("fail to start location service", KR(ret));
@@ -1211,6 +1241,9 @@ int ObServer::stop()
     net_frame_.sql_nio_stop();
     FLOG_INFO("sql nio stopped");
 
+    FLOG_INFO("begin to stop active session history task");
+    ObActiveSessHistTask::get_instance().stop();
+    FLOG_INFO("active session history task stopped");
 
     FLOG_INFO("begin to stop unix domain listener");
     unix_domain_listener_.stop();
@@ -1328,6 +1361,9 @@ int ObServer::stop()
     ObIOManager::get_instance().stop();
     FLOG_INFO("io manager stopped");
 
+    FLOG_INFO("begin to stop WR service");
+    wr_service_.stop();
+    FLOG_INFO("WR service stopped");
 
     // net frame, ensure net_frame should stop after multi_tenant_
     // stopping.
@@ -1412,6 +1448,7 @@ int ObServer::wait()
 
   FLOG_INFO("begin to wait observer setted to stop");
   while (OB_SUCC(ret) && !stop_) {
+    common::ObBKGDSessInActiveGuard inactive_guard;
     SLEEP(3);
   }
   _Exit(0);
@@ -1769,7 +1806,7 @@ int ObServer::init_pre_setting()
     const int64_t default_stack_size = 1L << 18; // 256KB
     const int64_t stack_size = std::max(static_cast<int64_t>(default_stack_size), static_cast<int64_t>(GCONF.stack_size));
     LOG_INFO("set stack_size", K(stack_size));
-    global_thread_stack_size = stack_size - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
+    global_thread_stack_size = stack_size - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 #ifdef __APPLE__
     const int ps = getpagesize();
     global_thread_stack_size = (global_thread_stack_size + ps - 1) & ~(ps - 1);
@@ -2246,7 +2283,7 @@ int ObServer::init_global_context()
   gctx_.disk_reporter_ = &disk_usage_report_task_;
   gctx_.log_block_mgr_ = &log_block_mgr_;
   (void)gctx_.set_upgrade_stage(obcall::OB_UPGRADE_STAGE_INVALID);
-
+  gctx_.wr_service_ = &wr_service_;
   gctx_.startup_accel_handler_ = &startup_accel_handler_;
 
   (void) gctx_.set_server_id(config_.observer_id);
@@ -2564,8 +2601,8 @@ int ObServer::reload_config()
     LOG_WARN("set bf_cache_miss_count_threshold fail", KR(ret));
   }
 
-  // Start the gRPC server when enable_rpc_service is first set to True.
-  if (GCONF.enable_rpc_service && !grpc_server_.is_running()) {
+  // Start the gRPC server only in non-embed mode.
+  if (!lib::is_embed_mode() && GCONF.enable_rpc_service && !grpc_server_.is_running()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(grpc_server_.start(config_.rpc_port))) {
       LOG_WARN("failed to start gRPC server on config reload", K(tmp_ret));
@@ -2994,6 +3031,7 @@ int ObServer::clean_up_invalid_tables_by_tenant(
     drop_table_arg.to_recyclebin_ = false;
     // only OB_ISNULL(GCTX.session_mgr_) will exit the loop
     for (int64_t i = 0; i < table_ids.count() && OB_SUCC(tmp_ret); i++) {
+      bool is_oracle_mode = false;
       const ObSimpleTableSchemaV2 *table_schema = NULL;
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
@@ -3005,6 +3043,8 @@ int ObServer::clean_up_invalid_tables_by_tenant(
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("got invalid schema", KR(ret), K(i));
+      } else if (OB_FAIL(table_schema->check_if_oracle_compat_mode(is_oracle_mode))) {
+        LOG_WARN("fail to check table if oracle compat mode", KR(ret));
       } else if (0 == table_schema->get_session_id()) {
         //do nothing
       } else {
@@ -3037,7 +3077,7 @@ int ObServer::clean_up_invalid_tables_by_tenant(
           drop_table_arg.table_type_ = table_schema->get_table_type();
           drop_table_arg.session_id_ = table_schema->get_session_id();
           drop_table_arg.to_recyclebin_ = false;
-          drop_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
+          drop_table_arg.compat_mode_ = is_oracle_mode ? lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL;
           table_item.table_name_ = table_schema->get_table_name_str();
           table_item.mode_ = table_schema->get_name_case_mode();
           if (OB_FAIL(schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), database_schema))) {

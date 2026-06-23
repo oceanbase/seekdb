@@ -53,6 +53,7 @@ int ObReentrantThread::create(const int64_t thread_cnt, const char* thread_name,
     LOG_WARN("fail to init cond, ", K(ret));
   } else {
     thread_name_ = thread_name;
+    ThreadPool::set_debug_name(thread_name);
     ThreadPool::set_thread_count(thread_cnt);
     created_ = true;
     ret = ThreadPool::start();
@@ -126,6 +127,7 @@ void ObReentrantThread::logical_wait()
       LOG_WARN("inner status error", K(ret), K_(running_cnt));
     } else {
       while (running_cnt_ > 0) {
+        ObBKGDSessInActiveGuard inactive_guard;
         cond_.wait();
       }
     }
@@ -184,6 +186,7 @@ int ObReentrantThread::blocking_run()
         if (ThreadPool::has_set_stop()) {
           break;
         }
+        ObBKGDSessInActiveGuard inactive_guard;
         cond_.wait(WAIT_TIME_MS);
       } else {
         need_run = true;
@@ -210,6 +213,7 @@ void ObReentrantThread::nothing()
 int ObReentrantThread::idle_wait(const int64_t idle_time_ms)
 {
   int ret = OB_SUCCESS;
+  ObBKGDSessInActiveGuard inactive_guard;
   ret = get_cond().wait(idle_time_ms);
   return ret;
 }
@@ -217,6 +221,7 @@ int ObReentrantThread::idle_wait(const int64_t idle_time_ms)
 int ObReentrantThread::idle_wait_us(const int64_t idle_time_us)
 {
   int ret = OB_SUCCESS;
+  ObBKGDSessInActiveGuard inactive_guard;
   ret = get_cond().wait_us(idle_time_us);
   return ret;
 }

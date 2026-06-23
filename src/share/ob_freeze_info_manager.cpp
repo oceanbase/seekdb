@@ -153,36 +153,14 @@ int ObFreezeInfoManager::fetch_new_freeze_info(
     share::SCN &latest_snapshot_gc_scn)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(fetch_new_snapshot_gc_scn_from_table(tenant_id, sql_proxy, latest_snapshot_gc_scn))) {
-    LOG_WARN("fail to select for update snapshot_gc_scn", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(fetch_new_freeze_info(tenant_id, min_frozen_scn, sql_proxy, freeze_infos))) {
-    LOG_WARN("fail to get freeze info", KR(ret), K(min_frozen_scn), K(tenant_id));
-  }
-  return ret;
-}
+  ObFreezeInfoProxy freeze_info_proxy(tenant_id);
 
-int ObFreezeInfoManager::fetch_new_snapshot_gc_scn_from_table(
-    const int64_t tenant_id,
-    common::ObMySQLProxy &sql_proxy,
-    share::SCN &latest_snapshot_gc_scn)
-{
-  int ret = OB_SUCCESS;
+  // 1. get snapshot_gc_scn
   if (OB_FAIL(ObGlobalStatProxy::get_snapshot_gc_scn(
              sql_proxy, tenant_id, latest_snapshot_gc_scn))) {
-    LOG_WARN("fail to select snapshot_gc_scn", KR(ret), K(tenant_id));
-  }
-  return ret;
-}
-
-int ObFreezeInfoManager::fetch_new_freeze_info(
-    const int64_t tenant_id,
-    const share::SCN &min_frozen_scn,
-    common::ObMySQLProxy &sql_proxy,
-    common::ObIArray<ObFreezeInfo> &freeze_infos)
-{
-  int ret = OB_SUCCESS;
-  ObFreezeInfoProxy freeze_info_proxy(tenant_id);
-  if (OB_FAIL(freeze_info_proxy.get_freeze_info_larger_or_equal_than(
+    LOG_WARN("fail to select for update snapshot_gc_scn", KR(ret), K(tenant_id));
+  // 2. acquire freeze info in same trans, ensure we can get the latest freeze info
+  } else if (OB_FAIL(freeze_info_proxy.get_freeze_info_larger_or_equal_than(
              sql_proxy, min_frozen_scn, freeze_infos))) {
     LOG_WARN("fail to get freeze info", KR(ret), K(min_frozen_scn));
   } else if (OB_UNLIKELY(freeze_infos.empty())) {

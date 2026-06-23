@@ -484,10 +484,11 @@ public:
       }
 #ifdef OB_BUILD_EMBED_MODE
       bool light_backtrace_allowed = false;
-      bool sample_allowed = false;
+      bool sample_allowed = ObCtxIds::GLIBC == attr.ctx_id_;
 #else
-      const bool light_backtrace_allowed = is_memleak_light_backtrace_enabled() && ObLightBacktraceGuard::is_enabled() && ObCtxIds::GLIBC != attr.ctx_id_;
-      bool sample_allowed = light_backtrace_allowed || malloc_sample_allowed(size, inner_attr);
+      const bool is_glibc_ctx = ObCtxIds::GLIBC == attr.ctx_id_;
+      const bool light_backtrace_allowed = is_memleak_light_backtrace_enabled() && ObLightBacktraceGuard::is_enabled() && !is_glibc_ctx;
+      bool sample_allowed = is_glibc_ctx || light_backtrace_allowed || malloc_sample_allowed(size, inner_attr);
 #endif
       inner_attr.alloc_extra_info_ = sample_allowed;
       nobj = allocator.realloc_object(obj, size, inner_attr);

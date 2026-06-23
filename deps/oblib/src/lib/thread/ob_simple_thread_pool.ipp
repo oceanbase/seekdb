@@ -16,6 +16,7 @@
 
 #include "lib/thread/ob_thread_name.h"
 #include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/ash/ob_active_session_guard.h"
 #ifdef __APPLE__
 #include <unistd.h>
 #elif defined(_WIN32)
@@ -143,6 +144,7 @@ bool ObSimpleThreadPoolBase<T>::do_add_worker()
     if (OB_ISNULL(w)) {
       return false;
     }
+    w->set_debug_name(name_);
     if (run_wrapper_ != nullptr) {
       w->set_run_wrapper(run_wrapper_);
     }
