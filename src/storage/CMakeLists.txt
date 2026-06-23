@@ -786,6 +786,7 @@ ob_set_subtarget(ob_storage memtable_mvcc
   memtable/mvcc/ob_mvcc_trans_ctx.cpp
   memtable/mvcc/ob_tx_callback_list.cpp
   memtable/mvcc/ob_query_engine.cpp
+  memtable/mvcc/ob_btree_iter_cache.cpp
   memtable/mvcc/ob_row_data.cpp
   memtable/mvcc/ob_mvcc_define.cpp
 )

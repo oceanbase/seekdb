@@ -2482,7 +2482,7 @@ public:
         index_table_id_(common::OB_INVALID_ID),
         if_not_exist_(false),
         with_rowid_(false),
-        index_schema_(),
+        index_schema_(&allocator_),
         is_inner_(false),
         nls_date_format_(),
         nls_timestamp_format_(),
