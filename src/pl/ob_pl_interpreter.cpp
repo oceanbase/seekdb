@@ -201,21 +201,26 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
 {
   typedef ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc HandlerDesc;
   int ret = OB_SUCCESS;
-  int64_t best = MAX_TYPE;
+  // Mirror ObPLDeclareHandlerStmt::DeclareHandler::compare_condition: rank candidates by
+  // declaring scope level FIRST (higher level == innermost scope wins), breaking ties only
+  // at equal level by condition-type specificity (smaller ObPLConditionType enum is more
+  // specific). The resolver stacks every active handler into this block's eh tagged with
+  // its scope level, so an inner SQLWARNING beats an outer SQLSTATE match.
+  int64_t best_type = MAX_TYPE;
+  int64_t best_level = OB_INVALID_INDEX;
   const HandlerDesc *chosen = NULL;
   for (int64_t i = 0; i < eh->get_handlers().count(); ++i) {
-    const HandlerDesc *desc = eh->get_handler(i).get_desc();
+    const ObPLDeclareHandlerStmt::DeclareHandler &h = eh->get_handler(i);
+    const HandlerDesc *desc = h.get_desc();
     if (OB_ISNULL(desc)) { continue; }
+    const int64_t level = h.get_level();
     for (int64_t j = 0; j < desc->get_conditions().count(); ++j) {
       const int64_t pre = match_condition(desc->get_condition(j), exception, ob_err);
-      // `<=`, not `<`: for CONTINUE handlers the resolver stacks every active handler
-      // into this block's eh outer-first / inner-last, so among equal precedence (the
-      // same condition declared in nested scopes) the LAST entry is the innermost-scope
-      // handler -- and MySQL fires the most-nested match.
-      if (pre >= 0 && pre <= best) {
-        best = pre;
-        chosen = desc;
-      }
+      if (pre < 0) { continue; }
+      const bool better = (NULL == chosen)
+          || (level > best_level)
+          || (level == best_level && pre < best_type);
+      if (better) { best_level = level; best_type = pre; chosen = desc; }
     }
   }
   if (OB_NOT_NULL(chosen)) {
@@ -227,6 +232,16 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
     // buffer, so stamp the caught sqlstate (e.g. 23000) now -- a bare RESIGNAL recovers it
     // from the snapshot instead of falling back to HY000.
     if (common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer()) {
+      // A native error's message can be wiped off the buffer by an inner frame before the
+      // handler catches it (errno + sqlstate survive); restore the standard message for the
+      // caught OB code so a bare RESIGNAL re-raises it with text, not an empty message. Skip
+      // user SIGNALs (OB_SP_RAISE_APPLICATION_ERROR), whose message is user-supplied and lives
+      // on the buffer.
+      const char *live_msg = wb->get_err_msg();
+      if ((OB_ISNULL(live_msg) || '\0' == live_msg[0])
+          && OB_SUCCESS != ob_err && OB_SP_RAISE_APPLICATION_ERROR != ob_err) {
+        wb->set_error(ob_strerror(ob_err), wb->get_err_code());  // keep errno, restore message
+      }
       if (OB_NOT_NULL(exception.sql_state_) && '\0' != exception.sql_state_[0]) {
         wb->set_sql_state(exception.sql_state_);
       }
@@ -235,6 +250,14 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
     int64_t saved_code = OB_SUCCESS;
     OZ (ObSPIService::spi_get_pl_exception_code(ctx, &saved_code));
     OZ (ObSPIService::spi_set_pl_exception_code(ctx, mysql_errno, false /*keep warning buf*/, level));
+    // Record the caught condition's severity for a bare RESIGNAL in the body: try_handle (the
+    // error search) passes the real error in ob_err, try_handle_warning passes OB_SUCCESS. A bare
+    // RESIGNAL re-raises with this severity, so an error-severity warning-class sqlstate (a
+    // strict-mode 1265 with sqlstate 01000) re-raises as an error instead of downgrading.
+    ObPLSqlCodeInfo *sci = (OB_NOT_NULL(ctx->exec_ctx_) && OB_NOT_NULL(ctx->exec_ctx_->get_my_session()))
+        ? ctx->exec_ctx_->get_my_session()->get_pl_sqlcode_info() : NULL;
+    const bool saved_is_err = OB_NOT_NULL(sci) ? sci->is_caught_error() : false;
+    if (OB_NOT_NULL(sci)) { sci->set_caught_error(OB_SUCCESS != ob_err); }
     if (OB_SUCC(ret)) {
       const int hret = SMART_CALL(exec_block(ctx, chosen->get_body(), ctrl));
       if (OB_SUCCESS == hret) {
@@ -246,6 +269,7 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
         ret = hret;
       }
     }
+    if (OB_NOT_NULL(sci)) { sci->set_caught_error(saved_is_err); }
     // An EXIT handler leaves the block that DECLARED it. Mark EXITING toward the chosen
     // handler's desc; each block's end-of-block check stops it at the declaring block. When
     // the handler is native to the current block, that reset fires immediately on return (net
@@ -769,7 +793,49 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
     nocopy[i] = (s->get_nocopy_params().count() == argc) ? s->get_nocopy_params().at(i) : OB_INVALID_INDEX;
     new (&storage[i]) ObObjParam();
     const bool local_out = p.is_out() && OB_INVALID_INDEX != p.out_idx_;
-    if (!local_out) {
+    const sql::ObRawExpr *act_expr = s->get_param_expr(i);
+    const bool obj_access_out = p.is_out() && OB_INVALID_INDEX == p.out_idx_
+        && OB_NOT_NULL(act_expr) && act_expr->is_obj_access_expr();
+    if (obj_access_out) {
+      // OUT/INOUT actual whose target is an obj-access write (a trigger NEW.col): evaluating it
+      // yields a for-write address (ObPlCompiteWrite*), not a value, so seed the callee from the
+      // destination's current value (INOUT) and write the result back after the call.
+      if (!p.is_pure_out()) {
+        ObObjParam addr;
+        OZ (ObSPIService::spi_calc_expr_at_idx(ctx, p.param_, OB_INVALID_INDEX, &addr));
+        if (OB_SUCC(ret) && addr.is_ext() && 0 != addr.get_ext()) {
+          ObPlCompiteWrite *cw = reinterpret_cast<ObPlCompiteWrite *>(addr.get_ext());
+          ObObj *src = OB_NOT_NULL(cw) ? reinterpret_cast<ObObj *>(cw->value_addr_) : NULL;
+          ObIArray<common::ObString> *src_ti = NULL;
+          if (OB_NOT_NULL(src) && ObEnumType == src->get_type()) {
+            // The actual column ENUM and the callee param ENUM may be *differently valued*
+            // (tab1.c2 '21'..'25' vs param '1','2','21'..). A raw index copy would mis-map, so
+            // pass the column's *string* value (looked up via its own type_info); the callee
+            // then resolves the string into its own ENUM.
+            ObPLDataType src_type;
+            OZ (static_cast<const sql::ObObjAccessRawExpr *>(act_expr)->get_final_type(src_type));
+            if (OB_SUCC(ret) && OB_INVALID_ID != src_type.get_type_info_id()) {
+              OZ (ctx->func_->get_enum_set_ctx().get_enum_type_info(src_type.get_type_info_id(), src_ti));
+            }
+          }
+          if (OB_FAIL(ret)) {
+          } else if (OB_NOT_NULL(src_ti)) {
+            const uint64_t idx = src->get_uint64();  // 1-based ENUM index; 0 == '' (no value)
+            common::ObString s;
+            if (idx >= 1 && idx <= static_cast<uint64_t>(src_ti->count())) {
+              OZ (ob_write_string(*ctx->allocator_, src_ti->at(idx - 1), s));
+            }
+            OX (storage[i].set_varchar(s));
+            OX (storage[i].set_collation_type(src->get_collation_type()));
+            OX (storage[i].set_collation_level(common::CS_LEVEL_IMPLICIT));
+            OX (storage[i].set_param_meta());
+          } else if (OB_NOT_NULL(src)) {
+            OZ (ob_write_obj(*ctx->allocator_, *src, storage[i]));
+            OX (storage[i].set_param_meta());
+          }
+        }
+      }  // pure-OUT: leave storage[i] default-constructed.
+    } else if (!local_out) {
       // IN actual, or an OUT to an external target (user/sys/pkg var): evaluate it.
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, p.param_, OB_INVALID_INDEX, &storage[i]));
     } else if (!p.is_pure_out()) {
@@ -787,8 +853,30 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
   // Copy each OUT/INOUT result from its temp back into the caller's local slot.
   for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {
     const InOutParam &p = s->get_params().at(i);
+    const sql::ObRawExpr *act_expr = s->get_param_expr(i);
     if (p.is_out() && OB_INVALID_INDEX != p.out_idx_) {
       OZ (ObSPIService::spi_convert_objparam(ctx, &storage[i], p.out_idx_, NULL /*result*/, true /*need_set*/));
+    } else if (p.is_out() && OB_INVALID_INDEX == p.out_idx_
+               && OB_NOT_NULL(act_expr) && act_expr->is_obj_access_expr()) {
+      // Write the callee's OUT result back through the obj-access address (trigger NEW.col),
+      // converting to the target column type -- mirrors exec_assign's obj-access write.
+      ObPLDataType final_type;
+      ObObjParam addr;
+      OZ (static_cast<const sql::ObObjAccessRawExpr *>(act_expr)->get_final_type(final_type));
+      OZ (ObSPIService::spi_calc_expr_at_idx(ctx, p.param_, OB_INVALID_INDEX, &addr));
+      if (OB_SUCC(ret) && final_type.is_obj_type() && addr.is_ext() && 0 != addr.get_ext()) {
+        ObPlCompiteWrite *cw = reinterpret_cast<ObPlCompiteWrite *>(addr.get_ext());
+        ObObj *dest = OB_NOT_NULL(cw) ? reinterpret_cast<ObObj *>(cw->value_addr_) : NULL;
+        ObIAllocator *alloc = OB_NOT_NULL(cw) ? reinterpret_cast<ObIAllocator *>(cw->allocator_) : NULL;
+        common::ObDataType *dest_type = final_type.get_data_type();
+        if (OB_NOT_NULL(dest) && OB_NOT_NULL(dest_type)) {
+          // Pass the destination column's enum/set type_info id so spi_copy_datum can map a
+          // string result (e.g. "12") back to the ENUM value; without it the VARCHAR->ENUM
+          // convert fails OB_INVALID_ARGUMENT. (get_type_info_id is OB_INVALID_ID for non-enum.)
+          OZ (ObSPIService::spi_copy_datum(ctx, alloc, &storage[i], dest, dest_type,
+                                           OB_INVALID_ID /*package_id*/, final_type.get_type_info_id()));
+        }
+      }
     }
   }
   return ret;
@@ -898,7 +986,7 @@ static int exec_signal(ObPLExecCtx *ctx, const ObPLSignalStmt *s)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s), OB_NOT_NULL(ctx));
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && ERROR_CODE != s->get_cond_type()) {
+  if (OB_SUCC(ret) && ERROR_CODE != s->get_cond_type()) {
     const int64_t *err_idx = s->get_expr_idx(static_cast<int64_t>(SignalCondInfoItem::DIAG_MYSQL_ERRNO));
     const int64_t *msg_idx = s->get_expr_idx(static_cast<int64_t>(SignalCondInfoItem::DIAG_MESSAGE_TEXT));
     int error_code = OB_SUCCESS;  // codegen pre-stores OB_SUCCESS for the SIGNAL path

@@ -19,7 +19,7 @@
 
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_operator_factory.h"
-#include "common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 
 namespace oceanbase
 {

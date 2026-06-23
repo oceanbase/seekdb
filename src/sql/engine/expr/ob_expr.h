@@ -24,7 +24,7 @@
 #include "share/vector/ob_fixed_length_base.h"
 #include "share/vector/ob_vector_define.h"
 #include "sql/engine/ob_serializable_function.h"
-#include "common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "sql/engine/ob_batch_rows.h"
 #include "common/ob_common_utility.h"
 #include "sql/ob_eval_bound.h"

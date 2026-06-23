@@ -4132,7 +4132,14 @@ int ObSPIService::spi_get_pl_exception_code(pl::ObPLExecCtx *ctx, int64_t *code)
     // Snapshot the current condition (errno + sqlstate + message) onto the diagnostic
     // stack BEFORE clearing the TSI buffer, so a bare RESIGNAL in the handler body can
     // recover the original sqlstate (e.g. 23000, not HY000); then reset the buffer so
-    // the handler body starts clean.
+    // the handler body starts clean. The sqlstate may have been wiped off the live buffer
+    // during propagation (errno+message survive), so restore it from the persisted
+    // ObPLSqlCodeInfo first -- otherwise the snapshot (and the bare RESIGNAL) falls back to
+    // HY000.
+    const char *live_ss = wb->get_sql_state();
+    if ((OB_ISNULL(live_ss) || '\0' == live_ss[0]) && '\0' != sqlcode_info->get_sqlstate()[0]) {
+      wb->set_sql_state(sqlcode_info->get_sqlstate());
+    }
     OZ (sqlcode_info->get_stack_warning_buf().push_back(*wb));
     OX (wb->reset_warning());
   }
@@ -4308,7 +4315,10 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
   } while(0)
 
   if (OB_SUCC(ret)) {
-    type = ObPLEH::eh_classify_exception(sql_state);
+    // A bare RESIGNAL carries no explicit sqlstate; classify by the caught condition's
+    // sqlstate (resignal_sql_state) so a re-raised warning-class condition ('01000')
+    // downgrades to a warning instead of re-raising as a generic exception.
+    type = ObPLEH::eh_classify_exception(NULL != sql_state ? sql_state : resignal_sql_state);
     if (OB_NOT_NULL(wb)) {
       cur_err_code = wb->get_err_code();
     }
@@ -4375,7 +4385,14 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
   if (OB_FAIL(ret)) {
   } else {
     snprintf(err_msg, STR_LEN, "%.*s", sqlcode_info->get_sqlmsg().length(), sqlcode_info->get_sqlmsg().ptr());
-    if (ObPLConditionType::SQL_WARNING == type) {
+    // A warning-class condition downgrades when it is a SIGNAL, an explicit `RESIGNAL SQLSTATE
+    // '01xxx'` (the user pinned a warning sqlstate), or a *bare* RESIGNAL whose caught condition
+    // was itself a warning. A bare RESIGNAL re-raises with the original severity, so an
+    // error-severity warning-class sqlstate (a strict-mode 1265 with '01000' caught by a
+    // SQLWARNING handler) re-raises as an error via the else branch instead of downgrading.
+    if (ObPLConditionType::SQL_WARNING == type
+        && (is_signal || OB_NOT_NULL(sql_state)
+            || OB_ISNULL(sqlcode_info) || !sqlcode_info->is_caught_error())) {
       if (OB_ISNULL(errcode_expr)) {
         if (OB_NOT_NULL(wb)) {
           wb->append_warning(err_msg, OB_ERR_SIGNAL_WARN);
@@ -4390,6 +4407,14 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
         if (OB_NOT_NULL(wb)) {
           wb->reset_err();
         }
+      } else {
+        // A warning-class RESIGNAL downgrades the caught condition to a warning: clear the
+        // pending error (sqlcode + *error_code) so the handler continues instead of re-raising.
+        sqlcode_info->set_sqlcode(OB_SUCCESS);
+        *error_code = OB_SUCCESS;
+        if (OB_NOT_NULL(wb)) {
+          wb->reset_err();
+        }
       }
     } else {
       if (is_signal) {
@@ -4400,12 +4425,16 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
           wb->set_error_code(sqlcode_info->get_sqlcode());
           wb->set_sql_state(sql_state);
         }
+        // Persist the raised sqlstate: error propagation wipes it off the TSI buffer before
+        // the handler / client reads it, while errno+message survive.
+        sqlcode_info->set_sqlstate(sql_state);
       } else {
         if (OB_NOT_NULL(wb)) {
           wb->set_error(err_msg, sqlcode_info->get_sqlcode());
           wb->set_sql_state(sql_state != NULL
                              ? sql_state
                              : (resignal_sql_state != NULL) ? resignal_sql_state : ob_sqlstate(cur_err_code));
+          sqlcode_info->set_sqlstate(wb->get_sql_state());  // persist for the next propagation
         }
       }
       *error_code = sqlcode_info->get_sqlcode();

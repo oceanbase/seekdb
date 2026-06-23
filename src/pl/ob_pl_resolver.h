@@ -22,7 +22,7 @@
 #include "sql/ob_spi.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/dml/ob_sequence_namespace_checker.h"
-#include "common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 
 #ifndef LOG_IN_CHECK_MODE
 #define LOG_IN_CHECK_MODE(fmt, args...) \

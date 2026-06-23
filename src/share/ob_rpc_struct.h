@@ -49,7 +49,7 @@
 #include "rootserver/ob_rs_job_table_operator.h"
 #include "sql/executor/ob_task_id.h"
 #include "sql/plan_cache/ob_lib_cache_register.h"
-#include "common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "ob_i_tablet_scan.h"
 #include "storage/ob_i_table.h"
 #include "share/ob_ls_id.h"

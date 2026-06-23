@@ -19,7 +19,7 @@
 
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/allocator/page_arena.h"
-#include "common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 
 using namespace oceanbase::common;
 

@@ -18,7 +18,7 @@
 #define OCEANBASE_SRC_PL_OB_PL_TYPE_H_
 
 #include "share/ob_define.h"
-#include "common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fast_array.h"

@@ -416,6 +416,7 @@ int ObPLCompiler::compile(
           OZ (func.add_members(func_ast.get_flag()));
           OX (func.set_pipelined(func_ast.get_pipelined()));
           OX (func.set_can_cached(func_ast.get_can_cached()));
+          OX (func.set_has_incomplete_rt_dep_error(func_ast.has_incomplete_rt_dep_error()));
           OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
           OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
           OX (func.set_ast(func_ast_ptr));
@@ -662,6 +663,7 @@ int ObPLCompiler::compile(
       OZ (func.add_members(func_ast.get_flag()));
       OX (func.set_pipelined(func_ast.get_pipelined()));
       OX (func.set_can_cached(func_ast.get_can_cached()));
+      OX (func.set_has_incomplete_rt_dep_error(func_ast.has_incomplete_rt_dep_error()));
       OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
       OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
       if (OB_SUCC(ret)) {
@@ -878,62 +880,29 @@ int ObPLCompiler::analyze_package(const ObString &source,
   return ret;
 }
 
-int ObPLCompiler::generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package, bool &is_from_disk)
+int ObPLCompiler::generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(session_info_.get_pl_engine()));
-  OX (is_from_disk = false);
   if (OB_SUCC(ret)) {
     WITH_CONTEXT(package.get_mem_context()) {
-      uint64_t session_database_id = package_ast.get_compile_flag().compile_with_invoker_right() ? package_ast.get_invoker_db_id() : session_info_.get_database_id();
-      ObRoutinePersistentInfo routine_storage(MTL_ID(),
-                                        package.get_database_id(),
-                                        session_database_id,
-                                        package.get_id(),
-                                        get_tenant_id_by_object_id(package.get_id()));
-      ObRoutinePersistentInfo::ObPLOperation op = ObRoutinePersistentInfo::ObPLOperation::NONE;
       bool exist_same_name_obj_with_public_synonym = false;
-      OZ (ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(schema_guard_, 
-                                                                            package_ast.get_dependency_table(), 
+      OZ (ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(schema_guard_,
+                                                                            package_ast.get_dependency_table(),
                                                                             exist_same_name_obj_with_public_synonym,
                                                                             session_info_));
-      // LLVM JIT removed: the interpreter produces no compiled object, so there is no DLL
-      // to persist or load. Force the persistent-compiled-routine path off.
-      bool enable_persistent = false;
-      FLT_SET_TAG(pl_compile_is_persist, enable_persistent);
       CK (package.is_inited());
       OZ (package.get_dependency_table().assign(package_ast.get_dependency_table()));
       OZ (generate_package_conditions(package_ast.get_condition_table(), package));
       OZ (generate_package_vars(package_ast, package_ast.get_symbol_table(), package));
       OZ (generate_package_types(package_ast.get_user_type_table(), package));
-      if (enable_persistent) {
-        sql::ObExecEnv env;
-        OZ (env.init(exec_env));
-        OZ (routine_storage.read_dll_from_disk(&session_info_, schema_guard_, env, package_ast, package, op));
-      }
-      if (op == ObRoutinePersistentInfo::ObPLOperation::SUCC) {
-        OX (is_from_disk = true);
-      } else {
+      {
         // latch_id = (bucket_id % bucket_cnt_) / 8, so it is needed to multiply 8 to avoid consecutive ids being mapped to the same latch
         ObBucketHashWLockGuard compile_id_guard(GCTX.pl_engine_->get_jit_lock().first, package.get_id() * 8);
         ObBucketHashWLockGuard compile_num_guard(GCTX.pl_engine_->get_jit_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
 
         OZ (ObPL::check_session_alive(session_info_));
-        if (OB_SUCC(ret)) {
-          if (enable_persistent) {
-            sql::ObExecEnv env;
-            OZ (env.init(exec_env));
-            OZ (routine_storage.read_dll_from_disk(&session_info_, schema_guard_, env, package_ast, package, op));
-          }
-          if (op == ObRoutinePersistentInfo::ObPLOperation::SUCC) {
-            OX (is_from_disk = true);
-          } else {
-            OZ (generate_package_routines(exec_env, package_ast.get_routine_table(), package));
-            if (enable_persistent) {
-              OZ (routine_storage.process_storage_dll(allocator_, schema_guard_, package, op));
-            }
-          }
-        }
+        OZ (generate_package_routines(exec_env, package_ast.get_routine_table(), package));
       }
       OZ (generate_package_cursors(package_ast, package_ast.get_cursor_table(), package));
     }
@@ -1009,14 +978,13 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
     OX (package.get_stat_for_update().pl_cg_mem_hold_ = 0);
   }
 
-  bool is_from_disk = false;
-  OZ (generate_package(copy_exec_env, package_ast, package, is_from_disk));
+  OZ (generate_package(copy_exec_env, package_ast, package));
   OX (package.set_can_cached(package_ast.get_can_cached()));
   OX (package_ast.get_serially_reusable() ? package.set_serially_reusable() : void(NULL));
   session_info_.set_for_trigger_package(saved_trigger_flag);
   OZ (check_dep_schema(schema_guard_, package.get_dependency_table()));
 
-  if (OB_SUCC(ret) && !is_from_disk) {
+  if (OB_SUCC(ret)) {
     ObMutexGuard guard(package_dep_info_lock_);
     if (session_info_.get_effective_tenant_id() == package_info.get_tenant_id()) {
       OZ (update_schema_object_dep_info(package_ast.get_dependency_table(),
@@ -1484,6 +1452,7 @@ int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
               OZ (routine->add_members(routine_ast->get_flag()));
               OX (routine->set_pipelined(routine_ast->get_pipelined()));
               OX (routine->set_can_cached(routine_ast->get_can_cached()));
+              OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
               OX (routine->set_is_all_sql_stmt(routine_ast->get_is_all_sql_stmt()));
               OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));
               OX (routine->set_ret_type(routine_ast->get_ret_type()));

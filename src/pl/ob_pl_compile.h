@@ -47,24 +47,11 @@ class ObPLResolver;
 class ObPLVarDebugInfo;
 class ObRoutinePersistentInfo;
 
-class ObPLCGMallocCallback final : public lib::ObMallocCallback
-{
-public:
-  ObPLCGMallocCallback(int64_t &mem_used)
-    : mem_used_(mem_used) {}
-  virtual ~ObPLCGMallocCallback() {}
-  virtual void operator()(const ObMemAttr &attr, int64_t add_size) override
-  {
-    if ((ObLabel(GET_PL_MOD_STRING(pl::OB_PL_JIT)) == attr.label_ 
-        || ObLabel(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)) == attr.label_)
-        && attr.ctx_id_ == ObCtxIds::GLIBC) {
-      mem_used_ += add_size;
-    }
-  }
-private:
-  int64_t &mem_used_;
-}; // end of class ObPLCGMallocCallback
-
+// PL front-end: parses and semantically resolves PL source (anonymous blocks,
+// standalone routines, packages) into an executable AST unit (ObPLFunction /
+// ObPLPackage). It emits no native code -- the interpreter is the back-end that
+// walks the produced AST. "Compile" here means source -> executable AST, as in
+// an interpreter front-end, not JIT/codegen (which has been removed).
 class ObPLCompiler
 {
 public:
@@ -91,7 +78,7 @@ public:
 
   int analyze_package(const ObString &source, const ObPLBlockNS *parent_ns,
                       ObPLPackageAST &package_ast, bool is_for_trigger);
-  int generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package, bool &is_from_disk);
+  int generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package);
   int compile_package(const share::schema::ObPackageInfo &package_info, const ObPLBlockNS *parent_ns,
                       ObPLPackageAST &package_ast, ObPLPackage &package); //package
   static int compile_subprogram_table(common::ObIAllocator &allocator,

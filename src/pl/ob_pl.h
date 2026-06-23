@@ -460,10 +460,6 @@ public:
     return ob_write_string(get_allocator(), interface_name, interface_name_);
   }
 
-  // LLVM JIT removed: the interpreter produces no DWARF debug info, so a routine is
-  // never in (JIT) debug mode.
-  inline bool is_debug_mode() const { return false; }
-
   inline bool get_is_all_sql_stmt() const { return is_all_sql_stmt_; }
   inline void set_is_all_sql_stmt(bool is_all_sql_stmt) { is_all_sql_stmt_ = is_all_sql_stmt; }
 
@@ -499,13 +495,6 @@ public:
     return ob_write_string(get_allocator(), priv_user, priv_user_);
   }
 
-  inline bool need_register_debug_info()
-  {
-    return is_debug_mode()
-        && get_tenant_id() != OB_SYS_TENANT_ID
-        && has_debug_priv()
-        && !ObTriggerInfo::is_trigger_package_id(get_package_id());
-  }
   bool should_init_as_session_cursor();
   /*
   * some package subprogram has special invoker right, though the package may have definer privs
@@ -516,8 +505,6 @@ public:
   * test -> oceanbase, we see oceanbase in interface but can't see test.
   */
   int is_special_pkg_invoke_right(ObSchemaGetterGuard &guard, bool &flag);
-
-  int gen_action_from_precompiled(const ObString &name, size_t length, const char *ptr);
 
   common::ObFixedArray<ObPLSqlInfo, common::ObIAllocator>& get_sql_infos()
   {
@@ -588,7 +575,7 @@ private:
 struct ObPLSqlCodeInfo
 {
 public:
-  ObPLSqlCodeInfo() : sqlcode_(OB_SUCCESS), sqlmsg_() {}
+  ObPLSqlCodeInfo() : sqlcode_(OB_SUCCESS), sqlmsg_(), is_caught_error_(false) { sqlstate_[0] = '\0'; }
   inline void set_sqlcode(int sqlcode, const ObString &sqlmsg = ObString(""))
   {
     sqlcode_ = sqlcode;
@@ -598,11 +585,28 @@ public:
   {
     sqlcode_ = OB_SUCCESS;
     sqlmsg_ = ObString("");
+    sqlstate_[0] = '\0';
+    is_caught_error_ = false;
     stakced_warning_buff_.reset();
   }
   inline void set_sqlmsg(const ObString &sqlmsg) { sqlmsg_ = sqlmsg; }
   inline int get_sqlcode() const { return sqlcode_; }
   inline const ObString& get_sqlmsg() const { return sqlmsg_; }
+  // The diagnostic-area sqlstate. Persisted here (alongside sqlcode_/sqlmsg_) because the TSI
+  // warning buffer's sqlstate is wiped during error propagation while errno+message survive,
+  // so a bare RESIGNAL / GET DIAGNOSTICS must still recover the originally raised sqlstate.
+  inline void set_sqlstate(const char *ss)
+  {
+    if (OB_NOT_NULL(ss)) { snprintf(sqlstate_, sizeof(sqlstate_), "%s", ss); }
+    else { sqlstate_[0] = '\0'; }
+  }
+  inline const char *get_sqlstate() const { return sqlstate_; }
+  // Severity of the condition the currently-running handler caught: true if it was an error
+  // (entered via the error-handler search), false if a warning (the raised-warning search). A
+  // bare RESIGNAL re-raises with the original severity -- a warning-class sqlstate (01000) on an
+  // error-severity condition (strict-mode 1265) must re-raise as an error, not downgrade.
+  inline void set_caught_error(bool v) { is_caught_error_ = v; }
+  inline bool is_caught_error() const { return is_caught_error_; }
   inline common::ObIArray<ObWarningBuffer>& get_stack_warning_buf()
   {
     return stakced_warning_buff_;
@@ -610,6 +614,8 @@ public:
 private:
   int sqlcode_;
   ObString sqlmsg_;
+  char sqlstate_[8];
+  bool is_caught_error_;
   common::ObSEArray<ObWarningBuffer, 4> stakced_warning_buff_;
 };
 
@@ -934,7 +940,6 @@ public:
 
   static int debug_start(sql::ObSQLSessionInfo *sql_session);
   static int debug_stop(sql::ObSQLSessionInfo *sql_session);
-  static int notify(sql::ObSQLSessionInfo *sql_session);
 
   static int get_exec_state_from_local(sql::ObSQLSessionInfo &session_info,
                                     int64_t package_id,

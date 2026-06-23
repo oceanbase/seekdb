@@ -48,10 +48,6 @@ extern int sys_pkg_need_priv_check(uint64_t pkg_id, ObSchemaGetterGuard *schema_
 namespace pl
 {
 
-#if defined(__aarch64__)
-static void* DW_REF_ObPLEH_eh_personality = (void*)(&ObPLEH::eh_personality);
-#endif // defined(__aarch64__)
-
 #ifdef ERRSIM
 ERRSIM_POINT_DEF(OBPLCONTEXT_INIT);
 #endif // ERRSIM
@@ -392,13 +388,6 @@ int ObPLContext::debug_start(ObSQLSessionInfo *sql_session)
 }
 
 int ObPLContext::debug_stop(ObSQLSessionInfo *sql_session)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(sql_session);
-  return ret;
-}
-
-int ObPLContext::notify(ObSQLSessionInfo *sql_session)
 {
   int ret = OB_SUCCESS;
   UNUSED(sql_session);
@@ -3773,11 +3762,6 @@ int ObPLExecState::init(const ParamStore *params, bool is_anonymous)
 
   OX (top_context_->set_has_output_arguments(!func_.get_out_args().is_empty()));
 
-  if (OB_SUCC(ret)) {
-    if (func_.need_register_debug_info()) {
-      OZ (ObPLContext::notify(ctx_.exec_ctx_->get_my_session()));
-    }
-  }
   return ret;
 }
 
@@ -4603,15 +4587,6 @@ int ObPL::check_session_alive(const ObBasicSessionInfo &session) {
     LOG_WARN("session is killed", K(ret));
   }
   return ret;
-}
-
-int ObPLFunction::gen_action_from_precompiled(const ObString &name, size_t length,
-                                       const char *ptr) {
-  // LLVM JIT removed: there is no compiled object to load and no function address to
-  // bind. The interpreter executes the AST directly; persisted DLLs are neither
-  // produced nor consumed, so this load path is unsupported.
-  UNUSEDx(name, length, ptr);
-  return OB_NOT_SUPPORTED;
 }
 
 int ObPLConcurrentGuard::set_concurrent_num(ObPLFunction &routine, ObExecContext &ctx, ObPLPackageGuard &package_guard)
