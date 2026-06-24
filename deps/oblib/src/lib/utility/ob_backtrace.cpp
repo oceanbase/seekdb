@@ -29,6 +29,11 @@
 
 #include "ob_backtrace.h"
 #include "lib/utility/utility.h"
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#include <elf.h>
+#endif
 
 namespace oceanbase
 {
@@ -179,27 +184,56 @@ struct ProcMapInfo
 {
   int64_t code_start_addr_;
   int64_t code_end_addr_;
+  bool is_pie_executable_;
   bool is_inited_;
 };
 
-ProcMapInfo g_proc_map_info{.code_start_addr_ = -1, .code_end_addr_ = -1, .is_inited_ = false};
+ProcMapInfo g_proc_map_info{
+    .code_start_addr_ = -1,
+    .code_end_addr_ = -1,
+    .is_pie_executable_ = true,
+    .is_inited_ = false};
+
+#ifndef _WIN32
+bool read_is_pie_executable()
+{
+  bool is_pie = true;
+  int fd = open("/proc/self/exe", O_RDONLY);
+  if (fd >= 0) {
+    Elf64_Ehdr ehdr;
+    if (read(fd, &ehdr, sizeof(ehdr)) == static_cast<ssize_t>(sizeof(ehdr))) {
+      is_pie = (ehdr.e_type == ET_DYN);
+    }
+    close(fd);
+  }
+  return is_pie;
+}
+#endif
 
 void init_proc_map_info()
 {
   read_min_max_addr(g_proc_map_info.code_start_addr_, g_proc_map_info.code_end_addr_);
+#ifndef _WIN32
+  g_proc_map_info.is_pie_executable_ = read_is_pie_executable();
+#else
+  g_proc_map_info.is_pie_executable_ = false;
+#endif
   g_proc_map_info.is_inited_ = true;
 }
 
 int64_t get_rel_offset(int64_t addr)
 {
-  int64_t code_start_addr = -1;
-  int64_t code_end_addr = -1;
   if (OB_UNLIKELY(!g_proc_map_info.is_inited_)) {
-    read_min_max_addr(code_start_addr, code_end_addr);
-  } else {
-    code_start_addr = g_proc_map_info.code_start_addr_;
-    code_end_addr = g_proc_map_info.code_end_addr_;
+    init_proc_map_info();
   }
+  // PIE (ET_DYN) executables are loaded at a random base address, so backtrace
+  // addresses must be converted to file-relative offsets for addr2line. Non-PIE
+  // (ET_EXEC) executables use fixed link-time VMAs that addr2line accepts as-is.
+  if (!g_proc_map_info.is_pie_executable_) {
+    return addr;
+  }
+  int64_t code_start_addr = g_proc_map_info.code_start_addr_;
+  int64_t code_end_addr = g_proc_map_info.code_end_addr_;
   if (code_start_addr != -1) {
     if (OB_LIKELY(addr >= code_start_addr && addr < code_end_addr)) {
       addr -= code_start_addr;
