@@ -1816,3 +1816,9 @@ int ObHashPartInfrastructureVecImpl::rewind()
 }
 //////////////////// end ObHashPartInfrastructureVecImpl //////////////////
 
+// Single definition site for ObHashPartInfrastructureVec (declared extern template in the header).
+template class oceanbase::sql::ObHashPartInfrastructureVec<oceanbase::sql::HPInfrasBktGeneral>;
+template class oceanbase::sql::ObHashPartInfrastructureVec<oceanbase::sql::HPInfrasFixedBktByte48>;
+template class oceanbase::sql::ObHashPartInfrastructureVec<oceanbase::sql::HPInfrasFixedBktByte56>;
+template class oceanbase::sql::ObHashPartInfrastructureVec<oceanbase::sql::HPInfrasFixedBktByte64>;
+

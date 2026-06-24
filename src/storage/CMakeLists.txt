@@ -71,7 +71,6 @@ ob_set_subtarget(ob_storage blocksstable_encoding1
   blocksstable/encoding/ob_column_equal_encoder.cpp
   blocksstable/encoding/ob_const_decoder.cpp
   blocksstable/encoding/ob_const_encoder.cpp
-  blocksstable/encoding/ob_vector_decode_util.cpp
   blocksstable/encoding/ob_dict_decoder.cpp
   blocksstable/encoding/ob_dict_encoder.cpp
   blocksstable/encoding/ob_encoding_allocator.cpp
@@ -85,6 +84,13 @@ ob_set_subtarget(ob_storage blocksstable_encoding1
   blocksstable/encoding/ob_new_column_decoder.cpp
   blocksstable/encoding/ob_integer_base_diff_decoder.cpp
   blocksstable/encoding/ob_integer_base_diff_encoder.cpp
+)
+# Vector-decode explicit-instantiation sites: must be ALONE (own TU), not unity, so the include
+# guard does not swallow their definition pass and they remain the sole definers of the symbols.
+ob_set_subtarget(ob_storage ALONE
+  blocksstable/encoding/ob_vector_decode_util.cpp
+  blocksstable/encoding/ob_vector_decode_util_b.cpp
+  blocksstable/encoding/ob_vector_decode_util_c.cpp
 )
 ob_set_subtarget(ob_storage blocksstable_encoding2
   blocksstable/encoding/ob_inter_column_substring_decoder.cpp
@@ -136,14 +142,20 @@ ob_set_subtarget(ob_storage blocksstable_cs_encoding
   blocksstable/cs_encoding/ob_integer_stream_decoder.cpp
   blocksstable/cs_encoding/ob_string_stream_encoder.cpp
   blocksstable/cs_encoding/ob_string_stream_decoder.cpp
-  blocksstable/cs_encoding/ob_integer_stream_vector_decoder.cpp
-  blocksstable/cs_encoding/ob_string_stream_vector_decoder.cpp
   blocksstable/cs_encoding/ob_cs_vector_decoding_util.cpp
   blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_column_encoder.cpp
   blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_column_decoder.cpp
   blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_json.cpp
   blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_encoding_util.cpp
   blocksstable/cs_encoding/semistruct_encoding/ob_semistruct_encoding_struct.cpp
+)
+
+# These two carry the cs vector-decode template matrix (ConvertStringToVec / ObIntStreamVecDecode);
+# each is ~190s/~87s alone and dominates the cs_encoding unity. ALONE makes them their own TUs so
+# they compile in parallel instead of serializing inside one unity straggler (no source/runtime change).
+ob_set_subtarget(ob_storage ALONE
+  blocksstable/cs_encoding/ob_string_stream_vector_decoder.cpp
+  blocksstable/cs_encoding/ob_integer_stream_vector_decoder.cpp
 )
 
 ob_set_subtarget(ob_storage blocksstable_index_block

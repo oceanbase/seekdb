@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Definition site for vector-decode locator group A (B/C in ob_vector_decode_util_b/_c.cpp).
-#define OB_VEC_INST_A
+// Definition site for vector-decode locator group B (see ob_vector_decode_util.cpp).
+#define OB_VEC_INST_B
 #include "ob_vector_decode_util.h"
 namespace oceanbase
 {

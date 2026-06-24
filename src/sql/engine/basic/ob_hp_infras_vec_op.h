@@ -1123,10 +1123,12 @@ int ObHashPartInfrastructureVecImpl::alloc_hp_infras_impl_instance(const int64_t
   return ret;
 }
 
-template class ObHashPartInfrastructureVec<HPInfrasBktGeneral>;
-template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte48>;
-template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte56>;
-template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte64>;
+// Definitions live in ob_hp_infras_vec_op.cpp; declared extern here so every includer
+// (groupby/distinct/set/agg vec ops) stops re-instantiating the full bucket cross-product.
+extern template class ObHashPartInfrastructureVec<HPInfrasBktGeneral>;
+extern template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte48>;
+extern template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte56>;
+extern template class ObHashPartInfrastructureVec<HPInfrasFixedBktByte64>;
 ///////////////////////////////////////////////////////////////////////////////////
 
 
