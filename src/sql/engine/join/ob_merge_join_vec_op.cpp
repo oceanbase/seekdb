@@ -287,14 +287,13 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::match_proc(ObBatchRows &brs)
   return ret;
 }
 
-int ObMergeJoinVecOp::ObSemiAntiJoinTracker::init(int64_t tenant_id,
-                                                  int64_t max_batch_size)
+int ObMergeJoinVecOp::ObSemiAntiJoinTracker::init(int64_t max_batch_size)
 {
   int ret = OB_SUCCESS;
   match_pair_array_size_ = max_batch_size;
   match_pair_cnt_ = max_batch_size;
   int match_vec_array_size = 0;
-  intermediate_cache_.set_attr(ObMemAttr(tenant_id, "SqlMJSJCache"));
+  intermediate_cache_.set_attr(ObMemAttr("SqlMJSJCache"));
   match_vec_array_size = match_pair_array_size_;
   if (OB_ISNULL(semi_anti_match_pair_array_ = static_cast<SemiAntiMatchPair *>(
             allocator_->alloc(sizeof(SemiAntiMatchPair) * match_pair_array_size_)))) {
@@ -487,8 +486,7 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::match_proc(ObBatchRows &brs)
   return ret;
 }
 
-int ObMergeJoinVecOp::ObMergeJoinCursor::init(bool is_left,
-    const uint64_t tenant_id, ObOperator *child,
+int ObMergeJoinVecOp::ObMergeJoinCursor::init(bool is_left, ObOperator *child,
     const ExprFixedArray *all_exprs,
     const ExprFixedArray *equal_keys,
     const common::ObFixedArray<int64_t, common::ObIAllocator> *key_idx,
@@ -508,7 +506,7 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init(bool is_left,
   } else if (OB_ISNULL(allocator_ = mj_op_.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is NULL", K(ret));
-  } else if (OB_FAIL(init_row_store(tenant_id, io_event_observer))) {
+  } else if (OB_FAIL(init_row_store(io_event_observer))) {
     LOG_WARN("init temp row store failed", K(ret));
   } else if (OB_FAIL(result_hldr_.init(*all_exprs, eval_ctx_))) {
     LOG_WARN("init result holder failed!", K(ret));
@@ -600,11 +598,10 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init_col_equal_group_boundary()
   return ret;
 }
 
-int ObMergeJoinVecOp::ObMergeJoinCursor::init_row_store(const uint64_t tenant_id,
-      ObIOEventObserver &io_event_observer)
+int ObMergeJoinVecOp::ObMergeJoinCursor::init_row_store(ObIOEventObserver &io_event_observer)
 {
   int ret = OB_SUCCESS;
-  lib::ObMemAttr attr(tenant_id, ObLabel("ObMergeJoinVec"));
+  lib::ObMemAttr attr(ObLabel("ObMergeJoinVec"));
   if (OB_FAIL(row_store_.init(*all_exprs_, max_batch_size_, attr,
                             INT64_MAX /*set mem_limit later*/,
                             true, 0, common::NONE_COMPRESSOR))) {
@@ -1227,9 +1224,9 @@ int ObMergeJoinVecOp::inner_open() {
     left_match_cursor_ = is_right_drive ? &right_cursor_ : &left_cursor_;
     right_match_cursor_ = is_right_drive ? &left_cursor_ : &right_cursor_;
     allocator_ = &mem_context_->get_malloc_allocator();
-    const uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    group_pairs_.set_attr(ObMemAttr(tenant_id, "SqlMJVecGroups"));
-    output_cache_.set_attr(ObMemAttr(tenant_id, "SqlMJOutput"));
+    
+    group_pairs_.set_attr(ObMemAttr("SqlMJVecGroups"));
+    output_cache_.set_attr(ObMemAttr("SqlMJOutput"));
     const ObIArray<ObMergeJoinVecSpec::EqualConditionInfo> &equal_cond_infos =
         MY_SPEC.equal_cond_infos_;
     const int64_t left_width = left_->get_spec().width_;
@@ -1246,19 +1243,16 @@ int ObMergeJoinVecOp::inner_open() {
                                (left_width + right_width);
     const bool is_compatible_mode = false;
     if (OB_FAIL(sql_mem_processor_.init(allocator_,
-                                        tenant_id,
                                         std::max(static_cast<int64_t>(2L << 20), cache_size),
                                         MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
-    } else if (OB_FAIL(left_cursor_.init(true,
-                   tenant_id, left_, &(MY_SPEC.left_child_fetcher_all_exprs_),
+    } else if (OB_FAIL(left_cursor_.init(true, left_, &(MY_SPEC.left_child_fetcher_all_exprs_),
                    &(MY_SPEC.left_child_fetcher_equal_keys_),
                    &(MY_SPEC.left_child_fetcher_equal_keys_idx_),
                    MY_SPEC.equal_cond_infos_,
                    io_event_observer_, left_mem_bound_ratio))) {
       LOG_WARN("init left batch fetcher failed", K(ret));
-    } else if (OB_FAIL(right_cursor_.init(false,
-                   tenant_id, right_, &(MY_SPEC.right_child_fetcher_all_exprs_),
+    } else if (OB_FAIL(right_cursor_.init(false, right_, &(MY_SPEC.right_child_fetcher_all_exprs_),
                    &(MY_SPEC.right_child_fetcher_equal_keys_),
                    &(MY_SPEC.right_child_fetcher_equal_keys_idx_),
                    MY_SPEC.equal_cond_infos_,
@@ -1275,7 +1269,7 @@ int ObMergeJoinVecOp::inner_open() {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc ObSemiAntiJoinTracker failed", K(ret));
       } else if (OB_FALSE_IT(tracker_ = tracker)) {
-      } else if (OB_FAIL(tracker->init(tenant_id, MY_SPEC.max_batch_size_))) {
+      } else if (OB_FAIL(tracker->init(MY_SPEC.max_batch_size_))) {
         LOG_WARN("ObSemiAntiJoinTracker init failed", K(ret));
       }
     } else {
@@ -1303,9 +1297,9 @@ int ObMergeJoinVecOp::init_mem_context() {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context_)) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id, ObModIds::OB_SQL_MERGE_JOIN,
+    param.set_mem_attr(ObModIds::OB_SQL_MERGE_JOIN,
                       ObCtxIds::WORK_AREA)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {

@@ -15,7 +15,7 @@ create database fts_basic_dml_sequel;
 
 use fts_basic_dml_sequel;
 
-let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_basic_dml_sequel' AND tenant_id = 1, database_id, 1);
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_database WHERE database_name = 'fts_basic_dml_sequel', database_id, 1);
 
 --result_format 3
 
@@ -48,19 +48,19 @@ SHOW INDEX FROM sub_part_t1;
 
 set ob_enable_index_direct_select = 'ON';
 
-let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'sub_part_t1' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
-let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id AND table_name like '%idx1', table_name, 1);
-let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id AND table_name like '%idx2', table_name, 1);
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'sub_part_t1' AND database_id = $database_id, table_id, 1);
+let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id AND table_name like '%idx1', table_name, 1);
+let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id AND table_name like '%idx2', table_name, 1);
 
-let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
-let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_segment_18_%', column_name, 1);
-let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_count_18_%', column_name, 1);
-let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_length_18_%', column_name, 1);
+let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_segment_18_%', column_name, 1);
+let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_count_18_%', column_name, 1);
+let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_length_18_%', column_name, 1);
 
-let $__word_segment_19 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_segment_19_%', column_name, 1);
-let $__word_count_19 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_count_19_%', column_name, 1);
-let $__doc_length_19 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_length_19_%', column_name, 1);
+let $__word_segment_19 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_segment_19_%', column_name, 1);
+let $__word_count_19 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_count_19_%', column_name, 1);
+let $__doc_length_19 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_length_19_%', column_name, 1);
 
 insert into sub_part_t1(c2, c3, c4) values (1, 'aaaa aaa, aa', 'bbbb'), (2, 'cccc', 'dddd dd ddd'), (3, 'eeee', 'ffff');
 select * from sub_part_t1;
@@ -349,14 +349,14 @@ INSERT INTO dml_without_null(name, description) VALUES
 ('Product 5', 'This is the description for product 5.'),
 ('Product 6', 'This is the description for product 6.');
 
-let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'dml_without_null' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
-let $fts_index = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id AND table_name like '%fts_idx', table_name, 1);
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'dml_without_null' AND database_id = $database_id, table_id, 1);
+let $fts_index = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 15 AND data_table_id = $data_table_id AND table_name like '%fts_idx', table_name, 1);
 
-let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
 
-let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
-let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
-let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_column WHERE table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
 
 select * from dml_without_null order by id desc;
 

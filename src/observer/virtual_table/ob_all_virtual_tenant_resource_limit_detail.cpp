@@ -73,9 +73,9 @@ int ObResourceLimitDetailTable::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-bool ObResourceLimitDetailTable::is_need_process(uint64_t tenant_id)
+bool ObResourceLimitDetailTable::is_need_process()
 {
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
+  if (true || true) {
     return true;
   }
   return false;

@@ -31,7 +31,6 @@ public:
   explicit ObCreateTablegroupStmt(common::ObIAllocator *name_pool);
   virtual ~ObCreateTablegroupStmt();
 
-  virtual void set_tenant_id(const uint64_t tenant_id) override;
 
   void set_if_not_exists(bool if_not_exists);
   int set_tablegroup_name(const common::ObString &tablegroup_name);

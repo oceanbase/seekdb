@@ -22,8 +22,7 @@ namespace datadict
 {
 
 ObDataDictIterator::ObDataDictIterator()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    palf_buf_(NULL),
+  : palf_buf_(NULL),
     palf_buf_len_(0),
     palf_pos_(0),
     dict_buf_(NULL),
@@ -32,15 +31,14 @@ ObDataDictIterator::ObDataDictIterator()
 {
 }
 
-int ObDataDictIterator::init(const uint64_t tenant_id)
+int ObDataDictIterator::init()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(dict_buf_ = static_cast<char*>(ob_dict_malloc(DEFAULT_DICT_BUF_SIZE_FOR_ITERATOR, tenant_id)))) {
+  if (OB_ISNULL(dict_buf_ = static_cast<char*>(ob_dict_malloc(DEFAULT_DICT_BUF_SIZE_FOR_ITERATOR)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    DDLOG(ERROR, "dict_buf_ is null", KR(ret), K(tenant_id));
+    DDLOG(ERROR, "dict_buf_ is null", KR(ret));
   } else {
-    tenant_id_ = tenant_id;
     dict_buf_len_ = DEFAULT_DICT_BUF_SIZE_FOR_ITERATOR;
   }
 
@@ -250,7 +248,7 @@ int ObDataDictIterator::prepare_dict_buf_(const int64_t required_size)
 
     ob_dict_free(dict_buf_);
 
-    if (OB_ISNULL(dict_buf_ = static_cast<char*>(ob_dict_malloc(alloc_size, tenant_id_)))) {
+    if (OB_ISNULL(dict_buf_ = static_cast<char*>(ob_dict_malloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DDLOG(WARN, "malloc data_dict_buf failed", KR(ret),
           K(alloc_size), K(required_size), K(block_cnt), K(block_size));

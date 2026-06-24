@@ -33,7 +33,7 @@ class ObTableLoadRowArray
 public:
   ObTableLoadRowArray() : allocator_handle_()
   {
-    array_.set_attr(ObMemAttr(MTL_ID(), "TDL_RowArray"));
+    array_.set_attr(ObMemAttr("TDL_RowArray"));
   }
   ~ObTableLoadRowArray() {}
 

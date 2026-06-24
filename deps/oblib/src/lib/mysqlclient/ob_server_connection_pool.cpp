@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX LIB_MYSQLC
 #include "lib/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/mysqlclient/ob_server_connection_pool.h"
-#include "lib/mysqlclient/ob_dblink_error_trans.h"
 
 namespace oceanbase
 {
@@ -126,10 +125,6 @@ int ObServerConnectionPool::release(common::sqlclient::ObISQLConnection *conn, c
     connection->set_busy(false);
     if (succ) {
       connection->succ_times_++;
-      if (!get_dblink_reuse_connection_cfg()) {
-        connection->close();
-        LOG_TRACE("close dblink connection when release it", K(ret), K(succ), KP(conn));
-      }
     } else {
       LOG_TRACE("release oci connection, close it caused by err", K(succ));
       connection->error_times_++;
@@ -192,7 +187,7 @@ void ObServerConnectionPool::reset()
 void ObServerConnectionPool::reset_idle_conn_to_sys_tenant()
 {
   ObSpinLockGuard lock(pool_lock_);
-  auto fn = [](ObMySQLConnection &conn){ if (!conn.is_closed() && !conn.is_busy()) conn.switch_tenant(OB_SYS_TENANT_ID); };
+  auto fn = [](ObMySQLConnection &conn){ if (!conn.is_closed() && !conn.is_busy()) conn.switch_tenant(); };
   connection_pool_.for_each(fn);
 }
 

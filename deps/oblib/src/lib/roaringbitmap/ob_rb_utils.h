@@ -81,7 +81,7 @@ struct ObRbAggCell
   // max memory cost 64KB = 8 * 8K
   static const uint64_t MAX_CACHED_COUNT = 8000;
 
-  ObRbAggCell(ObRoaringBitmap *rb, const uint64_t tenant_id);
+  ObRbAggCell(ObRoaringBitmap *rb);
 
   int destroy();
   int reuse() { return destroy(); }
@@ -106,10 +106,9 @@ struct ObRbAggCell
 class ObRbAggAllocator
 {
 public:
-  ObRbAggAllocator(const uint64_t tenant_id) :
+  ObRbAggAllocator() :
     is_inited_(false),
-    tenant_id_(tenant_id),
-    rb_allocator_("RbAggAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id)
+    rb_allocator_("RbAggAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
 
   ~ObRbAggAllocator()
@@ -144,7 +143,7 @@ private:
 
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
+  
   hash::ObHashSet<uint64_t, hash::NoPthreadDefendMode> alloced_rb_;
   common::ObArenaAllocator rb_allocator_;
 

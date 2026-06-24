@@ -63,17 +63,16 @@ private:
 
 
 public:
-  ObAllVirtualTxData() : addr_(), tenant_id_(0), tx_id_(0) {}
+  ObAllVirtualTxData() : addr_(), tx_id_(0) {}
   ~ObAllVirtualTxData() {}
 
-  TO_STRING_KV(K(MTL_ID()), K_(tenant_id), K_(tx_id));
+  TO_STRING_KV(K_(tx_id));
 
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset()
   {
     addr_.reset();
-    tenant_id_ = 0;
     tx_id_.reset();
     memset(ip_buf_, 0, sizeof(ip_buf_));
   }
@@ -90,7 +89,6 @@ private:
 
 private:
   common::ObAddr addr_;
-  uint64_t tenant_id_;
   transaction::ObTransID tx_id_;
   char ip_buf_[common::OB_IP_STR_BUFF];
 

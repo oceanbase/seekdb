@@ -90,8 +90,8 @@ int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCt
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_BUFFER_STRATEGY);
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_BUFFER_STRATEGY);
   ObDatum *strategy_datum = NULL;
   ObString strategy_str;
   ObDatum *val_datum = NULL;
@@ -380,8 +380,8 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   double distance = 0.0;
   ObGeoBufferStrategy buf_strat;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_BUFFER);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_BUFFER);
   bool is_null_result = false;
   bool is_empty = false;
   uint32_t srid = 0;
@@ -406,7 +406,7 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
 
   ObString geo_str = geo_datum->get_string();
   if (!is_null_result && OB_SUCC(ret)) {
-    ObGeoBoostAllocGuard guard(tenant_id);
+    ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
     if (!is_valid_distance(distance)) {
       ret = OB_INVALID_ARGUMENT;
@@ -754,8 +754,8 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   double distance = 0.0;
   ObGeoBufferStrategy buf_strat;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_BUFFER);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_BUFFER);
   bool is_null_result = false;
   bool is_transform_method = false;
   bool is_empty = false;
@@ -772,7 +772,7 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, dist_datum))) {
     LOG_WARN("eval distance arg failed", K(ret));
   } 
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret)) {
   } else if (geo_datum->is_null() || geo_datum->is_null() || is_null_result) {

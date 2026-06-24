@@ -60,7 +60,7 @@ enum ObMultiModeType
 class ObMultiModeExprHelper final
 {
 public:
-  static uint64_t get_tenant_id(ObSQLSessionInfo *session); // json and xml get tenant_id public function
+ // json and xml get tenant public function
 };
 
 
@@ -68,8 +68,7 @@ public:
 class MultimodeAlloctor : public ObIAllocator
 {
 public:
-  MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int &ret);
-  MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int64_t tenant_id, int &ret, const char *func_name = "");
+  MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int &ret, const char *func_name = "");
   ~MultimodeAlloctor();
 
 public:

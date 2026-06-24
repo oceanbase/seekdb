@@ -139,12 +139,12 @@ int ObExprSTCrosses::eval_st_crosses(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_CROSSES);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_CROSSES);
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1, geo2, is_null_res, srs))) {
     LOG_WARN("fail to process input geometry", K(ret));
   } 
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret) || is_null_res) {
     // do nothing

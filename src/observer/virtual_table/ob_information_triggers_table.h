@@ -60,10 +60,9 @@ public:
 
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 
 private:
-  uint64_t tenant_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaTriggersTable);
 };

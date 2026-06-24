@@ -42,7 +42,7 @@ int ObRoutineSqlService::create_package(ObPackageInfo &package_info,
       LOG_WARN("add package failed", K(ret));
     } else {
       ObSchemaOperation opt;
-      opt.tenant_id_ = package_info.get_tenant_id();
+      
       opt.database_id_ = package_info.get_database_id();
       opt.table_id_ = package_info.get_package_id();
       opt.op_type_ = is_replace ? OB_DDL_ALTER_PACKAGE : OB_DDL_CREATE_PACKAGE;
@@ -57,24 +57,22 @@ int ObRoutineSqlService::create_package(ObPackageInfo &package_info,
   return ret;
 }
 
-int ObRoutineSqlService::drop_package(const uint64_t tenant_id,
-                                      const uint64_t database_id,
+int ObRoutineSqlService::drop_package(const uint64_t database_id,
                                       const uint64_t package_id,
                                       const int64_t new_schema_version,
                                       ObISQLClient &sql_client,
                                       const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)
-      || OB_UNLIKELY(OB_INVALID_ID == database_id)
+  if (OB_UNLIKELY(OB_INVALID_ID == database_id)
       || OB_UNLIKELY(OB_INVALID_ID == package_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid package info in drop procedure", KR(ret), K(tenant_id), K(database_id), K(package_id));
-  } else if (OB_FAIL(del_package(sql_client, tenant_id, package_id, new_schema_version))) {
+    LOG_WARN("invalid package info in drop procedure", KR(ret), K(database_id), K(package_id));
+  } else if (OB_FAIL(del_package(sql_client, package_id, new_schema_version))) {
     LOG_WARN("delete package failed", K(ret));
   } else {
     ObSchemaOperation opt;
-    opt.tenant_id_ = tenant_id;
+    
     opt.database_id_ = database_id;
     opt.table_id_ = package_id;
     opt.op_type_ = OB_DDL_DROP_PACKAGE;
@@ -102,7 +100,7 @@ int ObRoutineSqlService::alter_package(const ObPackageInfo &package_info,
     LOG_WARN("add package failed", K(ret));
   } else {
     ObSchemaOperation opt;
-    opt.tenant_id_ = package_info.get_tenant_id();
+    
     opt.database_id_ = package_info.get_database_id();
     opt.table_id_ = package_info.get_package_id();
     opt.op_type_ = OB_DDL_ALTER_PACKAGE;
@@ -122,13 +120,13 @@ int ObRoutineSqlService::add_package(common::ObISQLClient &sql_client,
                                      bool only_history)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = package_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(gen_package_dml(exec_tenant_id, package_info, dml))) {
+  if (OB_FAIL(gen_package_dml(package_info, dml))) {
     LOG_WARN("gen table dml failed", K(ret));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
       if (is_replace) {
@@ -178,7 +176,7 @@ int ObRoutineSqlService::create_routine(ObRoutineInfo &routine_info,
       LOG_WARN("add routine params failed", K(ret));
     } else {
       ObSchemaOperation opt;
-      opt.tenant_id_ = routine_info.get_tenant_id();
+      
       opt.database_id_ = routine_info.get_database_id();
       opt.table_id_ = routine_info.get_routine_id();
       opt.op_type_ = OB_DDL_CREATE_ROUTINE;
@@ -202,7 +200,7 @@ int ObRoutineSqlService::update_routine(ObRoutineInfo &routine_info,
   OZ (add_routine(*sql_client, routine_info, true));
   if (OB_SUCC(ret)) {
     ObSchemaOperation opt;
-    opt.tenant_id_ = routine_info.get_tenant_id();
+    
     opt.database_id_ = routine_info.get_database_id();
     opt.table_id_ = routine_info.get_routine_id();
     opt.op_type_ = OB_DDL_REPLACE_ROUTINE;
@@ -239,7 +237,7 @@ int ObRoutineSqlService::replace_routine(ObRoutineInfo &routine_info,
       LOG_WARN("add routine params failed", K(routine_info), K(ret));
     } else {
       ObSchemaOperation opt;
-      opt.tenant_id_ = routine_info.get_tenant_id();
+      
       opt.database_id_ = routine_info.get_database_id();
       opt.table_id_ = routine_info.get_routine_id();
       opt.op_type_ = OB_DDL_REPLACE_ROUTINE;
@@ -260,22 +258,21 @@ int ObRoutineSqlService::drop_routine(const ObRoutineInfo &routine_info,
                                       const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = routine_info.get_tenant_id();
+  
   uint64_t db_id = routine_info.get_database_id();
   uint64_t routine_id = routine_info.get_routine_id();
   const ObString& routine_name = routine_info.get_routine_name();
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)
-      || OB_UNLIKELY(OB_INVALID_ID == db_id)
+  if (OB_UNLIKELY(OB_INVALID_ID == db_id)
       || OB_UNLIKELY(OB_INVALID_ID == routine_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid routine info in drop procedure", K(tenant_id), K(db_id), K(routine_id));
+    LOG_WARN("invalid routine info in drop procedure", K(db_id), K(routine_id));
   } else if (OB_FAIL(del_routine(sql_client, routine_info, new_schema_version))) {
     LOG_WARN("delete from __all_routine failed", K(ret));
   } else if (routine_info.get_routine_params().count() > 0 && OB_FAIL(del_routine_params(sql_client, routine_info, new_schema_version))) {
     LOG_WARN("delete from __all_routine_param failed", K(ret));
   } else {
     ObSchemaOperation opt;
-    opt.tenant_id_ = tenant_id;
+    
     opt.database_id_ = db_id;
     opt.table_id_ = routine_id;
     opt.op_type_ = OB_DDL_DROP_ROUTINE;
@@ -290,7 +287,6 @@ int ObRoutineSqlService::drop_routine(const ObRoutineInfo &routine_info,
 }
 
 int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
-                                     const uint64_t tenant_id,
                                      const uint64_t package_id,
                                      int64_t new_schema_version)
 {
@@ -298,13 +294,13 @@ int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
   int64_t affected_rows = 0;
   ObDMLSqlSplicer dml;
   ObSqlString sql;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
 
   if (OB_FAIL(dml.add_pk_column("package_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, package_id)))) {
+                                                 package_id)))) {
     LOG_WARN("add pk column to __all_package failed", K(ret));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(OB_ALL_PACKAGE_TNAME, dml, affected_rows))) {
       LOG_WARN("execute delete failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
@@ -317,10 +313,10 @@ int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(package_id, schema_version, is_deleted)"
         " VALUES(%lu,%ld,%d)",
         OB_ALL_PACKAGE_HISTORY_TNAME,
-        ObSchemaUtils::get_extract_schema_id(exec_tenant_id, package_id),
+        ObSchemaUtils::get_extract_schema_id(package_id),
         new_schema_version, 1))) {
       LOG_WARN("assign insert into all package history fail", K(package_id), K(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql fail", K(sql));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
@@ -335,16 +331,16 @@ int ObRoutineSqlService::del_routine(ObISQLClient &sql_client,
                                      int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = routine_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   const uint64_t routine_id = routine_info.get_routine_id();
   ObDMLSqlSplicer dml;
   if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, routine_id)))) {
+                                                 routine_id)))) {
     LOG_WARN("add pk column to __all_routine failed", K(ret));
   } else {
     int64_t affected_rows = 0;
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(OB_ALL_ROUTINE_TNAME, dml, affected_rows))) {
       LOG_WARN("execute delete failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
@@ -359,10 +355,10 @@ int ObRoutineSqlService::del_routine(ObISQLClient &sql_client,
     // insert into __all_routine_history
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(routine_id, schema_version, is_deleted) VALUES(%lu,%lu,%d)",
         OB_ALL_ROUTINE_HISTORY_TNAME,
-        ObSchemaUtils::get_extract_schema_id(exec_tenant_id, routine_id),
+        ObSchemaUtils::get_extract_schema_id(routine_id),
         new_schema_version, 1))) {
       LOG_WARN("assign insert into __all_routine_history fail", K(routine_info), K(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql fail", K(sql));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
@@ -380,16 +376,16 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
                                             int64_t new_schema_version)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = routine_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   const uint64_t routine_id = routine_info.get_routine_id();
   ObDMLSqlSplicer dml;
   if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, routine_id)))) {
+                                                 routine_id)))) {
     LOG_WARN("add pk column to __all_routine_param failed", K(ret));
   } else {
     int64_t affected_rows = 0;
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(OB_ALL_ROUTINE_PARAM_TNAME, dml, affected_rows))) {
       LOG_WARN("execute delete failed", K(ret));
     } else if (affected_rows < routine_info.get_routine_params().count()) {
@@ -417,7 +413,7 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("routine param is null");
       } else if (OB_FAIL(sql.append_fmt("%s(%lu, %lu, %lu, %d)", (0 == i) ? "" : ",",
-          ObSchemaUtils::get_extract_schema_id(exec_tenant_id, routine_param->get_routine_id()),
+          ObSchemaUtils::get_extract_schema_id(routine_param->get_routine_id()),
           routine_param->get_sequence(),
           new_schema_version, 1))) {
         LOG_WARN("append_fmt failed", K(ret));
@@ -425,7 +421,7 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (routine_params.count() != affected_rows) {
         LOG_WARN("affected_rows not same with routine_param_count", K(affected_rows),
@@ -438,21 +434,20 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
 }
 
 int ObRoutineSqlService::gen_package_dml(
-    const uint64_t exec_tenant_id,
     const ObPackageInfo &package_info,
     ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("package_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, package_info.get_package_id())))
+                                                 package_info.get_package_id())))
       || OB_FAIL(dml.add_column("database_id", ObSchemaUtils::get_extract_schema_id(
-                                               exec_tenant_id, package_info.get_database_id())))
+                                               package_info.get_database_id())))
       || OB_FAIL(dml.add_column("package_name", ObHexEscapeSqlStr(package_info.get_package_name())))
       || OB_FAIL(dml.add_column("schema_version", package_info.get_schema_version()))
       || OB_FAIL(dml.add_column("type", package_info.get_type()))
       || OB_FAIL(dml.add_column("flag", package_info.get_flag()))
       || OB_FAIL(dml.add_column("owner_id", ObSchemaUtils::get_extract_schema_id(
-                                            exec_tenant_id, package_info.get_owner_id())))
+                                            package_info.get_owner_id())))
       || OB_FAIL(dml.add_column("comp_flag", package_info.get_comp_flag()))
       || OB_FAIL(dml.add_column("exec_env", ObHexEscapeSqlStr(package_info.get_exec_env())))
       || OB_FAIL(dml.add_column("source", ObHexEscapeSqlStr(package_info.get_source())))
@@ -466,18 +461,17 @@ int ObRoutineSqlService::gen_package_dml(
 }
 
 int ObRoutineSqlService::gen_routine_dml(
-    const uint64_t exec_tenant_id,
     const ObRoutineInfo &routine_info,
     ObDMLSqlSplicer &dml,
     bool is_replace)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, routine_info.get_routine_id())))
+                                                 routine_info.get_routine_id())))
       || OB_FAIL(dml.add_pk_column("package_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, routine_info.get_package_id())))
+                                                 routine_info.get_package_id())))
       || OB_FAIL(dml.add_column("database_id", ObSchemaUtils::get_extract_schema_id(
-                                               exec_tenant_id, routine_info.get_database_id())))
+                                               routine_info.get_database_id())))
       || OB_FAIL(dml.add_column("routine_name", ObHexEscapeSqlStr(routine_info.get_routine_name())))
       || OB_FAIL(dml.add_column("overload", routine_info.get_overload()))
       || OB_FAIL(dml.add_column("subprogram_id", routine_info.get_subprogram_id()))
@@ -485,7 +479,7 @@ int ObRoutineSqlService::gen_routine_dml(
       || OB_FAIL(dml.add_column("routine_type", routine_info.get_routine_type()))
       || OB_FAIL(dml.add_column("flag", routine_info.get_flag()))
       || OB_FAIL(dml.add_column("owner_id", ObSchemaUtils::get_extract_schema_id(
-                                            exec_tenant_id, routine_info.get_owner_id())))
+                                            routine_info.get_owner_id())))
       || OB_FAIL(dml.add_column("priv_user", ObHexEscapeSqlStr(routine_info.get_priv_user())))
       || OB_FAIL(dml.add_column("comp_flag", routine_info.get_comp_flag()))
       || OB_FAIL(dml.add_column("exec_env", ObHexEscapeSqlStr(routine_info.get_exec_env())))
@@ -495,13 +489,13 @@ int ObRoutineSqlService::gen_routine_dml(
     LOG_WARN("add column failed", K(ret));
   }
   if (OB_FAIL(ret)) {
-  } else if (is_sys_tenant(pl::get_tenant_id_by_object_id(routine_info.get_type_id()))) {
+  } else if (true) {
     if (OB_FAIL(dml.add_column("type_id", routine_info.get_type_id()))) {
       LOG_WARN("add column failed", K(ret));
     }
   } else {
     if (OB_FAIL(dml.add_column("type_id", ObSchemaUtils::get_extract_schema_id(
-                               exec_tenant_id, routine_info.get_type_id())))) {
+                               routine_info.get_type_id())))) {
       LOG_WARN("add column failed", K(ret));
     }
   }
@@ -514,7 +508,6 @@ int ObRoutineSqlService::gen_routine_dml(
 }
 
 int ObRoutineSqlService::gen_routine_param_dml(
-    const uint64_t exec_tenant_id,
     const ObRoutineParam &routine_param,
     ObDMLSqlSplicer &dml)
 {
@@ -538,7 +531,7 @@ int ObRoutineSqlService::gen_routine_param_dml(
                                              routine_param.get_param_type().get_collation_type());
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
-                                                 exec_tenant_id, routine_param.get_routine_id())))
+                                                 routine_param.get_routine_id())))
       || OB_FAIL(dml.add_pk_column("sequence", routine_param.get_sequence()))
       || OB_FAIL(dml.add_column("subprogram_id", routine_param.get_subprogram_id()))
       || OB_FAIL(dml.add_column("param_position", routine_param.get_param_position()))
@@ -563,7 +556,7 @@ int ObRoutineSqlService::gen_routine_param_dml(
     }
   } else {
     if (OB_FAIL(dml.add_column("type_owner", ObSchemaUtils::get_extract_schema_id(
-                                             exec_tenant_id, routine_param.get_type_owner())))) {
+                                             routine_param.get_type_owner())))) {
       LOG_WARN("add column failed", K(ret));
     }
   }
@@ -584,16 +577,16 @@ int ObRoutineSqlService::add_routine(ObISQLClient &sql_client,
                                      bool only_history)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = routine_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(gen_routine_dml(exec_tenant_id, routine_info, dml, is_replace))) {
+  if (OB_FAIL(gen_routine_dml(routine_info, dml, is_replace))) {
     LOG_WARN("gen table dml failed", K(ret));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       if (is_replace) {
         if (OB_FAIL(exec.exec_update(OB_ALL_ROUTINE_TNAME, dml, affected_rows))) {
           LOG_WARN("execute update failed", K(ret));
@@ -628,8 +621,8 @@ int ObRoutineSqlService::add_routine_params(ObISQLClient &sql_client,
                                             bool only_history)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = routine_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   ObIArray<ObRoutineParam *> &routine_params = routine_info.get_routine_params();
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_params.count(); ++i) {
@@ -646,13 +639,13 @@ int ObRoutineSqlService::add_routine_params(ObISQLClient &sql_client,
     }
     if (OB_FAIL(ret)) {
       //do nothing
-    } else if (OB_FAIL(gen_routine_param_dml(exec_tenant_id, *routine_param, dml))) {
+    } else if (OB_FAIL(gen_routine_param_dml(*routine_param, dml))) {
       LOG_WARN("gen routine param dml failed", K(ret));
     } else {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (!only_history) {
-        ObDMLExecHelper exec(sql_client, exec_tenant_id);
+        ObDMLExecHelper exec(sql_client);
         if (OB_FAIL(exec.exec_insert(OB_ALL_ROUTINE_PARAM_TNAME, dml, affected_rows))) {
           LOG_WARN("execute insert failed", K(ret));
         } else if (!is_single_row(affected_rows)) {

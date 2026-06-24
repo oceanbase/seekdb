@@ -42,7 +42,6 @@ OB_SERIALIZE_MEMBER(ObGAISPushAutoIncValReq, autoinc_key_, base_value_, max_valu
 OB_DEF_SERIALIZE(ObGAISBroadcastAutoIncCacheReq)
 {
   int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE(tenant_id_);
   OB_UNIS_ENCODE(buf_size_);
   if (OB_SUCC(ret)) {
     if (pos + buf_size_ > buf_len) {
@@ -58,7 +57,6 @@ OB_DEF_SERIALIZE(ObGAISBroadcastAutoIncCacheReq)
 OB_DEF_DESERIALIZE(ObGAISBroadcastAutoIncCacheReq)
 {
   int ret = OB_SUCCESS;
-  OB_UNIS_DECODE(tenant_id_);
   OB_UNIS_DECODE(buf_size_);
   if (OB_SUCC(ret)) {
     buf_ = buf + pos;
@@ -70,7 +68,6 @@ OB_DEF_DESERIALIZE(ObGAISBroadcastAutoIncCacheReq)
 OB_DEF_SERIALIZE_SIZE(ObGAISBroadcastAutoIncCacheReq)
 {
   int64_t len = 0;
-  OB_UNIS_ADD_LEN(tenant_id_);
   OB_UNIS_ADD_LEN(buf_size_);
   len += buf_size_;
   return len;
@@ -88,7 +85,7 @@ int ObGAISNextAutoIncValReq::init(const AutoincKey &autoinc_key,
                                   const int64_t &autoinc_version)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(autoinc_key.tenant_id_) || max_value <= 0 ||
+  if (!true || max_value <= 0 ||
         cache_size <= 0 || offset < 1 || increment < 1 || base_value > max_value ||
         desired_cnt <= 0 || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -111,7 +108,7 @@ int ObGAISNextAutoIncValReq::init(const AutoincKey &autoinc_key,
 int ObGAISAutoIncKeyArg::init(const AutoincKey &autoinc_key, const common::ObAddr &sender, const int64_t autoinc_version)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(autoinc_key.tenant_id_) || !sender.is_valid()) {
+  if (!true || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(autoinc_key), K(sender));
   } else {
@@ -130,7 +127,7 @@ int ObGAISPushAutoIncValReq::init(const AutoincKey &autoinc_key,
                                   const int64_t cache_size)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(autoinc_key.tenant_id_) ||
+  if (!true ||
        max_value <= 0 || base_value > max_value || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(autoinc_key), K(base_value), K(max_value), K(sender));
@@ -149,7 +146,7 @@ int ObGAISNextSequenceValReq::init(const schema::ObSequenceSchema &schema,
                                    const common::ObAddr &sender)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(schema.get_tenant_id()) || !sender.is_valid()) {
+  if (!true || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(schema), K(sender));
   } else if (OB_FAIL(schema_.assign(schema))){

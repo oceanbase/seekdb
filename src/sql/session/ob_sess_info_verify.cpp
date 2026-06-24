@@ -85,8 +85,7 @@ int ObSessInfoVerify::sync_sess_info_veri(sql::ObSQLSessionInfo &sess,
       }
     }
     LOG_DEBUG("success to get sess info verification requied by proxy",
-              K(sess_info_verification), K(sess.get_server_sid()),
-              K(sess.get_proxy_sessid()));
+              K(sess_info_verification), K(sess.get_server_sid()));
   }
 
   return ret;
@@ -102,7 +101,7 @@ int ObSessInfoVerify::verify_session_info(sql::ObSQLSessionInfo &sess,
   obcall::ObSessionInfoVeriRes result;
   // current session verify info
   ObString current_verify_info;
-  if (GET_MIN_CLUSTER_VERSION() == CLUSTER_CURRENT_VERSION) {
+  { // version gate folded: GET_MIN_CLUSTER_VERSION() == CLUSTER_CURRENT_VERSION always holds
     if (OB_FAIL(ObSessInfoVerify::sql_port_to_rpc_port(sess,
                       sess_info_verification))) {
       LOG_WARN("fail to rpc port", K(ret));
@@ -122,8 +121,9 @@ int ObSessInfoVerify::verify_session_info(sql::ObSQLSessionInfo &sess,
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(GCTX.session_mgr_->get_session(arg.get_sess_id(), session))) {
       } else {
-        if (arg.get_proxy_sess_id() == session->get_proxy_sessid()
-            && GET_MIN_CLUSTER_VERSION() == CLUSTER_CURRENT_VERSION
+        // obproxy support removed: session proxy_sessid is always 0;
+        // version gate folded (GET_MIN_CLUSTER_VERSION() == CLUSTER_CURRENT_VERSION always holds)
+        if (arg.get_proxy_sess_id() == 0
             && session->is_has_query_executed() && session->is_latest_sess_info()) {
           if (OB_FAIL(ObSessInfoVerify::fetch_verify_session_info(*session, str_result, result.allocator_))) {
           } else {
@@ -151,8 +151,7 @@ int ObSessInfoVerify::verify_session_info(sql::ObSQLSessionInfo &sess,
       ObString value_buffer;
       char *ptr = nullptr;
       common::ObArenaAllocator allocator(common::ObModIds::OB_SQL_SESSION,
-                                                    OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                                    sess.get_effective_tenant_id());
+                                                    OB_MALLOC_NORMAL_BLOCK_SIZE);
       if (OB_ISNULL(ptr = static_cast<char *> (allocator.alloc(result.verify_info_buf_.length
 ())))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -173,19 +172,15 @@ int ObSessInfoVerify::verify_session_info(sql::ObSQLSessionInfo &sess,
         } else if (OB_FAIL(ObSessInfoVerify::compare_verify_session_info(sess,
                             current_verify_info, value_buffer))) {
           LOG_ERROR("session info self-verification failed", K(ret), K(sess.get_server_sid()),
-                  K(sess.get_proxy_sessid()), K(sess_info_verification));
+                  K(sess_info_verification));
         } else {
           LOG_DEBUG("session info self-verification success", K(ret));
         }
       } else {
         LOG_DEBUG("session info no need self-verification", K(ret));
       }
-      LOG_DEBUG("verify end", K(sess.get_server_sid()),
-          K(sess.get_proxy_sessid()), K(sess_info_verification));
+      LOG_DEBUG("verify end", K(sess.get_server_sid()), K(sess_info_verification));
     }
-  } else {
-    LOG_TRACE("verify version not consistent, no need self-verification", K(sess.get_server_sid()),
-          K(sess.get_proxy_sessid()), K(GET_MIN_CLUSTER_VERSION()), K(CLUSTER_CURRENT_VERSION));
   }
   
   return ret;
@@ -244,7 +239,6 @@ int ObSessInfoVerify::compare_verify_session_info(sql::ObSQLSessionInfo &sess,
                                   buf2 + pos2, info_len2))) {
         LOG_ERROR("fail to compare session info", K(ret),
                     K(sess.get_server_sid()),
-                  K(sess.get_proxy_sessid()),
                   "info_type", info_type1);
         int temp_ret = ret;
         if (OB_FAIL(encoder->display_sess_info(sess, buf1 + pos1, info_len1,

@@ -35,16 +35,12 @@ class ObOptSystemStat : public common::ObIKVCacheValue
 public:
   struct Key : public common::ObIKVCacheKey
   {
-    Key() : tenant_id_(0)
+    Key()
     {
     }
-    explicit Key(uint64_t tenant_id) :
-      tenant_id_(tenant_id)
+    void init()
     {
-    }
-    void init(uint64_t tenant_id)
-    {
-      tenant_id_ = tenant_id;
+      
     }
     uint64_t hash() const
     {
@@ -54,12 +50,9 @@ public:
     bool operator==(const ObIKVCacheKey &other) const
     {
       const Key &other_key = reinterpret_cast<const Key&>(other);
-      return tenant_id_ == other_key.tenant_id_;
+      return true;
     }
-    uint64_t get_tenant_id() const
-    {
-      return tenant_id_;
-    }
+    
 
     int64_t size() const
     {
@@ -84,17 +77,17 @@ public:
 
     bool is_valid() const
     {
-      return tenant_id_ != 0;
+      return true;
     }
 
     void reset()
     {
-      tenant_id_ = 0;
+      
     }
 
-    TO_STRING_KV(K_(tenant_id));
+    TO_STRING_KV("key", "system_stat");
 
-    uint64_t tenant_id_;
+    
   };
   ObOptSystemStat()
     : last_analyzed_(0),
@@ -211,7 +204,7 @@ public:
   inline int64_t get_disk_rnd_read_speed() const { return disk_rnd_read_speed_; }
   static OptSystemIoBenchmark& get_instance();
 
-  int run_benchmark(ObIAllocator &allocator, const uint64_t tenant_id);
+  int run_benchmark(ObIAllocator &allocator);
   
 private:
   int64_t disk_seq_read_speed_;

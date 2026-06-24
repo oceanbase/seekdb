@@ -22,7 +22,7 @@
 #include "lib/string/ob_fixed_length_string.h"
 #include "share/object_storage/ob_device_manifest.h"
 #include "share/object_storage/ob_object_storage_struct.h"
-#include "share/backup/ob_backup_struct.h"
+#include "share/io/ob_backup_storage_info.h"
 
 namespace oceanbase
 {

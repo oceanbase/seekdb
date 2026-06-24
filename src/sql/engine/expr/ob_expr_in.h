@@ -144,7 +144,6 @@ public:
   ~ObColumnHashSet() {}
 
   int init(uint64_t capacity,
-           int64_t tenant_id,
            common::ObCollationType cs_type = CS_TYPE_INVALID,
            bool cmp_end_space = false)
   {
@@ -155,7 +154,7 @@ public:
       ret = OB_INIT_TWICE;
       COMMON_LOG(WARN, "init twice");
     } else {
-      alloc_.set_tenant_id(tenant_id);
+      
       alloc_.set_label("ObColumnHashSet");
       if (OB_FAIL(alloc_mem(capacity))) {
         COMMON_LOG(WARN, "failed to alloc when init");
@@ -328,7 +327,7 @@ const static int HASH_CMP_UNKNOWN = 1;
   }
   int create(int param_num)
   {
-    ObMemAttr attr(MTL_ID(), common::ObModIds::OB_HASH_BUCKET);
+    ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     return map_.create(param_num * 2, attr);
   }
   int set_refactored(const Row<T> &row);

@@ -1842,7 +1842,6 @@
   ],
   "separator_param_expr":null,
   "udf_meta": {
-    "tenant_id":-1,
     "name":"",
     "ret":0,
     "dl":"",
@@ -1924,7 +1923,6 @@
   ],
   "separator_param_expr":null,
   "udf_meta": {
-    "tenant_id":-1,
     "name":"",
     "ret":0,
     "dl":"",

@@ -221,7 +221,7 @@ int ObInnerTableSchemaDumper::get_table_info_(const ObIArray<schema::ObTableSche
     if (OB_ISNULL(table = schema_ptrs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
-    } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(OB_INVALID_TENANT_ID, *table,
+    } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
             false, dml))) {
       LOG_WARN("failed to gen_table_dml", KR(ret));
     } else if (is_core_table(table->get_table_id())) {
@@ -271,7 +271,7 @@ int ObInnerTableSchemaDumper::get_column_info_(const ObIArray<schema::ObTableSch
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("pointer is null", KR(ret), KP(iter));
-        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(OB_INVALID_TENANT_ID, **iter,
+        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
                 lib::Worker::CompatMode::MYSQL, dml))) {
           LOG_WARN("failed to gen_table_dml", KR(ret));
         } else if (is_core_table(table->get_table_id()) ) {
@@ -338,7 +338,6 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
       OZ (dml.add_column("table_name", ""));
       OZ (dml.add_column("operation_type", op_type));
       OZ (dml.add_column("ddl_stmt_str", ""));
-      OZ (dml.add_function_call("exec_tenant_id", "effective_tenant_id()"));
       const int64_t line_end = __LINE__;
       if (OB_SUCC(ret) && table->get_table_id() == OB_ALL_DDL_OPERATION_TID && 
           table->get_column_count() != line_end - line_begin - 1) {
@@ -372,7 +371,7 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else if (!is_core_table(table->get_table_id())) {
-    } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(OB_INVALID_TENANT_ID, *table,
+    } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
             false, dml))) {
       LOG_WARN("failed to gen_table_dml", KR(ret));
     } else if (OB_FAIL(table_constructor.add_lines(table->get_table_id(), dml))) {
@@ -384,7 +383,7 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
         if (OB_ISNULL(iter) || OB_ISNULL(*iter)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("pointer is null", KR(ret), KP(iter));
-        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(OB_INVALID_TENANT_ID, **iter,
+        } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
                 lib::Worker::CompatMode::MYSQL, dml))) {
           LOG_WARN("failed to gen_table_dml", KR(ret));
         } else if (OB_FAIL(column_constructor.add_lines(table->get_table_id(), dml))) {

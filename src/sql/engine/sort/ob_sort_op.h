@@ -130,12 +130,10 @@ private:
   int process_sort_batch();
   int scan_all_then_sort();
   int scan_all_then_sort_batch();
-  int init_prefix_sort(int64_t tenant_id,
-                       int64_t row_count,
+  int init_prefix_sort(int64_t row_count,
                        bool is_batch,
                        int64_t topn_cnt = INT64_MAX);
-  int init_sort(int64_t tenant_id,
-                int64_t row_count,
+  int init_sort(int64_t row_count,
                 bool is_batch,
                 int64_t topn_cnt = INT64_MAX);
   void reset_pd_topn_filter_expr_ctx();

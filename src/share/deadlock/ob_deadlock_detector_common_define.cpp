@@ -32,7 +32,7 @@ int64_t ObIDeadLockDetector::total_destructed_count = 0;
 OB_SERIALIZE_MEMBER(ObDetectorUserReportInfo, module_name_, resource_visitor_,
                     required_resource_, extra_columns_names_, extra_columns_values_,
                     valid_extra_column_size_, blocked_seq_);
-OB_SERIALIZE_MEMBER(ObDetectorInnerReportInfo, binary_key_, tenant_id_, addr_,
+OB_SERIALIZE_MEMBER(ObDetectorInnerReportInfo, binary_key_, addr_,
                     detector_id_, report_time_,
                     created_time_, event_id_, role_, start_delay_, priority_, user_report_info_);
 OB_SERIALIZE_MEMBER(ObDetectorPriority, priority_range_, priority_value_)
@@ -364,7 +364,6 @@ int ObDetectorUserReportInfo::assign(const ObDetectorUserReportInfo &rhs)
 }
 
 ObDetectorInnerReportInfo::ObDetectorInnerReportInfo() :
-  tenant_id_(INVALID_VALUE),
   detector_id_(INVALID_VALUE),
   report_time_(INVALID_VALUE),
   created_time_(INVALID_VALUE),
@@ -392,7 +391,6 @@ int ObDetectorInnerReportInfo::set_args(const UserBinaryKey &binary_key,
     start_delay_ = start_delay;
     priority_ = priority;
     binary_key_ = binary_key;
-    tenant_id_ = MTL_ID();
     addr_ = addr;
     detector_id_ = detector_id;
     report_time_ = report_time;
@@ -409,10 +407,7 @@ const UserBinaryKey &ObDetectorInnerReportInfo::get_user_key() const
   return binary_key_;
 }
 
-uint64_t ObDetectorInnerReportInfo::get_tenant_id() const
-{
-  return tenant_id_;
-}
+
 
 const ObAddr &ObDetectorInnerReportInfo::get_addr() const
 {
@@ -463,7 +458,6 @@ int ObDetectorInnerReportInfo::assign(const ObDetectorInnerReportInfo &rhs)
     DETECT_LOG(WARN, "fail to assign user report info", K(rhs));
   } else {
     binary_key_ = rhs.binary_key_;
-    tenant_id_ = rhs.tenant_id_;
     addr_ = rhs.addr_;
     detector_id_ = rhs.detector_id_;
     report_time_ = rhs.report_time_;

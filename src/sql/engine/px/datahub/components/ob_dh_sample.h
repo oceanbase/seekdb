@@ -109,7 +109,6 @@ public:
       uint64_t op_id,
       int64_t task_cnt,
       int64_t timeout_ts,
-      int64_t tenant_id,
       ObExecContext &exec_ctx,
       ObPxCoordOp &coord,
       const SortDef &sort_def);
@@ -128,7 +127,7 @@ public:
   int on_message(
       common::ObIArray<ObPxSqcMeta> &sqcs,
       const ObDynamicSamplePieceMsg &piece);
-  INHERIT_TO_STRING_KV("meta", ObPieceMsgCtx, K(is_inited_), K(tenant_id_), K(received_), K(succ_count_), K(tablet_ids_));
+  INHERIT_TO_STRING_KV("meta", ObPieceMsgCtx, K(is_inited_), K(received_), K(succ_count_), K(tablet_ids_));
   static int alloc_piece_msg_ctx(const ObDynamicSamplePieceMsg &pkt,
                                  ObPxCoordInfo &coord_info,
                                  ObExecContext &ctx,
@@ -140,7 +139,7 @@ private:
     void destroy_sample_stores();
 public:
   bool is_inited_;
-  int64_t tenant_id_;
+  
   int received_; // received piece count
   int succ_count_;
   ObArray<uint64_t> tablet_ids_;

@@ -36,17 +36,17 @@ ObSetKvAttributeHelper::ObSetKvAttributeHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
   const obcall::ObHTableDDLArg &arg,
   obcall::ObParallelDDLRes &res)
-  : ObDDLHelper(schema_service, arg.exec_tenant_id_, "[paralle set kv_attribute]"),
+  : ObDDLHelper(schema_service, "[paralle set kv_attribute]"),
   arg_(arg),
   res_(res),
   database_id_(OB_INVALID_ID),
   tablegroup_id_(OB_INVALID_ID)
 {
-  table_names_.set_attr(ObMemAttr(arg.exec_tenant_id_, "SetKvAttTblNam"));
-  table_ids_.set_attr(ObMemAttr(arg.exec_tenant_id_, "SetKvAttTblId"));
-  origin_table_schemas_.set_attr(ObMemAttr(arg.exec_tenant_id_, "SetKvAttOriSch"));
-  new_table_schemas_.set_attr(ObMemAttr(arg.exec_tenant_id_, "SetKvAttNewSch"));
-  ddl_stmt_strs_.set_attr(ObMemAttr(arg.exec_tenant_id_, "SetKvAttDDLStr"));
+  table_names_.set_attr(ObMemAttr("SetKvAttTblNam"));
+  table_ids_.set_attr(ObMemAttr("SetKvAttTblId"));
+  origin_table_schemas_.set_attr(ObMemAttr("SetKvAttOriSch"));
+  new_table_schemas_.set_attr(ObMemAttr("SetKvAttNewSch"));
+  ddl_stmt_strs_.set_attr(ObMemAttr("SetKvAttDDLStr"));
 }
 
 ObSetKvAttributeHelper::~ObSetKvAttributeHelper()
@@ -87,15 +87,15 @@ int ObSetKvAttributeHelper::lock_objects_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(lock_databases_by_obj_name_())) { // lock database name
-    LOG_WARN("fail to lock databases by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock databases by obj name", KR(ret));
   } else if (OB_FAIL(check_database_legitimacy_())) { // check database legitimacy
-    LOG_WARN("fail to check database legitimacy", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to check database legitimacy", KR(ret));
   } else if (OB_FAIL(lock_tablegroup_by_name_())) { // lock tablegroup name and id
-    LOG_WARN("fail to lock tablegroup by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock tablegroup by name", KR(ret));
   } else if (OB_FAIL(lock_objects_by_name_())) { // lock object name
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   } else if (OB_FAIL(lock_objects_by_id_())) { // lock objects by id
-    LOG_WARN("fail to lock objects by id" , KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by id" , KR(ret));
   }
   DEBUG_SYNC(AFTER_PARALLEL_DDL_LOCK);
   RS_TRACE(lock_objects);
@@ -112,7 +112,7 @@ int ObSetKvAttributeHelper::lock_objects_()
       LOG_WARN("database_id_ is not equal to table schema's databse_id",
               KR(ret), K_(database_id), K(orig_table_schema->get_database_id()));
     } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id_, database_schema))) {
-      LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K_(database_id));
+      LOG_WARN("fail to get database schema", KR(ret), K_(database_id));
     } else if (OB_ISNULL(database_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("databse_schema is null", KR(ret));
@@ -132,11 +132,11 @@ int ObSetKvAttributeHelper::lock_tablegroup_by_name_()
   int ret = OB_SUCCESS;
   const ObString &tablegroup_name = get_params_().table_group_name_;
   if (OB_FAIL(add_lock_object_by_tablegroup_name_(tablegroup_name, transaction::tablelock::EXCLUSIVE))) { // lock tablegroup name
-    LOG_WARN("fail to add tablegroup lock by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to add tablegroup lock by obj name", KR(ret));
   } else if (OB_FAIL(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   } else if (OB_FAIL(check_tablegroup_name_())) { // check tablegroup name
-    LOG_WARN("fail to check tablegroup legitimacy", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to check tablegroup legitimacy", KR(ret));
   }
   return ret;
 }
@@ -165,9 +165,9 @@ int ObSetKvAttributeHelper::lock_databases_by_obj_name_()
   } else {
     const ObString &database_name = get_params_().database_name_;
     if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-      LOG_WARN("fail to add lock database by name", KR(ret), K_(tenant_id), K(database_name));
+      LOG_WARN("fail to add lock database by name", KR(ret), K(database_name));
     } else if (OB_FAIL(lock_databases_by_name_())) {
-      LOG_WARN("fail to lock databases by name", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to lock databases by name", KR(ret));
     }
   }
   return ret;
@@ -214,7 +214,7 @@ int ObSetKvAttributeHelper::lock_objects_by_name_()
         const ObString &table_name = table_names_.at(i);
         if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
             share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-          LOG_WARN("fail to lock object by table name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
+          LOG_WARN("fail to lock object by table name", KR(ret), K(database_name), K(table_name));
         }
       } // end for
       if (FAILEDx(lock_existed_objects_by_name_())) {
@@ -235,7 +235,7 @@ int ObSetKvAttributeHelper::lock_objects_by_id_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database is not exist", KR(ret), K_(tenant_id), K_(get_params_().database_name));
+    LOG_WARN("database is not exist", KR(ret), K_(get_params_().database_name));
   } else if (OB_FAIL(add_lock_object_by_id_(database_id_,
     share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
     LOG_WARN("fail to lock database id", KR(ret), K_(database_id));
@@ -247,7 +247,7 @@ int ObSetKvAttributeHelper::lock_objects_by_id_()
   for (int64_t i = 0; i < table_ids_.count() && OB_SUCC(ret); i++) {
     uint64_t table_id = table_ids_.at(i);
     if (OB_FAIL(add_lock_object_by_id_(table_id, share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-      LOG_WARN("fail to lock table id", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to lock table id", KR(ret));
     } 
   }
   
@@ -289,7 +289,7 @@ int ObSetKvAttributeHelper::lock_for_common_ddl_()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database is not exist", KR(ret), K_(tenant_id));
+    LOG_WARN("database is not exist", KR(ret));
   } 
   for (int64_t i = 0; i < table_ids_.count() && OB_SUCC(ret); ++i) {
     const uint64_t table_id = table_ids_.at(i);
@@ -342,11 +342,13 @@ int ObSetKvAttributeHelper::check_table_legitimacy_()
         ret = OB_OP_NOT_ALLOW;
         LOG_WARN("table is physical or logical split can not split", KR(ret), KPC(orig_table_schema));
       } else if (OB_FAIL(ddl_service_->get_snapshot_mgr().check_restore_point(
-        ddl_service_->get_sql_proxy(), tenant_id_, orig_table_schema->get_table_id(), is_exist))) {
-        LOG_WARN("failed to check restore point", KR(ret), K_(tenant_id));
+        ddl_service_->get_sql_proxy(), orig_table_schema->get_table_id(), is_exist))) {
+        LOG_WARN("failed to check restore point", KR(ret));
       } else if (OB_UNLIKELY(is_exist)) {
         ret = OB_OP_NOT_ALLOW;
-        LOG_WARN("restore point exist, cannot alter ", KR(ret), K_(tenant_id), K(orig_table_schema->get_table_id()));
+        LOG_WARN("restore point exist, cannot alter ", KR(ret), K(orig_table_schema->get_table_id()));
+      } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*orig_table_schema, true/*by_admin*/))) {
+        LOG_WARN("failed to check htable ddl supoprted", KR(ret));
       }
     }
   }
@@ -472,8 +474,8 @@ int ObSetKvAttributeHelper::operate_schemas_()
     } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_service impl is null", KR(ret));
-    } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id_, new_schema_version))) {
-      LOG_WARN("fail to gen new schema version", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+      LOG_WARN("fail to gen new schema version", KR(ret));
     } else {
       new_table_schema->set_schema_version(new_schema_version);
       if (FAILEDx(schema_service_impl->get_table_sql_service().only_update_table_options(

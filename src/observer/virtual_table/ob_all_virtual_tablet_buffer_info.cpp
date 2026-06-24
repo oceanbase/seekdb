@@ -15,6 +15,7 @@
  */
  
 #include "ob_all_virtual_tablet_buffer_info.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -70,19 +71,19 @@ int ObAllVirtualTabletBufferInfo::inner_get_next_row(common::ObNewRow *&row)
 int ObAllVirtualTabletBufferInfo::get_tablet_pool_infos()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(MTL_ID(), "TabletBuffer");
+  ObMemAttr attr("TabletBuffer");
   buffer_infos_.set_attr(attr);
-  if (OB_FAIL(MTL(ObTenantMetaMemMgr*)->get_tablet_buffer_infos(buffer_infos_))) {
+  if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->get_tablet_buffer_infos(buffer_infos_))) {
     SERVER_LOG(WARN, "fail to get tablet buffer infos", K(ret));
   }
   return ret;
 }
 
-bool ObAllVirtualTabletBufferInfo::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualTabletBufferInfo::is_need_process()
 {
   bool need_process = false;
-  if (!is_virtual_tenant_id(tenant_id) &&
-    (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
+  if (!false &&
+    (true || true)){
     need_process = true;
   }
   return need_process;

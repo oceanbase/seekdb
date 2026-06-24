@@ -603,10 +603,9 @@
     }\
   }
 
-#define EXTRACT_INT_FIELD_FROM_NUMBER_TO_CLASS_MYSQL_WITH_TENAND_ID(result, column_name, obj, tenant_id) \
+#define EXTRACT_INT_FIELD_FROM_NUMBER_TO_CLASS_MYSQL_WITH_TENAND_ID(result, column_name, obj) \
   if (OB_SUCC(ret)) \
   { \
-    UNUSED(tenant_id); \
     common::number::ObNumber number_value; \
     char buffer[common::number::ObNumber::MAX_NUMBER_ALLOC_BUFF_SIZE]; \
     ObDataBuffer data_buffer(buffer, sizeof(buffer)); \
@@ -1031,7 +1030,7 @@
  * and the default value may be obtained from either cur_default_value or new_default_value. Here, compatibility handling is done,
  * using default_value_v2_version to distinguish between these two scenarios
  */
-#define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, column_name, data_type, class_obj,is_cur_default_value, default_value_v2_version, tenant_id) \
+#define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, column_name, data_type, class_obj,is_cur_default_value, default_value_v2_version) \
   [&]() { /*+ The original macro use too much stack space, wrap to lambda to avoid it. */ \
   if (OB_SUCC(ret)) \
   { \
@@ -1147,7 +1146,7 @@
             cast_ctx.res_accuracy_ = &res_acc;\
           }\
           def_obj.set_varchar(str_value); \
-          if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_info.get_tz_map_wrap())))  \
+          if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap())))  \
           {         \
             SQL_LOG(WARN, "get tenant timezone map failed", K(ret));    \
           }         \
@@ -1170,7 +1169,7 @@
   } \
   } ()
 
-#define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL_V2(result, data_type, class_obj,is_cur_default_value, default_value_v2_version, tenant_id) \
+#define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL_V2(result, data_type, class_obj,is_cur_default_value, default_value_v2_version) \
 { \
   if (OB_SUCC(ret)) \
   { \
@@ -1281,7 +1280,7 @@
         else                                                                                     \
         {                                                                                        \
           def_obj.set_varchar(str_value);                                                        \
-          if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_info.get_tz_map_wrap())))             \
+          if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap())))             \
           {                                                                                      \
             SQL_LOG(WARN, "get tenant timezone map failed", K(ret));                             \
           }                                                                                      \
@@ -1374,46 +1373,15 @@
     ret;                                                                              \
   })
 
-// Used to construct the ID encoded with tenant_id
-#define EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, column_name, obj, tenant_id) \
-  if (OB_SUCC(ret)) \
-  { \
-    UNUSED(tenant_id); \
-    int64_t int_value = 0; \
-    if (OB_SUCCESS != (ret = (result).get_int(#column_name, int_value)))  \
-    { \
-      SQL_LOG(WARN, "fail to get column in row. ", "column_name", #column_name, K(ret)); \
-    } \
-    else \
-    { \
-      (obj).set_##column_name(int_value); \
-    }\
-  }
-
-// Used to construct the ID encoded with tenant_id
-#define EXTRACT_UINT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, column_name, obj, tenant_id) \
-  if (OB_SUCC(ret)) \
-  { \
-    UNUSED(tenant_id); \
-    uint64_t uint_value = 0; \
-    if (OB_SUCCESS != (ret = (result).get_uint(#column_name, uint_value)))  \
-    { \
-      SQL_LOG(WARN, "fail to get column in row. ", "column_name", #column_name, K(ret)); \
-    } \
-    else \
-    { \
-      (obj).set_##column_name(uint_value); \
-    }\
-  }
-
-// Macro with default value, used to construct ID with tenant_id encoded
+// Used to construct the ID encoded with tenant
+// Used to construct the ID encoded with tenant
+// Macro with default value, used to construct ID with tenant encoded
 // 1. skip_null_error: indicates whether to ignore NULL values
 // 2. skip_column_error: indicates whether to ignore column errors, and pass in ObSchemaService::g_ignore_column_retrieve_error_
 // 3. default_value: indicates the default value passed in
-#define EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID_AND_DEFAULT_VALUE(result, column_name, obj, tenant_id, skip_null_error, skip_column_error, default_value) \
+#define EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, column_name, obj, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
   { \
-    UNUSED(tenant_id); \
     int64_t int_value = 0; \
     if (OB_SUCCESS == (ret = (result).get_int(#column_name, int_value)))  \
     { \
@@ -1451,10 +1419,9 @@
     }\
   }
 
-#define EXTRACT_UINT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID_AND_DEFAULT_VALUE(result, column_name, obj, tenant_id, skip_null_error, skip_column_error, default_value) \
+#define EXTRACT_UINT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, column_name, obj, skip_null_error, skip_column_error, default_value) \
   if (OB_SUCC(ret)) \
   { \
-    UNUSED(tenant_id); \
     uint64_t uint_value = 0; \
     if (OB_SUCCESS == (ret = (result).get_uint(#column_name, uint_value)))  \
     { \
@@ -1492,36 +1459,7 @@
     }\
   }
 
-// Macro with default value, used to construct ID with tenant_id encoded
-#define EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, column_name, field, tenant_id) \
-  if (OB_SUCC(ret)) \
-  { \
-    UNUSED(tenant_id); \
-    int64_t int_value = 0; \
-    if (OB_SUCCESS != (ret = (result).get_int(column_name, int_value)))  \
-    { \
-      SQL_LOG(WARN, "fail to get column in row. ", "column_name", column_name, K(ret)); \
-    } \
-    else \
-    { \
-      field = static_cast<uint64_t>(int_value); \
-    }\
-  }
-#define EXTRACT_UINT_FIELD_MYSQL_WITH_TENANT_ID(result, column_name, field, tenant_id) \
-  if (OB_SUCC(ret)) \
-  { \
-    UNUSED(tenant_id); \
-    uint64_t int_value = 0; \
-    if (OB_SUCCESS != (ret = (result).get_uint(column_name, int_value)))  \
-    { \
-      SQL_LOG(WARN, "fail to get column in row. ", "column_name", column_name, K(ret)); \
-    } \
-    else \
-    { \
-      field = static_cast<uint64_t>(int_value); \
-    }\
-  }
-
+// Macro with default value, used to construct ID with tenant encoded
 #define EXTRACT_TIMESTAMP_FIELD_TO_CLASS_MYSQL(result, column_name, obj, tz_info) \
   if (OB_SUCC(ret)) \
   { \

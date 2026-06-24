@@ -29,8 +29,6 @@
 #include "ob_expr_date_diff.h"
 #include "ob_expr_day_of_func.h"
 #include "ob_expr_div.h"
-#include "ob_expr_effective_tenant.h"
-#include "ob_expr_effective_tenant_id.h"
 #include "ob_expr_exists.h"
 #include "ob_expr_extract.h"
 #include "ob_expr_export_set.h"
@@ -75,7 +73,6 @@
 #include "ob_expr_func_dump.h"
 #include "ob_expr_func_part_hash.h"
 #include "ob_expr_autoinc_nextval.h"
-#include "ob_expr_is_serving_tenant.h"
 #include "ob_expr_sys_privilege_check.h"
 #include "ob_expr_field.h"
 #include "ob_expr_elt.h"
@@ -545,8 +542,8 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprDiv::div_number,                                              /* 67 */
   NULL,                                                               /* 68 */
   NULL,                                                               /* 69 */
-  ObExprEffectiveTenant::eval_effective_tenant,                       /* 70 */
-  ObExprEffectiveTenantId::eval_effective_tenant_id,                  /* 71 */
+  NULL,                       /* 70 */
+  NULL,                  /* 71 */
   ObExprExists::exists_eval,                                          /* 72 */
   calc_exp_expr_double,                                               /* 73 */
   calc_exp_expr_number,                                               /* 74 */
@@ -680,7 +677,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL,//ObExprFuncAddrToPartId::eval_addr_to_part_id is deleted      /* 202 */
   ObExprAutoincNextval::eval_nextval,                                 /* 203 */
   ObExprFuncLnnvl::eval_lnnvl,                                        /* 204 */
-  ObExprIsServingTenant::eval_is_serving_tenant,                      /* 205 */
+  NULL,                      /* 205 */
   ObExprSysPrivilegeCheck::eval_sys_privilege_check,                  /* 206 */
   ObExprField::eval_field,                                            /* 207 */
   ObExprElt::eval_elt,                                                /* 208 */

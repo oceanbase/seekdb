@@ -103,22 +103,20 @@ int ObRecoverRestoreTableTask::obtain_snapshot(const ObDDLTaskStatus next_task_s
   } else if (snapshot_version_ > 0) {
     new_status = next_task_status; // to switch to the next status.
   } else if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(new_fetched_snapshot,
-                                                       dst_tenant_id_,
                                                        task_id_,
                                                        0/*trans_end_snapshot*/,
                                                        0/*index_snapshot_version_diff*/))) {
     // fetch snapshot.
-    LOG_WARN("calc snapshot with gts failed", K(ret), K(dst_tenant_id_));
+    LOG_WARN("calc snapshot with gts failed", K(ret), K(1UL));
   } else if (new_fetched_snapshot <= 0) {
     // the snapshot version obtained here must be valid.
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("snapshot version is invalid", K(ret), K(new_fetched_snapshot));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::update_snapshot_version_if_not_exist(*GCTX.sql_proxy_,
-                                                                      dst_tenant_id_,
                                                                       task_id_,
                                                                       new_fetched_snapshot,
                                                                       persisted_snapshot))) {
-    LOG_WARN("update snapshot version failed", K(ret), K(dst_tenant_id_), K(task_id_), K(persisted_snapshot));
+    LOG_WARN("update snapshot version failed", K(ret), K(1UL), K(task_id_), K(persisted_snapshot));
   }
 
   if (OB_FAIL(ret)) {
@@ -196,20 +194,20 @@ int ObRecoverRestoreTableTask::fail()
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(dst_tenant_id_, dst_tenant_schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret), K(dst_tenant_id_));
-    } else if (OB_FAIL(dst_tenant_schema_guard.get_table_schema(dst_tenant_id_, target_object_id_, table_schema))) {
-      LOG_WARN("get table schema failed", K(ret), K(dst_tenant_id_), K(target_object_id_));
+    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(dst_tenant_schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret));
+    } else if (OB_FAIL(dst_tenant_schema_guard.get_table_schema( target_object_id_, table_schema))) {
+      LOG_WARN("get table schema failed", K(ret), K(target_object_id_));
     } else if (OB_ISNULL(table_schema)) {
       // already dropped.
       already_cleanuped = true;
-      LOG_INFO("already dropped", K(ret), K(dst_tenant_id_), K(target_object_id_));
-    } else if (OB_FAIL(dst_tenant_schema_guard.get_database_schema(dst_tenant_id_, table_schema->get_database_id(), db_schema))) {
-      LOG_WARN("get db schema failed", K(ret), K(dst_tenant_id_), KPC(table_schema));
+      LOG_INFO("already dropped", K(ret), K(target_object_id_));
+    } else if (OB_FAIL(dst_tenant_schema_guard.get_database_schema( table_schema->get_database_id(), db_schema))) {
+      LOG_WARN("get db schema failed", K(ret), KPC(table_schema));
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(ret), K(dst_tenant_id_), "db_id", table_schema->get_database_id());
-    } else if (OB_FAIL(ObDDLUtil::get_all_indexes_tablets_count(dst_tenant_schema_guard, dst_tenant_id_, target_object_id_, all_indexes_tablets_count))) {
+      LOG_WARN("database id is invalid", K(ret), "db_id", table_schema->get_database_id());
+    } else if (OB_FAIL(ObDDLUtil::get_all_indexes_tablets_count(dst_tenant_schema_guard, target_object_id_, all_indexes_tablets_count))) {
       LOG_WARN("get all indexes tablets count failed", K(ret));
     } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_indexes_tablets_count + table_schema->get_all_part_num(), rpc_timeout))) {
       LOG_WARN("get ddl rpc timeout failed", K(ret));
@@ -222,8 +220,8 @@ int ObRecoverRestoreTableTask::fail()
       table_item.mode_                   = table_schema->get_name_case_mode();
       table_item.is_hidden_              = table_schema->is_hidden_schema();
       // for drop table arg.
-      drop_table_arg.tenant_id_          = dst_tenant_id_;
-      drop_table_arg.exec_tenant_id_     = dst_tenant_id_;
+      
+      
       drop_table_arg.session_id_         = table_schema->get_session_id();
       drop_table_arg.table_type_         = table_schema->get_table_type();
       drop_table_arg.foreign_key_checks_ = false;
@@ -238,7 +236,7 @@ int ObRecoverRestoreTableTask::fail()
       LOG_WARN("check and cancel complement data dag failed", K(ret));
     } else if (!all_complement_dag_exit) {
       if (REACH_COUNT_INTERVAL(1000L)) {
-        LOG_INFO("wait all complement data dag exit", K(dst_tenant_id_), K(task_id_));
+        LOG_INFO("wait all complement data dag exit", K(task_id_));
       }
     } else if (OB_FAIL(drop_table_arg.tables_.push_back(table_item))) {
       LOG_WARN("push back failed", K(ret), K(drop_table_arg));
@@ -269,23 +267,6 @@ int ObRecoverRestoreTableTask::check_health()
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLUtil::check_tenant_status_normal(GCTX.sql_proxy_, tenant_id_))) {
-    // switch to build failed if the source tenant is been dropped, 
-    // in order to remove the destination tenant's persistent task record.
-    if (OB_TENANT_HAS_BEEN_DROPPED == ret) {
-      const ObDDLTaskStatus old_status = static_cast<ObDDLTaskStatus>(task_status_);
-      const ObDDLTaskStatus new_status = ObDDLTaskStatus::FAIL;
-      int tmp_ret = switch_status(new_status, false, ret);
-      LOG_INFO("switch status to build_failed", K(ret), K(tmp_ret), K_(task_status), K(old_status), K(new_status));
-      ret = OB_SUCCESS;
-    } else if (OB_STANDBY_READ_ONLY == ret) {
-      // do not care about the role of the source tenant is expected.
-      if (OB_FAIL(ObDDLRedefinitionTask::check_health())) {
-        LOG_WARN("check health failed", K(ret), K_(task_status));
-      }
-    } else {
-      LOG_WARN("check tenant status normal failed", K(ret), K_(tenant_id));
-    }
   } else if (OB_FAIL(ObDDLRedefinitionTask::check_health())) {
     LOG_WARN("check health failed", K(ret), K_(task_status));
   }

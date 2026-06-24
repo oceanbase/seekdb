@@ -113,37 +113,36 @@ public:
 
   void set_root_allocator();
   static ObMallocAllocator *get_instance();
-  ObTenantCtxAllocatorGuard get_tenant_ctx_allocator(uint64_t tenant_id, uint64_t ctx_id) const;
-  int create_and_add_tenant_allocator(uint64_t tenant_id);
-  ObTenantCtxAllocatorGuard get_tenant_ctx_allocator_unrecycled(uint64_t tenant_id,
-                                                                uint64_t ctx_id) const;
+  ObTenantCtxAllocatorGuard get_tenant_ctx_allocator(uint64_t ctx_id) const;
+  int create_and_add_tenant_allocator();
+  ObTenantCtxAllocatorGuard get_tenant_ctx_allocator_unrecycled(uint64_t ctx_id) const;
   // statistic relating
   void set_reserved(int64_t bytes);
   int64_t get_reserved() const;
-  int set_tenant_hard_limit(uint64_t tenant_id, int64_t bytes);
-  int64_t get_tenant_hard_limit(uint64_t tenant_id);
-  int set_tenant_limit(uint64_t tenant_id, int64_t bytes);
-  int64_t get_tenant_limit(uint64_t tenant_id);
-  int64_t get_tenant_hold(uint64_t tenant_id);
-  int64_t get_tenant_cache_hold(uint64_t tenant_id);
-  int64_t get_tenant_remain(uint64_t tenant_id);
-  int64_t get_tenant_ctx_hold(const uint64_t tenant_id, const uint64_t ctx_id) const;
-  void get_tenant_label_usage(uint64_t tenant_id, ObLabel &label, common::ObLabelItem &item) const;
+  int set_tenant_hard_limit(int64_t bytes);
+  int64_t get_tenant_hard_limit();
+  int set_tenant_limit(int64_t bytes);
+  int64_t get_tenant_limit();
+  int64_t get_tenant_hold();
+  int64_t get_tenant_cache_hold();
+  int64_t get_tenant_remain();
+  int64_t get_tenant_ctx_hold(const uint64_t ctx_id) const;
+  void get_tenant_label_usage(ObLabel &label, common::ObLabelItem &item) const;
 
-  void print_tenant_ctx_memory_usage(uint64_t tenant_id) const;
-  void print_tenant_memory_usage(uint64_t tenant_id) const;
+  void print_tenant_ctx_memory_usage() const;
+  void print_tenant_memory_usage() const;
   int set_tenant_ctx_idle(
-      const uint64_t tenant_id, const uint64_t ctx_id, const int64_t size, const bool reserve = false);
-  int64_t sync_wash(uint64_t tenant_id, uint64_t from_set_tenantctx_id, int64_t wash_size);
+      const uint64_t ctx_id, const int64_t size, const bool reserve = false);
+  int64_t sync_wash(uint64_t from_set_tenantctx_id, int64_t wash_size);
   int64_t sync_wash();
-  int recycle_tenant_allocator(uint64_t tenant_id);
-  int64_t get_max_used_tenant_id() { return max_used_tenant_id_; }
+  int recycle_tenant_allocator();
+  
   void make_allocator_create_on_demand() { create_on_demand_ = true; }
   static bool is_inited_;
 private:
   using InvokeFunc = std::function<int (ObTenantMemoryMgr*)>;
-  static int with_resource_handle_invoke(uint64_t tenant_id, InvokeFunc func);
-  int create_tenant_allocator(uint64_t tenant_id, void *buf, ObTenantCtxAllocatorV2 *&allocator);
+  static int with_resource_handle_invoke(InvokeFunc func);
+  int create_tenant_allocator(void *buf, ObTenantCtxAllocatorV2 *&allocator);
 #ifdef ENABLE_SANITY
   int get_chunks(ObTenantCtxAllocatorV2 *ta, AChunk **chunks, int cap, int &cnt);
   void modify_tenant_memory_access_permission(ObTenantCtxAllocatorV2 *ta, bool accessible);
@@ -160,7 +159,7 @@ private:
 private:
   ObTenantCtxAllocatorV2 *allocator_;
   int64_t reserved_;
-  uint64_t max_used_tenant_id_;
+  
   bool create_on_demand_;
 }; // end of class ObMallocAllocator
 

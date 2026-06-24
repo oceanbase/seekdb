@@ -473,7 +473,7 @@ struct ObMicroBlockEncodingCtx
     minimum_rows_(1),
     semistruct_encoding_type_()
   {
-    previous_encodings_.set_attr(ObMemAttr(MTL_ID(), "MicroEncodeCtx"));
+    previous_encodings_.set_attr(ObMemAttr("MicroEncodeCtx"));
   }
   bool is_valid() const;
   bool is_enable_semistruct_encoding() const { return semistruct_encoding_type_.is_enable_semistruct_encoding();}

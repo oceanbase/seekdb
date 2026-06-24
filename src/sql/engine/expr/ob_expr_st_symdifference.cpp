@@ -135,14 +135,14 @@ int ObExprSTSymDifference::eval_st_symdifference(const ObExpr &expr, ObEvalCtx &
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_SYMDIFFERENCE);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_SYMDIFFERENCE);
   ObGeometry *diff_res = nullptr;
   if (OB_FAIL(
           process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1_3d, geo2_3d, is_null_res, srs))) {
     LOG_WARN("fail to process input geometry", K(ret));
   }
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_SUCC(ret) && !is_null_res) {
     ObGeometry *geo1 = nullptr;

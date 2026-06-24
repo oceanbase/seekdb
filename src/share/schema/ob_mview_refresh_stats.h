@@ -69,7 +69,6 @@ public:
   OB_INLINE const ObString &get_##name() const { return name##_; } \
   OB_INLINE int set_##name(const ObString &name) { return deep_copy_str(name, name##_); }
 
-  DEFINE_GETTER_AND_SETTER(uint64_t, tenant_id);
   DEFINE_GETTER_AND_SETTER(int64_t, refresh_id);
   DEFINE_GETTER_AND_SETTER(uint64_t, run_user_id);
   DEFINE_GETTER_AND_SETTER(int64_t, num_mvs_total);
@@ -97,14 +96,14 @@ public:
 #undef DEFINE_GETTER_AND_SETTER
 #undef DEFINE_STRING_GETTER_AND_SETTER
 
-  int gen_insert_run_stats_dml(uint64_t exec_tenant_id, share::ObDMLSqlSplicer &dml) const;
+  int gen_insert_run_stats_dml(share::ObDMLSqlSplicer &dml) const;
   static int insert_run_stats(ObISQLClient &sql_client, const ObMViewRefreshRunStats &run_stats);
-  static int dec_num_mvs_current(ObISQLClient &sql_client, uint64_t tenant_id, int64_t refresh_id,
+  static int dec_num_mvs_current(ObISQLClient &sql_client, int64_t refresh_id,
                                  int64_t dec_val);
-  static int drop_empty_run_stats(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int drop_empty_run_stats(ObISQLClient &sql_client,
                                   int64_t &affected_rows, int64_t limit = -1);
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(refresh_id),
                K_(run_user_id),
                K_(num_mvs_total),
@@ -130,7 +129,7 @@ public:
                K_(trace_id));
 
 public:
-  uint64_t tenant_id_;
+  
   int64_t refresh_id_;
   uint64_t run_user_id_;
   int64_t num_mvs_total_;
@@ -177,7 +176,6 @@ public:
   OB_INLINE type get_##name() const { return name##_; } \
   OB_INLINE void set_##name(type name) { name##_ = name; }
 
-  DEFINE_GETTER_AND_SETTER(uint64_t, tenant_id);
   DEFINE_GETTER_AND_SETTER(int64_t, refresh_id);
   DEFINE_GETTER_AND_SETTER(uint64_t, mview_id);
   DEFINE_GETTER_AND_SETTER(int64_t, retry_id);
@@ -194,11 +192,11 @@ public:
 
 #undef DEFINE_GETTER_AND_SETTER
 
-  int gen_insert_refresh_stats_dml(uint64_t tenant_id, share::ObDMLSqlSplicer &dml) const;
+  int gen_insert_refresh_stats_dml(share::ObDMLSqlSplicer &dml) const;
   static int insert_refresh_stats(const ObMViewRefreshStats &refresh_stats);
   static int insert_refresh_stats(ObISQLClient &sql_client,
                                   const ObMViewRefreshStats &refresh_stats);
-  static int drop_refresh_stats_record(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int drop_refresh_stats_record(ObISQLClient &sql_client,
                                        const ObMViewRefreshStatsRecordId &record_id);
 
   class FilterParam
@@ -244,12 +242,12 @@ public:
     };
   };
 
-  static int collect_record_ids(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int collect_record_ids(ObISQLClient &sql_client,
                                 const FilterParam &filter_param,
                                 ObIArray<ObMViewRefreshStatsRecordId> &record_ids,
                                 int64_t limit = -1);
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(refresh_id),
                K_(mview_id),
                K_(retry_id),
@@ -265,7 +263,7 @@ public:
                K_(refresh_parallelism));
 
 public:
-  uint64_t tenant_id_;
+  
   int64_t refresh_id_;
   uint64_t mview_id_;
   int64_t retry_id_;
@@ -302,7 +300,6 @@ public:
   OB_INLINE type get_##name() const { return name##_; } \
   OB_INLINE void set_##name(type name) { name##_ = name; }
 
-  DEFINE_GETTER_AND_SETTER(uint64_t, tenant_id);
   DEFINE_GETTER_AND_SETTER(int64_t, refresh_id);
   DEFINE_GETTER_AND_SETTER(uint64_t, mview_id);
   DEFINE_GETTER_AND_SETTER(int64_t, retry_id);
@@ -314,13 +311,13 @@ public:
 
 #undef DEFINE_GETTER_AND_SETTER
 
-  int gen_insert_change_stats_dml(uint64_t exec_tenant_id, share::ObDMLSqlSplicer &dml) const;
+  int gen_insert_change_stats_dml(share::ObDMLSqlSplicer &dml) const;
   static int insert_change_stats(ObISQLClient &sql_client,
                                  const ObMViewRefreshChangeStats &change_stats);
-  static int drop_change_stats_record(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int drop_change_stats_record(ObISQLClient &sql_client,
                                       const ObMViewRefreshStatsRecordId &record_id);
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(refresh_id),
                K_(mview_id),
                K_(retry_id),
@@ -331,7 +328,7 @@ public:
                K_(num_rows));
 
 public:
-  uint64_t tenant_id_;
+  
   int64_t refresh_id_;
   uint64_t mview_id_;
   int64_t retry_id_;
@@ -368,7 +365,6 @@ public:
   OB_INLINE const ObString &get_##name() const { return name##_; } \
   OB_INLINE int set_##name(const ObString &name) { return deep_copy_str(name, name##_); }
 
-  DEFINE_GETTER_AND_SETTER(uint64_t, tenant_id);
   DEFINE_GETTER_AND_SETTER(int64_t, refresh_id);
   DEFINE_GETTER_AND_SETTER(uint64_t, mview_id);
   DEFINE_GETTER_AND_SETTER(int64_t, retry_id);
@@ -382,12 +378,12 @@ public:
 #undef DEFINE_GETTER_AND_SETTER
 #undef DEFINE_STRING_GETTER_AND_SETTER
 
-  int gen_insert_stmt_stats_dml(uint64_t exec_tenant_id, share::ObDMLSqlSplicer &dml) const;
+  int gen_insert_stmt_stats_dml(share::ObDMLSqlSplicer &dml) const;
   static int insert_stmt_stats(ObISQLClient &sql_client, const ObMViewRefreshStmtStats &stmt_stats);
-  static int drop_stmt_stats_record(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int drop_stmt_stats_record(ObISQLClient &sql_client,
                                     const ObMViewRefreshStatsRecordId &record_id);
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(refresh_id),
                K_(mview_id),
                K_(retry_id),
@@ -399,7 +395,7 @@ public:
                K_(result));
 
 public:
-  uint64_t tenant_id_;
+  
   int64_t refresh_id_;
   uint64_t mview_id_;
   int64_t retry_id_;

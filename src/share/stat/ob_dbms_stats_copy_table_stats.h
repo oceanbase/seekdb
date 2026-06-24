@@ -66,7 +66,6 @@ struct ObCopyPartInfo {
 
 struct CopyTableStatHelper {
   CopyTableStatHelper(ObIAllocator *alloc):
-    tenant_id_(OB_INVALID_ID),
     table_id_(OB_INVALID_ID),
     owner_(""),
     table_name_(""),
@@ -102,7 +101,6 @@ struct CopyTableStatHelper {
   // int set_dst_hist_buckets(ObHistogram &dst_hist,
   //                          const common::ObObj &endpoint_val_1,
   //                          const common::ObObj &endpoint_val_2);
-  uint64_t tenant_id_;
   uint64_t table_id_;
   ObString owner_;
   ObString table_name_;
@@ -119,7 +117,7 @@ struct CopyTableStatHelper {
   ObSEArray<uint64_t, 8> subpart_column_ids_;
 
   ObIAllocator *allocator_;
-  TO_STRING_KV(K(tenant_id_), K(table_id_), K(owner_), K(table_name_),
+  TO_STRING_KV(K(table_id_), K(owner_), K(table_name_),
                K(srcpart_name_), K(dstpart_name_), K(scale_factor_), K(flags_),
                K(force_copy_), K(part_column_ids_));
 };

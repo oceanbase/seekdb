@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_func_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -329,7 +330,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
   ObString metas;
   storage::ObLobCursor *cursor = nullptr;
   int64_t query_timeout_ts = ObTimeUtility::current_time() + 60 * USECS_PER_SEC;
-  storage::ObLobManager *lob_mgr = MTL(storage::ObLobManager*);
+  storage::ObLobManager *lob_mgr = share::g_mp->lob_manager();
   uint8_t root_type = 0;
   if (lob_str.empty()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1586,7 +1587,7 @@ int ObJsonExprHelper::get_sql_scalar_type(
       } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(
         ctx.exec_ctx_.get_my_session(), enable_decimalint))) {
         LOG_WARN("fail to check_enable_decimalint_type",
-            K(ret), K(ctx.exec_ctx_.get_my_session()->get_effective_tenant_id()));
+            K(ret));
       } else if (enable_decimalint) {
         scalar_type = ObDecimalIntType;
       }
@@ -1645,7 +1646,7 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
         } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(type_ctx.get_session(),
                                                                enable_decimalint))) {
           LOG_WARN("fail to check_enable_decimalint_type",
-              K(ret), K(type_ctx.get_session()->get_effective_tenant_id()));
+              K(ret));
         } else if (enable_decimalint) {
           dst_type.set_type(ObDecimalIntType);
         }
@@ -2243,7 +2244,7 @@ int ObJsonExprHelper::pre_default_value_check(ObObjType dst_type, ObString val_s
 int ObJsonExprHelper::get_json_max_depth_config()
 {
   uint32_t json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     json_max_depth = tenant_config->json_document_max_depth;
     if (json_max_depth < JSON_DOCUMENT_MAX_DEPTH || json_max_depth > 1024) {
@@ -2632,7 +2633,7 @@ int ObJsonDeltaLob::deserialize_partial_data(storage::ObLobDiffHeader *diff_head
   int64_t data_len = diff_header->persist_loc_size_;
   int64_t pos = 0;
   ObLobLocatorV2 locator;
-  ObLobManager* lob_mgr = MTL(ObLobManager*);
+  ObLobManager* lob_mgr = share::g_mp->lob_manager();
   if (OB_ISNULL(partial_data_ = OB_NEWx(storage::ObLobPartialData, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc lob param fail", K(ret), "size", sizeof(ObLobPartialData));

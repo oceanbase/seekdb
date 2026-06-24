@@ -99,11 +99,11 @@ class ObTopKFrequencyHistograms
       obj_memory_limit_(0),
       max_disuse_cnt_(0)
     {
-      topk_buf_.set_tenant_id(MTL_ID());
-      obj_buf1_.set_tenant_id(MTL_ID());
-      obj_buf2_.set_tenant_id(MTL_ID());
-      used_list_.set_attr(lib::ObMemAttr(MTL_ID(), "ObTopkUsedlist"));
-      free_list_.set_attr(lib::ObMemAttr(MTL_ID(), "ObTopkfreelist"));
+      
+      
+      
+      used_list_.set_attr(lib::ObMemAttr("ObTopkUsedlist"));
+      free_list_.set_attr(lib::ObMemAttr("ObTopkfreelist"));
     }
 
     int read_result(const ObObj &result_obj);

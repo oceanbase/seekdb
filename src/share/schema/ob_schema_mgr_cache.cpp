@@ -25,7 +25,6 @@ namespace oceanbase
 {
 using namespace common;
 void ObSchemaSlot::reset() {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   slot_id_ = OB_INVALID_INDEX;
   schema_version_ = OB_INVALID_VERSION;
   schema_count_ = OB_INVALID_COUNT;
@@ -34,10 +33,9 @@ void ObSchemaSlot::reset() {
   allocator_idx_ = OB_INVALID_INDEX;
 }
 
-void ObSchemaSlot::init(const uint64_t &tenant_id, const int64_t &slot_id,
+void ObSchemaSlot::init(const int64_t &slot_id,
                         const int64_t &schema_version, const int64_t &schema_count,
                         const int64_t &ref_cnt, const common::ObString &str, const int64_t &allocator_idx) {
-  tenant_id_ = tenant_id;
   slot_id_ = slot_id;
   schema_version_ = schema_version;
   schema_count_ = schema_count;
@@ -105,7 +103,6 @@ inline void ObSchemaMgrHandle::revert()
         && ObClockGenerator::getClock() - ref_timestamp_ >= REF_TIME_THRESHOLD) {
       ObSchemaMgr *&schema_mgr = schema_mgr_item_->schema_mgr_;
       LOG_WARN_RET(OB_SUCCESS, "long time to hold one guard", K(schema_mgr),
-               "tenant_id", schema_mgr->get_tenant_id(),
                "version", schema_mgr->get_schema_version(),
                "cur_timestamp", ObTimeUtility::current_time(),
                K_(ref_timestamp), K(lbt()));
@@ -414,7 +411,7 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
     ObSchemaMgr *schema_mgr = NULL;
     int64_t cached_slot_num = OB_INVALID_COUNT;
     int64_t slot_id = OB_INVALID_INDEX;
-    uint64_t tenant_id = OB_INVALID_TENANT_ID;
+    
     int64_t schema_version = OB_INVALID_VERSION;
     int64_t schema_count = OB_INVALID_COUNT;
     int64_t ref_cnt = OB_INVALID_COUNT;
@@ -437,30 +434,29 @@ int ObSchemaMgrCache::get_slot_info(common::ObIAllocator &allocator, common::ObI
           ref_infos.reset();
           tmp_str.reset();
           slot_id = i;
-          tenant_id = schema_mgr->get_tenant_id();
           schema_version = schema_mgr->get_schema_version();
           allocator_idx = schema_mgr->get_allocator_idx();
           ref_cnt = schema_mgr_items_[i].ref_cnt_;
           mod_ref = schema_mgr_items_[i].mod_ref_cnt_;
           if (OB_FAIL(schema_mgr->get_schema_count(schema_count))) {
-            LOG_WARN("fail to get schema count", KR(ret), K(tenant_id), K(schema_version));
+            LOG_WARN("fail to get schema count", KR(ret), K(schema_version));
           } else if (0 == ref_cnt) {
             //do nothing
           } else if (OB_ISNULL(mod_ref)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tenant slot ref_cnt size > 0 but mod ref array is NULL", KR(ret), K(tenant_id),
+            LOG_WARN("tenant slot ref_cnt size > 0 but mod ref array is NULL", KR(ret),
                     K(slot_id), K(schema_version));
           } else if (OB_FAIL(build_ref_mod_infos_(mod_ref, tmp_buff, buf_len, tmp_str))) {
-            LOG_WARN("fail to build mode_ref_cnt to string", KR(ret), K(tenant_id), K(schema_version));
+            LOG_WARN("fail to build mode_ref_cnt to string", KR(ret), K(schema_version));
           //deep copy string
           } else if (OB_FAIL(ob_write_string(allocator, tmp_str, ref_infos))) {
             LOG_WARN("set mod_ref_infos string faild", K(tmp_str));
           }
           if (OB_SUCC(ret)) {
-            schema_slot.init(tenant_id, slot_id, schema_version,
+            schema_slot.init(slot_id, schema_version,
                               schema_count, ref_cnt, ref_infos, allocator_idx);
             if (OB_FAIL(schema_slot_infos.push_back(schema_slot))) {
-              LOG_WARN("push back to schema_slot_infos failed", KR(ret), K(tenant_id), K(schema_version));
+              LOG_WARN("push back to schema_slot_infos failed", KR(ret), K(schema_version));
             }
           }
         }//OB_NOT_NULL(schema_mgr)
@@ -497,16 +493,13 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
   } else if (OB_ISNULL(schema_mgr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(schema_mgr));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == schema_mgr->get_tenant_id())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), "tenant_id", schema_mgr->get_tenant_id());
   } else {
     ObSchemaMgrItem *dst_item = NULL;
     bool is_stop = false;
-    const uint64_t tenant_id = schema_mgr->get_tenant_id();
+    
     int64_t max_schema_slot_num = max_cached_num_;
     if (!ObSchemaService::g_liboblog_mode_) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         max_schema_slot_num = tenant_config->_max_schema_slot_num;
       }
@@ -549,9 +542,9 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
         const ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
         const ObSchemaMgr *schema_mgr = schema_mgr_item.schema_mgr_;
         if (OB_NOT_NULL(schema_mgr)) {
-          uint64_t tenant_id = schema_mgr->get_tenant_id();
+          
           uint64_t schema_version = schema_mgr->get_schema_version();
-          LOG_INFO("schema_mgr_item", "i", i, K(ret), K(tenant_id),
+          LOG_INFO("schema_mgr_item", "i", i, K(ret),
                    K(schema_version), K(schema_mgr),
                    "ref_cnt", schema_mgr_item.ref_cnt_,
                    "mod_ref_cnt", ObArrayWrap<int64_t>(schema_mgr_item.mod_ref_cnt_,
@@ -562,10 +555,10 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
       eli_schema_mgr = dst_item->schema_mgr_;
       schema_mgr->set_timestamp_in_slot(ObClockGenerator::getClock());
       dst_item->schema_mgr_ = schema_mgr;
-      uint64_t tenant_id = schema_mgr->get_tenant_id();
+      
       int64_t dst_timestamp = schema_mgr->get_timestamp_in_slot();
       int64_t dst_schema_version = schema_mgr->get_schema_version();
-      LOG_INFO("dst schema mgr item ptr", K(tenant_id), K(dst_item),
+      LOG_INFO("dst schema mgr item ptr", K(dst_item),
                K(dst_timestamp), K(dst_schema_version), K(target_pos));
       (void)ATOMIC_STORE(&dst_item->ref_cnt_, 0);
       for (int64_t i = 0; i < ObSchemaMgrItem::MOD_MAX; i++) {
@@ -653,11 +646,11 @@ int ObSchemaMgrCache::try_eliminate_schema_mgr(ObSchemaMgr *&eli_schema_mgr)
       } else if (eli_schema_mgr != tmp_schema_mgr) {
       } else if (ATOMIC_LOAD(&schema_mgr_item.ref_cnt_) > 0) {
         ret = OB_EAGAIN;
-        uint64_t tenant_id = tmp_schema_mgr->get_tenant_id();
+        
         int64_t ref_cnt = ATOMIC_LOAD(&schema_mgr_item.ref_cnt_);
         int64_t timestamp = tmp_schema_mgr->get_timestamp_in_slot();
         int64_t schema_version = tmp_schema_mgr->get_schema_version();
-        LOG_WARN("schema mgr is in use, try eliminate later", KR(ret), K(tenant_id),
+        LOG_WARN("schema mgr is in use, try eliminate later", KR(ret),
                  K(ref_cnt), K(schema_version), K(timestamp));
       } else {
         eli_schema_mgr = tmp_schema_mgr;
@@ -692,7 +685,7 @@ void ObSchemaMgrCache::dump() const
     for (int64_t i = 0; i < max_cached_num_; ++i) {
       const ObSchemaMgrItem &schema_mgr_item = schema_mgr_items_[i];
       const ObSchemaMgr *schema_mgr = schema_mgr_item.schema_mgr_;
-      uint64_t tenant_id = OB_INVALID_TENANT_ID;
+      
       int64_t schema_version = OB_INVALID_VERSION;
       int64_t timestamp_in_slot = 0;
       int64_t schema_count = 0;
@@ -703,13 +696,12 @@ void ObSchemaMgrCache::dump() const
         ret = OB_SUCC(ret) ? tmp_ret : ret;
         tmp_ret = schema_mgr->get_schema_size(schema_size);
         ret = OB_SUCC(ret) ? tmp_ret : ret;
-        tenant_id = schema_mgr->get_tenant_id();
         schema_version = schema_mgr->get_schema_version();
         timestamp_in_slot = schema_mgr->get_timestamp_in_slot();
         total_count += schema_count;
         total_size += schema_size;
         FLOG_INFO("[SCHEMA_STATISTICS] dump schema_mgr_item", "i", i, K(ret),
-                  K(tenant_id), K(schema_version), K(schema_count),
+                  K(schema_version), K(schema_count),
                   K(schema_size), K(timestamp_in_slot),
                   "ref_cnt", schema_mgr_item.ref_cnt_,
                   "mod_ref_cnt", ObArrayWrap<int64_t>(schema_mgr_item.mod_ref_cnt_,

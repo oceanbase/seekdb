@@ -151,7 +151,7 @@ public:
 
 public:
   ObExtInfoCbRegister():
-      tmp_allocator_(lib::ObMemAttr(MTL_ID(), "ExtInfoLogReg")),
+      tmp_allocator_(lib::ObMemAttr("ExtInfoLogReg")),
       mvcc_ctx_(nullptr),
       header_(),
       ext_info_data_(),

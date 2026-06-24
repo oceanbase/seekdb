@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tenant_medium_checker.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -93,7 +94,7 @@ int ObTenantMediumChecker::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantMediumChecker is inited before", KR(ret), KPC(this));
-  } else if (OB_FAIL(tablet_ls_set_.create(DEFAULT_MAP_BUCKET, "MedCheckSet", "CheckSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(tablet_ls_set_.create(DEFAULT_MAP_BUCKET, "MedCheckSet", "CheckSetNode"))) {
     LOG_WARN("failed to create set", K(ret));
   } else {
     is_inited_ = true;
@@ -152,11 +153,11 @@ int ObTenantMediumChecker::check_medium_finish_schedule()
   } else {
     DEL_SUSPECT_INFO(MEDIUM_MERGE, UNKNOW_LS_ID, UNKNOW_TABLET_ID, ObDiagnoseTabletType::TYPE_MEDIUM_MERGE);
     TabletLSArray tablet_ls_infos;
-    tablet_ls_infos.set_attr(ObMemAttr(MTL_ID(), "CheckInfos"));
+    tablet_ls_infos.set_attr(ObMemAttr("CheckInfos"));
     TabletLSArray batch_tablet_ls_infos;
-    batch_tablet_ls_infos.set_attr(ObMemAttr(MTL_ID(), "BCheckInfos"));
+    batch_tablet_ls_infos.set_attr(ObMemAttr("BCheckInfos"));
     TabletLSArray finish_tablet_ls_infos;
-    finish_tablet_ls_infos.set_attr(ObMemAttr(MTL_ID(), "FinishInfos"));
+    finish_tablet_ls_infos.set_attr(ObMemAttr("FinishInfos"));
     // copy the tablet_ls_infos from set // with lock
     {
       lib::ObMutexGuard guard(lock_);
@@ -174,7 +175,7 @@ int ObTenantMediumChecker::check_medium_finish_schedule()
         tablet_ls_set_.clear();
       }
     }
-    const int64_t batch_size = MTL(ObTenantTabletScheduler *)->get_checker_batch_size();
+    const int64_t batch_size = share::g_mp->tenant_tablet_scheduler()->get_checker_batch_size();
     if (OB_FAIL(ret) || tablet_ls_infos.empty()) {
     } else if (OB_FAIL(batch_tablet_ls_infos.reserve(batch_size))) {
       LOG_WARN("fail to reserve array", K(ret), "size", batch_size);

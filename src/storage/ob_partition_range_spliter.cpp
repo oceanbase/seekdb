@@ -373,7 +373,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::find(const int64_t level,
     // root node
     is_in_cache = caches_[0].is_inited_;
   } else {
-    ObMicroBlockCacheKey key(MTL_ID(), *micro_index_info);
+    ObMicroBlockCacheKey key(*micro_index_info);
     is_in_cache = (key == caches_[level].key_);
   }
 
@@ -416,7 +416,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
                        : cache_node->context_.init(cache_node->micro_data_, micro_index_info, traverser))) {
       LOG_WARN("Fail to init root node context", KR(ret), K(cache_node->micro_data_));
     } else if (OB_FAIL(
-                   cache_node->key_.assign(ObMicroBlockCacheKey(MTL_ID(), *micro_index_info)))) {
+                   cache_node->key_.assign(ObMicroBlockCacheKey(*micro_index_info)))) {
       LOG_WARN("Fail to assign cache key", KR(ret), KPC(micro_index_info));
     } else {
       cache_node->is_inited_ = true;
@@ -435,7 +435,7 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
   micro_handle.reset();
   micro_handle.allocator_ = &allocator_;
 
-  ObMicroBlockCacheKey key(MTL_ID(), micro_index_info);
+  ObMicroBlockCacheKey key(micro_index_info);
   ObIMicroBlockCache *cache
       = micro_index_info.is_data_block()
             ? &blocksstable::ObStorageCacheSuite::get_instance().get_block_cache()
@@ -459,15 +459,14 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
     if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(true /* deep_copy_key */,
                                                                   micro_handle.des_meta_))) {
       LOG_WARN("Fail to fill micro block deserialize meta", KR(ret));
-    } else if (OB_FAIL(cache->prefetch(MTL_ID(),
-                                       micro_index_info.get_macro_id(),
+    } else if (OB_FAIL(cache->prefetch(micro_index_info.get_macro_id(),
                                        micro_index_info,
                                        /* use_cache */ true,
                                        micro_handle.io_handle_,
                                        &allocator_))) {
       LOG_WARN("Fail to prefetch data micro block", KR(ret), K(micro_index_info));
     } else if (ObSSTableMicroBlockState::UNKNOWN_STATE == micro_handle.block_state_) {
-      micro_handle.tenant_id_ = MTL_ID();
+      
       micro_handle.macro_block_id_ = micro_index_info.get_macro_id();
       micro_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
       micro_handle.micro_info_.set(micro_index_info.get_block_offset(),

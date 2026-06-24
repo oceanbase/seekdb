@@ -87,8 +87,8 @@ int ObSharedNothingTmpFileMetaTree::init(const int64_t fd,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K(fd_), KP(wbp), KP(callback_allocator), KP(block_manager));
   } else {
-    data_item_array_.set_attr(ObMemAttr(MTL_ID(), "TFDataItemArr"));
-    level_page_range_array_.set_attr(ObMemAttr(MTL_ID(), "TFTreeLevelArr"));
+    data_item_array_.set_attr(ObMemAttr("TFDataItemArr"));
+    level_page_range_array_.set_attr(ObMemAttr("TFTreeLevelArr"));
     fd_ = fd;
     wbp_ = wbp;
     callback_allocator_ = callback_allocator;
@@ -1305,7 +1305,7 @@ int ObSharedNothingTmpFileMetaTree::flush_leaf_pages_(
         STORAGE_LOG(ERROR, "fail to notify write back for meta", KR(ret), K(fd_), K(cur_page_id), K(page_key));
       } else {
         ObTmpPageCacheKey cache_key(tree_io_info.block_index_,
-                                    write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, MTL_ID());
+                                    write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE);
         ObTmpPageCacheValue cache_value(page_buff);
         MEMCPY(block_buff + write_offset, page_buff, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
         if (OB_FAIL(calc_and_set_page_checksum_(block_buff + write_offset))) {
@@ -1407,7 +1407,7 @@ int ObSharedNothingTmpFileMetaTree::flush_internal_pages_(
           STORAGE_LOG(ERROR, "fail to notify write back for meta", KR(ret), K(fd_), K(cur_page_id), K(page_key));
         } else {
           ObTmpPageCacheKey cache_key(tree_io_info.block_index_,
-                                      write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, MTL_ID());
+                                      write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE);
           MEMCPY(block_buff + write_offset, page_buff, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
           if (OB_FAIL(modify_child_pages_location(block_buff + write_offset))) {
             STORAGE_LOG(WARN, "fail to modify child pages location", KR(ret), K(fd_), KP(block_buff + write_offset));
@@ -2159,7 +2159,7 @@ int ObSharedNothingTmpFileMetaTree::release_tmp_file_page_(
   // ignore ret
   for (int64_t i = 0; i < page_num; ++i) {
     int64_t page_id = begin_page_id + i;
-    ObTmpPageCacheKey key(block_index, page_id, MTL_ID());
+    ObTmpPageCacheKey key(block_index, page_id);
     ObTmpPageCache::get_instance().erase(key);
   }
 
@@ -2764,7 +2764,7 @@ int ObSharedNothingTmpFileMetaTree::get_page_(
   } else {
     if (!is_page_in_write_cache(page_info)) {
       bool need_load_from_disk = false;
-      ObTmpPageCacheKey key(page_info.block_index_, page_info.physical_page_id_, MTL_ID());
+      ObTmpPageCacheKey key(page_info.block_index_, page_info.physical_page_id_);
       if (OB_SUCC(ObTmpPageCache::get_instance().get_page(key, p_handle))) {
         page_buff = p_handle.value_->get_buffer();
       } else if (OB_ENTRY_NOT_EXIST != ret) {
@@ -2853,7 +2853,7 @@ int ObSharedNothingTmpFileMetaTree::cache_page_for_write_(
         STORAGE_LOG(ERROR, "fail to notify load for meta", KR(ret), K(fd_), K(new_page_id), K(page_key));
       } else {
         ObTmpPageValueHandle p_handle;
-        ObTmpPageCacheKey key(page_info.block_index_, page_info.physical_page_id_, MTL_ID());
+        ObTmpPageCacheKey key(page_info.block_index_, page_info.physical_page_id_);
         if (OB_SUCC(ObTmpPageCache::get_instance().get_page(key, p_handle))) {
           MEMCPY(new_page_buff, p_handle.value_->get_buffer(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
         } else if (OB_ENTRY_NOT_EXIST != ret) {

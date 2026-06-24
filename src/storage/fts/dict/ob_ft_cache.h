@@ -37,10 +37,9 @@ class ObDictCacheKey : public common::ObIKVCacheKey
 {
 public:
   ObDictCacheKey(const uint64_t name,
-                 const uint64_t tenant,
                  const ObFTDictType dict_type,
                  int32_t range_id)
-      : name_(name), tenant_(tenant), dict_type_(dict_type), range_id_(range_id)
+      : name_(name), dict_type_(dict_type), range_id_(range_id)
   {
   }
   ~ObDictCacheKey() override {}
@@ -49,15 +48,13 @@ public:
   {
     const ObDictCacheKey &other_key = reinterpret_cast<const ObDictCacheKey &>(other);
     return (&other == this)
-           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_)
-               && (other_key.tenant_ == tenant_));
+           || ((other_key.name_ == name_) && (other_key.dict_type_ == dict_type_));
   }
 
   uint64_t hash() const override
   {
     uint64_t hash_val = 0;
     hash_val = murmurhash(&name_, sizeof(name_), hash_val);
-    hash_val = murmurhash(&tenant_, sizeof(tenant_), hash_val);
     hash_val = murmurhash(&dict_type_, sizeof(dict_type_), hash_val);
     hash_val = murmurhash(&range_id_, sizeof(range_id_), hash_val);
     return hash_val;
@@ -73,7 +70,7 @@ public:
     hash_value = hash();
     return OB_SUCCESS;
   }
-  uint64_t get_tenant_id() const override { return tenant_; }
+  
   int64_t size() const override { return sizeof(ObDictCacheKey); }
 
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override
@@ -83,17 +80,16 @@ public:
       ret = OB_INVALID_ARGUMENT;
       CLOG_LOG(WARN, "invalid argument for ob dict cache", K(ret), K(buf_len), K(size()));
     } else {
-      ObDictCacheKey *new_key = new (buf) ObDictCacheKey(name_, tenant_, dict_type_, range_id_);
+      ObDictCacheKey *new_key = new (buf) ObDictCacheKey(name_, dict_type_, range_id_);
       key = new_key;
     }
     return ret;
   }
 
-  TO_STRING_KV(K_(name), K_(tenant), K_(dict_type), K_(range_id));
+  TO_STRING_KV(K_(name), K_(dict_type), K_(range_id));
 private:
   // to change to name
   uint64_t name_; // when build dict
-  uint64_t tenant_;
   ObFTDictType dict_type_;
   int32_t range_id_;
 };

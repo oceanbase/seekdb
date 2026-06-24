@@ -263,7 +263,7 @@ int ob_datum_to_ob_time_with_date(const T &datum,
     case ObStringTC: {
       ObScale res_scale = -1;
       ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER,
-                                     OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+                                     OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString str = datum.get_string();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               &lob_allocator, type, CS_TYPE_BINARY, has_lob_header, str))) {
@@ -368,7 +368,7 @@ int ob_datum_to_ob_time_without_date(const T &datum,
     }
     case ObTextTC: // TODO@hanhui texttc share with the stringtc temporarily
     case ObStringTC: {
-      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString str = datum.get_string();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
               &lob_allocator, type, CS_TYPE_BINARY, has_lob_header, str))) {

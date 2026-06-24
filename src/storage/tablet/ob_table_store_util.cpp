@@ -1368,7 +1368,7 @@ int ObCacheSSTableHelper::load_sstable(
     LOG_WARN("invalid argument", K(ret), K(addr));
   } else {
     ObStorageMetaCache &meta_cache = OB_STORE_CACHE.get_storage_meta_cache();
-    ObStorageMetaKey meta_key(MTL_ID(), addr);
+    ObStorageMetaKey meta_key(addr);
     ObStorageMetaValue::MetaType meta_type = load_co_sstable
                                           ? ObStorageMetaValue::MetaType::CO_SSTABLE
                                           : ObStorageMetaValue::MetaType::SSTABLE;
@@ -1506,7 +1506,7 @@ int ObCacheSSTableHelper::cache_local_sstable_meta(
       ObStorageMetaValue::MetaType meta_type = sstable->is_co_sstable()                          \
                                              ? ObStorageMetaValue::CO_SSTABLE                    \
                                              : ObStorageMetaValue::SSTABLE;                      \
-      ObStorageMetaKey key(MTL_ID(), sstable->get_addr());                                       \
+      ObStorageMetaKey key(sstable->get_addr());                                       \
       if (cur_remain_size <= sstable->get_addr().size()) {                                       \
         break;                                                                                   \
       } else if (OB_FAIL(meta_types.push_back(meta_type))) {                                     \
@@ -1527,7 +1527,7 @@ int ObCacheSSTableHelper::batch_cache_sstable_meta(
     ObTabletTableStore *table_store)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "CacheSSTable"));
+  common::ObArenaAllocator tmp_allocator(common::ObMemAttr("CacheSSTable"));
   ObSafeArenaAllocator safe_allocator(tmp_allocator);
   common::ObSEArray<ObStorageMetaValue::MetaType, 8> meta_types;
   common::ObSEArray<ObStorageMetaKey, 8> cache_keys;

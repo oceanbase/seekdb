@@ -47,11 +47,11 @@ void ObMaterialOp::destroy()
   ObOperator::destroy();
 }
 
-int ObMaterialOp::init_material_impl(int64_t tenant_id, int64_t row_count)
+int ObMaterialOp::init_material_impl(int64_t row_count)
 {
   int ret = OB_SUCCESS;  
-  if (OB_FAIL(material_impl_.init(tenant_id, &eval_ctx_, &ctx_, &io_event_observer_))) {
-    LOG_WARN("failed to init material impl", K(tenant_id));
+  if (OB_FAIL(material_impl_.init(&eval_ctx_, &ctx_, &io_event_observer_))) {
+    LOG_WARN("failed to init material impl");
   } else {
     material_impl_.set_input_rows(row_count);
     material_impl_.set_input_width(MY_SPEC.width_);
@@ -64,12 +64,12 @@ int ObMaterialOp::init_material_impl(int64_t tenant_id, int64_t row_count)
 int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = session.get_effective_tenant_id();
+  
   int64_t row_count = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
     LOG_WARN("failed to get px size", K(ret));
-  } else if (OB_FAIL(init_material_impl(tenant_id, row_count))) {
+  } else if (OB_FAIL(init_material_impl(row_count))) {
     LOG_WARN("failed to init material impl");
   }
 
@@ -98,12 +98,12 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
 int ObMaterialOp::get_all_batch_from_child(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = session.get_effective_tenant_id();
+  
   int64_t row_count = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
     LOG_WARN("failed to get px size", K(ret));
-  } else if (OB_FAIL(init_material_impl(tenant_id, row_count))) {
+  } else if (OB_FAIL(init_material_impl(row_count))) {
     LOG_WARN("failed to init material impl");
   }
 

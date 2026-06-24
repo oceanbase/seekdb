@@ -226,7 +226,7 @@ private:
   {
     query_range_.reset();
     is_query_range_ready_ = false;
-    query_range_allocator_.set_tenant_id(tenant_id_);
+    
     query_range_allocator_.set_label("ObRangeMsgQR");
     query_range_allocator_.reset_remain_one_page();
   }
@@ -330,7 +330,7 @@ private:
   {
     query_range_.reset();
     is_query_range_ready_ = false;
-    query_range_allocator_.set_tenant_id(tenant_id_);
+    
     query_range_allocator_.set_label("ObInMsgQR");
     query_range_allocator_.reset_remain_one_page();
   }

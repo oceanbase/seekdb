@@ -210,13 +210,11 @@ ObDynamicSamplePieceMsgCtx::ObDynamicSamplePieceMsgCtx(
     uint64_t op_id,
     int64_t task_cnt,
     int64_t timeout_ts,
-    int64_t tenant_id,
     ObExecContext &exec_ctx,
     ObPxCoordOp &coord,
     const ObDynamicSamplePieceMsgCtx::SortDef &sort_def)
   : ObPieceMsgCtx(op_id, task_cnt, timeout_ts),
     is_inited_(false),
-    tenant_id_(tenant_id),
     received_(0),
     succ_count_(0),
     tablet_ids_(),
@@ -274,7 +272,6 @@ int ObDynamicSamplePieceMsgCtx::alloc_piece_msg_ctx(const ObDynamicSamplePieceMs
           pkt.op_id_,
           task_cnt,
           ctx.get_physical_plan_ctx()->get_timeout_timestamp(),
-          ctx.get_my_session()->get_effective_tenant_id(),
           ctx,
           coord_info.coord_,
           sort_def);
@@ -295,7 +292,6 @@ int ObDynamicSamplePieceMsgCtx::init(const ObIArray<uint64_t> &tablet_ids)
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
     LOG_WARN("assign partition ids failed", K(ret), K(tablet_ids));
   } else if (OB_FAIL(sort_impl_.init(
-          tenant_id_,
           sort_def_.collations_,
           sort_def_.cmp_funs_,
           &coord_.get_eval_ctx(),
@@ -312,7 +308,7 @@ int ObDynamicSamplePieceMsgCtx::init(const ObIArray<uint64_t> &tablet_ids)
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       ObChunkDatumStore *sample_store = new (buf + i * sizeof(ObChunkDatumStore)) ObChunkDatumStore("DYN_SAMPLE_CTX");
-      if (OB_FAIL(sample_store->init(0, tenant_id_, ObCtxIds::DEFAULT_CTX_ID,
+      if (OB_FAIL(sample_store->init(0, ObCtxIds::DEFAULT_CTX_ID,
           "DYN_SAMPLE_CTX", false/*enable dump*/))) {
         LOG_WARN("init sample chunk store failed", K(ret), K(i));
       } else if (OB_FAIL(sample_stores_.push_back(sample_store))) {
@@ -474,17 +470,17 @@ int ObDynamicSamplePieceMsgCtx::build_whole_msg(ObDynamicSampleWholeMsg &whole_m
       rootserver::ObDDLSliceInfo ddl_slice_info;
       bool is_idempotent_mode = false;
       if (OB_FAIL(ddl_slice_info.part_ranges_.assign(whole_msg.part_ranges_))) {
-        LOG_WARN("assign part ranges failed", K(ret), K(tenant_id_), K(ddl_task_id), K(whole_msg.part_ranges_));
-      } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_or_insert_schedule_info(tenant_id_, ddl_task_id, exec_ctx_.get_allocator(), ddl_slice_info, is_idempotent_mode))) {
-        LOG_WARN("insert slice info failed", K(ret), K(tenant_id_), K(ddl_task_id), K(ddl_slice_info));
+        LOG_WARN("assign part ranges failed", K(ret), K(ddl_task_id), K(whole_msg.part_ranges_));
+      } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_or_insert_schedule_info(ddl_task_id, exec_ctx_.get_allocator(), ddl_slice_info, is_idempotent_mode))) {
+        LOG_WARN("insert slice info failed", K(ret), K(ddl_task_id), K(ddl_slice_info));
       } else if (is_idempotent_mode) {
         if (OB_UNLIKELY(!ddl_slice_info.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid ddl slice info", K(ret), K(tenant_id_), K(ddl_task_id), K(ddl_slice_info));
+          LOG_WARN("invalid ddl slice info", K(ret), K(ddl_task_id), K(ddl_slice_info));
         } else if (OB_FAIL(whole_msg.part_ranges_.assign(ddl_slice_info.part_ranges_))) {
-          LOG_WARN("assign part ranges failed", K(ret), K(tenant_id_), K(ddl_task_id), K(ddl_slice_info.part_ranges_));
+          LOG_WARN("assign part ranges failed", K(ret), K(ddl_task_id), K(ddl_slice_info.part_ranges_));
         }
-        LOG_TRACE("build whole msg with ddl task record", K(ret), K(tenant_id_), K(ddl_task_id), K(ddl_slice_info));
+        LOG_TRACE("build whole msg with ddl task record", K(ret), K(ddl_task_id), K(ddl_slice_info));
       }
     }
   }

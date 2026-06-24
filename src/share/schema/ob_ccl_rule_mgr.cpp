@@ -175,8 +175,7 @@ int ObCCLRuleMgr::add_ccl_rule(const ObSimpleCCLRuleSchema &schema, const ObName
   } else {
     if (OB_SUCC(ret)) {
       int over_write = 1;
-      ObCCLRuleNameHashKey hash_wrapper(new_schema->get_tenant_id(),
-                                        new_schema->get_name_case_mode(),
+      ObCCLRuleNameHashKey hash_wrapper(new_schema->get_name_case_mode(),
                                         new_schema->get_ccl_rule_name());
       if (OB_FAIL(ccl_rule_name_map_.set_refactored(hash_wrapper, new_schema, over_write))) {
         LOG_WARN("build ccl_rule hash map failed", K(ret));
@@ -230,7 +229,7 @@ int ObCCLRuleMgr::del_ccl_rule_from_ccl_rule_infos(const ObTenantCCLRuleId &id,
     // if item can be found, schema should not be null
     // defense code, should not happed
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("removed ccl_rule schema return NULL, ", "tenant_id", id.tenant_id_, "ccl_rule_id",
+    LOG_WARN("removed ccl_rule schema return NULL, ",  "ccl_rule_id",
              id.ccl_rule_id_, K(ret));
   }
 
@@ -264,8 +263,7 @@ int ObCCLRuleMgr::del_ccl_rule(const ObTenantCCLRuleId &id)
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(schema)) {
     if (OB_FAIL(ccl_rule_name_map_.erase_refactored(
-        ObCCLRuleNameHashKey(schema->get_tenant_id(),
-                             schema->get_name_case_mode(),
+        ObCCLRuleNameHashKey(schema->get_name_case_mode(),
                              schema->get_ccl_rule_name())))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
@@ -310,8 +308,7 @@ int ObCCLRuleMgr::get_schema_by_id(const uint64_t ccl_rule_id,
   return ret;
 }
 
-int ObCCLRuleMgr::get_schema_by_name(const uint64_t tenant_id,
-                                     const ObNameCaseMode mode,
+int ObCCLRuleMgr::get_schema_by_name(const ObNameCaseMode mode,
                                      const common::ObString &name,
                                      const ObSimpleCCLRuleSchema *&schema) const
 {
@@ -320,17 +317,16 @@ int ObCCLRuleMgr::get_schema_by_name(const uint64_t tenant_id,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id ||
-             name.empty())) {
+  } else if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(name));
+    LOG_WARN("invalid argument", K(ret), K(name));
   } else {
     ObSimpleCCLRuleSchema *tmp_schema = NULL;
-    ObCCLRuleNameHashKey hash_wrapper(tenant_id, mode, name);
+    ObCCLRuleNameHashKey hash_wrapper(mode, name);
     if (OB_FAIL(ccl_rule_name_map_.get_refactored(hash_wrapper, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        // LOG_WARN("schema is not exist", K(tenant_id), K(name));
+        // LOG_WARN("schema is not exist", K(name));
       } else {
         LOG_WARN("failed to get ccl_rule from hashmap", K(ret));
       }
@@ -355,13 +351,12 @@ ObCCLRuleMgr::get_ccl_rule_belong_ccl_rule_infos(CclRuleContainsInfo contians_in
   return target_ccl_rule_infos;
 }
 
-int ObCCLRuleMgr::get_schemas_in_tenant(const uint64_t tenant_id,
-                                        common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas,
+int ObCCLRuleMgr::get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas,
                                         const CCLRuleInfos &ccl_rule_infos) const
 {
   int ret = OB_SUCCESS;
   schemas.reset();
-  ObTenantCCLRuleId id(tenant_id, OB_MIN_ID);
+  ObTenantCCLRuleId id(OB_MIN_ID);
   ConstCCLRuleIter iter_begin = ccl_rule_infos.lower_bound(id, compare_with_tenant_ccl_rule_id);
   bool is_stop = false;
   for (ConstCCLRuleIter iter = iter_begin; OB_SUCC(ret) && iter != ccl_rule_infos.end() && !is_stop;
@@ -370,7 +365,7 @@ int ObCCLRuleMgr::get_schemas_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (tenant_id != schema->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back ccl_rule failed", K(ret));
@@ -379,41 +374,15 @@ int ObCCLRuleMgr::get_schemas_in_tenant(const uint64_t tenant_id,
   return ret;
 }
 
-int ObCCLRuleMgr::get_schemas_in_tenant(const uint64_t tenant_id,
-                                        common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas) const
+int ObCCLRuleMgr::get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSchema *> &schemas) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(get_schemas_in_tenant(tenant_id, schemas, ccl_rules_specified_by_database_table_dml_))) {
+  if (OB_FAIL(get_schemas_in_tenant(schemas, ccl_rules_specified_by_database_table_dml_))) {
     LOG_WARN("fail to get ccl rule schemas in ccl_rules_specified_by_database_table_dml_", K(ret));
-  } else if (OB_FAIL(get_schemas_in_tenant(tenant_id, schemas, ccl_rules_specified_by_dml_))) {
+  } else if (OB_FAIL(get_schemas_in_tenant(schemas, ccl_rules_specified_by_dml_))) {
     LOG_WARN("fail to get ccl rule schemas in ccl_rules_specified_by_database_table_dml_", K(ret));
-  } else if (OB_FAIL(get_schemas_in_tenant(tenant_id, schemas, ccl_rules_))) {
+  } else if (OB_FAIL(get_schemas_in_tenant(schemas, ccl_rules_))) {
     LOG_WARN("fail to get ccl rule schemas in ccl_rules_specified_by_database_table_dml_", K(ret));
-  }
-  return ret;
-}
-
-int ObCCLRuleMgr::del_schemas_in_tenant(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObSimpleCCLRuleSchema *> schemas;
-    if (OB_FAIL(get_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get rls_policy schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObTenantCCLRuleId id(tenant_id, (*schema)->get_ccl_rule_id());
-        if (OB_FAIL(del_ccl_rule(id))) {
-          LOG_WARN("del ccl_rule failed",
-                   "tenant_id", id.tenant_id_,
-                   "ccl_rule_id", id.ccl_rule_id_,
-                   K(ret));
-        }
-      }
-    }
   }
   return ret;
 }

@@ -22,7 +22,7 @@
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "inner_table/ob_inner_table_schema.h"
 #include "share/ob_debug_sync.h"
-#include "share/ob_tenant_id_schema_version.h"
+#include "share/ob_schema_version_info.h"
 
 namespace oceanbase
 {
@@ -344,10 +344,9 @@ DEF_TO_STRING(ObCoreTableProxy::Row)
 
 ObCoreTableProxy::ObCoreTableProxy(
   const char *table_name,
-  ObISQLClient &sql_client,
-  const uint64_t tenant_id)
+  ObISQLClient &sql_client)
   : table_name_(table_name), sql_client_(&sql_client), load_for_update_(false),
-    cur_idx_(-1), all_row_(), allocator_(ObModIds::OB_CORE_TABLE_PROXY), tenant_id_(tenant_id)
+    cur_idx_(-1), all_row_(), allocator_(ObModIds::OB_CORE_TABLE_PROXY)
 {
 }
 
@@ -396,8 +395,8 @@ int ObCoreTableProxy::load(const bool for_update)
         "FROM %s WHERE table_name = '%s' ORDER BY row_id, column_name%s",
         OB_ALL_CORE_TABLE_TNAME, table_name_, for_update ? " FOR UPDATE" : ""))) {
       LOG_WARN("assign sql failed", K(ret));
-    } else if (OB_FAIL(sql_client_->read(res, tenant_id_, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K_(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client_->read(res, sql.ptr()))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", K(ret), K(sql));
@@ -861,10 +860,10 @@ int ObCoreTableProxy::execute_delete_sql(const int64_t row_id)
     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_name = '%s' AND row_id = %ld",
         OB_ALL_CORE_TABLE_TNAME, table_name_, row_id))) {
       LOG_WARN("assign sql failed", K(ret));
-    } else if (OB_FAIL(sql_client_->write(tenant_id_, sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql failed", KR(ret), K_(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected_rows))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else {
-      LOG_TRACE("execute sql", KR(ret), K_(tenant_id), K(sql));
+      LOG_TRACE("execute sql", KR(ret), K(sql));
     }
   }
   return ret;
@@ -1018,10 +1017,10 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s ",
                                       OB_ALL_CORE_TABLE_TNAME, insert_sql.ptr()))) {
       LOG_WARN("fail to assign fmt", K(ret));
-    } else if (OB_FAIL(sql_client_->write(tenant_id_, sql.ptr(), affected))) {
-      LOG_WARN("execute sql failed", KR(ret), K_(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else {
-      LOG_TRACE("execute sql", KR(ret), K_(tenant_id), K(sql), K(affected));
+      LOG_TRACE("execute sql", KR(ret), K(sql), K(affected));
     }
 
     //batch update
@@ -1035,10 +1034,10 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
                                       "column_value, values(column_value))",
                                       OB_ALL_CORE_TABLE_TNAME, update_sql.ptr(), OB_INVALID_SCHEMA_VERSION))) {
       LOG_WARN("fail to assign fmt", K(ret));
-    } else if (OB_FAIL(sql_client_->write(tenant_id_, sql.ptr(), affected))) {
-      LOG_WARN("execute sql failed", KR(ret), K_(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else {
-      LOG_TRACE("execute sql", KR(ret), K_(tenant_id), K(sql), K(affected));
+      LOG_TRACE("execute sql", KR(ret), K(sql), K(affected));
       if (is_zero_row(affected)) {
         LOG_WARN("core table update do nothing", K(sql));
       }
@@ -1121,10 +1120,10 @@ int ObCoreTableProxy::execute_update_sql(const Row &row, const ObIArray<UpdateCe
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s ",
                                       OB_ALL_CORE_TABLE_TNAME, insert_sql.ptr()))) {
       LOG_WARN("fail to assign fmt", K(ret));
-    } else if (OB_FAIL(sql_client_->write(tenant_id_, sql.ptr(), affected))) {
-      LOG_WARN("execute sql failed", KR(ret), K_(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else {
-      LOG_TRACE("execute sql", KR(ret), K_(tenant_id), K(sql), K(affected));
+      LOG_TRACE("execute sql", KR(ret), K(sql), K(affected));
     }
 
     //batch update
@@ -1136,10 +1135,10 @@ int ObCoreTableProxy::execute_update_sql(const Row &row, const ObIArray<UpdateCe
                                       "ON DUPLICATE KEY UPDATE column_value = values(column_value)",
                                       OB_ALL_CORE_TABLE_TNAME, update_sql.ptr()))) {
       LOG_WARN("fail to assign fmt", K(ret));
-    } else if (OB_FAIL(sql_client_->write(tenant_id_, sql.ptr(), affected))) {
-      LOG_WARN("execute sql failed", KR(ret), K_(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
+      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else {
-      LOG_TRACE("execute sql", KR(ret), K_(tenant_id), K(sql), K(affected));
+      LOG_TRACE("execute sql", KR(ret), K(sql), K(affected));
     }
 
     if (OB_SUCC(ret)) {

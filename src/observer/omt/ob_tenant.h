@@ -64,14 +64,13 @@ class ObPxPool
 public:
 	class Task;
   ObPxPool() :
-      tenant_id_(common::OB_INVALID_ID),
       group_id_(0),
       is_inited_(false),
       concurrency_(0),
       active_threads_(0)
   {}
   virtual void stop();
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_group_id(uint64_t group_id)
   {
     group_id_ = group_id;
@@ -92,7 +91,6 @@ private:
     IGNORE_RETURN recycle_lock_.unlock();
   }
 private:
-  uint64_t tenant_id_;
   uint64_t group_id_;
 	common::ObPriorityQueue2<0, 1> queue_;
   bool is_inited_;
@@ -139,8 +137,8 @@ public:
   static int mtl_init(ObPxPools *&pools)
   {
     int ret = common::OB_SUCCESS;
-    uint64_t tenant_id = MTL_ID();
-    if (OB_FAIL(pools->init(tenant_id))) {
+    
+    if (OB_FAIL(pools->init())) {
     }
     return ret;
   }
@@ -151,20 +149,18 @@ public:
     pools = nullptr;
   }
 public:
-  ObPxPools() : tenant_id_(common::OB_INVALID_ID)
-  {}
+  ObPxPools() {}
   ~ObPxPools()
   {
     destroy();
   }
-  int init(uint64_t tenant_id);
+  int init();
   int get_or_create(int64_t group_id, ObPxPool *&pool);
   int thread_recycle();
 private:
   void destroy();
   int create_pool(int64_t group_id, ObPxPool *&pool);
 private:
-  uint64_t tenant_id_;
   common::SpinRWLock lock_;
   common::hash::ObHashMap<int64_t, ObPxPool *> pool_map_;
 };
@@ -223,8 +219,7 @@ class ObTenant : public share::ObTenantBase,
 public:
   static constexpr int64_t KEEP_ALIVE_TIMEOUT = 10 * 1000 * 1000L;  // 10s
 
-  ObTenant(const int64_t id,
-           const int64_t epoch,
+  ObTenant(const int64_t epoch,
            const int64_t times_of_workers,
            share::ObCgroupCtrl &cgroup_ctrl);
   virtual ~ObTenant();
@@ -288,7 +283,7 @@ public:
   void print_throttled_time();
   void regist_threads_to_cgroup();
 
-  TO_STRING_KV(K_(id),
+  TO_STRING_KV("id", id(),
                K_(tenant_meta),
                K_(unit_min_cpu), K_(unit_max_cpu),
                "total_worker_cnt", worker_count(),
@@ -307,7 +302,7 @@ public:
 public:
   static bool equal(const ObTenant *t1, const ObTenant *t2)
   {
-    return (!OB_ISNULL(t1) && !OB_ISNULL(t2) && t1->id_ == t2->id_);
+    return (!OB_ISNULL(t1) && !OB_ISNULL(t2) && t1->id() == t2->id());
   }
 
   OB_INLINE void disable_user_sched() { disable_user_sched_ = true; }

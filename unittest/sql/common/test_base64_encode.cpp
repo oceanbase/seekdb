@@ -15,10 +15,11 @@
  */
 
 #include "lib/encode/ob_base64_encode.h"
+#include "lib/ob_errno.h"
+#include <cstring>
 
 #include <gtest/gtest.h>
 #include <string>
-#include "share/backup/ob_archive_piece.h"
 
 namespace oceanbase
 {

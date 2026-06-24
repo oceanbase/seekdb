@@ -21,7 +21,6 @@
 #include "share/ob_max_id_fetcher.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
-#include "share/restore/ob_import_util.h"
 
 #define USING_LOG_PREFIX SHARE
 
@@ -32,6 +31,24 @@ namespace oceanbase
 {
 namespace share
 {
+
+namespace {
+int local_get_tenant_name_case_mode(ObNameCaseMode &name_case_mode)
+{
+  int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
+  if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(WARN, "schema service must not be null", K(ret));
+  } else if (!schema_service->is_tenant_refreshed()) {
+    ret = OB_SCHEMA_EAGAIN;
+    OB_LOG(WARN, "wait schema refreshed", K(ret));
+  } else if (OB_FAIL(schema_service->get_tenant_name_case_mode(name_case_mode))) {
+    OB_LOG(WARN, "failed to get tenant name case mode", K(ret));
+  }
+  return ret;
+}
+}
 const int64_t ObAiServiceExecutor::SPECIAL_ENDPOINT_ID_FOR_VERSION = -1;
 const int64_t ObAiServiceExecutor::INIT_ENDPOINT_VERSION = 0;
 const char *ObAiServiceExecutor::SPECIAL_ENDPOINT_SCOPE_FOR_VERSION = "";
@@ -42,15 +59,15 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   ObMySQLTransaction trans;
   ObAiModelEndpointInfo endpoint;
   uint64_t new_endpoint_id = OB_INVALID_ID;
-  uint64_t tenant_id = gen_meta_tenant_id(MTL_ID());
+  
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   bool is_exists = false;
   ObAiModelEndpointInfo tmp_endpoint;
   if (OB_FAIL(endpoint.parse_from_json_base(allocator, endpoint_name, create_jbase))) {
     LOG_WARN("failed to parse ai service endpoint info", KR(ret), K(create_jbase));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start transaction", KR(ret));
-  } else if (OB_FAIL(ObAiServiceProxy::check_ai_endpoint_exists(tenant_id, allocator, trans, endpoint_name, is_exists))) {
+  } else if (OB_FAIL(ObAiServiceProxy::check_ai_endpoint_exists(allocator, trans, endpoint_name, is_exists))) {
     LOG_WARN("failed to check ai endpoint exists", KR(ret), K(endpoint_name));
   } else if (is_exists) {
     ret = OB_AI_FUNC_ENDPOINT_EXISTS;
@@ -72,12 +89,12 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   
   
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(fetch_new_ai_model_endpoint_id(tenant_id, new_endpoint_id))) {
-    LOG_WARN("failed to fetch new ai model endpoint id", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(fetch_new_ai_model_endpoint_id( new_endpoint_id))) {
+    LOG_WARN("failed to fetch new ai model endpoint id", KR(ret));
   } else if (FALSE_IT(endpoint.set_endpoint_id(new_endpoint_id))) {
-  } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, tenant_id, new_endpoint_version))) {
-    LOG_WARN("failed to lock and fetch endpoint version", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObAiServiceProxy::insert_ai_endpoint(tenant_id, trans, new_endpoint_version, endpoint))) {
+  } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
+    LOG_WARN("failed to lock and fetch endpoint version", KR(ret));
+  } else if (OB_FAIL(ObAiServiceProxy::insert_ai_endpoint( trans, new_endpoint_version, endpoint))) {
     LOG_WARN("failed to insert ai endpoint", KR(ret), K(endpoint));
   }
 
@@ -99,25 +116,25 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   ObMySQLTransaction trans;
   ObAiModelEndpointInfo tmp_endpoint;
   ObNameCaseMode name_case_mode;
-  uint64_t tenant_id = gen_meta_tenant_id(MTL_ID());
-  uint64_t user_tenant_id = MTL_ID(); // ai model name maybe case sensitive, so need user tenant id to get name case mode
+  
+   // ai model name maybe case sensitive, so need user tenant id to get name case mode
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start transaction", KR(ret));
-  } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(tenant_id, allocator, *GCTX.sql_proxy_, name, old_endpoint, true))) {
+  } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, name, old_endpoint, true))) {
     LOG_WARN("failed to select ai endpoint", K(ret), K(name));
   } else if (OB_FAIL(construct_new_endpoint(allocator, old_endpoint, alter_jbase, new_endpoint))) {
     LOG_WARN("failed to construct new endpoint", KR(ret), K(old_endpoint), K(alter_jbase));
   } else if (OB_FAIL(new_endpoint.check_valid())) {
     LOG_WARN("invalid endpoint", KR(ret), K(new_endpoint));
-  } else if (OB_FAIL(ObImportTableUtil::get_tenant_name_case_mode(user_tenant_id, name_case_mode))) {
-    LOG_WARN("failed to get tenant name case mode", K(ret), K(user_tenant_id));
+  } else if (OB_FAIL(local_get_tenant_name_case_mode(name_case_mode))) {
+    LOG_WARN("failed to get tenant name case mode", K(ret));
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
     // need check name case mode equal, if not change ai model name, just update the endpoint 
-    LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(user_tenant_id), K(name_case_mode), K(new_endpoint), K(old_endpoint));
+    LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
   } else {
     // if change ai model name, check if the ai model endpoint has the same ai model name is already exists
     // if not exists, continue
@@ -135,9 +152,9 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   }
   
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, tenant_id, new_endpoint_version))) {
-    LOG_WARN("failed to lock and fetch endpoint version", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObAiServiceProxy::update_ai_endpoint(tenant_id, trans, new_endpoint_version, new_endpoint))) {
+  } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
+    LOG_WARN("failed to lock and fetch endpoint version", KR(ret));
+  } else if (OB_FAIL(ObAiServiceProxy::update_ai_endpoint( trans, new_endpoint_version, new_endpoint))) {
     LOG_WARN("failed to insert new ai endpoint", KR(ret), K(new_endpoint));
   }
 
@@ -169,16 +186,16 @@ int ObAiServiceExecutor::drop_ai_model_endpoint(const ObString &endpoint_name)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
-  uint64_t tenant_id = gen_meta_tenant_id(MTL_ID());
+  
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start transaction", KR(ret));
-  } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, tenant_id, new_endpoint_version))) {
-    LOG_WARN("failed to lock and fetch endpoint version", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObAiServiceProxy::drop_ai_model_endpoint(tenant_id, trans, endpoint_name))) {
+  } else if (OB_FAIL(lock_and_fetch_endpoint_version(trans, new_endpoint_version))) {
+    LOG_WARN("failed to lock and fetch endpoint version", KR(ret));
+  } else if (OB_FAIL(ObAiServiceProxy::drop_ai_model_endpoint(trans, endpoint_name))) {
     LOG_WARN("failed to drop ai endpoint", KR(ret), K(endpoint_name));
   }
 
@@ -195,11 +212,11 @@ int ObAiServiceExecutor::drop_ai_model_endpoint(const ObString &endpoint_name)
 int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObString &endpoint_name, ObAiModelEndpointInfo &endpoint_info)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = gen_meta_tenant_id(MTL_ID());
+  
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(tenant_id, allocator, *GCTX.sql_proxy_, endpoint_name, endpoint_info))) {
+  } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, endpoint_name, endpoint_info))) {
     LOG_WARN("failed to select ai endpoint", KR(ret), K(endpoint_name));
   }
   return ret;
@@ -208,24 +225,24 @@ int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObS
 int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &allocator, const ObString &ai_model_name, ObAiModelEndpointInfo &endpoint_info)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  uint64_t meta_tenant_id = gen_meta_tenant_id(MTL_ID());
+  
+  
   ObNameCaseMode name_case_mode;
-  if (OB_FAIL(ObImportTableUtil::get_tenant_name_case_mode(tenant_id, name_case_mode))) {
-    LOG_WARN("failed to get tenant name case mode", K(ret), K(tenant_id));
+  if (OB_FAIL(local_get_tenant_name_case_mode(name_case_mode))) {
+    LOG_WARN("failed to get tenant name case mode", K(ret));
   } else if (OB_NAME_CASE_INVALID >= name_case_mode || OB_NAME_CASE_MAX <= name_case_mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid name case mode", K(ret), K(name_case_mode));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(meta_tenant_id, allocator, *GCTX.sql_proxy_, ai_model_name, name_case_mode, endpoint_info))) {
+  } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(allocator, *GCTX.sql_proxy_, ai_model_name, name_case_mode, endpoint_info))) {
     LOG_WARN("failed to select ai endpoint by ai model name", KR(ret), K(ai_model_name));
   }
   return ret;
 }
 
-int ObAiServiceExecutor::fetch_new_ai_model_endpoint_id(const uint64_t tenant_id, uint64_t &new_ai_model_endpoint_id)
+int ObAiServiceExecutor::fetch_new_ai_model_endpoint_id(uint64_t &new_ai_model_endpoint_id)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -233,20 +250,20 @@ int ObAiServiceExecutor::fetch_new_ai_model_endpoint_id(const uint64_t tenant_id
     LOG_WARN("sql proxy is null", KR(ret));
   } else {
     ObMaxIdFetcher fetcher(*GCTX.sql_proxy_);
-    if (OB_FAIL(fetcher.fetch_new_max_id(tenant_id, OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE, new_ai_model_endpoint_id, 0))) {
-      LOG_WARN("failed to fetch new ai model endpoint id", KR(ret), K(tenant_id));
+    if (OB_FAIL(fetcher.fetch_new_max_id( OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE, new_ai_model_endpoint_id, 0))) {
+      LOG_WARN("failed to fetch new ai model endpoint id", KR(ret));
     }
   }
   return ret;
 }
 
-int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &trans, const uint64_t tenant_id, int64_t &endpoint_version)
+int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &trans, int64_t &endpoint_version)
 {
   int ret = OB_SUCCESS;
   const int64_t timeout = GCONF.internal_sql_execute_timeout;
   observer::ObInnerSQLConnection *conn = NULL;
   ObSqlString sql;
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   int64_t old_endpoint_version = OB_INVALID_VERSION;
   int64_t new_endpoint_version = OB_INVALID_VERSION;
   bool need_insert = false;
@@ -254,20 +271,19 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
   if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connection is null", KR(ret));
-  } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(tenant_id,
-                                                           OB_ALL_AI_MODEL_ENDPOINT_TID,
+  } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(OB_ALL_AI_MODEL_ENDPOINT_TID,
                                                            EXCLUSIVE,
                                                            timeout,
                                                            conn))) {
   } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %ld AND scope = '%s'",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME, SPECIAL_ENDPOINT_ID_FOR_VERSION, SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(tenant_id));
+    LOG_WARN("failed to assign sql", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       int tmp_ret = OB_SUCCESS;
       const int64_t idx = 0;
-      if (OB_FAIL(trans.read(res, tenant_id, sql.ptr()))) {
+      if (OB_FAIL(trans.read(res, sql.ptr()))) {
         LOG_WARN("failed to read sql", KR(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -292,8 +308,8 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
     }
 
     if (OB_SUCC(ret) && need_insert) {
-      if (OB_FAIL(insert_special_endpoint_for_version(trans, tenant_id))) {
-        LOG_WARN("failed to insert special endpoint for version", KR(ret), K(tenant_id));
+      if (OB_FAIL(insert_special_endpoint_for_version(trans))) {
+        LOG_WARN("failed to insert special endpoint for version", KR(ret));
       } else {
         new_endpoint_version = INIT_ENDPOINT_VERSION + 1;
       }
@@ -311,8 +327,8 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
         LOG_WARN("failed to add column", K(ret), K(new_endpoint_version));
       } else if (OB_FAIL(sql.splice_update_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
         LOG_WARN("failed to splice_insert_sql", K(ret));
-      } else if (OB_FAIL(trans.write(tenant_id, buffer.ptr(), affected_rows))) {
-        LOG_WARN("failed to write sql", KR(ret), K(tenant_id), K(buffer));
+      } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
+        LOG_WARN("failed to write sql", KR(ret), K(buffer));
       } else if (1 != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
@@ -326,10 +342,10 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
   return ret;
 }
 
-int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction &trans, const uint64_t tenant_id)
+int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   uint64_t new_endpoint_version = OB_INVALID_VERSION;
   int64_t affected_rows = 0;
 
@@ -361,8 +377,8 @@ int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction 
     LOG_WARN("failed to add column", K(ret));
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
     LOG_WARN("failed to splice_insert_sql", K(ret));
-  } else if (OB_FAIL(trans.write(tenant_id, buffer.ptr(), affected_rows))) {
-    LOG_WARN("failed to write sql", KR(ret), K(tenant_id), K(buffer));
+  } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
+    LOG_WARN("failed to write sql", KR(ret), K(buffer));
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));

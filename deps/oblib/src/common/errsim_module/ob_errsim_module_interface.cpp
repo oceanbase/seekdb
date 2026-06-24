@@ -28,13 +28,11 @@ namespace oceanbase {
 namespace common {
 
 int OB_WEAK_SYMBOL build_tenant_errsim_moulde(
-    const uint64_t tenant_id,
     const int64_t config_version,
     const common::ObArray<ObFixedLengthString<ObErrsimModuleTypeHelper::MAX_TYPE_NAME_LENGTH>> &module_array,
     const int64_t percentage)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   UNUSED(config_version);
   UNUSED(module_array);
   UNUSED(percentage);
@@ -42,21 +40,17 @@ int OB_WEAK_SYMBOL build_tenant_errsim_moulde(
 }
 
 bool OB_WEAK_SYMBOL is_errsim_module(
-    const uint64_t tenant_id,
     const ObErrsimModuleType::TYPE &type)
 {
   bool b_ret = false;
-  UNUSED(tenant_id);
   UNUSED(type);
   return b_ret;
 }
 
 int OB_WEAK_SYMBOL add_tenant_errsim_event(
-    const uint64_t tenant_id,
     const ObTenantErrsimEvent &event)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   UNUSED(event);
   return ret;
 }

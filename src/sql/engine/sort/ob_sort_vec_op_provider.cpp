@@ -177,11 +177,11 @@ int ObSortVecOpProvider::init_sort_impl(ObSortVecOpContext &ctx, ObISortVecOpImp
   return ret;
 }
 
-int ObSortVecOpProvider::init_mem_context(uint64_t tenant_id)
+int ObSortVecOpProvider::init_mem_context()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(tenant_id, ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
+  param.set_mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL);
   if (nullptr == mem_context_ && OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create entity failed", K(ret));
@@ -200,17 +200,14 @@ int ObSortVecOpProvider::init(ObSortVecOpContext &context)
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_INVALID_ID == context.tenant_id_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(context.tenant_id_));
   } else if (OB_ISNULL(context.sk_exprs_) || (context.has_addon_ && OB_ISNULL(context.addon_exprs_))
              || OB_ISNULL(context.sk_collations_) || OB_ISNULL(context.eval_ctx_)
              || OB_ISNULL(context.exec_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument: argument is null", K(ret), K(context.tenant_id_),
+    LOG_WARN("invalid argument: argument is null", K(ret),
              K(context.sk_collations_), K(context.eval_ctx_), K(context.exec_ctx_));
-  } else if (OB_FAIL(init_mem_context(context.tenant_id_))) {
-    LOG_WARN("failed to init mem context", K(ret), K(context.tenant_id_));
+  } else if (OB_FAIL(init_mem_context())) {
+    LOG_WARN("failed to init mem context", K(ret));
   } else if (OB_FAIL(init_sort_impl(context, sort_op_impl_))) {
     LOG_WARN("failed to init sort impl instance", K(ret));
   } else if (OB_FAIL(sort_op_impl_->init(context))) {

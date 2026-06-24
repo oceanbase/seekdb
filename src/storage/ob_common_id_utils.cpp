@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_common_id_utils.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_unique_id_service.h" // ObUniqueIDService
 
 namespace oceanbase
@@ -25,7 +26,7 @@ using namespace common;
 using namespace share;
 namespace storage
 {
-int ObCommonIDUtils::gen_unique_id(const uint64_t tenant_id, ObCommonID &id)
+int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
 {
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
@@ -34,14 +35,14 @@ int ObCommonIDUtils::gen_unique_id(const uint64_t tenant_id, ObCommonID &id)
 
   id.reset();
 
-  if (OB_UNLIKELY(MTL_ID() != tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invaild tenant id", KR(ret), K(tenant_id), K(MTL_ID()));
+    LOG_WARN("invaild tenant id", KR(ret));
   } else if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
     LOG_WARN("set default timeout ctx fail", KR(ret), K(DEFAULT_TIMEOUT));
-  } else if (OB_FAIL(MTL(transaction::ObUniqueIDService*)->gen_unique_id(unique_id,
+  } else if (OB_FAIL(share::g_mp->unique_id_service()->gen_unique_id(unique_id,
       ctx.get_timeout()))) {
-    LOG_WARN("gen_unique_id failed", KR(ret), K(tenant_id), K(ctx));
+    LOG_WARN("gen_unique_id failed", KR(ret), K(ctx));
   } else {
     id = ObCommonID(unique_id);
   }
@@ -49,14 +50,14 @@ int ObCommonIDUtils::gen_unique_id(const uint64_t tenant_id, ObCommonID &id)
   return ret;
 }
 
-int ObCommonIDUtils::gen_unique_id_by_rpc(const uint64_t tenant_id, ObCommonID &id)
+int ObCommonIDUtils::gen_unique_id_by_rpc(ObCommonID &id)
 {
   int ret = OB_SUCCESS;
   // seekdb single-node: all LS leaders are local, just call gen_unique_id directly.
-  // Switch tenant context so gen_unique_id's MTL_ID() check passes.
-  MTL_SWITCH(tenant_id) {
-    if (OB_FAIL(gen_unique_id(tenant_id, id))) {
-      LOG_WARN("gen_unique_id local call failed", KR(ret), K(tenant_id));
+  // Switch tenant context so gen_unique_id's sys tenant check passes.
+  MOD_SCOPE {
+    if (OB_FAIL(gen_unique_id(id))) {
+      LOG_WARN("gen_unique_id local call failed", KR(ret));
     }
   }
   return ret;

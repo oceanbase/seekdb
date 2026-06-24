@@ -138,7 +138,7 @@ int ObPxMSCoordOp::inner_open()
       msg_proc_.set_scheduler(&parallel_scheduler_);
     }
     alloc_.set_label(common::ObModIds::OB_SQL_PX);
-    alloc_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+    
     metric_.set_id(MY_SPEC.id_);
   }
   return ret;
@@ -178,7 +178,7 @@ int ObPxMSCoordOp::setup_loop_proc()
       .register_processor(rd_winfunc_px_piece_msg_proc_)
       .register_processor(join_filter_count_row_piece_msg_proc_)
       .register_interrupt_processor(interrupt_proc_);
-  msg_loop_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+  
   return ret;
 }
 

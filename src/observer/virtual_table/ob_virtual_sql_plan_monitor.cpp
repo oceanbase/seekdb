@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_virtual_sql_plan_monitor.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/monitor/ob_phy_plan_monitor_info.h"
 
 using namespace oceanbase::observer;
@@ -37,8 +38,7 @@ ObVirtualSqlPlanMonitor::ObVirtualSqlPlanMonitor() :
     port_(0),
     is_first_get_(true),
     is_use_index_(false),
-    tenant_id_array_(),
-    tenant_id_array_idx_(-1),
+    sys_scope_done_(false),
     with_tenant_ctx_(nullptr),
     need_rt_node_(false),
     rt_nodes_(),
@@ -69,8 +69,8 @@ void ObVirtualSqlPlanMonitor::reset()
   is_first_get_ = true;
   is_use_index_ = false;
   cur_id_ = 0;
-  tenant_id_array_.reset();
-  tenant_id_array_idx_ = -1;
+  sys_scope_done_ = false;
+
   start_id_ = INT64_MAX;
   end_id_ = INT64_MIN;
   cur_mysql_req_mgr_ = nullptr;
@@ -84,12 +84,6 @@ void ObVirtualSqlPlanMonitor::reset()
 int ObVirtualSqlPlanMonitor::inner_open()
 {
   int ret = OB_SUCCESS;
-
-  if (OB_FAIL(extract_tenant_ids())) {
-    SERVER_LOG(WARN, "failed to extract tenant ids", K(ret));
-  }
-
-  SERVER_LOG(DEBUG, "tenant ids", K(tenant_id_array_));
 
   if (OB_SUCC(ret)) {
     if (NULL == allocator_) {
@@ -139,7 +133,7 @@ int ObVirtualSqlPlanMonitor::inner_get_next_row(common::ObNewRow *&row)
   } else if (is_first_get_) {
     bool is_valid = true;
     // init inner iterator varaibales
-    tenant_id_array_idx_ = is_reverse_scan() ? tenant_id_array_.count() : -1;
+    
     cur_mysql_req_mgr_ = nullptr;
 
     // if use primary key scan, we need to perform check on ip and port
@@ -192,7 +186,7 @@ int ObVirtualSqlPlanMonitor::inner_get_next_row(common::ObNewRow *&row)
       } else {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpected null rec",
-                   K(rec), K(cur_id_), K(tenant_id_array_idx_), K(tenant_id_array_), K(ret));
+                   K(rec), K(cur_id_), K(ret));
       }
     }
 
@@ -259,17 +253,11 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
     sql::ObPlanMonitorNodeList *prev_req_mgr = cur_mysql_req_mgr_;
     cur_mysql_req_mgr_ = nullptr;
     while (nullptr == cur_mysql_req_mgr_ && OB_SUCC(ret)) {
-      if (is_reverse_scan())  {
-        tenant_id_array_idx_ -= 1;
-      } else {
-        tenant_id_array_idx_ += 1;
-      }
-      if (tenant_id_array_idx_ >= tenant_id_array_.count() ||
-          tenant_id_array_idx_ < 0) {
+      if (sys_scope_done_) {
         ret = OB_ITER_END;
         break;
       } else {
-        uint64_t t_id = tenant_id_array_.at(tenant_id_array_idx_);
+        sys_scope_done_ = true;
         // inc ref count by 1
         if (with_tenant_ctx_ != nullptr) { // free old memory
           // before freeing tenant ctx, we must release ref_ if possible
@@ -285,32 +273,32 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SERVER_LOG(WARN, "failed to allocate memory", K(ret));
         } else {
-          with_tenant_ctx_ = new(buff) ObTenantSpaceFetcher(t_id);
+          with_tenant_ctx_ = new(buff) ObTenantSpaceFetcher{};
           if (OB_FAIL(with_tenant_ctx_->get_ret())) {
             // ignore error when tenant not in this server, return empty record
             if (OB_TENANT_NOT_IN_SERVER == ret) {
               ret = OB_SUCCESS;
               continue;
             } else {
-              SERVER_LOG(WARN, "failed to switch tenant context", K(t_id), K(ret));
+              SERVER_LOG(WARN, "failed to switch tenant context", K(ret));
             }
           } else {
-            cur_mysql_req_mgr_ = with_tenant_ctx_->entity().get_tenant()->get<sql::ObPlanMonitorNodeList*>();
+            cur_mysql_req_mgr_ = ::oceanbase::share::g_mp->plan_monitor_node_list();
           }
         }
 
         if (nullptr == cur_mysql_req_mgr_) {
-          SERVER_LOG(DEBUG, "req manager doest not exist", K(t_id));
+          SERVER_LOG(DEBUG, "req manager doest not exist");
           continue;
         } else if (OB_SUCC(ret)) {
           start_id_ = INT64_MIN;
           end_id_ = INT64_MAX;
           reset_rt_node_info();
           bool is_req_valid = true;
-          if (OB_FAIL(extract_request_ids(t_id, start_id_, end_id_, is_req_valid))) {
+          if (OB_FAIL(extract_request_ids(start_id_, end_id_, is_req_valid))) {
             SERVER_LOG(WARN, "failed to extract request ids", K(ret));
           } else if (!is_req_valid) {
-            SERVER_LOG(DEBUG, "invalid query range", K(t_id), K(key_ranges_));
+            SERVER_LOG(DEBUG, "invalid query range", K(key_ranges_));
             ret = OB_ITER_END;
           } else {
             int64_t start_idx = cur_mysql_req_mgr_->get_start_idx();
@@ -331,7 +319,7 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
               if (need_rt_node_) {
                 break;
               } else {
-                SERVER_LOG(DEBUG, "cur_mysql_req_mgr_ iter end", K(start_id_), K(end_id_), K(t_id));
+                SERVER_LOG(DEBUG, "cur_mysql_req_mgr_ iter end", K(start_id_), K(end_id_));
                 prev_req_mgr = cur_mysql_req_mgr_;
                 cur_mysql_req_mgr_ = nullptr;
               }
@@ -341,7 +329,7 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
               cur_id_ = start_id_;
             }
             SERVER_LOG(DEBUG, "start to get rows from inner table",
-                       K(start_id_), K(end_id_), K(cur_id_), K(t_id),
+                       K(start_id_), K(end_id_), K(cur_id_),
                        K(start_idx), K(end_idx));
           }
         }
@@ -362,34 +350,18 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
   return ret;
 }
 
-int ObVirtualSqlPlanMonitor::extract_tenant_ids()
-{
-  int ret = OB_SUCCESS;
-  tenant_id_array_.reset();
-  tenant_id_array_idx_ = -1;
-  // In single-node mode, use system tenant (tenant_id = 1)
-  if (OB_FAIL(tenant_id_array_.push_back(OB_SYS_TENANT_ID))) {
-    SERVER_LOG(WARN, "failed to push back sys tenant id", K(ret));
-  } else {
-    SERVER_LOG(DEBUG, "using sys tenant for single-node mode", K(tenant_id_array_));
-  }
-  return ret;
-}
-
-int ObVirtualSqlPlanMonitor::extract_request_ids(const uint64_t tenant_id,
-                                      int64_t &start_id,
+int ObVirtualSqlPlanMonitor::extract_request_ids(int64_t &start_id,
                                       int64_t &end_id,
                                       bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   is_valid = true;
   // In single-node mode, rowkey only has request_id (index 0)
   const int64_t req_id_key_idx = PRI_KEY_REQ_ID_IDX;
   if (key_ranges_.count() >= 1) {
     for (int i = 0; OB_SUCC(ret) && is_valid && i < key_ranges_.count(); i++) {
       ObNewRange &req_id_range = key_ranges_.at(i);
-      SERVER_LOG(DEBUG, "extracting request id for tenant", K(req_id_range), K(tenant_id));
+      SERVER_LOG(DEBUG, "extracting request id for tenant", K(req_id_range));
       if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() < 1
                       || req_id_range.get_end_key().get_obj_cnt() < 1)
                       || OB_ISNULL(req_id_range.get_start_key().get_obj_ptr())

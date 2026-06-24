@@ -23,7 +23,7 @@ namespace oceanbase
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER((ObForceDropLonelyLobAuxTableArg, ObDDLArg), tenant_id_, data_table_id_, aux_lob_meta_table_id_, aux_lob_piece_table_id_);
+OB_SERIALIZE_MEMBER((ObForceDropLonelyLobAuxTableArg, ObDDLArg), data_table_id_, aux_lob_meta_table_id_, aux_lob_piece_table_id_);
 
 }//end namespace obcall
 }//end namespace oceanbase

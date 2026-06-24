@@ -93,14 +93,12 @@ bool ObExprLockFunc::proxy_is_support(const ObExecContext &exec_ctx)
   if (OB_ISNULL(session)) {
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "session is null!");
   } else {
-    is_support = ((session->is_feedback_proxy_info_support() && session->is_client_sessid_support())
-                  || !session->is_obproxy_mode())
-                 && session->get_client_sid() != INVALID_SESSID;
+    // obproxy support removed: only the client session id requirement remains
+    is_support = session->get_client_sid() != INVALID_SESSID;
     if (!is_support) {
       LOG_WARN_RET(OB_NOT_SUPPORTED,
-                   "proxy is not support this feature",
+                   "this feature is not supported without a valid client session id",
                    K(session->get_server_sid()),
-                   K(session->is_feedback_proxy_info_support()),
                    K(session->is_client_sessid_support()));
     }
   }

@@ -298,7 +298,7 @@ int64_t ObS2Adapter::get_mbr(ObSpatialMBR &mbr)
         mbr.x_max_ = rect.lng_hi().degrees();
       }
     } else {
-      CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(), "GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
+      CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
         ObCartesianBox box;
         ObGeoEvalCtx gis_context(CURRENT_CONTEXT, NULL);
         if (OB_FAIL(gis_context.append_geo_arg(geo_))) {

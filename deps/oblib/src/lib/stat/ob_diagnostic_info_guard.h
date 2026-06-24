@@ -88,6 +88,7 @@ private:
 class ObTenantDiagnosticInfoSummaryGuard
 {
 public:
+  ObTenantDiagnosticInfoSummaryGuard() {}
   explicit ObTenantDiagnosticInfoSummaryGuard(int64_t, int64_t = 0, bool = false) {}
   explicit ObTenantDiagnosticInfoSummaryGuard(void *) {}
   ~ObTenantDiagnosticInfoSummaryGuard() {}
@@ -176,9 +177,9 @@ public:
 } /* namespace oceanbase */
 
 #define EVENT_ADD(stat_no, value)
-#define EVENT_TENANT_ADD(stat_no, value, tenant_id)
+#define EVENT_TENANT_ADD(stat_no, value)
 #define EVENT_INC(stat_no)
-#define EVENT_TENANT_INC(stat_no, tenant_id)
+#define EVENT_TENANT_INC(stat_no)
 #define EVENT_DEC(stat_no)
 
 // No-op stub: ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER

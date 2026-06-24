@@ -45,7 +45,7 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   const ObTenantSchema *tenant_schema = NULL;
-  uint64_t show_tenant_id = OB_INVALID_ID;
+  
   const int64_t col_count = output_column_ids_.count();
   int64_t pos = 0;
   if (OB_UNLIKELY(NULL == allocator_
@@ -63,22 +63,6 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
                    K(output_column_ids_.count()));
   } else {
     if (!start_to_read_) {
-      // get tenant id
-      for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_ID == show_tenant_id && i < key_ranges_.count(); ++i) {
-        const ObRowkey &start_key = key_ranges_.at(i).start_key_;
-        const ObRowkey &end_key = key_ranges_.at(i).end_key_;
-        const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-        const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-        if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
-          if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-          } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
-                     && ObIntType == start_key_obj_ptr[0].get_type()) {
-            show_tenant_id = start_key_obj_ptr[0].get_int();
-          } else {/*do nothing*/}
-        }
-      }
       // fill scanner
       if (OB_SUCC(ret)) {
         ObObj *cells = NULL;
@@ -86,15 +70,11 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
         if (OB_UNLIKELY(NULL == (create_stmt = static_cast<char *>(allocator_->alloc(OB_MAX_VARCHAR_LENGTH))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SERVER_LOG(ERROR, "fail to alloc memory", K(ret));
-        } else if (OB_UNLIKELY(OB_INVALID_ID == show_tenant_id)) {
-          // FIXME(tingshuai.yts): Temporarily set to display this error message, which will only occur when directly querying this virtual table
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
-        } else if (OB_FAIL(schema_guard_->get_tenant_info(show_tenant_id, tenant_schema))) {
-          SERVER_LOG(WARN, "get tenant info failed", K(show_tenant_id), K(ret));
+        } else if (OB_FAIL(schema_guard_->get_tenant_info(tenant_schema))) {
+          SERVER_LOG(WARN, "get tenant info failed", K(ret));
         } else if (OB_ISNULL(tenant_schema)) {
           ret = OB_TENANT_NOT_EXIST;
-          SERVER_LOG(WARN, "Unknow tenant", K(ret), K(show_tenant_id));
+          SERVER_LOG(WARN, "Unknow tenant", K(ret));
         } else if (OB_ISNULL(cells = cur_row_.cells_)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
@@ -105,7 +85,7 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
             uint64_t col_id = output_column_ids_.at(i);
             switch(col_id) {//tenant_name
               case OB_APP_MIN_COLUMN_ID: {
-                cells[cell_idx].set_int(static_cast<int64_t>(show_tenant_id));
+                cells[cell_idx].set_int(static_cast<int64_t>(1));
                 break;
               }
               case OB_APP_MIN_COLUMN_ID + 1: {
@@ -115,13 +95,12 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
                 break;
               }
               case OB_APP_MIN_COLUMN_ID + 2: {//create_stmt
-                if (OB_FAIL(schema_printer.print_tenant_definition(show_tenant_id,
-                                                                    sql_proxy_,
+                if (OB_FAIL(schema_printer.print_tenant_definition(sql_proxy_,
                                                                     create_stmt,
                                                                     OB_MAX_VARCHAR_LENGTH,
                                                                     pos,
                                                                     false/*is_agent_mode*/))) {
-                  SERVER_LOG(WARN, "print tenant definition fail", K(ret), K(show_tenant_id));
+                  SERVER_LOG(WARN, "print tenant definition fail", K(ret));
                 } else {
                   cells[cell_idx].set_varchar(ObString::make_string(create_stmt));
                   cells[cell_idx].set_collation_type(

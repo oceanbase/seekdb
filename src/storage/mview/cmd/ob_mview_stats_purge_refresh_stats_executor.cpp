@@ -33,7 +33,6 @@ using namespace sql;
 ObMViewStatsPurgeRefreshStatsExecutor::ObMViewStatsPurgeRefreshStatsExecutor()
   : ctx_(nullptr),
     session_info_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     op_type_(OpType::MAX),
     retention_period_(INT64_MAX)
 {
@@ -51,7 +50,7 @@ int ObMViewStatsPurgeRefreshStatsExecutor::execute(ObExecContext &ctx,
   CK(OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
   OZ(schema_checker_.init(*ctx.get_sql_ctx()->schema_guard_, session_info_->get_server_sid()));
-  OX(tenant_id_ = session_info_->get_effective_tenant_id());
+  OX();
   OZ(resolve_arg(arg));
 
   if (OB_SUCC(ret)) {
@@ -59,9 +58,9 @@ int ObMViewStatsPurgeRefreshStatsExecutor::execute(ObExecContext &ctx,
       ObMViewRefreshStats::FilterParam filter_param;
       if (INT64_MAX == retention_period_) {
         ObMViewRefreshStatsParams stats_params;
-        if (OB_FAIL(ObMViewRefreshStatsParams::fetch_sys_defaults(*ctx.get_sql_proxy(), tenant_id_,
+        if (OB_FAIL(ObMViewRefreshStatsParams::fetch_sys_defaults(*ctx.get_sql_proxy(),
                                                                   stats_params))) {
-          LOG_WARN("fail to fetch sys defaults", KR(ret), K(tenant_id_));
+          LOG_WARN("fail to fetch sys defaults", KR(ret));
         } else {
           filter_param.set_retention_period(stats_params.get_retention_period());
         }
@@ -86,12 +85,12 @@ int ObMViewStatsPurgeRefreshStatsExecutor::execute(ObExecContext &ctx,
         if (INT64_MAX == retention_period_) {
           ObMViewRefreshStatsParams stats_params;
           if (OB_FAIL(ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(
-                *ctx.get_sql_proxy(), tenant_id_, mview_id, stats_params, true))) {
+                *ctx.get_sql_proxy(), mview_id, stats_params, true))) {
             if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-              LOG_WARN("fail to fetch mview refresh stats params", KR(ret), K_(tenant_id), K(mview_id));
+              LOG_WARN("fail to fetch mview refresh stats params", KR(ret), K(mview_id));
             } else {
               ret = OB_ERR_MVIEW_NOT_EXIST;
-              LOG_WARN("mview not exist", KR(ret), K_(tenant_id), K(mview_id));
+              LOG_WARN("mview not exist", KR(ret), K(mview_id));
             }
           } else {
             filter_param.set_retention_period(stats_params.get_retention_period());
@@ -145,8 +144,7 @@ int ObMViewStatsPurgeRefreshStatsExecutor::resolve_arg(const ObMViewStatsPurgeRe
       } else if (OB_UNLIKELY(database_name.empty())) {
         ret = OB_ERR_NO_DB_SELECTED;
         LOG_WARN("No database selected", KR(ret));
-      } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(
-                   tenant_id_, database_name, table_name, false /*is_index_table*/, has_synonym,
+      } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                    new_db_name, new_tbl_name, table_schema))) {
         LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
       } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_materialized_view())) {
@@ -171,11 +169,11 @@ int ObMViewStatsPurgeRefreshStatsExecutor::purge_refresh_stats(
   int64_t affected_rows = 0;
   do {
     ObMySQLTransaction trans;
-    if (OB_FAIL(trans.start(ctx_->get_sql_proxy(), tenant_id_))) {
+    if (OB_FAIL(trans.start(ctx_->get_sql_proxy()))) {
       LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
-                 trans, tenant_id_, filter_param, affected_rows, PURGE_BATCH_COUNT))) {
-      LOG_WARN("fail to purge refresh stats", KR(ret), K(tenant_id_), K(filter_param));
+                 trans, filter_param, affected_rows, PURGE_BATCH_COUNT))) {
+      LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;

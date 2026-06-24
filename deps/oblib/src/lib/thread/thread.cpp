@@ -86,7 +86,7 @@ int Thread::start()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
 #if !defined(OB_USE_ASAN) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
-  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), stack_size_))) {
+  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(stack_size_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
 #endif
@@ -192,15 +192,7 @@ void Thread::stop()
   stop_ = true;
 }
 
-uint64_t Thread::get_tenant_id() const
-{
-  uint64_t tenant_id = OB_SERVER_TENANT_ID;
-  IRunWrapper *run_wrapper_ = threads_->get_effective_run_wrapper();
-  if (OB_NOT_NULL(run_wrapper_)) {
-    tenant_id = run_wrapper_->id();
-  }
-  return tenant_id;
-}
+
 
 void Thread::run()
 {
@@ -375,7 +367,6 @@ void* Thread::__th_start(void *arg)
   setpriority(PRIO_DARWIN_THREAD, 0, 0);
   ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
 #endif
-  ob_set_thread_tenant_id(th->get_tenant_id());
   current_thread_ = th;
   th->tid_ = gettid();
 
@@ -397,7 +388,7 @@ void* Thread::__th_start(void *arg)
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
     ObPageManager pm;
-    ret = pm.set_tenant_ctx(common::OB_SERVER_TENANT_ID, common::ObCtxIds::GLIBC);
+    ret = pm.set_tenant_ctx(common::ObCtxIds::GLIBC);
     if (OB_FAIL(ret)) {
       LOG_ERROR("set tenant ctx failed", K(ret));
     } else {

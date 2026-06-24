@@ -460,7 +460,7 @@ public:
   static uint64_t get_local_max_cg_cnt()
   {
     double local_max_cg_read_info_cnt = 0.0;
-    double tenant_memory_limit = static_cast<double>(lib::get_tenant_memory_limit(MTL_ID()));
+    double tenant_memory_limit = static_cast<double>(lib::get_tenant_memory_limit());
     local_max_cg_read_info_cnt = (tenant_memory_limit / CG_READ_INFO_MEMORY_BASE) * LOCAL_MAX_CG_READ_INFO_CNT;
     return MAX(static_cast<uint64_t>(local_max_cg_read_info_cnt), LOCAL_MAX_CG_READ_INFO_CNT);
   }

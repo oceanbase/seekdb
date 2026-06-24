@@ -45,18 +45,17 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObCatalogStmt *stmt = NULL;
   stmt::StmtType stmt_type = stmt::T_NONE;
-  uint64_t tenant_id = OB_INVALID_ID; 
+   
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_ISNULL(stmt = create_stmt<ObCatalogStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_catalog_stmt", K(ret));
   } else {
     obcall::ObCatalogDDLArg &arg = stmt->get_ddl_arg();
-    // tenant_id, user_id
-    arg.schema_.set_tenant_id(session_info_->get_effective_tenant_id());
+    // tenant, user_id
+    
     arg.user_id_ = session_info_->get_user_id();
     // stmt_type
     switch (parse_tree.type_) {
@@ -128,8 +127,7 @@ int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obcall:
   }
   OZ(resolve_catalog_name(*name_node, arg));
   catalog_name = arg.schema_.get_catalog_name_str();
-  OZ(schema_checker_->get_catalog_id_name(session_info_->get_effective_tenant_id(),
-                                          catalog_name,
+  OZ(schema_checker_->get_catalog_id_name(catalog_name,
                                           catalog_id,
                                           NULL,
                                           arg.if_exist_));
@@ -159,8 +157,7 @@ int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obcall::
   OZ(resolve_catalog_name(*name_node, arg));
   if (arg.schema_.get_catalog_id() != OB_INTERNAL_CATALOG_ID) {
     catalog_name = arg.schema_.get_catalog_name_str();
-    OZ(schema_checker_->get_catalog_id_name(session_info_->get_effective_tenant_id(),
-                                            catalog_name,
+    OZ(schema_checker_->get_catalog_id_name(catalog_name,
                                             catalog_id));
     OX(arg.schema_.set_catalog_id(catalog_id));
     OZ(arg.schema_.set_catalog_name(catalog_name));

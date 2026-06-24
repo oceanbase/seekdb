@@ -112,8 +112,7 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
     char peer_buf[common::OB_IP_PORT_STR_BUFF];
     char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
     //If you are in system tenant, you can see all thread.
-    if ((OB_SYS_TENANT_ID == my_session_->get_priv_tenant_id())
-        || (sess_info->get_priv_tenant_id() == my_session_->get_priv_tenant_id())) {
+    if ((1UL == 1UL)) {
       ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
       const int64_t col_count = output_column_ids_.count();
       ObCharsetType default_charset = ObCharset::get_default_charset();
@@ -152,7 +151,7 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
             break;
           }
           case TENANT: {
-            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_effective_tenant_name());
+            cur_row_->cells_[cell_idx].set_varchar(sess_info->get_tenant_name());
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
@@ -211,14 +210,6 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             } else {
               cur_row_->cells_[cell_idx].set_null();
-            }
-            break;
-          }
-          case PROXY_SESSID: {
-            if (ObBasicSessionInfo::VALID_PROXY_SESSID == sess_info->get_proxy_sessid()) {
-              cur_row_->cells_[cell_idx].set_null();
-            } else {
-              cur_row_->cells_[cell_idx].set_uint64(sess_info->get_proxy_sessid());
             }
             break;
           }

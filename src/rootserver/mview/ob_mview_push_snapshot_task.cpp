@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "observer/ob_server_struct.h"
+#include "share/rc/ob_module_provider.h"
 #include "rootserver/mview/ob_mview_push_snapshot_task.h"
 #include "share/schema/ob_mview_info.h"
 #include "share/ob_global_stat_proxy.h"
@@ -28,8 +29,7 @@ namespace rootserver {
 ObMViewPushSnapshotTask::ObMViewPushSnapshotTask()
   : is_inited_(false),
     in_sched_(false),
-    is_stop_(true),
-    tenant_id_(OB_INVALID_TENANT_ID)
+    is_stop_(true)
 {
 }
 
@@ -42,7 +42,6 @@ int ObMViewPushSnapshotTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewPushSnapshotTask init twice", KR(ret), KP(this));
   } else {
-    tenant_id_ = MTL_ID();
     is_inited_ = true;
   }
   return ret;
@@ -79,7 +78,6 @@ void ObMViewPushSnapshotTask::destroy()
   in_sched_ = false;
   cancel_task();
   wait_task();
-  tenant_id_ = OB_INVALID_TENANT_ID;
 }
 
 void ObMViewPushSnapshotTask::wait() { wait_task(); }
@@ -89,7 +87,7 @@ void ObMViewPushSnapshotTask::runTimerTask()
   int ret = OB_SUCCESS;
   uint64_t data_version = 0;
   common::ObISQLClient *sql_proxy = GCTX.sql_proxy_;
-  storage::ObTenantFreezeInfoMgr *mgr = MTL(storage::ObTenantFreezeInfoMgr *);
+  storage::ObTenantFreezeInfoMgr *mgr = share::g_mp->tenant_freeze_info_mgr();
   bool need_schedule = false;
   ObMySQLTransaction trans;
 
@@ -98,17 +96,17 @@ void ObMViewPushSnapshotTask::runTimerTask()
     LOG_WARN("ObMViewPushSnapshotTask not init", KR(ret), KP(this));
   } else if (OB_UNLIKELY(is_stop_)) {
 
-  } else if (OB_FAIL(need_schedule_major_refresh_mv_task(tenant_id_, need_schedule))) {
-    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
+    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret));
   } else if (!need_schedule) {
 
   } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy) || OB_ISNULL(mgr))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy or mgr is null", KR(ret), K(sql_proxy), K(mgr));
-  } else if (OB_FAIL(trans.start(sql_proxy, tenant_id_))) {
-    LOG_WARN("fail to start trans", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(trans.start(sql_proxy))) {
+    LOG_WARN("fail to start trans", KR(ret));
   } else {
-    share::ObGlobalStatProxy stat_proxy(trans, tenant_id_);
+    share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
     const int64_t snapshot_for_tx = mgr->get_min_reserved_snapshot_for_tx();
     share::SCN min_refresh_scn;
@@ -118,28 +116,28 @@ void ObMViewPushSnapshotTask::runTimerTask()
     // process.
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(select_for_update,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret), K(tenant_id_));
+      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     } else if (OB_UNLIKELY(!major_refresh_mv_merge_scn.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret), K(tenant_id_),
+      LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret),
                 K(major_refresh_mv_merge_scn));
     } // to ensure the concurrent query won't return the OB_SNAPSHOT_DISCARDED error,
       // we use snapshot_for_tx to get the min refresh scn in __all_mview.
     else if (OB_FAIL(ObMViewInfo::get_min_major_refresh_mview_scn(
-                 trans, tenant_id_, snapshot_for_tx, min_refresh_scn))) {
+                 trans, snapshot_for_tx, min_refresh_scn))) {
       // the tenant has no major refresh mview
       if (OB_ERR_NULL_VALUE == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get min major_refresh_mview_scn", KR(ret), K(tenant_id_),
+        LOG_WARN("fail to get min major_refresh_mview_scn", KR(ret),
                   K(snapshot_for_tx));
       }
-    } else if (OB_FAIL(snapshot_proxy.push_snapshot_for_major_refresh_mv(trans, tenant_id_,
+    } else if (OB_FAIL(snapshot_proxy.push_snapshot_for_major_refresh_mv(trans,
                                                                          min_refresh_scn))) {
-      LOG_WARN("fail to push snapshot for major refresh mv", KR(ret), K(tenant_id_),
+      LOG_WARN("fail to push snapshot for major refresh mv", KR(ret),
                 K(min_refresh_scn));
     } else {
-      LOG_INFO("[MAJ_REF_MV] successfully push major refresh mview snapshot", K(tenant_id_),
+      LOG_INFO("[MAJ_REF_MV] successfully push major refresh mview snapshot",
                 K(snapshot_for_tx), K(min_refresh_scn));
     }
     if (trans.is_started()) {

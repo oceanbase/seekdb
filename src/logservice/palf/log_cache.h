@@ -98,20 +98,20 @@ class LogKVCacheKey : public common::ObIKVCacheKey
 {
 public:
   LogKVCacheKey();
-  LogKVCacheKey(const uint64_t tenant_id, const int64_t palf_id, const LSN aligned_lsn, const int64_t flashback_version);
+  LogKVCacheKey(const int64_t palf_id, const LSN aligned_lsn, const int64_t flashback_version);
   ~LogKVCacheKey();
   bool is_valid() const;
   void reset();
 public: // derived from ObIKVCacheKey
   bool operator ==(const ObIKVCacheKey &other) const override;
   uint64_t hash() const override;
-  uint64_t get_tenant_id() const override;
+  
   int64_t size() const override;
   int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const override;
-  TO_STRING_KV(K_(tenant_id), K_(palf_id), K_(aligned_lsn), K_(flashback_version));
+  TO_STRING_KV(K_(palf_id), K_(aligned_lsn), K_(flashback_version));
 
 private:
-  uint64_t tenant_id_;
+  
   int64_t palf_id_;
   LSN aligned_lsn_;
   int64_t flashback_version_;
@@ -211,7 +211,7 @@ public:
            LogIOContext &io_ctx);
   int fill_cache_line(FillBuf &fill_buf);
   int alloc_kv_pair(const int64_t flashback_version, const LSN &aligned_lsn, FillBuf &fill_buf);
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(palf_id), K_(log_cache_stat));
+  TO_STRING_KV(K_(is_inited), K_(palf_id), K_(log_cache_stat));
 private:
   int allow_filling_cache_(LogIteratorInfo *iterator_info, bool &enable_fill_cache);
   /*
@@ -281,7 +281,7 @@ private:
     int64_t last_record_cache_read_size_;
   };
 private:
-  int64_t tenant_id_;
+  
   int64_t palf_id_;
   IPalfEnvImpl *palf_env_impl_;
   LogReader *log_reader_;

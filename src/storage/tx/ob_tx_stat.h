@@ -58,8 +58,7 @@ struct ObTxStat
   ObTxStat() { reset(); }
   ~ObTxStat() { }
   void reset();
-  int init(const common::ObAddr &addr, const ObTransID &tx_id,
-           const uint64_t tenant_id,  const bool has_decided,
+  int init(const common::ObAddr &addr, const ObTransID &tx_id,  const bool has_decided,
            const share::ObLSID &ls_id, const share::ObLSArray &participants,
            const int64_t tx_ctx_create_time, const int64_t tx_expired_time,
            const int64_t ref_cnt, const int64_t last_op_sn,
@@ -76,7 +75,7 @@ struct ObTxStat
            const int busy_cbs_cnt,
            int replay_completeness,
            share::SCN serial_final_scn);
-  TO_STRING_KV(K_(addr), K_(tx_id), K_(tenant_id),
+  TO_STRING_KV(K_(addr), K_(tx_id),
                K_(has_decided), K_(ls_id), K_(participants),
                K_(tx_ctx_create_time), K_(tx_expired_time), K_(ref_cnt),
                K_(last_op_sn), K_(pending_write), K_(state), K_(tx_type),
@@ -95,7 +94,6 @@ public:
   bool is_inited_;
   common::ObAddr addr_;
   ObTransID tx_id_;
-  uint64_t tenant_id_;
   bool has_decided_;
   share::ObLSID ls_id_;
   share::ObLSArray participants_;
@@ -158,7 +156,6 @@ public:
   ObTxLockStat() { reset(); }
   ~ObTxLockStat() {}
   int init(const common::ObAddr &addr,
-            uint64_t tenant_id,
             const share::ObLSID &ls_id,
             const ObMemtableKeyInfo &memtable_key_info,
             uint32_t session_id,
@@ -169,7 +166,7 @@ public:
             int64_t tx_expired_time);
   void reset();
   const common::ObAddr &get_addr() const { return addr_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const share::ObLSID &get_ls_id() const { return ls_id_; }
   const ObMemtableKeyInfo &get_memtable_key_info() const { return memtable_key_info_; }
   uint32_t get_session_id() const { return session_id_; }
@@ -180,7 +177,6 @@ public:
   int64_t get_tx_expired_time() const { return tx_expired_time_; }
 
   TO_STRING_KV(K_(addr),
-               K_(tenant_id),
                K_(ls_id),
                K_(memtable_key_info),
                K_(session_id),
@@ -192,7 +188,6 @@ public:
 private:
   bool is_inited_;
   common::ObAddr addr_;
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   ObMemtableKeyInfo memtable_key_info_;
   uint32_t session_id_;
@@ -209,8 +204,7 @@ public:
   ObTxSchedulerStat() { reset(); }
   ~ObTxSchedulerStat() { }
   void reset();
-  int init(const uint64_t tenant_id,
-            const common::ObAddr &addr,
+  int init(const common::ObAddr &addr,
             const uint32_t sess_id,
             const uint32_t client_sid,
             const ObTransID &tx_id,
@@ -232,7 +226,7 @@ public:
             const ObTxSavePointList &savepoints,
             const int16_t abort_cause,
             const bool can_elr);
-  TO_STRING_KV(K_(tenant_id), K_(addr), K_(sess_id), K_(client_sid),
+  TO_STRING_KV(K_(addr), K_(sess_id), K_(client_sid),
                K_(tx_id), K_(state), K_(cluster_id),
                K_(xid), K_(coord_id), K_(parts),
                K_(isolation), K_(snapshot_version),
@@ -246,7 +240,6 @@ public:
 
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
   common::ObAddr addr_;
   uint32_t sess_id_;
   uint32_t client_sid_;

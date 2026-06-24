@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_table_store_iterator.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_table_store.h"
 
 namespace oceanbase
@@ -39,7 +40,7 @@ ObTableStoreIterator::ObTableStoreIterator(const bool reverse, const bool need_l
     fork_infos_(nullptr)
 {
   step_ = reverse ? -1 : 1;
-  sstable_handle_array_.set_attr(ObMemAttr(MTL_ID(), "TblHdlArray"));
+  sstable_handle_array_.set_attr(ObMemAttr("TblHdlArray"));
 }
 
 int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
@@ -68,7 +69,7 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
       }
       if (OB_UNLIKELY(nullptr != other.ddl_co_sstable_handle_)) {
         if (nullptr == ddl_co_sstable_handle_
-            && OB_ISNULL(ddl_co_sstable_handle_ = OB_NEW(ObTableHandleV2, ObMemAttr(MTL_ID(), "ddl_co_hdl")))) {
+            && OB_ISNULL(ddl_co_sstable_handle_ = OB_NEW(ObTableHandleV2, ObMemAttr("ddl_co_hdl")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory failed", K(ret));
         } else {
@@ -89,7 +90,7 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(nullptr != other.transfer_src_table_store_handle_)) {
       if (nullptr == transfer_src_table_store_handle_) {
-        void *meta_hdl_buf = ob_malloc(sizeof(ObStorageMetaHandle), ObMemAttr(MTL_ID(), "TransferMetaH"));
+        void *meta_hdl_buf = ob_malloc(sizeof(ObStorageMetaHandle), ObMemAttr("TransferMetaH"));
         if (OB_ISNULL(meta_hdl_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocator memory for handle", K(ret));
@@ -119,7 +120,7 @@ ObTableStoreIterator::~ObTableStoreIterator()
 
 void ObTableStoreIterator::reset()
 {
-  OB_DELETE(ObTableHandleV2, ObMemAttr(MTL_ID(), "ddl_co_hdl"), ddl_co_sstable_handle_);
+  OB_DELETE(ObTableHandleV2, ObMemAttr("ddl_co_hdl"), ddl_co_sstable_handle_);
   table_ptr_array_.reset();
   sstable_handle_array_.reset();
   table_store_handle_.reset();
@@ -166,7 +167,7 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
     if (OB_FAIL(get_ith_table(pos_, table))) {
       LOG_WARN("fail to get ith table", K(ret), K(pos_));
     } else if (table->is_memtable() || table->is_ddl_mem_sstable()) {
-      ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+      ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
       if (OB_FAIL(table_handle.set_table(table, t3m, table->get_key().table_type_))) {
         LOG_WARN("failed to set memtable to table handle", K(ret), KPC(table));
       }
@@ -283,7 +284,7 @@ int ObTableStoreIterator::add_ddl_co_table(ObTableHandleV2 &table_handle, ObITab
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl co sstable handle set twice", K(ret), K(ddl_co_sstable_handle_));
   } else if (nullptr == ddl_co_sstable_handle_
-      && OB_ISNULL(ddl_co_sstable_handle_ = OB_NEW(ObTableHandleV2, ObMemAttr(MTL_ID(), "ddl_co_hdl")))) {
+      && OB_ISNULL(ddl_co_sstable_handle_ = OB_NEW(ObTableHandleV2, ObMemAttr("ddl_co_hdl")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
   } else if (FALSE_IT(*ddl_co_sstable_handle_ = table_handle)) {

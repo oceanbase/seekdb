@@ -48,7 +48,7 @@ struct ObMallocSampleKey
   int64_t hash() const;
   int hash(uint64_t &hash_val) const;
   bool operator==(const ObMallocSampleKey &other) const;
-  int64_t tenant_id_;
+  
   int64_t ctx_id_;
   char label_[lib::AOBJECT_LABEL_SIZE + 1];
   void *bt_[AOBJECT_BACKTRACE_COUNT];
@@ -74,9 +74,7 @@ struct ObMallocSamplePairCmp
   bool operator()(const ObMallocSamplePair *left, const ObMallocSamplePair *right)
   {
     bool bret = true;
-    if (left->first.tenant_id_ != right->first.tenant_id_) {
-      bret = left->first.tenant_id_ < right->first.tenant_id_;
-    } else if (left->first.ctx_id_ != right->first.ctx_id_) {
+    if (left->first.ctx_id_ != right->first.ctx_id_) {
       bret = left->first.ctx_id_ < right->first.ctx_id_;
     } else if (0 != STRCMP(left->first.label_, right->first.label_)) {
       bret = STRCMP(left->first.label_, right->first.label_) < 0;
@@ -143,7 +141,6 @@ inline void ObMallocSampleLimiter::set_interval(int32_t max_interval, int32_t mi
 inline int64_t ObMallocSampleKey::hash() const
 {
   int64_t hash_val = 0;
-  hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
   hash_val = murmurhash(&ctx_id_, sizeof(ctx_id_), hash_val);
   hash_val = murmurhash(label_, sizeof(label_), hash_val);
   hash_val = murmurhash(bt_, sizeof(bt_), hash_val);
@@ -159,7 +156,7 @@ inline int ObMallocSampleKey::hash(uint64_t &hash_val) const
 inline bool ObMallocSampleKey::operator==(const ObMallocSampleKey &other) const
 {
   bool ret = true;
-  if (tenant_id_ != other.tenant_id_ || ctx_id_ != other.ctx_id_
+  if (false || ctx_id_ != other.ctx_id_
       || 0 != STRNCMP(label_, other.label_, sizeof(label_))
       || 0 != MEMCMP((char*)bt_, (char*)other.bt_, sizeof(bt_))) {
     ret = false;

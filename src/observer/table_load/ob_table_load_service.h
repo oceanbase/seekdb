@@ -103,7 +103,7 @@ public:
 	static int get_sort_memory(int64_t &sort_memory);
   static int refresh_and_check_resource(ObDirectLoadResourceCheckArg &arg, ObDirectLoadResourceOpRes &res);
 public:
-  ObTableLoadService(const uint64_t tenant_id);
+  ObTableLoadService();
   int init();
   int start();
   int stop();
@@ -166,7 +166,6 @@ private:
     ObTableLoadService &service_;
   };
 private:
-  const uint64_t tenant_id_;
   ObTableLoadManager manager_;
   ObTableLoadAssignedMemoryManager assigned_memory_manager_;
   ObTableLoadAssignedTaskManager assigned_task_manager_;

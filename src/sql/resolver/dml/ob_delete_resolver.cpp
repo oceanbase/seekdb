@@ -395,16 +395,14 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(schema_checker_), K(params_.session_info_),
         K(allocator_), K(delete_stmt), K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(params_.session_info_->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                        base_table_item.ref_id_,
-                                                       table_schema,
-                                                       base_table_item.is_link_table()))) {
+                                                       table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(params_.session_info_->get_effective_tenant_id(),
-                                                                base_table_item.ref_id_,
+  } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
     LOG_WARN("failed to get global index", K(ret));
   } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
@@ -435,7 +433,6 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
         table_info->loc_table_id_ = base_table_item.table_id_;
         table_info->ref_table_id_ = base_table_item.ref_id_;
         table_info->table_name_ = table_schema->get_table_name_str();
-        table_info->is_link_table_ = base_table_item.is_link_table();
       }
     } else {
       uint64_t view_id = OB_INVALID_ID;

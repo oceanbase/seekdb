@@ -41,36 +41,30 @@ struct ObTenantCCLRuleId {
 
 public:
   ObTenantCCLRuleId()
-      : tenant_id_(common::OB_INVALID_ID), ccl_rule_id_(common::OB_INVALID_ID) {
+      : ccl_rule_id_(common::OB_INVALID_ID) {
   }
-  ObTenantCCLRuleId(const uint64_t tenant_id, const uint64_t ccl_rule_id)
-      : tenant_id_(tenant_id), ccl_rule_id_(ccl_rule_id) {}
+  ObTenantCCLRuleId(const uint64_t ccl_rule_id)
+      : ccl_rule_id_(ccl_rule_id) {}
   bool operator==(const ObTenantCCLRuleId &rhs) const {
-    return (tenant_id_ == rhs.tenant_id_) && (ccl_rule_id_ == rhs.ccl_rule_id_);
+    return (true) && (ccl_rule_id_ == rhs.ccl_rule_id_);
   }
   bool operator!=(const ObTenantCCLRuleId &rhs) const {
     return !(*this == rhs);
   }
   bool operator<(const ObTenantCCLRuleId &rhs) const {
-    bool bret = tenant_id_ < rhs.tenant_id_;
-    if (tenant_id_ == rhs.tenant_id_) {
-      bret = ccl_rule_id_ < rhs.ccl_rule_id_;
-    }
-    return bret;
+    return ccl_rule_id_ < rhs.ccl_rule_id_;
   }
   inline uint64_t hash() const {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
     hash_ret =
-        common::murmurhash(&ccl_rule_id_, sizeof(ccl_rule_id_), hash_ret);
+        common::murmurhash(&ccl_rule_id_, sizeof(ccl_rule_id_), 0);
     return hash_ret;
   }
   bool is_valid() const {
-    return (tenant_id_ != common::OB_INVALID_ID) &&
+    return (true) &&
            (ccl_rule_id_ != common::OB_INVALID_ID);
   }
-  TO_STRING_KV(K_(tenant_id), K_(ccl_rule_id));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(ccl_rule_id));
   uint64_t ccl_rule_id_;
 };
 
@@ -90,7 +84,7 @@ public:
   ObSimpleCCLRuleSchema &operator=(const ObSimpleCCLRuleSchema &other);
   int assign(const ObSimpleCCLRuleSchema &other);
   bool operator==(const ObSimpleCCLRuleSchema &other) const;
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_ccl_rule_id(uint64_t ccl_rule_id) {
     ccl_rule_id_ = ccl_rule_id;
   }
@@ -110,7 +104,7 @@ public:
     affect_dml_ = affect_dml;
   }
   inline void set_name_case_mode(common::ObNameCaseMode mode) { name_case_mode_ = mode; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline int64_t get_schema_version() const { return schema_version_; }
   inline uint64_t get_ccl_rule_id() const { return ccl_rule_id_; }
   inline const common::ObString &get_ccl_rule_name() const {
@@ -124,15 +118,15 @@ public:
   inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
 
   inline ObTenantCCLRuleId get_sort_key() const {
-    return ObTenantCCLRuleId(tenant_id_, ccl_rule_id_);
+    return ObTenantCCLRuleId(ccl_rule_id_);
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(ccl_rule_id), K_(ccl_rule_name),
+  TO_STRING_KV(K_(ccl_rule_id), K_(ccl_rule_name),
                K_(schema_version), K_(affect_for_all_databases),
                K_(affect_for_all_tables), K_(affect_dml), K_(name_case_mode));
 
 private:
-  uint64_t tenant_id_;
+  
   uint64_t ccl_rule_id_;
   ObString ccl_rule_name_;
   int64_t schema_version_;
@@ -205,7 +199,7 @@ public:
    */
   int split_strings_with_escape(char separator, char escape_char);
 
-  VIRTUAL_TO_STRING_KV(K(get_tenant_id()), K(get_ccl_rule_id()),
+  VIRTUAL_TO_STRING_KV(K(1UL), K(get_ccl_rule_id()),
                        K(get_ccl_rule_name()), K(get_schema_version()),
                        K(affect_for_all_databases()),
                        K(affect_for_all_tables()), K_(affect_database),

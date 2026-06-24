@@ -32,8 +32,8 @@ public:
   ObAlterRoleStmt();
   virtual ~ObAlterRoleStmt();
 
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
+  
   void set_role_name(const common::ObString &role_name) { role_name_ = role_name; }
   const common::ObString &get_role_name() const { return role_name_; }
   void set_password(const common::ObString &password) { password_ = password; }
@@ -47,7 +47,6 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
-  uint64_t tenant_id_;
   common::ObString role_name_; 
   common::ObString password_; 
   bool need_enc_;

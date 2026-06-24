@@ -16,6 +16,7 @@
 
 
 #include "ob_mds_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -37,10 +38,10 @@ void ObTenantMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t
   const int64_t MDS_THROTTLE_TRIGGER_PERCENTAGE = 60;
   const int64_t MDS_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
-  int64_t total_memory = lib::get_tenant_memory_limit(MTL_ID());
+  int64_t total_memory = lib::get_tenant_memory_limit();
 
   // Use tenant config to init throttle config
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     resource_limit = total_memory * tenant_config->_mds_memory_limit_percentage / 100LL;
     trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
@@ -52,8 +53,7 @@ void ObTenantMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t
     max_duration = MDS_THROTTLE_MAX_DURATION;
   }
 }
-void ObTenantMdsAllocator::adaptive_update_limit(const int64_t tenant_id,
-                                                 const int64_t holding_size,
+void ObTenantMdsAllocator::adaptive_update_limit(const int64_t holding_size,
                                                  const int64_t config_specify_resource_limit,
                                                  int64_t &resource_limit,
                                                  int64_t &last_update_limit_ts,
@@ -67,10 +67,10 @@ int ObTenantMdsAllocator::init()
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
   // TODO : @gengli new ctx id?
-  mem_attr.tenant_id_ = MTL_ID();
+  
   mem_attr.ctx_id_ = ObCtxIds::MDS_DATA_ID;
   mem_attr.label_ = "MdsTable";
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = MTL(ObSharedMemAllocMgr *);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   MDS_TG(10_ms);
   if (IS_INIT){
@@ -118,7 +118,7 @@ void *ObTenantMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_t
   void *obj = allocator_.alloc(size);
   MDS_LOG(DEBUG, "mds alloc ", K(size), KP(obj), K(abs_expire_time));
   if (OB_NOT_NULL(obj)) {
-    MTL(storage::mds::ObTenantMdsService *)
+    share::g_mp->tenant_mds_service()
         ->record_alloc_backtrace(obj,
                                  __thread_mds_tag__,
                                  __thread_mds_alloc_type__,
@@ -133,16 +133,16 @@ void *ObTenantMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_t
 void ObTenantMdsAllocator::free(void *ptr)
 {
   allocator_.free(ptr);
-  MTL(storage::mds::ObTenantMdsService *)->erase_alloc_backtrace(ptr);
+  share::g_mp->tenant_mds_service()->erase_alloc_backtrace(ptr);
 }
 
 void ObTenantMdsAllocator::set_attr(const ObMemAttr &attr) { allocator_.set_attr(attr); }
 
 void *ObTenantBufferCtxAllocator::alloc(const int64_t size)
 {
-  void *obj = share::mtl_malloc(size, ObMemAttr(MTL_ID(), "MDS_CTX_DEFAULT", ObCtxIds::MDS_CTX_ID));
+  void *obj = share::mtl_malloc(size, ObMemAttr("MDS_CTX_DEFAULT", ObCtxIds::MDS_CTX_ID));
   if (OB_NOT_NULL(obj)) {
-    MTL(ObTenantMdsService*)->record_alloc_backtrace(obj,
+    share::g_mp->tenant_mds_service()->record_alloc_backtrace(obj,
                                                      __thread_mds_tag__,
                                                      __thread_mds_alloc_type__,
                                                      __thread_mds_alloc_file__,
@@ -156,7 +156,7 @@ void *ObTenantBufferCtxAllocator::alloc(const int64_t size, const ObMemAttr &att
 {
   void *obj = share::mtl_malloc(size, attr);
   if (OB_NOT_NULL(obj)) {
-    MTL(ObTenantMdsService*)->record_alloc_backtrace(obj,
+    share::g_mp->tenant_mds_service()->record_alloc_backtrace(obj,
                                                      __thread_mds_tag__,
                                                      __thread_mds_alloc_type__,
                                                      __thread_mds_alloc_file__,
@@ -169,13 +169,13 @@ void *ObTenantBufferCtxAllocator::alloc(const int64_t size, const ObMemAttr &att
 void ObTenantBufferCtxAllocator::free(void *ptr)
 {
   share::mtl_free(ptr);
-  MTL(ObTenantMdsService*)->erase_alloc_backtrace(ptr);
+  share::g_mp->tenant_mds_service()->erase_alloc_backtrace(ptr);
 }
 
 ObMdsThrottleGuard::ObMdsThrottleGuard(const share::ObLSID ls_id, const bool for_replay, const int64_t abs_expire_time)
     : ls_id_(ls_id), for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
-  throttle_tool_ = &(MTL(ObSharedMemAllocMgr *)->share_resource_throttle_tool());
+  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {
     abs_expire_time_ =
         ObClockGenerator::getClock() + ObThrottleUnit<ObMdsThrottleGuard>::DEFAULT_MAX_THROTTLE_TIME;
@@ -194,7 +194,7 @@ ObMdsThrottleGuard::~ObMdsThrottleGuard()
     MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
   } else if (throttle_tool_->is_throttling<ObTenantMdsAllocator>(share_ti_guard, module_ti_guard)) {
 
-    if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       STORAGE_LOG(WARN, "get ls handle failed", KR(ret), K(ls_id_));
     } else if (OB_ISNULL(ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;

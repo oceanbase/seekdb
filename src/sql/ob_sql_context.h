@@ -28,7 +28,6 @@
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "observer/omt/ob_tenant_config_mgr.h"
-#include "share/client_feedback/ob_feedback_partition_struct.h"
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "share/stat/ob_opt_ds_stat_cache.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
@@ -395,13 +394,13 @@ public:
   {
     last_query_retry_err_ = last_query_retry_err;
   }
-  bool should_fast_fail(uint64_t tenant_id)
+  bool should_fast_fail()
   {
     bool fast_fail = false;
     if (0 == query_switch_leader_retry_timeout_ts_) {
       query_switch_leader_retry_timeout_ts_ = INT64_MAX;
       // start timing from first retry, not from query start
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         int64_t timeout = tenant_config->ob_query_switch_leader_retry_timeout;
         if (timeout > 0) {
@@ -464,36 +463,29 @@ public:
   int get_table_schema(uint64_t table_id,
                        const share::schema::ObTableSchema *&table_schema,
                        bool is_link = false) const;
-  int get_database_schema(const uint64_t tenant_id,
+  int get_database_schema(
                           const uint64_t database_id,
                           const ObDatabaseSchema *&database_schema);
-  int get_table_schema(const uint64_t tenant_id,
+  int get_table_schema(
                        const uint64_t table_id,
                        const share::schema::ObTableSchema *&table_schema,
                        bool is_link = false);
-  int get_database_schema(const uint64_t database_id,
-                          const ObDatabaseSchema *&database_schema);
-  int get_catalog_database_schema(const uint64_t tenant_id,
-                                  const uint64_t catalog_id,
+  int get_catalog_database_schema(const uint64_t catalog_id,
                                   const ObString &database_name,
                                   const ObDatabaseSchema *&database_schema);
-  int get_catalog_database_id(const uint64_t tenant_id,
-                              const uint64_t catalog_id,
+  int get_catalog_database_id(const uint64_t catalog_id,
                               const ObString &database_name,
                               uint64_t &database_id);
-  int get_catalog_table_schema(const uint64_t tenant_id,
-                               const uint64_t catalog_id,
+  int get_catalog_table_schema(const uint64_t catalog_id,
                                const uint64_t database_id,
                                const ObString &database_name,
                                const ObString &tbl_name,
                                const ObTableSchema *&table_schema);
-  int get_catalog_table_schema(const uint64_t tenant_id,
-                               const uint64_t catalog_id,
+  int get_catalog_table_schema(const uint64_t catalog_id,
                                const uint64_t database_id,
                                const ObString &tbl_name,
                                const ObTableSchema *&table_schema);
-  int get_catalog_table_id(const uint64_t tenant_id,
-                           const uint64_t catalog_id,
+  int get_catalog_table_id(const uint64_t catalog_id,
                            const uint64_t database_id,
                            const ObString &tbl_name,
                            uint64_t &table_id);
@@ -513,7 +505,6 @@ public:
                                bool with_spatial_index = true,
                                bool with_vector_index = true);
   int get_table_mlog_schema(const uint64_t table_id, const ObTableSchema *&mlog_schema);
-  // get current scn from dblink. return OB_INVALID_ID if remote server not support current_scn
   uint64_t get_next_mocked_schema_id() { return ++mocked_schema_id_counter_; }
   int get_mocked_table_schema(uint64_t ref_table_id, const share::schema::ObTableSchema *&table_schema) const;
   int add_mocked_table_schema(const share::schema::ObTableSchema &table_schema);
@@ -523,7 +514,6 @@ public:
   common::ObIArray<const share::schema::ObDatabaseSchema *> &get_mocked_database_schemas();
   common::ObIArray<const share::schema::ObTableSchema *> &get_mocked_table_schemas();
 public:
-  static bool is_link_table(const ObDMLStmt *stmt, uint64_t table_id);
 
 private:
   share::schema::ObSchemaGetterGuard *schema_guard_;
@@ -531,8 +521,6 @@ private:
   common::ObSEArray<const share::schema::ObTableSchema *, 1> table_schemas_;
   common::ObSEArray<const share::schema::ObDatabaseSchema *, 1> mocked_database_schemas_;
   uint64_t next_link_table_id_;
-  // key is dblink_id, value is current scn.
-  common::hash::ObHashMap<uint64_t, uint64_t> dblink_scn_;
   int64_t mocked_schema_id_counter_;
 };
 
@@ -590,27 +578,6 @@ public:
   void reset();
 
   bool handle_batched_multi_stmt() const { return multi_stmt_item_.is_batched_multi_stmt(); }
-  void reset_reroute_info() {
-    if (nullptr != reroute_info_) {
-      op_reclaim_free(reroute_info_);
-    }
-    reroute_info_ = NULL;
-  }
-  share::ObFeedbackRerouteInfo *get_or_create_reroute_info()
-  {
-    if (nullptr == reroute_info_) {
-      reroute_info_ = op_reclaim_alloc(share::ObFeedbackRerouteInfo);
-    }
-    return reroute_info_;
-  }
-  share::ObFeedbackRerouteInfo *get_reroute_info() const {
-    return reroute_info_;
-  }
-  void set_reroute_info(share::ObFeedbackRerouteInfo &reroute_info)
-  {
-    reroute_info_->assign(reroute_info);
-  }
-
   bool is_batch_params_execute() const
   {
     return multi_stmt_item_.is_batched_multi_stmt() || is_do_insert_batch_opt();
@@ -721,7 +688,6 @@ public:
   const sql::ObStmt *cur_stmt_;
   const ObPhysicalPlan *cur_plan_;
 
-  bool can_reroute_sql_; // whether can reroute
   bool is_sensitive_;    // whether it contains sensitive information, if so, do not record in sql_audit
   bool is_protocol_weak_read_; // record whether proxy set weak read for this request in protocol flag
   common::ObFixedArray<int64_t, common::ObIAllocator> multi_stmt_rowkey_pos_;
@@ -754,9 +720,6 @@ public:
   common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_rule_level_values_;
   common::ObSEArray<ObCCLRuleConcurrencyValueWrapper*, 4> matched_ccl_format_sqlid_level_values_;
   TO_STRING_KV(K(stmt_type_));
-private:
-  share::ObFeedbackRerouteInfo *reroute_info_;
-
 };
 
 struct ObQueryCtx
@@ -795,7 +758,6 @@ public:
       root_stmt_(NULL),
       optimizer_features_enable_version_(0),
       udf_flag_(0),
-      has_dblink_(false),
       injected_random_status_(false),
       ori_question_marks_count_(0),
       type_demotion_flag_(0),
@@ -869,8 +831,6 @@ public:
   void set_is_prepare_stmt(bool is_prepare) { is_prepare_stmt_ = is_prepare; }
   bool has_nested_sql() const { return has_nested_sql_; }
   void set_has_nested_sql(bool has_nested_sql) { has_nested_sql_ = has_nested_sql; }
-  bool has_dblink() const { return has_dblink_; }
-  void set_has_dblink(bool v) { has_dblink_ = v; }
   void set_timezone_info(const common::ObTimeZoneInfo *tz_info) { tz_info_ = tz_info; }
   const common::ObTimeZoneInfo *get_timezone_info() const { return tz_info_; }
   int add_local_session_vars(ObIAllocator *alloc, const ObLocalSessionVar &local_session_var, int64_t &idx);
@@ -946,11 +906,9 @@ public:
       int8_t has_pl_udf_ : 1; // used to mark sql contain pl udf
       int8_t udf_has_select_stmt_ : 1; // udf has select stmt, not contain other dml stmt
       int8_t udf_has_dml_stmt_ : 1; // udf has dml stmt
-      int8_t has_dblink_udf_ : 1; // udf is dblink udf
       int8_t reserved_:4;
     };
   };
-  bool has_dblink_;
   bool injected_random_status_;
   ObRandom rand_gen_;
   int64_t ori_question_marks_count_;

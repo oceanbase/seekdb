@@ -78,8 +78,8 @@ bool ObDirectLoadMergeParam::is_valid() const
 
 ObDirectLoadMergeCtx::ObDirectLoadMergeCtx() : allocator_("TLD_MergeCtx"), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  tablet_merge_ctx_array_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObDirectLoadMergeCtx::~ObDirectLoadMergeCtx()
@@ -333,9 +333,9 @@ ObDirectLoadTabletMergeCtx::ObDirectLoadTabletMergeCtx()
     task_ret_code_(OB_SUCCESS),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  range_array_.set_tenant_id(MTL_ID());
-  merge_task_array_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObDirectLoadTabletMergeCtx::~ObDirectLoadTabletMergeCtx() { reset(); }
@@ -944,12 +944,12 @@ int ObDirectLoadTabletMergeCtx::get_autoincrement_value(uint64_t count,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(count));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
     interval.tablet_id_ = tablet_id_;
     interval.cache_size_ = count;
-    if (OB_FAIL(auto_inc.get_tablet_cache_interval(tenant_id, interval))) {
-      LOG_WARN("fail to get tablet cache interval", K(ret), K(tenant_id), K_(tablet_id));
+    if (OB_FAIL(auto_inc.get_tablet_cache_interval(interval))) {
+      LOG_WARN("fail to get tablet cache interval", K(ret), K_(tablet_id));
     } else if (OB_UNLIKELY(count > interval.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected autoincrement value count", K(ret), K(count), K(interval));

@@ -338,7 +338,7 @@ int ObGetAllJobStatusOp::get_next_job_status(ObLoadDataStat *&job_status)
 int ObGlobalLoadDataStatMap::init()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_SQL_LOAD_DATA);
+  ObMemAttr attr(ObModIds::OB_SQL_LOAD_DATA);
   SET_USE_500(attr);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;

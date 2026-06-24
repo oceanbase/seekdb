@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_table_read_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
 namespace oceanbase
@@ -977,7 +978,7 @@ ObCGReadInfoHandle::~ObCGReadInfoHandle()
 void ObCGReadInfoHandle::reset()
 {
   if (OB_NOT_NULL(cg_read_info_)) {
-    MTL(ObTenantCGReadInfoMgr *)->release_cg_read_info(cg_read_info_);
+    share::g_mp->tenant_cg_read_info_mgr()->release_cg_read_info(cg_read_info_);
   }
   cg_read_info_ = nullptr;
 }
@@ -986,7 +987,7 @@ void ObCGReadInfoHandle::reset()
  * ------------------------------- ObTenantCGReadInfoMgr -------------------------------
 */
 ObTenantCGReadInfoMgr::ObTenantCGReadInfoMgr()
-  : allocator_(MTL_ID()),
+  : allocator_{},
     index_read_info_(),
     normal_cg_read_infos_(),
     lock_(),
@@ -1011,14 +1012,14 @@ int ObTenantCGReadInfoMgr::init()
     LOG_WARN("Init twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(allocator_.init(nullptr,
       common::OB_MALLOC_NORMAL_BLOCK_SIZE,
-      lib::ObMemAttr(MTL_ID(), "CGReadInfoMgr")))) {
+      lib::ObMemAttr("CGReadInfoMgr")))) {
     COMMON_LOG(WARN, "failed to init allocator", K(ret));
   } else if (OB_FAIL(construct_index_read_info(allocator_, index_read_info_))) {
     STORAGE_LOG(WARN, "Fail to construct index read info", K(ret));
   } else if (OB_FAIL(construct_normal_cg_read_infos())) {
     STORAGE_LOG(WARN, "Fail to constuct normal cg read infos", K(ret));
   } else {
-    release_cg_read_info_array_.set_attr(ObMemAttr(MTL_ID(), "RSCompCkmPair"));
+    release_cg_read_info_array_.set_attr(ObMemAttr("RSCompCkmPair"));
     is_inited_ = true;
   }
 

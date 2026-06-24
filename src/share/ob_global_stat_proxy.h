@@ -43,9 +43,8 @@ static const char *OB_ALL_GLOBAL_STAT_TNAME = "__all_global_stat";
 class ObGlobalStatProxy
 {
 public:
-  ObGlobalStatProxy(common::ObISQLClient &client,
-                    const uint64_t tenant_id)
-      : core_table_(OB_ALL_GLOBAL_STAT_TNAME, client, tenant_id)
+  ObGlobalStatProxy(common::ObISQLClient &client)
+      : core_table_(OB_ALL_GLOBAL_STAT_TNAME, client)
   {}
   virtual ~ObGlobalStatProxy() {}
   void set_sql_client(common::ObISQLClient &client) { core_table_.set_sql_client(client); }
@@ -87,16 +86,12 @@ public:
   virtual int get_snapshot_info(int64_t &snapshot_gc_scn,
                                 int64_t &gc_schema_version);
   static int select_snapshot_gc_scn_for_update_nowait(common::ObISQLClient &sql_client,
-                                               const uint64_t tenant_id,
                                                SCN &snapshot_gc_scn);
   static int select_snapshot_gc_scn_for_update(common::ObISQLClient &sql_client,
-                                               const uint64_t tenant_id,
                                                SCN &snapshot_gc_scn);
   static int get_snapshot_gc_scn(common::ObISQLClient &sql_client,
-                                 const uint64_t tenant_id,
                                  share::SCN &snapshot_gc_scn);
   static int update_snapshot_gc_scn(common::ObISQLClient &sql_client,
-                                    const uint64_t tenant_id,
                                     const SCN &snapshot_gc_scn,
                                     int64_t &affected_rows);
   int get_snapshot_gc_scn(share::SCN &snapshot_gc_scn);
@@ -106,7 +101,6 @@ public:
   int set_ddl_epoch(const int64_t ddl_epoch, bool is_incremental = true);
 
   static int select_ddl_epoch_for_update(common::ObISQLClient &sql_client,
-                                               const uint64_t tenant_id,
                                                int64_t &ddl_epoch);
   // for major refresh mv
   int update_major_refresh_mv_merge_scn(const share::SCN &scn, bool is_incremental = true);
@@ -114,25 +108,20 @@ public:
 
   // for change stream async index
   static int advance_change_stream_refresh_scn(common::ObISQLClient &sql_client,
-                                               const uint64_t tenant_id,
                                                const SCN &refresh_scn,
                                                int64_t &affected_rows);
   static int get_change_stream_refresh_scn(common::ObISQLClient &sql_client,
-                                           const uint64_t tenant_id,
                                            const bool for_update,
                                            SCN &refresh_scn);
   // Change Stream: min LSN that change stream still depends on, for log recycling and restart.
   static int advance_change_stream_min_dep_lsn(common::ObISQLClient &sql_client,
-                                               const uint64_t tenant_id,
                                                const int64_t min_dep_lsn,
                                                int64_t &affected_rows);
   static int get_change_stream_min_dep_lsn(common::ObISQLClient &sql_client,
-                                           const uint64_t tenant_id,
                                            const bool for_update,
                                            int64_t &min_dep_lsn);
 private:
   static int inner_get_snapshot_gc_scn_(common::ObISQLClient &sql_client,
-                                        const uint64_t tenant_id,
                                         SCN &snapshot_gc_scn,
                                         const char *for_update_str);
   int update(const ObGlobalStatItem::ItemList &list, const bool is_incremental = false);

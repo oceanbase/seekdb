@@ -17,6 +17,7 @@
 #define OCEANBASE_STORAGE_META_STORE_TENANT_STORAGE_META_SERVICE_
 
 #include <stdint.h>
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_tenant_storage_meta_persister.h"
 #include "storage/meta_store/ob_tenant_storage_meta_replayer.h"
 #include "storage/blockstore/ob_shared_object_reader_writer.h"
@@ -96,6 +97,7 @@ private:
 private:
   bool is_inited_;
   bool is_started_;
+  bool is_shared_storage_;
   ObTenantCheckpointSlogHandler ckpt_slog_handler_;
   storage::ObStorageLogger slogger_;
   ObTenantSeqGenerator seq_generator_;
@@ -106,8 +108,8 @@ private:
   
 };
 
-#define TENANT_STORAGE_META_PERSISTER (MTL(ObTenantStorageMetaService*)->get_persister())
-#define TENANT_SEQ_GENERATOR (MTL(ObTenantStorageMetaService*)->get_seq_generator())
+#define TENANT_STORAGE_META_PERSISTER (share::g_mp->tenant_storage_meta_service()->get_persister())
+#define TENANT_SEQ_GENERATOR (share::g_mp->tenant_storage_meta_service()->get_seq_generator())
 
 } // namespace storage
 } // namespace oceanbase

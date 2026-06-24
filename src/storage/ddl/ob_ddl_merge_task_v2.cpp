@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 #include "share/ob_ddl_checksum.h"
@@ -43,7 +44,7 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
 {
   int ret = OB_SUCCESS;
   char* buf = nullptr;
-  ObDDLMergeBucketLock *mtl_bucket_lock = MTL(ObDDLMergeBucketLock*);
+  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
@@ -71,7 +72,7 @@ int ObDDLMergeGuardTask::init(const bool for_replay, const ObTabletID &tablet_id
 int ObDDLMergeGuardTask::process()
 {
   int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = MTL(ObDDLMergeBucketLock*);
+  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
   if (!tablet_id_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected tablet id val", K(ret));
@@ -90,7 +91,7 @@ int ObDDLMergeGuardTask::process()
 ObDDLMergeGuardTask::~ObDDLMergeGuardTask()
 {
   int ret = OB_SUCCESS;
-  ObDDLMergeBucketLock *mtl_bucket_lock = MTL(ObDDLMergeBucketLock*);
+  ObDDLMergeBucketLock *mtl_bucket_lock = share::g_mp->ddl_merge_bucket_lock();
    if (OB_ISNULL(mtl_bucket_lock)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("bucket lock should not be null", K(ret));
@@ -384,7 +385,7 @@ int ObDDLMergeAssembleTask::process()
 {
   int ret = OB_SUCCESS;
   ObIDDLMergeHelper *merge_helper = nullptr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(),"Ddl_Assm_Task"));
+  ObArenaAllocator allocator(ObMemAttr("Ddl_Assm_Task"));
   ObLSID target_ls_id;
   ObTabletID target_tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;

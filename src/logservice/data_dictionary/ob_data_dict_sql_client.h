@@ -41,17 +41,13 @@ public:
   void destroy();
 public:
   int get_ls_info(
-      const uint64_t tenant_id,
       const share::SCN &snapshot_scn,
       share::ObLSArray &ls_array);
   int get_schema_version(
-      const uint64_t tenant_id,
       const share::SCN &snapshot_scn,
       int64_t &schema_version);
 public:
-  int report_data_dict_persist_info(
-      const uint64_t tenant_id,
-      const share::SCN &snapshot_scn,
+  int report_data_dict_persist_info(const share::SCN &snapshot_scn,
       const palf::LSN &start_lsn,
       const palf::LSN &end_lsn);
 private:

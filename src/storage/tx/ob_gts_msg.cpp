@@ -25,19 +25,18 @@ using namespace obcall;
 namespace transaction
 {
 // ObGtsRequest
-OB_SERIALIZE_MEMBER(ObGtsRequest, tenant_id_, srr_.mts_, range_size_, sender_);
+OB_SERIALIZE_MEMBER(ObGtsRequest, srr_.mts_, range_size_, sender_);
 // ObGtsErrResponse
-OB_SERIALIZE_MEMBER(ObGtsErrResponse, tenant_id_, srr_.mts_, status_, sender_);
+OB_SERIALIZE_MEMBER(ObGtsErrResponse, srr_.mts_, status_, sender_);
 
-int ObGtsRequest::init(const uint64_t tenant_id, const MonotonicTs srr, const int64_t range_size,
+int ObGtsRequest::init(const MonotonicTs srr, const int64_t range_size,
     const ObAddr &sender)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) || !srr.is_valid() || 0 >= range_size || !sender.is_valid()) {
+  if (!true || !srr.is_valid() || 0 >= range_size || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(srr), K(range_size), K(sender));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(range_size), K(sender));
   } else {
-    tenant_id_ = tenant_id;
     srr_ = srr;
     range_size_ = range_size;
     sender_ = sender;
@@ -47,20 +46,19 @@ int ObGtsRequest::init(const uint64_t tenant_id, const MonotonicTs srr, const in
 
 bool ObGtsRequest::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) && srr_.is_valid() && range_size_ > 0 &&
+  return true && srr_.is_valid() && range_size_ > 0 &&
     sender_.is_valid();
 }
 
 //leader may be invalid, the validity check does not need to check this field
-int ObGtsErrResponse::init(const uint64_t tenant_id, const MonotonicTs srr, const int status,
+int ObGtsErrResponse::init(const MonotonicTs srr, const int status,
     const ObAddr &sender)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) || !srr.is_valid() || !sender.is_valid()) {
+  if (!true || !srr.is_valid() || !sender.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(srr), K(status), K(sender));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(status), K(sender));
   } else {
-    tenant_id_ = tenant_id;
     srr_ = srr;
     status_ = status;
     sender_ = sender;
@@ -70,7 +68,7 @@ int ObGtsErrResponse::init(const uint64_t tenant_id, const MonotonicTs srr, cons
 
 bool ObGtsErrResponse::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) && srr_.is_valid() && OB_SUCCESS != status_ && sender_.is_valid();
+  return true && srr_.is_valid() && OB_SUCCESS != status_ && sender_.is_valid();
 }
 
 } // transaction

@@ -51,7 +51,7 @@ int ObPlAggUdfFunction::pick_routine(ObSEArray<const ObIRoutineInfo *, 4> &routi
       OZ (mock_exec_expr.push_back(c_expr));
     }
     if (OB_SUCC(ret)) {
-      pl::ObPLPackageGuard package_guard(session_info_->get_effective_tenant_id());
+      pl::ObPLPackageGuard package_guard{};
       pl::ObPLResolveCtx resolve_ctx(*allocator_,
                                   *session_info_,
                                   *exec_ctx_->get_sql_ctx()->schema_guard_,

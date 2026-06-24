@@ -38,7 +38,7 @@ public:
   // Release the resources of the previous tenant
   virtual void release_last_tenant() = 0;
   // Filter tenant
-  virtual bool is_need_process(uint64_t tenant_id) { return true; }
+  virtual bool is_need_process() { return true; }
   // Release resources, note that subclasses inheriting from ObMultiTenantOperator must first call ObMultiTenantOperator::reset() when destroyed
   // Tenant object release on subclasses maintained by ObMultiTenantOperator
   void reset();

@@ -22,6 +22,7 @@
 #define OB_CS_DISPATCHER_H_
 
 #include "lib/ob_define.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_ext_ring_buffer.h"
@@ -155,7 +156,7 @@ inline bool is_row_visible(
 
 // ---------------------------------------------------------------------------
 // ObCSDispatcher: single-threaded consumer of committed tx, slices and pushes to Workers.
-// All sibling module access (Worker, Plugins) goes through MTL(ObChangeStreamMgr*).
+// All sibling module access (Worker, Plugins) goes through share::g_mp->change_stream_mgr().
 // ---------------------------------------------------------------------------
 
 class ObCSDispatcher : public share::ObThreadPool

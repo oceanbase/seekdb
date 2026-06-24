@@ -29,16 +29,15 @@ namespace observer
 void ObTenantShowCatalogDatabases::reset()
 {
   catalog_id_ = OB_INVALID_ID;
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableIterator::reset();
 }
 
 int ObTenantShowCatalogDatabases::inner_open()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_ISNULL(schema_guard_) || OB_ISNULL(session_) || !is_valid_id(tenant_id_) || OB_ISNULL(allocator_))) {
+  if (OB_UNLIKELY(OB_ISNULL(schema_guard_) || OB_ISNULL(session_) || false || OB_ISNULL(allocator_))) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member doesn't init", K(ret), K(schema_guard_), K(session_), K(tenant_id_), K(allocator_));
+    LOG_WARN("data member doesn't init", K(ret), K(schema_guard_), K(session_), K(allocator_));
   } else if (key_ranges_.count() > 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support yet", K(ret));
@@ -116,8 +115,8 @@ int ObTenantShowCatalogDatabases::fill_scanner()
     LOG_WARN("cur row cell is NULL", K(ret));
   } else {
     ObCachedCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
-    if (OB_FAIL(ob_catalog_meta_getter.list_namespace_names(tenant_id_, catalog_id_, db_names))) {
-      LOG_WARN("list_namespace_names failed", K(ret), K(tenant_id_), K(catalog_id_));
+    if (OB_FAIL(ob_catalog_meta_getter.list_namespace_names(catalog_id_, db_names))) {
+      LOG_WARN("list_namespace_names failed", K(ret), K(catalog_id_));
     }
   }
 

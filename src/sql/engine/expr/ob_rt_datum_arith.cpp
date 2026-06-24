@@ -42,7 +42,7 @@ ObRTDatumArith::Item ObRTDatumArith::Item::operator*(const ObRTDatumArith::Item 
 
 
 ObRTDatumArith::ObRTDatumArith(ObExecContext &ctx, ObSQLSessionInfo &session)
-    : alloc_("RTDatumArith", OB_MALLOC_NORMAL_BLOCK_SIZE, session.get_effective_tenant_id()),
+    : alloc_("RTDatumArith", OB_MALLOC_NORMAL_BLOCK_SIZE),
     exec_ctx_(ctx), session_(session), factory_(alloc_), frame_info_(alloc_),
     eval_ctx_(NULL), expr_(NULL), raw_cols_(alloc_), cols_(alloc_)
 {

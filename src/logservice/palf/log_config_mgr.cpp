@@ -3121,7 +3121,7 @@ int LogConfigMgr::remove_duplicate_region_child_(LogLearnerList &dup_region_chil
   if (children_.get_member_number() == 0) {
     // skip
   } else if (OB_FAIL(region_map.create(REGION_MAP_SIZE,
-      ObMemAttr(MTL_ID(), ObModIds::OB_HASH_NODE, ObCtxIds::DEFAULT_CTX_ID)))) {
+      ObMemAttr(ObModIds::OB_HASH_NODE, ObCtxIds::DEFAULT_CTX_ID)))) {
     PALF_LOG(WARN, "region_map init failed", KR(ret), K_(palf_id), K_(self));
   } else if (OB_FAIL(get_member_regions_(region_map))) {
     PALF_LOG(WARN, "get_member_region failed", KR(ret), K_(palf_id), K_(self));

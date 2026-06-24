@@ -95,19 +95,17 @@ class ObDirectLoadIndexBlockWriter
 public:
   ObDirectLoadIndexBlockWriter();
   ~ObDirectLoadIndexBlockWriter();
-  int init(uint64_t tenant_id, int64_t buf_size, const ObDirectLoadTmpFileHandle &file_handle);
+  int init(int64_t buf_size, const ObDirectLoadTmpFileHandle &file_handle);
   int append_row(int64_t row_count, const ObDirectLoadIndexBlockItem &item);
   void reset();
   int close();
   int64_t get_total_index_size() const { return total_index_size_; }
-  TO_STRING_KV(KP(buf_), K(buf_pos_), K(buf_size_), K(item_size_), K(total_index_size_), K(offset_),
-               K(tenant_id_));
+  TO_STRING_KV(KP(buf_), K(buf_pos_), K(buf_size_), K(item_size_), K(total_index_size_), K(offset_));
 private:
   int flush_buffer();
   int write_item(const ObDirectLoadIndexBlockItem &item);
   void assign(const int64_t buf_pos, const int64_t buf_cap, char *buf);
 private:
-  uint64_t tenant_id_;
   int64_t header_length_;
   int64_t buf_pos_;
   int64_t buf_size_;
@@ -129,7 +127,7 @@ class ObDirectLoadDataBlockWriter2
 public:
   ObDirectLoadDataBlockWriter2();
   ~ObDirectLoadDataBlockWriter2();
-  int init(uint64_t tenant_id, int64_t buf_size, const ObDirectLoadTmpFileHandle &file_handle,
+  int init(int64_t buf_size, const ObDirectLoadTmpFileHandle &file_handle,
            ObDirectLoadIndexBlockWriter *index_block_writer);
   int append_row(const ObDirectLoadExternalRow &external_row);
   void reset();
@@ -138,14 +136,13 @@ public:
   int64_t get_total_row_count() const { return total_row_count_; }
   int64_t get_file_size() const { return file_size_; }
   TO_STRING_KV(KP(buf_), K(buf_pos_), K(buf_size_), K(file_size_), K(file_io_handle_),
-               K(tenant_id_), K(total_row_count_), K(row_count_));
+               K(total_row_count_), K(row_count_));
 private:
   int write_item(const ObDirectLoadExternalRow &external_row);
   int write_large_item(const ObDirectLoadExternalRow &datum_row, int64_t total_size);
   void assign(const int64_t buf_pos, const int64_t buf_cap, char *buf);
   int flush_buffer(int64_t buf_size, char *buf);
 private:
-  uint64_t tenant_id_;
   int64_t header_length_;
   int64_t buf_pos_;
   int64_t buf_size_;
@@ -172,8 +169,8 @@ public:
       is_closed_(false),
       is_inited_(false)
   {
-    allocator_.set_tenant_id(MTL_ID());
-    rowkey_allocator_.set_tenant_id(MTL_ID());
+    
+    
   }
   virtual ~ObDirectLoadSSTableBuilder() = default;
   int init(const ObDirectLoadSSTableBuildParam &param);
@@ -207,16 +204,15 @@ class ObDirectLoadIndexBlockReader
 public:
   ObDirectLoadIndexBlockReader();
   virtual ~ObDirectLoadIndexBlockReader() = default;
-  int init(uint64_t tenant_id, int64_t buf_size, const ObDirectLoadTmpFileHandle &file_handle);
+  int init(int64_t buf_size, const ObDirectLoadTmpFileHandle &file_handle);
   int change_fragment(const ObDirectLoadTmpFileHandle &file_handle);
   int get_index_info(int64_t idx, ObDirectLoadIndexInfo &info);
   ObDirectLoadIndexBlockHeader *get_header() { return &header_; }
-  TO_STRING_KV(KP(buf_), K(buf_size_), K(tenant_id_));
+  TO_STRING_KV(KP(buf_), K(buf_size_));
 private:
   void assign(const int64_t buf_size, char *buf);
   int read_buffer(int64_t idx);
 private:
-  uint64_t tenant_id_;
   char *buf_;
   int64_t buf_size_;
   int64_t header_length_;

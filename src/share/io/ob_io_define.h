@@ -282,11 +282,11 @@ public:
   virtual void reset();
   bool is_valid() const;
   ObSNIOInfo &operator=(const ObSNIOInfo &other);
-  TO_STRING_KV(K(tenant_id_), K(fd_), K(offset_), K(size_), K(timeout_us_), K(flag_), KP(callback_), KP(buf_),
+  TO_STRING_KV(K(fd_), K(offset_), K(size_), K(timeout_us_), K(flag_), KP(callback_), KP(buf_),
       KP(user_data_buf_), K_(part_id));
 
 public:
-  uint64_t tenant_id_;
+  
   ObIOFd fd_;
   int64_t offset_;
   int64_t size_;
@@ -422,13 +422,13 @@ struct ObIOGroupKey
 
 struct ObIOSSGrpKey
 {
-  ObIOSSGrpKey() : tenant_id_(0), group_key_()
+  ObIOSSGrpKey() : group_key_()
   {}
-  ObIOSSGrpKey(const int64_t tenant_id, const ObIOGroupKey group_key) : tenant_id_(tenant_id), group_key_(group_key)
+  ObIOSSGrpKey(const ObIOGroupKey group_key) : group_key_(group_key)
   {}
   uint64_t hash() const
   {
-    uint64_t hash_val = static_cast<uint64_t>(tenant_id_);
+    uint64_t hash_val = 0;
     uint64_t hash_val_2 = static_cast<uint64_t>(group_key_.hash());
     hash_val = common::murmurhash(&hash_val_2, sizeof(hash_val_2), hash_val);
     return hash_val;
@@ -440,20 +440,20 @@ struct ObIOSSGrpKey
   }
   bool operator==(const ObIOSSGrpKey &that) const
   {
-    return tenant_id_ == that.tenant_id_ && group_key_ == that.group_key_;
+    return true && group_key_ == that.group_key_;
   }
   ObIOSSGrpKey& operator=(const ObIOSSGrpKey &other)
   {
     if (this != &other) {
-      tenant_id_ = other.tenant_id_;
+      
       group_key_ = other.group_key_;
     }
     return *this;
   }
   ObIOMode get_mode() const { return group_key_.mode_; };
-  int64_t tenant_id_;
+  
   ObIOGroupKey group_key_;
-  TO_STRING_KV(K(tenant_id_), K(group_key_));
+  TO_STRING_KV(K(group_key_));
 };
 
 
@@ -487,7 +487,7 @@ public:
   ObThreadCond &get_cond() { return cond_; }
 
   TO_STRING_KV(K(is_inited_), K(is_finished_), K(is_canceled_), K(has_estimated_), K(complete_size_), K(offset_), K(size_),
-               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), K(tenant_id_), KP(tenant_io_mgr_),
+               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), KP(tenant_io_mgr_),
                KP(user_data_buf_), KP(buf_), KP(io_callback_), K_(time_log));
   DISALLOW_COPY_AND_ASSIGN(ObIOResult);
 private:
@@ -510,7 +510,7 @@ private:
   int64_t offset_;
   int64_t size_;
   int64_t timeout_us_;
-  uint64_t tenant_id_;
+  
   int64_t aligned_size_;
   ObTenantIOManager *tenant_io_mgr_;
   const char *buf_;
@@ -562,7 +562,7 @@ public:
 
   int64_t get_remained_io_timeout_us();
 
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
+  TO_STRING_KV(K(is_inited_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
                K(trace_id_), K(retry_count_), KP(tenant_io_mgr_), K_(storage_accesser),
                KPC(io_result_), K_(part_id));
 private:
@@ -597,7 +597,7 @@ protected:
   int64_t align_size_; // align io size, use this and don't use calc_io_offset_and_size_()
   int64_t align_offset_;
   ObIOCB *control_block_;
-  uint64_t tenant_id_;
+  
   ObTenantIOManager *tenant_io_mgr_;
   ObRefHolder<ObStorageAccesser> storage_accesser_;
   ObIOFd fd_;
@@ -732,7 +732,7 @@ public:
   bool is_valid() const;
   int deep_copy(const ObTenantIOConfig &other_config);
   int parse_group_config(const char *config_str);
-  int add_single_group_config(const uint64_t tenant_id, const ObIOGroupKey &key, const char *group_name,
+  int add_single_group_config(const ObIOGroupKey &key, const char *group_name,
       int64_t min_percent, int64_t max_percent, int64_t weight_percent);
   int get_group_config(const uint64_t index, int64_t &min, int64_t &max, int64_t &weight) const;
   int64_t get_callback_thread_count() const;

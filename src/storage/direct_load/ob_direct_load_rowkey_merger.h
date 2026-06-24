@@ -92,7 +92,7 @@ template <class Rowkey, class Compare>
 ObDirectLoadRowkeyMerger<Rowkey, Compare>::ObDirectLoadRowkeyMerger()
   : step_(0), heap_(compare_), last_iter_idx_(-1), is_inited_(false)
 {
-  iters_.set_tenant_id(MTL_ID());
+  
 }
 
 template <class Rowkey, class Compare>

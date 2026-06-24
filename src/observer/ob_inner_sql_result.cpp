@@ -71,8 +71,7 @@ int ObInnerSQLResult::init(bool has_tenant_resource)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(session_.get_effective_tenant_id(),
-                     ObModIds::OB_RESULT_SET,
+  param.set_mem_attr(ObModIds::OB_RESULT_SET,
                      ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
@@ -80,18 +79,18 @@ int ObInnerSQLResult::init(bool has_tenant_resource)
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create memory entity failed", K(ret));
   } else if (has_tenant_resource) {
-    if (OB_FAIL(GCTX.omt_->get_tenant_with_tenant_lock(session_.get_effective_tenant_id(), tenant_))) {
+    if (OB_FAIL(GCTX.omt_->get_tenant_with_tenant_lock(tenant_))) {
       if (OB_IN_STOP_STATE == ret) {
         ret = OB_TENANT_NOT_IN_SERVER;
       }
-      LOG_WARN("get tenant lock fail", K(ret), K(session_.get_effective_tenant_id()));
+      LOG_WARN("get tenant lock fail", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     set_has_tenant_resource(has_tenant_resource);
     {
       // single-replica: inner sql always executes locally (resource RPC removed).
-      MTL_SWITCH(session_.get_effective_tenant_id()) {
+      MOD_SCOPE {
         result_set_ = new (buf_) ObResultSet(session_, mem_context_->get_arena_allocator());
         result_set_->set_is_inner_result_set(true);
       }
@@ -139,7 +138,7 @@ int ObInnerSQLResult::open()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-    LOG_WARN("switch tenant failed", K(ret), K(session_.get_effective_tenant_id()));
+    LOG_WARN("switch tenant failed", K(ret));
   } else {
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
@@ -213,7 +212,7 @@ int ObInnerSQLResult::inner_close()
   ObInnerSqlWaitGuard guard(is_inner_session(), inner_sql_di_, &session_);
 
   if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-    LOG_WARN("switch tenant failed", K(ret), K(session_.get_effective_tenant_id()));
+    LOG_WARN("switch tenant failed", K(ret));
   } else {
     WITH_CONTEXT(mem_context_) {
       if (has_tenant_resource() && OB_FAIL(result_set_->close())) {
@@ -242,7 +241,7 @@ int ObInnerSQLResult::next()
   } else if (iter_end_) {
     ret = OB_ITER_END;
   } else if (has_tenant_resource() && OB_FAIL(tenant_guard.switch_to(tenant_))) {
-    LOG_WARN("switch tenant failed", K(ret), K(session_.get_effective_tenant_id()));
+    LOG_WARN("switch tenant failed", K(ret));
   } else if (store_first_row_) {
     store_first_row_ = false;
   } else {

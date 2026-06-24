@@ -32,7 +32,7 @@ public:
   ~ObMViewRefreshStatsCollection();
   DISABLE_COPY_ASSIGN(ObMViewRefreshStatsCollection);
 
-  int init(sql::ObExecContext &ctx, const uint64_t tenant_id, const int64_t refresh_id,
+  int init(sql::ObExecContext &ctx, const int64_t refresh_id,
            const uint64_t mview_id);
   int clear_for_retry();
 
@@ -57,12 +57,11 @@ public:
 
 #undef DEFINE_BASIC_SETTER
 
-  TO_STRING_KV(K_(tenant_id), K_(refresh_id), K_(mview_id), K_(retry_id), K_(collection_level),
+  TO_STRING_KV(K_(refresh_id), K_(mview_id), K_(retry_id), K_(collection_level),
                K_(refresh_stats), K_(change_stats_array), K_(stmt_stats_array));
 
 public:
   sql::ObExecContext *ctx_;
-  uint64_t tenant_id_;
   int64_t refresh_id_;
   uint64_t mview_id_;
   int64_t retry_id_;
@@ -80,11 +79,11 @@ public:
   ~ObMViewRefreshStatsCollector();
   DISABLE_COPY_ASSIGN(ObMViewRefreshStatsCollector);
 
-  int init(sql::ObExecContext &ctx, const ObMViewRefreshArg &refresh_arg, const uint64_t tenant_id,
+  int init(sql::ObExecContext &ctx, const ObMViewRefreshArg &refresh_arg,
            const int64_t refresh_id, const int64_t mv_cnt);
   int alloc_collection(const uint64_t mview_id, ObMViewRefreshStatsCollection *&stats_collection);
   int commit();
-  TO_STRING_KV(K_(tenant_id), K_(refresh_id), K_(run_stats));
+  TO_STRING_KV(K_(refresh_id), K_(run_stats));
 
 private:
   typedef common::hash::ObHashMap<uint64_t, ObMViewRefreshStatsCollection *,
@@ -93,7 +92,6 @@ private:
 
   ObArenaAllocator allocator_;
   sql::ObExecContext *ctx_;
-  uint64_t tenant_id_;
   int64_t refresh_id_;
   share::schema::ObMViewRefreshRunStats run_stats_;
   MVRefStatsMap mv_ref_stats_map_;

@@ -71,13 +71,12 @@ public:
 
 struct OptStatExpiredTableInfo
 {
-  OptStatExpiredTableInfo() : tenant_id_(0), table_id_(0), tablet_ids_(), inserts_(0) {}
-  bool is_valid() const { return tenant_id_ > 0 && table_id_ > 0 && !tablet_ids_.empty(); }
-  uint64_t tenant_id_;
+  OptStatExpiredTableInfo() : table_id_(0), tablet_ids_(), inserts_(0) {}
+  bool is_valid() const { return table_id_ > 0 && !tablet_ids_.empty(); }
   uint64_t table_id_;
   ObSEArray<int64_t, 4> tablet_ids_;
   uint64_t inserts_;
-  TO_STRING_KV(K(tenant_id_), K(table_id_), K(tablet_ids_), K(inserts_));
+  TO_STRING_KV(K(table_id_), K(tablet_ids_), K(inserts_));
 };
 
 class ObOptStatMonitorManager
@@ -103,7 +102,6 @@ class ObOptStatMonitorManager
 public:
   ObOptStatMonitorManager()
     : inited_(false),
-      tenant_id_(0),
       tg_id_(-1),
       destroyed_(false),
       mysql_proxy_(NULL)
@@ -138,10 +136,8 @@ public:
                                        common::sqlclient::ObISQLConnection *conn = nullptr);
   static int get_column_usage_from_table(sql::ObExecContext &ctx,
                                          ObIArray<ObColumnStatParam *> &column_params,
-                                         uint64_t tenant_id,
                                          uint64_t table_id);
   static int construct_get_column_usage_sql(ObIArray<ObColumnStatParam *> &column_params,
-                                            const uint64_t tenant_id,
                                             const uint64_t table_id,
                                             ObSqlString &select_sql);
 
@@ -156,7 +152,7 @@ public:
   int get_dml_stats(ObIArray<ObOptDmlStat> &dml_stats);
   ObOptStatMonitorFlushAllTask &get_flush_all_task() { return flush_all_task_; }
   ObOptStatMonitorCheckTask &get_check_task() { return check_task_; }
-  int init(uint64_t tenant_id);
+  int init();
   int check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml_stats, bool is_from_direct_load = false);
   int get_opt_stats_expired_table_info(ObIArray<ObOptDmlStat> &dml_stats,
                                        ObIArray<OptStatExpiredTableInfo> &stale_infos,
@@ -166,8 +162,7 @@ public:
                       const int64_t end_idx,
                       const bool is_from_direct_load,
                       ObSqlString &tablet_list);
-  int do_get_opt_stats_expired_table_info(const int64_t tenant_id,
-                                          const ObSqlString &where_str,
+  int do_get_opt_stats_expired_table_info(const ObSqlString &where_str,
                                           ObIArray<OptStatExpiredTableInfo> &stale_infos);
   int mark_the_opt_stat_expired(const OptStatExpiredTableInfo &expired_table_info);
   int get_expired_table_part_info(ObIAllocator &allocator,
@@ -179,8 +174,7 @@ public:
                                             ObIArray<PartInfo> &part_infos,
                                             ObIArray<PartInfo> &subpart_infos,
                                             ObIArray<int64_t> &partition_ids);
-  int check_table_stat_expired_by_dml_info(const uint64_t tenant_id,
-                                           const uint64_t table_id,
+  int check_table_stat_expired_by_dml_info(const uint64_t table_id,
                                            const ObIArray<uint64_t> &tablet_ids,
                                            bool &is_stat_expired);
   int get_need_mark_opt_stats_expired(const ObIArray<ObOptTableStat> &table_stats,
@@ -193,24 +187,20 @@ public:
                                       ObIArray<ObOptTableStat> &expired_table_stats,
                                       ObIArray<ObOptTableStat> &no_table_stats);
   int gen_tablet_list(const ObIArray<uint64_t> &tablet_ids, ObSqlString &tablet_list);
-  int do_mark_the_opt_stat_expired(const uint64_t tenant_id,
-                                   const ObIArray<ObOptTableStat> &expired_table_stats,
+  int do_mark_the_opt_stat_expired(const ObIArray<ObOptTableStat> &expired_table_stats,
                                    ObIArray<int64_t> &expired_partition_ids);
-  int do_mark_the_opt_stat_missing(const uint64_t tenant_id,
-                                   const ObIArray<ObOptTableStat> &no_table_stats);
+  int do_mark_the_opt_stat_missing(const ObIArray<ObOptTableStat> &no_table_stats);
   int gen_part_analyzed_list(const ObIArray<ObOptTableStat> &expired_table_stats,
                              const int64_t begin_idx,
                              const int64_t end_idx,
                              ObSqlString &same_part_analyzed_list,
                              ObSqlString &diff_part_analyzed_list,
                              ObIArray<int64_t> &expired_partition_ids);
-  int gen_values_list(const uint64_t tenant_id,
-                      const ObIArray<ObOptTableStat> &no_table_stats,
+  int gen_values_list(const ObIArray<ObOptTableStat> &no_table_stats,
                       const int64_t begin_idx,
                       const int64_t end_idx,
                       ObSqlString &values_list);
-  int get_async_stale_max_table_size(const uint64_t tenant_id,
-                                     const uint64_t table_id,
+  int get_async_stale_max_table_size(const uint64_t table_id,
                                      int64_t &async_stale_max_table_size);
 
 private:
@@ -219,7 +209,7 @@ private:
   const static int64_t info_count = 8;
   const static int64_t MAX_PROCESS_BATCH_TABLET_CNT = 1000;
   bool inited_;
-  uint64_t tenant_id_;
+  
   int tg_id_;
   bool destroyed_;
   ObMySQLProxy *mysql_proxy_;

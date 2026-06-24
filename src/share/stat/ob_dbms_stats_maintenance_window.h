@@ -50,7 +50,6 @@ public:
   ObDbmsStatsMaintenanceWindow();
 
   static int get_stats_maintenance_window_jobs_sql(const share::schema::ObSysVariableSchema &sys_variable,
-                                                   const uint64_t tenant_id,
                                                    common::ObISQLClient &sql_client);
 
   static int is_stats_maintenance_window_attr(sql::ObExecContext &ctx,
@@ -62,16 +61,13 @@ public:
 
   static bool is_stats_job(const ObString &job_name);
 
-  static int get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy,
-                                                    const uint64_t tenant_id);
+  static int get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy);
   
   static int check_job_exists(common::ObMySQLProxy *sql_proxy,
-                              const uint64_t tenant_id,
                               const char* job_name,
                               bool &is_join_exists);
                                             
   static int get_time_zone_offset(const share::schema::ObSysVariableSchema &sys_variable,
-                                  const uint64_t tenant_id,
                                   int32_t &offset_sec);
 
 private:
@@ -81,7 +77,7 @@ private:
                                  int64_t &start_usec,
                                  ObSqlString &job_action);
 
-  static int get_stat_window_job_info(const uint64_t tenant_id,
+  static int get_stat_window_job_info(
                                      const int64_t job_id,
                                      const char *job_name,
                                      const ObString &exec_env,
@@ -89,7 +85,7 @@ private:
                                      ObSqlString &job_action,
                                      dbms_scheduler::ObDBMSSchedJobInfo &job_info);
 
-  static int get_stats_history_manager_job_info(const uint64_t tenant_id,
+  static int get_stats_history_manager_job_info(
                                                const int64_t job_id,
                                                const ObString &exec_env,
                                                dbms_scheduler::ObDBMSSchedJobInfo &job_info);
@@ -98,13 +94,12 @@ private:
                                  const int64_t specify_time,
                                  const int64_t current_time,
                                  bool &is_valid);
-  static int get_async_gather_stats_job_info(const uint64_t tenant_id,
+  static int get_async_gather_stats_job_info(
                                             const int64_t job_id,
                                             const ObString &exec_env,
                                             dbms_scheduler::ObDBMSSchedJobInfo &job_info);
   static int get_next_job_id_and_exec_env(common::ObMySQLProxy *sql_proxy,
                                           ObIAllocator &allocator,
-                                          const uint64_t tenant_id,
                                           int64_t &job_id,
                                           ObString &exec_env);
 

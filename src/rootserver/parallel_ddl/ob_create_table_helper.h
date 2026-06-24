@@ -63,7 +63,6 @@ private:
 public:
   ObCreateTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObCreateTableArg &arg,
     obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans = nullptr,

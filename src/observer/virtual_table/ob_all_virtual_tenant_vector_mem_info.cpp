@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_tenant_vector_mem_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/alloc/memory_dump.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
@@ -45,11 +46,11 @@ void ObAllVirtualTenantVectorMemInfo::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int64_t ObAllVirtualTenantVectorMemInfo::fill_glibc_used_info(uint64_t tenant_id)
+int64_t ObAllVirtualTenantVectorMemInfo::fill_glibc_used_info()
 {
   int64_t used_size = 0;
   for (it_ = malloc_sample_map_.begin(); it_ != malloc_sample_map_.end(); ++it_) {
-    if (tenant_id == it_->first.tenant_id_) {
+    {
       if (0 == STRNCMP("VIndex", it_->first.label_, strlen("VIndex")) &&
           0 == STRNCMP("GLIBC", get_global_ctx_info().get_ctx_name(it_->first.ctx_id_), strlen("GLIBC"))) {
         used_size += it_->second.alloc_bytes_;
@@ -72,10 +73,9 @@ int ObAllVirtualTenantVectorMemInfo::inner_get_next_row(ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
     } else {
-      uint64_t tenant_id = OB_INVALID_ID;
+      
       char ip_buf[common::OB_IP_STR_BUFF];
       omt::ObMultiTenant *omt = GCTX.omt_;
-      omt::TenantIdList current_ids(nullptr, ObModIds::OMT);
       if (OB_ISNULL(omt)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "omt is null", K(ret));
@@ -83,29 +83,22 @@ int ObAllVirtualTenantVectorMemInfo::inner_get_next_row(ObNewRow *&row)
         SERVER_LOG(WARN, "create memory info map failed", K(ret));
       } else if (OB_FAIL(ObMemoryDump::get_instance().load_malloc_sample_map(malloc_sample_map_))) {
         SERVER_LOG(WARN, "load memory info map failed", K(ret));
-      } else {
-        omt->get_tenant_ids(current_ids);
       }
-      // does not check ret code, we need iter all the tenant.
-      for (int64_t i = 0; i < current_ids.size(); ++i) {
-        tenant_id = current_ids.at(i);
+      // does not check ret code, run for the single (sys) tenant.
+      {
         int64_t manage_used = 0;
         int64_t vector_hold = 0;
         int64_t vector_limit = 0;
         int64_t freeze_cnt = 0;
-        if (is_virtual_tenant_id(tenant_id)
-            || (!is_sys_tenant(effective_tenant_id_) && tenant_id != effective_tenant_id_)) {
-          continue;
-        }
-        MTL_SWITCH(tenant_id) {
-          ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
-          ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr*);
+        MOD_SCOPE {
+          ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+          ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
           manage_used = service->get_allocator().used();
           vector_hold = shared_mem_mgr->vector_allocator().hold();
           int64_t rb_used = shared_mem_mgr->vector_allocator().get_rb_mem_used();
           int64_t vector_used = shared_mem_mgr->vector_allocator().used();
           int64_t pos = 0;
-          int64_t glibc_used = fill_glibc_used_info(tenant_id);
+          int64_t glibc_used = fill_glibc_used_info();
           MEMSET(vector_used_str_, 0, sizeof(vector_used_str_));
           complete_tablet_ids_.reset();
           partial_tablet_ids_.reset();

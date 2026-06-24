@@ -35,7 +35,7 @@ ObAggCell::ObAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator 
       col_datums_(nullptr),
       group_by_result_datum_buf_(nullptr),
       group_by_result_cnt_(0),
-      padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   if (basic_info_.col_param_ != nullptr) {
     is_lob_col_ = basic_info_.col_param_->get_meta_type().is_lob_storage();
@@ -692,7 +692,7 @@ int ObCountAggCell::collect_result(sql::ObEvalCtx &ctx)
 ObMinAggCell::ObMinAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
       group_by_ref_array_(nullptr),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ =ObPDAggType::PD_MIN;
   result_datum_.set_null();
@@ -894,7 +894,7 @@ int ObMinAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAlloc
 ObMaxAggCell::ObMaxAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
       group_by_ref_array_(nullptr),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ = ObPDAggType::PD_MAX;
   result_datum_.set_null();
@@ -1477,7 +1477,7 @@ ObSumAggCell::ObSumAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllo
       cast_datum_(),
       sum_temp_buffer_(nullptr),
       cast_temp_buffer_(nullptr),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ = ObPDAggType::PD_SUM;
   result_datum_.set_null();
@@ -2606,7 +2606,7 @@ ObFirstRowAggCell::ObFirstRowAggCell(const ObAggCellBasicInfo &basic_info, commo
       is_determined_value_(false),
       aggregated_flag_cnt_(0),
       aggregated_flag_buf_(),
-      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   agg_type_ = ObPDAggType::PD_FIRST_ROW;
 }

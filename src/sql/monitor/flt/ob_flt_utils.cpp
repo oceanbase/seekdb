@@ -251,7 +251,7 @@ namespace sql
             // do nothing
             FLTAppInfo app_info;
             FLTControlInfo con;
-            ObFLTControlInfoManager mgr(sess.get_effective_tenant_id());
+            ObFLTControlInfoManager mgr;
             if (OB_FAIL(app_info.deserialize(buf, pos+v_len, pos))) {
               LOG_WARN("failed to deserialize full link trace extra info",
                                         KP(buf), K(ret), K(pos), K(v_len));
@@ -544,7 +544,7 @@ namespace sql
     } else {
       const char* keys[] = {"trace_id", "name", "id", "start_ts", "end_ts",
                             "parent_id", "is_follow", "tags", "logs"};
-      data.tenant_id_ = MTL_ID();
+      
       if (OB_FAIL(set_json_str_val(keys[0], j_tree, data.trace_id_))) {
         LOG_WARN("failed to set str val", K(keys[0]), K(ret));
       } else if (OB_FAIL(set_json_str_val(keys[1], j_tree, data.span_name_))) {
@@ -694,7 +694,7 @@ namespace sql
             SERVER_LOG(WARN, "record concurrent fifoallocator alloc mem failed", K(len), K(ret));
           }
       } else {
-        data.tenant_id_ = flt_span_manager->get_tenant_id();
+        
         // trace id
         org_pos = pos;
         if (OB_FAIL(OBTRACE->get_trace_id().tostring(buf, len, pos))) {

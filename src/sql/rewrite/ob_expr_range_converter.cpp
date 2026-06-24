@@ -1203,7 +1203,7 @@ int ObExprRangeConverter::get_row_in_range_ndoe(const ObRawExpr &l_expr,
 
   // 3. get all valid in param
   if (OB_SUCC(ret) && key_idxs.count() > 0) {
-    ObArenaAllocator alloc("ExprRangeAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator alloc("ExprRangeAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObSEArray<const ObRawExpr*, 4> cur_val_exprs;
     ObSEArray<TmpExprArray*, 4> all_val_exprs;
     const int64_t row_dimension = l_expr.get_param_count();
@@ -1215,7 +1215,7 @@ int ObExprRangeConverter::get_row_in_range_ndoe(const ObRawExpr &l_expr,
         LOG_WARN("failed to allocate memory for se array");
       } else {
         TmpExprArray *val_exprs = new(ptr)TmpExprArray();
-        val_exprs->set_attr(ObMemAttr(MTL_ID(), "ExprRangeCvt"));
+        val_exprs->set_attr(ObMemAttr("ExprRangeCvt"));
         ret = all_val_exprs.push_back(val_exprs);
       }
     }

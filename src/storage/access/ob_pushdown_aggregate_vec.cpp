@@ -59,7 +59,7 @@ ObAggCellVec::ObAggCellVec(const int64_t agg_idx, const ObAggCellVecBasicInfo &b
     agg_idx_(agg_idx),
     basic_info_(basic_info),
     aggregate_(nullptr),
-    padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    padding_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE),
     default_datum_(),
     agg_row_id_(OB_INVALID_CS_ROW_ID)
 {
@@ -1367,8 +1367,8 @@ ObGroupByCellVec::ObGroupByCellVec(
       agg_cells_(),
       agg_cell_factory_vec_(allocator),
       eval_ctx_(eval_ctx),
-      tmp_datum_allocator_("PDGroupBy", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      group_by_datum_allocator_("PDGroupBy", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      tmp_datum_allocator_("PDGroupBy", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      group_by_datum_allocator_("PDGroupBy", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 

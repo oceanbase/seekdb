@@ -65,10 +65,7 @@ public:
 
   static inline bool is_vectorized(const ObPhyOperatorType type)
   {
-    // consider upgrade case: disable vectorize if high version observer support
-    // vectorization, while low version observer does NOT
-    return type >= 0 && type < PHY_END && G_VECTORIZED_OP_ARRAY_[type] &&
-           (G_OB_VERSION_ARRAY_[type] <= GET_MIN_CLUSTER_VERSION());
+    return type >= 0 && type < PHY_END && G_VECTORIZED_OP_ARRAY_[type];
   }
 
   static inline bool support_rich_format(const ObPhyOperatorType type)

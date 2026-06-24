@@ -31,7 +31,7 @@ class ObAllVirtualServerSchemaInfo: public common::ObVirtualTableScannerIterator
 {
 public:
   explicit ObAllVirtualServerSchemaInfo(share::schema::ObMultiVersionSchemaService &schema_service)
-             : schema_service_(schema_service), tenant_ids_(), idx_(0) {}
+             : schema_service_(schema_service), idx_(0) {}
   virtual ~ObAllVirtualServerSchemaInfo() {}
 public:
   virtual int inner_open();
@@ -40,7 +40,6 @@ public:
 private:
   const static int64_t DEFAULT_TENANT_NUM = 10;
   share::schema::ObMultiVersionSchemaService &schema_service_;
-  ObSEArray<uint64_t, DEFAULT_TENANT_NUM> tenant_ids_;
   int64_t idx_;
 }; //class ObAllVirtualServerSchemaInfo
 }//namespace observer

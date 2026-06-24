@@ -64,7 +64,6 @@ public:
     old_worker_timeout_ts_ = 0;
     old_phy_plan_timeout_ts_ = 0;
     last_insert_id_ = 0;
-    tenant_id_ = 0;
     database_id_ = OB_INVALID_ID;
     database_name_.reset();
     inner_conn_ = nullptr;
@@ -102,7 +101,6 @@ private:
   int64_t old_worker_timeout_ts_;
   int64_t old_phy_plan_timeout_ts_;
   uint64_t last_insert_id_;
-  uint64_t tenant_id_;
   uint64_t database_id_;
   ObSqlString database_name_;
   observer::ObInnerSQLConnection *inner_conn_;

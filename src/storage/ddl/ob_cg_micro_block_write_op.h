@@ -65,7 +65,7 @@ public:
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     slice_idx_(-1),
     output_data_(nullptr),
-    allocator_(ObMemAttr(MTL_ID(), "CGMBWriteOp")),
+    allocator_(ObMemAttr("CGMBWriteOp")),
     cg_block_file_arr_(),
     cg_micro_block_writer_(),
     unique_index_id_(0)

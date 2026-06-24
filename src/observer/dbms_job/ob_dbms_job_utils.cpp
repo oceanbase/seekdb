@@ -35,7 +35,6 @@ const char *ObDBMSJobInfo::__ALL_SERVER_BC = "__ALL_SERVER_BC";
 int ObDBMSJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSJobInfo &other)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = other.tenant_id_;
   job_ = other.job_;
   last_modify_ = other.last_modify_;
   last_date_ = other.last_date_;
@@ -61,7 +60,7 @@ int ObDBMSJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSJobInfo &other
 }
 
 int ObDBMSJobUtils::update_for_start(
-  uint64_t tenant_id, ObDBMSJobInfo &job_info, bool update_nextdate)
+  ObDBMSJobInfo &job_info, bool update_nextdate)
 {
   int ret = OB_SUCCESS;
 
@@ -73,7 +72,7 @@ int ObDBMSJobUtils::update_for_start(
   int64_t dummy_execute_at = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (calc_execute_at(
@@ -84,13 +83,13 @@ int ObDBMSJobUtils::update_for_start(
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_time_column("this_date", job_info.this_date_));
   OZ (dml.splice_update_sql(OB_ALL_JOB_TNAME, sql));
-  OZ (sql_proxy_->write(tenant_id, sql.ptr(), affected_rows));
+  OZ (sql_proxy_->write(sql.ptr(), affected_rows));
 
   return ret;
 }
 
 int ObDBMSJobUtils::update_nextdate(
-  uint64_t tenant_id, ObDBMSJobInfo &job_info)
+  ObDBMSJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
 
@@ -100,21 +99,21 @@ int ObDBMSJobUtils::update_nextdate(
   const int64_t now = ObTimeUtility::current_time();
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_time_column("next_date", job_info.next_date_));
   OZ (dml.splice_update_sql(OB_ALL_JOB_TNAME, sql));
-  OZ (sql_proxy_->write(tenant_id, sql.ptr(), affected_rows));
+  OZ (sql_proxy_->write(sql.ptr(), affected_rows));
 
   return ret;
 }
 
 
 int ObDBMSJobUtils::update_for_end(
-  uint64_t tenant_id, ObDBMSJobInfo &job_info, int err, const ObString &errmsg)
+  ObDBMSJobInfo &job_info, int err, const ObString &errmsg)
 {
   int ret = OB_SUCCESS;
 
@@ -131,7 +130,7 @@ int ObDBMSJobUtils::update_for_end(
   UNUSED(errmsg);
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OX (job_info.failures_ = errmsg.empty() ? 0 : (job_info.failures_ + 1));
@@ -167,10 +166,10 @@ int ObDBMSJobUtils::update_for_end(
     "message", ObHexEscapeSqlStr(errmsg.empty() ? ObString("SUCCESS") : errmsg)));
   OZ (dml2.splice_insert_sql(OB_ALL_JOB_LOG_TNAME, sql2));
 
-  OZ (trans.start(sql_proxy_, tenant_id, true));
+  OZ (trans.start(sql_proxy_, true));
 
-  OZ (trans.write(tenant_id, sql1.ptr(), affected_rows), sql1);
-  OZ (trans.write(tenant_id, sql2.ptr(), affected_rows), sql2);
+  OZ (trans.write(sql1.ptr(), affected_rows), sql1);
+  OZ (trans.write(sql2.ptr(), affected_rows), sql2);
 
   if (trans.is_started()) {
     int ret = OB_SUCCESS;
@@ -182,13 +181,13 @@ int ObDBMSJobUtils::update_for_end(
   return ret;
 }
 
-int ObDBMSJobUtils::check_job_can_running(int64_t tenant_id, bool &can_running)
+int ObDBMSJobUtils::check_job_can_running(bool &can_running)
 {
   int ret = OB_SUCCESS;
   uint64_t job_queue_processor = 0;
   uint64_t job_running_cnt = 0;
   ObSqlString sql;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   share::schema::ObSchemaGetterGuard guard;
   bool is_restore = false;
   OX (can_running = false);
@@ -198,17 +197,17 @@ int ObDBMSJobUtils::check_job_can_running(int64_t tenant_id, bool &can_running)
   OZ (sql.append("select count(*) from __all_job where this_date is not null"));
 
   CK (OB_NOT_NULL(GCTX.schema_service_));
-  OZ (GCTX.schema_service_->get_tenant_schema_guard(tenant_id, guard));
-  OZ (guard.check_tenant_is_restore(tenant_id, is_restore));
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(guard));
+  OZ (guard.check_tenant_is_restore(is_restore));
 
   // job can not run in standy and restore tenant.
   bool is_primary = false;
-  if (FAILEDx(ObShareUtil::table_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-    LOG_WARN("fail to execute table_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+  if (FAILEDx(ObShareUtil::table_check_if_tenant_role_is_primary( is_primary))) {
+    LOG_WARN("fail to execute table_check_if_tenant_role_is_primary", KR(ret));
   } else if (is_primary && job_queue_processor > 0) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-      if (OB_FAIL(sql_proxy_->read(result, tenant_id, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql), K(tenant_id));
+      if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_NOT_NULL(result.get_result())) {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           int64_t int_value = 0;
@@ -233,7 +232,7 @@ int ObDBMSJobUtils::extract_info(
   int ret = OB_SUCCESS;
   ObDBMSJobInfo job_info_local;
 
-  job_info_local.tenant_id_ = OB_SYS_TENANT_ID;
+  
   EXTRACT_INT_FIELD_MYSQL(result, "job", job_info_local.job_, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "lowner", job_info_local.lowner_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "powner", job_info_local.powner_);
@@ -292,35 +291,34 @@ do {                                                                  \
 }
 
 int ObDBMSJobUtils::get_dbms_job_info(
-  uint64_t tenant_id, uint64_t job_id, ObIAllocator &allocator, ObDBMSJobInfo &job_info)
+  uint64_t job_id, ObIAllocator &allocator, ObDBMSJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
+  CK (OB_LIKELY(true));
   CK (OB_LIKELY(job_id != OB_INVALID_ID));
 
   OZ (sql.append_fmt("select * from %s where job = %ld", OB_ALL_JOB_TNAME, job_id));
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-      if (OB_FAIL(sql_proxy_->read(result, tenant_id, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql), K(tenant_id), K(job_id));
+      if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql), K(job_id));
       } else if (OB_NOT_NULL(result.get_result())) {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           OZ (extract_info(*(result.get_result()), allocator, job_info));
-          OX (job_info.tenant_id_ = tenant_id);
           if (OB_SUCC(ret) && (result.get_result()->next()) != OB_ITER_END) {
-            LOG_ERROR("got more than one row for dbms job!", K(ret), K(tenant_id), K(job_id));
+            LOG_ERROR("got more than one row for dbms job!", K(ret), K(job_id));
             ret = OB_ERR_UNEXPECTED;
           }
         } else if (OB_ITER_END == ret) {
-          LOG_INFO("job not exists, may delete alreay!", K(ret), K(tenant_id), K(job_id));
+          LOG_INFO("job not exists, may delete alreay!", K(ret), K(job_id));
           ret = OB_SUCCESS; // job not exist, do nothing ...
         } else {
-          LOG_WARN("failed to get next", K(ret), K(tenant_id), K(job_id));
+          LOG_WARN("failed to get next", K(ret), K(job_id));
         }
       }
     }
@@ -329,21 +327,21 @@ int ObDBMSJobUtils::get_dbms_job_info(
 }
 
 int ObDBMSJobUtils::get_dbms_job_infos_in_tenant(
-  uint64_t tenant_id, ObIAllocator &allocator, ObIArray<ObDBMSJobInfo> &job_infos)
+  ObIAllocator &allocator, ObIArray<ObDBMSJobInfo> &job_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   int64_t affected_rows = 0;
 
   CK (OB_NOT_NULL(sql_proxy_));
-  CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
+  CK (OB_LIKELY(true));
 
   OZ (sql.append_fmt("select * from %s", OB_ALL_JOB_TNAME));
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-      if (OB_FAIL(sql_proxy_->read(result, tenant_id, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql), K(tenant_id));
+      if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_NOT_NULL(result.get_result())) {
         do {
           if (OB_FAIL(result.get_result()->next())) {
@@ -353,7 +351,6 @@ int ObDBMSJobUtils::get_dbms_job_infos_in_tenant(
           } else {
             ObDBMSJobInfo job_info;
             OZ (extract_info(*(result.get_result()), allocator, job_info));
-            OX (job_info.tenant_id_ = tenant_id);
             OZ (job_infos.push_back(job_info));
           }
         } while (OB_SUCC(ret));
@@ -401,7 +398,7 @@ int ObDBMSJobUtils::calc_execute_at(
       interval.length(), interval.ptr()));
     if (OB_SUCC(ret)) {
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-        if (OB_FAIL(inner_proxy->read(result, job_info.get_tenant_id(), sql.ptr()))) {
+        if (OB_FAIL(inner_proxy->read(result, sql.ptr()))) {
           LOG_WARN("execute query failed", K(ret), K(sql), K(job_info));
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_FAIL(result.get_result()->next())) {
@@ -426,7 +423,7 @@ int ObDBMSJobUtils::calc_execute_at(
             }
             if (OB_SUCC(ret)) {
               OX (job_info.next_date_ = execute_at);
-              OZ (update_nextdate(job_info.get_tenant_id(), job_info));
+              OZ (update_nextdate(job_info));
             }
           }
         }

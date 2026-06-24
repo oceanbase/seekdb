@@ -60,7 +60,6 @@ class ObChecksumValidator
 {
 public:
   ObChecksumValidator(
-    const uint64_t tenant_id,
     volatile bool &stop,
     const compaction::ObTabletLSPairCache &tablet_ls_pair_cache,
     const compaction::ObTabletStatusMap &tablet_status_map,
@@ -77,7 +76,6 @@ public:
       need_validate_cross_cluster_ckm_(false),
       cross_cluster_ckm_sync_finish_(false),
       stop_(stop),
-      tenant_id_(tenant_id),
       table_id_(OB_INVALID_ID),
       freeze_info_(),
       major_merge_start_us_(0),
@@ -95,7 +93,7 @@ public:
       simple_schema_(nullptr),
       table_compaction_info_(),
       replica_ckm_items_(false/*need_map*/),
-      last_table_ckm_items_(tenant_id)
+      last_table_ckm_items_{}
   {}
   ~ObChecksumValidator() {}
   int init(
@@ -130,7 +128,7 @@ public:
     share::schema::ObSchemaGetterGuard &schema_guard,
     const ObFTSGroupArray &fts_group_array);
   static const int64_t SPECIAL_TABLE_ID = 1;
-  TO_STRING_KV(K_(tenant_id), K_(is_primary_service), K_(table_id), "compaction_scn", get_compaction_scn());
+  TO_STRING_KV(K_(is_primary_service), K_(table_id), "compaction_scn", get_compaction_scn());
 private:
   share::SCN get_compaction_scn() const { return freeze_info_.frozen_scn_; }
   int64_t get_compaction_scn_val() const { return get_compaction_scn().get_val_for_tx(); }
@@ -181,7 +179,6 @@ private:
   bool need_validate_cross_cluster_ckm_;
   bool cross_cluster_ckm_sync_finish_;
   volatile bool &stop_;
-  uint64_t tenant_id_;
   uint64_t table_id_;
   share::ObFreezeInfo freeze_info_;
   int64_t major_merge_start_us_;

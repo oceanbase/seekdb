@@ -70,7 +70,7 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     LOG_WARN("drop trigger stmt is NULL", K(ret));
   } else {
     const obcall::ObDropTriggerArg &arg = stmt->get_trigger_arg();
-    uint64_t tenant_id = arg.tenant_id_;
+    
     const ObString &trigger_database = arg.trigger_database_;
     const ObString &trigger_name = arg.trigger_name_;
     ObSchemaGetterGuard *schema_guard = NULL;
@@ -83,7 +83,7 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
     OX (schema_guard = schema_checker_->get_schema_guard());
     if (OB_SUCC(ret)) {
-      if(OB_FAIL(schema_guard->get_database_schema(tenant_id, trigger_database, db_schema))) {
+      if(OB_FAIL(schema_guard->get_database_schema( trigger_database, db_schema))) {
         LOG_WARN("get database schema failed", K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
@@ -91,12 +91,12 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
       } else if (db_schema->is_or_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
         LOG_WARN("Can't not operate db in recyclebin",
-                 K(tenant_id), K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
+                 K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
       } else if (OB_INVALID_ID == (trigger_database_id = db_schema->get_database_id())) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("database id is invalid",
-                 K(tenant_id), K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
-      } else if (OB_FAIL(schema_guard->get_trigger_info(tenant_id, trigger_database_id,
+                 K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
+      } else if (OB_FAIL(schema_guard->get_trigger_info( trigger_database_id,
                                                        trigger_name, trigger_info))) {
         LOG_WARN("get trigger info failed", K(ret), K(trigger_database), K(trigger_name));
       } else if (OB_ISNULL(trigger_info)) {
@@ -105,10 +105,10 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
         LOG_WARN("trigger is in recyclebin", K(ret),
                  K(trigger_info->get_trigger_id()), K(trigger_info->get_trigger_name()));
-      } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+      } else if (OB_FAIL(schema_guard->get_table_schema(
                                                   trigger_info->get_base_object_id(),
                                                   table))) {
-       LOG_WARN("Failed to get table schema", K(tenant_id),
+       LOG_WARN("Failed to get table schema",
                    K(trigger_info->get_base_object_id()), K(ret));
       } else if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
@@ -172,8 +172,7 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
         if (OB_SUCC(ret)) {
           // Check if user@host is in the mysql.user table
           const ObUserInfo* user_info = nullptr;
-          if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(session_info_->get_effective_tenant_id(),
-                                                                         user_name,
+          if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(user_name,
                                                                          host_name,
                                                                          user_info))) {
             ret = OB_ERR_UNEXPECTED;
@@ -223,7 +222,6 @@ int ObTriggerResolver::resolve_create_trigger_stmt(const ParseNode &parse_node,
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "editionable in create trigger");
   }
   OX (trigger_arg.with_replace_ = (parse_node.int32_values_[0] != 0));
-  OX (trigger_arg.trigger_info_.set_tenant_id(session_info_->get_effective_tenant_id()));
   OX (trigger_arg.trigger_info_.set_owner_id(session_info_->get_user_id()));
   OZ (resolve_sp_definer(parse_node.children_[0], trigger_arg));
   OZ (resolve_trigger_source(*parse_node.children_[1], trigger_arg));
@@ -231,7 +229,7 @@ int ObTriggerResolver::resolve_create_trigger_stmt(const ParseNode &parse_node,
     const ObTableSchema *table_schema = NULL;
     CK (OB_NOT_NULL(schema_checker_));
     CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
-    OZ (schema_checker_->get_schema_guard()->get_table_schema(trigger_arg.trigger_info_.get_tenant_id(),
+    OZ (schema_checker_->get_schema_guard()->get_table_schema(
                                                               trigger_arg.trigger_info_.get_base_object_id(),
                                                               table_schema));
     CK (OB_NOT_NULL(table_schema));
@@ -255,7 +253,7 @@ int ObTriggerResolver::resolve_drop_trigger_stmt(const ParseNode &parse_node,
   OV (OB_NOT_NULL(parse_node.children_));
   OV (OB_NOT_NULL(parse_node.children_[0]));    // trigger name.
   OV (OB_NOT_NULL(session_info_));
-  OX (trigger_arg.tenant_id_ = session_info_->get_effective_tenant_id());
+  OX ();
   OZ (resolve_schema_name(*parse_node.children_[0], trigger_arg.trigger_database_, trigger_arg.trigger_name_));
   OV (OB_NOT_NULL(schema_checker_));
   OX (trigger_arg.if_exist_ = parse_node.value_);
@@ -277,7 +275,7 @@ int ObTriggerResolver::resolve_alter_trigger_stmt(const ParseNode &parse_node,
   OV (OB_NOT_NULL(parse_node.children_[1]));  //alter clause.
   OV (OB_NOT_NULL(session_info_) && OB_NOT_NULL(schema_checker_));
   OZ (resolve_schema_name(*parse_node.children_[0], trigger_db_name, trigger_name));
-  OZ (schema_checker_->get_trigger_info(session_info_->get_effective_tenant_id(), trigger_db_name,
+  OZ (schema_checker_->get_trigger_info( trigger_db_name,
                                         trigger_name, old_tg_info));
   if (OB_SUCC(ret) && OB_ISNULL(old_tg_info)) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
@@ -286,7 +284,6 @@ int ObTriggerResolver::resolve_alter_trigger_stmt(const ParseNode &parse_node,
   OZ (ObDDLResolver::ob_add_ddl_dependency(old_tg_info->get_trigger_id(),
                                            TRIGGER_SCHEMA,
                                            old_tg_info->get_schema_version(),
-                                           old_tg_info->get_tenant_id(),
                                            trigger_arg));
   OZ (new_tg_info.deep_copy(*old_tg_info));
   OZ (resolve_alter_clause(*parse_node.children_[1], new_tg_info, trigger_db_name,
@@ -453,7 +450,7 @@ int ObTriggerResolver::resolve_compound_timing_point(const ParseNode &parse_node
   const ObTableSchema *table_schema = NULL;
   ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
   CK (OB_NOT_NULL(schema_guard));
-  OZ (schema_guard->get_table_schema(trigger_arg.trigger_info_.get_tenant_id(),
+  OZ (schema_guard->get_table_schema(
                                      trigger_arg.trigger_info_.get_base_object_id(),
                                      table_schema));
   CK (OB_NOT_NULL(table_schema));
@@ -703,7 +700,7 @@ int ObTriggerResolver::resolve_dml_event_list(const ParseNode &parse_node,
   if (OB_SUCC(ret)) {
     const ObTableSchema *table_schema = NULL;
     ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
-    OZ (schema_guard->get_table_schema(trigger_arg.trigger_info_.get_tenant_id(),
+    OZ (schema_guard->get_table_schema(
                                        trigger_arg.base_object_database_,
                                        trigger_arg.base_object_name_,
                                       false/*is_index*/, table_schema));
@@ -880,18 +877,18 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
   int ret = OB_SUCCESS;
   uint64_t tg_db_id = OB_INVALID_ID; 
   ObTriggerInfo &tg_info = tg_arg.trigger_info_;
-  uint64_t tenant_id = tg_info.get_tenant_id();
+  
   ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
   const ObTableSchema *table_schema = NULL;
   OV (OB_NOT_NULL(schema_guard));
-  OZ (schema_checker_->get_database_id(tenant_id, tg_arg.trigger_database_, tg_db_id));
-  OZ (schema_guard->get_table_schema(tenant_id, tg_arg.base_object_database_,
+  OZ (schema_checker_->get_database_id(tg_arg.trigger_database_, tg_db_id));
+  OZ (schema_guard->get_table_schema( tg_arg.base_object_database_,
                                      tg_arg.base_object_name_,
                                      false/*is_index*/, table_schema));
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table or view does not exist", K(tenant_id), K(tg_db_id),
+    LOG_WARN("table or view does not exist", K(tg_db_id),
               K(tg_arg.base_object_name_), K(ret));
     LOG_MYSQL_USER_ERROR(OB_TABLE_NOT_EXIST, tg_arg.base_object_database_.ptr(),
                           tg_arg.base_object_name_.ptr());
@@ -920,7 +917,7 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
     } else {
       uint64_t trigger_id = OB_INVALID_ID;
       const ObTriggerInfo *trigger_info = NULL;
-      const uint64_t tenant_id = table_schema->get_tenant_id();
+      
       const ObIArray<uint64_t> &trigger_list = table_schema->get_trigger_list();
       if (tg_db_id != table_schema->get_database_id()) {
         ret = OB_ERR_TRIGGER_IN_WRONG_SCHEMA;
@@ -929,7 +926,7 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
         OX (trigger_id = trigger_list.at(i));
-        OZ (schema_guard->get_trigger_info(tenant_id, trigger_id, trigger_info), trigger_id);
+        OZ (schema_guard->get_trigger_info( trigger_id, trigger_info), trigger_id);
         OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_id);
       }
     }
@@ -960,7 +957,7 @@ int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreat
         const ObTriggerInfo *ref_trg_info = NULL;
         OV (OB_NOT_NULL(schema_checker_));
         OV (!ref_trg_name.empty(), OB_ERR_UNEXPECTED, ref_trg_db_name, ref_trg_name);
-        OZ (schema_checker_->get_trigger_info(trg_info.get_tenant_id(), ref_trg_db_name, ref_trg_name, ref_trg_info));
+        OZ (schema_checker_->get_trigger_info( ref_trg_db_name, ref_trg_name, ref_trg_info));
         if (OB_FAIL(ret)) {
         } else if (NULL == ref_trg_info) {
           ret = OB_ERR_TRG_ORDER;
@@ -996,7 +993,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
   if (OB_SUCC(ret)) {
     HEAP_VARS_2((ObPLPackageAST, package_spec_ast, allocator),
                   (ObPLPackageAST, package_body_ast, allocator)) {
-      ObPLPackageGuard package_guard(session_info->get_effective_tenant_id());
+      ObPLPackageGuard package_guard{};
       const ObString &pkg_name = trigger_info.get_package_body_info().get_package_name();
       ObString source;
       ObPLCompiler compiler(allocator, *session_info, schema_guard, package_guard, *sql_proxy);
@@ -1014,7 +1011,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
         CK (column_list->type_ == T_TG_COLUMN_LIST);
         if (OB_SUCC(ret)) {
           const ObTableSchema *table_schema = NULL;
-          OZ (schema_guard.get_table_schema(trigger_info.get_tenant_id(),
+          OZ (schema_guard.get_table_schema(
                                             trigger_info.get_base_object_id(),
                                             table_schema));
           CK (OB_NOT_NULL(table_schema));
@@ -1040,8 +1037,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                 package_spec_info.get_package_id(),
                                 package_spec_info.get_schema_version(),
                                 NULL));
-      OZ (ObTriggerInfo::gen_package_source(trigger_info.get_tenant_id(),
-                                            trigger_info.get_trigger_spec_package_id(trigger_info.get_trigger_id()),
+      OZ (ObTriggerInfo::gen_package_source(trigger_info.get_trigger_spec_package_id(trigger_info.get_trigger_id()),
                                             source, true, schema_guard, allocator));
       OZ (compiler.analyze_package(source, NULL, package_spec_ast, true));
       OZ (package_body_ast.init(db_name,
@@ -1051,8 +1047,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                 trigger_info.get_package_body_info().get_package_id(),
                                 trigger_info.get_package_body_info().get_schema_version(),
                                 &package_spec_ast));
-      OZ (ObTriggerInfo::gen_package_source(trigger_info.get_tenant_id(), 
-                                            trigger_info.get_trigger_body_package_id(trigger_info.get_trigger_id()),
+      OZ (ObTriggerInfo::gen_package_source(trigger_info.get_trigger_body_package_id(trigger_info.get_trigger_id()),
                                             source, false, schema_guard, allocator));
       OZ (compiler.analyze_package(source,
                                    &(package_spec_ast.get_body()->get_namespace()),

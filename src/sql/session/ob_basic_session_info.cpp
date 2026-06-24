@@ -18,6 +18,7 @@
 
 
 #include "ob_basic_session_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "common/ob_smart_call.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
@@ -54,16 +55,13 @@ const int64_t ObBasicSessionInfo::ESSENTIAL_SYS_VARS_COUNT =
 
 ObBasicSessionInfo::SysVarsCacheData ObBasicSessionInfo::SysVarsCache::base_data_;
 
-ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
-  :   orig_tenant_id_(tenant_id),
+ObBasicSessionInfo::ObBasicSessionInfo()
+  :   
       tenant_session_mgr_(NULL),
       query_mutex_(common::ObLatchIds::SESSION_QUERY_LOCK),
       thread_data_mutex_(common::ObLatchIds::SESSION_THREAD_DATA_LOCK),
       is_valid_(true),
       is_deserialized_(false),
-      tenant_id_(OB_INVALID_ID),
-      effective_tenant_id_(OB_INVALID_ID),
-      rpc_tenant_id_(0),
       is_changed_to_temp_tenant_(false),
       user_id_(OB_INVALID_ID),
       client_version_(),
@@ -72,7 +70,6 @@ ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
       master_sessid_(INVALID_SESSID),
       client_sessid_(INVALID_SESSID),
       client_create_time_(0),
-      proxy_sessid_(VALID_PROXY_SESSID),
       global_vars_version_(0),
       sys_var_base_version_(OB_INVALID_VERSION),
       tx_desc_(NULL),
@@ -86,31 +83,31 @@ ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
       sess_ref_seq_(0),
       block_allocator_(SMALL_BLOCK_SIZE, common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
                        // Here subtracting 32 is to adapt to the ObMalloc alignment rule, preventing memory allocation exceeding 8k
-                       ObMalloc(lib::ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION_SBLOCK))),
+                       ObMalloc(lib::ObMemAttr(ObModIds::OB_SQL_SESSION_SBLOCK))),
       ps_session_info_allocator_(sizeof(ObPsSessionInfo), common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
                                  // Here subtracting 32 is to adapt to the ObMalloc alignment rule, preventing memory allocation exceeding 8k
-                                 ObMalloc(lib::ObMemAttr(orig_tenant_id_, "PsSessionInfo"))),
+                                 ObMalloc(lib::ObMemAttr("PsSessionInfo"))),
       cursor_info_allocator_(sizeof(pl::ObDbmsCursorInfo), common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
-                             ObMalloc(lib::ObMemAttr(orig_tenant_id_, "SessCursorInfo"))),
+                             ObMalloc(lib::ObMemAttr("SessCursorInfo"))),
       package_info_allocator_(sizeof(pl::ObPLPackageState), common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
-                              ObMalloc(lib::ObMemAttr(orig_tenant_id_, "SessPackageInfo"))),
-      sess_level_name_pool_(lib::ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
-      conn_level_name_pool_(lib::ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+                              ObMalloc(lib::ObMemAttr("SessPackageInfo"))),
+      sess_level_name_pool_(lib::ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      conn_level_name_pool_(lib::ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
       json_pl_mngr_(0),
       trans_flags_(),
       sql_scope_flags_(),
       need_reset_package_(false),
-      base_sys_var_alloc_(ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
-      inc_sys_var_alloc1_(ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
-      inc_sys_var_alloc2_(ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      base_sys_var_alloc_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      inc_sys_var_alloc1_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      inc_sys_var_alloc2_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
       current_buf_index_(0),
       bucket_allocator_wrapper_(&block_allocator_),
-      user_var_val_map_(SMALL_BLOCK_SIZE, ObWrapperAllocator(&block_allocator_), orig_tenant_id_),
+      user_var_val_map_(SMALL_BLOCK_SIZE, ObWrapperAllocator(&block_allocator_)),
       influence_plan_var_indexs_(),
       is_first_gen_(true),
       is_first_gen_config_(true),
       need_regenerate_sys_var_str_(true),
-      sys_var_fac_(orig_tenant_id_),
+      sys_var_fac_{},
       next_frag_mem_point_(OB_MALLOC_NORMAL_BLOCK_SIZE), // 8KB
       sys_vars_encode_max_size_(0),
       consistency_level_(INVALID_CONSISTENCY),
@@ -130,10 +127,9 @@ ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
       client_mode_(OB_MIN_CLIENT_MODE),
       changed_sys_vars_(),
       changed_user_vars_(),
-      changed_var_pool_(ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
-      extra_info_allocator_(ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      changed_var_pool_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
+      extra_info_allocator_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
       is_database_changed_(false),
-      feedback_manager_(),
       trans_spec_status_(TRANS_SPEC_NOT_SET),
       debug_sync_actions_(),
       partition_hit_(),
@@ -159,7 +155,6 @@ ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
       process_query_time_(0),
       last_update_tz_time_(0),
       is_client_sessid_support_(false),
-      is_feedback_proxy_info_support_(false),
       use_rich_vector_format_(false),
       last_refresh_schema_version_(OB_INVALID_VERSION),
       force_rich_vector_format_(ForceRichFormatStatus::Disable),
@@ -171,14 +166,13 @@ ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
   MEMSET(sys_vars_, 0, sizeof(sys_vars_));
   log_id_level_map_.reset_level();
   CHAR_CARRAY_INIT(tenant_);
-  CHAR_CARRAY_INIT(effective_tenant_);
   CHAR_CARRAY_INIT(trace_id_buff_);
   sql_id_[0] = '\0';
   ssl_cipher_buff_[0] = '\0';
   sess_bt_buff_[0] = '\0';
   inc_sys_var_alloc_[0] = &inc_sys_var_alloc1_;
   inc_sys_var_alloc_[1] = &inc_sys_var_alloc2_;
-  influence_plan_var_indexs_.set_attr(ObMemAttr(orig_tenant_id_, "PlanVaIdx"));
+  influence_plan_var_indexs_.set_attr(ObMemAttr("PlanVaIdx"));
   thread_name_[0] = '\0';
 }
 
@@ -195,7 +189,7 @@ bool ObBasicSessionInfo::is_server_status_in_transaction() const
 }
 
 //for test
-int ObBasicSessionInfo::test_init(uint32_t sessid, uint64_t proxy_sessid,
+int ObBasicSessionInfo::test_init(uint32_t sessid,
                              common::ObIAllocator *bucket_allocator)
 {
   int ret = OB_SUCCESS;
@@ -220,7 +214,6 @@ int ObBasicSessionInfo::test_init(uint32_t sessid, uint64_t proxy_sessid,
   } else {
     // tz_info_wrap_.set_tz_info_map(GCTX.tz_info_mgr_->get_tz_info_map());
     sessid_ = sessid;
-    proxy_sessid_ = proxy_sessid;
   }
   return ret;
 }
@@ -230,7 +223,7 @@ bool ObBasicSessionInfo::is_use_inner_allocator() const
   return bucket_allocator_wrapper_.get_alloc() == &block_allocator_;
 }
 
-int ObBasicSessionInfo::init(uint32_t sessid, uint64_t proxy_sessid,
+int ObBasicSessionInfo::init(uint32_t sessid,
                              common::ObIAllocator *bucket_allocator, const ObTZInfoMap *tz_info)
 {
   int ret = OB_SUCCESS;
@@ -259,11 +252,10 @@ int ObBasicSessionInfo::init(uint32_t sessid, uint64_t proxy_sessid,
 /*  } else if (FALSE_IT(tx_result_.set_trans_desc(&trans_desc_))) { */
   } else {
     sessid_ = sessid;
-    proxy_sessid_ = proxy_sessid;
-    uint64_t tenant_id = tenant_id_;
+    
     if (OB_ISNULL(tz_info)) {
       ObTZMapWrap tz_map_wrap;
-      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_map_wrap))) {
+      if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
         LOG_WARN("get tenant timezone map failed", K(ret));
       } else {
         tz_info_wrap_.set_tz_info_map(tz_map_wrap.get_tz_map());
@@ -312,8 +304,8 @@ void ObBasicSessionInfo::clean_status()
     LockGuard lock_guard(thread_data_mutex_);
     int ret = OB_SUCCESS;
     MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-    if (OB_SUCC(guard.switch_to(tx_desc_->get_tenant_id(), false))) {
-      MTL(transaction::ObTransService*)->release_tx(*tx_desc_);
+    if (OB_SUCC(guard.switch_to(false))) {
+      share::g_mp->trans_service()->release_tx(*tx_desc_);
     }
     tx_desc_ = NULL;
   }
@@ -355,7 +347,7 @@ int ObBasicSessionInfo::reset_sys_vars()
   // load system tenant variables
   OZ (load_default_sys_variable(print_info_log, is_sys_tenant));
   // load current tenant variables
-  OZ (GCTX.schema_service_->get_tenant_schema_guard(effective_tenant_id_, schema_guard,
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard,
                                                     OB_INVALID_VERSION));
   OZ (load_all_sys_vars(schema_guard));
   if (OB_FAIL(ret) && is_schema_error(ret)) {
@@ -378,8 +370,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   if (OB_NOT_NULL(tx_desc_)) {
     int ret = OB_SUCCESS;
     MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-    if (OB_SUCC(guard.switch_to(tx_desc_->get_tenant_id(), false))) {
-      MTL(transaction::ObTransService*)->release_tx(*tx_desc_);
+    if (OB_SUCC(guard.switch_to(false))) {
+      share::g_mp->trans_service()->release_tx(*tx_desc_);
     } else {
       LOG_WARN("tenant env not exist, force release tx", KP(tx_desc_), K(tx_desc_->get_tx_id()));
       transaction::ObTransService::force_release_tx_when_session_destroy(*tx_desc_);
@@ -391,9 +383,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   cached_tenant_config_version_ = 0;
   is_deserialized_ = false;
   CHAR_CARRAY_INIT(tenant_);
-  tenant_id_ = OB_INVALID_ID;
-  CHAR_CARRAY_INIT(effective_tenant_);
-  effective_tenant_id_ = OB_INVALID_ID;
+  
+  
   is_changed_to_temp_tenant_ = false;
   user_id_ = OB_INVALID_ID;
   client_version_.reset();
@@ -402,7 +393,6 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   master_sessid_ = INVALID_SESSID;
   client_sessid_ = INVALID_SESSID;
   client_create_time_ = 0,
-  proxy_sessid_ = VALID_PROXY_SESSID;
   global_vars_version_ = 0;
 
   tx_result_.reset();
@@ -501,7 +491,6 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   process_query_time_ = 0;
   last_update_tz_time_ = 0;
   is_client_sessid_support_ = false;
-  is_feedback_proxy_info_support_ = false;
   use_rich_vector_format_ = true;
   force_rich_vector_format_ = ForceRichFormatStatus::Disable;
   sess_bt_buff_pos_ = 0;
@@ -544,12 +533,12 @@ int ObBasicSessionInfo::reset_timezone()
   return ret;
 }
 
-int ObBasicSessionInfo::init_tenant(const ObString &tenant_name, const uint64_t tenant_id)
+int ObBasicSessionInfo::init_tenant(const ObString &tenant_name)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(tenant_id), K(ret));
+    LOG_WARN("invalid tenant id", K(ret));
   } else if (tenant_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant name is empty", K(tenant_name), K(ret));
@@ -558,29 +547,24 @@ int ObBasicSessionInfo::init_tenant(const ObString &tenant_name, const uint64_t 
     LOG_WARN("tenant name too long", K(tenant_name), K(ret));
   } else if (OB_FAIL(ob_cstrcopy(tenant_, sizeof(tenant_), tenant_name))) {
     LOG_WARN("failed to copy tenant name", K(tenant_name), K(ret));
-  } else if (OB_FAIL(ob_cstrcopy(effective_tenant_, sizeof(effective_tenant_), tenant_name))) {
-    LOG_WARN("failed to copy effective tenant name", K(tenant_name), K(ret));
   } else {
     ObTZMapWrap tz_map_wrap;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_map_wrap))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
       LOG_WARN("get tenant timezone map failed", K(ret));
     } else {
       tz_info_wrap_.set_tz_info_map(tz_map_wrap.get_tz_map());
-      tenant_id_ = tenant_id;
-      effective_tenant_id_ = tenant_id;
-      LOG_DEBUG("init session tenant", K(tenant_name), K(tenant_id));
+      
+      
+      LOG_DEBUG("init session tenant", K(tenant_name));
     }
   }
   return ret;
 }
 
-int ObBasicSessionInfo::set_tenant(const common::ObString &tenant_name, const uint64_t tenant_id)
+int ObBasicSessionInfo::set_tenant(const common::ObString &tenant_name)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(tenant_id), K(ret));
-  } else if (tenant_name.empty()) {
+  if (tenant_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant name is empty", K(tenant_name), K(ret));
   } else if (tenant_name.length() > OB_MAX_TENANT_NAME_LENGTH) {
@@ -589,72 +573,32 @@ int ObBasicSessionInfo::set_tenant(const common::ObString &tenant_name, const ui
   } else if (OB_FAIL(ob_cstrcopy(tenant_, sizeof(tenant_), tenant_name))) {
     LOG_WARN("tenant name too long", K(tenant_name));
   } else {
-    tenant_id_ = tenant_id;
-    LOG_TRACE("set tenant", K(tenant_name), K(tenant_id));
+    
+    LOG_TRACE("set tenant", K(tenant_name));
   }
   return ret;
 }
 
 
 int ObBasicSessionInfo::switch_tenant_with_name(
-  uint64_t effective_tenant_id, const common::ObString &tenant_name)
+  const common::ObString &tenant_name)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(effective_tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret), K(effective_tenant_id));
-  } else if (tenant_name.empty()) {
+  if (tenant_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant name is empty", K(ret), K(tenant_name));
   } else if (tenant_name.length() > OB_MAX_TENANT_NAME_LENGTH) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant name too long", K(ret), K(tenant_name));
-  } else if (OB_FAIL(switch_tenant(effective_tenant_id))) {
-    LOG_WARN("fail to switch tenant", K(ret), K(effective_tenant_id));
-  } else if (OB_FAIL(ob_cstrcopy(effective_tenant_, sizeof(effective_tenant_), tenant_name))) {
-    LOG_WARN("tenant name too long", K(ret), K(tenant_name));
+  } else if (OB_FAIL(switch_tenant())) {
+    LOG_WARN("fail to switch tenant", K(ret), K(1UL));
   }
   return ret;
 }
 
-int ObBasicSessionInfo::switch_tenant(uint64_t effective_tenant_id)
+int ObBasicSessionInfo::switch_tenant()
 {
   int ret = OB_SUCCESS;
-  if (OB_SYS_TENANT_ID != tenant_id_) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "switching tenant from a non-sys tenant");
-    LOG_WARN("only support sys tenant switch tenant", K(ret), K(tenant_id_), K(effective_tenant_id_));
-  } else if (effective_tenant_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(effective_tenant_id));
-  } else if (OB_NOT_NULL(tx_desc_) && effective_tenant_id != effective_tenant_id_) {
-    if (tx_desc_->in_tx_or_has_extra_state()) {
-      ret = OB_NOT_SUPPORTED;
-      // only inner-SQL goes switch_tenant and may fall into such state
-      // print out error to easy trouble-shot
-      LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                  "try to switch to another tenant without commit/rollback in a transaction");
-      LOG_ERROR("try to switch another tenant while session has active txn,"
-                " you must commit/rollback first", K(ret),
-                "current_effective_tenant_id", effective_tenant_id_,
-                "target_effective_tenant_id", effective_tenant_id,
-                KPC(tx_desc_), KPC(this));
-    } else if (OB_FAIL(ObSqlTransControl::reset_session_tx_state(this))) {
-      LOG_WARN("reset session tx state fail", K(ret), KPC(this));
-    }
-  }
-  if (OB_SUCC(ret)) {
-#ifndef NDEBUG
-    if (effective_tenant_id_ != effective_tenant_id) {
-      LOG_INFO("switch tenant",
-               "target_effective_tenant_id", effective_tenant_id,
-               "current_effective_tenant_id", effective_tenant_id_,
-               "priv_tenant_id", tenant_id_,
-               K(lbt()));
-    }
-#endif
-    effective_tenant_id_ = effective_tenant_id;
-  }
   return ret;
 }
 
@@ -663,10 +607,6 @@ const common::ObString ObBasicSessionInfo::get_tenant_name() const
   return ObString::make_string(tenant_);
 }
 
-const common::ObString ObBasicSessionInfo::get_effective_tenant_name() const
-{
-  return ObString::make_string(effective_tenant_);
-}
 
 int ObBasicSessionInfo::set_user(const ObString &user_name, const ObString &host_name, const uint64_t user_id)
 {
@@ -881,14 +821,14 @@ int ObBasicSessionInfo::update_database_variables(ObSchemaGetterGuard *schema_gu
     } else {
       const share::schema::ObDatabaseSchema *db_schema = NULL;
       ObString db_name(thread_data_.database_name_);
-      if (OB_FAIL(schema_guard->get_database_schema(effective_tenant_id_, db_name,
+      if (OB_FAIL(schema_guard->get_database_schema( db_name,
                                                     db_schema))) {
         LOG_WARN("get database schema failed",
-                 K(effective_tenant_id_), K(db_name), K(ret));
+                 K(db_name), K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("database not exist",
-                 K(effective_tenant_id_), K(db_name), K(ret));
+                 K(db_name), K(ret));
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
       } else {
         const int64_t db_coll = static_cast<int64_t>(db_schema->get_collation_type());
@@ -939,7 +879,6 @@ const ObString ObBasicSessionInfo::get_database_name() const
 //  } else if (OB_UNLIKELY(NULL == schema_guard)) {
 //    ret = OB_INVALID_ARGUMENT;
 //    LOG_WARN("Schema guard should not be NULL", K(ret));
-//  } else if (OB_FAIL(schema_guard->get_database_id(get_effective_tenant_id(), get_database_name(),
 //                                                     db_id))) {
 //    db_id = OB_INVALID_ID;
 //    LOG_WARN("failed to get database id", K(db_id), K(ret));
@@ -963,16 +902,14 @@ int ObBasicSessionInfo::get_global_sys_variable(const ObBasicSessionInfo *sessio
     //                                      session->get_nls_collation(),
     //                                      session->get_nls_collation_nation());
     ObDataTypeCastParams dtc_params = session->get_dtc_params();
-    if (OB_FAIL(get_global_sys_variable(session->get_effective_tenant_id(),
-                                        calc_buf, dtc_params, var_name, val))) {
+    if (OB_FAIL(get_global_sys_variable(calc_buf, dtc_params, var_name, val))) {
       LOG_WARN("fail to get global sys variable", K(ret), K(var_name));
     }
   }
   return ret;
 }
 
-int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id, // To handle the situation where the tenant has been switched
-                                                ObIAllocator &calc_buf,
+int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
                                                 const ObDataTypeCastParams &dtc_params,
                                                 const ObSysVarClassType var_id,
                                                 ObObj &val)
@@ -981,18 +918,17 @@ int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id,
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *sysvar_schema = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
-  if (OB_UNLIKELY(!is_valid_tenant_id(actual_tenant_id))) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(actual_tenant_id), K(ret));
+    LOG_WARN("invalid tenant id", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN,"invalid argument", K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-              actual_tenant_id,
               schema_guard))) {
     ret = OB_SCHEMA_ERROR;
     OB_LOG(WARN,"fail get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(actual_tenant_id, sys_variable_schema))) {
+  } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
     LOG_WARN("get sys variable schema failed", K(ret));
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1014,8 +950,7 @@ int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id,
   return ret;
 }
 
-int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id, // To handle the situation where the tenant has been switched
-                                                ObIAllocator &calc_buf,
+int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
                                                 const ObDataTypeCastParams &dtc_params,
                                                 const ObString &var_name,
                                                 ObObj &val)
@@ -1024,18 +959,17 @@ int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id,
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *sysvar_schema = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
-  if (OB_UNLIKELY(!is_valid_tenant_id(actual_tenant_id))) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(actual_tenant_id), K(ret));
+    LOG_WARN("invalid tenant id", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN,"invalid argument", K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-              actual_tenant_id,
               schema_guard))) {
     ret = OB_SCHEMA_ERROR;
     OB_LOG(WARN,"fail get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(actual_tenant_id, sys_variable_schema))) {
+  } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
     LOG_WARN("get sys variable schema failed", K(ret));
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1147,22 +1081,22 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
   const ObSysVarSchema *sysvar = NULL;
   int64_t schema_version = -1;
   const ObSimpleSysVariableSchema *sys_variable_schema = NULL;
-  const uint64_t tenant_id = get_effective_tenant_id();
+  
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   if (!check_sys_variable_) {
     // To avoid the SQL for obtaining tenant system variables triggering update_query_sensitive_system_variable and forming a circular dependency, we skip directly here
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("fail to get tenant schema version", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+    LOG_WARN("fail to get tenant schema version", K(ret));
   } else if (OB_INVALID_VERSION != last_refresh_schema_version_
              && last_refresh_schema_version_ == refreshed_schema_version) {
     // do nothing, version not changed, skip refresh
   } else if (OB_CORE_SCHEMA_VERSION >= refreshed_schema_version) {
     // Start tenant process or tenant creation failed or local schema not refreshed scenario, it's likely that system variables cannot be obtained, skip in this case
-  } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
-    LOG_WARN("get tenant schema version failed", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
+    LOG_WARN("get tenant schema version failed", K(ret));
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys variable schema should not be null", K(ret), K(tenant_id));
+    LOG_WARN("sys variable schema should not be null", K(ret));
   } else if (FALSE_IT(schema_version = sys_variable_schema->get_schema_version())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (schema_version > get_global_vars_version()
@@ -1170,9 +1104,9 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
     const ObTenantSchema *tenant_info = NULL;
     bool need_update_version = false;
     const ObSysVariableSchema *sys_variable_schema = NULL;
-    if (OB_FAIL(schema_guard.get_tenant_info(get_effective_tenant_id(), tenant_info))) {
+    if (OB_FAIL(schema_guard.get_tenant_info(tenant_info))) {
       LOG_WARN("get tenant info from schema guard failed", K(ret));
-    } else if (OB_FAIL(schema_guard.get_sys_variable_schema(get_effective_tenant_id(), sys_variable_schema))) {
+    } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
       if (OB_TENANT_NOT_EXIST == ret) {
         // New tenant creation process may not obtain sys_variable_schema, at this time ignore temporarily
         LOG_INFO("tenant maybe creating, just skip", K(ret), K(ret));
@@ -2018,7 +1952,7 @@ int ObBasicSessionInfo::gen_configs_in_pc_str()
       // update out-dated cached configs
       // first time to generate configuaration strings, init allocator
       if (is_first_gen_config_) {
-        inf_pc_configs_.init(tenant_id_);
+        inf_pc_configs_.init();
         if (NULL == (buf = (char *)sess_level_name_pool_.alloc(MAX_CONFIG_STR_SIZE))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocate memory", K(ret), K(MAX_CONFIG_STR_SIZE));
@@ -2125,7 +2059,7 @@ int ObBasicSessionInfo::deep_copy_sys_variable(ObBasicSysVar &sys_var,
                     "before", inc_sys_var_alloc_[current_buf_index_]->used(),
                     "after", inc_sys_var_alloc_[next_index]->used(),
                     "ids", sys_var_inc_info_.get_all_sys_var_ids(),
-                    K(sessid_), K(proxy_sessid_));
+                    K(sessid_));
           defragment_sys_variable_to(tmp_value);
           inc_sys_var_alloc_[current_buf_index_]->reset();
           current_buf_index_ = next_index;
@@ -3752,7 +3686,7 @@ int ObBasicSessionInfo::process_session_debug_sync(const ObObj &val,
                                                    const bool is_update_sys_var)
 {
   int ret = OB_SUCCESS;
-  if (OB_SYS_TENANT_ID == tenant_id_ && GCONF.is_debug_sync_enabled()) {
+  if (true && GCONF.is_debug_sync_enabled()) {
     ObString debug_sync;
     if (OB_FAIL(val.get_varchar(debug_sync))) {
       LOG_WARN("varchar expected", K(ret));
@@ -4225,8 +4159,7 @@ int64_t ObBasicSessionInfo::to_string(char *buf, const int64_t buf_len) const
   get_autocommit(ac),
   J_OBJ_START();
   J_KV(KP(this), "id", sessid_, "client_sid", client_sessid_, "deser", is_deserialized_,
-       N_TENANT, get_tenant_name(), "tenant_id", tenant_id_,
-       N_EFFECTIVE_TENANT, get_effective_tenant_name(), "effective_tenant_id", effective_tenant_id_,
+       N_TENANT, get_tenant_name(),
        N_DATABASE, get_database_name(),
        N_USER, get_user_at_host(),
        "consistency_level", consistency_level_,
@@ -4337,14 +4270,14 @@ int ObBasicSessionInfo::get_sync_sys_vars(ObIArray<ObSysVarClassType>
             LOG_TRACE("sys var need sync", K(sys_var_idx),
             "val", sys_vars_[sys_var_idx]->get_value(),
             "def", ObSysVariables::get_base_value(sys_var_idx),
-            K(sessid_), K(proxy_sessid_));
+            K(sessid_));
           }
         }
       } else {
          LOG_TRACE("sys var not need sync", K(sys_var_idx),
          "val", sys_vars_[sys_var_idx]->get_value(),
          "def", ObSysVariables::get_base_value(sys_var_idx),
-         K(sessid_), K(proxy_sessid_));
+         K(sessid_));
       }
     }
 
@@ -4354,7 +4287,7 @@ int ObBasicSessionInfo::get_sync_sys_vars(ObIArray<ObSysVarClassType>
       LOG_WARN("fail to push_back id", K(ret));
     } else {
       LOG_TRACE("success to get default sync sys vars", K(ret), K(sys_var_delta_ids),
-        K(sessid_), K(proxy_sessid_));
+        K(sessid_));
     }
   }
   return ret;
@@ -4393,7 +4326,7 @@ int ObBasicSessionInfo::serialize_sync_sys_vars(ObIArray<ObSysVarClassType>
                   "name", ObSysVariables::get_name(sys_var_idx),
                   "val", sys_vars_[sys_var_idx]->get_value(),
                   "def", ObSysVariables::get_base_value(sys_var_idx),
-                  K(sessid_), K(proxy_sessid_));
+                  K(sessid_));
       }
     }
   }
@@ -4419,7 +4352,7 @@ int ObBasicSessionInfo::deserialize_sync_sys_vars(int64_t &deserialize_sys_var_c
 {
   int ret = OB_SUCCESS;
   LOG_TRACE("before deserialize sync sys vars", "inc var ids", sys_var_inc_info_.get_all_sys_var_ids(),
-                                        K(sessid_), K(proxy_sessid_));
+                                        K(sessid_));
   if (OB_FAIL(serialization::decode(buf, data_len, pos, deserialize_sys_var_count))) {
       LOG_WARN("fail to deserialize sys var count", K(data_len), K(pos), K(ret));
   } else {
@@ -4473,7 +4406,7 @@ int ObBasicSessionInfo::deserialize_sync_sys_vars(int64_t &deserialize_sys_var_c
         LOG_WARN("fail to add sys var id", K(sys_var_id), K(ret));
       } else {
         LOG_TRACE("deserialize sync sys var", K(sys_var_id), K(*sys_var),
-                   K(sessid_), K(proxy_sessid_));
+                   K(sessid_));
       }
     }
     if (OB_SUCC(ret) && !is_error_sync) {
@@ -4494,7 +4427,7 @@ int ObBasicSessionInfo::deserialize_sync_sys_vars(int64_t &deserialize_sys_var_c
 
     LOG_TRACE("after deserialize sync sys vars", "inc var ids",
                       sys_var_inc_info_.get_all_sys_var_ids(),
-                      K(sessid_), K(proxy_sessid_));
+                      K(sessid_));
   }
   return ret;
 }
@@ -4531,7 +4464,7 @@ int ObBasicSessionInfo::sync_default_sys_vars(SysVarIncInfo &tmp_sys_var_inc_inf
         // do nothing.
       } else {
         LOG_TRACE("sync sys var set default value", K(sys_var_id),
-        K(sessid_), K(proxy_sessid_));
+        K(sessid_));
       }
     } else if (OB_FAIL(tmp_sys_var_inc_info.add_sys_var_id(sys_var_id))) {
       LOG_WARN("fail to add sys var id", K(sys_var_id), K(ret));
@@ -4741,10 +4674,6 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
               consistency_level_,
               compatibility_mode_index,
               tmp_tz_info,
-              // NOTE: rpc_tenant_id may cause compatability problem,
-              // But only in diagnose tenant, so keep the stupid hack as it is.
-              tenant_id_ | (rpc_tenant_id_ << 32),
-              effective_tenant_id_,
               is_changed_to_temp_tenant_,
               user_id_,
               is_master_session() ? get_sid() : master_sessid_,
@@ -4861,7 +4790,6 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
               app_trace_id_,
               proxy_capability_.capability_,
               client_mode_,
-              proxy_sessid_,
               nested_count_,
               thread_data_.user_name_,
               next_tx_isolation_,
@@ -4910,7 +4838,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   if (OB_FAIL(serialization::decode(buf, data_len, pos, has_tx_desc))) {
     LOG_WARN("fail to deserialize has_tx_desc_", K(data_len), K(pos), K(ret));
   } else if (has_tx_desc) {
-    transaction::ObTransService* txs = MTL(transaction::ObTransService*);
+    transaction::ObTransService* txs = share::g_mp->trans_service();
     if (OB_FAIL(txs->acquire_tx(buf, data_len, pos, tx_desc_))) {
       LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), K(ret));
     } else {
@@ -4923,15 +4851,15 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
               consistency_level_,
               compatibility_mode_index,
               tmp_tz_info,
-              tenant_id_,
-              effective_tenant_id_,
+              
+              
               is_changed_to_temp_tenant_,
               user_id_,
               master_sessid_,
               capability_.capability_,
               thread_data_.database_name_);
-  rpc_tenant_id_ = (tenant_id_ >> 32);
-  tenant_id_ = (tenant_id_ << 32 >> 32);
+  
+  
   // Deserialization of serialized user variables and system variables
   int64_t deserialize_user_var_count = 0;
   int64_t deserialize_sys_var_count = 0;
@@ -4975,7 +4903,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
 
   if (OB_SUCC(ret)) {
     ObTZMapWrap tz_map_wrap;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_map_wrap))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
       LOG_WARN("get tenant timezone map failed", K(ret));
     } else {
       tz_info_wrap_.set_tz_info_map(tz_map_wrap.get_tz_map());
@@ -5074,7 +5002,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
               app_trace_id_,
               proxy_capability_.capability_,
               client_mode_,
-              proxy_sessid_,
               nested_count_,
               thread_data_.user_name_,
               next_tx_isolation_,
@@ -5144,20 +5071,6 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   tz_info_wrap_.set_tz_info_map(tz_info_map);
   set_last_flt_trace_id(flt_vars_.last_flt_trace_id_);
   set_last_flt_span_id(flt_vars_.last_flt_span_id_);
-  // During the upgrade process, due to version differences, a high-version server needs to handle session variables sent by a low-version server with compatibility.
-  // Deserialization is complete, since there is a scenario of serializing for other servers later, so the system variables that need to be serialized need to be completed
-  // fix the following scenario   A(2.1)->B(2.2)->C(2.2)-> ret = -4016
-  if (OB_SUCC(ret) && GET_MIN_CLUSTER_VERSION() < CLUSTER_CURRENT_VERSION) {
-    ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
-    for (int64_t i = 0; OB_SUCC(ret) && i < get_sys_var_count(); ++i) {
-      if ((ObSysVariables::get_flags(i) & ObSysVarFlag::NEED_SERIALIZE)
-          && OB_ISNULL(sys_vars_[i])) {
-        if (OB_FAIL(load_default_sys_variable(calc_buf, i))) {
-          LOG_WARN("fail to load default sys variable", K(ret), K(i));
-        }
-      }
-    }
-  }
   release_to_pool_ = OB_SUCC(ret);
   force_rich_vector_format_ = ForceRichFormatStatus::Disable;
   }();
@@ -5265,7 +5178,7 @@ int ObBasicSessionInfo::load_all_sys_vars(ObSchemaGetterGuard &schema_guard)
   int ret = OB_SUCCESS;
   const ObSysVariableSchema *sys_var_schema = NULL;
   OZ (sys_var_fac_.create_all_sys_vars());
-  OZ (schema_guard.get_sys_variable_schema(effective_tenant_id_, sys_var_schema));
+  OZ (schema_guard.get_sys_variable_schema( sys_var_schema));
   OV (OB_NOT_NULL(sys_var_schema));
   OZ (load_all_sys_vars(*sys_var_schema, true));
   release_to_pool_ = OB_SUCC(ret);
@@ -5329,8 +5242,6 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
               consistency_level_,
               compatibility_mode_index,
               tmp_tz_info,
-              tenant_id_ | (rpc_tenant_id_<<32),
-              effective_tenant_id_,
               is_changed_to_temp_tenant_,
               user_id_,
               is_master_session() ? get_sid() : master_sessid_,
@@ -5406,7 +5317,6 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
               app_trace_id_,
               proxy_capability_.capability_,
               client_mode_,
-              proxy_sessid_,
               nested_count_,
               thread_data_.user_name_,
               next_tx_isolation_,
@@ -5451,7 +5361,6 @@ void ObBasicSessionInfo::reset_session_changed_info()
   changed_user_vars_.reset();
   is_database_changed_ = false;
   changed_var_pool_.reset();
-  feedback_manager_.reset();
 }
 
 bool ObBasicSessionInfo::is_already_tracked(const ObSysVarClassType &sys_var_id,
@@ -6044,7 +5953,7 @@ int ObBasicSessionInfo::store_query_string_(const ObString &stmt, int64_t& buf_l
       buf_len = 0;
     }
     int64_t len = MAX(MIN_CUR_QUERY_LEN, truncated_len + 1);
-    char *buf = reinterpret_cast<char*>(ob_malloc(len, ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION_QUERY_SQL)));
+    char *buf = reinterpret_cast<char*>(ob_malloc(len, ObMemAttr(ObModIds::OB_SQL_SESSION_QUERY_SQL)));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret));
@@ -6077,8 +5986,7 @@ int ObBasicSessionInfo::store_query_string_(const ObString &stmt)
       thread_data_.cur_query_buf_len_ = 0;
     }
     int64_t len = MAX(MIN_CUR_QUERY_LEN, truncated_len + 1);
-    char *buf = reinterpret_cast<char*>(ob_malloc(len, ObMemAttr(orig_tenant_id_,
-                                                                 ObModIds::OB_SQL_SESSION_QUERY_SQL)));
+    char *buf = reinterpret_cast<char*>(ob_malloc(len, ObMemAttr(ObModIds::OB_SQL_SESSION_QUERY_SQL)));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret));
@@ -6174,8 +6082,8 @@ int ObBasicSessionInfo::is_timeout(bool &is_timeout)
       } else {
         char time_buf_1[OB_MAX_TIME_STR_LENGTH] = {'\0'};
         char time_buf_2[OB_MAX_TIME_STR_LENGTH] = {'\0'};
-        _LOG_INFO("sessionkey %u, proxy_sessid %lu: %.*s from %s timeout: last active time=%s, cur=%s, timeout=%lds",
-                  sessid_, proxy_sessid_, user_name.length(), user_name.ptr(), addr_buf,
+        _LOG_INFO("sessionkey %u: %.*s from %s timeout: last active time=%s, cur=%s, timeout=%lds",
+                  sessid_, user_name.length(), user_name.ptr(), addr_buf,
                   time2str(thread_data_.last_active_time_, time_buf_1, sizeof(time_buf_1)),
                   time2str(cur_time, time_buf_2, sizeof(time_buf_2)), timeout);
       }
@@ -6305,19 +6213,19 @@ int ObBasicSessionInfo::set_session_state_(ObSQLSessionState state)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(SESSION_KILLED == thread_data_.state_)) {
     ret = OB_ERR_SESSION_INTERRUPTED;
-    LOG_WARN("session is killed", K(ret), K(sessid_), K(client_sessid_), K(proxy_sessid_), K(state));
+    LOG_WARN("session is killed", K(ret), K(sessid_), K(client_sessid_), K(state));
   } else if (OB_UNLIKELY(SESS_NOT_IN_RETRY != thread_data_.is_in_retry_
                          && is_query_killed()
                          && SESSION_KILLED != state)) {
     if (QUERY_DEADLOCKED == thread_data_.state_) {
       ret = OB_DEAD_LOCK;
-      LOG_WARN("query is deadlocked", K(ret), K(sessid_), K(proxy_sessid_), K(state));
+      LOG_WARN("query is deadlocked", K(ret), K(sessid_), K(state));
     } else if (QUERY_KILLED == thread_data_.state_) {
       ret = OB_ERR_QUERY_INTERRUPTED;
-      LOG_WARN("query is killed", K(ret), K(sessid_), K(proxy_sessid_), K(state));
+      LOG_WARN("query is killed", K(ret), K(sessid_), K(state));
     } else {
       ret = OB_ERR_UNEXPECTED;;
-      LOG_WARN("session state is unknown", K(ret), K(sessid_), K(proxy_sessid_), K(state));
+      LOG_WARN("session state is unknown", K(ret), K(sessid_), K(state));
     }
   } else {
     bool is_state_change = is_active_state_change(thread_data_.state_, state);
@@ -6341,13 +6249,13 @@ int ObBasicSessionInfo::check_session_status()
 
   if (OB_UNLIKELY(SESSION_KILLED == thread_data_.state_)) {
     ret = OB_ERR_SESSION_INTERRUPTED;
-    LOG_WARN("session is killed", K(ret), K(sessid_), K(proxy_sessid_));
+    LOG_WARN("session is killed", K(ret), K(sessid_));
   } else if (OB_UNLIKELY(QUERY_KILLED == thread_data_.state_)) {
     ret = OB_ERR_QUERY_INTERRUPTED;
-    LOG_WARN("query is killed", K(ret), K(sessid_), K(proxy_sessid_));
+    LOG_WARN("query is killed", K(ret), K(sessid_));
   } else if (OB_UNLIKELY(QUERY_DEADLOCKED == thread_data_.state_)) {
     ret = OB_DEAD_LOCK;
-    LOG_WARN("query is deadlocked", K(ret), K(sessid_), K(proxy_sessid_));
+    LOG_WARN("query is deadlocked", K(ret), K(sessid_));
   }
 
   return ret;
@@ -6427,8 +6335,7 @@ int ObBasicSessionInfo::base_save_session(BaseSavedValue &saved_value, bool skip
       ob_free(saved_value.cur_query_);
     }
     int64_t len = MAX(MIN_CUR_QUERY_LEN, truncated_len + 1);
-    saved_value.cur_query_ = reinterpret_cast<char*>(ob_malloc(len, ObMemAttr(orig_tenant_id_,
-                                                                 ObModIds::OB_SQL_SESSION_QUERY_SQL)));
+    saved_value.cur_query_ = reinterpret_cast<char*>(ob_malloc(len, ObMemAttr(ObModIds::OB_SQL_SESSION_QUERY_SQL)));
     if (OB_ISNULL(saved_value.cur_query_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       saved_value.cur_query_buf_len_ = 0;
@@ -6571,7 +6478,7 @@ int ObBasicSessionInfo::trans_restore_session(TransSavedValue &saved_value)
     ret = COVER_SUCC(tmp_ret);
   }
   if (OB_NOT_NULL(tx_desc_)) {
-    MTL(transaction::ObTransService *)->release_tx(*tx_desc_);
+    share::g_mp->trans_service()->release_tx(*tx_desc_);
   }
   tx_desc_ = saved_value.tx_desc_;
   if (OB_TMP_FAIL(base_restore_session(saved_value))) {
@@ -6647,7 +6554,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
   if (OB_ERR_UNKNOWN_TIME_ZONE == ret) {
     ObTZMapWrap tz_map_wrap;
     ObTimeZoneInfoManager *tz_info_mgr = NULL;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tenant_id_, tz_map_wrap, tz_info_mgr))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
       LOG_WARN("get tenant timezone with lock failed", K(ret));
     } else if (OB_ISNULL(tz_info_mgr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -6667,8 +6574,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
       int64_t start_service_time = GCTX.start_service_time_;
       if (OB_FAIL(tz_info_mgr->find_time_zone_info(val_no_sp,
                                                    tz_info_wrap_.get_tz_info_pos()))) {
-        LOG_WARN("fail to find time zone", K(str_val), K(val_no_sp), K(ret), K(tenant_id_),
-                 K(effective_tenant_id_));
+        LOG_WARN("fail to find time zone", K(str_val), K(val_no_sp), K(ret));
         tz_info_wrap_.set_cur_version(orig_version);
       } else {
         tz_info_wrap_.set_tz_info_position();
@@ -6691,7 +6597,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
         } else if (is_tenant_changed()) {
           // sys tenant doest not load timezone info and user tenant set global time_zone = 'Asia/Shanghai'.
           // when execute inner sql, value of sys var time_zone may be +08:00 or Asia/Shanghai.
-          // The reason is that px use tenant_id_ and das/remote use effective_tenant_id_ create session.
+          // px and das/remote create session with sys tenant.
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
                                                     check_timezone_valid))) {
@@ -6715,7 +6621,7 @@ int ObBasicSessionInfo::update_timezone_info()
   if (cur_time - last_update_tz_time_ > UPDATE_PERIOD) {
     ObTZMapWrap tz_map_wrap;
     ObTimeZoneInfoManager *tz_info_mgr = NULL;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tenant_id_, tz_map_wrap, tz_info_mgr))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
       LOG_WARN("get tenant timezone with lock failed", K(ret));
     } else if (OB_ISNULL(tz_info_mgr)) {
       ret = OB_ERR_UNEXPECTED;

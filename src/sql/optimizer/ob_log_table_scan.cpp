@@ -86,8 +86,6 @@ const char *ObLogTableScan::get_name() const
     name = use_das() ? "DISTRIBUTED TEXT RETRIEVAL SCAN" : "TEXT RETRIEVAL SCAN";
   } else if (is_skip_scan()) {
     name = use_das() ? "DISTRIBUTED TABLE SKIP SCAN" : "TABLE SKIP SCAN";
-  } else if (EXTERNAL_TABLE == get_table_type()) {
-    name = "EXTERNAL TABLE SCAN";
   } else if (use_index_merge()) {
     name = use_das() ? "DISTRIBUTED INDEX MERGE SCAN" : "INDEX MERGE SCAN";
   } else if (use_das()) {
@@ -164,13 +162,13 @@ int ObLogTableScan::check_is_delete_insert_scan(bool &is_delete_insert_scan) con
       || OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get table schema", K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(session->get_effective_tenant_id(), table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_UNLIKELY(NULL == table_schema)) {
     // may be fake table, skip
     LOG_DEBUG("get nullptr table schema", K(ret), K_(table_id), K_(ref_table_id), K(get_stmt()));
   } else if (table_schema->is_delete_insert_merge_engine()) {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (OB_LIKELY(tenant_config.is_valid())) {
       is_delete_insert_scan = tenant_config->_enable_delete_insert_scan;
     }
@@ -477,44 +475,7 @@ int ObLogTableScan::check_output_dependance(common::ObIArray<ObRawExpr *> &child
   } else if (OB_FAIL(dep_checker.check(exprs))) {
     LOG_WARN("failed to check op_exprs", K(ret));
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < child_output.count(); i++) {
-      if (OB_ISNULL(child_output.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error", K(ret));
-      } else if (child_output.at(i)->get_expr_type() == T_PSEUDO_EXTERNAL_FILE_URL) {
-        if (OB_FAIL(deps.del_member(i))) {
-          LOG_WARN("del member failed", K(ret));
-        }
-      }
-    }
     LOG_TRACE("succeed to check output exprs", K(exprs), K(type_), K(deps));
-  }
-  return ret;
-}
-
-int ObLogTableScan::extract_file_column_exprs_recursively(ObRawExpr *expr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else if (T_PSEUDO_EXTERNAL_FILE_COL == expr->get_expr_type() ||
-             T_PSEUDO_PARTITION_LIST_COL == expr->get_expr_type() ||
-             T_PSEUDO_EXTERNAL_FILE_URL == expr->get_expr_type()) {
-    auto pseudo_col_expr = static_cast<ObPseudoColumnRawExpr*>(expr);
-    if (pseudo_col_expr->get_table_id() != table_id_) {
-      //table id may be changed because of rewrite
-      pseudo_col_expr->set_table_id(table_id_);
-    }
-    if (OB_FAIL(add_var_to_array_no_dup(ext_file_column_exprs_, expr))) {
-      LOG_WARN("failed to add var to array", K(ret));
-    }
-  } else {
-    for (int i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
-      if (OB_FAIL(extract_file_column_exprs_recursively(expr->get_param_expr(i)))) {
-        LOG_WARN("fail to extract file column expr", K(ret));
-      }
-    }
   }
   return ret;
 }
@@ -747,17 +708,10 @@ int ObLogTableScan::generate_access_exprs()
       } else if (static_cast<ObPseudoColumnRawExpr*>(expr)->get_table_id() != table_id_) {
         /* do nothing */
       } else if (T_ORA_ROWSCN != expr->get_expr_type()
-                 && T_PSEUDO_EXTERNAL_FILE_URL != expr->get_expr_type()
                  && T_PSEUDO_OLD_NEW_COL != expr->get_expr_type()) {
         /* do nothing */
       } else if (OB_FAIL(access_exprs_.push_back(expr))) {
         LOG_WARN("fail to push back expr", K(ret));
-      } else if (T_PSEUDO_EXTERNAL_FILE_URL == expr->get_expr_type()) {
-        if (OB_FAIL(add_var_to_array_no_dup(ext_file_column_exprs_, expr))) {
-          LOG_WARN("fail to push back expr", K(ret));
-        } else if (OB_FAIL(add_var_to_array_no_dup(output_exprs_, expr))) {
-          LOG_WARN("fail to push back expr", K(ret));
-        }
       }
     }
 
@@ -765,7 +719,7 @@ int ObLogTableScan::generate_access_exprs()
       if (OB_FAIL(add_mapping_columns_for_vt(access_exprs_))) {
         LOG_WARN("failed to add mapping columns for vt", K(ret));
       } else {
-        LOG_TRACE("succeed to generate access exprs", K(access_exprs_), K(ext_file_column_exprs_));
+        LOG_TRACE("succeed to generate access exprs", K(access_exprs_));
       }
     }
   }
@@ -917,8 +871,7 @@ int ObLogTableScan::extract_pushdown_filters(ObIArray<ObRawExpr*> &nonpushdown_f
   const ObIArray<ObRawExpr*> &filters = get_filter_exprs();
   const auto &flags = get_filter_before_index_flags();
   if (get_contains_fake_cte() ||
-      is_virtual_table(get_ref_table_id()) ||
-      EXTERNAL_TABLE == get_table_type()) {
+      is_virtual_table(get_ref_table_id())) {
     //all filters can not push down to storage
     if (OB_FAIL(nonpushdown_filters.assign(filters))) {
       LOG_WARN("store non-pushdown filters failed", K(ret));
@@ -1022,8 +975,7 @@ int ObLogTableScan::extract_nonpushdown_filters(const ObIArray<ObRawExpr*> &filt
 {
   int ret = OB_SUCCESS;
   if (get_contains_fake_cte() ||
-      is_virtual_table(get_ref_table_id()) ||
-      EXTERNAL_TABLE == get_table_type()) {
+      is_virtual_table(get_ref_table_id())) {
     // all filters can not push down to storage
     if (OB_FAIL(nonpushdown_filters.assign(filters))) {
       LOG_WARN("failed to assign full filter to non-pushdown filters", K(ret));
@@ -1661,7 +1613,6 @@ int ObLogTableScan::init_calc_part_id_expr()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret));
     } else if (OB_FAIL(schema_guard->get_table_schema(
-               session->get_effective_tenant_id(),
                ref_table_id_, table_schema))) {
       LOG_WARN("get table schema failed", K(ref_table_id_), K(ret));
     } else if (OB_ISNULL(table_schema)) {
@@ -1783,16 +1734,6 @@ int ObLogTableScan::get_plan_item_info(PlanText &plan_text,
       EXPLAIN_PRINT_EXPRS(access, type);
     } else {
       EXPLAIN_PRINT_EXPRS(access, type);
-    }
-    if (OB_SUCC(ret) && EXTERNAL_TABLE == get_table_type() && EXPLAIN_EXTENDED == type) {
-      if(OB_FAIL(BUF_PRINTF(NEW_LINE))) {
-        LOG_WARN("BUG_PRINTF fails", K(ret));
-      } else if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
-        LOG_WARN("BUG_PRINTF fails", K(ret));
-      } else {
-        ObIArray<ObRawExpr*> &column_values = get_ext_column_convert_exprs();
-        EXPLAIN_PRINT_EXPRS(column_values, type);
-      }
     }
     END_BUF_PRINT(plan_item.access_predicates_,
                   plan_item.access_predicates_len_);
@@ -2128,23 +2069,6 @@ int ObLogTableScan::get_plan_object_info(PlanText &plan_text,
                       plan_item.object_name_,
                       plan_item.object_name_len_);
       BUF_PRINT_STR("SYNONYM",
-                    plan_item.object_type_,
-                    plan_item.object_type_len_);
-      plan_item.object_id_ = ref_table_id_;
-    } else if (table_item->is_link_table()) {
-      BUF_PRINT_OB_STR(table_item->dblink_name_.ptr(),
-                      table_item->dblink_name_.length(),
-                      plan_item.object_node_,
-                      plan_item.object_node_len_);
-      BUF_PRINT_OB_STR(table_item->database_name_.ptr(),
-                      table_item->database_name_.length(),
-                      plan_item.object_owner_,
-                      plan_item.object_owner_len_);
-      BUF_PRINT_OB_STR(table_item->table_name_.ptr(),
-                      table_item->table_name_.length(),
-                      plan_item.object_name_,
-                      plan_item.object_name_len_);
-      BUF_PRINT_STR("DBLINK",
                     plan_item.object_type_,
                     plan_item.object_type_len_);
       plan_item.object_id_ = ref_table_id_;
@@ -3132,7 +3056,7 @@ int ObLogTableScan::check_need_table_split_range_filter(ObSchemaGetterGuard &sch
                                                         bool &need_filter)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const int64_t table_id = table_schema.get_table_id();
   const int64_t data_table_id = table_schema.get_data_table_id();
   const ObTableSchema *data_table_schema = nullptr;
@@ -3140,7 +3064,7 @@ int ObLogTableScan::check_need_table_split_range_filter(ObSchemaGetterGuard &sch
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid partition type", K(ret), K(table_id), K(table_schema.get_part_option()));
   } else if (table_schema.is_index_local_storage()) {
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
+    if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
       LOG_WARN("failed to get data table schema", K(ret), K(table_id), K(data_table_id));
     } else if (OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
@@ -3671,7 +3595,6 @@ int ObLogTableScan::generate_auto_split_filter()
              || is_external_object_id(table_id)) {
     // skip mock table and virtual table
   } else if (OB_FAIL(schema_guard->get_table_schema(
-      session->get_effective_tenant_id(),
       table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
@@ -5504,7 +5427,7 @@ int ObLogTableScan::check_das_need_scan_with_domain_id()
   ObSqlSchemaGuard *schema_guard = nullptr;
   const ObTableSchema *table_schema = nullptr;
   ObSQLSessionInfo *session = NULL;
-  int tenant_id = OB_INVALID_TENANT_ID;
+  
   with_domain_types_.reset();
   domain_table_ids_.reset();
   ObOptimizerContext *opt_ctx = nullptr;
@@ -5516,12 +5439,11 @@ int ObLogTableScan::check_das_need_scan_with_domain_id()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(ret));
   } else {
-    tenant_id = session->get_effective_tenant_id();
   }
   // only for get ivfflat index table id
-  ObSEArray<uint64_t, 8> vec_id_cols(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("vecIdCol", tenant_id));
-  with_domain_types_.set_attr(ObMemAttr(tenant_id, "VecDType"));
-  domain_table_ids_.set_attr(ObMemAttr(tenant_id, "VecDTID"));
+  ObSEArray<uint64_t, 8> vec_id_cols(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("vecIdCol"));
+  with_domain_types_.set_attr(ObMemAttr("VecDType"));
+  domain_table_ids_.set_attr(ObMemAttr("VecDTID"));
   if (OB_FAIL(ret)) {
   } else if (!(stmt->is_delete_stmt() || stmt->is_update_stmt() || stmt->is_select_stmt())) {
     // just skip, nothing to do

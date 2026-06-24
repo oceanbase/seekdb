@@ -58,7 +58,6 @@ enum ObPlanCacheItemStatus
 
 struct PCVSchemaObj
 {
-  uint64_t tenant_id_;
   uint64_t database_id_;
   int64_t schema_id_;
   int64_t schema_version_;
@@ -71,7 +70,6 @@ struct PCVSchemaObj
   bool is_mv_container_table_;
 
   PCVSchemaObj():
-  tenant_id_(common::OB_INVALID_ID),
   database_id_(common::OB_INVALID_ID),
   schema_id_(common::OB_INVALID_ID),
   schema_version_(0),
@@ -83,7 +81,6 @@ struct PCVSchemaObj
   is_mv_container_table_(false) {}
 
   explicit PCVSchemaObj(ObIAllocator *alloc):
-    tenant_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
     schema_id_(common::OB_INVALID_ID),
     schema_version_(0),
@@ -105,7 +102,7 @@ struct PCVSchemaObj
   bool compare_schema(const share::schema::ObTableSchema &schema) const
   {
     bool ret = false;
-    ret = tenant_id_ == schema.get_tenant_id() &&
+    ret = true &&
           database_id_ == schema.get_database_id() &&
           schema_id_ == schema.get_table_id() &&
           schema_version_ == schema.get_schema_version() &&
@@ -116,7 +113,7 @@ struct PCVSchemaObj
   bool match_compare(const PCVSchemaObj &other) const
   {
     bool ret = true;
-    ret = tenant_id_ == other.tenant_id_
+    ret = true
           && database_id_ == other.database_id_
           && table_type_ == other.table_type_;
     return ret;
@@ -132,8 +129,7 @@ struct PCVSchemaObj
   void reset();
   ~PCVSchemaObj();
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(database_id),
+  TO_STRING_KV(K_(database_id),
                K_(schema_id),
                K_(schema_version),
                K_(schema_type),
@@ -297,11 +293,9 @@ private:
   int check_value_version_for_get(share::schema::ObSchemaGetterGuard *schema_guard,
                                   bool need_check_schema,
                                   const common::ObIArray<PCVSchemaObj> &schema_array,
-                                  const uint64_t tenant_id,
                                   bool &result);
 
   int get_outline_version(share::schema::ObSchemaGetterGuard &schema_guard,
-                          const uint64_t tenant_id,
                           share::schema::ObSchemaObjVersion &local_outline_version);
 
   int get_outline_param_index(ObExecContext &exec_ctx, int64_t &param_idx) const;

@@ -34,8 +34,7 @@ using namespace share::schema;
  */
 
 ObMViewRefreshStatsMaintenanceTask::ObMViewRefreshStatsMaintenanceTask()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    round_(0),
+  : round_(0),
     status_(StatusType::PREPARE),
     error_code_(OB_SUCCESS),
     last_fetch_mview_id_(OB_INVALID_ID),
@@ -64,9 +63,8 @@ int ObMViewRefreshStatsMaintenanceTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewRefreshStatsMaintenanceTask init twice", KR(ret), KP(this));
   } else {
-    const uint64_t tenant_id = MTL_ID();
-    tenant_id_ = tenant_id;
-    mview_ids_.set_attr(ObMemAttr(tenant_id, "MVIds"));
+    
+    mview_ids_.set_attr(ObMemAttr("MVIds"));
     is_inited_ = true;
   }
   return ret;
@@ -107,7 +105,6 @@ void ObMViewRefreshStatsMaintenanceTask::destroy()
   cancel_task();
   wait_task();
   cleanup();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   mview_ids_.destroy();
 }
 
@@ -175,7 +172,7 @@ int ObMViewRefreshStatsMaintenanceTask::prepare()
   }
   ++round_;
   prepare_cost_us_ = ObTimeUtil::current_time() - start_time_;
-  LOG_INFO("mvref stats maintenance task prepare success", K(tenant_id_), K(round_),
+  LOG_INFO("mvref stats maintenance task prepare success", K(round_),
            K(prepare_cost_us_));
   switch_status(StatusType::PURGE, ret);
   return ret;
@@ -191,10 +188,10 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
   if (mview_idx_ >= mview_ids_.count()) { // fetch next batch
     mview_ids_.reset();
     mview_idx_ = 0;
-    if (OB_FAIL(ObMViewInfo::batch_fetch_mview_ids(*GCTX.sql_proxy_, tenant_id_,
+    if (OB_FAIL(ObMViewInfo::batch_fetch_mview_ids(*GCTX.sql_proxy_,
                                                    last_fetch_mview_id_, mview_ids_,
                                                    MVIEW_NUM_FETCH_PER_SCHED))) {
-      LOG_WARN("fail to batch fetch mview ids", KR(ret), K(tenant_id_), K(last_fetch_mview_id_));
+      LOG_WARN("fail to batch fetch mview ids", KR(ret), K(last_fetch_mview_id_));
     } else {
       fetch_mview_num_ += mview_ids_.count();
       fetch_finish_ = mview_ids_.count() < MVIEW_NUM_FETCH_PER_SCHED;
@@ -213,9 +210,9 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
       ObMViewRefreshStatsParams refresh_stats_params;
       ObMViewRefreshStats::FilterParam filter_param;
       if (OB_FAIL(ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(
-            *GCTX.sql_proxy_, tenant_id_, mview_id, refresh_stats_params,
+            *GCTX.sql_proxy_, mview_id, refresh_stats_params,
             true /*with_sys_defaults*/))) {
-        LOG_WARN("fail to fetch mview refresh stats params", KR(ret), K(tenant_id_), K(mview_id));
+        LOG_WARN("fail to fetch mview refresh stats params", KR(ret), K(mview_id));
       } else if (refresh_stats_params.get_retention_period() == -1) {
         // never be purged, skip
         affected_rows = 0;
@@ -223,8 +220,8 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
         filter_param.set_mview_id(mview_id);
         filter_param.set_retention_period(refresh_stats_params.get_retention_period());
         if (OB_FAIL(ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
-              *GCTX.sql_proxy_, tenant_id_, filter_param, affected_rows, limit))) {
-          LOG_WARN("fail to purge refresh stats", KR(ret), K(tenant_id_), K(filter_param),
+              *GCTX.sql_proxy_, filter_param, affected_rows, limit))) {
+          LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param),
                    K(limit));
         }
       }
@@ -241,7 +238,7 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
   }
   if (OB_SUCC(ret) && fetch_finish_ && mview_idx_ >= mview_ids_.count()) { // goto next status
     purge_cost_us_ = ObTimeUtility::current_time() - start_purge_time_;
-    LOG_INFO("mvref stats maintenance task purge success", K(tenant_id_), K(round_),
+    LOG_INFO("mvref stats maintenance task purge success", K(round_),
              K(purge_cost_us_), K(fetch_mview_num_), K(purge_mview_num_), K(purge_stats_num_));
     new_status = StatusType::SUCCESS;
   }
@@ -253,7 +250,7 @@ int ObMViewRefreshStatsMaintenanceTask::finish()
 {
   int ret = OB_SUCCESS;
   cost_us_ = ObTimeUtility::current_time() - start_time_;
-  LOG_INFO("mvref stats maintenace task finish", K(tenant_id_), K(round_), K(status_),
+  LOG_INFO("mvref stats maintenace task finish", K(round_), K(status_),
            K(error_code_), K(cost_us_), K(prepare_cost_us_), K(purge_cost_us_), K(fetch_mview_num_),
            K(purge_mview_num_), K(purge_stats_num_));
   // cleanup

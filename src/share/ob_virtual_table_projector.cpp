@@ -83,9 +83,8 @@ int ObVirtualTableProjector::check_column_exist(const share::schema::ObTableSche
   return ret;
 }
 ////////////////////////////////////////////////////////////////
-ObSimpleVirtualTableIterator::ObSimpleVirtualTableIterator(uint64_t tenant_id, uint64_t table_id)
-    :tenant_id_(tenant_id),
-     table_id_(table_id),
+ObSimpleVirtualTableIterator::ObSimpleVirtualTableIterator(uint64_t table_id)
+    :table_id_(table_id),
      schema_guard_(share::schema::ObSchemaMgrItem::MOD_VIRTUAL_TABLE),
      schema_service_(NULL),
      table_schema_(NULL)
@@ -98,9 +97,9 @@ int ObSimpleVirtualTableIterator::inner_open()
   if (OB_UNLIKELY(NULL == schema_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("schema_service_ not init", K(ret));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard_))) {
+  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard_))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(get_table_schema(tenant_id_, table_id_))) {
+  } else if (OB_FAIL(get_table_schema( table_id_))) {
     LOG_WARN("fail to get table schema", K(ret));
   } else if (OB_FAIL(init_all_data())) {
     LOG_WARN("fail to init all data", K(ret));
@@ -108,14 +107,14 @@ int ObSimpleVirtualTableIterator::inner_open()
   return ret;
 }
 
-int ObSimpleVirtualTableIterator::get_table_schema(uint64_t tenant_id, uint64_t table_id)
+int ObSimpleVirtualTableIterator::get_table_schema( uint64_t table_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, table_id, table_schema_))) {
-    LOG_WARN("fail to get table schema", K(tenant_id), K(table_id), K(ret));
+  if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema_))) {
+    LOG_WARN("fail to get table schema", K(table_id), K(ret));
   } else if (NULL == table_schema_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema is null", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("table schema is null", K(ret), K(table_id));
   } else {} // no more to do
   return ret;
 }

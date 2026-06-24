@@ -49,7 +49,6 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
                                                 int64_t &res_task_id,
                                                 const common::TCRWLock& lock,
                                                 const uint64_t& data_table_id,
-                                                const uint64_t& tenant_id,
                                                 const int64_t& task_id,
                                                 obcall::ObCreateIndexArg& index_arg,
                                                 rootserver::ObRootService *root_service,
@@ -70,15 +69,15 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
     } else if (OB_ISNULL(root_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root_service is nullptr", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id,
-                                                      data_table_id,
+    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(data_table_id,
                                                       ddl_rpc_timeout))) {
       LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else {
       SMART_VARS_2((obcall::ObCreateAuxIndexArg, arg),
                     (obcall::ObCreateAuxIndexRes, res)) {
-      arg.tenant_id_ = tenant_id;
-      arg.exec_tenant_id_ = tenant_id;
+                    
+      
+      
       arg.data_table_id_ = data_table_id;
       arg.task_id_ = task_id;
       if (task_submitted) {

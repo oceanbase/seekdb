@@ -128,14 +128,7 @@ int ObStorageObjectHandle::report_bad_block() const
   return ret;
 }
 
-uint64_t ObStorageObjectHandle::get_tenant_id()
-{
-  uint64_t tenant_id = MTL_ID();
-  if (is_virtual_tenant_id(tenant_id) || 0 == tenant_id) {
-    tenant_id = OB_SERVER_TENANT_ID; // use 500 tenant in io manager
-  }
-  return tenant_id;
-}
+
 
 int ObStorageObjectHandle::async_read(const ObStorageObjectReadInfo &read_info)
 {
@@ -186,7 +179,6 @@ int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_inf
   } else {
     reuse();
     ObIOInfo io_info;
-    io_info.tenant_id_ = get_tenant_id();
     io_info.offset_ = read_info.offset_;
     io_info.size_ = static_cast<int32_t>(read_info.size_);
     io_info.flag_ = read_info.io_desc_;
@@ -204,6 +196,11 @@ int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_inf
     io_info.flag_.set_sys_module_id(read_info.io_desc_.get_sys_module_id());
 
     io_info.flag_.set_read();
+    if (io_info.fd_.is_backup_block_file()) {
+      // Backup removed, backup-mode macro blocks cannot exist
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("backup block file is not supported", K(ret), K(read_info));
+    }
 
     if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
       LOG_WARN("Fail to aio_read", K(read_info), K(ret));
@@ -222,7 +219,7 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
     LOG_WARN("Invalid argument", K(ret), K(write_info));
   } else {
     ObIOInfo io_info;
-    io_info.tenant_id_ = get_tenant_id();
+    
     io_info.offset_ = write_info.offset_;
     io_info.size_ = write_info.size_;
     io_info.buf_ = write_info.buffer_;
@@ -251,6 +248,7 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
   }
   return ret;
 }
+
 
 int ObStorageObjectHandle::wait()
 {

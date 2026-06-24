@@ -58,9 +58,9 @@ ObTmpFileIOCtx::ObTmpFileIOCtx():
                 aggregate_read_io_cnt_(0),
                 wbp_page_read_hits_(0)
 {
-  io_handles_.set_attr(ObMemAttr(MTL_ID(), "TMP_IO_HDL"));
-  page_cache_handles_.set_attr(ObMemAttr(MTL_ID(), "TMP_PCACHE_HDL"));
-  block_cache_handles_.set_attr(ObMemAttr(MTL_ID(), "TMP_BCACHE_HDL"));
+  io_handles_.set_attr(ObMemAttr("TMP_IO_HDL"));
+  page_cache_handles_.set_attr(ObMemAttr("TMP_PCACHE_HDL"));
+  block_cache_handles_.set_attr(ObMemAttr("TMP_BCACHE_HDL"));
 }
 
 ObTmpFileIOCtx::~ObTmpFileIOCtx()

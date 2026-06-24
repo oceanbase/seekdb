@@ -83,7 +83,6 @@ enum CompileType {
   }
 
   static int compile(sql::ObExecContext &ctx,
-                     uint64_t tenant_id,
                      uint64_t database_id,
                      const ObString &object_name,
                      CompileType object_type,
@@ -91,7 +90,6 @@ enum CompileType {
                      bool is_recompile = false);
 
   static int compile(sql::ObExecContext &ctx,
-                     uint64_t tenant_id,
                      const ObString &database_name,
                      const ObString &object_name,
                      CompileType object_type,
@@ -100,21 +98,18 @@ enum CompileType {
 
 private:
   static int compile_routine(sql::ObExecContext &ctx,
-                             uint64_t tenant_id,
                              uint64_t database_id,
                              const ObString &routine_name,
                              share::schema::ObRoutineType routine_type,
                              int64_t schema_version,
                              bool is_recompile);
   static int compile_package(sql::ObExecContext &ctx,
-                             uint64_t tenant_id,
                              uint64_t database_id,
                              const ObString &package_name,
                              share::schema::ObPackageType package_type,
                              int64_t schema_version,
                              bool is_recompile);
   static int compile_trigger(sql::ObExecContext &ctx,
-                             uint64_t tenant_id,
                              uint64_t database_id,
                              const ObString &trigger_name,
                              int64_t schema_version,

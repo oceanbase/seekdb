@@ -61,9 +61,17 @@ bool is_digits_only(const ObString &str)
   return ret;
 }
 
+// The session timezone map is normally fetched from the global OTTZ_MGR, which
+// is not initialized in a standalone unit test. Pass an explicit (empty) tz map
+// so init() skips the OTTZ_MGR.get_tenant_tz() path (would return -4016 here).
+// Same pattern as unittest/sql/optimizer/test_location_part_id.cpp.
+static ObTZInfoMap g_tz_info_map;
 void init_session(ObArenaAllocator &allocator, ObSQLSessionInfo &session)
 {
-  ASSERT_EQ(OB_SUCCESS, session.init(1 /*sessid*/, 0 /*proxy_sessid*/, &allocator));
+  if (!g_tz_info_map.is_inited()) {
+    ASSERT_EQ(OB_SUCCESS, g_tz_info_map.init(SET_USE_500("TestTzMap")));
+  }
+  ASSERT_EQ(OB_SUCCESS, session.init(1 /*sessid*/, &allocator, &g_tz_info_map));
   {
     oceanbase::obmysql::ObMySQLCapabilityFlags cap;
     cap.capability_ = 0;

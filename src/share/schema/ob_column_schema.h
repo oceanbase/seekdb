@@ -66,7 +66,7 @@ bool operator!=(const ObColumnSchemaV2 &r) const;
 int assign(const ObColumnSchemaV2 &src_schema);
 
 //set methods
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_table_id(const uint64_t id) { table_id_ = id; }
   inline void set_column_id(const uint64_t id) { column_id_ = id; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -160,7 +160,7 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void set_skip_index_attr(const uint64_t attr_val) { skip_index_attr_.set_column_attr(attr_val); }
   inline void set_is_string_lob() { add_column_flag(STRING_LOB_COLUMN_FLAG); }
   //get methods
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_table_id() const { return table_id_; }
   inline uint64_t get_column_id() const { return column_id_; }
   inline uint64_t& get_column_id() { return column_id_; }
@@ -379,7 +379,6 @@ int assign(const ObColumnSchemaV2 &src_schema);
 private:
   int alloc_column_ref_set();
 private:
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t column_id_;
   int64_t schema_version_;

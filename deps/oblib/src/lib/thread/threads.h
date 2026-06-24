@@ -104,7 +104,7 @@ public:
   virtual void wait();
   void destroy();
   virtual void run(int64_t idx);
-   void set_numa_info(uint64_t tenant_id, bool enable_numa_aware, int32_t group_index);
+   void set_numa_info(bool enable_numa_aware, int32_t group_index);
 
 public:
   template <class Functor>

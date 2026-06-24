@@ -66,7 +66,7 @@ private:
   sql::ObSQLSessionInfo *session_info_;
   sql::ObSchemaChecker schema_checker_;
 
-  uint64_t tenant_id_;
+  
   OpType op_type_;
   ObArray<uint64_t> mview_ids_;
   share::schema::ObMViewRefreshStatsParams stats_params_;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_opt_stat_monitor_manager.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_ex_rpc.h"
 #include "sql/ob_sql_init.h"
 #include "observer/ob_sql_client_decorator.h"
@@ -96,12 +97,12 @@ void ObOptStatMonitorFlushAllTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(optstat_monitor_mgr_) && optstat_monitor_mgr_->inited_) {
-    LOG_INFO("run opt stat monitor flush all task", K(optstat_monitor_mgr_->tenant_id_));
-    uint64_t tenant_id = optstat_monitor_mgr_->tenant_id_;
+    LOG_INFO("run opt stat monitor flush all task");
+    
     bool is_primary = true;
     THIS_WORKER.set_timeout_ts(FLUSH_INTERVAL / 2 + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (!is_primary) {
       // do nothing
     } else if (OB_FAIL(optstat_monitor_mgr_->update_column_usage_info(false))) {
@@ -116,12 +117,12 @@ void ObOptStatMonitorCheckTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(optstat_monitor_mgr_) && optstat_monitor_mgr_->inited_) {
-    LOG_INFO("run opt stat monitor check task", K(optstat_monitor_mgr_->tenant_id_));
-    uint64_t tenant_id = optstat_monitor_mgr_->tenant_id_;
+    LOG_INFO("run opt stat monitor check task");
+    
     bool is_primary = true;
     THIS_WORKER.set_timeout_ts(CHECK_INTERVAL + ObTimeUtility::current_time());
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (!is_primary) {
       // do nothing
     } else if (OB_FAIL(optstat_monitor_mgr_->update_column_usage_info(true))) {
@@ -132,20 +133,20 @@ void ObOptStatMonitorCheckTask::runTimerTask()
   }
 }
 
-int ObOptStatMonitorManager::init(uint64_t tenant_id)
+int ObOptStatMonitorManager::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("column usage manager has already been initialized.", K(ret));
-  } else if (OB_FAIL(column_usage_map_.create(10000, "ColUsagHashMap", "ColUsagNode", tenant_id))) {
+  } else if (OB_FAIL(column_usage_map_.create(10000, "ColUsagHashMap", "ColUsagNode"))) {
     LOG_WARN("failed to column usage map", K(ret));
-  } else if (OB_FAIL(dml_stat_map_.create(10000, "DmlStatHashMap", "DmlStatNode", tenant_id))) {
+  } else if (OB_FAIL(dml_stat_map_.create(10000, "DmlStatHashMap", "DmlStatNode"))) {
     LOG_WARN("failed to create dml stat map", K(ret));
   } else {
     inited_ = true;
     mysql_proxy_ = &ObServer::get_instance().get_mysql_proxy();
-    tenant_id_ = tenant_id;
+    
     destroyed_ = false;
   }
   if (OB_FAIL(ret) && !inited_) {
@@ -177,8 +178,7 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else {
-    obcall::ObFlushOptStatArg arg(ctx.get_my_session()->get_effective_tenant_id(),
-                                 is_flush_col_usage,
+    obcall::ObFlushOptStatArg arg(is_flush_col_usage,
                                  is_flush_dml_stat);
     timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
     if (0 >= GCTX.start_service_time_) {
@@ -187,8 +187,8 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
     } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
-      MTL_SWITCH(arg.tenant_id_) {
-        return MTL(ObOptStatMonitorManager*)->update_opt_stat_monitoring_info(arg);
+      MOD_SCOPE {
+        return share::g_mp->opt_stat_monitor_manager()->update_opt_stat_monitoring_info(arg);
       }
       return OB_SUCCESS;
     }))) {
@@ -339,7 +339,7 @@ int ObOptStatMonitorManager::update_dml_stat_info()
   } else if (!dml_stats.empty()) {
     ObSqlString value_sql;
     int count = 0;
-    uint64_t tenant_id = dml_stats.at(0).tenant_id_;
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < dml_stats.count(); ++i) {
       if (OB_FAIL(get_dml_stat_sql(dml_stats.at(i), 0 != count, value_sql))) {
         LOG_WARN("failed to get dml stat sql", K(ret));
@@ -379,8 +379,8 @@ int ObOptStatMonitorManager::get_column_usage_sql(const StatKey &col_key,
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = col_key.first;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id_, tenant_id_);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id_, table_id);
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   int64_t equality_preds = flags & EQUALITY_PREDS ? 1 : 0;
   int64_t equijoin_preds = flags & EQUIJOIN_PREDS ? 1 : 0;
   int64_t nonequijion_preds = flags & NONEQUIJOIN_PREDS ? 1 : 0;
@@ -422,9 +422,9 @@ int ObOptStatMonitorManager::exec_insert_column_usage_sql(ObSqlString &values_sq
     LOG_WARN("failed to append format", K(ret));
   } else if (OB_FAIL(insert_sql.append(ON_DUPLICATE_UPDATE))) {
     LOG_WARN("failed to append string", K(ret));
-  } else if (OB_FAIL(mysql_proxy_->write(tenant_id_, insert_sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(mysql_proxy_->write(insert_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
-  } else if (OB_FAIL(mysql_proxy_->write(tenant_id_, "commit;", affected_rows))) {
+  } else if (OB_FAIL(mysql_proxy_->write("commit;", affected_rows))) {
     LOG_WARN("fail to exec sql", K(ret));
   }
   return ret;
@@ -432,18 +432,17 @@ int ObOptStatMonitorManager::exec_insert_column_usage_sql(ObSqlString &values_sq
 
 int ObOptStatMonitorManager::get_column_usage_from_table(ObExecContext &ctx,
                                                          ObIArray<ObColumnStatParam *> &column_params,
-                                                         uint64_t tenant_id,
                                                          uint64_t table_id)
 {
   int ret = OB_SUCCESS;
   ObSqlString select_sql;
-  if (OB_FAIL(construct_get_column_usage_sql(column_params, tenant_id, table_id, select_sql))) {
+  if (OB_FAIL(construct_get_column_usage_sql(column_params, table_id, select_sql))) {
     LOG_WARN("failed to construct sql", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(ctx.get_sql_proxy());
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -501,14 +500,13 @@ int ObOptStatMonitorManager::get_column_usage_from_table(ObExecContext &ctx,
 }
 
 int ObOptStatMonitorManager::construct_get_column_usage_sql(ObIArray<ObColumnStatParam *> &column_params,
-                                                            const uint64_t tenant_id,
                                                             const uint64_t table_id,
                                                             ObSqlString &select_sql)
 {
   int ret = OB_SUCCESS;
   ObSqlString col_ids;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id);
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   for (int64_t i = 0; OB_SUCC(ret) && i < column_params.count(); ++i) {
     ObColumnStatParam *column_param = column_params.at(i);
     if (OB_ISNULL(column_param)) {
@@ -535,8 +533,8 @@ int ObOptStatMonitorManager::check_table_writeable(bool &is_writeable)
   int ret = OB_SUCCESS;
   is_writeable = true;
   bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id_, is_primary))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id_));
+  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_writeable = false;
   }
@@ -577,13 +575,13 @@ int ObOptStatMonitorManager::exec_insert_monitor_modified_sql(ObSqlString &value
   } else if (OB_FAIL(insert_sql.append(ON_DUPLICATE_UPDATE_MONITOR_MODIFIED))) {
     LOG_WARN("failed to append string", K(ret));
   } else if (nullptr != conn &&
-             OB_FAIL(conn->execute_write(tenant_id_, insert_sql.ptr(), affected_rows))) {
+             OB_FAIL(conn->execute_write(insert_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else if (nullptr == conn &&
-             OB_FAIL(mysql_proxy_->write(tenant_id_, insert_sql.ptr(), affected_rows))) {
+             OB_FAIL(mysql_proxy_->write(insert_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else {
-    LOG_TRACE("succeed to exec insert monitor modified sql", K(tenant_id_), K(values_sql));
+    LOG_TRACE("succeed to exec insert monitor modified sql", K(values_sql));
   }
   return ret;
 }
@@ -595,8 +593,8 @@ int ObOptStatMonitorManager::get_dml_stat_sql(const ObOptDmlStat &dml_stat,
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = dml_stat.table_id_;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id_, tenant_id_);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id_, table_id);
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("tablet_id", dml_stat.tablet_id_)) ||
       OB_FAIL(dml_splicer.add_column("inserts", dml_stat.insert_row_count_)) ||
@@ -631,7 +629,7 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
   int64_t affected_rows1 = 0;
   int64_t affected_rows2 = 0;
   const char* all_table_name = NULL;
-  if (OB_FAIL(ObSchemaUtils::get_all_table_name(tenant_id_, all_table_name))) {
+  if (OB_FAIL(ObSchemaUtils::get_all_table_name(all_table_name))) {
     LOG_WARN("failed to get all table name", K(ret));
   } else if (OB_FAIL(delete_table_sql.append_fmt("DELETE FROM %s m WHERE (NOT EXISTS (SELECT 1 " \
             "FROM %s t, %s db WHERE t.database_id = db.database_id "\
@@ -651,12 +649,12 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
             all_table_name, share::OB_ALL_DATABASE_TNAME, share::OB_ALL_PART_TNAME,
             share::OB_ALL_SUB_PART_TNAME, OB_MAX_INNER_TABLE_ID))) {
     LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(mysql_proxy_->write(tenant_id_, delete_table_sql.ptr(), affected_rows1))) {
+  } else if (OB_FAIL(mysql_proxy_->write(delete_table_sql.ptr(), affected_rows1))) {
     LOG_WARN("failed to execute sql", K(ret), K(delete_table_sql));
-  } else if (OB_FAIL(mysql_proxy_->write(tenant_id_, delete_part_sql.ptr(), affected_rows2))) {
+  } else if (OB_FAIL(mysql_proxy_->write(delete_part_sql.ptr(), affected_rows2))) {
     LOG_WARN("failed to execute sql", K(ret), K(delete_part_sql));
   } else {
-    LOG_TRACE("succeed to clean useless monitor modified_data", K(tenant_id_), K(delete_table_sql),
+    LOG_TRACE("succeed to clean useless monitor modified_data", K(delete_table_sql),
                                                                 K(affected_rows1), K(delete_part_sql),
                                                                 K(affected_rows2));
   }
@@ -672,10 +670,7 @@ int ObOptStatMonitorManager::update_dml_stat_info_from_direct_load(
   LOG_TRACE("begin to update dml stat info from direct load", K(dml_stats));
   if (dml_stats.empty() || OB_ISNULL(dml_stats.at(0))) {
     //do nothing
-  } else if (OB_UNLIKELY(dml_stats.at(0)->tenant_id_ != MTL_ID())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(dml_stats), K(MTL_ID()));
-  } else if (OB_ISNULL(optstat_monitor_mgr = MTL(ObOptStatMonitorManager*))) {
+  } else if (OB_ISNULL(optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(optstat_monitor_mgr));
   } else if (OB_FAIL(optstat_monitor_mgr->update_dml_stat_info(dml_stats, conn))) {
@@ -730,9 +725,9 @@ int ObOptStatMonitorManager::update_dml_stat_info(const ObIArray<ObOptDmlStat *>
 int ObOptStatMonitorManager::mtl_init(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = lib::current_resource_owner_id();
+  
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    if (OB_FAIL(optstat_monitor_mgr->init(tenant_id))) {
+    if (OB_FAIL(optstat_monitor_mgr->init())) {
       LOG_WARN("failed to init event list", K(ret));
     }
   }
@@ -743,10 +738,10 @@ int ObOptStatMonitorManager::mtl_start(ObOptStatMonitorManager* &optstat_monitor
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(), optstat_monitor_mgr->get_flush_all_task(),
+    if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_flush_all_task(),
                             ObOptStatMonitorFlushAllTask::FLUSH_INTERVAL, true))) {
       LOG_WARN("failed to scheduler flush all task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(), optstat_monitor_mgr->get_check_task(),
+    } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_check_task(),
                                    ObOptStatMonitorCheckTask::CHECK_INTERVAL, true))) {
       LOG_WARN("failed to scheduler check task", K(ret));
     } else {
@@ -762,16 +757,16 @@ int ObOptStatMonitorManager::mtl_start(ObOptStatMonitorManager* &optstat_monitor
 void ObOptStatMonitorManager::mtl_stop(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    TG_CANCEL_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), optstat_monitor_mgr->get_flush_all_task());
-    TG_CANCEL_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), optstat_monitor_mgr->get_check_task());
+    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_flush_all_task());
+    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_check_task());
   }
 }
 
 void ObOptStatMonitorManager::mtl_wait(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), optstat_monitor_mgr->get_flush_all_task());
-    TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), optstat_monitor_mgr->get_check_task());
+    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_flush_all_task());
+    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), optstat_monitor_mgr->get_check_task());
   }
 }
 
@@ -825,7 +820,7 @@ int ObOptStatMonitorManager::check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml
     ObSEArray<OptStatExpiredTableInfo, 4> stale_infos;
     int64_t begin_ts = ObTimeUtility::current_time();
     int64_t global_async_stale_max_table_size = DEFAULT_ASYNC_STALE_MAX_TABLE_SIZE;
-    if (OB_FAIL(get_async_stale_max_table_size(dml_stats.at(0).tenant_id_,
+    if (OB_FAIL(get_async_stale_max_table_size(
                                                OB_INVALID_ID,
                                                global_async_stale_max_table_size))) {
       LOG_WARN("failed to get async stale max table size", K(ret));
@@ -859,12 +854,12 @@ int ObOptStatMonitorManager::get_opt_stats_expired_table_info(ObIArray<ObOptDmlS
   while (OB_SUCC(ret) && begin_idx < dml_stats.count()) {
     ObSqlString where_list;
     int64_t end_idx = std::min(begin_idx + MAX_PROCESS_BATCH_TABLET_CNT, dml_stats.count());
-    uint64_t tenant_id = dml_stats.at(begin_idx).tenant_id_;
+    
     if (OB_FAIL(gen_tablet_list(dml_stats, begin_idx, end_idx, is_from_direct_load, where_list))) {
       LOG_WARN("failed to gen tablet list", K(ret));
     } else if (where_list.empty()) {
       //do nothing
-    } else if (OB_FAIL(do_get_opt_stats_expired_table_info(tenant_id, where_list, stale_infos))) {
+    } else if (OB_FAIL(do_get_opt_stats_expired_table_info(where_list, stale_infos))) {
       LOG_WARN("failed to do get opt stats expired table info", K(ret));
     }
     begin_idx = end_idx;
@@ -889,21 +884,20 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(dml_stats.at(begin_idx).tenant_id_, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret));
   } else {
     bool is_first = true;
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
       bool is_valid = is_from_direct_load && !is_inner_table(dml_stats.at(i).table_id_);
       if (!is_valid && OB_FAIL(ObDbmsStatsUtils::check_is_stat_table(schema_guard,
-                                                                     dml_stats.at(i).tenant_id_,
                                                                      dml_stats.at(i).table_id_,
                                                                      false,
                                                                      is_valid))) {
         LOG_WARN("failed to check is stat table", K(ret));
       } else if (is_valid) {
-        uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(dml_stats.at(i).tenant_id_, dml_stats.at(i).tenant_id_);
-        uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(dml_stats.at(i).tenant_id_, dml_stats.at(i).table_id_);
+        
+        uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(dml_stats.at(i).table_id_);
         if (OB_FAIL(tablet_list.append_fmt("%s(%lu, %ld)", is_first ? "(" : " ,",
                                                                 pure_table_id,
                                                                 dml_stats.at(i).tablet_id_))) {
@@ -922,8 +916,7 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
   return ret;
 }
 
-int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const int64_t tenant_id,
-                                                                 const ObSqlString &where_str,
+int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const ObSqlString &where_str,
                                                                  ObIArray<OptStatExpiredTableInfo> &stale_infos)
 {
   int ret = OB_SUCCESS;
@@ -940,7 +933,7 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const int64_t t
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -978,7 +971,7 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const int64_t t
             }
             if (OB_SUCC(ret) && !is_found) {
               OptStatExpiredTableInfo stale_info;
-              stale_info.tenant_id_ = tenant_id;
+              
               stale_info.table_id_ = table_id;
               stale_info.inserts_ = inserts;
               if (OB_FAIL(stale_info.tablet_ids_.push_back(tablet_id))) {
@@ -1015,7 +1008,7 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
   ObSEArray<ObOptTableStat, 4> table_stats;
   ObSEArray<ObOptTableStat, 4> expired_table_stats;
   ObSEArray<ObOptTableStat, 4> no_table_stats;
-  ObArenaAllocator allocator("OptStatMonitor", OB_MALLOC_NORMAL_BLOCK_SIZE, expired_table_info.tenant_id_);
+  ObArenaAllocator allocator("OptStatMonitor", OB_MALLOC_NORMAL_BLOCK_SIZE);
   int64_t begin_ts = ObTimeUtility::current_time();
   int64_t async_stale_max_table_size = DEFAULT_ASYNC_STALE_MAX_TABLE_SIZE;
   if (OB_FAIL(get_expired_table_part_info(allocator, expired_table_info, part_level, part_infos, subpart_infos))) {
@@ -1027,12 +1020,11 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
                                                            subpart_infos,
                                                            partition_ids))) {
     LOG_WARN("failed to get need check opt stat partition ids", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(expired_table_info.tenant_id_,
-                                                                     expired_table_info.table_id_,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(expired_table_info.table_id_,
                                                                      partition_ids,
                                                                      table_stats))) {
     LOG_WARN("failed to get table stat", K(ret));
-  } else if (OB_FAIL(get_async_stale_max_table_size(expired_table_info.tenant_id_,
+  } else if (OB_FAIL(get_async_stale_max_table_size(
                                                     expired_table_info.table_id_,
                                                     async_stale_max_table_size))) {
     LOG_WARN("failed to get async stale max table size", K(ret));
@@ -1048,21 +1040,22 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
                                                      expired_table_stats,
                                                      no_table_stats))) {
     LOG_WARN("failed to get need mark opt stats expired", K(ret));
-  } else if (OB_FAIL(do_mark_the_opt_stat_expired(expired_table_info.tenant_id_,
+  } else if (OB_FAIL(do_mark_the_opt_stat_expired(
                                                   expired_table_stats,
                                                   expired_partition_ids))) {
     LOG_WARN("failed to do mark the opt stat expired", K(ret));
-  } else if (OB_FAIL(do_mark_the_opt_stat_missing(expired_table_info.tenant_id_,
+  } else if (OB_FAIL(do_mark_the_opt_stat_missing(
                                                   no_table_stats))) {
     LOG_WARN("failed to do mark the opt stat missing", K(ret));
   } else {
     obcall::ObUpdateStatCacheArg stat_arg;
-    stat_arg.tenant_id_ = expired_table_info.tenant_id_;
+    
+    
     stat_arg.table_id_ = expired_table_info.table_id_;
     stat_arg.no_invalidate_ = true;
     if (OB_FAIL(append(stat_arg.partition_ids_, expired_partition_ids))) {
       LOG_WARN("failed to append", K(ret));
-    } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(expired_table_info.tenant_id_, stat_arg))) {
+    } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(stat_arg))) {
       LOG_WARN("failed to update stat cache", K(ret));
     }
   }
@@ -1084,12 +1077,12 @@ int ObOptStatMonitorManager::get_expired_table_part_info(ObIAllocator &allocator
   if (OB_ISNULL(GCTX.schema_service_) || OB_UNLIKELY(!expired_table_info.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expired_table_info), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(expired_table_info.tenant_id_, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(expired_table_info.tenant_id_,
+  } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    expired_table_info.table_id_,
                                                    table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(expired_table_info.tenant_id_), K(expired_table_info.table_id_));
+    LOG_WARN("get table schema failed", K(ret), K(expired_table_info.table_id_));
   } else if (OB_ISNULL(table_schema)) {//maybe table isn't exists.
     //do nothing
   } else if (OB_FAIL(pl::ObDbmsStats::get_table_part_infos(table_schema, allocator, part_infos, subpart_infos))) {
@@ -1148,7 +1141,7 @@ int ObOptStatMonitorManager::get_need_check_opt_stat_partition_ids(const OptStat
           LOG_WARN("failed to push back", K(ret));
         }
       }
-    } else if (OB_FAIL(partition_ids_map.create(part_infos.count(), "PartIdsMap", "PartIdsMapNode", expired_table_info.tenant_id_))) {
+    } else if (OB_FAIL(partition_ids_map.create(part_infos.count(), "PartIdsMap", "PartIdsMapNode"))) {
       LOG_WARN("fail to create hash map", K(ret), K(expired_table_info.tablet_ids_.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < expired_table_info.tablet_ids_.count(); ++i) {
@@ -1219,7 +1212,7 @@ int ObOptStatMonitorManager::get_need_mark_opt_stats_expired(const ObIArray<ObOp
         is_stat_expired = true;
       } else if (table_stats.at(i).get_object_type() == StatLevel::TABLE_LEVEL) {
         ObSEArray<uint64_t, 4> tablet_ids;
-        if (OB_FAIL(check_table_stat_expired_by_dml_info(expired_table_info.tenant_id_,
+        if (OB_FAIL(check_table_stat_expired_by_dml_info(
                                                          expired_table_info.table_id_,
                                                          tablet_ids,
                                                          is_stat_expired))) {
@@ -1256,7 +1249,7 @@ int ObOptStatMonitorManager::get_need_mark_opt_stats_expired(const ObIArray<ObOp
         if (OB_SUCC(ret)) {
           if (is_all_subpart_expired) {
             is_stat_expired = true;
-          } else if (OB_FAIL(check_table_stat_expired_by_dml_info(expired_table_info.tenant_id_,
+          } else if (OB_FAIL(check_table_stat_expired_by_dml_info(
                                                                   expired_table_info.table_id_,
                                                                   tablet_ids,
                                                                   is_stat_expired))) {
@@ -1265,7 +1258,7 @@ int ObOptStatMonitorManager::get_need_mark_opt_stats_expired(const ObIArray<ObOp
         }
       } else if (table_stats.at(i).get_object_type() == StatLevel::TABLE_LEVEL) {
         ObSEArray<uint64_t, 4> tablet_ids;
-        if (OB_FAIL(check_table_stat_expired_by_dml_info(expired_table_info.tenant_id_,
+        if (OB_FAIL(check_table_stat_expired_by_dml_info(
                                                          expired_table_info.table_id_,
                                                          tablet_ids,
                                                          is_stat_expired))) {
@@ -1292,8 +1285,7 @@ int ObOptStatMonitorManager::get_need_mark_opt_stats_expired(const ObIArray<ObOp
   return ret;
 }
 
-int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t tenant_id,
-                                                                  const uint64_t table_id,
+int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t table_id,
                                                                   const ObIArray<uint64_t> &tablet_ids,
                                                                   bool &is_stat_expired)
 {
@@ -1303,8 +1295,8 @@ int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t
   if (OB_FAIL(gen_tablet_list(tablet_ids, tablet_list))) {
     LOG_WARN("failed to gen tablet list", K(ret));
   } else {
-    uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-    uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id);
+    
+    uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
     ObSqlString select_sql;
     if (OB_FAIL(select_sql.append_fmt("SELECT 1 "\
                                        "FROM  (SELECT  table_id,"\
@@ -1328,7 +1320,7 @@ int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t
       SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
         sqlclient::ObMySQLResult *client_result = NULL;
         ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy_);
-        if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+        if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
           LOG_WARN("failed to execute sql", K(ret), K(select_sql));
         } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
           ret = OB_ERR_UNEXPECTED;
@@ -1367,8 +1359,7 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<uint64_t> &tablet_id
   return ret;
 }
 
-int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const uint64_t tenant_id,
-                                                          const ObIArray<ObOptTableStat> &no_table_stats)
+int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const ObIArray<ObOptTableStat> &no_table_stats)
 {
   int ret = OB_SUCCESS;
   if (!no_table_stats.empty()) {
@@ -1377,7 +1368,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const uint64_t tenant_
     if (OB_ISNULL(mysql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(mysql_proxy_));
-    } else if (OB_FAIL(trans.start(mysql_proxy_, tenant_id))) {
+    } else if (OB_FAIL(trans.start(mysql_proxy_))) {
       LOG_WARN("fail to start transaction", K(ret));
     } else {
       while (OB_SUCC(ret) && begin_idx < no_table_stats.count()) {
@@ -1385,7 +1376,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const uint64_t tenant_
         ObSqlString values_list;
         int64_t affected_rows = 0;
         int64_t end_idx = std::min(begin_idx + MAX_PROCESS_BATCH_TABLET_CNT, no_table_stats.count());
-        if (OB_FAIL(gen_values_list(tenant_id, no_table_stats, begin_idx, end_idx, values_list))) {
+        if (OB_FAIL(gen_values_list( no_table_stats, begin_idx, end_idx, values_list))) {
           LOG_WARN("failed to gen values list", K(ret));
         } else if (OB_UNLIKELY(values_list.empty())) {
           ret = OB_ERR_UNEXPECTED;
@@ -1393,7 +1384,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const uint64_t tenant_
         } else if (OB_FAIL(insert_sql.append_fmt(INSERT_STALE_TABLE_STAT_SQL,
                                                  share::OB_ALL_TABLE_STAT_TNAME,
                                                  values_list.ptr()))) {
-        } else if (OB_FAIL(trans.write(tenant_id, insert_sql.ptr(), affected_rows))) {
+        } else if (OB_FAIL(trans.write(insert_sql.ptr(), affected_rows))) {
           LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
         } else {
           begin_idx = end_idx;
@@ -1416,8 +1407,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_missing(const uint64_t tenant_
   return ret;
 }
 
-int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const uint64_t tenant_id,
-                                                          const ObIArray<ObOptTableStat> &expired_table_stats,
+int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const ObIArray<ObOptTableStat> &expired_table_stats,
                                                           ObIArray<int64_t> &expired_partition_ids)
 {
   int ret = OB_SUCCESS;
@@ -1432,8 +1422,8 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const uint64_t tenant_
     ObSqlString diff_part_analyzed_list;
     int64_t affected_rows = 0;
     int64_t end_idx = std::min(begin_idx + MAX_PROCESS_BATCH_TABLET_CNT, expired_table_stats.count());
-    uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-    uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, expired_table_stats.at(begin_idx).get_table_id());
+    
+    uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(expired_table_stats.at(begin_idx).get_table_id());
     if (OB_FAIL(gen_part_analyzed_list(expired_table_stats, begin_idx, end_idx,
                                        same_part_analyzed_list,
                                        diff_part_analyzed_list,
@@ -1443,7 +1433,7 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const uint64_t tenant_
                                               share::OB_ALL_TABLE_STAT_TNAME,
                                               pure_table_id,
                                               !same_part_analyzed_list.empty() ? same_part_analyzed_list.ptr() : diff_part_analyzed_list.ptr()))) {
-    } else if (OB_FAIL(mysql_proxy_->write(tenant_id, update_sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(mysql_proxy_->write(update_sql.ptr(), affected_rows))) {
       LOG_WARN("fail to exec sql", K(update_sql), K(ret));
     } else {
       begin_idx = end_idx;
@@ -1498,8 +1488,7 @@ int ObOptStatMonitorManager::gen_part_analyzed_list(const ObIArray<ObOptTableSta
   return ret;
 }
 
-int ObOptStatMonitorManager::gen_values_list(const uint64_t tenant_id,
-                                             const ObIArray<ObOptTableStat> &no_table_stats,
+int ObOptStatMonitorManager::gen_values_list(const ObIArray<ObOptTableStat> &no_table_stats,
                                              const int64_t begin_idx,
                                              const int64_t end_idx,
                                              ObSqlString &values_list)
@@ -1512,8 +1501,8 @@ int ObOptStatMonitorManager::gen_values_list(const uint64_t tenant_id,
   } else {
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
       ObSqlString value;
-      uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-      uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, no_table_stats.at(i).get_table_id());
+      
+      uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(no_table_stats.at(i).get_table_id());
       if (OB_FAIL(value.append_fmt(STALE_TABLE_STAT_MOCK_VALUE_PATTERN,
                                    pure_table_id,
                                    no_table_stats.at(i).get_partition_id()))) {
@@ -1526,19 +1515,18 @@ int ObOptStatMonitorManager::gen_values_list(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatMonitorManager::get_async_stale_max_table_size(const uint64_t tenant_id,
-                                                            const uint64_t table_id,
+int ObOptStatMonitorManager::get_async_stale_max_table_size(const uint64_t table_id,
                                                             int64_t &async_stale_max_table_size)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_alloc("OptStatPrefs", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+  ObArenaAllocator tmp_alloc("OptStatPrefs", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObAsyncStaleMaxTableSizePrefs prefs;
   ObString opt_name(prefs.get_stat_pref_name());
   ObObj result;
   ObObj dest_obj;
   ObCastCtx cast_ctx(&tmp_alloc, NULL, CM_NONE, ObCharset::get_system_collation());
   async_stale_max_table_size = DEFAULT_ASYNC_MAX_SCAN_ROWCOUNT;
-  if (OB_FAIL(ObDbmsStatsPreferences::get_prefs(mysql_proxy_, tmp_alloc, tenant_id,
+  if (OB_FAIL(ObDbmsStatsPreferences::get_prefs(mysql_proxy_, tmp_alloc,
                                                 table_id, opt_name, result))) {
     LOG_WARN("failed to get prefs", K(ret));
   } else if (result.is_null()) {

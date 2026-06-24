@@ -51,7 +51,7 @@ int ObDBMSAiService::check_ai_model_privilege_(ObPLExecCtx &ctx, ObPrivSet requi
     } else {
       sql::ObAIServiceEndpointPrivUtil priv_util(*schema_guard);
       share::schema::ObSessionPrivInfo session_priv;
-      if (OB_FAIL(schema_guard->get_session_priv_info(ctx.exec_ctx_->get_my_session()->get_priv_tenant_id(),
+      if (OB_FAIL(schema_guard->get_session_priv_info(
                                                     ctx.exec_ctx_->get_my_session()->get_priv_user_id(),
                                                     ctx.exec_ctx_->get_my_session()->get_database_name(),
                                                     session_priv))) {
@@ -210,7 +210,7 @@ int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &p
 int ObDBMSAiService::precheck_version_and_param_count_(int expect_param_count, sql::ParamStore &params)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   if (expect_param_count != params.count()) {
     ret = OB_INVALID_ARGUMENT_NUM;
     LOG_WARN("invalid argument", K(ret), K(params.count()));
@@ -242,7 +242,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
 {
   int ret = OB_SUCCESS;
   ObString model_name;
-  uint64_t tenant_id = MTL_ID();
+  
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *ai_model_schema = nullptr;
 
@@ -270,13 +270,13 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_ai_model_schema(tenant_id, model_name, ai_model_schema))) {
-    LOG_WARN("failed to get ai model schema", K(ret), K(tenant_id), K(model_name));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
+    LOG_WARN("failed to get ai model schema", K(ret), K(model_name));
   } else if (OB_NOT_NULL(ai_model_schema)) {
     ret = OB_AI_FUNC_MODEL_EXISTS;
-    LOG_WARN("ai model already exists", K(ret), K(tenant_id), K(model_name));
+    LOG_WARN("ai model already exists", K(ret), K(model_name));
     LOG_USER_ERROR(OB_AI_FUNC_MODEL_EXISTS, model_name.length(), model_name.ptr());
   } else if (OB_ISNULL(ctx.exec_ctx_)) {
     ret =  OB_ERR_UNEXPECTED;
@@ -293,7 +293,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     } else if (OB_FAIL(model_info.parse_from_json_base(model_name, *j_base))) {
       LOG_WARN("failed to parse ai model info", K(ret), K(model_name)); 
     } else {
-      ObCreateAiModelArg arg(tenant_id, model_info);
+      ObCreateAiModelArg arg(model_info);
       arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_FAIL(arg.check_valid())) {
         LOG_WARN("invalid create ai model arg", K(ret), K(arg));
@@ -311,7 +311,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
 {
   int ret = OB_SUCCESS;
   ObString model_name;
-  uint64_t tenant_id = MTL_ID();
+  
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *ai_model_schema = nullptr;
 
@@ -334,13 +334,13 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_ai_model_schema(tenant_id, model_name, ai_model_schema))) {
-    LOG_WARN("failed to get ai model schema", K(ret), K(tenant_id), K(model_name));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("failed to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
+    LOG_WARN("failed to get ai model schema", K(ret), K(model_name));
   } else if (OB_ISNULL(ai_model_schema)) {
     ret = OB_AI_FUNC_MODEL_NOT_FOUND;
-    LOG_WARN("ai model not exists", K(ret), K(tenant_id), K(model_name));
+    LOG_WARN("ai model not exists", K(ret), K(model_name));
     LOG_USER_ERROR(OB_AI_FUNC_MODEL_NOT_FOUND, model_name.length(), model_name.ptr());
   } else if (OB_ISNULL(ctx.exec_ctx_)) {
     ret =  OB_ERR_UNEXPECTED;
@@ -349,7 +349,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else {
-    ObDropAiModelArg arg(tenant_id, model_name);
+    ObDropAiModelArg arg(model_name);
     arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_ai_model(arg); }))) {
       LOG_WARN("failed to drop ai model", K(ret), K(arg));

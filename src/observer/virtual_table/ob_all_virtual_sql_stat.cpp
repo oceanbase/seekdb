@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/allocator/ob_mod_define.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "share/rc/ob_tenant_base.h"
@@ -48,9 +49,7 @@ int ObGetAllSqlStatCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID,
 
 ObAllVirtualSqlStatIter::ObAllVirtualSqlStatIter() :
   allocator_(nullptr),
-  tenant_ids_(),
-  cur_nth_tenant_(0),
-  cur_tenant_id_(0),
+  done_(false),
   tmp_sql_stat_map_(),
   sql_stat_cache_id_array_(),
   sql_stat_cache_id_array_idx_(0)
@@ -64,31 +63,23 @@ void ObAllVirtualSqlStatIter::destroy()
 
 void ObAllVirtualSqlStatIter::reset()
 {
-  tenant_ids_.reset();
-  cur_nth_tenant_ = 0;
-  cur_tenant_id_ = 0;
+  done_ = false;
   tmp_sql_stat_map_.destroy();
   sql_stat_cache_id_array_.reset();
   sql_stat_cache_id_array_idx_ = 0;
 }
 
-int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator ,const uint64_t effective_tenant_id)
+int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.omt_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
-  } else if (is_sys_tenant(effective_tenant_id)) {
-    if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids_))) {
-      LOG_WARN("failed to get_mtl_tenant_ids", KR(ret));
-    }
-  } else if (OB_FAIL(tenant_ids_.push_back(effective_tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", KR(ret), K(effective_tenant_id));
   }
   
   if (OB_SUCC(ret)) {
     const int64_t default_bucket_num  = 64;
-    if (OB_FAIL(tmp_sql_stat_map_.create(default_bucket_num, ObMemAttr(MTL_ID(), "TmpSqlStatMgr")))) {
+    if (OB_FAIL(tmp_sql_stat_map_.create(default_bucket_num, ObMemAttr("TmpSqlStatMgr")))) {
       LOG_WARN("fail to create tmp sql stat map", K(ret));
     } else {
       allocator_ = allocator;
@@ -100,16 +91,16 @@ int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator ,const uint64_t effect
 int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
 {
   int ret = OB_SUCCESS;
-  if (cur_nth_tenant_ >= tenant_ids_.count()) {
+  if (done_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(tmp_sql_stat_map_.clear())) {
     LOG_WARN("failed to clear tmp sql stat map", K(ret));
   } else if (FALSE_IT(sql_stat_cache_id_array_.reuse())) {
   } else {
-    cur_tenant_id_ = tenant_ids_.at(cur_nth_tenant_);
-    MTL_SWITCH(cur_tenant_id_) {
+    
+    MOD_SCOPE {
       ObReqTimeGuard req_timeinfo_guard;
-      ObPlanCache* plan_cache = MTL(ObPlanCache*);
+      ObPlanCache* plan_cache = share::g_mp->plan_cache();
       if (OB_NOT_NULL(plan_cache)) {
         ObGetAllSqlStatCacheIdOp op(&sql_stat_cache_id_array_);
         if (OB_FAIL(plan_cache->foreach_cache_obj(op))) {
@@ -124,7 +115,7 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
           GCTX.session_mgr_->for_each_session(*this);
         }
       }
-      ++cur_nth_tenant_;
+      done_ = true;
     } else {
       LOG_WARN("failed to switch mtl tenant", K(ret));
     }
@@ -142,7 +133,7 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
     // do nothing
   } else if (ObSQLSessionState::QUERY_ACTIVE != sess_info->get_session_state()) {
     // do nothing
-  } else if (sess_info->get_effective_tenant_id() == cur_tenant_id_) {
+  } else if (true) {
     // WARNNIGN!!!
     // Access to things like cur_sql_ctx_ and cur_plan is forbidden, 
     // these pointers are not guaranteed to be thread-safe and risk CORE!
@@ -174,7 +165,7 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
         if (OB_ISNULL(allocator_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("alloc is null", K(ret));
-        } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObExecutedSqlStatRecord), ObMemAttr(MTL_ID(), "TmpSqlStatMgr")))) {
+        } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObExecutedSqlStatRecord), ObMemAttr("TmpSqlStatMgr")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("alloc failed", K(ret));
         } else if (FALSE_IT(value = new(buf) ObExecutedSqlStatRecord())) {
@@ -194,8 +185,7 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
 }
 
 int ObAllVirtualSqlStatIter::get_next_sql_stat (
-  sql::ObExecutedSqlStatRecord &sql_stat_value, 
-  uint64_t &tenant_id)
+  sql::ObExecutedSqlStatRecord &sql_stat_value)
 {
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && sql_stat_cache_id_array_idx_ >= sql_stat_cache_id_array_.count() && tmp_sql_stat_map_.empty()) {
@@ -207,11 +197,10 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
   }
 
   if (OB_SUCC(ret)) {
-    tenant_id = cur_tenant_id_;
-    MTL_SWITCH(cur_tenant_id_) {
+    MOD_SCOPE {
       if (sql_stat_cache_id_array_idx_ < sql_stat_cache_id_array_.count()) {
         ObReqTimeGuard req_timeinfo_guard;
-        ObPlanCache* plan_cache = MTL(ObPlanCache*);
+        ObPlanCache* plan_cache = share::g_mp->plan_cache();
         if (OB_NOT_NULL(plan_cache)) {
           uint64_t cur_sql_stat_cache_id = sql_stat_cache_id_array_.at(sql_stat_cache_id_array_idx_);
           sql_stat_cache_id_array_idx_++;
@@ -326,7 +315,6 @@ int ObAllVirtualSqlStat::get_server_ip_and_port()
 }
 
 int ObAllVirtualSqlStat::fill_row(
-  const uint64_t tenant_id,
   const ObExecutedSqlStatRecord *sql_stat_record,
   common::ObNewRow *&row)
 {
@@ -636,7 +624,7 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
-    if (OB_FAIL(iter_.init(allocator_, effective_tenant_id_))) {
+    if (OB_FAIL(iter_.init(allocator_))) {
       LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
@@ -661,18 +649,17 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
 
   if (OB_SUCC(ret)) {
     ObExecutedSqlStatRecord *sql_stat_record = nullptr;
-    uint64_t tenant_id = OB_INVALID_TENANT_ID;
     void *buf = nullptr;
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("alloc is null", K(ret));
-    } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObExecutedSqlStatRecord), ObMemAttr(MTL_ID(), "TmpSqlStat")))) {
+    } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObExecutedSqlStatRecord), ObMemAttr("TmpSqlStat")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc failed", K(ret));
     } else if (FALSE_IT(sql_stat_record = new(buf) ObExecutedSqlStatRecord())) {
     } else {
-      while (OB_SUCC(ret) && (!sql_stat_record->get_key().is_valid() || OB_INVALID_TENANT_ID == tenant_id)) {
-        if (OB_FAIL(iter_.get_next_sql_stat(*sql_stat_record, tenant_id))) {
+      while (OB_SUCC(ret) && !sql_stat_record->get_key().is_valid()) {
+        if (OB_FAIL(iter_.get_next_sql_stat(*sql_stat_record))) {
           if (OB_ITER_END != ret) {
             LOG_WARN("failed to get next sql_stat_record", K(ret));
           }
@@ -680,8 +667,8 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
       } // end while
 
       if (OB_SUCC(ret)) {
-        if (sql_stat_record->get_key().is_valid() && OB_INVALID_TENANT_ID != tenant_id) {
-          if (OB_FAIL(fill_row(tenant_id, sql_stat_record, row))) {
+        if (sql_stat_record->get_key().is_valid()) {
+          if (OB_FAIL(fill_row(sql_stat_record, row))) {
             LOG_WARN("failed to get row from sql_stat_record", K(ret));
           } else {
             last_sql_stat_record_ = sql_stat_record;

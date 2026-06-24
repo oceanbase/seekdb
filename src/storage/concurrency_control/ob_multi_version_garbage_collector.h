@@ -34,8 +34,7 @@ namespace concurrency_control
     update %s set                             \
     snapshot_version = %ld,                   \
     create_time = %ld                         \
-    where tenant_id = %lu                     \
-    and snapshot_type = %lu                   \
+    where snapshot_type = %lu                 \
     and svr_ip = '%.*s'                       \
     and svr_port = %d                         \
     "
@@ -44,8 +43,7 @@ namespace concurrency_control
     select snapshot_version, snapshot_type,   \
     svr_ip, svr_port, create_time             \
     from %s                                   \
-    where tenant_id = %lu                     \
-    and snapshot_type = %lu                   \
+    where snapshot_type = %lu                 \
     and svr_ip = '%.*s'                       \
     and svr_port = %d                         \
     for update                                \
@@ -55,17 +53,16 @@ namespace concurrency_control
     select snapshot_version, snapshot_type,  \
     svr_ip, svr_port, create_time, status    \
     from %s                                  \
-    where tenant_id = %lu                    \
     "
 
 #define INSERT_ON_UPDATE_ALL_RESERVED_SNAPSHOT_SQL " \
     insert into %s                                   \
-    (tenant_id, snapshot_type, svr_ip, svr_port,     \
+    (snapshot_type, svr_ip, svr_port,                \
      create_time, status, snapshot_version)          \
-    values (%lu, %lu, '%.*s', %d, '%ld', %ld, %ld),  \
-    (%lu, %lu, '%.*s', %d, '%ld', %ld, %ld),         \
-    (%lu, %lu, '%.*s', %d, '%ld', %ld, %ld),         \
-    (%lu, %lu, '%.*s', %d, '%ld', %ld, %ld)          \
+    values (%lu, '%.*s', %d, '%ld', %ld, %ld),       \
+    (%lu, '%.*s', %d, '%ld', %ld, %ld),              \
+    (%lu, '%.*s', %d, '%ld', %ld, %ld),              \
+    (%lu, '%.*s', %d, '%ld', %ld, %ld)               \
     on duplicate key update                          \
     create_time = VALUES(create_time),               \
     snapshot_version = VALUES(snapshot_version)      \
@@ -74,8 +71,7 @@ namespace concurrency_control
 #define UPDATE_RESERVED_SNAPSHOT_STATUS " \
     update %s set                         \
     status = %ld                          \
-    where tenant_id = %lu                 \
-    and svr_ip = '%.*s'                   \
+    where svr_ip = '%.*s'                 \
     and svr_port = %d                     \
     "
 
@@ -83,7 +79,6 @@ namespace concurrency_control
     select create_time, snapshot_type,       \
     svr_ip, svr_port, create_time, status    \
     from %s                                  \
-    where tenant_id = %lu                    \
     group by snapshot_type, svr_ip, svr_port \
     order by create_time desc                \
     for update                               \
@@ -91,8 +86,7 @@ namespace concurrency_control
 
 #define DELETE_EXPIRED_RESERVED_SNAPSHOT "   \
     delete from %s                           \
-    where tenant_id = %lu                    \
-    and svr_ip = '%.*s'                      \
+    where svr_ip = '%.*s'                    \
     and svr_port = %d                        \
     "
 

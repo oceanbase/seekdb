@@ -23,7 +23,7 @@
 #include "lib/file/ob_file.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
-#include "share/backup/ob_backup_struct.h"
+#include "share/io/ob_backup_storage_info.h"
 #include "observer/mysql/obmp_packet_sender.h"
 
 namespace oceanbase

@@ -37,34 +37,31 @@ class ObSequenceHashWrapper
 {
 public:
   ObSequenceHashWrapper()
-    : tenant_id_(common::OB_INVALID_ID),
-      database_id_(common::OB_INVALID_ID),
+    : database_id_(common::OB_INVALID_ID),
       sequence_name_() {}
-  ObSequenceHashWrapper(uint64_t tenant_id, uint64_t database_id,
+  ObSequenceHashWrapper(uint64_t database_id,
                       const common::ObString &sequence_name)
-    : tenant_id_(tenant_id),
-      database_id_(database_id),
+    : database_id_(database_id),
       sequence_name_(sequence_name) {}
   ~ObSequenceHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator==(const ObSequenceHashWrapper &rv) const;
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_sequence_name(const common::ObString &sequence_name) { sequence_name_ = sequence_name; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_sequence_name() const { return sequence_name_; }
-  TO_STRING_KV(K_(tenant_id), K_(database_id), K_(sequence_name));
+  TO_STRING_KV(K_(database_id), K_(sequence_name));
 
 private:
-  uint64_t tenant_id_;
   uint64_t database_id_;
   common::ObString sequence_name_;
 };
 
 inline bool ObSequenceHashWrapper::operator == (const ObSequenceHashWrapper &rv) const
 {
-  return (tenant_id_ == rv.get_tenant_id())
+  return (true)
       && (database_id_ == rv.get_database_id())
       && (sequence_name_ == rv.get_sequence_name());
 }
@@ -72,8 +69,7 @@ inline bool ObSequenceHashWrapper::operator == (const ObSequenceHashWrapper &rv)
 inline uint64_t ObSequenceHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
-  hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
-  hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
+  hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), 0);
   hash_ret = common::murmurhash(sequence_name_.ptr(), sequence_name_.length(), hash_ret);
   return hash_ret;
 }
@@ -116,16 +112,12 @@ public:
 
   int get_sequence_schema(const uint64_t sequence_id,
                          const ObSequenceSchema *&sequence_schema) const;
-  int get_sequence_schema_with_name(const uint64_t tenant_id,
-                                   const uint64_t database_id,
+  int get_sequence_schema_with_name(const uint64_t database_id,
                                    const common::ObString &name,
                                    const ObSequenceSchema *&sequence_schema) const;
-  int get_sequence_schemas_in_tenant(const uint64_t tenant_id,
+  int get_sequence_schemas_in_tenant(common::ObIArray<const ObSequenceSchema *> &sequence_schemas) const;
+  int get_sequence_schemas_in_database(const uint64_t database_id,
       common::ObIArray<const ObSequenceSchema *> &sequence_schemas) const;
-  int get_sequence_schemas_in_database(const uint64_t tenant_id,
-      const uint64_t database_id,
-      common::ObIArray<const ObSequenceSchema *> &sequence_schemas) const;
-  int del_schemas_in_tenant(const uint64_t tenant_id);
   template<typename Filter, typename Acation, typename EarlyStopCondition>
   int for_each(Filter &filter, Acation &action, EarlyStopCondition &condition);
   static bool compare_sequence(const ObSequenceSchema *lhs,

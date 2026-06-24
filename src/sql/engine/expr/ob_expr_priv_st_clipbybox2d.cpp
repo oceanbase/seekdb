@@ -134,15 +134,15 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_CLIPBYBOX2D);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_CLIPBYBOX2D);
   ObString res_wkb;
   omt::ObSrsCacheGuard srs_guard;
 
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, is_null_res, geo1, geo2, srs1, srs2))) {
     LOG_WARN("fail to process input geometry", K(ret), K(geo1), K(geo2), K(is_null_res));
   } 
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret) || is_null_res) {
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty))

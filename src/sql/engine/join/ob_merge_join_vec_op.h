@@ -387,7 +387,7 @@ public:
         semi_anti_match_pair_ptr_array_ = nullptr;
       }
     }
-    int init(int64_t tenant_id, int64_t max_batch_size);
+    int init(int64_t max_batch_size);
     int fill_match_pair(int64_t max_pair_cnt, ObBatchRows &brs) override final;
     int match_proc(ObBatchRows &brs) override final;
     inline int get_cur_group(int64_t &group_idx, RowGroup *&left, RowGroup *&right)
@@ -496,14 +496,14 @@ public:
         col_equal_group_boundary_(nullptr)
     {}
     ~ObMergeJoinCursor() { destroy(); }
-    int init(bool is_left, const uint64_t tenant_id, ObOperator *child,
+    int init(bool is_left, ObOperator *child,
              const ExprFixedArray *all_exprs,
              const ExprFixedArray *equal_keys,
              const common::ObFixedArray<int64_t, common::ObIAllocator> *key_idx,
              const EqualCondInfoArray &equal_cond_infos,
              ObIOEventObserver &io_event_observer, double mem_bound_raito);
     int init_equal_key_exprs(bool is_left, const EqualCondInfoArray &equal_cond_infos);
-    inline int init_row_store(const uint64_t tenant_id, ObIOEventObserver &io_event_observer);
+    inline int init_row_store(ObIOEventObserver &io_event_observer);
     inline int init_stored_batch_rows();
     inline int init_store_rows_array();
     inline int init_col_equal_group_boundary();

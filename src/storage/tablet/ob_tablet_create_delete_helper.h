@@ -124,12 +124,6 @@ public:
   static int check_read_snapshot_by_commit_version(
       const int64_t snapshot_version,
       const ObTabletCreateDeleteMdsUserData &user_data);
-  static int check_for_standby(
-      const share::ObLSID &ls_id,
-      const transaction::ObTransID &tx_id,
-      const share::SCN &snapshot,
-      ObTxCommitData::TxDataState &tx_data_state,
-      share::SCN &commit_version);
   static int check_read_snapshot_for_finish_transfer_in_tx(
       const ObTablet &tablet,
       const int64_t snapshot_version,

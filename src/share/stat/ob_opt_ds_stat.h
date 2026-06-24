@@ -62,8 +62,7 @@ public:
   typedef ObArrayWrap<ObOptDSColStat> DSColStats;
   struct Key : public common::ObIKVCacheKey
   {
-    Key() : tenant_id_(0),
-            table_id_(OB_INVALID_ID),
+    Key() : table_id_(OB_INVALID_ID),
             partition_hash_(0),
             ds_level_(ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING),
             sample_block_(0),
@@ -75,17 +74,14 @@ public:
     bool operator==(const ObIKVCacheKey &other) const
     {
       const Key &other_key = reinterpret_cast<const Key&>(other);
-      return tenant_id_ == other_key.tenant_id_ &&
+      return true &&
              table_id_ == other_key.table_id_ &&
              partition_hash_ == other_key.partition_hash_ &&
              ds_level_ == other_key.ds_level_ &&
              sample_block_ == other_key.sample_block_ &&
              expression_hash_ == other_key.expression_hash_;
     }
-    uint64_t get_tenant_id() const
-    {
-      return tenant_id_;
-    }
+    
     int64_t size() const { return sizeof(*this); }
     int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const
     {
@@ -104,27 +100,24 @@ public:
     }
     bool is_valid() const
     {
-      return tenant_id_ != 0 &&
-             table_id_ != OB_INVALID_ID &&
+      return table_id_ != OB_INVALID_ID &&
              ds_level_ != ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING &&
              sample_block_ > 0;
     }
     void reset()
     {
-      tenant_id_ = 0;
       table_id_ = OB_INVALID_ID;
       partition_hash_ = 0;
       ds_level_ = ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING;
       sample_block_ = 0;
       expression_hash_ = 0;
     }
-    TO_STRING_KV(K(tenant_id_),
-                 K(table_id_),
+    TO_STRING_KV(K(table_id_),
                  K(partition_hash_),
                  K(ds_level_),
                  K(sample_block_),
                  K(expression_hash_));
-    uint64_t tenant_id_;//tenant id
+//tenant id
     uint64_t table_id_;//sample table id
     uint64_t partition_hash_;//sample table partition hash
     uint64_t ds_level_; //dynamic sampling level
@@ -133,8 +126,7 @@ public:
   };
 
   ObOptDSStat()
-    : tenant_id_(0),
-      table_id_(OB_INVALID_ID),
+    : table_id_(OB_INVALID_ID),
       partition_hash_(0),
       ds_level_(ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING),
       dml_cnt_(0),
@@ -174,12 +166,10 @@ public:
   int64_t get_ds_degree() const { return ds_degree_; }
   bool is_valid() const
   {
-    return tenant_id_ > 0 &&
-           table_id_ != OB_INVALID_ID &&
+    return table_id_ != OB_INVALID_ID &&
            ds_level_ != ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING;
   }
   void reset() {
-    tenant_id_ = 0;
     table_id_ = OB_INVALID_ID;
     partition_hash_ = 0;
     ds_level_ = ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING;
@@ -193,8 +183,7 @@ public:
     col_stats_.reset();
     stat_expired_time_ = -1;
   }
-  TO_STRING_KV(K(tenant_id_),
-               K(table_id_),
+  TO_STRING_KV(K(table_id_),
                K(partition_hash_),
                K(ds_level_),
                K(dml_cnt_),
@@ -208,7 +197,7 @@ public:
                K(stat_expired_time_));
 
 private:
-  uint64_t tenant_id_;//tenant id
+//tenant id
   uint64_t table_id_;//table id
   uint64_t partition_hash_;//partition hash
   uint64_t ds_level_;//dynamic sampling level

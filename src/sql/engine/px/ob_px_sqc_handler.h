@@ -65,11 +65,11 @@ public:
   typedef uint64_t ObPxSQCHandlerId;
 public:
   ObPxSqcHandler() :
-    mem_context_(NULL), tenant_id_(UINT64_MAX), reserved_px_thread_count_(0), process_flags_(0),
+    mem_context_(NULL), reserved_px_thread_count_(0), process_flags_(0),
     end_ret_(OB_SUCCESS), reference_count_(1), notifier_(nullptr), exec_ctx_(nullptr),
     des_phy_plan_(nullptr), sqc_init_args_(nullptr), sub_coord_(nullptr), rpc_level_(INT32_MAX),
     node_sequence_id_(0), has_interrupted_(false),
-    part_ranges_spin_lock_(common::ObLatchIds::PX_TENANT_TARGET_LOCK),
+    part_ranges_spin_lock_(common::ObLatchIds::PX_TARGET_LOCK),
     is_session_query_locked_(false) {
   }
   ~ObPxSqcHandler() = default;
@@ -95,8 +95,8 @@ public:
 
   int32_t get_type() { return 0; }
 
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   sql::ObDesExecContext &get_exec_ctx() { return *exec_ctx_; }
   ObPhysicalPlan &get_phy_plan() { return *des_phy_plan_; }
   ObPxRpcInitSqcArgs &get_sqc_init_arg() { return *sqc_init_args_; }
@@ -134,7 +134,7 @@ public:
   const Ob2DArray<ObPxTabletRange> &get_partition_ranges() const { return part_ranges_; }
   int set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_ranges,
                            char *buf = NULL, int64_t max_size = 0);
-  TO_STRING_KV(K_(tenant_id), K_(reserved_px_thread_count), KP_(notifier),
+  TO_STRING_KV(K_(reserved_px_thread_count), KP_(notifier),
       K_(exec_ctx), K_(des_phy_plan), K_(sqc_init_args), KP_(sub_coord), K_(rpc_level));
 
 private:
@@ -142,7 +142,6 @@ private:
   int destroy_sqc(int &report_ret);
 private:
   lib::MemoryContext mem_context_;
-  uint64_t tenant_id_;
   int64_t reserved_px_thread_count_;
   uint64_t process_flags_;
   int end_ret_;

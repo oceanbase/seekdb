@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_COMPLEMENT_DATA_TASK_H
 
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/compaction/ob_column_checksum_calculator.h"
 #include "storage/ddl/ob_cg_macro_block_write_task.h"
@@ -41,10 +42,10 @@ int add_dag_and_get_progress(
   if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(dag));
-  } else if (OB_FAIL(MTL(ObTenantDagScheduler*)->add_dag(dag))) {
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(dag))) {
     // caution ret = OB_EAGAIN or OB_SIZE_OVERFLOW
     if (OB_EAGAIN == ret
-        && OB_TMP_FAIL(MTL(ObTenantDagScheduler*)->get_dag_progress<T>(dag, row_inserted, physical_row_count))) { 
+        && OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_dag_progress<T>(dag, row_inserted, physical_row_count))) { 
       // tmp_ret is used to prevent the failure from affecting DDL_Task status
       LOG_WARN("get complement data progress failed", K(tmp_ret), K(ret));
     }
@@ -61,13 +62,13 @@ struct ObComplementDataParam final
 {
 public:
   ObComplementDataParam():
-    is_inited_(false), orig_tenant_id_(common::OB_INVALID_TENANT_ID), dest_tenant_id_(common::OB_INVALID_TENANT_ID), 
+    is_inited_(false), 
     orig_ls_id_(share::ObLSID::INVALID_LS_ID), dest_ls_id_(share::ObLSID::INVALID_LS_ID), orig_table_id_(common::OB_INVALID_ID), 
     dest_table_id_(common::OB_INVALID_ID), orig_tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), orig_schema_version_(0), dest_schema_version_(0),
     snapshot_version_(0), task_id_(0), execution_id_(-1), tablet_task_id_(0), compat_mode_(lib::Worker::CompatMode::INVALID), data_format_version_(0),
     orig_schema_tablet_size_(0), dest_schema_cg_cnt_(0), user_parallelism_(0), concurrent_cnt_(0), ranges_(),
-    is_no_logging_(false), dest_lob_meta_tablet_id_(), allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    is_no_logging_(false), dest_lob_meta_tablet_id_(), allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObComplementDataParam() { destroy(); }
   int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
@@ -79,7 +80,6 @@ public:
       const int64_t tablet_size,
       const int64_t hint_parallelism);
   int split_task_ranges_remote(
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     const int64_t tablet_size,
@@ -87,7 +87,7 @@ public:
     const int64_t dest_schema_cg_cnt);
   bool is_valid() const
   {
-    return common::OB_INVALID_TENANT_ID != orig_tenant_id_ && common::OB_INVALID_TENANT_ID != dest_tenant_id_ 
+    return true && true 
            && orig_ls_id_.is_valid() && dest_ls_id_.is_valid() && common::OB_INVALID_ID != orig_table_id_ 
            && common::OB_INVALID_ID != dest_table_id_ && orig_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
            && snapshot_version_ > 0 && compat_mode_ != lib::Worker::CompatMode::INVALID && execution_id_ >= 0 && tablet_task_id_ > 0 
@@ -101,8 +101,8 @@ public:
   void destroy()
   {
     is_inited_ = false;
-    orig_tenant_id_ = common::OB_INVALID_TENANT_ID;
-    dest_tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
+    
     orig_ls_id_.reset();
     dest_ls_id_.reset();
     orig_table_id_ = common::OB_INVALID_ID;
@@ -138,7 +138,7 @@ public:
     }
     allocator_.reset();
   }
-  TO_STRING_KV(K_(is_inited), K_(orig_tenant_id), K_(dest_tenant_id), K_(orig_ls_id), K_(dest_ls_id), 
+  TO_STRING_KV(K_(is_inited), K_(orig_ls_id), K_(dest_ls_id), 
       K_(orig_table_id), K_(dest_table_id), K_(orig_tablet_id), K_(dest_tablet_id), K_(orig_schema_version), 
       K_(tablet_task_id), K_(dest_schema_version), K_(snapshot_version), K_(task_id),
       K_(execution_id), K_(compat_mode), K_(data_format_version), K_(orig_schema_tablet_size),K_(user_parallelism),
@@ -146,7 +146,6 @@ public:
 private:
   int fill_tablet_param();
   int get_complement_parallel_mode(
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const int64_t schema_version,
       const lib::Worker::CompatMode compat_mode,
@@ -154,8 +153,8 @@ private:
       bool &is_allow_parallel);
 public:
   bool is_inited_;
-  uint64_t orig_tenant_id_;
-  uint64_t dest_tenant_id_;
+  
+  
   share::ObLSID orig_ls_id_;
   share::ObLSID dest_ls_id_;
   uint64_t orig_table_id_;
@@ -195,7 +194,7 @@ struct ObComplementDataContext final
 {
 public:
   ObComplementDataContext():
-    allocator_("DDL_COMPL_CTX", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_("DDL_COMPL_CTX", OB_MALLOC_NORMAL_BLOCK_SIZE),
     is_inited_(false), is_major_sstable_exist_(false), complement_data_ret_(common::OB_SUCCESS),
     lock_(ObLatchIds::COMPLEMENT_DATA_CONTEXT_LOCK), concurrent_cnt_(0),
     physical_row_count_(0), row_scanned_(0), row_inserted_(0), total_slice_cnt_(-1),
@@ -443,7 +442,6 @@ private:
       blocksstable::ObDatumRange &range);
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t dest_table_id_;
   int64_t schema_version_;
@@ -471,9 +469,8 @@ class ObRemoteScan : public ObScan
 public:
   ObRemoteScan();
   virtual ~ObRemoteScan();
-  int init(const uint64_t tenant_id,
-           const int64_t table_id,
-           const uint64_t dest_tenant_id,
+  int init(const int64_t table_id,
+           const uint64_t dest_tid,
            const int64_t dest_table_id,
            const int64_t schema_version,
            const int64_t dest_schema_version,
@@ -505,9 +502,8 @@ private:
 
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   int64_t table_id_;
-  uint64_t dest_tenant_id_;
+  
   int64_t dest_table_id_;
   int64_t schema_version_;
   int64_t dest_schema_version_;

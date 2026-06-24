@@ -41,7 +41,7 @@ namespace sql
   class ObFLTSpanMgr;
   class ObFLTSpanData {
   public:
-    int64_t tenant_id_;
+    
     ObString trace_id_;
     int64_t req_id_;
     ObString span_id_;
@@ -62,7 +62,7 @@ namespace sql
 
     void reset()
     {
-      tenant_id_ = OB_INVALID_TENANT_ID;
+      
       req_id_ = OB_INVALID_ID;
       ref_type_ = -1;
       start_ts_ = -1;
@@ -81,7 +81,7 @@ namespace sql
       return trace_id_.length() + span_id_.length() + parent_span_id_.length()
               + span_name_.length() + tags_.length() + logs_.length();
     }
-    TO_STRING_KV(K_(tenant_id), K_(trace_id),
+    TO_STRING_KV(K_(trace_id),
                 K_(req_id), K_(span_id),
                 K_(parent_span_id), K_(span_name),
                 K_(start_ts), K_(end_ts),
@@ -165,8 +165,7 @@ namespace sql
     static const int64_t EVICT_INTERVAL = 1000000; //1s
     ObFLTSpanMgr()
       : inited_(false), destroyed_(false), request_id_(0), mem_limit_(0),
-        allocator_(), queue_(),
-        tenant_id_(OB_INVALID_TENANT_ID), tg_id_(-1)
+        allocator_(), queue_(), tg_id_(-1)
     {
     }
 
@@ -179,8 +178,8 @@ namespace sql
 
     int64_t get_start_idx() const { return (int64_t)queue_.get_pop_idx(); }
     int64_t get_end_idx() const { return (int64_t)queue_.get_push_idx(); }
-    uint64_t get_tenant_id() { return tenant_id_; }
-    int init(uint64_t tenant_id, const int64_t max_mem_size, const int64_t queue_size);
+    
+    int init(const int64_t max_mem_size, const int64_t queue_size);
     int record_span(ObFLTSpanData &span_data, bool is_formmated_json);
     int release_old(int64_t limit = BATCH_RELEASE_COUNT); // evict old span and release memory
     uint64_t get_size() { return queue_.get_size(); }
@@ -221,7 +220,6 @@ namespace sql
     common::ObRaQueue queue_; // store span node
 
     // tenant id of this request manager
-    uint64_t tenant_id_;
     int tg_id_;
   };
 } // namespace sql

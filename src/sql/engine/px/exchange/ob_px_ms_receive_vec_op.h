@@ -128,14 +128,14 @@ private:
   class GlobalOrderInput : public MergeSortInput
   {
   public:
-    GlobalOrderInput(uint64_t tenant_id)
+    GlobalOrderInput()
     : MergeSortInput(nullptr, nullptr, false),
       get_reader_(),
       add_row_reader_(nullptr),
       get_row_reader_(nullptr),
       output_rows_(0)
     {
-      tenant_id_ = tenant_id;
+      
     }
     virtual ~GlobalOrderInput() { destroy(); }
 
@@ -158,7 +158,7 @@ private:
     virtual bool is_empty();
   private:
     int create_temp_row_store(
-      ObPxMSReceiveVecOp &ms_receive_op, uint64_t tenant_id, ObTempRowStore *&row_store);
+      ObPxMSReceiveVecOp &ms_receive_op, ObTempRowStore *&row_store);
     virtual int reset_add_row_store(bool &reset);
     virtual int switch_get_row_store();
     int get_rows_from_channels(
@@ -170,7 +170,7 @@ private:
     int process_dump(ObPxMSReceiveVecOp &ms_receive_op);
   private:
     static const int64_t MAX_ROWS_PER_STORE = 50L;
-    uint64_t  tenant_id_;
+    
     // Due to the need for two datum stores to switch back and forth, to avoid clearing the data and starting fresh inserts every time a switch occurs,
     // So need two iterators to save the current read position
     // eg:

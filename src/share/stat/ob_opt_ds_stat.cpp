@@ -25,7 +25,6 @@ using namespace sql;
 int ObOptDSStat::assign(const ObOptDSStat& other)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = other.tenant_id_;
   table_id_ = other.table_id_;
   partition_hash_ = other.partition_hash_;
   ds_level_ = other.ds_level_;
@@ -45,7 +44,6 @@ int ObOptDSStat::assign(const ObOptDSStat& other)
 
 void ObOptDSStat::init(const ObOptDSStat::Key &key)
 {
-  tenant_id_ = key.tenant_id_;
   table_id_ = key.table_id_;
   partition_hash_= key.partition_hash_;
   ds_level_ = key.ds_level_;
@@ -82,7 +80,6 @@ int ObOptDSStat::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheValue *&v
 int ObOptDSStat::deep_copy(const ObOptDSStat &src, char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = src.tenant_id_;
   table_id_ = src.table_id_;
   partition_hash_ = src.partition_hash_;
   ds_level_ = src.ds_level_;

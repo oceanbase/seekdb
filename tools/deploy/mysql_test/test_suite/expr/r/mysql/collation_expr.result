@@ -355,12 +355,6 @@ utf8mb4_general_ci
 select collation(bin(b))  from coll_test;
 collation(bin(b))
 utf8mb4_general_ci
-select collation(effective_tenant());
-collation(effective_tenant())
-utf8mb4_general_ci
-select coercibility(effective_tenant());
-coercibility(effective_tenant())
-3
 select collation(uc like b) from coll_test;
 collation(uc like b)
 binary

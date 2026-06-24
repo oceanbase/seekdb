@@ -332,11 +332,11 @@ int ObOutfileStreamCompressor::create(CsvCompressType format, ObIAllocator &allo
 
     case CsvCompressType::GZIP:
     case CsvCompressType::DEFLATE: {
-      compressor = OB_NEW(ObOutfileGzipStreamCompressor, ObMemAttr(MTL_ID(), "ExportWriter"), allocator);
+      compressor = OB_NEW(ObOutfileGzipStreamCompressor, ObMemAttr("ExportWriter"), allocator);
     } break;
 
     case CsvCompressType::ZSTD: {
-      compressor = OB_NEW(ObOutfileZstdStreamCompressor, ObMemAttr(MTL_ID(), "ExportWriter"), allocator);
+      compressor = OB_NEW(ObOutfileZstdStreamCompressor, ObMemAttr("ExportWriter"), allocator);
     } break;
 
     default: {
@@ -360,7 +360,7 @@ void ObOutfileStreamCompressor::destroy(ObOutfileStreamCompressor *compressor)
 {
   if (OB_NOT_NULL(compressor)) {
     compressor->reset();
-    OB_DELETE(ObOutfileStreamCompressor, ObMemAttr(MTL_ID(), "ExportWriter"), compressor);
+    OB_DELETE(ObOutfileStreamCompressor, ObMemAttr("ExportWriter"), compressor);
   }
 }
 

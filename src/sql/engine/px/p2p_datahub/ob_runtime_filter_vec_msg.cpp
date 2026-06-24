@@ -248,7 +248,7 @@ OB_DEF_DESERIALIZE(ObRFInFilterVecMsg)
       OB_UNIS_DECODE(sm_hash_set_);
     } else {
       // old fashion, insert from row store
-      if (OB_FAIL(sm_hash_set_.init(max_in_num_, tenant_id_))) {
+      if (OB_FAIL(sm_hash_set_.init(max_in_num_))) {
         LOG_WARN("failed to init small hash set", K(max_in_num_));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < row_store_.get_row_cnt(); ++i) {
@@ -344,7 +344,7 @@ int ObRFRangeFilterVecMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
 {
   int ret = OB_SUCCESS;
   ObRFRangeFilterVecMsg *rf_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "RANGEVECMSG");
+  ObMemAttr attr("RANGEVECMSG");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFRangeFilterVecMsg>(attr, rf_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(rf_msg->assign(*this))) {
@@ -1103,7 +1103,7 @@ int ObRFInFilterVecMsg::assign(const ObP2PDatahubMsgBase &msg)
     LOG_WARN("fail to assign row_store_", K(ret));
   } else if (OB_FAIL(rows_set_.create(bucket_cnt * 2, "RFCPInFilter", "RFCPInFilter"))) {
     LOG_WARN("fail to init in hash set", K(ret));
-  } else if (OB_FAIL(sm_hash_set_.init(bucket_cnt, tenant_id_))) {
+  } else if (OB_FAIL(sm_hash_set_.init(bucket_cnt))) {
     LOG_WARN("failed to init sm_hash_set_", K(other_msg.row_store_.get_row_cnt()));
   } else if (OB_FAIL(hash_funcs_for_insert_.assign(other_msg.hash_funcs_for_insert_))) {
     LOG_WARN("fail to assign hash_funcs_for_insert_", K(ret));
@@ -1137,7 +1137,7 @@ int ObRFInFilterVecMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
 {
   int ret = OB_SUCCESS;
   ObRFInFilterVecMsg *in_msg = nullptr;
-  ObMemAttr attr(tenant_id_, "INVECMSG");
+  ObMemAttr attr("INVECMSG");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFInFilterVecMsg>(attr, in_msg))) {
     LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(in_msg->assign(*this))) {

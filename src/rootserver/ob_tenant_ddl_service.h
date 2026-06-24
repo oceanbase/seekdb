@@ -57,14 +57,14 @@ struct ObSysStat
   ObSysStat();
 
   // set values after bootstrap
-  int set_initial_values(const uint64_t tenant_id);
+  int set_initial_values();
 
   TO_STRING_KV(K_(item_list));
 
   ItemList item_list_;
 
   // only root tenant own
-  Item ob_max_used_tenant_id_;
+  Item ob_max_used_id_;
   Item ob_max_used_unit_config_id_;
   Item ob_max_used_resource_pool_id_;
   Item ob_max_used_unit_id_;
@@ -116,34 +116,28 @@ public:
   };
 
 public:
-  static int gen_tenant_init_config(
-             const uint64_t tenant_id,
-             const uint64_t compatible_version,
+  static int gen_tenant_init_config(const uint64_t compatible_version,
              common::ObConfigPairs &tenant_config);
   static int notify_init_tenant_config(
       const common::ObIArray<common::ObConfigPairs> &init_configs);
 
-  static int replace_sys_stat(const uint64_t tenant_id,
-      ObSysStat &sys_stat,
+  static int replace_sys_stat(ObSysStat &sys_stat,
       common::ObISQLClient &trans);
 
 private:
-  int insert_tenant_merge_info_(const share::schema::ObSchemaOperationType op,
-                               const share::schema::ObTenantSchema &tenant_schema,
+  int insert_tenant_merge_info_(const share::schema::ObTenantSchema &tenant_schema,
                                common::ObMySQLTransaction &trans);
   int set_tenant_compatibility_(const obcall::ObCreateTenantArg &arg, ObTenantSchema &tenant_schema);
 
-  int init_tenant_sys_stats_(const uint64_t tenant_id,
-      common::ObMySQLTransaction &trans);
+  int init_tenant_sys_stats_(common::ObMySQLTransaction &trans);
 
 private:
   int check_inner_stat();
 
-  int get_tenant_schema_guard_with_version_in_inner_table(const uint64_t tenant_id,
-      share::schema::ObSchemaGetterGuard &schema_guard);
+  int get_tenant_schema_guard_with_version_in_inner_table(share::schema::ObSchemaGetterGuard &schema_guard);
 
-  int publish_schema(const uint64_t tenant_id);
-  int publish_schema(const uint64_t tenant_id, const common::ObAddrIArray &addrs);
+  int publish_schema();
+  int publish_schema(const common::ObAddrIArray &addrs);
 
   int init_system_variables(
       const obcall::ObCreateTenantArg &arg,

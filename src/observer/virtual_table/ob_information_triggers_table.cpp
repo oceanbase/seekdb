@@ -25,8 +25,7 @@ namespace oceanbase
 namespace observer
 {
 ObInfoSchemaTriggersTable::ObInfoSchemaTriggersTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 
 }
@@ -38,7 +37,6 @@ ObInfoSchemaTriggersTable::~ObInfoSchemaTriggersTable()
 
 void ObInfoSchemaTriggersTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -48,9 +46,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
   if (OB_ISNULL(allocator_) || OB_ISNULL(schema_guard_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "argument is NULL", K(allocator_), K(schema_guard_), K(session_), K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -59,7 +54,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       } else {
         ObArray<const ObTriggerInfo *> tg_array;
-        if (OB_FAIL(schema_guard_->get_trigger_infos_in_tenant(tenant_id_, tg_array))) {
+        if (OB_FAIL(schema_guard_->get_trigger_infos_in_tenant(tg_array))) {
           SERVER_LOG(WARN, "Get trigger info with tenant id error", K(ret));
         } else {
           const ObTriggerInfo *tg_info = NULL;
@@ -76,8 +71,8 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
             } else {
               const ObUserInfo *user_info = NULL;
               ObString user_name;
-              if (OB_FAIL(schema_guard_->get_user_info(tenant_id_, tg_info->get_owner_id(), user_info))) {
-                SERVER_LOG(WARN, "Failed to get database schema", K_(tenant_id),
+              if (OB_FAIL(schema_guard_->get_user_info(tg_info->get_owner_id(), user_info))) {
+                SERVER_LOG(WARN, "Failed to get database schema",
                            K(tg_info->get_owner_id()), K(ret));
               } else {
                 if (OB_NOT_NULL(user_info)) {
@@ -107,10 +102,10 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                      ++col_idx) {
                   const uint64_t col_id = output_column_ids_.at(col_idx);
                   const ObTableSchema *table = NULL;
-                  if (OB_FAIL(schema_guard_->get_table_schema(tenant_id_,
+                  if (OB_FAIL(schema_guard_->get_table_schema(
                                                               tg_info->get_base_object_id(),
                                                               table))) {
-                    SERVER_LOG(WARN, "Failed to get table schema", K(tenant_id_),
+                    SERVER_LOG(WARN, "Failed to get table schema",
                                K(tg_info->get_base_object_id()), K(ret));
                   } else if (OB_ISNULL(table)) {
                     ret = OB_ERR_UNEXPECTED;
@@ -120,10 +115,10 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                     switch (col_id) {
                       case TRIGGER_SCHEMA: {
                         const ObDatabaseSchema *db = NULL;
-                        if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_,
+                        if (OB_FAIL(schema_guard_->get_database_schema(
                             tg_info->get_database_id(), db))) {
                           SERVER_LOG(WARN, "Failed to get database schema",
-                                     K_(tenant_id), K(tg_info->get_database_id()), K(ret));
+                                     K(tg_info->get_database_id()), K(ret));
                         } else if (OB_ISNULL(db)) {
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -152,10 +147,10 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                       }
                       case EVENT_OBJECT_SCHEMA: {
                         const ObDatabaseSchema *table_db = NULL;
-                        if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_,
+                        if (OB_FAIL(schema_guard_->get_database_schema(
                             table->get_database_id(), table_db))) {
                           SERVER_LOG(WARN, "Failed to get database schema",
-                                     K_(tenant_id), K(table->get_database_id()), K(ret));
+                                     K(table->get_database_id()), K(ret));
                         } else if (OB_ISNULL(table_db)) {
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));

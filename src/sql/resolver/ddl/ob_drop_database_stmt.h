@@ -44,10 +44,7 @@ public:
   {
   }
 
-  void set_tenant_id(const int64_t tenant_id)
-  {
-    drop_database_arg_.tenant_id_ = tenant_id;
-  }
+  
 
   void set_if_exist(const bool if_exist)
   {

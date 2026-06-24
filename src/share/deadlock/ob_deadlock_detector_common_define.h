@@ -188,7 +188,7 @@ public:
                const ObDetectorPriority &priority,
                const ObDetectorUserReportInfo &user_report_info);
   const UserBinaryKey &get_user_key() const;
-  uint64_t get_tenant_id() const;
+  
   const common::ObAddr &get_addr() const;
   uint64_t get_detector_id() const;
   int64_t get_created_time() const;
@@ -197,13 +197,13 @@ public:
   uint64_t get_start_delay() const;
   const ObDetectorPriority &get_priority() const;
   const ObDetectorUserReportInfo &get_user_report_info() const;
-  TO_STRING_KV(K_(binary_key), K_(tenant_id), K_(addr), K_(detector_id),
+  TO_STRING_KV(K_(binary_key), K_(addr), K_(detector_id),
                K_(report_time), K_(created_time),
                K_(event_id), K_(role), K_(start_delay), K_(priority), K_(user_report_info));
 private:
   // binary key to describe user key info, to identify a dectector on a machine
   UserBinaryKey binary_key_;
-  uint64_t tenant_id_;// the tenant who owns this detector
+// the tenant who owns this detector
   // machine internet address,together witch detector_id_ and report_time_
   // identify a globally(through entire cluster) unique event
   common::ObAddr addr_;

@@ -316,7 +316,7 @@ public:
     const int64_t rowkey_cnt, 
     const common::ObIArray<share::schema::ObColDesc> &columns,
     ObMemtableKeyBuffer *memtable_key_buffer = nullptr) 
-    : allocator_(common::ObMemAttr(MTL_ID(), "ObMemtableKey")),
+    : allocator_(common::ObMemAttr("ObMemtableKey")),
       rowkey_cnt_(rowkey_cnt),
       columns_(columns),
       memtable_key_buffer_(memtable_key_buffer),

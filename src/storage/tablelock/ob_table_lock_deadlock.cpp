@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "storage/tablelock/ob_table_lock_deadlock.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_deadlock_adapter.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -51,7 +52,7 @@ int ObTxLockPartOnDetectOp::operator() (
       OB_UNLIKELY(!ls_id_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid member", K(ret), K(lock_part_id_), K(ls_id_));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id_,
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_,
                                                handle,
                                                ObLSGetMod::TABLELOCK_MOD))) {
     LOG_WARN("get ls failed", K(ret), K(ls_id_));
@@ -181,7 +182,7 @@ int ObTransLockPartBlockCallBack::operator()(
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("block callback is not valid", K(ret), KPC(this));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id_,
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_,
                                                handle,
                                                ObLSGetMod::TABLELOCK_MOD))) {
     if (OB_NOT_RUNNING == ret ||
@@ -297,7 +298,7 @@ int ObTableLockDeadlockDetectorHelper::register_trans_lock_part(
     } else if (OB_FAIL(on_detect_op.set(tx_lock_part_id,
                                         ls_id))) {
       LOG_WARN("set deadlock detect op failed", K(ret), K(tx_lock_part_id));
-    } else if (OB_FAIL(MTL(ObDeadLockDetectorMgr*) ->register_key(tx_lock_part_id,
+    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr() ->register_key(tx_lock_part_id,
                                                                   on_detect_op,
                                                                   on_collect_callback,
                                                                   priority))) {
@@ -317,7 +318,7 @@ int ObTableLockDeadlockDetectorHelper::unregister_trans_lock_part(
     if (OB_UNLIKELY(!tx_lock_part_id.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id));
-    } else if (OB_FAIL(MTL(ObDeadLockDetectorMgr*)->unregister_key(tx_lock_part_id))) {
+    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key(tx_lock_part_id))) {
       LOG_WARN("unregister from deadlock detector failed", K(tx_lock_part_id));
     }
     LOG_DEBUG("ObTableLockDeadlockDetectorHelper::unregister_trans_lock_part", K(ret), K(tx_lock_part_id));
@@ -338,7 +339,7 @@ int ObTableLockDeadlockDetectorHelper::add_parent(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(tx_lock_part_id), K(parent_addr),
               K(parent_trans_id));
-    } else if (OB_FAIL(MTL(ObDeadLockDetectorMgr*)->add_parent(tx_lock_part_id,
+    } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->add_parent(tx_lock_part_id,
                                                               parent_addr,
                                                               parent_trans_id))) {
       LOG_WARN("add lock parent trans failed", K(ret), K(tx_lock_part_id),
@@ -372,7 +373,7 @@ int ObTableLockDeadlockDetectorHelper::block(
       if (!fn.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("block callback invalid", K(ret), K(tx_lock_part_id), K(ls_id), K(lock_op));
-      } else if (OB_FAIL(MTL(ObDeadLockDetectorMgr*)->block(tx_lock_part_id,
+      } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(tx_lock_part_id,
                                                             fn))) {
         LOG_WARN("add block failed", K(ret), K(tx_lock_part_id), K(lock_op));
       } else {

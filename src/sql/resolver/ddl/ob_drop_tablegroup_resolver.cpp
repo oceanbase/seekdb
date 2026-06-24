@@ -67,7 +67,7 @@ int ObDropTablegroupResolver::resolve(const ParseNode &parse_tree)
           tablegroup_name.assign_ptr((char *)(node->children_[TG_NAME]->str_value_),
                                     static_cast<int32_t>(node->children_[TG_NAME]->str_len_));
           drop_tablegroup_stmt->set_tablegroup_name(tablegroup_name);
-          drop_tablegroup_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+          
         } else {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("node type is not T_IDENT", K(ret));

@@ -144,8 +144,7 @@ int ObUnitInfo::assign(const ObUnitInfo &other)
 }
 
 ObTenantServers::ObTenantServers()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      servers_(),
+    : servers_(),
       renew_time_(0)
 {
   servers_.set_label("TntSrvArr");
@@ -153,7 +152,6 @@ ObTenantServers::ObTenantServers()
 
 ObTenantServers::~ObTenantServers()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   renew_time_ = 0;
   servers_.destroy();
 }
@@ -165,7 +163,6 @@ int ObTenantServers::assign(const ObTenantServers &other)
     if (OB_FAIL(servers_.assign(other.servers_))) {
       LOG_WARN("assign failed", KR(ret), "servers", other.servers_);
     } else {
-      tenant_id_ = other.tenant_id_;
       renew_time_ = other.renew_time_;
     }
   }
@@ -173,26 +170,22 @@ int ObTenantServers::assign(const ObTenantServers &other)
 }
 
 int ObTenantServers::init_or_insert_server(
-    const uint64_t tenant_id,
     const common::ObAddr &server,
     const common::ObAddr &migrate_server,
     const int64_t renew_time)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) 
+  if (OB_UNLIKELY(!true 
       || !server.is_valid()
       || renew_time <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input parameter", KR(ret), 
-        K(tenant_id), K(server), K(renew_time));
+        K(server), K(renew_time));
   } else if (!is_valid()) {
-    tenant_id_ = tenant_id;
     renew_time_ = renew_time;
-  } else if (tenant_id != tenant_id_) {
+  } else if (false) {
     ret = OB_CONFLICT_VALUE;
-    LOG_WARN("already initialized; tenant mismatch", KR(ret),
-        "tenant to be inserted", tenant_id,
-        "tenant already inserted", tenant_id_);
+    LOG_WARN("already initialized; tenant mismatch", KR(ret));
   }
 
   // insert_server will ensure that 
@@ -209,14 +202,13 @@ int ObTenantServers::init_or_insert_server(
 
 void ObTenantServers::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   renew_time_ = 0;
   servers_.reset();
 }
 
 bool ObTenantServers::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_)
+  return true
          && !servers_.empty()
          && renew_time_ > 0;
 }

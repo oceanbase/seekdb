@@ -36,18 +36,16 @@ namespace observer
 
 class ApplyOnTabletOp;
 class ApplyOnLSOp;
-class ApplyOnTenantOp;
 
 class ObAllVirtualMdsNodeStat : public common::ObVirtualTableScannerIterator
 {
   friend class ApplyOnTabletOp;
   friend class ApplyOnLSOp;
-  friend class ApplyOnTenantOp;
   static constexpr int64_t IP_BUFFER_SIZE = 65;  // >= MAX_IP_ADDR_LENGTH (e.g. INET6 on Windows)
 public:
   explicit ObAllVirtualMdsNodeStat(omt::ObMultiTenant *omt) : omt_(omt) {}
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  TO_STRING_KV(K_(tenant_ranges), K_(tablet_ranges), K_(tablet_points))
+  TO_STRING_KV(K_(tablet_ranges), K_(tablet_points))
 private:
   int convert_node_info_to_row_(const storage::mds::MdsNodeInfoForVirtualTable &node_info,
                                 char *buffer,
@@ -72,7 +70,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualMdsNodeStat);
   omt::ObMultiTenant *omt_;
   char ip_buffer_[IP_BUFFER_SIZE];
-  ObArray<ObTuple<uint64_t, uint64_t>> tenant_ranges_;
   ObArray<ObTuple<common::ObTabletID, common::ObTabletID>> tablet_ranges_;
   ObArray<common::ObTabletID> tablet_points_;
 };

@@ -751,7 +751,7 @@ int ObHashSetDumpTest::SetPlan::setup_plan(ObOperator *set_op)
   // setup context
   ObString tenant_name("test");
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(session_.test_init(0, 0, 0, NULL))) {
+  } else if (OB_FAIL(session_.test_init(0, 0, NULL))) {
   } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var())) {
   } else if (OB_FAIL(session_.load_default_sys_variable(false, true))) {
   } else if (OB_FAIL(session_.init_tenant(tenant_name, OB_SYS_TENANT_ID))) {

@@ -35,40 +35,37 @@ int ObSchemaGetterGuard::get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  uint64_t tenant_id = obj_mysql_priv_key.tenant_id_;
-  if (OB_FAIL(check_tenant_schema_guard(tenant_id))) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K_(tenant_id));
-  } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret), K(tenant_id));
+  
+  if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_priv_set(obj_mysql_priv_key, priv_set))) {
     LOG_WARN("fail to get object priv set", KR(ret), K(obj_mysql_priv_key));
   }
   return ret;
 }
 
-int ObSchemaGetterGuard::get_obj_mysql_priv_with_user_id(const uint64_t tenant_id,
-                                                         const uint64_t user_id,
+int ObSchemaGetterGuard::get_obj_mysql_priv_with_user_id(const uint64_t user_id,
                                                          ObIArray<const ObObjMysqlPriv *> &obj_mysql_privs)
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   obj_mysql_privs.reset();
-  if (OB_INVALID_ID == tenant_id
-             || OB_INVALID_ID == user_id) {
+  if (OB_INVALID_ID == user_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(tenant_id), K(user_id));
-  } else if (OB_FAIL(check_tenant_schema_guard(tenant_id))) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K_(tenant_id));
-  } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_privs_in_user(tenant_id, user_id, obj_mysql_privs))) {
-    LOG_WARN("get obj mysql priv with user_id failed", KR(ret), K(tenant_id), K(user_id));
+    LOG_WARN("invalid arguments", K(user_id));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
+  } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_privs_in_user( user_id, obj_mysql_privs))) {
+    LOG_WARN("get obj mysql priv with user_id failed", KR(ret), K(user_id));
   }
   return ret;
 }
 
-int ObSchemaGetterGuard::get_obj_mysql_priv_with_obj_name(const uint64_t tenant_id,
-                                                          const ObString &obj_name,
+int ObSchemaGetterGuard::get_obj_mysql_priv_with_obj_name(const ObString &obj_name,
                                                           const uint64_t obj_type,
                                                           ObIArray<const ObObjMysqlPriv *> &obj_privs,
                                                           bool reset_flag)
@@ -78,18 +75,17 @@ int ObSchemaGetterGuard::get_obj_mysql_priv_with_obj_name(const uint64_t tenant_
   if (reset_flag) {
     obj_privs.reset();
   }
-  if (OB_INVALID_ID == tenant_id
-          || obj_name.empty()
+  if (obj_name.empty()
           || OB_INVALID_ID == obj_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(tenant_id), K(obj_name), K(obj_type));
-  } else if (OB_FAIL(check_tenant_schema_guard(tenant_id))) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K_(tenant_id));
-  } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_privs_in_obj(tenant_id, obj_name, obj_type,
+    LOG_WARN("invalid arguments", K(obj_name), K(obj_type));
+  } else if (OB_FAIL(check_tenant_schema_guard())) {
+    LOG_WARN("fail to check tenant schema guard", KR(ret));
+  } else if (OB_FAIL(check_lazy_guard( mgr))) {
+    LOG_WARN("fail to check lazy guard", KR(ret));
+  } else if (OB_FAIL(mgr->priv_mgr_.get_obj_mysql_privs_in_obj( obj_name, obj_type,
                   obj_privs, reset_flag))) {
-    LOG_WARN("get obj priv with grantee_id failed", KR(ret), K(tenant_id), K(obj_name), K(obj_type));
+    LOG_WARN("get obj priv with grantee_id failed", KR(ret), K(obj_name), K(obj_type));
   }
   return ret;
 }

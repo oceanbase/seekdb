@@ -38,7 +38,6 @@ class ObCreateTablegroupHelper : public ObDDLHelper
 public:
  ObCreateTablegroupHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObCreateTablegroupArg &arg,
     obcall::ObCreateTableGroupRes &res,
     ObDDLSQLTransaction *external_trans = nullptr);

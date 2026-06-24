@@ -46,7 +46,7 @@ ObDictEncodingHashTable::ObDictEncodingHashTable()
     bucket_num_(0), node_num_(0), distinct_node_cnt_(0),
     buckets_(NULL), nodes_(NULL),
     row_refs_(nullptr), null_node_(nullptr),
-    alloc_(blocksstable::OB_ENCODING_LABEL_HASH_TABLE, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    alloc_(blocksstable::OB_ENCODING_LABEL_HASH_TABLE, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -252,7 +252,7 @@ ObDictEncodingHashTableFactory::ObDictEncodingHashTableFactory()
   : allocator_(OB_MALLOC_NORMAL_BLOCK_SIZE, ObMalloc(blocksstable::OB_ENCODING_LABEL_HT_FACTORY)),
     hashtables_()
 {
-  lib::ObMemAttr attr(MTL_ID(), blocksstable::OB_ENCODING_LABEL_HT_FACTORY);
+  lib::ObMemAttr attr(blocksstable::OB_ENCODING_LABEL_HT_FACTORY);
   allocator_.set_attr(attr);
   hashtables_.set_attr(attr);
 }

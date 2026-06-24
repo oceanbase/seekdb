@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_checkpoint.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -50,7 +51,7 @@ int ObAllVirtualCheckpointInfo::get_next_ls_(ObLS *&ls)
   int ret = OB_SUCCESS;
 
   if (ls_iter_guard_.get_ptr() == nullptr
-      && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+      && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", K(ret));
   } else if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
     if (OB_ITER_END != ret) {
@@ -123,9 +124,9 @@ int ObAllVirtualCheckpointInfo::get_next_(ObCheckpointVTInfo &checkpoint)
   return ret;
 }
 
-bool ObAllVirtualCheckpointInfo::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualCheckpointInfo::is_need_process()
 {
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
+  if (true || true) {
     return true;
   }
   return false;

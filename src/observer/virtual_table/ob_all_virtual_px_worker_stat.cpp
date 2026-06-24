@@ -50,7 +50,7 @@ int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObPxWorkerStatList::instance().list_to_array(stat_array_, effective_tenant_id_);
+      ObPxWorkerStatList::instance().list_to_array(stat_array_);
     }
     if (index_ >= stat_array_.size()) {
       ret = OB_ITER_END;

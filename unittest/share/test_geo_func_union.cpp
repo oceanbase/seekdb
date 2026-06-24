@@ -2081,7 +2081,7 @@ TEST_F(TestGeoFuncUnion, gc_union)
   ASSERT_EQ(OB_SUCCESS, mock_get_tenant_srs_item(allocator, 4326, srs));
   lib::MemoryContext mem_context;
   ASSERT_EQ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context, 
-      lib::ContextParam().set_mem_attr(MTL_ID(), "GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
+      lib::ContextParam().set_mem_attr("GIS_UT", ObCtxIds::DEFAULT_CTX_ID)), OB_SUCCESS);
   int ret = ObGeoFuncUtils::ob_geo_gc_union<ObCartesianMultipoint, ObCartesianMultilinestring, ObCartesianMultipolygon>(mem_context, *srs, multi_point_tree, multi_line_tree, multi_poly_tree);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(true, is_geo_equal(mp_bg_res, *multi_point_tree));

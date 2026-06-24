@@ -40,7 +40,6 @@ ObMySQLConnection::ObMySQLConnection() :
     last_trace_id_(0),
     mode_(OCEANBASE_MODE),
     db_name_(NULL),
-    tenant_id_(OB_INVALID_ID),
     read_consistency_(-1)
 {
   memset(&mysql_, 0, sizeof(MYSQL));
@@ -95,7 +94,7 @@ void ObMySQLConnection::reset()
 
 
 int ObMySQLConnection::connect(const char *user, const char *pass, const char *db, const bool use_ssl,
-                               bool read_write_no_timeout /*false*/, int64_t sql_req_level /*0*/)
+                               bool read_write_no_timeout /*false*/)
 {
   int ret = OB_SUCCESS;
   const static int MAX_IP_BUFFER_LEN = common::OB_IP_STR_BUFF;
@@ -126,20 +125,6 @@ int ObMySQLConnection::connect(const char *user, const char *pass, const char *d
       mysql_options(&mysql_, MYSQL_OPT_READ_TIMEOUT, &timeout_);
       mysql_options(&mysql_, MYSQL_OPT_WRITE_TIMEOUT, &timeout_);
     }
-    switch (sql_req_level)
-    {
-    case 1:
-       mysql_options4(&mysql_, MYSQL_OPT_CONNECT_ATTR_ADD, OB_SQL_REQUEST_LEVEL, OB_SQL_REQUEST_LEVEL1);
-      break;
-    case 2:
-       mysql_options4(&mysql_, MYSQL_OPT_CONNECT_ATTR_ADD, OB_SQL_REQUEST_LEVEL, OB_SQL_REQUEST_LEVEL2);
-      break;
-    case 3:
-       mysql_options4(&mysql_, MYSQL_OPT_CONNECT_ATTR_ADD, OB_SQL_REQUEST_LEVEL, OB_SQL_REQUEST_LEVEL3);
-      break;
-    default:
-       mysql_options4(&mysql_, MYSQL_OPT_CONNECT_ATTR_ADD, OB_SQL_REQUEST_LEVEL, OB_SQL_REQUEST_LEVEL0);
-    }
     MYSQL *mysql = NULL;
     int32_t port = root_->get_server().get_port();
     mysql = mysql_real_connect(&mysql_, host, user, pass, db, port, NULL, 0);
@@ -163,7 +148,7 @@ int ObMySQLConnection::connect(const char *user, const char *pass, const char *d
       closed_ = false;
       set_usable(true);
       db_name_ = db;
-      tenant_id_ = OB_SYS_TENANT_ID;
+      
       read_consistency_ = -1;
     }
   }
@@ -177,15 +162,13 @@ void ObMySQLConnection::close()
     closed_ = true;
     sessid_ = 0;
     memset(&mysql_, 0, sizeof(MYSQL));
-    set_session_init_status(false);
   }
 }
 
-int ObMySQLConnection::start_transaction(const uint64_t &tenant_id, bool with_snap_shot/* = false*/)
+int ObMySQLConnection::start_transaction(bool with_snap_shot/* = false*/)
 {
   int ret = OB_SUCCESS;
   // FIXME:(yanmu.ztl) not supported yet
-  UNUSED(tenant_id);
   if (OB_UNLIKELY(closed_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("connection not established. call connect first", K(ret));
@@ -288,7 +271,7 @@ int ObMySQLConnection::set_timeout_variable(const int64_t query_timeout, const i
       if (OB_UNLIKELY(w_len <= 0) || OB_UNLIKELY(w_len >= OB_MAX_SQL_LENGTH)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fill sql string error", K(ret));
-      } else if (OB_FAIL(create_statement(stmt, OB_SYS_TENANT_ID, sql))) {
+      } else if (OB_FAIL(create_statement(stmt, sql))) {
         LOG_WARN("create statement failed", K(ret));
       } else if (OB_FAIL(stmt.execute_update(affect_rows))) {
         LOG_WARN("execute sql failed", K(get_server()), K(sql), K(ret));
@@ -308,54 +291,25 @@ int ObMySQLConnection::init_oceanbase_connection()
   if (OCEANBASE_MODE == mode_) {
     ObMySQLStatement stmt;
     const char *sql = "set @@session.autocommit = ON;";
-    if (OB_SYS_TENANT_ID != tenant_id_) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("tenant should be sys", K(ret), K_(tenant_id));
-    } else if (OB_FAIL(rollback())) {
+    if (OB_FAIL(rollback())) {
       LOG_WARN("fail to rollback", K(ret));
     } else if (OB_FAIL(stmt.init(*this, sql))) {
       LOG_WARN("create statement failed", K(ret));
     } else if (OB_FAIL(stmt.execute_update())) {
-      LOG_WARN("execute sql failed", K(sql), K(ret), K_(tenant_id));
+      LOG_WARN("execute sql failed", K(sql), K(ret));
     }
   }
   return ret;
 }
 
-int ObMySQLConnection::switch_tenant(const uint64_t tenant_id)
+int ObMySQLConnection::switch_tenant()
 {
   int ret = OB_SUCCESS;
-  if (tenant_id_ != tenant_id && OB_INVALID_TENANT_ID != tenant_id) {
-    ObMySQLStatement stmt;
-    ObSqlString sql;
-    if (OCEANBASE_MODE == mode_) {
-      if (OB_FAIL(sql.append_fmt("ALTER SYSTEM CHANGE TENANT TENANT_ID = %lu", tenant_id))) {
-        LOG_WARN("fail to assign sql", K(ret), K(tenant_id), K(tenant_id_));
-      }
-    } else {
-      if (OB_SYS_TENANT_ID == tenant_id) {
-        if (OB_FAIL(sql.append_fmt("USE %s", db_name_))) {
-          LOG_WARN("fail to assign sql", K(ret), K(tenant_id), KCSTRING(db_name_), K(tenant_id_));
-        }
-      } else {
-        if (OB_FAIL(sql.append_fmt("USE %s_%lu", db_name_, tenant_id))) {
-          LOG_WARN("fail to assign sql", K(ret), K(tenant_id), KCSTRING(db_name_), K(tenant_id_));
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(stmt.init(*this, sql.string()))) {
-      LOG_WARN("create statement failed", K(ret));
-    } else if (OB_FAIL(stmt.execute_update())) {
-      LOG_WARN("execute sql failed", K(sql), K(ret), K(tenant_id), K(tenant_id_));
-    } else {
-      tenant_id_ = tenant_id;
-    }
-  }
+  
   return ret;
 }
 
-int ObMySQLConnection::execute_write(const uint64_t tenant_id, const ObString &sql,
+int ObMySQLConnection::execute_write(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql, const common::ObAddr *sql_exec_addr)
 {
   UNUSED(is_user_sql);
@@ -366,7 +320,7 @@ int ObMySQLConnection::execute_write(const uint64_t tenant_id, const ObString &s
     LOG_WARN("connection not established. call connect first", K(ret));
   } else {
     ObMySQLStatement stmt;
-    if (OB_FAIL(create_statement(stmt, tenant_id, sql))) {
+    if (OB_FAIL(create_statement(stmt, sql))) {
       LOG_WARN("create statement failed", K(sql), K(ret));
     } else if (OB_FAIL(stmt.execute_update(affected_rows))) {
       LOG_WARN("statement execute update failed", K(sql), K(ret));
@@ -375,8 +329,7 @@ int ObMySQLConnection::execute_write(const uint64_t tenant_id, const ObString &s
   return ret;
 }
 
-int ObMySQLConnection::execute_proc(const uint64_t tenant_id,
-                                    ObIAllocator &allocator,
+int ObMySQLConnection::execute_proc(ObIAllocator &allocator,
                                     ParamStore &params,
                                     ObString &sql,
                                     const share::schema::ObRoutineInfo &routine_info,
@@ -411,15 +364,15 @@ int ObMySQLConnection::execute_proc(const uint64_t tenant_id,
   return ret;
 }
 
-int ObMySQLConnection::execute_read(const int64_t cluster_id, const uint64_t tenant_id,
+int ObMySQLConnection::execute_read(const int64_t cluster_id,
     const ObString &sql, ObISQLClient::ReadResult &res, bool is_user_sql,
     const common::ObAddr *sql_exec_addr)
 {
-  UNUSEDx(cluster_id, tenant_id, sql, res, is_user_sql, sql_exec_addr);
+  UNUSEDx(cluster_id, sql, res, is_user_sql, sql_exec_addr);
   return OB_NOT_SUPPORTED;
 }
 
-int ObMySQLConnection::execute_read(const uint64_t tenant_id, const ObString &sql,
+int ObMySQLConnection::execute_read(const ObString &sql,
     ObISQLClient::ReadResult &res, bool is_user_sql, const common::ObAddr *sql_exec_addr)
 {
   UNUSED(is_user_sql);
@@ -431,7 +384,7 @@ int ObMySQLConnection::execute_read(const uint64_t tenant_id, const ObString &sq
     LOG_WARN("connection not established. call connect first", K(ret));
   } else if (OB_FAIL(res.create_handler(read_ctx))) {
     LOG_ERROR("create result handler failed", K(ret));
-  } else if (OB_FAIL(create_statement(read_ctx->stmt_, tenant_id, sql))) {
+  } else if (OB_FAIL(create_statement(read_ctx->stmt_, sql))) {
     LOG_WARN("create statement failed", K(sql), K(ret));
   } else if (OB_ISNULL(read_ctx->result_ = read_ctx->stmt_.execute_query(res.is_enable_use_result()))) {
     ret = get_last_error();
@@ -459,7 +412,7 @@ int ObMySQLConnection::get_session_variable(const ObString &name, int64_t &val)
     ObMySQLResult *result = NULL;
     if (OB_FAIL(sql.append_fmt("select %.*s from dual", name.length(), name.ptr()))) {
       LOG_WARN("assign sql failed", K(ret));
-    } else if (OB_FAIL(create_statement(read_ctx.stmt_, OB_SYS_TENANT_ID, sql.string()))) {
+    } else if (OB_FAIL(create_statement(read_ctx.stmt_, sql.string()))) {
       LOG_WARN("create statement failed", K(sql), K(ret));
     } else if (OB_ISNULL(read_ctx.result_ = read_ctx.stmt_.execute_query())) {
       ret = get_last_error();
@@ -513,14 +466,8 @@ int ObMySQLConnection::set_session_variable(const ObString &name, const ObString
   } else {
     ObMySQLStatement stmt;
     ObSqlString sql;
-    if (name.compare("_set_reverse_dblink_infos")) { // const char *ObReverseLink::SESSION_VARIABLE = "_set_reverse_dblink_infos";
-      if (OB_FAIL(sql.append_fmt("/*$BEFPARSEdblink_req_level=1*/ set \"%.*s\" = '%.*s'", name.length(), name.ptr(), val.length(), val.ptr()))) {
-        LOG_WARN("assign sql failed", K(ret), K(name), K(val), K(sql));
-      }
-    } else {
-      if (OB_FAIL(sql.append_fmt("set \"%.*s\" = '%.*s'", name.length(), name.ptr(), val.length(), val.ptr()))) {
-        LOG_WARN("assign sql failed", K(ret), K(name), K(val), K(sql));
-      }
+    if (OB_FAIL(sql.append_fmt("set \"%.*s\" = '%.*s'", name.length(), name.ptr(), val.length(), val.ptr()))) {
+      LOG_WARN("assign sql failed", K(ret), K(name), K(val), K(sql));
     }
     if (OB_FAIL(ret)) {
       // do nothing
@@ -573,7 +520,7 @@ int ObMySQLConnection::prepare_proc_stmt(const ObString &sql, int64_t param_coun
   } else if (OB_UNLIKELY(closed_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("connection not established. call connect first", K(ret));
-  } else if (OB_FAIL(create_statement(proc_stmt_, OB_INVALID_TENANT_ID, sql, param_count))) {
+  } else if (OB_FAIL(create_statement(proc_stmt_, sql, param_count))) {
     LOG_WARN("create statement failed", K(ret), K(ObString(sql)));
   }
   return ret;

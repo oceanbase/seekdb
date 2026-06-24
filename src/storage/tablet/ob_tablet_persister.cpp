@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_persister.h"
 #include "src/storage/ls/ob_ls.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
@@ -257,7 +258,7 @@ int64_t ObMultiTimeStats::to_string(char *buf, const int64_t buf_len) const
 
 ObTabletPersister::ObTabletPersister(
     const ObTabletPersisterParam &param, const int64_t mem_ctx_id)
-  : allocator_("TblPersist", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), mem_ctx_id),
+  : allocator_("TblPersist", OB_MALLOC_NORMAL_BLOCK_SIZE, mem_ctx_id),
     multi_stats_(&allocator_), param_(param), cur_macro_seq_(param.start_macro_seq_)
 {
 }
@@ -328,7 +329,7 @@ int ObTabletPersister::inner_persist_and_transform_shared_tablet(
   ObTabletSpaceUsage space_usage;
   int64_t total_tablet_meta_size = 0;
   ObTabletMacroInfo tablet_macro_info;
-  total_write_ctxs.set_attr(lib::ObMemAttr(MTL_ID(), "TblMetaWriCtx", ctx_id));
+  total_write_ctxs.set_attr(lib::ObMemAttr("TblMetaWriCtx", ctx_id));
   ObSArray<MacroBlockId> shared_meta_id_arr;
 
   if (OB_UNLIKELY(!old_tablet.is_valid())) {
@@ -351,6 +352,7 @@ int ObTabletPersister::inner_persist_and_transform_shared_tablet(
   }
   return ret;
 }
+
 
 // !!!attention shouldn't be called by empty shell
 /*static*/ int ObTabletPersister::persist_and_transform_only_tablet_meta(
@@ -529,7 +531,7 @@ int ObTabletPersister::convert_tablet_to_disk_arg(
   const int64_t ctx_id = share::is_reserve_mode()
                        ? ObCtxIds::MERGE_RESERVE_CTX_ID
                        : ObCtxIds::DEFAULT_CTX_ID;
-  write_infos.set_attr(lib::ObMemAttr(MTL_ID(), "WriteInfos", ctx_id));
+  write_infos.set_attr(lib::ObMemAttr("WriteInfos", ctx_id));
   // fetch member wrapper
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
 
@@ -649,7 +651,8 @@ int ObTabletPersister::calc_tablet_space_usage_(
 {
   int ret = OB_SUCCESS;
   int64_t clustered_sstable_size = 0;
-  int64_t backup_block_size = 0; // for sstable has backup_block and local_block;
+  // Backup removed, backup-mode macro blocks cannot exist
+  int64_t backup_block_size = 0;
   int64_t pure_backup_sstable_size = 0; // for sstable has no local_block
   for (ObBlockInfoSet::MapIterator iter = block_info_set.clustered_data_block_info_map_.begin();
       iter != block_info_set.clustered_data_block_info_map_.end();
@@ -742,7 +745,7 @@ int ObTabletPersister::acquire_tablet(
     ObTabletHandle &new_handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(t3m->acquire_tablet_from_pool(type, WashTabletPriority::WTP_HIGH, key, new_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
     } else if (ObTabletPoolType::TP_LARGE == type
@@ -769,7 +772,7 @@ int ObTabletPersister::persist_aggregated_meta(
   ObMacroInfoIterator macro_iter;
   bool inc_success = false;
   ObTablet *new_tablet = new_handle.get_obj();
-  ObTenantStorageMetaService *meta_service = MTL(ObTenantStorageMetaService*);
+  ObTenantStorageMetaService *meta_service = share::g_mp->tenant_storage_meta_service();
   ObSharedObjectWriteInfo write_info;
   ObSharedObjectWriteHandle handle;
   ObSharedObjectsWriteCtx write_ctx;
@@ -912,7 +915,7 @@ int ObTabletPersister::transform(const ObTabletTransformArg &arg, char *buf, con
     // buf related
     int64_t start_pos = sizeof(ObTablet);
     int64_t remain = len - start_pos;
-    common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "Transform"));
+    common::ObArenaAllocator allocator(common::ObMemAttr("Transform"));
 
     LOG_DEBUG("TINY TABLET: tablet", KP(buf), K(start_pos), K(remain));
     // rowkey read info related
@@ -1091,7 +1094,7 @@ int ObTabletPersister::batch_write_sstable_info(
 {
   int ret = OB_SUCCESS;
   ObSharedObjectBatchHandle handle;
-  ObTenantStorageMetaService *meta_service = MTL(ObTenantStorageMetaService*);
+  ObTenantStorageMetaService *meta_service = share::g_mp->tenant_storage_meta_service();
   blocksstable::ObStorageObjectOpt curr_opt;
   build_async_write_start_opt_(curr_opt);
   if (OB_FAIL(meta_service->get_shared_object_reader_writer().async_batch_write(write_infos, handle, curr_opt/*OUTPUT*/))) {
@@ -1185,9 +1188,9 @@ int ObTabletPersister::fetch_and_persist_large_co_sstable(
     const int64_t ctx_id = share::is_reserve_mode()
                         ? ObCtxIds::MERGE_RESERVE_CTX_ID
                         : ObCtxIds::DEFAULT_CTX_ID;
-    cg_addrs.set_attr(lib::ObMemAttr(MTL_ID(), "PerstCGAddrs", ctx_id));
-    cg_write_ctxs.set_attr(lib::ObMemAttr(MTL_ID(), "CGWriteCtxs", ctx_id));
-    cg_write_infos.set_attr(lib::ObMemAttr(MTL_ID(), "CGWriteInfos", ctx_id));
+    cg_addrs.set_attr(lib::ObMemAttr("PerstCGAddrs", ctx_id));
+    cg_write_ctxs.set_attr(lib::ObMemAttr("CGWriteCtxs", ctx_id));
+    cg_write_infos.set_attr(lib::ObMemAttr("CGWriteInfos", ctx_id));
 
     if (OB_FAIL(co_sstable->get_meta(co_meta_handle))) {
       LOG_WARN("failed to get co meta handle", K(ret), KPC(co_sstable));
@@ -1369,9 +1372,9 @@ int ObTabletPersister::ObSSTablePersistCtx::init(const int64_t ctx_id)
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else {
-    tables_.set_attr(lib::ObMemAttr(MTL_ID(), "PerstTables", ctx_id));
-    write_infos_.set_attr(lib::ObMemAttr(MTL_ID(), "PerstWriteInfos", ctx_id));
-    if (OB_FAIL(shared_macro_map_.create(ObTablet::SHARED_MACRO_BUCKET_CNT, "ObBlockInfoMap", "SharedBlkNode", MTL_ID()))) {
+    tables_.set_attr(lib::ObMemAttr("PerstTables", ctx_id));
+    write_infos_.set_attr(lib::ObMemAttr("PerstWriteInfos", ctx_id));
+    if (OB_FAIL(shared_macro_map_.create(ObTablet::SHARED_MACRO_BUCKET_CNT, "ObBlockInfoMap", "SharedBlkNode"))) {
       LOG_WARN("fail to create shared macro map", K(ret));
     }
     is_inited_ = true;
@@ -1439,9 +1442,9 @@ int ObTabletPersister::fetch_and_persist_sstable(
 #endif
   common::ObSEArray<ObSharedObjectsWriteCtx, 8> write_ctxs;
   common::ObSEArray<ObMetaDiskAddr, 8> addrs;
-  addrs.set_attr(lib::ObMemAttr(MTL_ID(), "PerstAddrs", ctx_id));
-  write_ctxs.set_attr(lib::ObMemAttr(MTL_ID(), "PerstWriteCtxs", ctx_id));
-  ObArenaAllocator tmp_allocator("PersistSSTable", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ctx_id);
+  addrs.set_attr(lib::ObMemAttr("PerstAddrs", ctx_id));
+  write_ctxs.set_attr(lib::ObMemAttr("PerstWriteCtxs", ctx_id));
+  ObArenaAllocator tmp_allocator("PersistSSTable", OB_MALLOC_NORMAL_BLOCK_SIZE, ctx_id);
   ObSSTablePersistCtx sstable_persist_ctx(block_info_set, sstable_meta_write_ctxs);
   ObITable *table = nullptr;
   ObMultiTimeStats::TimeStats *time_stats = nullptr;
@@ -1628,7 +1631,7 @@ int ObTabletPersister::write_and_fill_args(
     ObBlockInfoSet::TabletMacroSet &meta_block_id_set)
 {
   int ret = OB_SUCCESS;
-  ObTenantStorageMetaService *meta_service = MTL(ObTenantStorageMetaService*);
+  ObTenantStorageMetaService *meta_service = share::g_mp->tenant_storage_meta_service();
   ObSharedObjectReaderWriter &reader_writer = meta_service->get_shared_object_reader_writer();
   ObSharedObjectBatchHandle handle;
   ObMetaDiskAddr* addr[] = { // NOTE: The order must be the same as the batch async write.
@@ -1647,7 +1650,7 @@ int ObTabletPersister::write_and_fill_args(
   const int64_t ctx_id = share::is_reserve_mode()
                        ? ObCtxIds::MERGE_RESERVE_CTX_ID
                        : ObCtxIds::DEFAULT_CTX_ID;
-  write_ctxs.set_attr(lib::ObMemAttr(MTL_ID(), "WriteCtxs", ctx_id));
+  write_ctxs.set_attr(lib::ObMemAttr("WriteCtxs", ctx_id));
 
   blocksstable::ObStorageObjectOpt curr_opt;
   if (OB_UNLIKELY(total_addr_cnt != write_infos.count() + none_addr_cnt)) {
@@ -1713,9 +1716,9 @@ int ObTabletPersister::link_write_medium_info_list(
     ObBlockInfoSet::TabletMacroSet &meta_block_id_set)
 {
   int ret = OB_SUCCESS;
-  ObTenantStorageMetaService *meta_service = MTL(ObTenantStorageMetaService*);
+  ObTenantStorageMetaService *meta_service = share::g_mp->tenant_storage_meta_service();
   ObSharedObjectReaderWriter &reader_writer = meta_service->get_shared_object_reader_writer();
-  common::ObArenaAllocator arena_allocator(common::ObMemAttr(MTL_ID(), "serializer"));
+  common::ObArenaAllocator arena_allocator(common::ObMemAttr("serializer"));
   ObSharedObjectWriteInfo write_info;
   ObSharedObjectLinkHandle write_handle;
   int64_t tmp_meta_size = 0;
@@ -1821,7 +1824,7 @@ int ObTabletPersister::load_table_store(
   int ret = OB_SUCCESS;
   void *ptr = nullptr;
   ObTabletTableStore *tmp_store = nullptr;
-  ObArenaAllocator io_allocator(common::ObMemAttr(MTL_ID(), "PersisterTmpIO"));
+  ObArenaAllocator io_allocator(common::ObMemAttr("PersisterTmpIO"));
   if (OB_UNLIKELY(!addr.is_block())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("address type isn't disk", K(ret), K(addr));

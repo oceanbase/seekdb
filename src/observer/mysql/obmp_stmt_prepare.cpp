@@ -173,7 +173,6 @@ int ObMPStmtPrepare::process()
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
-    session.set_proxy_version(get_proxy_version());
     int64_t tenant_version = 0;
     int64_t sys_version = 0;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
@@ -187,14 +186,14 @@ int ObMPStmtPrepare::process()
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
-               K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
+               K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K_(sql), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                session.get_effective_tenant_id(), tenant_version))) {
+                tenant_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                OB_SYS_TENANT_ID, sys_version))) {
+                sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (pkt.exist_trace_info()
                && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
@@ -208,7 +207,7 @@ int ObMPStmtPrepare::process()
       LOG_WARN("packet too large than allowd for the session", K_(sql), K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret), K(MTL_ID()));
+      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(pkt.get_extra_info(), session,
                             conn->proxy_cap_flags_.is_full_link_trace_support(),
                             enable_flt))) {
@@ -291,8 +290,7 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
     LOG_WARN("init process var faield.", K(ret), K(multi_stmt_item));
   } else {
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
-    if (OB_FAIL(check_and_refresh_schema(session.get_login_tenant_id(),
-                                         session.get_effective_tenant_id()))) {
+    if (OB_FAIL(check_and_refresh_schema())) {
       LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (OB_FAIL(session.update_timezone_info())) {
       LOG_WARN("fail to update time zone info", K(ret));
@@ -308,13 +306,13 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
         retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
-                    session.get_effective_tenant_id(), schema_guard))) {
+                    schema_guard))) {
           LOG_WARN("get schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
-                    session.get_effective_tenant_id(), tenant_version))) {
+                    tenant_version))) {
           LOG_WARN("fail get schema version", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
-                    OB_SYS_TENANT_ID, sys_version))) {
+                    sys_version))) {
           LOG_WARN("fail get sys schema version", K(ret));
         } else {
           ctx_.schema_guard_ = &schema_guard;
@@ -352,31 +350,27 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
   return ret;
 }
 
-int ObMPStmtPrepare::check_and_refresh_schema(uint64_t login_tenant_id,
-                                              uint64_t effective_tenant_id)
+int ObMPStmtPrepare::check_and_refresh_schema()
 {
   int ret = OB_SUCCESS;
   int64_t local_version = 0;
   int64_t last_version = 0;
 
-  if (login_tenant_id != effective_tenant_id) {
-    // do nothing
-    // 
-  } else if (OB_ISNULL(gctx_.schema_service_)) {
+  if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("null schema service", K(ret), K(gctx_));
   } else {
     if (OB_ISNULL(ctx_.session_info_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(effective_tenant_id, local_version))) {
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
       LOG_WARN("fail to get tenant refreshed schema version", K(ret));
     } else if (OB_FAIL(ctx_.session_info_->get_ob_last_schema_version(last_version))) {
       LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
     } else if (local_version >= last_version) {
       // skip
-    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(effective_tenant_id, last_version))) {
-      LOG_WARN("failed to refresh schema", K(ret), K(effective_tenant_id), K(last_version));
+    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
+      LOG_WARN("failed to refresh schema", K(ret), K(1UL), K(last_version));
     }
   }
   return ret;

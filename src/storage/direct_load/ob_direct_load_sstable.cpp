@@ -113,8 +113,8 @@ void ObDirectLoadSSTableMeta::reset()
 ObDirectLoadSSTable::ObDirectLoadSSTable()
   : allocator_("TLD_SSTable"), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  fragments_.set_tenant_id(MTL_ID());
+  
+  
   table_type_ = ObDirectLoadTableType::SSTABLE;
 }
 

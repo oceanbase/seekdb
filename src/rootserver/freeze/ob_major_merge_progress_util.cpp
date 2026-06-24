@@ -94,8 +94,7 @@ int64_t ObMergeProgress::to_string(char *buf, const int64_t buf_len) const
 const int64_t ObTabletLSPairCache::TABLET_LS_MAP_BUCKET_CNT;
 const int64_t ObTabletLSPairCache::RANGE_SIZE;
 ObTabletLSPairCache::ObTabletLSPairCache()
-  : tenant_id_(0),
-    last_refresh_ts_(0)
+  : last_refresh_ts_(0)
 {
 }
 
@@ -112,7 +111,6 @@ void ObTabletLSPairCache::reuse()
 
 void ObTabletLSPairCache::destroy()
 {
-  tenant_id_ = 0;
   last_refresh_ts_ = 0;
   if (map_.created()) {
     map_.destroy();
@@ -131,7 +129,7 @@ int ObTabletLSPairCache::refresh()
     map_.reuse();
   }
   SMART_VAR(ObArray<ObTabletLSPair>, tablet_ls_pair_array) {
-    tablet_ls_pair_array.set_attr(ObMemAttr(tenant_id_, "RSCompPairCache"));
+    tablet_ls_pair_array.set_attr(ObMemAttr("RSCompPairCache"));
     if (OB_FAIL(tablet_ls_pair_array.reserve(RANGE_SIZE))) {
       LOG_WARN("failed to reserve array", KR(ret));
     }
@@ -139,12 +137,11 @@ int ObTabletLSPairCache::refresh()
       tablet_ls_pair_array.reuse();
       if (OB_FAIL(ObTabletToLSTableOperator::range_get_tablet(
                                                 *GCTX.sql_proxy_,
-                                                tenant_id_,
                                                 start_tablet_id,
                                                 RANGE_SIZE,
                                                 tablet_ls_pair_array))) {
         LOG_WARN("fail to get a range of tablet through tablet_to_ls_table_operator",
-                KR(ret), K_(tenant_id), K(start_tablet_id), K(RANGE_SIZE),
+                KR(ret), K(start_tablet_id), K(RANGE_SIZE),
                 K(tablet_ls_pair_array));
       } else if (tablet_ls_pair_array.empty()) {
         break;
@@ -179,7 +176,7 @@ int ObTabletLSPairCache::rebuild_map_by_tablet_cnt()
   int ret = OB_SUCCESS;
   int64_t tablet_cnt = 0;
   if (map_.empty()) {
-    if (OB_FAIL(ObTabletToLSTableOperator::get_tablet_ls_pairs_cnt(*GCTX.sql_proxy_, tenant_id_, tablet_cnt))) {
+    if (OB_FAIL(ObTabletToLSTableOperator::get_tablet_ls_pairs_cnt(*GCTX.sql_proxy_, tablet_cnt))) {
       LOG_WARN("failed to get tablet_ls pair cnt", KR(ret));
     }
 #ifdef ERRSIM
@@ -202,8 +199,8 @@ int ObTabletLSPairCache::rebuild_map_by_tablet_cnt()
       if (map_.created()) {
         map_.destroy();
       }
-      if (OB_FAIL(map_.create(recommend_map_bucked_cnt, "RSCompPairCache", "RSCompPairCache", tenant_id_))) {
-        LOG_WARN("fail to create tablet ls pair map", KR(ret), K_(tenant_id), K(recommend_map_bucked_cnt));
+      if (OB_FAIL(map_.create(recommend_map_bucked_cnt, "RSCompPairCache", "RSCompPairCache"))) {
+        LOG_WARN("fail to create tablet ls pair map", KR(ret), K(recommend_map_bucked_cnt));
       } else {
         LOG_INFO("success to rebuild or create map", KR(ret), K(tablet_cnt), K(map_.bucket_count()));
       }
@@ -231,7 +228,7 @@ int ObTabletLSPairCache::get_tablet_ls_pairs(
     ObIArray<share::ObTabletLSPair> &pairs) const
 {
   int ret = OB_SUCCESS;
-  if (is_sys_tenant(tenant_id_) || is_sys_table(table_id)) {
+  if (true || is_sys_table(table_id)) {
     ObLSID tmp_ls_id(ObLSID::SYS_LS_ID);
     for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_ids.count(); ++idx) {
       if (OB_FAIL(pairs.push_back(ObTabletLSPair(tablet_ids.at(idx), tmp_ls_id)))) {
@@ -261,7 +258,7 @@ int ObTabletLSPairCache::get_tablet_ls_id(
   share::ObLSID &ls_id) const
 {
   int ret = OB_SUCCESS;
-  if (is_sys_tenant(tenant_id_) || is_sys_table(table_id)) {
+  if (true || is_sys_table(table_id)) {
     ls_id = ObLSID(ObLSID::SYS_LS_ID);
   } else if (OB_FAIL(map_.get_refactored(tablet_id, ls_id))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -326,13 +323,12 @@ void ObUncompactInfo::add_tablet(const share::ObTabletReplica &replica)
 }
 
 void ObUncompactInfo::add_tablet(
-    const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   ObTabletReplica fake_replica;
-  fake_replica.fake_for_diagnose(tenant_id, ls_id, tablet_id);
+  fake_replica.fake_for_diagnose( ls_id, tablet_id);
   SpinWLockGuard w_guard(diagnose_rw_lock_);
   if (tablets_.count() < DEBUG_INFO_CNT
       && OB_FAIL(tablets_.push_back(fake_replica))) {

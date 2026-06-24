@@ -157,9 +157,9 @@ public:
 class ObDASMemProfileInfo : public ObSqlMemoryCallback
 {
 public:
-  ObDASMemProfileInfo(const uint64_t tenant_id)
+  ObDASMemProfileInfo()
     : ref_count_(0), row_count_(0),
-      allocator_(tenant_id),
+      allocator_{},
       profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
       sql_mem_processor_(profile_),
       mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK)

@@ -49,7 +49,6 @@ int ObZoneMergeTableOperator::init()
 
 int ObZoneMergeTableOperator::load_zone_merge_info(
     ObISQLClient &sql_client,
-    const uint64_t tenant_id,
     ObZoneMergeInfo &info,
     const bool print_sql)
 {
@@ -58,9 +57,9 @@ int ObZoneMergeTableOperator::load_zone_merge_info(
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
   } else {
-    ret = storage_.get(tenant_id, info);
+    ret = storage_.get(info);
     if (OB_FAIL(ret) && OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("failed to get zone merge info from storage", K(ret), K(tenant_id));
+      LOG_WARN("failed to get zone merge info from storage", K(ret));
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS; // Return empty info
     }
@@ -70,7 +69,6 @@ int ObZoneMergeTableOperator::load_zone_merge_info(
 
 int ObZoneMergeTableOperator::load_zone_merge_infos(
     ObISQLClient &sql_client,
-    const uint64_t tenant_id,
     ObIArray<ObZoneMergeInfo> &infos,
     const bool print_sql)
 {
@@ -79,9 +77,9 @@ int ObZoneMergeTableOperator::load_zone_merge_infos(
     ret = OB_NOT_INIT;
     LOG_WARN("storage not initialized", K(ret));
   } else {
-    ret = storage_.get_all(tenant_id, infos);
+    ret = storage_.get_all(infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get all zone merge infos from storage", K(ret), K(tenant_id));
+      LOG_WARN("failed to get all zone merge infos from storage", K(ret));
     }
   }
   return ret;
@@ -90,7 +88,6 @@ int ObZoneMergeTableOperator::load_zone_merge_infos(
 
 int ObZoneMergeTableOperator::insert_zone_merge_infos(
     ObISQLClient &sql_client,
-    const uint64_t tenant_id,
     const ObIArray<ObZoneMergeInfo> &infos)
 {
   int ret = OB_SUCCESS;
@@ -109,7 +106,6 @@ int ObZoneMergeTableOperator::insert_zone_merge_infos(
 
 int ObZoneMergeTableOperator::update_partial_zone_merge_info(
     ObISQLClient &sql_client,
-    const uint64_t tenant_id,
     const ObZoneMergeInfo &info)
 {
   int ret = OB_SUCCESS;
@@ -120,7 +116,7 @@ int ObZoneMergeTableOperator::update_partial_zone_merge_info(
     // Use SQLite storage - partial update is same as full update for SQLite
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to insert or update zone merge info", K(ret), K(tenant_id), K(info));
+      LOG_WARN("failed to insert or update zone merge info", K(ret), K(info));
     }
   }
   return ret;
@@ -129,7 +125,6 @@ int ObZoneMergeTableOperator::update_partial_zone_merge_info(
 
 int ObZoneMergeTableOperator::update_zone_merge_infos(
     ObISQLClient &sql_client,
-    const uint64_t tenant_id,
     const ObIArray<ObZoneMergeInfo> &infos)
 {
   int ret = OB_SUCCESS;
@@ -148,7 +143,6 @@ int ObZoneMergeTableOperator::update_zone_merge_infos(
 
 int ObZoneMergeTableOperator::get_zone_list(
     ObISQLClient &sql_client,
-    const uint64_t tenant_id,
     ObIArray<ObZone> &zone_list)
 {
   int ret = OB_SUCCESS;
@@ -161,8 +155,8 @@ int ObZoneMergeTableOperator::get_zone_list(
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
   } else {
     ObArray<ObZoneMergeInfo> infos;
-    if (OB_FAIL(storage_.get_all(tenant_id, infos))) {
-      LOG_WARN("failed to get all zone merge infos", K(ret), K(tenant_id));
+    if (OB_FAIL(storage_.get_all(infos))) {
+      LOG_WARN("failed to get all zone merge infos", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
         if (OB_FAIL(zone_list.push_back(GCTX.config_->zone.str()))) {

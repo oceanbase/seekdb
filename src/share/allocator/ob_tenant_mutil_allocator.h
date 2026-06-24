@@ -97,7 +97,7 @@ protected:
 };
 
 class ObTenantMutilAllocator
-    : public ObILogAllocator, public common::ObLink
+    : public ObILogAllocator
 {
 public:
   // The memory percent of clog
@@ -115,7 +115,7 @@ public:
   static int choose_blk_size(int obj_size);
 
 public:
-  explicit ObTenantMutilAllocator(uint64_t tenant_id);
+  explicit ObTenantMutilAllocator();
   ~ObTenantMutilAllocator();
   void destroy();
   // update nway when tenant's max_cpu changed
@@ -123,12 +123,7 @@ public:
   // update limit when tenant's memory_limit changed
   void set_limit(const int64_t total_limit);
   int64_t get_limit() const;
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  inline ObTenantMutilAllocator *&get_next()
-  {
-    return reinterpret_cast<ObTenantMutilAllocator*&>(next_);
-  }
-  void try_purge();
+  
   void *alloc(const int64_t size);
   void* alloc(const int64_t size, const ObMemAttr &attr);
   void free(void *ptr);
@@ -167,7 +162,6 @@ public:
   ObIAllocator *get_replay_decompression_allocator() {return &replay_log_task_alloc_;}
 
 private:
-  uint64_t tenant_id_ CACHE_ALIGNED;
   int64_t total_limit_;
   int64_t pending_replay_mutator_size_;
   const int LOG_HANDLE_SUBMIT_TASK_SIZE;

@@ -23,7 +23,7 @@
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
-#include "storage/high_availability/ob_storage_ha_struct.h"
+#include "storage/ob_storage_ha_struct.h"
 
 namespace oceanbase
 {
@@ -44,7 +44,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   int init(common::ObIAllocator *allocator, common::ObAddr &addr);
 protected:
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   virtual void release_last_tenant() override { inner_reset(); };
   virtual int process_curr_tenant(common::ObNewRow *&row) = 0;
   virtual void inner_reset();

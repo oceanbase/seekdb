@@ -290,8 +290,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
               }
             } else {
               tmp_exec_ctx.set_my_session(&session);
-              tmp_exec_ctx.set_mem_attr(ObMemAttr(session.get_effective_tenant_id(),
-                                                  ObModIds::OB_SQL_EXEC_CONTEXT,
+              tmp_exec_ctx.set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
                                                   ObCtxIds::EXECUTE_CTX_ID));
               exec_ctx = &tmp_exec_ctx;
               if (OB_ISNULL(cursor.get_spi_cursor())) {
@@ -390,8 +389,8 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           }
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(session.get_effective_tenant_id(), schema_guard))) {
-            LOG_WARN("get tenant schema guard failed ", K(ret), K(session.get_effective_tenant_id()));
+          } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+            LOG_WARN("get tenant schema guard failed ", K(ret));
           } else if (!need_fetch && NULL != row) {
             if (has_long_data()) {
               OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), 
@@ -473,7 +472,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         } else {
           flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = 0;
         }
-        if (!session.is_obproxy_mode()) {
+        {
           // in java client or others, use slow query bit to indicate partition hit or not
           flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session.partition_hit().get_bool();
         }
@@ -540,8 +539,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
   // observer will force refresh schema if local_schema_version < last_schema_version;
-  if (OB_FAIL(check_and_refresh_schema(session.get_login_tenant_id(),
-                                       session.get_effective_tenant_id()))) {
+  if (OB_FAIL(check_and_refresh_schema())) {
     LOG_WARN("failed to check_and_refresh_schema", K(ret));
   } else {
     //Each execution of different SQL requires an update
@@ -609,7 +607,6 @@ int ObMPStmtFetch::process()
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
     session.init_use_rich_format();
     session.get_raw_audit_record().request_memory_used_ = 0;
-    session.set_proxy_version(get_proxy_version());
     observer::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
@@ -623,7 +620,7 @@ int ObMPStmtFetch::process()
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(cursor_id),
-               K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
+               K(session.get_server_sid()), K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
@@ -631,16 +628,16 @@ int ObMPStmtFetch::process()
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                session.get_effective_tenant_id(), tenant_version))) {
+                tenant_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                OB_SYS_TENANT_ID, sys_version))) {
+                sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
       LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret), K(MTL_ID()));
+      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else {
       need_disconnect = false;
       ObPLCursorInfo *cursor = NULL;

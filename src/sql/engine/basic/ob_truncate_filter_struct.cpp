@@ -862,7 +862,7 @@ ObTruncateAndFilterExecutor::ObTruncateAndFilterExecutor(
     filter_(filter)
 {
   MEMSET(item_buffer_, 0, sizeof(item_buffer_));
-  ObMemAttr mem_attr(MTL_ID(), "TruncateExe");
+  ObMemAttr mem_attr("TruncateExe");
   truncate_filters_.set_attr(mem_attr);
   part_filter_buffer_.set_attr(mem_attr);
   subpart_filter_buffer_.set_attr(mem_attr);

@@ -219,7 +219,7 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
   ObSchemaGetterGuard schema_guard;
   schema_guard.set_session_id(alter_table_arg.session_id_);
   const AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
-  const uint64_t tenant_id = alter_table_schema.get_tenant_id();
+  
   const ObString &origin_database_name = alter_table_schema.get_origin_database_name();
   const ObString &origin_table_name = alter_table_schema.get_origin_table_name();
   const ObTableSchema *orig_table_schema = NULL;
@@ -229,18 +229,18 @@ int ObAlterTableConstraintChecker::need_modify_not_null_constraint_validate(
   } else if (obcall::ObAlterTableArg::ADD_CONSTRAINT != alter_table_arg.alter_constraint_type_
              && obcall::ObAlterTableArg::ALTER_CONSTRAINT_STATE != alter_table_arg.alter_constraint_type_) {
     // skip
-  } else if (OB_FAIL(ddl_service.get_schema_service().get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+  } else if (OB_FAIL(ddl_service.get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    origin_database_name,
                                                    origin_table_name,
                                                    false,
                                                    orig_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(origin_database_name),
+    LOG_WARN("fail to get table schema", KR(ret), K(origin_database_name),
              K(origin_table_name));
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("NULL ptr", K(ret), KR(tenant_id), K(alter_table_arg), K(schema_guard.get_session_id()));
+    LOG_WARN("NULL ptr", K(ret), K(alter_table_arg), K(schema_guard.get_session_id()));
   } else if (alter_table_arg.alter_table_schema_.get_constraint_count() == 1) {
     ObTableSchema::const_constraint_iterator iter =
         alter_table_arg.alter_table_schema_.constraint_begin();

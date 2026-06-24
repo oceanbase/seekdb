@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ls_tablet_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "storage/blocksstable/ob_datum_row_store.h"
 #include "storage/blocksstable/ob_datum_row_utils.h"
@@ -42,7 +43,6 @@
 #include "observer/table_load/ob_table_load_coordinator.h"
 #include "observer/table_load/ob_table_load_store.h"
 #include "observer/table_load/ob_table_load_store_trans_px_writer.h"
-#include "storage/high_availability/ob_storage_ha_utils.h"
 #include "share/ob_partition_split_query.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
@@ -98,10 +98,10 @@ int ObLSTabletService::init(
   } else if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ls));
-  } else if (OB_FAIL(tablet_id_set_.init(ObTabletCommon::BUCKET_LOCK_BUCKET_CNT, MTL_ID()))) {
+  } else if (OB_FAIL(tablet_id_set_.init(ObTabletCommon::BUCKET_LOCK_BUCKET_CNT))) {
     LOG_WARN("fail to init tablet id set", K(ret));
   } else if (OB_FAIL(bucket_lock_.init(ObTabletCommon::BUCKET_LOCK_BUCKET_CNT,
-      ObLatchIds::TABLET_BUCKET_LOCK, "TabletSvrBucket", MTL_ID()))) {
+      ObLatchIds::TABLET_BUCKET_LOCK, "TabletSvrBucket"))) {
     LOG_WARN("failed to init bucket lock", K(ret));
   } else if (OB_FAIL(set_allow_to_read_(ls))) {
     LOG_WARN("failed to set allow to read", K(ret));
@@ -254,7 +254,6 @@ int ObLSTabletService::prepare_for_safe_destroy()
 #ifdef ERRSIM
   if (OB_NOT_NULL(ls_) && !ls_->get_ls_id().is_sys_ls()) {
     SERVER_EVENT_SYNC_ADD("ls_tablet_service", "after_delete_all_tablets",
-                          "tenant_id", MTL_ID(),
                           "ls_id", ls_->get_ls_id().id());
     DEBUG_SYNC(AFTER_LS_GC_DELETE_ALL_TABLETS);
   }
@@ -265,7 +264,7 @@ int ObLSTabletService::prepare_for_safe_destroy()
 int ObLSTabletService::safe_to_destroy(bool &is_safe)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   is_safe = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -502,9 +501,9 @@ int ObLSTabletService::inner_remove_tablet(
 {
   int ret = OB_SUCCESS;
   const ObTabletMapKey key(ls_id, tablet_id);
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
-  ObTransService *tx_svr = MTL(ObTransService*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
+  ObTransService *tx_svr = share::g_mp->trans_service();
 
   if (OB_FAIL(tablet_id_set_.erase(tablet_id))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -575,7 +574,7 @@ int ObLSTabletService::get_tablet(
 int ObLSTabletService::get_tablet_addr(const ObTabletMapKey &key, ObMetaDiskAddr &addr)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -594,7 +593,7 @@ void ObLSTabletService::report_tablet_to_rs(const common::ObTabletID &tablet_id)
 
   if (tablet_id.is_ls_inner_tablet()) {
     // no need to report for ls inner tablet
-  } else if (OB_FAIL(MTL(ObTabletTableUpdater*)->submit_tablet_update_task(ls_id, tablet_id))) {
+  } else if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id))) {
     LOG_WARN("failed to report tablet info", KR(ret), K(ls_id), K(tablet_id));
   }
 }
@@ -603,7 +602,7 @@ void ObLSTabletService::report_tablet_to_rs(
     const common::ObIArray<common::ObTabletID> &tablet_id_array)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const share::ObLSID &ls_id = ls_->get_ls_id();
 
   // ignore ret on purpose
@@ -612,8 +611,8 @@ void ObLSTabletService::report_tablet_to_rs(
     if (tablet_id.is_ls_inner_tablet()) {
       // no need to report for ls inner tablet
       continue;
-    } else if (OB_FAIL(MTL(ObTabletTableUpdater*)->submit_tablet_update_task(ls_id, tablet_id))) {
-      LOG_WARN("failed to report tablet info", KR(ret), K(tenant_id), K(ls_id), K(tablet_id));
+    } else if (OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(ls_id, tablet_id))) {
+      LOG_WARN("failed to report tablet info", KR(ret), K(ls_id), K(tablet_id));
     }
   }
 }
@@ -631,7 +630,7 @@ int ObLSTabletService::table_scan(ObTabletHandle &tablet_handle, ObTableScanIter
   } else if (!allow_to_read) {
     ret = OB_REPLICA_NOT_READABLE;
     LOG_WARN("ls is not allow to read", K(ret), KPC(ls_));
-  } else if (OB_FAIL(prepare_scan_table_param(param, *(MTL(ObTenantSchemaService*)->get_schema_service())))) {
+  } else if (OB_FAIL(prepare_scan_table_param(param, *(share::g_mp->tenant_schema_service()->get_schema_service())))) {
     LOG_WARN("failed to prepare scan table param", K(ret), K(param));
   } else if (OB_FAIL(inner_table_scan(tablet_handle, iter, param))) {
     LOG_WARN("failed to do table scan", K(ret), KP(&iter), K(param));
@@ -657,7 +656,7 @@ int ObLSTabletService::table_rescan(ObTabletHandle &tablet_handle, ObTableScanPa
   } else if (!allow_to_read) {
     ret = OB_REPLICA_NOT_READABLE;
     LOG_WARN("ls is not allow to read", K(ret), KPC(ls_));
-  } else if (OB_FAIL(prepare_scan_table_param(param, *(MTL(ObTenantSchemaService*)->get_schema_service())))) {
+  } else if (OB_FAIL(prepare_scan_table_param(param, *(share::g_mp->tenant_schema_service()->get_schema_service())))) {
     LOG_WARN("failed to prepare scan table param", K(ret), K(result), K(param));
   } else {
     ObTableScanIterator *iter = static_cast<ObTableScanIterator*>(result);
@@ -677,7 +676,7 @@ int ObLSTabletService::refresh_tablet_addr(
 {
   int ret = OB_SUCCESS;
   const ObTabletMapKey key(ls_id, tablet_id);
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
 
   while (OB_SUCC(ret)) {
     ret = tablet_id_set_.set(tablet_id);
@@ -787,7 +786,7 @@ int ObLSTabletService::rebuild_tablet_with_old(
 {
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("ObLSTabletService::rebuild_tablet_with_old", 1_s);
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "RebuildTablet"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("RebuildTablet"));
   ObTabletHandle old_tablet_hdl;
   ObTabletHandle tmp_tablet_hdl;
   ObTabletHandle new_tablet_hdl;
@@ -833,7 +832,7 @@ int ObLSTabletService::migrate_update_tablet(
 {
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("ObLSTabletService::migrate_update_tablet", 1_s);
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "MigUpTab"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("MigUpTab"));
   const common::ObTabletID &tablet_id = mig_tablet_param.tablet_id_;
   const share::ObLSID &ls_id = mig_tablet_param.ls_id_;
   const ObTabletMapKey key(mig_tablet_param.ls_id_, mig_tablet_param.tablet_id_);
@@ -876,7 +875,7 @@ int ObLSTabletService::migrate_create_tablet(
 {
   int ret = OB_SUCCESS;
   ObTimeGuard time_guard("ObLSTabletService::migrate_create_tablet", 1_s);
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "MigCreateTab"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("MigCreateTab"));
   const share::ObLSID &ls_id = mig_tablet_param.ls_id_;
   const common::ObTabletID &tablet_id = mig_tablet_param.tablet_id_;
   const ObTabletMapKey key(ls_id, tablet_id);
@@ -885,7 +884,7 @@ int ObLSTabletService::migrate_create_tablet(
   ObTabletHandle tablet_handle;
   ObMetaDiskAddr disk_addr;
   const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, 0);
-  ObTransService *tx_svr = MTL(ObTransService*);
+  ObTransService *tx_svr = share::g_mp->trans_service();
   const bool is_transfer = false;
 
   if (OB_FAIL(ObTabletCreateDeleteHelper::create_tmp_tablet(key, allocator, tmp_tablet_hdl))) {
@@ -957,8 +956,8 @@ int ObLSTabletService::update_tablet_checkpoint(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(key), K(new_addr), K(new_handle));
   } else {
-    common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "CKPTUpdate"));
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    common::ObArenaAllocator allocator(common::ObMemAttr("CKPTUpdate"));
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     ObTabletHandle tablet_handle;
     ObMetaDiskAddr addr;
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
@@ -996,7 +995,7 @@ int ObLSTabletService::update_tablet_table_store(
     const ObIArray<storage::ObITable *> &tables)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "UpTabStore"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("UpTabStore"));
   ObTabletHandle new_tablet_hdl;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1067,7 +1066,7 @@ int ObLSTabletService::update_tablet_table_store(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator allocator("UpdateTmpTablet", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID);
+  common::ObArenaAllocator allocator("UpdateTmpTablet", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID);
   if (share::is_reserve_mode()) {
     // TODO(@DanLing) use LocalArena later
     allocator.set_ctx_id(ObCtxIds::MERGE_RESERVE_CTX_ID);
@@ -1140,7 +1139,7 @@ int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &ta
   int ret = OB_SUCCESS;
   const share::ObLSID &ls_id = ls_->get_ls_id();
   const ObTabletMapKey key(ls_id, tablet_id);
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "UpdEmptySh"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("UpdEmptySh"));
   ObTabletHandle new_tablet_handle;
   ObTabletHandle tmp_tablet_handle;
   ObTabletHandle old_tablet_handle;
@@ -1163,7 +1162,7 @@ int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &ta
     LOG_WARN("fail to acquire temporary tablet", K(ret), K(key));
   } else {
     time_guard.click("Acquire");
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     ObTablet *old_tablet = old_tablet_handle.get_obj();
     ObTablet *tmp_tablet = tmp_tablet_handle.get_obj();
     ObTablet *new_tablet = nullptr;
@@ -1193,7 +1192,7 @@ int ObLSTabletService::update_medium_compaction_info(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "UpMeidumCom"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("UpMeidumCom"));
   ObTabletHandle old_tablet_handle;
   ObTimeGuard time_guard("ObLSTabletService::update_medium_compaction_info", 1_s);
   ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
@@ -1251,7 +1250,7 @@ int ObLSTabletService::build_new_tablet_from_mds_table(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "BuildMSD"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("BuildMSD"));
   const share::ObLSID &ls_id = ls_->get_ls_id();
   const ObTabletMapKey key(ls_id, tablet_id);
   ObTabletHandle old_tablet_hdl;
@@ -1366,7 +1365,7 @@ int ObLSTabletService::update_tablet_release_memtable_for_offline(
     ObTableStoreIterator iter;
     const bool is_from_buf_pool = nullptr == tablet_handle.get_obj()->get_allocator();
     if (is_from_buf_pool) {
-      ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+      ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
       ObTabletHandle new_tablet_handle;
       ObUpdateTabletPointerParam param;
       const ObTabletPersisterParam persist_param(ls_id, ls_->get_ls_epoch(), tablet_id, tablet->get_transfer_seq());
@@ -1443,7 +1442,7 @@ int ObLSTabletService::update_tablet_ddl_commit_scn(
     LOG_WARN("fail to direct get tablet", K(ret), K(key));
   } else {
     time_guard.click("get_tablet");
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     ObMetaDiskAddr disk_addr;
     ObUpdateDDLCommitSCN modifier(ddl_commit_scn);
     ObUpdateTabletPointerParam param;
@@ -1523,7 +1522,7 @@ int ObLSTabletService::update_tablet_snapshot_version(
     const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "UTabletSnapVer"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("UTabletSnapVer"));
   ObTabletHandle old_tablet_handle;
   ObTimeGuard time_guard("ObLSTabletService::update_tablet_snapshot_version", 1_s);
   ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
@@ -1682,7 +1681,7 @@ int ObLSTabletService::update_tablet_ha_data_status(
     const ObTabletMapKey key(ls_->get_ls_id(), tablet_id);
     ObTablet *old_tablet = tablet_handle.get_obj();
     ObTablet *tmp_tablet = nullptr;
-    common::ObArenaAllocator allocator("UpdateSchema", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID);
+    common::ObArenaAllocator allocator("UpdateSchema", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID);
     ObTabletHandle new_tablet_handle;
     ObTabletHandle tmp_tablet_handle;
     const ObTabletPersisterParam param(ls_->get_ls_id(), ls_->get_ls_epoch(), tablet_id, old_tablet->get_transfer_seq());
@@ -1809,7 +1808,7 @@ int ObLSTabletService::replay_create_inner_tablet(
   int64_t pos = 0;
   ObTablet *tablet = tablet_handle.get_obj();
   tablet->tablet_addr_ = disk_addr;
-  if (OB_FAIL(MTL(ObTenantStorageMetaService*)->read_from_disk(disk_addr, ls_epoch, allocator, buf, buf_len))) {
+  if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->read_from_disk(disk_addr, ls_epoch, allocator, buf, buf_len))) {
     LOG_WARN("fail to read tablet buf from disk", K(ret), K(disk_addr));
   } else if (OB_FAIL(tablet->deserialize_for_replay(allocator, buf, buf_len, pos))) {
     LOG_WARN("fail to deserialize tablet", K(ret), KP(buf), K(buf_len));
@@ -1819,6 +1818,7 @@ int ObLSTabletService::replay_create_inner_tablet(
   return ret;
 }
 
+
 int ObLSTabletService::replay_create_tablet(
     const ObMetaDiskAddr &disk_addr,
     const char *buf,
@@ -1827,11 +1827,11 @@ int ObLSTabletService::replay_create_tablet(
 {
   int ret = OB_SUCCESS;
   bool b_exist = false;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-  ObTransService *tx_svr = MTL(ObTransService*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObTransService *tx_svr = share::g_mp->trans_service();
   ObFreezer *freezer = ls_->get_freezer();
   const ObLSID &ls_id = ls_->get_ls_id();
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "ReplayCreate"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("ReplayCreate"));
   ObTabletHandle tablet_hdl;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1953,7 +1953,7 @@ int ObLSTabletService::get_ls_migration_required_size(int64_t &required_size)
   int64_t tmp_size = 0;
   required_size = 0;
   const ObLSID &ls_id = ls_->get_ls_id();
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletMapKey key;
   ObSArray<ObTabletID> tablet_ids;
   GetAllTabletIDOperator op(tablet_ids);
@@ -2074,7 +2074,7 @@ int ObLSTabletService::has_tablet(
   int ret = OB_SUCCESS;
   b_exist = false;
   const ObTabletMapKey key(ls_id, tablet_id);
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
 
   if (OB_FAIL(t3m->has_tablet(key, b_exist))) {
     LOG_WARN("failed to check tablet exist", K(ret), K(key));
@@ -2104,10 +2104,10 @@ int ObLSTabletService::create_tablet(
 {
   int ret = OB_SUCCESS;
   UNUSED(data_format_version);
-  common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "CreateTab"));
+  common::ObArenaAllocator tmp_allocator(common::ObMemAttr("CreateTab"));
   common::ObArenaAllocator *allocator = nullptr;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-  ObTransService *tx_svr = MTL(ObTransService*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObTransService *tx_svr = share::g_mp->trans_service();
   const ObTabletMapKey key(ls_id, tablet_id);
   const bool need_generate_cs_replica_cg_array = ls_->is_cs_replica()
                                           && create_tablet_schema.is_row_store()
@@ -2169,11 +2169,11 @@ int ObLSTabletService::create_inner_tablet(
 {
   int ret = OB_SUCCESS;
   uint64_t compat_version = 0;
-  const uint64_t tenant_id = MTL_ID();
+  
   bool need_create_empty_major_old_version = true;
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "LSCreateTab"));
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-  ObTransService *tx_svr = MTL(ObTransService*);
+  common::ObArenaAllocator allocator(common::ObMemAttr("LSCreateTab"));
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObTransService *tx_svr = share::g_mp->trans_service();
   const ObTabletMapKey key(ls_id, tablet_id);
   ObTablet *tmp_tablet = nullptr;
   ObFreezer *freezer = ls_->get_freezer();
@@ -2224,8 +2224,8 @@ int ObLSTabletService::create_transfer_in_tablet(
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-  ObTransService *tx_svr = MTL(ObTransService*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+  ObTransService *tx_svr = share::g_mp->trans_service();
   const common::ObTabletID &tablet_id = tablet_meta.tablet_id_;
   const ObTabletMapKey key(ls_id, tablet_id);
   ObTablet *tablet = nullptr;
@@ -2306,7 +2306,7 @@ int ObLSTabletService::create_empty_shell_tablet(
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   const share::ObLSID &ls_id = param.ls_id_;
   const common::ObTabletID &tablet_id = param.tablet_id_;
   const ObTabletMapKey key(ls_id, tablet_id);
@@ -2333,7 +2333,7 @@ int ObLSTabletService::create_empty_shell_tablet(
   }
 
   ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash()); // must lock after prepare
-  common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "MigEmptyT"));
+  common::ObArenaAllocator allocator(common::ObMemAttr("MigEmptyT"));
   ObTabletHandle tmp_tablet_hdl;
   if (FAILEDx(ObTabletCreateDeleteHelper::create_tmp_tablet(key, allocator, tmp_tablet_hdl))) {
     LOG_WARN("fail to create temporary tablet", K(ret), K(key));
@@ -2406,7 +2406,7 @@ int ObLSTabletService::rollback_remove_tablet_without_lock(
     const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   const ObTabletMapKey key(ls_id, tablet_id);
 
   if (OB_FAIL(tablet_id_set_.erase(tablet_id))) {
@@ -2434,7 +2434,7 @@ int ObLSTabletService::rollback_remove_tablet_without_lock(
 int ObLSTabletService::create_memtable(const common::ObTabletID &tablet_id, CreateMemtableArg &arg)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletHandle old_tablet_handle;
   const ObTabletMapKey key(ls_->get_ls_id(), tablet_id);
   ObTabletHandle new_tablet_handle;
@@ -3911,7 +3911,7 @@ int ObLSTabletService::build_tablet_with_batch_tables(
     const ObBatchUpdateTableStoreParam &param)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "BuildHaTab"));
+  ObArenaAllocator allocator(common::ObMemAttr("BuildHaTab"));
   ObMetaDiskAddr disk_addr;
   ObTabletPointer *pointer = nullptr;
   ObTimeGuard time_guard("ObLSTabletService::build_ha_tablet_new_table_store", 1_s);
@@ -3999,7 +3999,7 @@ int ObLSTabletService::safe_update_cas_tablet(
   int ret = OB_SUCCESS;
   ObUpdateTabletPointerParam param;
   int64_t ls_epoch = 0;
-  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(MTL(ObTenantStorageMetaService*)->get_ckpt_slog_hdl());
+  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(share::g_mp->tenant_storage_meta_service()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(new_handle.get_obj()->get_ls_epoch(ls_epoch))) {
@@ -4009,7 +4009,7 @@ int ObLSTabletService::safe_update_cas_tablet(
   } else if (OB_FAIL(TENANT_STORAGE_META_PERSISTER.update_tablet(key.ls_id_, ls_epoch, key.tablet_id_, addr))) {
     LOG_WARN("fail to write update tablet slog", K(ret), K(key), K(addr));
   } else if (FALSE_IT(time_guard.click("WrSlog"))) {
-  } else if (OB_FAIL(MTL(ObTenantMetaMemMgr*)->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
+  } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
     LOG_ERROR("failed to compare and swap tablet", K(ret), K(key), K(addr), K(param));
     ob_usleep(1_s);
     ob_abort();
@@ -4029,7 +4029,7 @@ int ObLSTabletService::safe_update_cas_empty_shell(
   ObMetaDiskAddr addr;
   ObUpdateTabletPointerParam param;
   ObTablet *tablet = new_handle.get_obj();
-  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(MTL(ObTenantStorageMetaService*)->get_ckpt_slog_hdl());
+  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(share::g_mp->tenant_storage_meta_service()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(new_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
@@ -4039,7 +4039,7 @@ int ObLSTabletService::safe_update_cas_empty_shell(
   } else if (FALSE_IT(tablet->tablet_addr_ = addr)) {
   } else if (FALSE_IT(param.tablet_addr_ = addr)) {
   } else if (FALSE_IT(time_guard.click("WrSlog"))) {
-  } else if (OB_FAIL(MTL(ObTenantMetaMemMgr*)->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
+  } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
     LOG_ERROR("failed to compare and swap tablet", K(ret), K(key), K(old_handle), K(new_handle), K(param));
     ob_usleep(1_s);
     ob_abort();
@@ -4059,7 +4059,7 @@ int ObLSTabletService::safe_create_cas_tablet(
   int ret = OB_SUCCESS;
   ObUpdateTabletPointerParam param;
   int64_t ls_epoch = 0;
-  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(MTL(ObTenantStorageMetaService*)->get_ckpt_slog_hdl());
+  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(share::g_mp->tenant_storage_meta_service()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ls_epoch(ls_epoch))) {
@@ -4089,7 +4089,7 @@ int ObLSTabletService::safe_create_cas_empty_shell(
   ObTablet *tablet = tablet_handle.get_obj();
   ObUpdateTabletPointerParam param;
   ObMetaDiskAddr addr;
-  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(MTL(ObTenantStorageMetaService*)->get_ckpt_slog_hdl());
+  ObTenantCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(share::g_mp->tenant_storage_meta_service()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
@@ -4137,7 +4137,7 @@ int ObLSTabletService::check_old_row_legitimacy(
   } else if (is_need_check_old_row) {
     //the vertical partition is no longer maintained,
     //and the defense check skips the vertical partition function
-    ObArenaAllocator scan_allocator(common::ObMemAttr(MTL_ID(), ObModIds::OB_TABLE_SCAN_ITER));
+    ObArenaAllocator scan_allocator((common::ObMemAttr(ObModIds::OB_TABLE_SCAN_ITER)));
     ObRowGetter storage_row_getter(scan_allocator, *data_tablet_handle.get_obj());
     ObDatumRow *storage_old_row = nullptr;
     const ObIArray<uint64_t> &column_ids = *column_ids_ptr;
@@ -4254,23 +4254,23 @@ int ObLSTabletService::check_is_gencol_check_failed(const ObRelativeTable &data_
   is_virtual_gen_col = false;
   if (data_table.is_index_table()) {
     const ObColumnParam *param = nullptr;
-    const uint64_t tenant_id = MTL_ID();
+    
     uint64_t index_table_id = data_table.get_table_id();
     const ObTableSchema *index_table_schema = NULL;
     const ObTableSchema *data_table_schema = NULL;
-    ObMultiVersionSchemaService *schema_service = MTL(ObTenantSchemaService*)->get_schema_service();
+    ObMultiVersionSchemaService *schema_service = share::g_mp->tenant_schema_service()->get_schema_service();
     ObSchemaGetterGuard schema_guard;
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), KP(schema_service));
-    } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, schema_guard))) {
-      LOG_WARN("failed to get schema manager", K(ret), K(tenant_id));
-    }  else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_table_schema))) {
+    } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get schema manager", K(ret));
+    }  else if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_table_schema))) {
       LOG_WARN("get index table schema failed", K(ret));
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index table schema is unexpected null", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_schema->get_data_table_id(), data_table_schema))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema( index_table_schema->get_data_table_id(), data_table_schema))) {
       LOG_WARN("get data table schema failed", K(ret));
     } else if (OB_ISNULL(data_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -4514,7 +4514,7 @@ int ObLSTabletService::process_lob_before_insert(
 {
   int ret = OB_SUCCESS;
   int64_t col_cnt = run_ctx.col_descs_->count();
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   const ObTableSchemaParam &table_param = run_ctx.dml_param_.table_param_->get_data_table();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -4586,7 +4586,7 @@ int ObLSTabletService::process_lob_before_insert(
 {
   int ret = OB_SUCCESS;
   // DEBUG_SYNC(DELAY_INDEX_WRITE);
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[STORAGE_LOB]failed to get lob manager handle.", K(ret));
@@ -4626,7 +4626,7 @@ int ObLSTabletService::insert_vector_index_rows(
     int64_t extra_info_actual_size = 0;
     // get extra info col idx
     // delta_buffer table columns def is: <vid, type, vector, extra_infos>
-    ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
     if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
                                                         run_ctx.relative_table_.get_tablet_id(),
@@ -4680,7 +4680,7 @@ int ObLSTabletService::insert_vector_index_rows(
     ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
     int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
-    ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
     if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
                                                         run_ctx.relative_table_.get_tablet_id(),
                                                         ObIndexType::INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL,
@@ -4739,7 +4739,7 @@ int ObLSTabletService::insert_vector_index_rows(
     } else {
       // get extra info col idx
       // hybrid vec embedded table columns def is: <vid, embedded_vector>
-      ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+      ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
       ObPluginVectorIndexAdapterGuard adaptor_guard;
       if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
                                                           run_ctx.relative_table_.get_tablet_id(),
@@ -4776,7 +4776,7 @@ int ObLSTabletService::insert_vector_index_rows(
       }
     }
   } else if (table_param.is_ivf_vector_index()) { // check outrow
-    ObLobManager *lob_mngr = MTL(ObLobManager*);
+    ObLobManager *lob_mngr = share::g_mp->lob_manager();
     for (int64_t k = 0; OB_SUCC(ret) && k < row_count; k++) {
       blocksstable::ObDatumRow &datum_row = rows[k];
       int64_t col_cnt = run_ctx.col_descs_->count();
@@ -4801,7 +4801,7 @@ int ObLSTabletService::insert_vector_index_rows(
       }
     }
   } else if (OB_UNLIKELY(run_ctx.dml_param_.table_param_->get_data_table().is_vector_index_id())) {
-    ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
     ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
     const int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
@@ -5865,7 +5865,7 @@ int ObLSTabletService::table_refresh_row(
     blocksstable::ObDatumRow &datum_row)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator scan_allocator(common::ObMemAttr(MTL_ID(), ObModIds::OB_LOB_ACCESS_BUFFER));
+  ObArenaAllocator scan_allocator((common::ObMemAttr(ObModIds::OB_LOB_ACCESS_BUFFER)));
   ObRowGetter storage_row_getter(scan_allocator, *data_tablet_handle.get_obj());
 
   int64_t col_cnt = col_descs.count();
@@ -6002,13 +6002,13 @@ int ObLSTabletService::prepare_scan_table_param(
     ObTableParam *table_param = NULL;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
-    const uint64_t tenant_id = MTL_ID();
+    
     const bool check_formal = param.index_id_ > OB_MAX_CORE_TABLE_ID;
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard))) {
-      LOG_WARN("failed to get schema manager", K(ret), K(tenant_id));
+    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("failed to get schema manager", K(ret));
     } else if (check_formal && OB_FAIL(schema_guard.check_formal_guard())) {
       LOG_WARN("Fail to check formal schema, ", K(param.index_id_), K(ret));
-    } else  if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+    } else  if (OB_FAIL(schema_guard.get_table_schema(
                 param.index_id_, table_schema))) {
       LOG_WARN("Fail to get table schema", K(param.index_id_), K(ret));
     } else if (NULL == table_schema) {
@@ -6041,7 +6041,7 @@ void ObLSTabletService::dump_diag_info_for_old_row_loss(
   ObStoreCtx &store_ctx = run_ctx.store_ctx_;
   ObRelativeTable &data_table = run_ctx.relative_table_;
   ObColDescIArray &col_descs = const_cast<ObColDescIArray&>(*run_ctx.col_descs_);
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "DumpDIAGInfo"));
+  ObArenaAllocator allocator(common::ObMemAttr("DumpDIAGInfo"));
   ObTableAccessParam access_param;
   ObTableAccessContext access_ctx;
   ObSEArray<int32_t, 16> out_col_pros;
@@ -6182,7 +6182,7 @@ void ObLSTabletService::dump_diag_info_for_old_row_loss(
 #ifdef ENABLE_DEBUG_LOG
     // print single row check info
     if (store_ctx.mvcc_acc_ctx_.tx_id_.is_valid()) {
-      transaction::ObTransService *trx = MTL(transaction::ObTransService *);
+      transaction::ObTransService *trx = share::g_mp->trans_service();
       if (OB_NOT_NULL(trx)
           && NULL != trx->get_defensive_check_mgr()) {
         (void)trx->get_defensive_check_mgr()->dump(store_ctx.mvcc_acc_ctx_.tx_id_);
@@ -6203,7 +6203,7 @@ int ObLSTabletService::prepare_dml_running_ctx(
   if (OB_FAIL(run_ctx.init(
       column_ids,
       upd_col_ids,
-      MTL(ObTenantSchemaService*)->get_schema_service(),
+      share::g_mp->tenant_schema_service()->get_schema_service(),
       tablet_handle))) {
     LOG_WARN("failed to init run ctx", K(ret));
   }
@@ -6216,7 +6216,7 @@ int ObLSTabletService::get_ls_min_end_scn(
 {
   int ret = OB_SUCCESS;
   const ObLSID &ls_id = ls_->get_ls_id();
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObSArray<ObTabletID> tablet_ids;
   GetAllTabletIDOperator op(tablet_ids, true/*except_ls_inner_tablet*/);
   min_end_scn_from_latest_tablets.set_max();
@@ -6281,7 +6281,7 @@ int ObLSTabletService::get_multi_ranges_cost(
   } else {
     ObPartitionSplitQuery split_query;
     ObSEArray<ObStoreRange, 16> new_ranges;
-    ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "GetMulRangeCost"));
+    ObArenaAllocator allocator(common::ObMemAttr("GetMulRangeCost"));
     const ObTabletHandle &tablet_handle = iter.get_tablet_handle();
     bool is_splited_range = false;
     if (OB_FAIL(split_query.split_multi_ranges_if_need(ranges, new_ranges,
@@ -6637,7 +6637,7 @@ int ObLSTabletService::estimate_block_count_and_row_count(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
-  } else if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), nullptr, max_readable_scn))) {
+  } else if (OB_FAIL(OB_TS_MGR.get_gts(nullptr, max_readable_scn))) {
     LOG_WARN("failed to get gts", K(ret));
   } else if (FALSE_IT(snapshot_version_for_tablet = static_cast<int64_t>(max_readable_scn.get_val_for_sql()))) {
   } else if (FALSE_IT(snapshot_version_for_tables = static_cast<int64_t>(max_readable_scn.get_val_for_sql()))) {
@@ -6991,7 +6991,7 @@ int ObLSTabletService::GetAllTabletIDOperator::operator()(const common::ObTablet
 int ObLSTabletService::DestroyMemtableAndMemberAndMdsTableOperator::operator()(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   cur_tablet_id_ = tablet_id;
   if (OB_UNLIKELY(!tablet_id.is_valid()) || OB_ISNULL(tablet_svr_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -7163,7 +7163,7 @@ int ObLSTabletService::ha_scan_all_tablets(
           LOG_WARN("failed to build migration tablet param", K(ret));
         } else if (OB_FAIL(tablet->get_ha_sstable_size(tablet_info.data_size_))) {
           LOG_WARN("failed to get sstable size", K(ret), KPC(tablet));
-        } else if (OB_FAIL(ObStorageHAUtils::get_server_version(tablet_info.version_))) {
+        } else if (OB_FAIL(FALSE_IT(tablet_info.version_ = GET_MIN_CLUSTER_VERSION()))) {
           LOG_WARN("failed to get server version", K(ret), K(tablet_info));
         } else {
           tablet_info.tablet_id_ = tablet->get_tablet_meta().tablet_id_;
@@ -7207,7 +7207,7 @@ int ObLSTabletService::get_tablet_without_memtables(
   TIMEGUARD_INIT(GetStaticTablet, 1_s);
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   const bool force_alloc_new = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -7260,9 +7260,9 @@ int ObLSTabletService::check_real_leader_for_4377_(const ObLSID ls_id)
   int64_t epoch = 0;
   bool is_real_leader = false;
 
-  if (OB_ISNULL(ls_srv = MTL(ObLSService*))) {
+  if (OB_ISNULL(ls_srv = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("MTL(ObLSService*) fail, MTL not init?", K(ret));
+    LOG_ERROR("share::g_mp->ls_service() fail, MTL not init?", K(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls_id,
                                     ls_handle,
                                     ObLSGetMod::TRANS_MOD))) {
@@ -7339,7 +7339,7 @@ int ObLSTabletService::check_need_rollback_in_transfer_for_4377_(const transacti
 int ObLSTabletService::check_parts_tx_state_in_transfer_for_4377_(transaction::ObTxDesc *tx_desc)
 {
   int ret = OB_SUCCESS;
-  transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+  transaction::ObTransService *txs = share::g_mp->trans_service();
   transaction::ObTxPartList copy_parts;
   bool is_alive = false;
 
@@ -8040,7 +8040,7 @@ int ObLSTabletService::get_conflict_rows_by_multi_get(
 {
   int ret = OB_SUCCESS;
   const int64_t row_count = rows_info.get_rowkey_cnt();
-  ObMemAttr mem_attr(MTL_ID(), "GetConflictRow");
+  ObMemAttr mem_attr("GetConflictRow");
   ObSEArray<ObDatumRowkey, 2> rowkeys;
   rowkeys.set_attr(mem_attr);
   ObArenaAllocator get_allocator(mem_attr);
@@ -8164,7 +8164,7 @@ int ObLSTabletService::single_get_conflict_row(
     blocksstable::ObDatumRowIterator *&dup_row_iter)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr(MTL_ID(), "GetConflictRow");
+  ObMemAttr mem_attr("GetConflictRow");
   ObArenaAllocator get_allocator(mem_attr);
   ObTablet *data_tablet = tablet_handle.get_obj();
   ObDatumRow *out_row = nullptr;
@@ -8379,12 +8379,12 @@ int ObLSTabletService::estimate_skip_index_sortedness(
 {
   int ret = OB_SUCCESS;
 
-  int64_t tenant_id = MTL_ID();
+  
   ObTabletHandle tablet_handle;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
   ObSSTable *latest_major_sstable = nullptr;
 
-  ObMultiVersionSchemaService *schema_service = MTL(ObTenantSchemaService *)->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = share::g_mp->tenant_schema_service()->get_schema_service();
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
 
@@ -8425,10 +8425,10 @@ int ObLSTabletService::estimate_skip_index_sortedness(
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Fail to get schema service", KR(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("Fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("Fail to get table schema", KR(ret), K(tenant_id), K(tablet_id));
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("Fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("Fail to get table schema", KR(ret), K(tablet_id));
   } else if (latest_major_sstable->is_co_sstable()) {
     // for column store table, there are a few points to note:
     //   1. Firstly use cg_sstable to calculate skip index sortedness
@@ -8438,7 +8438,7 @@ int ObLSTabletService::estimate_skip_index_sortedness(
     const ObITableReadInfo *index_read_info = nullptr;
 
     // the column_param is used to transform column_id to cg_idx
-    common::ObArenaAllocator allocator(common::ObMemAttr(tenant_id, "SkipIndexEsti"));
+    common::ObArenaAllocator allocator(common::ObMemAttr("SkipIndexEsti"));
     ObColumnParam *column_param = nullptr;
 
     if (cosstable->is_cgs_empty_co_table()) {
@@ -8447,7 +8447,7 @@ int ObLSTabletService::estimate_skip_index_sortedness(
       use_row_store_table_to_calc = true;
     } else if (OB_FAIL(ObTableParam::alloc_column(allocator, column_param))) {
       LOG_WARN("Fail to alloc column param", KR(ret));
-    } else if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+    } else if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
       LOG_WARN("Fail to get cg index read info", KR(ret));
     } else {
       // the table contains cg_sstable, we need do as follows:
@@ -8583,7 +8583,7 @@ int ObLSTabletService::scan_block_stat(
   } else if (OB_UNLIKELY(!allow_to_read)) {
     ret = OB_REPLICA_NOT_READABLE;
     LOG_WARN("ls not allow to read", K(ret), KPC_(ls));
-  } else if (OB_FAIL(prepare_scan_table_param(*scan_param.get_scan_param(), *(MTL(ObTenantSchemaService *)->get_schema_service())))) {
+  } else if (OB_FAIL(prepare_scan_table_param(*scan_param.get_scan_param(), *(share::g_mp->tenant_schema_service()->get_schema_service())))) {
     LOG_WARN("fail to prepare scan table param", K(ret), K(scan_param), K(tablet_handle));
   } else if (OB_UNLIKELY(scan_param.get_scan_param()->fb_snapshot_.is_min())) {
     ret = OB_SNAPSHOT_DISCARDED;

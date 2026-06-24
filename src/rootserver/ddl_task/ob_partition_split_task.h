@@ -86,7 +86,6 @@ class ObPartitionSplitTask final : public ObDDLTask
 public:
   ObPartitionSplitTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const int64_t table_id,
       const int64_t schema_version,
@@ -112,7 +111,6 @@ public:
       const int64_t buf_size,
       int64_t &pos) const override;
   virtual int deserialize_params_from_message(
-      const uint64_t tenant_id,
       const char *buf,
       const int64_t buf_size,
       int64_t &pos) override;
@@ -220,17 +218,14 @@ private:
                                       int64_t &pos);
   int get_waiting_tablet_ids_(const hash::ObHashMap<ObCheckProgressKey<common::ObAddr>, ObCheckProgressStatus> &tablet_hash,
                               ObIArray<uint64_t> &waiting_tablets /* OUT */);
-  int get_waiting_tablet_ids_(const hash::ObHashMap<ObCheckProgressKey<uint64_t>, ObCheckProgressStatus> &tablet_hash,
+  int get_waiting_tablet_ids_(const hash::ObHashMap<ObTabletID, ObCheckProgressStatus> &tablet_hash,
                               ObIArray<uint64_t> &waiting_tablets /* OUT */);
   int batch_insert_reorganize_history();
   int check_can_reuse_macro_block(
       ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const ObIArray<uint64_t> &table_ids,
       ObSArray<bool> &can_reuse_macro_blocks);
-  int check_src_tablet_exist(
-      const uint64_t tenant_id,
-      const int64_t table_id,
+  int check_src_tablet_exist(const int64_t table_id,
       const ObTabletID &src_tablet_id,
       bool &is_src_tablet_exist);
   int prepare_tablet_split_ranges(
@@ -245,8 +240,6 @@ private:
   using ObDDLTask::is_inited_;
   using ObDDLTask::task_status_;
   using ObDDLTask::snapshot_version_;
-  using ObDDLTask::tenant_id_;
-  using ObDDLTask::dst_tenant_id_;
   using ObDDLTask::object_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::dst_schema_version_;
@@ -262,9 +255,9 @@ private:
   ObSArray<int64_t> index_tablet_compaction_scns_;
   ObSArray<int64_t> lob_tablet_compaction_scns_;
   hash::ObHashMap<ObTabletID, int64_t> tablet_compaction_scn_map_;
-  hash::ObHashMap<ObCheckProgressKey<uint64_t>, ObCheckProgressStatus> freeze_progress_map_;
+  hash::ObHashMap<ObTabletID, ObCheckProgressStatus> freeze_progress_map_;
   hash::ObHashMap<ObCheckProgressKey<common::ObAddr>, ObCheckProgressStatus> compaction_progress_map_;
-  hash::ObHashMap<ObCheckProgressKey<uint64_t>, ObCheckProgressStatus> send_finish_map_;
+  hash::ObHashMap<ObTabletID, ObCheckProgressStatus> send_finish_map_;
   bool freeze_progress_status_inited_;
   bool compact_progress_status_inited_;
   bool write_split_log_status_inited_;

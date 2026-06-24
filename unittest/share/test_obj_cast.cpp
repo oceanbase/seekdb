@@ -36,7 +36,7 @@ public:
 
 void TestObjCast::SetUp()
 {
-  const lib::ObMemAttr attr(common::OB_SYS_TENANT_ID, ObModIds::OB_NUMBER);
+  const lib::ObMemAttr attr(ObModIds::OB_NUMBER);
   int ret = ObNumberConstValue::init(allocator_);
   ASSERT_EQ(OB_SUCCESS, ret);
 }

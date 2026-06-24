@@ -266,7 +266,7 @@ DEF_TO_STRING(ObRow2ExprsProjector::Item)
   return pos;
 }
 
-int ScanResumePoint::init(bool *is_paused, int64_t tenant_id)
+int ScanResumePoint::init(bool *is_paused)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(is_paused)) {
@@ -275,7 +275,7 @@ int ScanResumePoint::init(bool *is_paused, int64_t tenant_id)
   } else {
     is_paused_ = is_paused;
     ATOMIC_STORE(is_paused_, false);
-    allocator_.set_tenant_id(tenant_id);
+    
     allocator_.set_label("ScanResumePoint");
   }
   return ret;
@@ -313,8 +313,6 @@ DEF_TO_STRING(ObTableScanParam)
        K_(need_switch_param),
        K_(is_mds_query),
        K_(fb_read_tx_uncommitted),
-       K_(external_file_format),
-       K_(external_file_location),
        K_(tx_seq_base),
        K_(auto_split_filter_type),
        K_(is_tablet_spliting),

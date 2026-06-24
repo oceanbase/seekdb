@@ -124,7 +124,7 @@ int ObNetTraverProcessAutoDiag::get_trav_req_info(ObRequest *cur, ObNetQueueTraR
         LOG_ERROR("sess is nullptr", K(ret));
       } else {
         conn = static_cast<oceanbase::observer::ObSMConnection *>(sess);
-        tmp_info.tenant_id_ = static_cast<int64_t>(conn->tenant_id_);
+        
         tmp_info.sql_session_id_ = static_cast<uint32_t>(conn->sessid_);
         tmp_info.mysql_cmd_ = pkt.get_cmd();
       }

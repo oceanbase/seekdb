@@ -181,11 +181,17 @@ int ObAllVirtualDumpTenantInfo::inner_get_next_row(common::ObNewRow *&row)
     if (OB_ISNULL(omt)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "nullptr", K(ret));
-    } else if (OB_FAIL(omt->for_each(func))){
-      SERVER_LOG(WARN, "omt for each failed", K(ret));
     } else {
-      scanner_it_ = scanner_.begin();
-      is_inited_ = true;
+      omt::ObTenant *the_tenant = nullptr;
+      if (OB_SUCCESS == omt->get_tenant(the_tenant) && OB_NOT_NULL(the_tenant)) {
+        ret = func(*the_tenant);
+      }
+      if (OB_FAIL(ret)) {
+        SERVER_LOG(WARN, "run tenant func failed", K(ret));
+      } else {
+        scanner_it_ = scanner_.begin();
+        is_inited_ = true;
+      }
     }
   }
 

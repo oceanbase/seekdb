@@ -27,23 +27,20 @@ static void *roaring_malloc(size_t size) {
   void *alloc_ptr = nullptr;
   if (size > 0) {
     ObRbMemMgr *mem_mgr  = nullptr;
-    uint64_t tenant_id = MTL_ID();
-    // reserve header for mem_mgr, tenant_id and size, returning data ptr
-    // | mem_mgr | tenant_id | size | data |
+    uint64_t tid_reserved = 0;
+    // reserve header for mem_mgr, reserved id and size, returning data ptr
+    // | mem_mgr | reserved | size | data |
     size_t alloc_size = size + sizeof(ObRbMemMgr *) + sizeof(uint64_t) + sizeof(size_t);
     lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
-    if (OB_INVALID_TENANT_ID == tenant_id) {
-      // use ob_malloc
-      alloc_ptr = ob_malloc(alloc_size, lib::ObLabel("RbMemMgr"));
-    } else if (OB_ISNULL(mem_mgr = MTL(ObRbMemMgr *))) {
+    if (OB_ISNULL(mem_mgr = get_rb_mem_mgr())) {
       int ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("mem_mgr is null", K(tenant_id));
+      LOG_ERROR("mem_mgr is null");
       ob_abort();
     } else if (last_mem_attr.label_.is_valid() && 
                last_mem_attr.label_[0] == 'V' && 
                last_mem_attr.label_[1] == 'I' && 
                last_mem_attr.label_[2] == 'B') {
-      alloc_ptr = ob_malloc(alloc_size, lib::ObMemAttr(tenant_id, last_mem_attr.label_));
+      alloc_ptr = ob_malloc(alloc_size, lib::ObMemAttr(last_mem_attr.label_));
       mem_mgr->incr_vec_idx_used(alloc_size);
     } else {
       alloc_ptr = mem_mgr->alloc(alloc_size);
@@ -59,7 +56,7 @@ static void *roaring_malloc(size_t size) {
       void *size_ptr = reinterpret_cast<void *>(tid_location + sizeof(size_t));
       res_ptr = reinterpret_cast<void *>(alloc_location + sizeof(ObRbMemMgr *) + sizeof(uint64_t) + sizeof(size_t));
       MEMCPY(alloc_ptr, &mem_mgr, sizeof(ObRbMemMgr *));
-      MEMCPY(tid_ptr, &tenant_id, sizeof(uint64_t));
+      MEMCPY(tid_ptr, &tid_reserved, sizeof(uint64_t));
       MEMCPY(size_ptr, &size, sizeof(size_t));
     }
   }
@@ -69,13 +66,7 @@ static void *roaring_malloc(size_t size) {
 static void roaring_free(void *ptr) {
   if (ptr != nullptr) {
     size_t ptr_location = reinterpret_cast<size_t>(ptr);
-    void *tid_ptr = reinterpret_cast<void *>(ptr_location - sizeof(uint64_t) - sizeof(size_t));
-    uint64_t tenant_id = MTL_ID();
-    if (tenant_id != *reinterpret_cast<uint64_t *>(tid_ptr)) {
-      int ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("tenant ID not match", K(tenant_id), K(*reinterpret_cast<uint64_t *>(tid_ptr)));
-      ob_abort();
-    } else {
+    {
       size_t alloc_location = ptr_location - sizeof(size_t) - sizeof(uint64_t) - sizeof(ObRbMemMgr *);
       void * alloc_ptr = reinterpret_cast<void *>(alloc_location);
       ObRbMemMgr *mem_mgr = *reinterpret_cast<ObRbMemMgr **>(alloc_ptr);
@@ -170,8 +161,8 @@ int ObRbMemMgr::init_memory_hook()
 int ObRbMemMgr::init()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  lib::ObMemAttr mem_attr(tenant_id, "RoaringBitmap");
+  
+  lib::ObMemAttr mem_attr("RoaringBitmap");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObRbMemMgr init twice.", K(ret));
@@ -190,7 +181,7 @@ int ObRbMemMgr::init()
 
 void ObRbMemMgr::destroy()
 {
-  FLOG_INFO("destroy Roaring bitmap manager", K(MTL_ID()));
+  FLOG_INFO("destroy Roaring bitmap manager");
   allocator_.destroy();
   is_inited_ = false;
 }

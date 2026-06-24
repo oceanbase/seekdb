@@ -60,24 +60,6 @@ public:
     return ret;
   }
 
-  int init(const char *label, uint64_t size, uint64_t tenant_id) {
-    int ret = OB_SUCCESS;
-    ObMemAttr mem_attr;
-    mem_attr.label_ = label;
-    mem_attr.tenant_id_ = tenant_id;
-    if (size <= 0) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_ISNULL(array_ = (void**)ob_malloc(sizeof(void*) * size, mem_attr))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      MEMSET(array_, 0, sizeof(void*) * size);
-      push_ = 0;
-      pop_ = 0;
-      capacity_ = size;
-      memset(ref_, 0, sizeof(ref_));
-    }
-    return ret;
-  }
   void destroy() {
     if (NULL != array_) {
       ob_free(array_);

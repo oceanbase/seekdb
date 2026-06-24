@@ -16,11 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_storage_rpc.h"
-#include "storage/high_availability/ob_storage_ha_reader.h"
 #include "logservice/ob_log_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "storage/high_availability/ob_storage_ha_utils.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "lib/thread/thread.h"
 #include "lib/worker.h"
@@ -52,8 +50,7 @@ OB_SERIALIZE_MEMBER(ObCopyMacroBlockArg,
 
 
 ObCopyMacroBlockListArg::ObCopyMacroBlockListArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     table_key_(),
     arg_list_()
 {
@@ -62,14 +59,14 @@ ObCopyMacroBlockListArg::ObCopyMacroBlockListArg()
 
 bool ObCopyMacroBlockListArg::is_valid() const
 {
-  return tenant_id_ != OB_INVALID_ID
+  return true
       && ls_id_.is_valid()
       && table_key_.is_valid()
       && arg_list_.count() > 0;
 }
 
 
-OB_SERIALIZE_MEMBER(ObCopyMacroBlockListArg, tenant_id_, ls_id_, table_key_, arg_list_);
+OB_SERIALIZE_MEMBER(ObCopyMacroBlockListArg, ls_id_, table_key_, arg_list_);
 
 ObCopyMacroBlockInfo::ObCopyMacroBlockInfo()
   : logical_id_(),
@@ -82,8 +79,7 @@ ObCopyMacroBlockInfo::ObCopyMacroBlockInfo()
 OB_SERIALIZE_MEMBER(ObCopyMacroBlockInfo, logical_id_, data_type_);
 
 ObCopyMacroBlockRangeArg::ObCopyMacroBlockRangeArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     table_key_(),
     data_version_(0),
     backfill_tx_scn_(SCN::min_scn()),
@@ -96,8 +92,7 @@ ObCopyMacroBlockRangeArg::ObCopyMacroBlockRangeArg()
 
 bool ObCopyMacroBlockRangeArg::is_valid() const
 {
-  return OB_INVALID_ID != tenant_id_
-      && ls_id_.is_valid()
+  return ls_id_.is_valid()
       && table_key_.is_valid()
       && data_version_ >= 0
       && backfill_tx_scn_ >= SCN::min_scn()
@@ -106,7 +101,7 @@ bool ObCopyMacroBlockRangeArg::is_valid() const
 }
 
 
-OB_SERIALIZE_MEMBER(ObCopyMacroBlockRangeArg, tenant_id_, ls_id_, table_key_, data_version_,
+OB_SERIALIZE_MEMBER(ObCopyMacroBlockRangeArg, ls_id_, table_key_, data_version_,
     backfill_tx_scn_, copy_macro_range_info_, need_check_seq_, ls_rebuild_seq_, copy_macro_block_infos_);
 
 ObCopyMacroBlockHeader::ObCopyMacroBlockHeader()
@@ -126,8 +121,7 @@ void ObCopyMacroBlockHeader::reset()
 OB_SERIALIZE_MEMBER(ObCopyMacroBlockHeader, is_reuse_macro_block_, occupy_size_, data_type_);
 
 ObCopyTabletInfoArg::ObCopyTabletInfoArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     tablet_id_list_(),
     need_check_seq_(false),
     ls_rebuild_seq_(-1),
@@ -139,7 +133,7 @@ ObCopyTabletInfoArg::ObCopyTabletInfoArg()
 
 
 OB_SERIALIZE_MEMBER(ObCopyTabletInfoArg,
-    tenant_id_, ls_id_, tablet_id_list_, need_check_seq_, ls_rebuild_seq_,
+    ls_id_, tablet_id_list_, need_check_seq_, ls_rebuild_seq_,
     is_only_copy_major_, version_);
 
 ObCopyTabletInfo::ObCopyTabletInfo()
@@ -205,8 +199,7 @@ OB_SERIALIZE_MEMBER(ObCopyTabletSSTableInfoArg,
     tablet_id_, max_major_sstable_snapshot_, minor_sstable_scn_range_, ddl_sstable_scn_range_);
 
 ObCopyTabletsSSTableInfoArg::ObCopyTabletsSSTableInfoArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     need_check_seq_(false),
     ls_rebuild_seq_(-1),
     is_only_copy_major_(false),
@@ -222,7 +215,6 @@ ObCopyTabletsSSTableInfoArg::~ObCopyTabletsSSTableInfoArg()
 
 void ObCopyTabletsSSTableInfoArg::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ls_id_.reset();
   need_check_seq_ = false;
   ls_rebuild_seq_ = -1;
@@ -233,7 +225,7 @@ void ObCopyTabletsSSTableInfoArg::reset()
 
 
 OB_SERIALIZE_MEMBER(ObCopyTabletsSSTableInfoArg,
-    tenant_id_, ls_id_, need_check_seq_, ls_rebuild_seq_, is_only_copy_major_,
+    ls_id_, need_check_seq_, ls_rebuild_seq_, is_only_copy_major_,
     tablet_sstable_info_arg_list_, version_);
 
 
@@ -263,8 +255,7 @@ OB_SERIALIZE_MEMBER(ObCopyTabletSSTableInfo,
 
 
 ObCopyLSInfoArg::ObCopyLSInfoArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     version_(OB_INVALID_ID)
 {
 }
@@ -272,7 +263,7 @@ ObCopyLSInfoArg::ObCopyLSInfoArg()
 
 
 OB_SERIALIZE_MEMBER(ObCopyLSInfoArg,
-    tenant_id_, ls_id_, version_);
+    ls_id_, version_);
 
 
 ObCopyLSInfo::ObCopyLSInfo()
@@ -289,15 +280,14 @@ OB_SERIALIZE_MEMBER(ObCopyLSInfo,
     ls_meta_package_, tablet_id_array_, is_log_sync_, version_);
 
 ObFetchLSMetaInfoArg::ObFetchLSMetaInfoArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     version_(OB_INVALID_ID)
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObFetchLSMetaInfoArg, tenant_id_, ls_id_, version_);
+OB_SERIALIZE_MEMBER(ObFetchLSMetaInfoArg, ls_id_, version_);
 
 
 ObFetchLSMetaInfoResp::ObFetchLSMetaInfoResp()
@@ -317,14 +307,13 @@ bool ObFetchLSMetaInfoResp::is_valid() const
 OB_SERIALIZE_MEMBER(ObFetchLSMetaInfoResp, ls_meta_package_, version_, has_transfer_table_);
 
 ObFetchLSMemberListArg::ObFetchLSMemberListArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_()
+  : ls_id_()
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObFetchLSMemberListArg, tenant_id_, ls_id_);
+OB_SERIALIZE_MEMBER(ObFetchLSMemberListArg, ls_id_);
 
 ObCheckRestorePreconditionResult::ObCheckRestorePreconditionResult()
   : required_disk_size_(0),
@@ -404,14 +393,13 @@ ObFetchLSMemberListInfo::ObFetchLSMemberListInfo()
 OB_SERIALIZE_MEMBER(ObFetchLSMemberListInfo, member_list_);
 
 ObFetchLSMemberAndLearnerListArg::ObFetchLSMemberAndLearnerListArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_()
+  : ls_id_()
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObFetchLSMemberAndLearnerListArg, tenant_id_, ls_id_);
+OB_SERIALIZE_MEMBER(ObFetchLSMemberAndLearnerListArg, ls_id_);
 
 ObFetchLSMemberAndLearnerListInfo::ObFetchLSMemberAndLearnerListInfo()
   : member_list_(),
@@ -424,8 +412,7 @@ ObFetchLSMemberAndLearnerListInfo::ObFetchLSMemberAndLearnerListInfo()
 OB_SERIALIZE_MEMBER(ObFetchLSMemberAndLearnerListInfo, member_list_, learner_list_);
 
 ObCopySSTableMacroRangeInfoArg::ObCopySSTableMacroRangeInfoArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     tablet_id_(),
     copy_table_key_array_(),
     macro_range_max_marco_count_(0),
@@ -441,7 +428,7 @@ ObCopySSTableMacroRangeInfoArg::~ObCopySSTableMacroRangeInfoArg()
 
 bool ObCopySSTableMacroRangeInfoArg::is_valid() const
 {
-  return tenant_id_ != OB_INVALID_ID
+  return true
       && ls_id_.is_valid()
       && tablet_id_.is_valid()
       && copy_table_key_array_.count() > 0
@@ -457,7 +444,6 @@ int ObCopySSTableMacroRangeInfoArg::assign(const ObCopySSTableMacroRangeInfoArg 
   } else if (OB_FAIL(copy_table_key_array_.assign(arg.copy_table_key_array_))) {
     LOG_WARN("failed to assign src table array", K(ret), K(arg));
   } else {
-    tenant_id_ = arg.tenant_id_;
     ls_id_ = arg.ls_id_;
     tablet_id_ = arg.tablet_id_;
     macro_range_max_marco_count_ = arg.macro_range_max_marco_count_;
@@ -467,7 +453,7 @@ int ObCopySSTableMacroRangeInfoArg::assign(const ObCopySSTableMacroRangeInfoArg 
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObCopySSTableMacroRangeInfoArg, tenant_id_, ls_id_,
+OB_SERIALIZE_MEMBER(ObCopySSTableMacroRangeInfoArg, ls_id_,
     tablet_id_, copy_table_key_array_, macro_range_max_marco_count_,
     need_check_seq_, ls_rebuild_seq_);
 
@@ -527,75 +513,71 @@ OB_SERIALIZE_MEMBER(ObCopyTabletSSTableHeader,
     tablet_id_, status_, sstable_count_, tablet_meta_, version_);
 
 ObNotifyRestoreTabletsArg::ObNotifyRestoreTabletsArg()
-  : tenant_id_(OB_INVALID_ID), ls_id_(), tablet_id_array_(), restore_status_(), leader_proposal_id_(0)
+  : ls_id_(), tablet_id_array_(), restore_status_(), leader_proposal_id_(0)
 {
 }
 
 
 bool ObNotifyRestoreTabletsArg::is_valid() const
 {
-  return OB_INVALID_ID != tenant_id_
-         && ls_id_.is_valid()
+  return ls_id_.is_valid()
          && restore_status_.is_valid()
          && leader_proposal_id_ > 0;
 }
 
-OB_SERIALIZE_MEMBER(ObNotifyRestoreTabletsArg, tenant_id_, ls_id_, tablet_id_array_, restore_status_, leader_proposal_id_);
+OB_SERIALIZE_MEMBER(ObNotifyRestoreTabletsArg, ls_id_, tablet_id_array_, restore_status_, leader_proposal_id_);
 
 
 ObNotifyRestoreTabletsResp::ObNotifyRestoreTabletsResp()
-  : tenant_id_(OB_INVALID_ID), ls_id_(), restore_status_()
+  : ls_id_(), restore_status_()
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObNotifyRestoreTabletsResp, tenant_id_, ls_id_, restore_status_);
+OB_SERIALIZE_MEMBER(ObNotifyRestoreTabletsResp, ls_id_, restore_status_);
 
 
 ObInquireRestoreArg::ObInquireRestoreArg()
-  : tenant_id_(OB_INVALID_ID), ls_id_(), restore_status_()
+  : ls_id_(), restore_status_()
 {
 }
 
 
 bool ObInquireRestoreArg::is_valid() const
 {
-  return OB_INVALID_ID != tenant_id_
-         && ls_id_.is_valid()
+  return ls_id_.is_valid()
 	       && restore_status_.is_valid();
 }
 
-OB_SERIALIZE_MEMBER(ObInquireRestoreArg, tenant_id_, ls_id_, restore_status_);
+OB_SERIALIZE_MEMBER(ObInquireRestoreArg, ls_id_, restore_status_);
 
 ObInquireRestoreResp::ObInquireRestoreResp()
-  : tenant_id_(OB_INVALID_ID), ls_id_(), is_leader_(false), restore_status_()
+  : ls_id_(), is_leader_(false), restore_status_()
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObInquireRestoreResp, tenant_id_, ls_id_, is_leader_, restore_status_);
+OB_SERIALIZE_MEMBER(ObInquireRestoreResp, ls_id_, is_leader_, restore_status_);
 
 
 ObRestoreUpdateLSMetaArg::ObRestoreUpdateLSMetaArg()
-  : tenant_id_(OB_INVALID_ID), ls_meta_package_()
+  : ls_meta_package_()
 {
 }
 
 
 bool ObRestoreUpdateLSMetaArg::is_valid() const
 {
-  return OB_INVALID_ID != tenant_id_
-         && ls_meta_package_.is_valid();
+  return ls_meta_package_.is_valid();
 }
 
-OB_SERIALIZE_MEMBER(ObRestoreUpdateLSMetaArg, tenant_id_, ls_meta_package_);
+OB_SERIALIZE_MEMBER(ObRestoreUpdateLSMetaArg, ls_meta_package_);
 
 
 ObCheckSrcTransferTabletsArg::ObCheckSrcTransferTabletsArg()
-  : tenant_id_(OB_INVALID_ID),
-    src_ls_id_(),
+  : src_ls_id_(),
     tablet_info_array_()
 {
 }
@@ -603,28 +585,26 @@ ObCheckSrcTransferTabletsArg::ObCheckSrcTransferTabletsArg()
 
 
 
-OB_SERIALIZE_MEMBER(ObCheckSrcTransferTabletsArg, tenant_id_, src_ls_id_, tablet_info_array_);
+OB_SERIALIZE_MEMBER(ObCheckSrcTransferTabletsArg, src_ls_id_, tablet_info_array_);
 
 
 ObGetLSActiveTransCountArg::ObGetLSActiveTransCountArg()
-  : tenant_id_(OB_INVALID_ID),
-    src_ls_id_()
+  : src_ls_id_()
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObGetLSActiveTransCountArg, tenant_id_, src_ls_id_);
+OB_SERIALIZE_MEMBER(ObGetLSActiveTransCountArg, src_ls_id_);
 
 ObCopyLSViewArg::ObCopyLSViewArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_()
+  : ls_id_()
 {
 }
 
 
 
-OB_SERIALIZE_MEMBER(ObCopyLSViewArg, tenant_id_, ls_id_);
+OB_SERIALIZE_MEMBER(ObCopyLSViewArg, ls_id_);
 
 
 // ObStorageStreamRpcP<> obcall stream-RPC processor impls deleted — dead in seekdb.

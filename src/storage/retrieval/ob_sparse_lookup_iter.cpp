@@ -285,7 +285,7 @@ ObSRHashLookupIter::ObSRHashLookupIter()
 int ObSRHashLookupIter::inner_init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(hash_map_.create(cache_capacity_, common::ObMemAttr(MTL_ID(), "SRTaaTMap")))) {
+  if (OB_FAIL(hash_map_.create(cache_capacity_, common::ObMemAttr("SRTaaTMap")))) {
     LOG_WARN("failed to create hash map");
   }
   return ret;

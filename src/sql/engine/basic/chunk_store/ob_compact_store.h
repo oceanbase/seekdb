@@ -47,7 +47,6 @@ public:
   void reset();
   void rescan();
   int init(const int64_t mem_limit,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
            const char *label = common::ObModIds::OB_SQL_ROW_STORE,
            const bool enable_dump = true,
@@ -58,7 +57,6 @@ public:
 
   int init(const int64_t mem_limit,
            const ObIArray<storage::ObColumnSchemaItem> &col_array,
-           const uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID,
            const char *label = common::ObModIds::OB_SQL_ROW_STORE,
            const bool enable_dump = true,

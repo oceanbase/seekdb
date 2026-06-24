@@ -29,7 +29,6 @@ void ObTxStat::reset()
   is_inited_ = false;
   addr_.reset();
   tx_id_.reset();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   has_decided_ = false;
   ls_id_.reset();
   participants_.reset();
@@ -56,8 +55,7 @@ void ObTxStat::reset()
   serial_final_scn_.reset();
   callback_list_stats_.reset();
 }
-int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,
-                   const uint64_t tenant_id,  const bool has_decided,
+int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bool has_decided,
                    const share::ObLSID &ls_id, const share::ObLSArray &participants,
                    const int64_t tx_ctx_create_time, const int64_t tx_expired_time,
                    const int64_t ref_cnt, const int64_t last_op_sn,
@@ -85,7 +83,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,
     is_inited_ = true;
     addr_ = addr;
     tx_id_ = tx_id;
-    tenant_id_ = tenant_id;
     has_decided_ = has_decided;
     ls_id_ = ls_id;
     tx_ctx_create_time_ = tx_ctx_create_time;
@@ -123,7 +120,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,
 }
 
 int ObTxLockStat::init(const common::ObAddr &addr,
-                      uint64_t tenant_id,
                       const share::ObLSID &ls_id,
                       const ObMemtableKeyInfo &memtable_key_info,
                       uint32_t session_id,
@@ -141,7 +137,6 @@ int ObTxLockStat::init(const common::ObAddr &addr,
   } else {
     is_inited_ = true;
     addr_ = addr;
-    tenant_id_ = tenant_id;
     ls_id_ = ls_id;
     memtable_key_info_ = memtable_key_info;
     session_id_ = session_id;
@@ -159,7 +154,6 @@ void ObTxLockStat::reset()
 {
   is_inited_ = false;
   addr_.reset();
-  tenant_id_ = 0;
   ls_id_.reset();
   memtable_key_info_.reset();
   session_id_ = 0;
@@ -169,8 +163,7 @@ void ObTxLockStat::reset()
   tx_expired_time_ = 0;
 }
 
-int ObTxSchedulerStat::init(const uint64_t tenant_id,
-                            const common::ObAddr &addr,
+int ObTxSchedulerStat::init(const common::ObAddr &addr,
                             const uint32_t sess_id,
                             const uint32_t client_sid,
                             const ObTransID &tx_id,
@@ -203,7 +196,6 @@ int ObTxSchedulerStat::init(const uint64_t tenant_id,
     TRANS_LOG(WARN, "savepoints assign error", KR(ret), K(savepoints));
   } else {
     is_inited_ = true;
-    tenant_id_ = tenant_id;
     addr_ = addr;
     sess_id_ = sess_id;
     client_sid_ = client_sid;
@@ -231,7 +223,6 @@ int ObTxSchedulerStat::init(const uint64_t tenant_id,
 void ObTxSchedulerStat::reset()
 {
   is_inited_ = false;
-  tenant_id_ = 0;
   addr_.reset();
   sess_id_ = 0;
   tx_id_.reset();

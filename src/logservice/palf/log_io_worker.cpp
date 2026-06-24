@@ -48,7 +48,6 @@ LogIOWorker::~LogIOWorker()
 }
 
 int LogIOWorker::init(const LogIOWorkerConfig &config,
-                      const int64_t tenant_id,
                       const int cb_thread_pool_tg_id,
                       ObIAllocator *allocator,
                       LogWritingThrottle *throttle,
@@ -64,7 +63,7 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid argument!!!", K(ret), K(config), K(cb_thread_pool_tg_id), KP(allocator),
         KP(throttle), KP(palf_env_impl));
-  } else if (OB_FAIL(queue_.init(config.io_queue_capcity_, "IOWorkerLQ", tenant_id))) {
+  } else if (OB_FAIL(queue_.init(config.io_queue_capcity_, "IOWorkerLQ"))) {
     PALF_LOG(ERROR, "io task queue init failed", K(ret), K(config));
   } else if (OB_FAIL(batch_io_task_mgr_.init(config.batch_width_,
                                              config.batch_depth_,

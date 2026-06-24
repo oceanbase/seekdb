@@ -32,19 +32,18 @@ namespace schema
 class ObTenantAiModelId final
 {
 public:
-  ObTenantAiModelId() : tenant_id_(OB_INVALID_TENANT_ID), ai_model_id_(OB_INVALID_ID) {}
-  ObTenantAiModelId(const uint64_t tenant_id, const uint64_t ai_model_id) : tenant_id_(tenant_id), ai_model_id_(ai_model_id) {}
+  ObTenantAiModelId() : ai_model_id_(OB_INVALID_ID) {}
+  ObTenantAiModelId(const uint64_t ai_model_id) : ai_model_id_(ai_model_id) {}
   bool operator==(const ObTenantAiModelId &other) const
   {
-    return tenant_id_ == other.tenant_id_ && ai_model_id_ == other.ai_model_id_;
+    return true && ai_model_id_ == other.ai_model_id_;
   }
-  bool is_valid() const { return tenant_id_ != OB_INVALID_TENANT_ID && ai_model_id_ != OB_INVALID_ID; }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
+  bool is_valid() const { return true && ai_model_id_ != OB_INVALID_ID; }
+  
   OB_INLINE uint64_t get_ai_model_id() const { return ai_model_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(ai_model_id));
+  TO_STRING_KV(K_(ai_model_id));
 
 private:
-  uint64_t tenant_id_;
   uint64_t ai_model_id_;
 };
 
@@ -58,7 +57,7 @@ public:
   bool is_valid() const override
   {
     return ObSchema::is_valid()
-          && tenant_id_ != OB_INVALID_TENANT_ID
+          && true
           && model_id_ != OB_INVALID_ID
           && !name_.empty()
           && type_ != EndpointType::MAX_TYPE
@@ -68,7 +67,6 @@ public:
 
   void reset()
   {
-    tenant_id_ = OB_INVALID_TENANT_ID;
     model_id_ = OB_INVALID_ID;
     name_.reset();
     type_ = EndpointType::MAX_TYPE;
@@ -78,18 +76,18 @@ public:
   }
 
   int assign(const ObAiModelSchema &other); 
-  int assign(const uint64_t tenant_id, const ObAiServiceModelInfo &model_info);
+  int assign(const ObAiServiceModelInfo &model_info);
   int64_t get_convert_size() const override;
 
   OB_INLINE uint64_t get_ai_model_id() const { return model_id_; }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
+  
   OB_INLINE ObString get_name() const { return name_; }
   OB_INLINE EndpointType::TYPE get_type() const { return type_; }
   OB_INLINE ObString get_model_name() const { return model_name_; }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
   OB_INLINE common::ObNameCaseMode get_case_mode() const { return case_mode_; }
 
-  OB_INLINE void set_tenant_id(const uint64_t &tenant_id) { tenant_id_ = tenant_id; }
+  
   OB_INLINE void set_model_id(const uint64_t &model_id) { model_id_ = model_id; }
   OB_INLINE int set_name(const ObString &name) { return deep_copy_str(name, name_); }
   OB_INLINE void set_type(const EndpointType::TYPE &type) { type_ = type; }
@@ -97,15 +95,13 @@ public:
   OB_INLINE void set_schema_version(const int64_t &schema_version) { schema_version_ = schema_version; }
   OB_INLINE void set_case_mode(const common::ObNameCaseMode &case_mode) { case_mode_ = case_mode; }
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(model_id),
+  TO_STRING_KV(K_(model_id),
                K_(name),
                K_(type),
                K_(model_name),
                K_(schema_version));
 
 private:
-  uint64_t tenant_id_;
   uint64_t model_id_;
   ObString name_;
   EndpointType::TYPE type_;
@@ -119,23 +115,22 @@ class ObAiModelHashWrapper final
 {
 public:
   ObAiModelHashWrapper() { reset(); };
-  ObAiModelHashWrapper(uint64_t tenant_id, const ObString &name, common::ObNameCaseMode case_mode)
-    : tenant_id_(tenant_id), name_(name), case_mode_(case_mode)
+  ObAiModelHashWrapper(const ObString &name, common::ObNameCaseMode case_mode)
+    : name_(name), case_mode_(case_mode)
   {
   }
   ObAiModelHashWrapper(const ObAiModelHashWrapper &other) = default;
   ObAiModelHashWrapper &operator=(const ObAiModelHashWrapper &other) = default;
   ~ObAiModelHashWrapper() = default;
 
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_ai_model_name(const common::ObString &ai_model_name) { name_ = ai_model_name; }
   inline void set_case_mode(const common::ObNameCaseMode &case_mode) { case_mode_ = case_mode; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const common::ObString &get_ai_model_name() const { return name_; }
 
   void reset()
   {
-    tenant_id_ = OB_INVALID_TENANT_ID;
     name_.reset();
     case_mode_ = common::OB_NAME_CASE_INVALID;
   }
@@ -144,7 +139,6 @@ public:
   {
     uint64_t hash_ret = 0;
 
-    hash_ret = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_ret);
     common::ObCollationType cs_type = ObSchema::get_cs_type_with_cmp_mode(case_mode_);
     hash_ret = common::ObCharset::hash(cs_type, name_, hash_ret);
 
@@ -153,16 +147,15 @@ public:
 
   inline bool operator==(const ObAiModelHashWrapper &other) const
   {
-    ObCompareNameWithTenantID name_cmp(tenant_id_, case_mode_);
+    ObCompareNameWithTenantID name_cmp(case_mode_);
 
-    return (tenant_id_ == other.tenant_id_)
+    return (true)
             && (case_mode_ == other.case_mode_)
             && (0 == name_cmp.compare(name_, other.name_));
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(name), K_(case_mode));
+  TO_STRING_KV(K_(name), K_(case_mode));
 private:
-  uint64_t tenant_id_;
   ObString name_;
   common::ObNameCaseMode case_mode_;
 };
@@ -187,7 +180,7 @@ struct ObGetAiModelKey<ObAiModelHashWrapper, ObAiModelSchema*>
     ObAiModelHashWrapper wrapper;
 
     if (OB_NOT_NULL(ai_model_schema)) {
-      wrapper.set_tenant_id(ai_model_schema->get_tenant_id());
+      
       wrapper.set_ai_model_name(ai_model_schema->get_name());
       wrapper.set_case_mode(ai_model_schema->get_case_mode());
     }
@@ -215,14 +208,13 @@ public:
   int get_ai_model_schema_count(int64_t &ai_model_schema_count) const;
   int get_schema_statistics(ObSchemaStatisticsInfo &schema_info) const;
   int get_ai_model_schema(const uint64_t ai_model_id, const ObAiModelSchema *&ai_model_schema) const;
-  int get_ai_model_schema(const uint64_t tenant_id, const common::ObString &name, const common::ObNameCaseMode case_mode, const ObAiModelSchema *&ai_model_schema) const;
-  int del_schemas_in_tenant(const uint64_t tenant_id);
+  int get_ai_model_schema( const common::ObString &name, const common::ObNameCaseMode case_mode, const ObAiModelSchema *&ai_model_schema) const;
   int add_ai_model(const ObAiModelSchema &ai_model_schema, common::ObNameCaseMode case_mode);
   int add_ai_models(const common::ObIArray<ObAiModelSchema> &ai_model_schemas, common::ObNameCaseMode case_mode);
   int del_ai_model(const ObTenantAiModelId &tenant_ai_model_id);
 
 private:
-  int get_ai_model_schemas_in_tenant(const uint64_t tenant_id, common::ObIArray<const ObAiModelSchema *> &ai_model_schemas) const;
+  int get_ai_model_schemas_in_tenant(common::ObIArray<const ObAiModelSchema *> &ai_model_schemas) const;
   int rebuild_ai_model_hashmap();
 
   OB_INLINE static bool compare_ai_model(const ObAiModelSchema *lhs, const ObAiModelSchema *rhs)
@@ -234,10 +226,10 @@ private:
     return lhs->get_ai_model_id() == rhs->get_ai_model_id();
   }
   OB_INLINE static bool equal_to_tenant_ai_model_id(const ObAiModelSchema *lhs, const ObTenantAiModelId &rhs) {
-    return lhs->get_tenant_id() == rhs.get_tenant_id() && lhs->get_ai_model_id() == rhs.get_ai_model_id();
+    return true && lhs->get_ai_model_id() == rhs.get_ai_model_id();
   }
   OB_INLINE static bool compare_with_tenant_ai_model_id(const ObAiModelSchema *lhs, const ObTenantAiModelId &rhs) {
-    return lhs->get_tenant_id() < rhs.get_tenant_id() || (lhs->get_tenant_id() == rhs.get_tenant_id() && lhs->get_ai_model_id() < rhs.get_ai_model_id());
+    return lhs->get_ai_model_id() < rhs.get_ai_model_id();
   }
 private:
   bool is_inited_;

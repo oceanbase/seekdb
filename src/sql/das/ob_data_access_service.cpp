@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "observer/ob_srv_network_frame.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_parallel_handler.h"
@@ -23,6 +24,7 @@
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/omt/ob_tenant.h"
 #include "sql/das/ob_das_extra_data.h"
+#include "observer/omt/ob_tenant.h"  // table_api removal: was included transitively via ob_ls.h -> ob_tenant_tablet_ttl_mgr.h
 
 namespace oceanbase
 {
@@ -190,7 +192,7 @@ int ObDataAccessService::refresh_task_location_info(ObDASRef &das_ref, ObIDASTas
     task_op.set_ls_id(tablet_loc->ls_id_);
     if (!task_op.is_local_task()) {
       int64_t task_id;
-      if (OB_FAIL(MTL(ObDataAccessService*)->get_das_task_id(task_id))) {
+      if (OB_FAIL(share::g_mp->data_access_service()->get_das_task_id(task_id))) {
         LOG_WARN("retry get das task id failed", KR(ret));
       } else {
         task_op.set_task_id(task_id);
@@ -423,7 +425,7 @@ int ObDataAccessService::process_task_resp(ObDASRef &das_ref, const ObDASTaskRes
   }
   // even if trans result have a failure. It only take effect on the last valid op result.
   if (OB_NOT_NULL(session->get_tx_desc())) {
-    int tmp_ret = MTL(transaction::ObTransService*)
+    int tmp_ret = share::g_mp->trans_service()
       ->add_tx_exec_result(*session->get_tx_desc(),
                             task_resp.get_trans_result());
     if (tmp_ret != OB_SUCCESS) {
@@ -473,13 +475,13 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
   } else if (OB_FAIL(task->init(&agg_task, timeout_ts, group_id))) {
     LOG_WARN("init parallel task failed", K(ret), K(agg_task));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     omt::ObTenant *tenant = nullptr;
-    if (OB_FAIL(omt->get_tenant(tenant_id, tenant))) {
-      LOG_WARN("get tenant failed", K(ret), K(tenant_id));
+    if (OB_FAIL(omt->get_tenant(tenant))) {
+      LOG_WARN("get tenant failed", K(ret));
     } else if (OB_ISNULL(tenant)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant is null", K(ret), K(tenant_id));
+      LOG_WARN("tenant is null", K(ret));
     } else if (OB_FAIL(tenant->recv_request(*task))) {
       LOG_WARN("fail to push parallel_das_task", K(ret), KPC(task));
     } else {
@@ -617,14 +619,8 @@ int ObDataAccessService::setup_extra_result(ObDASRef &das_ref,
 
 void ObDataAccessService::set_max_concurrency(int32_t cpu_count)
 {
-  const int32_t das_concurrent_upper_limit = 8;
-  const int32_t das_concurrent_factor = 5;
-  if (OB_UNLIKELY(!is_user_tenant(MTL_ID()))) {
-    das_concurrency_limit_ = 1;
-  } else {
-    das_concurrency_limit_ = min(cpu_count / das_concurrent_factor + 1, das_concurrent_upper_limit);
-  }
-  LOG_DEBUG("set current tenant's das max concurrency", K_(das_concurrency_limit), K(MTL_ID()));
+  das_concurrency_limit_ = 1; // lite: sys tenant (not user) -> serial das
+  LOG_DEBUG("set current tenant's das max concurrency", K_(das_concurrency_limit));
 }
 
 }  // namespace sql

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_server_reload_config.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "share/ob_resource_limit.h"
@@ -288,40 +289,14 @@ int ObServerReloadConfig::operator()()
 
 void ObServerReloadConfig::reload_tenant_scheduler_config_()
 {
-  int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("omt should not be null", K(ret));
-  } else {
-    auto f = [] () {
-      (void) MTL(ObTenantDagScheduler *)->reload_config();
-      (void) MTL(compaction::ObTenantTabletScheduler *)->reload_tenant_config();
-
-      return OB_SUCCESS;
-    };
-    omt->operate_in_each_tenant(f);
-  }
+  (void) share::g_mp->tenant_dag_scheduler()->reload_config();
+  (void) share::g_mp->tenant_tablet_scheduler()->reload_tenant_config();
 }
 
-int ObServerReloadConfig::ObReloadTenantFreezerConfOp::operator()()
-{
-  int ret = OB_SUCCESS;
-  // NOTICE: tenant freezer should update before ObSharedMemAllocMgr.
-  MTL(ObTenantFreezer *)->reload_config();
-  MTL(ObSharedMemAllocMgr*)->update_throttle_config();
-  return ret;
-}
 
 void ObServerReloadConfig::reload_tenant_freezer_config_()
 {
-  int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("omt should not be null", K(ret));
-  } else {
-    ObReloadTenantFreezerConfOp f;
-    omt->operate_in_each_tenant(f);
-  }
+  // NOTICE: tenant freezer should update before ObSharedMemAllocMgr.
+  share::g_mp->tenant_freezer()->reload_config();
+  share::g_mp->shared_mem_alloc_mgr()->update_throttle_config();
 }

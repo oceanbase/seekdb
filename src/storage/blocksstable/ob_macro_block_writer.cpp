@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_macro_block_writer.h"
+#include "share/rc/ob_module_provider.h"
 #include "src/storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "storage/blocksstable/cs_encoding/ob_micro_block_cs_encoder.h"
 #include "src/storage/ddl/ob_ddl_clog.h"
@@ -401,7 +402,6 @@ int ObMacroBlockWriter::ObDefaultMacroBlockFlusher::write_disk(ObMacroBlock& mac
     const int64_t data_buf_size = upper_align(macro_block.get_data_size(), DIO_ALIGN_SIZE);
     {
       object_info.size_ = data_buf_size;
-      object_info.mtl_tenant_id_ = MTL_ID();
       object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       object_info.io_desc_.set_sealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
@@ -467,7 +467,7 @@ int ObMacroBlockWriter::ObSmallSStableMacroBlockFlusher::write_disk(ObMacroBlock
 {
   int ret = OB_SUCCESS;
   UNUSED(is_close_flush);
-  ObSharedMacroBlockMgr *shared_block_mgr = MTL(ObSharedMacroBlockMgr*);
+  ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
   const int64_t data_buf_size = upper_align(macro_block.get_data_size(), DIO_ALIGN_SIZE);
   if (OB_UNLIKELY(OB_ISNULL(block_write_ctx_) || block_info_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
@@ -2192,7 +2192,7 @@ int ObMacroBlockWriter::check_write_complete(const MacroBlockId &macro_block_id)
   read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
   read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
   read_info.macro_block_id_ = macro_block_id;
-  read_info.mtl_tenant_id_ = MTL_ID();
+  
 
   ObStorageObjectHandle read_handle;
   if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =

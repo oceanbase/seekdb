@@ -27,6 +27,9 @@ namespace common
 {
 static roaring_memory_t roaring_memory_mgr;
 
+// Lib-bridge to ObServer-owned ObRbMemMgr (defined in share/rc/ob_tenant_base.cpp).
+extern ObRbMemMgr *get_rb_mem_mgr();
+
 class ObRbMemMgr
 {
 public:

@@ -71,7 +71,7 @@ OB_UNIS_VERSION_V(1);
 public:
   ObPxBloomFilter();
   virtual ~ObPxBloomFilter() {};
-  int init(int64_t data_length, common::ObIAllocator &allocator, int64_t tenant_id,
+  int init(int64_t data_length, common::ObIAllocator &allocator,
            double fpp = 0.01, int64_t max_filter_size = 2147483648 /*2G*/);
   int init(const ObPxBloomFilter *filter);
   inline bool is_inited() { return is_inited_; }
@@ -105,9 +105,9 @@ public:
   }
   typedef int (ObPxBloomFilter::*GetFunc)(uint64_t hash, bool &is_match);
   void reset();
-  int assign(const ObPxBloomFilter &filter, int64_t tenant_id);
+  int assign(const ObPxBloomFilter &filter);
   int regenerate();
-  void set_allocator_attr(int64_t tenant_id);
+  void set_allocator_attr();
   int might_contain_nonsimd(uint64_t hash, bool &is_match);
   TO_STRING_KV(K_(data_length), K_(bits_count), K_(fpp), K_(hash_func_count), K_(is_inited),
       K_(bits_array_length), K_(true_count));
@@ -150,24 +150,24 @@ struct ObPxBFStaticInfo
   OB_UNIS_VERSION(1);
 public:
   ObPxBFStaticInfo()
-  : is_inited_(false), tenant_id_(common::OB_INVALID_TENANT_ID),
+  : is_inited_(false),
     filter_id_(common::OB_INVALID_ID), server_id_(common::OB_INVALID_ID),
     is_shared_(false), skip_subpart_(false),
     p2p_dh_id_(OB_INVALID_ID), is_shuffle_(false), log_join_filter_create_op_(nullptr)
   {}
-  int init(int64_t tenant_id, int64_t filter_id,
+  int init(int64_t filter_id,
            int64_t server_id, bool is_shared,
            bool skip_subpart, int64_t p2p_dh_id,
            bool is_shuffle, ObLogJoinFilter *log_join_filter_create_op);
   bool is_inited_;
-  int64_t tenant_id_;
+  
   int64_t filter_id_;
   int64_t server_id_;
   bool is_shared_;    // Execution period join filter memory is shared or not, false represents thread-level, true represents sqc-level.
   bool skip_subpart_; // whether to skip subpart
   int64_t p2p_dh_id_;
   bool is_shuffle_;
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), K(filter_id_),
+  TO_STRING_KV(K(is_inited_), K(filter_id_),
               K(server_id_), K(is_shared_), K(skip_subpart_),
               K(is_shuffle_), K(p2p_dh_id_));
   ObLogJoinFilter *log_join_filter_create_op_; // not need to serialize, only used in optimizor

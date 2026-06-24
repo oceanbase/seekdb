@@ -81,7 +81,6 @@ int ObSelectStmtPrinter::print()
     } else if (select_stmt->is_set_stmt()) {
       if (select_stmt->is_recursive_union() &&
           !print_params_.print_origin_stmt_) {
-        // for dblink, print a embeded recursive union query block
         if (OB_FAIL(print_recursive_union_stmt())) {
           LOG_WARN("failed to print recursive union stmt", K(ret));
         }

@@ -38,7 +38,7 @@ public:
   typedef share::schema::ObReferenceObjTable::DependencyObjKeyItemPair DepObjKeyItem;
   typedef share::schema::ObReferenceObjTable::DependencyObjKeyItemPairs DepObjKeyItemList;
   ObMaintainObjDepInfoTask (
-    const uint64_t tenant_id);
+    );
   virtual ~ObMaintainObjDepInfoTask()
   {
     insert_dep_objs_.destroy();
@@ -50,7 +50,6 @@ public:
   DepObjKeyItemList& get_delete_dep_objs() { return delete_dep_objs_; }
   bool is_empty_task() const
   { return !reset_view_column_infos_ && (insert_dep_objs_.empty() && update_dep_objs_.empty() && delete_dep_objs_.empty() && !view_schema_.is_valid()); }
-  // int check_and_refresh_schema(uint64_t effective_tenant_id);
   int check_cur_maintain_task_is_valid(
       const share::schema::ObReferenceObjTable::ObDependencyObjKey &dep_obj_key,
       int64_t dep_obj_schema_version,
@@ -71,7 +70,6 @@ public:
   bool reset_view_column_infos() const { return reset_view_column_infos_; }
 
 private:
-  uint64_t tenant_id_;
   const share::ObGlobalContext &gctx_;
   DepObjKeyItemList insert_dep_objs_;
   DepObjKeyItemList update_dep_objs_;
@@ -101,13 +99,13 @@ public:
   { last_execute_time_ = execute_time; }
   int add_view_id_to_set(const uint64_t view_id) { return view_info_set_.set_refactored(view_id); }
   int erase_view_id_from_set(const uint64_t view_id) { return view_info_set_.erase_refactored(view_id); }
-  int add_consistent_sys_view_id_to_set(const uint64_t tenant_id, const uint64_t view_id) { return sys_view_consistent_.set_refactored(std::make_pair(tenant_id, view_id)); }
-  int read_consistent_sys_view_from_set(const uint64_t tenant_id, const uint64_t view_id) { return sys_view_consistent_.exist_refactored(std::make_pair(tenant_id, view_id)); }
+  int add_consistent_sys_view_id_to_set(const uint64_t view_id) { return sys_view_consistent_.set_refactored(view_id); }
+  int read_consistent_sys_view_from_set(const uint64_t view_id) { return sys_view_consistent_.exist_refactored(view_id); }
   bool is_queue_almost_full() const { return queue_.size() > queue_.capacity() * MAX_QUEUE_USAGE_RATIO; }
 private:
   int64_t last_execute_time_;
   common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> view_info_set_;
-  common::hash::ObHashSet<std::pair<uint64_t, uint64_t>, common::hash::ReadWriteDefendMode> sys_view_consistent_;
+  common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> sys_view_consistent_;
 };
 
 }  // namespace sql

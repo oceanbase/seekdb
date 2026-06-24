@@ -27,9 +27,7 @@ namespace oceanbase
 namespace common
 {
 
-static const char *const BACKUP_INFO_TENANT_ID = "tenant_id";
 static const char *const BACKUP_BASE_DATA = "base_data";
-static const char *const BACKUP_ALL_TENANT_ID_LIST = "all_tenant_id_list";
 
 class ObStoragePath
 {

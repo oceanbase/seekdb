@@ -60,9 +60,9 @@ ObDirectLoadMultipleSSTableScanMerge::ObDirectLoadMultipleSSTableScanMerge()
     rows_merger_(nullptr),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  scanners_.set_tenant_id(MTL_ID());
-  rows_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObDirectLoadMultipleSSTableScanMerge::~ObDirectLoadMultipleSSTableScanMerge() { reset(); }

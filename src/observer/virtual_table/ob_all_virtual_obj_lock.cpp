@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 
@@ -78,10 +79,10 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-bool ObAllVirtualObjLock::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualObjLock::is_need_process()
 {
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
+  if (!false &&
+      (true || true)) {
     return true;
   }
   return false;
@@ -328,7 +329,7 @@ int ObAllVirtualObjLock::prepare_start_to_read()
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (OB_ISNULL(ls_iter_guard_.get_ptr())
-             && OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+             && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "init ls_iter_guard_ failed", K(ret));
   } else if (OB_FAIL(get_next_ls())) {
     SERVER_LOG(WARN, "init ls_ failed", K(ret));

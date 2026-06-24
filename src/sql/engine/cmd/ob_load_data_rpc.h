@@ -149,7 +149,7 @@ struct ObInsertTask
   }
 
   void reset() {
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
     column_count_ = 0;
     reuse();
     token_server_idx_ = OB_INVALID_INDEX;
@@ -165,14 +165,13 @@ struct ObInsertTask
     return task_id_ == OB_INVALID_ID;
   }
 
-  TO_STRING_KV(K(tenant_id_),
-               K(task_id_),
+  TO_STRING_KV(K(task_id_),
                K(row_count_),
                K(column_count_),
                K(insert_value_data_.count()));
 
   //serialized data:
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   int64_t row_count_;
   int64_t column_count_;
@@ -327,8 +326,7 @@ class ObLoadbuffer
 {
 public:
   const static int64_t LOAD_BUFFER_MAX_ROW_COUNT = DEFAULT_BUFFERRED_ROW_COUNT;
-  ObLoadbuffer (): tenant_id_(common::OB_INVALID_ID),
-                   table_id_(common::OB_INVALID_ID),
+  ObLoadbuffer (): table_id_(common::OB_INVALID_ID),
                    insert_column_num_(0),
                    stored_row_cnt_(0),
                    stored_pos_(0),
@@ -375,8 +373,8 @@ public:
   OB_INLINE ObTabletID get_tablet_id() { return tablet_id_; }
   OB_INLINE void set_table_id(uint64_t table_id) { table_id_ = table_id; }
   OB_INLINE uint64_t get_table_id() { return table_id_; }
-  OB_INLINE void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  OB_INLINE uint64_t get_tenant_id(){ return tenant_id_; }
+  
+  
   OB_INLINE void set_column_num(int64_t insert_column_num) { insert_column_num_ = insert_column_num; }
   OB_INLINE int64_t get_column_num(){ return insert_column_num_; }
   OB_INLINE int64_t get_stored_pos() { return stored_pos_; }
@@ -397,7 +395,7 @@ public:
   common::ObIArray<int64_t>& get_file_line_number() { return file_line_number_; }
   common::ObIArray<int16_t>& get_failed_row_idx() { return failed_inserted_row_idx_; }
   common::ObIArray<int>& get_error_code_array() { return error_codes_; }
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(table_id),
                K_(insert_column_num),
                K_(stored_row_cnt),
@@ -410,7 +408,7 @@ public:
   OB_UNIS_VERSION(1);
 private:
   //send params
-  uint64_t tenant_id_;
+  
   uint64_t table_id_;
   common::ObString table_name_;
   int64_t insert_column_num_;

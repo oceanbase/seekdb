@@ -154,7 +154,7 @@ int ObDatumRowStore::Iterator::get_next_row(ObDatumRow &row)
 
 ////////////////////////////////////////////////////////////////
 ObDatumRowStore::ObDatumRowStore()
-:   inner_alloc_("DatumRowStore", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID),
+:   inner_alloc_("DatumRowStore", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID),
     blocks_(),
     row_count_(0),
     col_count_(0)

@@ -1383,7 +1383,7 @@ int ObRangeGraphGenerator::crop_final_range_node(ObRangeNode *&range_node, int64
   uint64_t node_count = 0;
   common::hash::ObHashMap<uint64_t, ObRangeNode*> refined_ranges;
   common::hash::ObHashSet<uint64_t> shared_ranges;
-  ObArenaAllocator alloc("CropRangeAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator alloc("CropRangeAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObRangeNode *out_range_node = nullptr;
   RangeNodeConnectInfo connect_info;
   bool check_range_graph = ERRSIM_CROP_RANGE_GRAPH_WITH_CHECK;
@@ -1392,9 +1392,9 @@ int ObRangeGraphGenerator::crop_final_range_node(ObRangeNode *&range_node, int64
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(generate_node_id(range_node, node_count))) {
     LOG_WARN("failed to generate node id", K(ret));
-  } else if (OB_FAIL(refined_ranges.create(node_count, "RefinedRanges", "RefinedRanges", MTL_ID()))) {
+  } else if (OB_FAIL(refined_ranges.create(node_count, "RefinedRanges", "RefinedRanges"))) {
     LOG_WARN("fail to init hashmap", K(ret));
-  } else if (OB_FAIL(shared_ranges.create(1000, "SharedRanges", "SharedRanges", MTL_ID()))) {
+  } else if (OB_FAIL(shared_ranges.create(1000, "SharedRanges", "SharedRanges"))) {
     LOG_WARN("failed to init hashset", K(ret));
   } else if (check_range_graph && 
              OB_FAIL(generate_range_node_connect_info(alloc, range_node, node_count, connect_info))) {

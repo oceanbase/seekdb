@@ -65,7 +65,6 @@ void ObSqlEndTransCb::callback(int cb_param)
 {
   int ret = OB_SUCCESS;
   uint32_t sessid = 0;
-  uint64_t proxy_sessid = 0;
   sql::ObSQLSessionInfo *session_info = sess_info_;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_NULL_VALUE;
@@ -77,7 +76,6 @@ void ObSqlEndTransCb::callback(int cb_param)
       || OB_TRANS_ROLLBACKED == cb_param;
     sql::ObSqlTransControl::reset_session_tx_state(session_info, reuse_tx);
     sessid = session_info->get_server_sid();
-    proxy_sessid = session_info->get_proxy_sessid();
     // Check these variables within the critical section to prevent adverse effects caused by concurrent callbacks
     if (OB_UNLIKELY(!pkt_param_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -166,7 +164,7 @@ void ObSqlEndTransCb::callback(int cb_param)
     MEM_BARRIER();
     int sret = packet_sender_.revert_session(session_info);
     if (OB_SUCCESS != sret) {
-      SERVER_LOG_RET(ERROR, sret, "revert session fail", K(sessid), K(proxy_sessid), K(sret), "ret", ret, K(lbt()));
+      SERVER_LOG_RET(ERROR, sret, "revert session fail", K(sessid), K(sret), "ret", ret, K(lbt()));
     }
   }
 }

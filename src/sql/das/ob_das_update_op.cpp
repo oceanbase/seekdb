@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_update_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_domain_utils.h"
 #include "src/sql/engine/px/ob_dfo.h"
 #include "sql/engine/dml/ob_dml_service.h"
@@ -402,7 +403,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *as = MTL(ObAccessService *);
+  ObAccessService *as = share::g_mp->access_service();
   if (OB_UNLIKELY((ctdef.table_param_.get_data_table().is_vector_delta_buffer() ||
                   ctdef.table_param_.get_data_table().is_hybrid_vector_index_log()) &&
                   !ctdef.is_access_mlog_as_master_table_)) {
@@ -473,7 +474,7 @@ int ObDASUpdateOp::open_op()
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   common::ObSEArray<ObFTDocWordInfo, 4> doc_word_infos;
-  doc_word_infos.set_attr(lib::ObMemAttr(MTL_ID(), "FTDocWInfo"));
+  doc_word_infos.set_attr(lib::ObMemAttr("FTDocWInfo"));
   ObDASUpdIterator upd_iter(upd_ctdef_, write_buffer_, op_alloc_);
   ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator> upd_adaptor;
   upd_adaptor.tx_desc_ = trans_desc_;
@@ -562,7 +563,7 @@ int ObDASUpdateOp::init_task_info(uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
   if (!write_buffer_.is_inited()
-      && OB_FAIL(write_buffer_.init(op_alloc_, row_extend_size, MTL_ID(), "DASUpdateBuffer"))) {
+      && OB_FAIL(write_buffer_.init(op_alloc_, row_extend_size, "DASUpdateBuffer"))) {
     LOG_WARN("init update buffer failed", K(ret));
   }
   return ret;

@@ -32,7 +32,6 @@ struct ObMViewCompleteRefreshArg final : public ObDDLArg
 public:
   ObMViewCompleteRefreshArg()
     : ObDDLArg(),
-      tenant_id_(OB_INVALID_TENANT_ID),
       table_id_(OB_INVALID_ID),
       session_id_(OB_INVALID_ID),
       sql_mode_(0),
@@ -50,7 +49,6 @@ public:
   bool is_valid() const;
   void reset();
   INHERIT_TO_STRING_KV("ObDDLArg", ObDDLArg,
-                       K_(tenant_id),
                        K_(table_id),
                        K_(session_id),
                        K_(sql_mode),
@@ -62,7 +60,7 @@ public:
                        K_(target_data_sync_scn),
                        K_(select_sql));
 public:
-  uint64_t tenant_id_;
+  
   uint64_t table_id_; // mview table id
   uint64_t session_id_;
   ObSQLMode sql_mode_;
@@ -364,7 +362,6 @@ public:
         database_name_(),
         table_name_(),
         mlog_name_(),
-        tenant_id_(OB_INVALID_TENANT_ID),
         base_table_id_(common::OB_INVALID_ID),
         mlog_table_id_(common::OB_INVALID_ID),
         session_id_(common::OB_INVALID_ID),
@@ -398,7 +395,7 @@ public:
       database_name_ = other.database_name_;
       table_name_ = other.table_name_;
       mlog_name_ = other.mlog_name_;
-      tenant_id_ = other.tenant_id_;
+      
       base_table_id_ = other.base_table_id_;
       mlog_table_id_ = other.mlog_table_id_;
       session_id_ = other.session_id_;
@@ -422,7 +419,7 @@ public:
     database_name_.reset();
     table_name_.reset();
     mlog_name_.reset();
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
     base_table_id_ = common::OB_INVALID_ID;
     mlog_table_id_ = common::OB_INVALID_ID;
     session_id_ = common::OB_INVALID_ID;
@@ -473,7 +470,7 @@ public:
   common::ObString database_name_;
   common::ObString table_name_;
   common::ObString mlog_name_; // for privilege check
-  uint64_t tenant_id_;
+  
   uint64_t base_table_id_;
   uint64_t mlog_table_id_;
   uint64_t session_id_;

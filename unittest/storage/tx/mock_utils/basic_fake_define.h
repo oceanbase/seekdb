@@ -51,7 +51,6 @@ public:
     IGNORE_RETURN map_.init();
     ObMemAttr mem_attr;
     mem_attr.label_ = "TX_DATA_TABLE";
-    mem_attr.tenant_id_ = 1;
     mem_attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
     ObMemtableMgrHandle memtable_mgr_handle;
     OB_ASSERT(OB_SUCCESS == slice_allocator_.init(
@@ -147,7 +146,6 @@ public:
   void destroy() { }
   void reset() { ls_addr_table_.reuse(); }
   int get_leader(const int64_t cluster_id,
-                 const int64_t tenant_id,
                  const share::ObLSID &ls_id,
                  common::ObAddr &leader)
   {
@@ -158,18 +156,16 @@ public:
     return ret;
   }
   int nonblock_get_leader(const int64_t cluster_id,
-                          const int64_t tenant_id,
                           const share::ObLSID &ls_id,
                           common::ObAddr &leader)
-  { return get_leader(cluster_id, tenant_id, ls_id, leader); }
+  { return get_leader(cluster_id, ls_id, leader); }
   int nonblock_get(const int64_t cluster_id,
-                   const int64_t tenant_id,
                    const share::ObLSID &ls_id,
                    share::ObLSLocation &location)
   {
     int ret = OB_SUCCESS;
     common::ObAddr leader;
-    OZ(get_leader(cluster_id, tenant_id, ls_id, leader));
+    OZ(get_leader(cluster_id, ls_id, leader));
     ObLSReplicaLocation rep_loc;
     ObLSRestoreStatus restore_status(ObLSRestoreStatus::Status::NONE);
     auto p = ObReplicaProperty::create_property(100);
@@ -224,8 +220,7 @@ public:
     get_gts_waiting_mode_ = false;
   }
   int update_gts(const uint64_t tenant_id, const int64_t gts, bool &update) { return OB_SUCCESS; }
-  int get_gts(const uint64_t tenant_id,
-              const MonotonicTs stc,
+  int get_gts(const MonotonicTs stc,
               ObTsCbTask *task,
               share::SCN &scn,
               MonotonicTs &receive_gts_ts)
@@ -247,8 +242,7 @@ public:
     return ret;
   }
 
-  int get_gts_sync(const uint64_t tenant_id,
-                   const MonotonicTs stc,
+  int get_gts_sync(const MonotonicTs stc,
                    const int64_t timeout_us,
                    share::SCN &scn,
                    MonotonicTs &receive_gts_ts)
@@ -260,7 +254,7 @@ public:
       int64_t n = ObClockGenerator::getClock();
       if (n >= expire_ts) {
         ret = OB_TIMEOUT;
-      } else if (OB_FAIL(get_gts(tenant_id, stc, NULL, scn, receive_gts_ts))) {
+      } else if (OB_FAIL(get_gts(stc, NULL, scn, receive_gts_ts))) {
         if (OB_EAGAIN == ret) {
           ob_usleep(500);
         }
@@ -268,18 +262,18 @@ public:
     } while (OB_EAGAIN == ret);
 
     return ret;
-    return get_gts(tenant_id, stc, NULL, scn, receive_gts_ts);
+    return get_gts(stc, NULL, scn, receive_gts_ts);
   }
 
-  int get_gts(const uint64_t tenant_id, ObTsCbTask *task, share::SCN &scn) {
+  int get_gts(ObTsCbTask *task, share::SCN &scn) {
     if (get_gts_error_) { return get_gts_error_; }
     return OB_SUCCESS;
   }
-  int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_ts,
+  int get_ts_sync(const int64_t timeout_ts,
                   share::SCN &scn, bool &is_external_consistent) { return OB_SUCCESS; }
-  int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_ts,
+  int get_ts_sync(const int64_t timeout_ts,
                   share::SCN &scn) { return OB_SUCCESS; }
-  int wait_gts_elapse(const uint64_t tenant_id, const share::SCN &scn, ObTsCbTask *task,
+  int wait_gts_elapse(const share::SCN &scn, ObTsCbTask *task,
                       bool &need_wait)
   {
     TRANS_LOG(INFO, "wait_gts_elapse begin", K(gts_), K(scn));
@@ -295,7 +289,7 @@ public:
     return ret;
   }
 
-  int wait_gts_elapse(const uint64_t tenant_id, const share::SCN &scn)
+  int wait_gts_elapse(const share::SCN &scn)
   {
     int ret = OB_SUCCESS;
     if (scn.get_val_for_gts() > gts_) {
@@ -304,21 +298,19 @@ public:
     return ret;
   }
 
-  int remove_dropped_tenant(const uint64_t tenant_id) {
-    UNUSED(tenant_id);
+  int remove_dropped_tenant() {
     return OB_SUCCESS;
   }
 
-  int interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id, const share::ObLSID ls_id) {
-    UNUSED(tenant_id);
+  int interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id) {
     UNUSED(ls_id);
     return OB_SUCCESS;
   }
 
   int update_base_ts(const int64_t base_ts) { return OB_SUCCESS; }
   int get_base_ts(int64_t &base_ts) { return OB_SUCCESS; }
-  bool is_external_consistent(const uint64_t tenant_id) { return true; }
-  int get_gts_and_type(const uint64_t tenant_id, const MonotonicTs stc, int64_t &gts,
+  bool is_external_consistent() { return true; }
+  int get_gts_and_type(const MonotonicTs stc, int64_t &gts,
                        int64_t &ts_type) { return OB_SUCCESS; }
   int64_t gts_ = 100;
   int64_t callback_gts_ = 100;
@@ -626,12 +618,11 @@ class ObFakeTxReplayExecutor : public ObTxReplayExecutor
 public:
   ObFakeTxReplayExecutor(storage::ObLS *ls,
                          const share::ObLSID &ls_id,
-                         const uint64_t tenant_id,
                          storage::ObLSTxService *ls_tx_srv,
                          const palf::LSN &lsn,
                          const share::SCN &log_timestamp,
                          const logservice::ObLogBaseHeader &base_header)
-    : ObTxReplayExecutor(ls, ls_id, tenant_id, ls_tx_srv, lsn, log_timestamp, base_header)
+    : ObTxReplayExecutor(ls, ls_id, ls_tx_srv, lsn, log_timestamp, base_header)
   { memtable_ = nullptr; }
   ~ObFakeTxReplayExecutor() { }
   int set_memtable(memtable::ObMemtable* memtable)

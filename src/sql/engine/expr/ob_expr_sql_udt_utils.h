@@ -155,7 +155,6 @@ public:
   static int generate_udt_meta_from_schema(ObSchemaGetterGuard *schema_guard,
                                            ObSubSchemaCtx *subschema_ctx,
                                            common::ObIAllocator &allocator,
-                                           uint64_t tenant_id,
                                            uint64_t udt_id,
                                            ObSqlUDTMeta &udt_meta);
 };

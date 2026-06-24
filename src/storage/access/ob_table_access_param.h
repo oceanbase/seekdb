@@ -18,6 +18,7 @@
 #define OB_STORAGE_TABLE_ACCESS_PARAM_H
 
 #include "storage/ob_i_store.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_datum_range.h"
 #include "ob_sstable_index_filter.h"
 #include "common/ob_tablet_id.h"
@@ -71,7 +72,7 @@ public:
   {
     int ret = OB_SUCCESS;
     if (is_cg) {
-      ret = MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info);
+      ret = share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info);
     } else {
       index_read_info = read_info_;
     }

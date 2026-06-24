@@ -91,7 +91,7 @@ const int64_t _HOUR_ = 60L * _MIN_;
 const int64_t _DAY_ = 24L * _HOUR_;
 const int64_t _YEAR_ = 365L * _DAY_;
 
-void *ob_dict_malloc(const int64_t nbyte, const uint64_t tenant_id);
+void *ob_dict_malloc(const int64_t nbyte);
 void ob_dict_free(void *ptr);
 
 OB_INLINE int64_t get_timestamp_ns()

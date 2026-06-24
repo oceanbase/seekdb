@@ -47,9 +47,6 @@ int ObDynamicPartitionManager::init(
   } else if (OB_ISNULL(session_ = session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", KR(ret));
-  } else if (OB_INVALID_ID == (tenant_id_ = table_schema->get_tenant_id())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id is invalid", KR(ret));
   } else if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema->get_dynamic_partition_policy(), policy_))) {
     LOG_WARN("fail to convert str to dynamic partition policy", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(check_is_supported(*table_schema))) {
@@ -104,9 +101,6 @@ int ObDynamicPartitionManager::check_inner_stat_()
   } else if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", KR(ret));
-  } else if (OB_INVALID_ID == tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant id is invalid", KR(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("GCTX schema service is null", KR(ret));
@@ -176,12 +170,11 @@ int ObDynamicPartitionManager::write_ddl_(const ObSqlString &ddl)
     if (OB_FAIL(get_table_time_zone_wrap_(tz_info_wrap))) {
       LOG_WARN("fail to get tenant time zone wrap", KR(ret));
     } else if (FALSE_IT(session_param.tz_info_wrap_ = &tz_info_wrap)) {
-    } else if (OB_FAIL(GCTX.sql_proxy_->write(tenant_id_,
-                                              ddl.ptr(),
+    } else if (OB_FAIL(GCTX.sql_proxy_->write(ddl.ptr(),
                                               affected_rows,
                                               ObCompatibilityMode::MYSQL_MODE,
                                               &session_param))) {
-      LOG_WARN("fail to execute dynamic partition ddl", KR(ret), K_(tenant_id), K(ddl));
+      LOG_WARN("fail to execute dynamic partition ddl", KR(ret), K(ddl));
     }
   }
 
@@ -206,9 +199,9 @@ int ObDynamicPartitionManager::build_add_partition_sql_(
       LOG_WARN("fail to build precreate partition definition list", KR(ret), K(specified_precreate_time));
     } else if (part_def_list.empty()) {
       // no need to add partition
-    }  else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id_, database_id, database_schema))) {
+    }  else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get tenant schema guard", KR(ret));
+    } else if (OB_FAIL(schema_guard.get_database_schema( database_id, database_schema))) {
       LOG_WARN("fail to get database schema", KR(ret), K(database_id));
     } else if (OB_ISNULL(database_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -246,9 +239,9 @@ int ObDynamicPartitionManager::build_drop_partition_sql_(
       LOG_WARN("fail to build expired partition name list", KR(ret));
     } else if (part_name_list.empty()) {
       // no need to drop expired partition
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id_));
-    } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id_, database_id, database_schema))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get tenant schema guard", KR(ret));
+    } else if (OB_FAIL(schema_guard.get_database_schema( database_id, database_schema))) {
       LOG_WARN("fail to get database schema", KR(ret), K(database_id));
     } else if (OB_ISNULL(database_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -605,8 +598,8 @@ int ObDynamicPartitionManager::get_table_time_zone_wrap_(ObTimeZoneInfoWrap &tz_
       LOG_WARN("fail to get session time zone str", KR(ret));
     } else {
       time_zone = 0 == time_zone.case_compare("DEFAULT") ? ObString(pos, buf) : time_zone;
-      if (OB_FAIL(get_time_zone_wrap_(tenant_id_, time_zone, tz_info_wrap))) {
-        LOG_WARN("failed to get time zone wrap", KR(ret), K_(tenant_id), K(time_zone));
+      if (OB_FAIL(get_time_zone_wrap_( time_zone, tz_info_wrap))) {
+        LOG_WARN("failed to get time zone wrap", KR(ret), K(time_zone));
       }
     }
   }
@@ -1136,9 +1129,7 @@ int ObDynamicPartitionManager::update_dynamic_partition_policy_str(
   return ret;
 }
 
-int ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(
-  const uint64_t tenant_id,
-  bool &is_valid)
+int ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   is_valid = true;
@@ -1149,18 +1140,15 @@ int ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    is_valid = false;
-    LOG_INFO("tenant id is invalid", KR(ret));
-  } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-    LOG_WARN("fail to check if tenant role is primary", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+    LOG_WARN("fail to check if tenant role is primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_valid = false;
     LOG_INFO("not primary tenant", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get sys tenant schema guard", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-    LOG_WARN("fail to get tenant info", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+    LOG_WARN("fail to get tenant info", KR(ret));
   } else if (OB_ISNULL(tenant_schema)) {
     is_valid = false;
     LOG_INFO("tenant schema is null", KR(ret));
@@ -1179,7 +1167,7 @@ int ObDynamicPartitionManager::check_is_supported(const ObTableSchema &table_sch
 {
   int ret = OB_SUCCESS;
   ObObjType col_data_type = ObObjType::ObMaxType;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   ObString part_key_column_name;
   if (!table_schema.is_user_table()) {
     ret = OB_NOT_SUPPORTED;
@@ -1458,15 +1446,15 @@ int64_t ObDynamicPartitionManager::bigint_precision_scale_(const ObString &bigin
   return scale;
 }
 
-int ObDynamicPartitionManager::get_time_zone_wrap_(const uint64_t tenant_id, const ObString &time_zone, ObTimeZoneInfoWrap &tz_info_wrap)
+int ObDynamicPartitionManager::get_time_zone_wrap_(const ObString &time_zone, ObTimeZoneInfoWrap &tz_info_wrap)
 {
   int ret = OB_SUCCESS;
   ObString tenant_time_zone;
   ObTZMapWrap tz_map_wrap;
   ObTimeZoneInfoManager *tz_info_mgr = nullptr;
   ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tenant_id, tz_map_wrap, tz_info_mgr))) {
-    LOG_WARN("failed to get tenant timezone", KR(ret), K(tenant_id));
+  if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
+    LOG_WARN("failed to get tenant timezone", KR(ret));
   } else if (OB_ISNULL(tz_map_wrap.get_tz_map())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz map is null", KR(ret));

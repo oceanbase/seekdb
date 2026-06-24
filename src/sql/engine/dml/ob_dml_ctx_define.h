@@ -1057,7 +1057,7 @@ struct ObDMLRtCtx
   {
     bool bret = false;
     int64_t simulate_buffer_size = - EVENT_CALL(EventTable::EN_DAS_DML_BUFFER_OVERFLOW);
-    int64_t buffer_size_limit = is_meta_tenant(MTL_ID()) ? das::OB_DAS_MAX_META_TENANT_PACKET_SIZE : das::OB_DAS_MAX_TOTAL_PACKET_SIZE;
+    int64_t buffer_size_limit = das::OB_DAS_MAX_TOTAL_PACKET_SIZE;
     if (OB_UNLIKELY(simulate_buffer_size > 0)) {
       buffer_size_limit = simulate_buffer_size;
     }

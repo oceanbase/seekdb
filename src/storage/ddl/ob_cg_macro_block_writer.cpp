@@ -115,7 +115,7 @@ int ObCgMacroBlockWriter::init(
 
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(ddl_redo_callback_ = inc_redo_callback = OB_NEW(
-                           ObDDLIncRedoLogWriterCallback, ObMemAttr(MTL_ID(), "ddl_redo_cb")))) {
+                           ObDDLIncRedoLogWriterCallback, ObMemAttr("ddl_redo_cb")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDDLIncRedoLogWriterCallback", KR(ret));
     } else {
@@ -212,7 +212,7 @@ int ObCgMacroBlockWriter::init(
     } else if (OB_FAIL(ObDDLUtil::get_ddl_write_stat(param, table_key, ddl_write_stat))) {
       LOG_WARN("get ddl write stat failed", K(ret), K(table_key), K(with_cs_replica), K(param), KPC(ddl_write_stat));
     } else if (OB_ISNULL(ddl_redo_callback_ = ddl_redo_callback = OB_NEW(
-                           ObDDLRedoLogWriterCallback, ObMemAttr(MTL_ID(), "ddl_redo_cb")))) {
+                           ObDDLRedoLogWriterCallback, ObMemAttr("ddl_redo_cb")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDDLRedoLogWriterCallback", KR(ret));
     } else {
@@ -300,6 +300,6 @@ void ObCgMacroBlockWriter::reset()
   is_inited_ = false;
   data_desc_.reset();
   index_builder_.reset();
-  OB_DELETE(ObIMacroBlockFlushCallback, ObMemAttr(MTL_ID(), "ddl_redo_cb"), ddl_redo_callback_);
+  OB_DELETE(ObIMacroBlockFlushCallback, ObMemAttr("ddl_redo_cb"), ddl_redo_callback_);
   macro_block_writer_.reset();
 }

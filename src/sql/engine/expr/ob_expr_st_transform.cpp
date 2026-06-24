@@ -75,8 +75,8 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_TRANSFORM);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_TRANSFORM);
   ObString src_proj4_param;
   ObString dest_proj4_param;
   bool need_eval = true;
@@ -170,7 +170,7 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
       }
       
       // eval by bg
-      ObGeoBoostAllocGuard guard(tenant_id);
+      ObGeoBoostAllocGuard guard{};
       lib::MemoryContext *mem_ctx = nullptr;
       if (OB_FAIL(ret) || !need_eval) {
       } else if (OB_FAIL(guard.init())) {

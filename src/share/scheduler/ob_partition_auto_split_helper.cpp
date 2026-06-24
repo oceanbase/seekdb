@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/scheduler/ob_partition_auto_split_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_schema_printer.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "rootserver/ob_root_service.h"
@@ -31,25 +32,22 @@ namespace oceanbase
 namespace share
 {
 ObAutoSplitTaskKey::ObAutoSplitTaskKey()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    tablet_id_(common::ObTabletID::INVALID_TABLET_ID)
+  : tablet_id_(common::ObTabletID::INVALID_TABLET_ID)
   {}
 
-ObAutoSplitTaskKey::ObAutoSplitTaskKey(const uint64_t tenant_id, const ObTabletID &tablet_id)
-  : tenant_id_(tenant_id),
-    tablet_id_(tablet_id)
+ObAutoSplitTaskKey::ObAutoSplitTaskKey(const ObTabletID &tablet_id)
+  : tablet_id_(tablet_id)
   {}
 
 uint64_t ObAutoSplitTaskKey::hash() const
 {
-  uint64_t hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
-  hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
+  uint64_t hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), 0);
   return hash_val;
 }
 
 bool ObAutoSplitTaskKey::operator==(const ObAutoSplitTaskKey &other) const
 {
-  return tenant_id_ == other.tenant_id_ && tablet_id_ == other.tablet_id_;
+  return tablet_id_ == other.tablet_id_;
 }
 
 
@@ -60,7 +58,6 @@ int ObAutoSplitTaskKey::assign(const ObAutoSplitTaskKey &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(other));
   } else {
-    tenant_id_ = other.tenant_id_;
     tablet_id_ = other.tablet_id_;
   }
   return ret;
@@ -77,34 +74,33 @@ int ObAutoSplitTask::assign(const ObAutoSplitTask &other)
     ls_id_ = other.ls_id_;
     retry_times_ = other.retry_times_;
     tablet_id_ = other.tablet_id_;
-    tenant_id_ = other.tenant_id_;
     used_disk_space_ = other.used_disk_space_;
   }
   return ret;
 }
 
 ObAutoSplitTaskCache::ObAutoSplitTaskCache()
-  : inited_(false), total_tasks_(0), tenant_id_(OB_INVALID_TENANT_ID),
+  : inited_(false), total_tasks_(0),
     max_heap_(max_comp_, &cache_malloc_), min_heap_(min_comp_, &cache_malloc_)
   {}
 
-int ObAutoSplitTaskCache::init(const int64_t capacity, const uint64_t tenant_id, const uint64_t host_tenant_id)
+int ObAutoSplitTaskCache::init(const int64_t capacity)
 {
   int ret = OB_SUCCESS;
   ObLockGuard<ObSpinLock> guard(lock_);
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init ObAutoSplitTaskCache twice", K(ret), K(inited_));
-  } else if (OB_UNLIKELY(capacity <= 0 || OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_TENANT_ID == host_tenant_id)) {
+  } else if (OB_UNLIKELY(capacity <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(capacity), K(tenant_id), K(host_tenant_id));
-  } else if (OB_FAIL(tasks_set_.create(capacity, ObMemAttr(host_tenant_id, "task_cache")))) {
+    LOG_WARN("invalid argument", K(ret), K(capacity));
+  } else if (OB_FAIL(tasks_set_.create(capacity, ObMemAttr("task_cache")))) {
     LOG_WARN("fail to create hashset", KR(ret));
   } else {
     inited_ = true;
-    tenant_id_ = tenant_id;
-    host_tenant_id_ = host_tenant_id;
-    cache_malloc_.set_attr(ObMemAttr(host_tenant_id_, "task_cache"));
+    
+    
+    cache_malloc_.set_attr(ObMemAttr("task_cache"));
   }
   return ret;
 }
@@ -115,8 +111,8 @@ int ObAutoSplitTaskCache::mtl_init(ObAutoSplitTaskCache *&task_cache)
   if (OB_ISNULL(task_cache)) {
     ret = OB_NULL_CHECK_ERROR;
     LOG_WARN("unexpeted null ptr of task_cache", K(ret), KP(task_cache));
-  } else if (OB_FAIL(task_cache->init(ObAutoSplitTaskCache::CACHE_MAX_CAPACITY, MTL_ID(), MTL_ID()))) {
-    LOG_WARN("failed to init ObAutoSplitTaskCache", K(ret), "tenant_id: ", MTL_ID());
+  } else if (OB_FAIL(task_cache->init(ObAutoSplitTaskCache::CACHE_MAX_CAPACITY))) {
+    LOG_WARN("failed to init ObAutoSplitTaskCache", K(ret));
   }
   return ret;
 }
@@ -152,7 +148,7 @@ void ObAutoSplitTaskCache::destroy()
   }
   inited_ = false;
   total_tasks_ = 0;
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   max_heap_.reset();
   min_heap_.reset();
   (void) tasks_set_.destroy();
@@ -197,11 +193,11 @@ int ObAutoSplitTaskCache::atomic_remove_task()
       if (OB_TMP_FAIL(min_heap_.pop())) {
         LOG_WARN("pop from min heap failed", K(ret));
       }
-    } else if (OB_FAIL(tasks_set_.erase_refactored(ObAutoSplitTaskKey(ptr_task_wrapper->task_.tenant_id_, ptr_task_wrapper->task_.tablet_id_))) && OB_HASH_NOT_EXIST != ret) {
+    } else if (OB_FAIL(tasks_set_.erase_refactored(ObAutoSplitTaskKey(ptr_task_wrapper->task_.tablet_id_))) && OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("remove key from task_set_ failed", K(ret));
     } else {
       if (OB_HASH_NOT_EXIST == ret) {
-        LOG_WARN("task key not existed in tasks_sets", K(ret), K(ObAutoSplitTaskKey(ptr_task_wrapper->task_.tenant_id_, ptr_task_wrapper->task_.tablet_id_)));
+        LOG_WARN("task key not existed in tasks_sets", K(ret), K(ObAutoSplitTaskKey(ptr_task_wrapper->task_.tablet_id_)));
         //overwrite ret
         ret = OB_SUCCESS;
       }
@@ -259,7 +255,7 @@ int ObAutoSplitTaskCache::atomic_push_task(const ObAutoSplitTask &task)
     } else if (OB_FAIL(max_heap_.push(ptr_t_wra_to_max))) {
       LOG_WARN("push task into max_heap_ failed", K(ret), K(task));
     } else if (OB_FALSE_IT(ptr_t_wra_to_max = nullptr)) {
-    } else if (OB_FAIL(tasks_set_.set_refactored(ObAutoSplitTaskKey (task.tenant_id_, task.tablet_id_)))) {
+    } else if (OB_FAIL(tasks_set_.set_refactored(ObAutoSplitTaskKey (task.tablet_id_)))) {
       LOG_WARN("push into task_set_ failed", K(ret));
     }
     if (OB_NOT_NULL(ptr_t_wra_to_min)) {
@@ -293,7 +289,7 @@ int ObAutoSplitTaskCache::atomic_pop_task(ObAutoSplitTask &task)
       }
     } else if (OB_FAIL(task.assign(ptr_task_wrapper->task_))) {
       LOG_WARN("assign task failed", K(ret), K(task));
-    } else if (OB_FAIL(tasks_set_.erase_refactored(ObAutoSplitTaskKey(task.tenant_id_, task.tablet_id_))) && OB_HASH_NOT_EXIST != ret) {
+    } else if (OB_FAIL(tasks_set_.erase_refactored(ObAutoSplitTaskKey(task.tablet_id_))) && OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("remove key from task_set_ failed", K(ret));
     } else {
       if (OB_HASH_NOT_EXIST == ret) {
@@ -369,7 +365,7 @@ int ObAutoSplitTaskCache::push_tasks(const ObArray<ObAutoSplitTask> &task_array)
       } else if (OB_FALSE_IT(task_priority = static_cast<double>(task.used_disk_space_) / task.auto_split_tablet_size_)) {
       } else if (get_tasks_num() >= CACHE_MAX_CAPACITY && task_priority <= min_heap_.top()->priority_) {
         // do nothing
-      } else if (OB_TMP_FAIL(tasks_set_.exist_refactored(ObAutoSplitTaskKey(task.tenant_id_, task.tablet_id_)))) {
+      } else if (OB_TMP_FAIL(tasks_set_.exist_refactored(ObAutoSplitTaskKey(task.tablet_id_)))) {
         if (OB_HASH_NOT_EXIST == tmp_ret) {
           tmp_ret = OB_SUCCESS;
           if (OB_TMP_FAIL(atomic_push_task(task))) {
@@ -402,7 +398,6 @@ int ObAutoSpTaskSchedEntry::assign(const ObAutoSpTaskSchedEntry &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(other));
   } else {
-    tenant_id_ = other.tenant_id_;
     table_id_ = other.table_id_;
     next_valid_schedule_time_ = other.next_valid_schedule_time_;
     if (OB_FAIL(task_.assign(other.task_))) {
@@ -521,14 +516,14 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
 {
   int ret = OB_SUCCESS;
   real_split_size = OB_INVALID_SIZE;
-  const uint64_t tenant_id = MTL_ID();
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   int64_t tablet_cnt_per_gb = ObServerAutoSplitScheduler::TABLET_CNT_PER_GB; // default value
   if (OB_UNLIKELY(inc_tablet_cnt < 0 || safe_ratio > 1 || safe_ratio <= 0 || split_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(inc_tablet_cnt), K(safe_ratio), K(split_size));
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (OB_UNLIKELY(!tenant_config.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get invalid tenant config", K(ret));
@@ -544,7 +539,7 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
     double cur_ratio = 0.0;
     if (OB_UNLIKELY(cur_tablet_cnt + inc_tablet_cnt > max_tablet_cnt)) {
       ret = OB_TOO_MANY_PARTITIONS_ERROR;
-      LOG_WARN("too many partitions of tenant", K(ret), K(tenant_id), K(hard_memory_limit), K(tablet_cnt_per_gb),
+      LOG_WARN("too many partitions of tenant", K(ret), K(hard_memory_limit), K(tablet_cnt_per_gb),
           K(max_tablet_cnt), K(cur_tablet_cnt), K(inc_tablet_cnt));
     } else if (OB_UNLIKELY(max_tablet_cnt <= 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -557,9 +552,7 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
   return ret;
 }
 
-int ObRsAutoSplitScheduler::check_ls_migrating(
-      const uint64_t tenant_id,
-      const ObTabletID &tablet_id,
+int ObRsAutoSplitScheduler::check_ls_migrating(const ObTabletID &tablet_id,
       bool &is_migrating)
 {
   int ret = OB_SUCCESS;
@@ -614,7 +607,7 @@ int ObRsAutoSplitScheduler::push_to_direct_cache(ObArray<ObArray<ObAutoSplitTask
   int ret = OB_SUCCESS;
   ObSEArray<ObTabletID, MAX_SPLIT_TASKS_ONE_ROUND> tablet_ids;
   ObSEArray<uint64_t, MAX_SPLIT_TASKS_ONE_ROUND> table_ids;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   ObAutoSpTaskSchedEntry split_task_sched_entry;
   const int64_t cur_time = ObTimeUtility::current_time();
   const int64_t redundancy_time = 1L * 1000L * 1000L;
@@ -624,13 +617,12 @@ int ObRsAutoSplitScheduler::push_to_direct_cache(ObArray<ObArray<ObAutoSplitTask
     table_ids.reuse();
     for (int64_t j = 0; OB_SUCC(ret) && j < split_task_array.count(); ++j) {
       ObAutoSplitTask &auto_split_task = split_task_array.at(j);
-      tenant_id = auto_split_task.tenant_id_;
       if (OB_FAIL(tablet_ids.push_back(auto_split_task.tablet_id_))) {
         LOG_WARN("failed to push back", K(ret), K(tablet_ids));
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObAutoSplitArgBuilder::acquire_table_id_of_tablets(tenant_id, tablet_ids, table_ids))) {
+    } else if (OB_FAIL(ObAutoSplitArgBuilder::acquire_table_id_of_tablets(tablet_ids, table_ids))) {
       LOG_WARN("failed to acquire table ids", K(ret));
     } else if (OB_UNLIKELY(tablet_ids.count() != split_task_array.count() || table_ids.count() != split_task_array.count())) {
       ret = OB_ERR_UNEXPECTED;
@@ -639,7 +631,7 @@ int ObRsAutoSplitScheduler::push_to_direct_cache(ObArray<ObArray<ObAutoSplitTask
       for (int64_t m = 0; OB_SUCC(ret) && m < split_task_array.count(); ++m) {
         ObAutoSplitTask &auto_split_task = split_task_array.at(m);
         split_task_sched_entry.reset();
-        split_task_sched_entry.tenant_id_ = auto_split_task.tenant_id_;
+        
         split_task_sched_entry.table_id_ = table_ids.at(m);
         split_task_sched_entry.next_valid_schedule_time_ = cur_time;
         if (OB_FAIL(split_task_sched_entry.task_.assign(auto_split_task))) {
@@ -751,7 +743,7 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
   } else if (OB_FAIL(check_sstable_limit(*tablet, num_sstables_exceed_limit))) {
     LOG_WARN("fail to check sstable limit", K(ret), KPC(tablet));
   } else if (OB_FAIL(ls.get_ls_role(role))) {
-    LOG_WARN("get role failed", K(ret), K(MTL_ID()), K(ls_id));
+    LOG_WARN("get role failed", K(ret), K(ls_id));
   } else if (OB_FAIL(check_tablet_creation_limit(ObAutoSplitArgBuilder::get_max_split_partition_num(), 0.8/*safe_ratio*/, auto_split_tablet_size, real_auto_split_size))) {
     LOG_WARN("check_create_new_tablets fail", K(ret));
     if (OB_TOO_MANY_PARTITIONS_ERROR == ret) {
@@ -776,7 +768,7 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
         LOG_WARN("failed to get medium info list", K(ret), KP(tablet));
         can_split = false;
       } else if ((can_split = user_data.get_tablet_status() == ObTabletStatus::Status::NORMAL && (medium_info_list->size() == 0))) {
-        task.tenant_id_ = MTL_ID();
+        
         task.ls_id_ = ls_id;
         task.tablet_id_ = tablet->get_tablet_id();
         task.auto_split_tablet_size_ = auto_split_tablet_size;
@@ -841,7 +833,8 @@ int ObServerAutoSplitScheduler::batch_send_split_request(const ObArray<ObArray<O
         single_arg.auto_split_tablet_size_ = task.auto_split_tablet_size_;
         single_arg.ls_id_ = task.ls_id_;
         single_arg.tablet_id_ = task.tablet_id_;
-        single_arg.tenant_id_ = task.tenant_id_;
+        
+        
         single_arg.used_disk_space_ = task.used_disk_space_;
         if (OB_FAIL(args.args_.push_back(single_arg))) {
           LOG_WARN("push task failed", K(ret), K(task), K(j));
@@ -872,11 +865,10 @@ int ObAutoSplitTaskPollingMgr::init()
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("try to init an inited ObAutoSplitTaskPollingMgr", K(ret));
-  } else if (OB_FAIL(map_tenant_to_cache_.create(ObAutoSplitTaskPollingMgr::INITIAL_TENANT_COUNT, ObMemAttr(OB_SERVER_TENANT_ID, "spl_task_map")))) {
-    LOG_WARN("fail to create map_tenant_to_cache_", K(ret));
   } else {
+    tenant_cache_ = nullptr;
     inited_ = true;
-    polling_mgr_malloc_.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "spl_task_mal"));
+    polling_mgr_malloc_.set_attr(ObMemAttr("spl_task_mal"));
   }
   return ret;
 }
@@ -884,22 +876,17 @@ int ObAutoSplitTaskPollingMgr::init()
 void ObAutoSplitTaskPollingMgr::reset()
 {
   ObLockGuard<ObSpinLock> guard(lock_);
-  for (hash::ObHashMap<uint64_t, ObAutoSplitTaskCache*>::iterator iter = map_tenant_to_cache_.begin(); iter != map_tenant_to_cache_.end(); iter++) {
-    uint64_t tenant_id = iter->first;
-    ObAutoSplitTaskCache *&tenant_cache = iter->second;
-    if (OB_NOT_NULL(tenant_cache)) {
-      tenant_cache->destroy();
-      polling_mgr_malloc_.free(tenant_cache);
-      tenant_cache = nullptr;
-    }
+  if (OB_NOT_NULL(tenant_cache_)) {
+    tenant_cache_->destroy();
+    polling_mgr_malloc_.free(tenant_cache_);
+    tenant_cache_ = nullptr;
   }
-  (void) map_tenant_to_cache_.destroy();
   polling_mgr_malloc_.reset();
   inited_ = false;
   total_tasks_ = 0;
 }
 
-int ObAutoSplitTaskPollingMgr::get_tenant_cache(const int tenant_id, ObAutoSplitTaskCache *&tenant_cache)
+int ObAutoSplitTaskPollingMgr::get_tenant_cache(ObAutoSplitTaskCache *&tenant_cache)
 {
   int ret = OB_SUCCESS;
   tenant_cache = nullptr;
@@ -907,19 +894,18 @@ int ObAutoSplitTaskPollingMgr::get_tenant_cache(const int tenant_id, ObAutoSplit
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(inited_));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else if (OB_FAIL(map_tenant_to_cache_.get_refactored(tenant_id, tenant_cache))) {
-    LOG_WARN("get tenant cache index failed", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
+  } else if (FALSE_IT(tenant_cache = tenant_cache_)) {
+  } else if (OB_ISNULL(tenant_cache)) {
+    ret = OB_HASH_NOT_EXIST;
+    LOG_WARN("get tenant cache index failed", K(ret));
   }
   if (OB_SUCC(ret) && OB_ISNULL(tenant_cache)) {
     ret = OB_NULL_CHECK_ERROR;
     LOG_WARN("unexpected of null ptr of tenant_cache", K(ret), KP(tenant_cache));
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(map_tenant_to_cache_.erase_refactored(tenant_id))) {
-      LOG_WARN("failed to remove tenant cache from map_tenant_to_cache_", K(ret));
-    }
+    tenant_cache_ = nullptr;
   }
   return ret;
 }
@@ -929,65 +915,12 @@ int ObAutoSplitTaskPollingMgr::gc_deleted_tenant_caches()
   int ret = OB_SUCCESS;
   ObLockGuard<ObSpinLock> guard(lock_);
   if (is_root_server_ && REACH_TIME_INTERVAL(60LL * 60 * 1000 * 1000)) {
-    ObSchemaGetterGuard schema_guard;
-    ObSEArray<uint64_t, 10> tenant_ids;
-    common::hash::ObHashSet<uint64_t> existed_tenants_set;
-
+    // single-tenant: the only cache belongs to sys tenant, which always exists,
+    // so the cache is never garbage-collected here.
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema service should not be null", K(ret), K(GCTX.schema_service_));
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-      LOG_WARN("get_schema_guard failed", K(ret));
-    } else if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-      LOG_WARN("failed to get all tenant ids", K(ret));
-    } else if (OB_FAIL(existed_tenants_set.create(5, ObMemAttr(OB_SERVER_TENANT_ID, "as_ten_set")))) {
-      LOG_WARN("failed to create hash set", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); ++i) {
-        if (OB_FAIL(existed_tenants_set.set_refactored(tenant_ids.at(i)))) {
-          LOG_WARN("failed to push into task set", K(ret), K(i), K(tenant_ids));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else {
-        GcTenantCacheOperator tc_op(existed_tenants_set);
-        if (OB_FAIL(map_tenant_to_cache_.foreach_refactored(tc_op))) {
-          LOG_WARN("failed to do for each refactored", K(ret));
-        } else {
-          ObSEArray<oceanbase::common::hash::HashMapPair<uint64_t, ObAutoSplitTaskCache*>, 1> &needed_gc_tenant_caches = tc_op.needed_gc_tenant_caches_;
-          for (int64_t i = 0; OB_SUCC(ret) && i < needed_gc_tenant_caches.count(); ++i) {
-            oceanbase::common::hash::HashMapPair<uint64_t, ObAutoSplitTaskCache*> &pair = needed_gc_tenant_caches.at(i);
-            uint64_t tenant_id = pair.first;
-            ObAutoSplitTaskCache *&tenant_cache = pair.second;
-            if (OB_FAIL(map_tenant_to_cache_.erase_refactored(tenant_id))) {
-              LOG_WARN("failed to erase tenant cache from map_tenant_to_cache_", K(ret), K(tenant_id));
-            } else if (OB_ISNULL(tenant_cache)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("tenant cache ptr should not be null", K(ret), K(tenant_cache));
-            } else {
-              tenant_cache->~ObAutoSplitTaskCache();
-              polling_mgr_malloc_.free(tenant_cache);
-              tenant_cache = nullptr;
-            }
-          }
-        }
-      }
     }
-  }
-  return ret;
-}
-
-int ObAutoSplitTaskPollingMgr::GcTenantCacheOperator::operator() (oceanbase::common::hash::HashMapPair<uint64_t, ObAutoSplitTaskCache*> &entry)
-{
-  int ret = OB_SUCCESS;
-  uint64_t tenant_id = entry.first;
-  ObAutoSplitTaskCache *tenant_cache = entry.second;
-  if (OB_ISNULL(tenant_cache)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant cache ptr should not be null", K(ret), K(tenant_cache));
-  } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST == existed_tenants_set_.exist_refactored(tenant_id)) &&
-      OB_FAIL(needed_gc_tenant_caches_.push_back(entry))) {
-    LOG_WARN("failed to push back into needed_gc_tenant_caches_", K(ret));
   }
   return ret;
 }
@@ -1045,7 +978,7 @@ int ObAutoSplitTaskPollingMgr::pop_tasks(const int64_t num_tasks_can_pop, ObArra
     ret = OB_ENTRY_NOT_EXIST;
     LOG_DEBUG("no task exist", K(ret));
   } else if ((!is_root_server_) &&
-      OB_TMP_FAIL(pop_tasks_from_tenant_cache(1/*num_tasks_can_pop*/, tmp_array, MTL(ObAutoSplitTaskCache*)))) {
+      OB_TMP_FAIL(pop_tasks_from_tenant_cache(1/*num_tasks_can_pop*/, tmp_array, share::g_mp->auto_split_task_cache()))) {
     LOG_WARN("pop tasks from tenant cache failed", K(tmp_ret));
   } else if (tmp_array.count() == 0) {
   } else if (tmp_array.count() > 0 && OB_TMP_FAIL(task_array.push_back(tmp_array))) {
@@ -1054,28 +987,13 @@ int ObAutoSplitTaskPollingMgr::pop_tasks(const int64_t num_tasks_can_pop, ObArra
     --total_tasks_pop_budge;
   }
   if (OB_SUCC(ret) && OB_LIKELY(total_tasks_pop_budge > 0)) {
-    ObArray<uint64_t> tenants_id;
-    for (hash::ObHashMap<uint64_t, ObAutoSplitTaskCache*>::iterator iter = map_tenant_to_cache_.begin(); OB_SUCC(ret) && iter != map_tenant_to_cache_.end(); iter++) {
-      uint64_t tenant_id = iter->first;
-      if (OB_FAIL(tenants_id.push_back(tenant_id))) {
-        LOG_WARN("failed to push task into tenants_id", K(ret));
-      }
-    }
+    const int64_t cache_count = OB_NOT_NULL(tenant_cache_) ? 1 : 0;
     int64_t tasks_budget_per_tenant = max(total_tasks_pop_budge / get_total_tenants(), 1);
     int64_t tasks_pop_this_round = (total_tasks_pop_budge / get_total_tenants() == 0) ? 0 : total_tasks_pop_budge % get_total_tenants();
     total_tasks_pop_budge -= tasks_pop_this_round;
-    if (tasks_budget_per_tenant == 1) {
-#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
-      std::random_device rd;
-      std::mt19937 g(rd());
-      std::shuffle(tenants_id.begin(), tenants_id.end(), g);
-#else
-      std::random_shuffle(tenants_id.begin(), tenants_id.end());
-#endif
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && (tasks_pop_this_round > 0 || total_tasks_pop_budge > 0) && i < tenants_id.size(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && (tasks_pop_this_round > 0 || total_tasks_pop_budge > 0) && i < cache_count; ++i) {
       int tmp_ret = OB_SUCCESS;
-      int64_t tenant_id = tenants_id.at(i);
+      
       ObAutoSplitTaskCache * tenant_cache = nullptr;
       tmp_array.reuse();
       if (total_tasks_pop_budge > 0) {
@@ -1084,17 +1002,15 @@ int ObAutoSplitTaskPollingMgr::pop_tasks(const int64_t num_tasks_can_pop, ObArra
       }
       if (!is_root_server_) {
         MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-        if (OB_TMP_FAIL(guard.switch_to(tenant_id, false /*need_check_allow*/))) {
-          LOG_WARN("failed to switch to tenant", K(tmp_ret), K(tenant_id));
-          if (OB_TMP_FAIL(map_tenant_to_cache_.erase_refactored(tenant_id))) {
-            LOG_WARN("failed to remove cache from map_tenant_to_cache_", K(tmp_ret), K(tenant_id));
-          }
-        } else if (OB_FALSE_IT(tenant_cache = MTL(ObAutoSplitTaskCache*))) {
+        if (OB_TMP_FAIL(guard.switch_to(false /*need_check_allow*/))) {
+          LOG_WARN("failed to switch to tenant", K(tmp_ret));
+          tenant_cache_ = nullptr;
+        } else if (OB_FALSE_IT(tenant_cache = share::g_mp->auto_split_task_cache())) {
         } else if (OB_TMP_FAIL(pop_tasks_from_tenant_cache(tasks_pop_this_round, tmp_array, tenant_cache))) {
           LOG_WARN("failed to pop tasks from tenant cache", K(tmp_ret));
         }
-      } else if (OB_TMP_FAIL(get_tenant_cache(tenant_id, tenant_cache))) {
-        LOG_WARN("get tenant cache failed", K(tmp_ret), K(tenant_id));
+      } else if (OB_TMP_FAIL(get_tenant_cache(tenant_cache))) {
+        LOG_WARN("get tenant cache failed", K(tmp_ret));
       } else if (OB_TMP_FAIL(pop_tasks_from_tenant_cache(tasks_pop_this_round, tmp_array, tenant_cache))) {
         LOG_WARN("failed to pop tasks from tenant cache", K(tmp_ret));
       }
@@ -1122,7 +1038,7 @@ int ObAutoSplitTaskPollingMgr::push_tasks(const ObArray<ObAutoSplitTask> &task_a
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_array));
   } else {
-    uint64_t tenant_id = OB_INVALID_TENANT_ID;
+    
     // ensure all valid task share the same tenant id and ignore invalid task
     for (int64_t i = 0; OB_SUCC(ret) && i < task_array.count(); ++i) {
       const ObAutoSplitTask &task = task_array.at(i);
@@ -1130,22 +1046,20 @@ int ObAutoSplitTaskPollingMgr::push_tasks(const ObArray<ObAutoSplitTask> &task_a
         //ignore ret
         int tmp_ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(tmp_ret));
-      } else if (OB_INVALID_TENANT_ID == tenant_id && FALSE_IT(tenant_id = task.tenant_id_)) {
-      } else if (OB_UNLIKELY(task.tenant_id_ != tenant_id)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tenant ids don't match", K(ret), K(task.tenant_id_), K(tenant_id));
       }
     }
     ObAutoSplitTaskCache *tenant_cache = nullptr;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(map_tenant_to_cache_.get_refactored(tenant_id, tenant_cache))) {
+    } else if (FALSE_IT(tenant_cache = tenant_cache_)) {
+    } else if (FALSE_IT(ret = (nullptr == tenant_cache) ? OB_HASH_NOT_EXIST : OB_SUCCESS)) {
+    } else if (OB_FAIL(ret)) {
       if (OB_HASH_NOT_EXIST == ret) {
         //overwrite ret
         ret = OB_SUCCESS;
-        if (is_root_server_ && OB_FAIL(create_tenant_cache(tenant_id, OB_SERVER_TENANT_ID, tenant_cache))) {
-          LOG_WARN("failed to create tenant cache", K(ret), K(tenant_id));
-        } else if (OB_FAIL(register_tenant_cache(tenant_id, tenant_cache))) {
-          LOG_WARN("failed to register tenant cache", K(ret), K(tenant_id), KP(tenant_cache));
+        if (is_root_server_ && OB_FAIL(create_tenant_cache(tenant_cache))) {
+          LOG_WARN("failed to create tenant cache", K(ret));
+        } else if (OB_FAIL(register_tenant_cache( tenant_cache))) {
+          LOG_WARN("failed to register tenant cache", K(ret), KP(tenant_cache));
           if (OB_NOT_NULL(tenant_cache)) {
             tenant_cache->destroy();
             polling_mgr_malloc_.free(tenant_cache);
@@ -1153,20 +1067,17 @@ int ObAutoSplitTaskPollingMgr::push_tasks(const ObArray<ObAutoSplitTask> &task_a
           }
         }
       } else {
-        LOG_WARN("failed to get tenant_cache from map_tenant_to_cache_", K(ret), K(tenant_id));
+        LOG_WARN("failed to get tenant_cache", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else {
-      tenant_cache = is_root_server_ ? tenant_cache : MTL(ObAutoSplitTaskCache*);
+      tenant_cache = is_root_server_ ? tenant_cache : share::g_mp->auto_split_task_cache();
       int64_t cache_total_task_old = OB_INVALID_SIZE;
       if (OB_ISNULL(tenant_cache)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpted null ptr of tenant_cache", K(ret), KP(tenant_cache), K(tenant_id), K(is_root_server_), K(MTL_ID()));
-        int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(map_tenant_to_cache_.erase_refactored(tenant_id))) {
-          LOG_WARN("erase from tenantid_idx failed", K(tmp_ret));
-        }
+        LOG_WARN("unexpted null ptr of tenant_cache", K(ret), KP(tenant_cache), K(is_root_server_));
+        tenant_cache_ = nullptr;
       } else if (OB_FALSE_IT(cache_total_task_old = tenant_cache->get_tasks_num())) {
       } else if (OB_FAIL(tenant_cache->push_tasks(task_array))) {
         LOG_WARN("push tasks into tenant cache failed", K(ret));
@@ -1182,7 +1093,7 @@ int ObAutoSplitTaskPollingMgr::push_tasks(const ObArray<ObAutoSplitTask> &task_a
   return ret;
 }
 
-int ObAutoSplitTaskPollingMgr::create_tenant_cache(const uint64_t tenant_id, const uint64_t host_tenant_id, ObAutoSplitTaskCache *&tenant_cache)
+int ObAutoSplitTaskPollingMgr::create_tenant_cache(ObAutoSplitTaskCache *&tenant_cache)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
@@ -1190,14 +1101,11 @@ int ObAutoSplitTaskPollingMgr::create_tenant_cache(const uint64_t tenant_id, con
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(inited_));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_TENANT_ID == host_tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(host_tenant_id));
   } else if (OB_ISNULL(buf = polling_mgr_malloc_.alloc(sizeof(ObAutoSplitTaskCache)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), KP(buf));
   } else if (FALSE_IT(tenant_cache = new (buf) ObAutoSplitTaskCache())) {
-  } else if (OB_FAIL(tenant_cache->init(ObAutoSplitTaskCache::CACHE_MAX_CAPACITY, tenant_id, host_tenant_id))) {
+  } else if (OB_FAIL(tenant_cache->init(ObAutoSplitTaskCache::CACHE_MAX_CAPACITY))) {
     LOG_WARN("failed to init ", K(ret));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(tenant_cache)) {
@@ -1208,23 +1116,22 @@ int ObAutoSplitTaskPollingMgr::create_tenant_cache(const uint64_t tenant_id, con
   return ret;
 }
 
-int ObAutoSplitTaskPollingMgr::register_tenant_cache(const uint64_t tenant_id, ObAutoSplitTaskCache * const tenant_cache)
+int ObAutoSplitTaskPollingMgr::register_tenant_cache(ObAutoSplitTaskCache * const tenant_cache)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(inited_));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else if (OB_FAIL(map_tenant_to_cache_.set_refactored(tenant_id, tenant_cache))) {
-    LOG_WARN("push into map_tenant_to_cache_ failed", K(ret));
+    LOG_WARN("invalid argument", K(ret));
+  } else {
+    tenant_cache_ = tenant_cache;
   }
   return ret;
 }
 
-int ObAutoSplitArgBuilder::build_arg(const uint64_t tenant_id,
-                                     const share::ObLSID ls_id,
+int ObAutoSplitArgBuilder::build_arg(const share::ObLSID ls_id,
                                      const ObTabletID tablet_id,
                                      const int64_t auto_split_tablet_size,
                                      const int64_t used_disk_space,
@@ -1240,18 +1147,18 @@ int ObAutoSplitArgBuilder::build_arg(const uint64_t tenant_id,
   int64_t ranges_num = 0;
   arg.reset();
 
-  if (tenant_id == OB_INVALID_ID || !ls_id.is_valid() || !tablet_id.is_valid() ||
+  if (false || !ls_id.is_valid() || !tablet_id.is_valid() ||
       auto_split_tablet_size <= 0 || used_disk_space <= 0 ||
       used_disk_space < auto_split_tablet_size ) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id), K(tablet_id),
+    LOG_WARN("invalid argument", KR(ret), K(ls_id), K(tablet_id),
                                  K(auto_split_tablet_size), K(used_disk_space));
   } else if (FALSE_IT(ranges_num = (used_disk_space / auto_split_tablet_size +
                                     (used_disk_space % auto_split_tablet_size == 0 ? 0 : 1)))) {
   } else if (FALSE_IT(ranges_num = MAX_SPLIT_PARTITION_NUM > ranges_num ?
                                    ranges_num : MAX_SPLIT_PARTITION_NUM)) {
-  } else if (OB_FAIL(acquire_schema_info_of_tablet_(tenant_id, tablet_id, table_schema, db_schema, guard, arg))) {
-    LOG_WARN("fail to acquire schema info of tablet", KR(ret), K(tenant_id), K(tablet_id));
+  } else if (OB_FAIL(acquire_schema_info_of_tablet_( tablet_id, table_schema, db_schema, guard, arg))) {
+    LOG_WARN("fail to acquire schema info of tablet", KR(ret), K(tablet_id));
   } else if (OB_ISNULL(table_schema) || OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", KR(ret), K(tablet_id), KPC(table_schema), KPC(db_schema));
@@ -1259,9 +1166,8 @@ int ObAutoSplitArgBuilder::build_arg(const uint64_t tenant_id,
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("attempt to auto split tablet of a non-auto-partitioned table", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(table_schema->check_validity_for_auto_partition())) {
-    LOG_WARN("table is invalid for auto partition", KR(ret), K(tenant_id), K(tablet_id), KPC(table_schema));
-  } else if (OB_FAIL(sampler.query_ranges(tenant_id,
-                                          db_schema->get_database_name_str(),
+    LOG_WARN("table is invalid for auto partition", KR(ret), K(tablet_id), KPC(table_schema));
+  } else if (OB_FAIL(sampler.query_ranges(db_schema->get_database_name_str(),
                                           *table_schema,
                                           tablet_id,
                                           ranges_num,
@@ -1273,9 +1179,9 @@ int ObAutoSplitArgBuilder::build_arg(const uint64_t tenant_id,
     ret = OB_EAGAIN;
     LOG_WARN("partition is empty or all data have same partition key", KR(ret));
   } else {
-    if (OB_FAIL(build_arg_(tenant_id, db_schema->get_database_name_str(),
+    if (OB_FAIL(build_arg_( db_schema->get_database_name_str(),
                             *table_schema, tablet_id, ranges, arg))) {
-      LOG_WARN("fail to build split arg", KR(ret), K(tenant_id), KPC(db_schema),
+      LOG_WARN("fail to build split arg", KR(ret), KPC(db_schema),
                                           KPC(table_schema), K(tablet_id), K(ranges));
     }
   }
@@ -1283,8 +1189,7 @@ int ObAutoSplitArgBuilder::build_arg(const uint64_t tenant_id,
   return ret;
 }
 
-int ObAutoSplitArgBuilder::acquire_schema_info_of_tablet_(const uint64_t tenant_id,
-                                                          const ObTabletID tablet_id,
+int ObAutoSplitArgBuilder::acquire_schema_info_of_tablet_(const ObTabletID tablet_id,
                                                           const share::schema::ObTableSchema *&table_schema,
                                                           const share::schema::ObSimpleDatabaseSchema *&db_schema,
                                                           share::schema::ObSchemaGetterGuard &guard,
@@ -1298,37 +1203,36 @@ int ObAutoSplitArgBuilder::acquire_schema_info_of_tablet_(const uint64_t tenant_
   ObSEArray<uint64_t, 1> table_ids;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", KR(ret), K(tenant_id), K(tablet_id));
+    LOG_WARN("unexpected null", KR(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
     LOG_WARN("failed to push back", K(ret), K(tablet_id));
-  } else if (OB_FAIL(acquire_table_id_of_tablets(tenant_id, tablet_ids, table_ids))) {
+  } else if (OB_FAIL(acquire_table_id_of_tablets(tablet_ids, table_ids))) {
     LOG_WARN("fail to acquire tablet info", KR(ret), K(tablet_id));
   } else if (table_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count of the table_ids", K(ret), K(table_ids));
   } else if (OB_FALSE_IT(table_id = table_ids.at(0))) {
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, guard))){
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(guard.get_table_schema(tenant_id, table_id, table_schema))){
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id), K(tablet_id));
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))){
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(guard.get_table_schema( table_id, table_schema))){
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", KR(ret), K(tenant_id), K(table_id), K(tablet_id));
+    LOG_WARN("unexpected null", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(table_schema->get_table_id(),
-      schema::TABLE_SCHEMA, table_schema->get_schema_version(), table_schema->get_tenant_id())))) {
+      schema::TABLE_SCHEMA, table_schema->get_schema_version())))) {
     LOG_WARN("fail to push back into based_schema_object_infos_", K(ret));
   } else if (FALSE_IT(db_id = table_schema->get_database_id())){
-  } else if (OB_FAIL(guard.get_database_schema(tenant_id, db_id, db_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K(tenant_id), K(table_id), K(tablet_id));
+  } else if (OB_FAIL(guard.get_database_schema( db_id, db_schema))) {
+    LOG_WARN("fail to get database schema", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", KR(ret), K(tenant_id), K(db_id), K(table_id), K(tablet_id));
+    LOG_WARN("unexpected null", KR(ret), K(db_id), K(table_id), K(tablet_id));
   }
   return ret;
 }
 
-int ObAutoSplitArgBuilder::acquire_table_id_of_tablets(const uint64_t tenant_id,
-                                                       const ObIArray<ObTabletID> &tablet_ids,
+int ObAutoSplitArgBuilder::acquire_table_id_of_tablets(const ObIArray<ObTabletID> &tablet_ids,
                                                        ObIArray<uint64_t> &table_ids)
 {
   int ret = OB_SUCCESS;
@@ -1360,11 +1264,11 @@ int ObAutoSplitArgBuilder::acquire_table_id_of_tablets(const uint64_t tenant_id,
           "%lu%s",
           tablet_ids.at(idx).id(),
           ((idx == tablet_ids.count() - 1) ? ")" : ",")))) {
-          LOG_WARN("assign sql string failed", K(ret), K(tenant_id), K(tablet_ids.at(idx).id()));
+          LOG_WARN("assign sql string failed", K(ret), K(tablet_ids.at(idx).id()));
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(mysql_proxy->read(res, tenant_id, sql.ptr()))) {
+      } else if (OB_FAIL(mysql_proxy->read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(sql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1402,8 +1306,7 @@ int ObAutoSplitArgBuilder::acquire_table_id_of_tablets(const uint64_t tenant_id,
   return ret;
 }
 
-int ObAutoSplitArgBuilder::build_arg_(const uint64_t tenant_id,
-                                      const ObString &db_name,
+int ObAutoSplitArgBuilder::build_arg_(const ObString &db_name,
                                       const share::schema::ObTableSchema &table_schema,
                                       const ObTabletID split_source_tablet_id,
                                       const ObArray<ObNewRange> &ranges,
@@ -1412,22 +1315,19 @@ int ObAutoSplitArgBuilder::build_arg_(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   ObTZMapWrap tz_map_wrap;
   share::schema::AlterTableSchema& alter_table_schema = arg.alter_table_schema_;
-  if (tenant_id == OB_INVALID_ID) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(build_alter_table_schema_(tenant_id, db_name, table_schema,
+  if (OB_FAIL(build_alter_table_schema_( db_name, table_schema,
                                                split_source_tablet_id,
                                                ranges,
                                                arg.tz_info_wrap_.get_time_zone_info(),
                                                alter_table_schema))) {
-    LOG_WARN("fail to build alter_table_schema", KR(ret), K(tenant_id), K(db_name),
+    LOG_WARN("fail to build alter_table_schema", KR(ret), K(db_name),
                                                  K(table_schema), K(split_source_tablet_id),
                                                  K(ranges));
-  } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_map_wrap))) {
-    LOG_WARN("get tenant timezone map failed", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
+    LOG_WARN("get tenant timezone map failed", KR(ret));
   } else {
     arg.alter_part_type_ = obcall::ObAlterTableArg::AlterPartitionType::AUTO_SPLIT_PARTITION;
-    arg.exec_tenant_id_ = tenant_id;
+    
     arg.is_alter_partitions_ = true;
     arg.is_inner_ = true;
     arg.is_add_to_scheduler_ = false;
@@ -1437,7 +1337,7 @@ int ObAutoSplitArgBuilder::build_arg_(const uint64_t tenant_id,
     arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
     arg.set_tz_info_map(tz_map_wrap.get_tz_map());
     if (table_schema.is_user_table() && OB_FAIL(build_ddl_stmt_str_(table_schema, alter_table_schema, split_source_tablet_id, arg.tz_info_wrap_.get_time_zone_info(), arg.allocator_, arg.ddl_stmt_str_))) {
-      LOG_WARN("failed to build ddl stmt str", K(ret), K(tenant_id), K(table_schema.get_table_id()), K(split_source_tablet_id));
+      LOG_WARN("failed to build ddl stmt str", K(ret), K(table_schema.get_table_id()), K(split_source_tablet_id));
     }
   }
   return ret;
@@ -1611,8 +1511,7 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
   return ret;
 }
 
-int ObAutoSplitArgBuilder::build_alter_table_schema_(const uint64_t tenant_id,
-                                                     const ObString &db_name,
+int ObAutoSplitArgBuilder::build_alter_table_schema_(const ObString &db_name,
                                                      const share::schema::ObTableSchema &table_schema,
                                                      const ObTabletID split_source_tablet_id,
                                                      const ObArray<ObNewRange> &ranges,
@@ -1637,7 +1536,6 @@ int ObAutoSplitArgBuilder::build_alter_table_schema_(const uint64_t tenant_id,
     LOG_WARN("invalid target part level", KR(ret), K(table_schema));
   } else if (FALSE_IT(alter_table_schema.set_table_type(table_schema.get_table_type()))) {
   } else if (FALSE_IT(alter_table_schema.set_index_type(table_schema.get_index_type()))) {
-  } else if (FALSE_IT(alter_table_schema.set_tenant_id(tenant_id))) {
   } else if (FALSE_IT(alter_table_schema.set_part_level(target_part_level))) {
   } else if (FALSE_IT(alter_table_schema.get_part_option().set_part_func_type(part_func_type))) {
   } else if (FALSE_IT(alter_table_schema.get_part_option().set_part_expr(part_func_expr))) {
@@ -1648,10 +1546,10 @@ int ObAutoSplitArgBuilder::build_alter_table_schema_(const uint64_t tenant_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < part_num; i++) {
       const ObRowkey& high_bound_val = ranges[i].get_end_key();
 
-      if (OB_FAIL(build_partition_(tenant_id, table_id,
+      if (OB_FAIL(build_partition_( table_id,
                                    split_source_tablet_id, high_bound_val, tz_info,
                                    new_part))) {
-        LOG_WARN("fail to build partition", KR(ret), K(tenant_id), K(table_id), K(split_source_tablet_id),
+        LOG_WARN("fail to build partition", KR(ret), K(table_id), K(split_source_tablet_id),
                                             K(high_bound_val), K(table_schema));
       } else if (OB_FAIL(alter_table_schema.add_partition(new_part))) {
         LOG_WARN("fail to add partition", KR(ret), K(new_part));
@@ -1687,7 +1585,7 @@ int ObAutoSplitArgBuilder::build_alter_table_schema_(const uint64_t tenant_id,
   return ret;
 }
 
-int ObAutoSplitArgBuilder::build_partition_(const uint64_t tenant_id, const uint64_t table_id,
+int ObAutoSplitArgBuilder::build_partition_(const uint64_t table_id,
                                             const ObTabletID split_source_tablet_id,
                                             const ObRowkey &high_bound_val,
                                             const ObTimeZoneInfo *tz_info,
@@ -1705,7 +1603,7 @@ int ObAutoSplitArgBuilder::build_partition_(const uint64_t tenant_id, const uint
     LOG_WARN("failed to set high_bound_val", KR(ret));
   } else {
     new_part.set_is_empty_partition_name(true);
-    new_part.set_tenant_id(tenant_id);
+    
     new_part.set_table_id(table_id);
     new_part.set_split_source_tablet_id(split_source_tablet_id);
     new_part.set_partition_type(PartitionType::PARTITION_TYPE_NORMAL);
@@ -1787,8 +1685,7 @@ int ObAutoSplitArgBuilder::check_need_to_cast(const ObObj &obj, bool &need_to_ca
 }
 
 // sample rowkey ranges of data_table/global_index from given tablet
-int ObSplitSampler::query_ranges(const uint64_t tenant_id,
-                                 const ObString &db_name,
+int ObSplitSampler::query_ranges(const ObString &db_name,
                                  const share::schema::ObTableSchema &table_schema,
                                  const ObTabletID tablet_id,
                                  const int64_t range_num, const int64_t used_disk_space,
@@ -1803,10 +1700,10 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
   common::ObRowkey low_bound_val;
   common::ObRowkey high_bound_val;
 
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == table_id ||
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id ||
                   !tablet_id.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid id", KR(ret), K(tenant_id), K(table_id), K(tablet_id));
+    LOG_WARN("invalid id", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_UNLIKELY(db_name.empty())){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid db name", KR(ret));
@@ -1826,22 +1723,22 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
     LOG_WARN("invalid array count", KR(ret), K(column_names));
   } else if (table_schema.is_partitioned_table()) {
     if (OB_FAIL(acquire_partition_meta_(table_schema, tablet_id, part_meta))) {
-      LOG_WARN("fail to acquire partition meta", KR(ret), K(tenant_id), K(table_id), K(tablet_id));
+      LOG_WARN("fail to acquire partition meta", KR(ret), K(table_id), K(tablet_id));
     } else if (nullptr == part_meta.part_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("meta's partition is NULL", KR(ret), K(tenant_id), K(table_id), K(tablet_id), K(part_meta));
+      LOG_WARN("meta's partition is NULL", KR(ret), K(table_id), K(tablet_id), K(part_meta));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fill_query_range_bounder(part_meta, unused_column_ranges, column_names.count(), low_bound_val, high_bound_val, range_allocator))) {
     LOG_WARN("fail to fill query range bounder", K(ret));
-  } else if (OB_FAIL(query_ranges_(tenant_id, db_name, table_schema.get_table_name_str(), part_meta,
+  } else if (OB_FAIL(query_ranges_(db_name, table_schema.get_table_name_str(), part_meta,
                             column_names, unused_column_ranges,
                             range_num, used_disk_space,
                             table_schema.is_global_index_table(),
                             low_bound_val, high_bound_val,
                             range_allocator, ranges))) {
-    LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(tenant_id), K(db_name),
+    LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(db_name),
                                                            K(table_schema), K(part_meta),
                                                            K(range_num), K(used_disk_space),
                                                            K(ranges));
@@ -1856,8 +1753,7 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
 // column_ranges should be empty or be same size with column_names.
 // each range of column_ranges records the scope of column in column_names,
 // we will filter the sampling result which are not in the scope.
-int ObSplitSampler::query_ranges(const uint64_t tenant_id,
-                                 const ObString &db_name,
+int ObSplitSampler::query_ranges(const ObString &db_name,
                                  const share::schema::ObTableSchema &data_table_schema,
                                  const ObIArray<ObString> &column_names,
                                  const ObIArray<ObNewRange> &column_ranges,
@@ -1870,10 +1766,8 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
   const int64_t unused_presetting_column_cnt = 0;
   common::ObRowkey low_bound_val;
   common::ObRowkey high_bound_val;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
-  } else if (OB_UNLIKELY(db_name.empty())){
+
+  if (OB_UNLIKELY(db_name.empty())){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid db name", KR(ret));
   } else if (OB_UNLIKELY(range_num < 2)) {
@@ -1890,14 +1784,14 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
     LOG_WARN("invalid array count", KR(ret), K(column_names), K(column_ranges));
   } else if (OB_FAIL(fill_query_range_bounder(unused_part_meta, column_ranges, unused_presetting_column_cnt, low_bound_val, high_bound_val, range_allocator))) {
     LOG_WARN("fail to fill query range bounder", K(ret), K(column_ranges));
-  } else if (OB_FAIL(query_ranges_(tenant_id, db_name, data_table_schema.get_table_name_str(),
+  } else if (OB_FAIL(query_ranges_(db_name, data_table_schema.get_table_name_str(),
                                    unused_part_meta,
                                    column_names, column_ranges,
                                    range_num, used_disk_space,
                                    false /*query_index*/,
                                    low_bound_val, high_bound_val,
                                    range_allocator, ranges))) {
-    LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(tenant_id), K(db_name),
+    LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(db_name),
                                                            K(data_table_schema), K(range_num),
                                                            K(used_disk_space),
                                                            K(ranges));
@@ -2000,7 +1894,7 @@ int ObSplitSampler::acquire_partition_meta_(const share::schema::ObTableSchema &
   return ret;
 }
 
-int ObSplitSampler::query_ranges_(const uint64_t tenant_id, const ObString &db_name,
+int ObSplitSampler::query_ranges_(const ObString &db_name,
                                   const ObString &table_name,
                                   const PartitionMeta &part_meta,
                                   const ObIArray<ObString> &column_names,
@@ -2025,8 +1919,8 @@ int ObSplitSampler::query_ranges_(const uint64_t tenant_id, const ObString &db_n
                       static_cast<double>(MAX_SAMPLE_SCALE) / used_disk_space * 100;
   ranges.reset();
 
-  if (OB_FAIL(single_conn_proxy.connect(tenant_id, 0/*group_id*/, GCTX.sql_proxy_))) {
-    LOG_WARN("failed to get mysql connect", KR(ret), K(tenant_id));
+  if (OB_FAIL(single_conn_proxy.connect(0/*group_id*/, GCTX.sql_proxy_))) {
+    LOG_WARN("failed to get mysql connect", KR(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (query_index) {
@@ -2034,7 +1928,7 @@ int ObSplitSampler::query_ranges_(const uint64_t tenant_id, const ObString &db_n
     int64_t affected_rows = 0;
     if (OB_FAIL(set_sql.assign_fmt("SET session %s = true", share::OB_SV_ENABLE_INDEX_DIRECT_SELECT))) {
       LOG_WARN("failed to assign sql", KR(ret));
-    } else if (OB_FAIL(single_conn_proxy.write(tenant_id, set_sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(single_conn_proxy.write(set_sql.ptr(), affected_rows))) {
       LOG_WARN("single_conn_proxy write failed", KR(ret), K(set_sql));
     }
   }
@@ -2050,7 +1944,7 @@ int ObSplitSampler::query_ranges_(const uint64_t tenant_id, const ObString &db_n
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *sql_result = nullptr;
-      if (OB_FAIL(single_conn_proxy.read(res, tenant_id, sql.ptr()))) {
+      if (OB_FAIL(single_conn_proxy.read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(sql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;

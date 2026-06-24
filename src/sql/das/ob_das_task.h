@@ -158,7 +158,6 @@ public:
     : errcode_(OB_SUCCESS),
       trans_desc_(nullptr),
       snapshot_(nullptr),
-      tenant_id_(common::OB_INVALID_ID),
       task_id_(common::OB_INVALID_ID),
       op_type_(DAS_OP_INVALID),
       task_flag_(0),
@@ -230,8 +229,7 @@ public:
   void set_attach_ctdef(const ObDASBaseCtDef *attach_ctdef) { attach_ctdef_ = attach_ctdef; }
   void set_attach_rtdef(ObDASBaseRtDef *attach_rtdef) { attach_rtdef_ = attach_rtdef; }
   ObDASBaseRtDef *get_attach_rtdef() { return attach_rtdef_; }
-  VIRTUAL_TO_STRING_KV(K_(tenant_id),
-                       K_(task_id),
+  VIRTUAL_TO_STRING_KV(K_(task_id),
                        K_(op_type),
                        K_(errcode),
                        K_(can_part_retry),
@@ -251,8 +249,8 @@ public:
                        K_(das_task_node),
                        K_(plan_line_id));
 public:
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   void set_type(ObDASOpType op_type) { op_type_ = op_type; }
   ObDASOpType get_type() const { return op_type_; }
   void set_trans_desc(transaction::ObTxDesc *trans_desc) { trans_desc_ = trans_desc; }
@@ -300,7 +298,6 @@ public:
   transaction::ObTxReadSnapshot *snapshot_; // Mvcc snapshot
 
 protected:
-  uint64_t tenant_id_;
   int64_t task_id_;
   ObDASOpType op_type_; // DAS provided operation type
 protected:
@@ -611,15 +608,14 @@ class ObDASDataFetchReq
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASDataFetchReq() : tenant_id_(0), task_id_(0) {}
+  ObDASDataFetchReq() : task_id_(0) {}
   ~ObDASDataFetchReq() {}
-  int init(const uint64_t tenant_id, const int64_t task_id);
+  int init(const int64_t task_id);
 public:
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   int64_t get_task_id() { return task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id));
+  TO_STRING_KV(K_(task_id));
 private:
-  uint64_t tenant_id_;
   int64_t task_id_;
 };
 
@@ -629,19 +625,18 @@ class ObDASDataFetchRes
 public:
   ObDASDataFetchRes();
   ~ObDASDataFetchRes() { datum_store_.reset(); };
-  int init(const uint64_t tenant_id, const int64_t task_id);
+  int init(const int64_t task_id);
 public:
   ObChunkDatumStore &get_datum_store() { return datum_store_; }
   ObTempRowStore &get_vec_row_store() { return vec_row_store_; }
   void set_has_more(const bool has_more) { has_more_ = has_more; }
   bool has_more() { return has_more_; }
   int64_t get_task_id() const { return task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id), K_(has_more), K_(datum_store),
+  TO_STRING_KV(K_(task_id), K_(has_more), K_(datum_store),
                K_(io_read_bytes), K_(ssstore_read_bytes),
                K_(ssstore_read_row_cnt), K_(memstore_read_row_cnt));
 private:
   ObChunkDatumStore datum_store_;
-  uint64_t tenant_id_;
   int64_t task_id_;
   bool has_more_;
   bool enable_rich_format_;
@@ -657,15 +652,14 @@ class ObDASDataEraseReq
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASDataEraseReq() : tenant_id_(0), task_id_(0) {}
+  ObDASDataEraseReq() : task_id_(0) {}
   ~ObDASDataEraseReq() {}
-  int init(const uint64_t tenant_id, const int64_t task_id);
+  int init(const int64_t task_id);
 public:
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   int64_t get_task_id() { return task_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(task_id));
+  TO_STRING_KV(K_(task_id));
 private:
-  uint64_t tenant_id_;
   int64_t task_id_;
 };
 }  // namespace sql

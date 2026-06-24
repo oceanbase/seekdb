@@ -968,7 +968,6 @@ public:
         }
         if (OB_FAIL(tx_stat.init(tx_ctx->addr_,
                                  tx_id,
-                                 tx_ctx->tenant_id_,
                                  has_decided,
                                  tx_ctx->ls_id_,
                                  participants_arr,
@@ -1142,7 +1141,6 @@ public:
         for (int i = 0; OB_SUCC(ret) && i < count; i++) {
           ObTxLockStat tx_lock_stat;
           if (OB_FAIL(tx_lock_stat.init(tx_ctx->get_addr(),
-                                        tx_ctx->get_tenant_id(),
                                         tx_ctx->get_ls_id(),
                                         memtable_key_info_arr.at(i),
                                         tx_ctx->get_session_id(),
@@ -1472,8 +1470,7 @@ public:
         TRANS_LOG_RET(WARN, tmp_ret, "ObTxSchedulerStat get participants copy error", K(tmp_ret));
       } else if (OB_TMP_FAIL(tx_desc->get_savepoints_copy(copy_savepoints))) {
         TRANS_LOG_RET(WARN, tmp_ret, "ObTxSchedulerStat get savepoints copy error", K(tmp_ret));
-      } else if (OB_TMP_FAIL(tx_scheduler_stat.init(tx_desc->tenant_id_,
-                                                    tx_desc->addr_,
+      } else if (OB_TMP_FAIL(tx_scheduler_stat.init(tx_desc->addr_,
                                                     tx_desc->sess_id_,
                                                     tx_desc->client_sid_,
                                                     tx_desc->tx_id_,

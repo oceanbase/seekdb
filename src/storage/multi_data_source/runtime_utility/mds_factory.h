@@ -17,6 +17,7 @@
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_MDS_FACTORY_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_MDS_FACTORY_H
 #include "lib/allocator/ob_malloc.h"
+#include "share/rc/ob_module_provider.h"
 #include <type_traits>
 #include <typeinfo>
 #include "lib/atomic/ob_atomic.h"
@@ -64,14 +65,14 @@ struct MdsFactory
   static int deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
                                   const BufferCtx &old_ctx,
                                   BufferCtx *&new_ctx,
-                                  ObIAllocator &allocator = MTL(ObTenantMdsService*)->get_buffer_ctx_allocator(),
+                                  ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator(),
                                   const char *alloc_file = __builtin_FILE(),
                                   const char *alloc_func = __builtin_FUNCTION(),
                                   const int64_t line = __builtin_LINE());
   static int create_buffer_ctx(const transaction::ObTxDataSourceType &data_source_type,
                                const transaction::ObTransID &trans_id,
                                BufferCtx *&buffer_ctx,
-                               ObIAllocator &allocator = MTL(ObTenantMdsService*)->get_buffer_ctx_allocator(),
+                               ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator(),
                                const char *alloc_file = __builtin_FILE(),
                                const char *alloc_func = __builtin_FUNCTION(),
                                const int64_t line = __builtin_LINE());

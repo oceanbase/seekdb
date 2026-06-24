@@ -80,16 +80,16 @@ int ObPLDependencyUtil::add_dependency_objects(ObPLDependencyTable &dep_tbl,
     if (type.is_package_type()) {
       const ObSimplePackageSchema *package_info = nullptr;
       const uint64_t package_id = extract_package_id(type.get_user_type_id());
-      const uint64_t tenant_id = get_tenant_id_by_object_id(package_id);
+      
 
       if (OB_INVALID_ID == package_id || ObTriggerInfo::is_trigger_package_id(package_id)) {
         // do nothing, may inside package of ddl stage
-      } else if (OB_FAIL(resolve_ctx.schema_guard_.get_simple_package_info(tenant_id, package_id, package_info))) {
+      } else if (OB_FAIL(resolve_ctx.schema_guard_.get_simple_package_info( package_id, package_info))) {
         LOG_WARN("failed to get_simple_package_info",
-                 K(ret), K(type), K(tenant_id), K(package_id), KPC(package_info));
+                 K(ret), K(type), K(package_id), KPC(package_info));
       } else if (OB_ISNULL(package_info)) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
-        LOG_WARN("unexpected NULL pacakge info", K(ret), K(type), K(tenant_id), K(package_id));
+        LOG_WARN("unexpected NULL pacakge info", K(ret), K(type), K(package_id));
       } else {
         obj_version.object_id_ = package_id;
         obj_version.object_type_ = DEPENDENCY_PACKAGE;
@@ -102,10 +102,10 @@ int ObPLDependencyUtil::add_dependency_objects(ObPLDependencyTable &dep_tbl,
     } else if (type.is_rowtype_type()) {
       const ObSimpleTableSchemaV2 *table_schema = nullptr;
       const uint64_t table_id = type.get_user_type_id();
-      const uint64_t tenant_id = get_tenant_id_by_object_id(table_id);
+      
 
-      if (OB_FAIL(resolve_ctx.schema_guard_.get_simple_table_schema(tenant_id, table_id, table_schema))) {
-        LOG_WARN("failed to get_simple_table_schema", K(ret), K(type), K(tenant_id), K(table_id), KPC(table_schema));
+      if (OB_FAIL(resolve_ctx.schema_guard_.get_simple_table_schema( table_id, table_schema))) {
+        LOG_WARN("failed to get_simple_table_schema", K(ret), K(type), K(table_id), KPC(table_schema));
       } else if (OB_NOT_NULL(table_schema)) {
         obj_version.object_id_ = table_id;
         obj_version.object_type_ = DEPENDENCY_TABLE;

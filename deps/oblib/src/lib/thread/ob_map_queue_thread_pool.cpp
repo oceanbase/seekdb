@@ -35,7 +35,7 @@ ObMapQueueThreadPool::~ObMapQueueThreadPool()
   }
 }
 
-int ObMapQueueThreadPool::init(const uint64_t tenant_id, const int64_t thread_num, const char *label)
+int ObMapQueueThreadPool::init(const int64_t thread_num, const char *label)
 {
   int ret = OB_SUCCESS;
 
@@ -59,7 +59,7 @@ int ObMapQueueThreadPool::init(const uint64_t tenant_id, const int64_t thread_nu
       destroy();
     } else {
       is_inited_ = true;
-      LIB_LOG(INFO, "ObMapQueueThreadPool init success", K(tenant_id), K(thread_num));
+      LIB_LOG(INFO, "ObMapQueueThreadPool init success", K(thread_num));
     }
   }
 

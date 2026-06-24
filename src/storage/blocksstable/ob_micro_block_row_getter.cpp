@@ -285,8 +285,7 @@ int ObMicroBlockRowGetter::get_block_row(ObSSTableReadHandle &read_handle,
       EVENT_INC(ObStatEventIds::GET_ROW_EMPTY_READ);
       if (!context_->query_flag_.is_index_back() && context_->query_flag_.is_use_bloomfilter_cache()
           && !sstable_->is_small_sstable()) {
-        (void)OB_STORE_CACHE.get_bf_cache().inc_empty_read(MTL_ID(),
-                                                           param_->table_id_,
+        (void)OB_STORE_CACHE.get_bf_cache().inc_empty_read(param_->table_id_,
                                                            param_->ls_id_,
                                                            sstable_->get_key(),
                                                            read_handle.micro_handle_->macro_block_id_,
@@ -403,7 +402,6 @@ int ObMicroBlockRowGetter::inner_get_row(
     } else {
       //put row cache, ignore fail
       ObRowCacheKey row_cache_key(
-          MTL_ID(),
           sstable_->get_key().get_tablet_id(),
           rowkey,
           read_info_->get_datum_utils(),

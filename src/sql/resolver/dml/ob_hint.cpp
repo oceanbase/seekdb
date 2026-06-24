@@ -59,26 +59,6 @@ int ObPhyPlanHint::deep_copy(const ObPhyPlanHint &other, ObIAllocator &allocator
   return ret;
 }
 
-int ObDBLinkHit::print(char *buf, int64_t &buf_len, int64_t &pos, const char* outline_indent) const {
-  int ret = OB_SUCCESS;
-  if (0 < tx_id_) {
-    if (OB_FAIL(BUF_PRINTF("%s%s(\'%s\' , %ld)", outline_indent, "DBLINK_INFO", "DBLINK_TX_ID", tx_id_))) {
-      LOG_WARN("failed to print hint", K(ret), K("DBLINK_INFO(%s , %ld)")); 
-    }
-  }
-  if (OB_SUCC(ret) &&  0 != tm_sessid_) {
-    if (OB_FAIL(BUF_PRINTF("%s%s(\'%s\' , %u)", outline_indent, "DBLINK_INFO", "DBLINK_TM_SESSID", tm_sessid_))) {
-      LOG_WARN("failed to print hint", K(ret), K("DBLINK_INFO(%s , %u)")); 
-    }
-  }
-  if (OB_SUCC(ret) &&  hint_xa_trans_stop_check_lock_) {
-    if (OB_FAIL(BUF_PRINTF("%s%s(\'%s\' , \'%s\')", outline_indent, "DBLINK_INFO", "DBLINK_XA_TRANS_STOP_CHECK_LOCK", "TRUE"))) {
-      LOG_WARN("failed to print hint", K(ret), K("DBLINK_INFO(%s , %s)")); 
-    }
-  }
-  return 0;
-}
-
 int ObGlobalHint::merge_alloc_op_hints(const ObIArray<ObAllocOpHint> &alloc_op_hints)
 {
   int ret = OB_SUCCESS;
@@ -331,7 +311,6 @@ bool ObGlobalHint::has_hint_exclude_concurrent() const
          || -1 != topk_precision_
          || 0 != sharding_minimum_row_count_
          || UNSET_QUERY_TIMEOUT != query_timeout_
-         || dblink_hints_.has_valid_hint()
          || common::INVALID_CONSISTENCY != read_consistency_
          || OB_USE_PLAN_CACHE_INVALID != plan_cache_policy_
          || false != force_trace_log_
@@ -390,7 +369,6 @@ void ObGlobalHint::reset()
   dynamic_sampling_ = ObGlobalHint::UNSET_DYNAMIC_SAMPLING;
   alloc_op_hints_.reuse();
   direct_load_hint_.reset();
-  dblink_hints_.reset();
   resource_group_.reset();
   parallel_das_dml_option_ = ObParallelDASOption::NOT_SPECIFIED;
   px_node_hint_.reset();
@@ -420,7 +398,6 @@ int ObGlobalHint::merge_global_hint(const ObGlobalHint &other)
   osg_hint_.flags_ |= other.osg_hint_.flags_;
   has_dbms_stats_hint_ |= other.has_dbms_stats_hint_;
   flashback_read_tx_uncommitted_ |= other.flashback_read_tx_uncommitted_;
-  dblink_hints_ = other.dblink_hints_;
   merge_parallel_das_dml_hint(other.parallel_das_dml_option_);
   merge_dynamic_sampling_hint(other.dynamic_sampling_);
   merge_direct_load_hint(other.direct_load_hint_);
@@ -455,7 +432,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   int64_t &buf_len = plan_text.buf_len_;
   int64_t &pos = plan_text.pos_;
   const char* outline_indent = ObQueryHint::get_outline_indent(plan_text.is_oneline_);
-  const bool ignore_parallel_for_dblink = EXPLAIN_DBLINK_STMT == plan_text.type_;
 
   #define PRINT_GLOBAL_HINT_STR(hint_str)           \
   if (OB_FAIL(BUF_PRINTF("%s%s", outline_indent, hint_str))) {  \
@@ -481,7 +457,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
 
   //DOP
-  if (OB_SUCC(ret) && !dops_.empty() && !ignore_parallel_for_dblink) {
+  if (OB_SUCC(ret) && !dops_.empty()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < dops_.count(); ++i) {
       if (OB_FAIL(BUF_PRINTF("%sDOP(%lu, %lu)", outline_indent, dops_.at(i).dfo_, dops_.at(i).dop_))) {
         LOG_WARN("failed to print dop hint", K(ret));
@@ -506,9 +482,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && UNSET_QUERY_TIMEOUT != query_timeout_) { //QUERY_TIMEOUT
     PRINT_GLOBAL_HINT_NUM("QUERY_TIMEOUT", query_timeout_);
-  }
-  if (OB_SUCC(ret) && OB_FAIL(dblink_hints_.print(buf, buf_len, pos, outline_indent))) { // DBLINK_INFO
-    LOG_WARN("failed to print dblink hints", K(ret), K(dblink_hints_)); 
   }
   if (OB_SUCC(ret) && plan_cache_policy_ != OB_USE_PLAN_CACHE_INVALID) { //USE_PLAN_CACHE
     const char *plan_cache_policy = "INVALID";
@@ -535,7 +508,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       LOG_WARN("failed to print log level hint", K(ret));
     }
   }
-  if (OB_SUCC(ret) && has_parallel_hint() && !ignore_parallel_for_dblink) { //PARALLEL
+  if (OB_SUCC(ret) && has_parallel_hint()) { //PARALLEL
     if (has_parallel_degree()) {
       PRINT_GLOBAL_HINT_NUM("PARALLEL", parallel_);
     } else if (enable_auto_dop()) {
@@ -544,7 +517,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       PRINT_GLOBAL_HINT_STR("PARALLEL( MANUAL )");
     }
   }
-  if (OB_SUCC(ret) && has_dml_parallel_hint() && !ignore_parallel_for_dblink) { //DML_PARALLEL
+  if (OB_SUCC(ret) && has_dml_parallel_hint()) { //DML_PARALLEL
     PRINT_GLOBAL_HINT_NUM("DML_PARALLEL", dml_parallel_);
   }
   if (OB_SUCC(ret) && monitor_) { //MONITOR
@@ -552,9 +525,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && ObPDMLOption::NOT_SPECIFIED != pdml_option_) { //PDML
     if (ObPDMLOption::ENABLE == pdml_option_) {
-      if (!ignore_parallel_for_dblink) {
-        PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DML");
-      }
+      PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DML");
     } else if (ObPDMLOption::DISABLE == pdml_option_) {
       PRINT_GLOBAL_HINT_STR("DISABLE_PARALLEL_DML");
     } else {
@@ -564,9 +535,7 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
   }
   if (OB_SUCC(ret) && ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_) { //PDML
    if (ObParallelDASOption::ENABLE == parallel_das_dml_option_) {
-     if (!ignore_parallel_for_dblink) {
-       PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DAS_DML");
-     }
+     PRINT_GLOBAL_HINT_STR("ENABLE_PARALLEL_DAS_DML");
    } else if (ObParallelDASOption::DISABLE == parallel_das_dml_option_) {
      PRINT_GLOBAL_HINT_STR("DISABLE_PARALLEL_DAS_DML");
    } else {

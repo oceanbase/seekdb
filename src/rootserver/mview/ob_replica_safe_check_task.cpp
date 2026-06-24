@@ -227,7 +227,7 @@ int ObReplicaSafeCheckTask::register_mds_in_trans(
     LOG_WARN("conn is NULL", KR(ret));
   } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
     LOG_WARN("fail to serialize", KR(ret), K(arg));
-  } else if (OB_FAIL(conn->register_multi_data_source(MTL_ID(), arg.ls_id_, type, buf, buf_len))) {
+  } else if (OB_FAIL(conn->register_multi_data_source(arg.ls_id_, type, buf, buf_len))) {
     LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf_len));
   }
   return ret;
@@ -253,7 +253,7 @@ int ObReplicaSafeCheckTask::do_multi_trans(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("status error", KR(ret), K(buf_len), K(MAX_MULTI_BUF_SIZE), KPC(this));
     ob_abort();
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, MTL_ID()))) {
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start trans", KR(ret), KPC(this));
   } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
                        (trans.get_connection()))) {
@@ -261,7 +261,7 @@ int ObReplicaSafeCheckTask::do_multi_trans(
     LOG_WARN("conn is NULL", KR(ret), KPC(this));
   } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
     LOG_WARN("fail to serialize", KR(ret), K(arg));
-  } else if (OB_FAIL(conn->register_multi_data_source(MTL_ID(), arg.ls_id_, type, buf, buf_len))) {
+  } else if (OB_FAIL(conn->register_multi_data_source(arg.ls_id_, type, buf, buf_len))) {
     LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf_len));
   }
   if (trans.is_started()) {
@@ -293,7 +293,7 @@ int ObReplicaSafeCheckTask::check_row_empty(
     if (!sql_str.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("sql_str is invalid", KR(ret));
-    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, MTL_ID(), sql_str.ptr()))) {
+    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql_str.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql_str));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -374,25 +374,24 @@ int ObReplicaSafeCheckTask::notice_safe()
   return ret;
 }
 
-int ObReplicaSafeCheckTask::create_ls_with_tenant_mv_merge_scn(const uint64_t tenant_id,
-                                                               const share::ObLSID &ls_id,
+int ObReplicaSafeCheckTask::create_ls_with_tenant_mv_merge_scn(const share::ObLSID &ls_id,
                                                                common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   share::SCN merge_scn(share::SCN::min_scn());
 
-  if (tenant_id == OB_INVALID_TENANT_ID ||
+  if (false ||
       !ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id));
+    LOG_WARN("invalid argument", KR(ret), K(ls_id));
   } else if (ls_id.is_sys_ls()) {
     // do nothing
   } else if (!trans.is_started()) {
-    LOG_WARN("trans not start", KR(ret), K(tenant_id));
+    LOG_WARN("trans not start", KR(ret));
   } else {
-    ObGlobalStatProxy proxy(trans, tenant_id);
+    ObGlobalStatProxy proxy(trans);
     if (OB_FAIL(proxy.get_major_refresh_mv_merge_scn(false /* for_update */, merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret), K(tenant_id));
+      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
       if (OB_ERR_NULL_VALUE == ret) {
         ret = OB_SUCCESS;
         merge_scn.set_min();
@@ -411,7 +410,7 @@ int ObReplicaSafeCheckTask::create_ls_with_tenant_mv_merge_scn(const uint64_t te
       }
     }
   }
-  LOG_INFO("create ls with tenant mv merge scn", K(ret), K(merge_scn), K(tenant_id), K(ls_id));
+  LOG_INFO("create ls with tenant mv merge scn", K(ret), K(merge_scn), K(ls_id));
   return ret;
 }
 // void ObReplicaSafeCheckTask::finish()

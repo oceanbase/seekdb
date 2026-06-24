@@ -33,13 +33,13 @@ private:
   class Item
   {
   public:
-    Item() : lock_(0), tenant_id_(0), key_(0), arg1_(0), arg2_(0), tid_(0),
+    Item() : lock_(0), key_(0), arg1_(0), arg2_(0), tid_(0),
              start_ts_(0), max_dur_ts_(INT64_MAX), is_concerned_(false) { mod_name_[0] = '\0'; }
     void set(const uint64_t key, const uint64_t arg1, const uint64_t arg2, const char *mod_name,
         const int64_t max_dur_ts)
     {
       if (0 == key_) {
-        tenant_id_ = MTL_ID();
+        
         key_ = key;
         arg1_ = arg1;
         arg2_ = arg2;
@@ -68,7 +68,7 @@ private:
     {
       if (this != &item) {
         lock_ = 0;
-        tenant_id_ = item.tenant_id_;
+        
         key_ = item.key_;
         arg1_ = item.arg1_;
         arg2_ = item.arg2_;
@@ -83,14 +83,14 @@ private:
     }
     bool is_equal(const Item &item) const
     {
-      return tenant_id_ == item.tenant_id_ && key_ == item.key_;
+      return true && key_ == item.key_;
     }
     void set_concerned() { is_concerned_ = true; }
     bool is_concerned() const { return is_concerned_; }
     bool is_valid() const { return key_ != 0; }
     int64_t get_dur_ts() const { return is_valid() ? (ObTimeUtility::current_time() - start_ts_) : 0; }
     int64_t get_max_dur_ts() const { return max_dur_ts_; }
-    TO_STRING_KV(K_(tenant_id), K_(key), K_(arg1), K_(arg2), K_(tid), K_(start_ts), "dur_ts", get_dur_ts(),
+    TO_STRING_KV(K_(key), K_(arg1), K_(arg2), K_(tid), K_(start_ts), "dur_ts", get_dur_ts(),
         K_(max_dur_ts), K_(mod_name), K_(trace_id), K_(is_concerned));
   public:
     void lock()
@@ -108,7 +108,7 @@ private:
     }
   private:
     int64_t lock_;
-    int64_t tenant_id_;
+    
     uint64_t key_;
     uint64_t arg1_;
     uint64_t arg2_;

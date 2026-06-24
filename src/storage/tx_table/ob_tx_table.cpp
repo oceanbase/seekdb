@@ -183,11 +183,11 @@ int ObTxTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SC
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else {
-    const uint64_t tenant_id = ls_->get_tenant_id();
+    
     const share::ObLSID &ls_id = ls_->get_ls_id();
-    if (OB_FAIL(create_data_tablet_(tenant_id, ls_id, compat_mode, create_scn))) {
+    if (OB_FAIL(create_data_tablet_(ls_id, compat_mode, create_scn))) {
       LOG_WARN("create data tablet failed", K(ret));
-    } else if (OB_FAIL(create_ctx_tablet_(tenant_id, ls_id, compat_mode, create_scn))) {
+    } else if (OB_FAIL(create_ctx_tablet_(ls_id, compat_mode, create_scn))) {
       LOG_WARN("create ctx tablet failed", K(ret));
     }
     if (OB_FAIL(ret)) {
@@ -200,7 +200,7 @@ int ObTxTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SC
   return ret;
 }
 
-int ObTxTable::get_ctx_table_schema_(const uint64_t tenant_id, share::schema::ObTableSchema &schema)
+int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = ObTabletID::LS_TX_CTX_TABLET_ID;
@@ -213,7 +213,7 @@ int ObTxTable::get_ctx_table_schema_(const uint64_t tenant_id, share::schema::Ob
   common::ObObjMeta INC_ID_TYPE;
   INC_ID_TYPE.set_int();
   ObColumnSchemaV2 id_column;
-  id_column.set_tenant_id(tenant_id);
+  
   id_column.set_table_id(table_id);
   id_column.set_column_id(common::OB_APP_MIN_COLUMN_ID);
   id_column.set_schema_version(SCHEMA_VERSION);
@@ -224,7 +224,7 @@ int ObTxTable::get_ctx_table_schema_(const uint64_t tenant_id, share::schema::Ob
   common::ObObjMeta META_TYPE;
   META_TYPE.set_binary();
   ObColumnSchemaV2 meta_column;
-  meta_column.set_tenant_id(tenant_id);
+  
   meta_column.set_table_id(table_id);
   meta_column.set_column_id(common::OB_APP_MIN_COLUMN_ID + 1);
   meta_column.set_schema_version(SCHEMA_VERSION);
@@ -234,14 +234,14 @@ int ObTxTable::get_ctx_table_schema_(const uint64_t tenant_id, share::schema::Ob
   common::ObObjMeta DATA_TYPE;
   DATA_TYPE.set_binary();
   ObColumnSchemaV2 value_column;
-  value_column.set_tenant_id(tenant_id);
+  
   value_column.set_table_id(table_id);
   value_column.set_column_id(common::OB_APP_MIN_COLUMN_ID + 2);
   value_column.set_schema_version(SCHEMA_VERSION);
   value_column.set_data_length(MAX_TX_CTX_TABLE_VALUE_LENGTH);
   value_column.set_meta_type(DATA_TYPE);
 
-  schema.set_tenant_id(tenant_id);
+  
   schema.set_database_id(OB_SYS_DATABASE_ID);
   schema.set_table_id(table_id);
   schema.set_schema_version(SCHEMA_VERSION);
@@ -266,9 +266,7 @@ int ObTxTable::get_ctx_table_schema_(const uint64_t tenant_id, share::schema::Ob
   return ret;
 }
 
-int ObTxTable::create_ctx_tablet_(
-    const uint64_t tenant_id,
-    const ObLSID ls_id,
+int ObTxTable::create_ctx_tablet_(const ObLSID ls_id,
     const lib::Worker::CompatMode compat_mode,
     const share::SCN &create_scn)
 {
@@ -276,7 +274,7 @@ int ObTxTable::create_ctx_tablet_(
   share::schema::ObTableSchema table_schema;
   ObArenaAllocator arena_allocator;
   ObCreateTabletSchema create_tablet_schema;
-  if (OB_FAIL(get_ctx_table_schema_(tenant_id, table_schema))) {
+  if (OB_FAIL(get_ctx_table_schema_( table_schema))) {
     LOG_WARN("get ctx table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
@@ -293,7 +291,7 @@ int ObTxTable::create_ctx_tablet_(
   return ret;
 }
 
-int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::ObTableSchema &schema)
+int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = ObTabletID::LS_TX_DATA_TABLET_ID;
@@ -319,7 +317,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   DATA_TYPE.set_binary();
 
   ObColumnSchemaV2 tx_id_column;
-  tx_id_column.set_tenant_id(tenant_id);
+  
   tx_id_column.set_table_id(table_id);
   tx_id_column.set_column_id(ObTxDataTable::TX_ID);
   tx_id_column.set_schema_version(SCHEMA_VERSION);
@@ -328,7 +326,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   tx_id_column.set_meta_type(TX_ID_TYPE);  // int64_t
 
   ObColumnSchemaV2 idx_column;
-  idx_column.set_tenant_id(tenant_id);
+  
   idx_column.set_table_id(table_id);
   idx_column.set_column_id(ObTxDataTable::IDX);
   idx_column.set_schema_version(SCHEMA_VERSION);
@@ -337,7 +335,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   idx_column.set_meta_type(IDX_TYPE);  // int64_t
 
   ObColumnSchemaV2 total_row_cnt_column;
-  total_row_cnt_column.set_tenant_id(tenant_id);
+  
   total_row_cnt_column.set_table_id(table_id);
   total_row_cnt_column.set_column_id(ObTxDataTable::TOTAL_ROW_CNT);
   total_row_cnt_column.set_schema_version(SCHEMA_VERSION);
@@ -345,7 +343,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   total_row_cnt_column.set_rowkey_position(0);
 
   ObColumnSchemaV2 end_ts_column;
-  end_ts_column.set_tenant_id(tenant_id);
+  
   end_ts_column.set_table_id(table_id);
   end_ts_column.set_column_id(ObTxDataTable::END_LOG_TS);
   end_ts_column.set_schema_version(SCHEMA_VERSION);
@@ -353,7 +351,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   end_ts_column.set_rowkey_position(0);
 
   ObColumnSchemaV2 value_column;
-  value_column.set_tenant_id(tenant_id);
+  
   value_column.set_table_id(table_id);
   value_column.set_column_id(ObTxDataTable::VALUE);
   value_column.set_schema_version(SCHEMA_VERSION);
@@ -361,7 +359,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   value_column.set_meta_type(DATA_TYPE);
   value_column.set_rowkey_position(0);
 
-  schema.set_tenant_id(tenant_id);
+  
   schema.set_database_id(OB_SYS_DATABASE_ID);
   schema.set_table_id(table_id);
   schema.set_schema_version(SCHEMA_VERSION);
@@ -394,8 +392,7 @@ int ObTxTable::get_data_table_schema_(const uint64_t tenant_id, share::schema::O
   return ret;
 }
 
-int ObTxTable::create_data_tablet_(const uint64_t tenant_id,
-                                   const ObLSID ls_id,
+int ObTxTable::create_data_tablet_(const ObLSID ls_id,
                                    const lib::Worker::CompatMode compat_mode,
                                    const share::SCN &create_scn)
 {
@@ -403,7 +400,7 @@ int ObTxTable::create_data_tablet_(const uint64_t tenant_id,
   share::schema::ObTableSchema table_schema;
   ObArenaAllocator arena_allocator;
   ObCreateTabletSchema create_tablet_schema;
-  if (OB_FAIL(get_data_table_schema_(tenant_id, table_schema))) {
+  if (OB_FAIL(get_data_table_schema_( table_schema))) {
     LOG_WARN("get data table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
@@ -712,7 +709,7 @@ int ObTxTable::check_tx_data_in_mini_cache_(ObReadTxDataArg &read_tx_data_arg, O
 int ObTxTable::check_tx_data_in_kv_cache_(ObReadTxDataArg &read_tx_data_arg, ObITxDataCheckFunctor &fn)
 {
   int ret = OB_SUCCESS;
-  ObTxDataCacheKey key(MTL_ID(), ls_id_, read_tx_data_arg.tx_id_);
+  ObTxDataCacheKey key(ls_id_, read_tx_data_arg.tx_id_);
   ObTxDataValueHandle val_handle;
 
   if (OB_FAIL(OB_TX_DATA_KV_CACHE.get_row(key, val_handle))) {
@@ -795,7 +792,7 @@ int ObTxTable::check_tx_data_in_tables_(ObReadTxDataArg &read_tx_data_arg, ObITx
 int ObTxTable::put_tx_data_into_kv_cache_(const ObTxData &tx_data)
 {
   int ret = OB_SUCCESS;
-  const ObTxDataCacheKey key(MTL_ID(), ls_id_, tx_data.tx_id_);
+  const ObTxDataCacheKey key(ls_id_, tx_data.tx_id_);
   ObTxDataCacheValue cache_value;
 
   if (OB_FAIL(cache_value.init(tx_data))) {
@@ -926,7 +923,7 @@ int ObTxTable::get_recycle_scn(SCN &real_recycle_scn)
 
   int64_t current_time_us = ObClockGenerator::getClock();
   int64_t tx_result_retention_s = DEFAULT_TX_RESULT_RETENTION_S;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     // use config value if config is valid
     tx_result_retention_s = tenant_config->_tx_result_retention;
@@ -1166,8 +1163,8 @@ int ObTxTable::dump_single_tx_data_2_text(const int64_t tx_id_int, const char *f
     STORAGE_LOG(WARN, "open file fail:", K(fname));
   } else {
     int64_t ls_id = ls_->get_ls_id().id();
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld ls_id=%ld\n", tenant_id, ls_id);
+    
+    fprintf(fd, "ls_id=%ld\n", ls_id);
 
     if (OB_SUCC(tx_ctx_table_.dump_single_tx_data_2_text(tx_id_int, fd))) {
     } else if (OB_TRANS_CTX_NOT_EXIST == ret) {

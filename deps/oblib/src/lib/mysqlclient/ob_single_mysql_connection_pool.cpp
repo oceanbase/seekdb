@@ -54,13 +54,8 @@ int64_t ObSingleMySQLServerProvider::get_server_count() const
   return (server_.is_valid()) ? 1 : 0;
 }
 
-int ObSingleMySQLServerProvider::get_tenant_ids(ObIArray<uint64_t> &tenant_ids)
-{
-  tenant_ids.reset();
-  return OB_SUCCESS;
-}
 
-int ObSingleMySQLServerProvider::get_tenant_servers(const uint64_t tenant_id, ObIArray<ObAddr> &tenant_servers)
+int ObSingleMySQLServerProvider::get_tenant_servers(ObIArray<ObAddr> &tenant_servers)
 {
   tenant_servers.reset();
   return OB_SUCCESS;

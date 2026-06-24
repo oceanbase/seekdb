@@ -50,7 +50,7 @@ ObRoutineParam &ObRoutineParam::operator =(const ObRoutineParam &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    OX (tenant_id_ = src_schema.get_tenant_id());
+    OX ();
     OX (routine_id_ = src_schema.get_routine_id());
     OX (sequence_ = src_schema.get_sequence());
     OX (subprogram_id_ = src_schema.get_subprogram_id());
@@ -113,8 +113,7 @@ bool ObRoutineParam::is_valid() const
   bool bret = false;
   if (ObSchema::is_valid()) {
     if (is_user_field_valid()) {
-      bret = (OB_INVALID_ID != tenant_id_)
-          && (OB_INVALID_ID != routine_id_)
+      bret = (OB_INVALID_ID != routine_id_)
           && (OB_INVALID_INDEX != sequence_)
           && (OB_INVALID_INDEX != subprogram_id_)
           && (OB_INVALID_VERSION != schema_version_);
@@ -126,7 +125,6 @@ bool ObRoutineParam::is_valid() const
 
 void ObRoutineParam::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   routine_id_ = OB_INVALID_ID;
   sequence_ = OB_INVALID_INDEX;
   subprogram_id_ = OB_INVALID_INDEX;
@@ -163,7 +161,6 @@ OB_DEF_SERIALIZE(ObRoutineParam)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               routine_id_,
               sequence_,
               subprogram_id_,
@@ -187,7 +184,6 @@ OB_DEF_DESERIALIZE(ObRoutineParam)
   int ret = OB_SUCCESS;
   reset();
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               routine_id_,
               sequence_,
               subprogram_id_,
@@ -210,7 +206,6 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineParam)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               routine_id_,
               sequence_,
               subprogram_id_,
@@ -255,7 +250,6 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
     database_id_ = src_schema.database_id_;
     package_id_ =  src_schema.package_id_;
     owner_id_ = src_schema.owner_id_;
@@ -313,7 +307,7 @@ bool ObRoutineInfo::is_user_field_valid() const
 {
   bool bret = false;
   if (ObSchema::is_valid()) {
-    bret = (OB_INVALID_ID != tenant_id_)
+    bret = true
    //   && (OB_INVALID_ID != owner_id_)
         && (!routine_name_.empty())
         && (OB_INVALID_INDEX != overload_)
@@ -338,7 +332,6 @@ bool ObRoutineInfo::is_valid() const
 
 void ObRoutineInfo::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   package_id_ = OB_INVALID_ID;
   owner_id_ = OB_INVALID_ID;
@@ -512,7 +505,6 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
   int ret = OB_SUCCESS;
   int64_t param_cnt = routine_params_.count();
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               database_id_,
               package_id_,
               owner_id_,
@@ -551,7 +543,6 @@ OB_DEF_DESERIALIZE(ObRoutineInfo)
   ObRoutineParam routine_param;
   reset();
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               database_id_,
               package_id_,
               owner_id_,
@@ -588,7 +579,6 @@ OB_DEF_SERIALIZE_SIZE(ObRoutineInfo)
   int64_t len = 0;
   int64_t param_cnt = routine_params_.count();
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               database_id_,
               package_id_,
               owner_id_,

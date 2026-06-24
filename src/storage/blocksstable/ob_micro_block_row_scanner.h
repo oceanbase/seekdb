@@ -334,7 +334,7 @@ public:
         finish_scanning_cur_rowkey_(true),
         is_last_multi_version_row_(true),
         read_row_direct_flag_(false),
-        cell_allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+        cell_allocator_(common::ObModIds::OB_SSTABLE_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
         reserved_pos_(ObIMicroBlockReaderInfo::INVALID_ROW_INDEX),
         trans_version_col_idx_(-1),
         sql_sequence_col_idx_(-1),

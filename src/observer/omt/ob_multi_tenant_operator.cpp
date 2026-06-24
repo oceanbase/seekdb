@@ -75,11 +75,11 @@ int ObMultiTenantOperator::execute(common::ObNewRow *&row)
     ret = init();
   }
   if (OB_SUCC(ret)) {
-    uint64_t tenant_id = OB_SYS_TENANT_ID;
+    
     int process_ret = OB_SUCCESS;
     if (tenant_ == nullptr) {
-      if (OB_FAIL(GCTX.omt_->get_active_tenant_with_tenant_lock(tenant_id, tenant_))) {
-        LOG_WARN("get_tenant_with_tenant_lock", K(ret), K(tenant_id));
+      if (OB_FAIL(GCTX.omt_->get_active_tenant_with_tenant_lock(tenant_))) {
+        LOG_WARN("get_tenant_with_tenant_lock", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

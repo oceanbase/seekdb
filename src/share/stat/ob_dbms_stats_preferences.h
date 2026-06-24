@@ -386,7 +386,6 @@ public:
 
   static int get_prefs(ObMySQLProxy *mysql_proxy,
                        ObIAllocator &allocator,
-                       const uint64_t tenant_id,
                        const uint64_t table_id,
                        const ObString &opt_name,
                        ObObj &result);
@@ -420,13 +419,11 @@ public:
 private:
   static int do_get_prefs(ObMySQLProxy *mysql_proxy,
                           ObIAllocator &allocator,
-                          const uint64_t tenant_id,
                           const ObSqlString &raw_sql,
                           bool &get_result,
                           ObObj &result);
 
-  static int get_user_prefs_sql(const uint64_t tenant_id,
-                                const uint64_t table_id,
+  static int get_user_prefs_sql(const uint64_t table_id,
                                 const ObString &opt_name,
                                 const ObString &opt_value,
                                 const int64_t current_time,

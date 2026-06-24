@@ -60,10 +60,7 @@ int ObCreateDatabaseStmt::set_default_tablegroup_name(const common::ObString &ta
   return create_database_arg_.database_schema_.set_default_tablegroup_name(tablegroup_name);
 }
 
-void ObCreateDatabaseStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  create_database_arg_.database_schema_.set_tenant_id(tenant_id);
-}
+
 
 int ObCreateDatabaseStmt::set_database_name(const ObString &database_name)
 {

@@ -391,7 +391,6 @@ private:
 };
 
 // Validates ls_id and allocates a tenant-wide monotonic checkpoint batch trace id (via MTL).
-int acquire_checkpoint_batch_trace_id(const share::ObLSID &ls_id, int64_t &trace_id);
 
 }  // namespace storage
 }  // namespace oceanbase

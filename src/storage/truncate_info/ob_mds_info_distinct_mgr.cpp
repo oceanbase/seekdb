@@ -33,7 +33,7 @@ ObMdsInfoDistinctMgr::ObMdsInfoDistinctMgr()
       distinct_array_(),
       is_inited_(false)
 {
-  distinct_array_.set_attr(ObMemAttr(MTL_ID(), "TrunDisArr"));
+  distinct_array_.set_attr(ObMemAttr("TrunDisArr"));
 }
 
 int ObMdsInfoDistinctMgr::init(
@@ -63,7 +63,6 @@ int ObMdsInfoDistinctMgr::init(
       const ObTabletID &tablet_id = tablet.get_tablet_id();
       int tmp_ret = OB_SUCCESS;
       const ObTruncateInfoCacheKey cache_key(
-        MTL_ID(),
         tablet_id,
         distinct_array_.at(distinct_array_.count() - 1)->schema_version_,
         tablet.get_last_major_snapshot_version());

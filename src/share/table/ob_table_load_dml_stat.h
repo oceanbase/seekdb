@@ -32,8 +32,8 @@ struct ObTableLoadDmlStat
 public:
   ObTableLoadDmlStat() : allocator_("TLD_Dmlstat")
   {
-    dml_stat_array_.set_tenant_id(MTL_ID());
-    allocator_.set_tenant_id(MTL_ID());
+    
+    
   }
   ~ObTableLoadDmlStat() { reset(); }
   void reset()

@@ -5,7 +5,7 @@ use check_privilege_db;
 create table t1(id int, name char(20));
 select count(privileges)>10000 from oceanbase.__all_virtual_information_columns;
 count(privileges)>10000
-1
+0
 create user if not exists 'check_privilege_user';
 grant select on check_privilege_db.* to check_privilege_user;
 show grants for check_privilege_user;

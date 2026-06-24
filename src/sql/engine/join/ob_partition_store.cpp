@@ -34,7 +34,7 @@ int ObPartitionStore::init(const ObExprPtrIArray &exprs, const int64_t max_batch
 {
   int ret = OB_SUCCESS;
   extra_size_ = extra_size;
-  ObMemAttr mem_attr(tenant_id_, common::ObModIds::OB_ARENA_HASH_JOIN, ObCtxIds::WORK_AREA);
+  ObMemAttr mem_attr(common::ObModIds::OB_ARENA_HASH_JOIN, ObCtxIds::WORK_AREA);
   if (OB_FAIL(row_store_.init(exprs,
                               max_batch_size,
                               mem_attr,

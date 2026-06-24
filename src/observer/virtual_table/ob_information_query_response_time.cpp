@@ -15,6 +15,7 @@
  */
 
 #include "ob_information_query_response_time.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -89,10 +90,10 @@ int ObInfoSchemaQueryResponseTimeTable::inner_get_next_row(common::ObNewRow*& ro
   return ret;
 }
 
-bool ObInfoSchemaQueryResponseTimeTable::is_need_process(uint64_t tenant_id)
+bool ObInfoSchemaQueryResponseTimeTable::is_need_process()
 {
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
+  if (!false &&
+      (true || true)){
     return true;
   }
   return false;
@@ -110,16 +111,16 @@ int ObInfoSchemaQueryResponseTimeTable::process_curr_tenant(ObNewRow *&row)
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
   } else {
     if (utility_iter_ == 0 && sql_type_iter_ == 0) {
-      observer::ObTenantQueryRespTimeCollector *t_query_resp_time_collector = MTL(observer::ObTenantQueryRespTimeCollector *);
+      observer::ObTenantQueryRespTimeCollector *t_query_resp_time_collector = share::g_mp->tenant_query_resp_time_collector();
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (OB_ISNULL(t_query_resp_time_collector)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "t_query_resp_time_collector should not be null", K(ret));
       } else if (OB_FAIL(t_query_resp_time_collector->get_sum_value(time_collector_))) {
-        SERVER_LOG(WARN, "failed to get sum value",K(ret), K(MTL_ID()));
+        SERVER_LOG(WARN, "failed to get sum value",K(ret));
       } else if (OB_FAIL(process_row_data(row, cells))){
-        SERVER_LOG(WARN, "process row data of time collector failed", K(MTL_ID()), K(ret));
+        SERVER_LOG(WARN, "process row data of time collector failed", K(ret));
       }
     } else if (utility_iter_ == time_collector_.utility().bound_count() && sql_type_iter_ == static_cast<int32_t>(RespTimeSqlType::END) -1 ){
       ret = OB_ITER_END;
@@ -129,7 +130,7 @@ int ObInfoSchemaQueryResponseTimeTable::process_curr_tenant(ObNewRow *&row)
         utility_iter_ = 0;
       }
       if (OB_FAIL(process_row_data(row, cells))){
-        SERVER_LOG(WARN, "process row data of time collector failed", K(MTL_ID()), K(ret));
+        SERVER_LOG(WARN, "process row data of time collector failed", K(ret));
       }
     }
   }

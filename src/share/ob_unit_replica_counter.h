@@ -91,29 +91,28 @@ inline UnitReplicaCounter &UnitReplicaCounter::operator=(const UnitReplicaCounte
 
 struct ObTURepSortKey
 {
-  ObTURepSortKey() : tenant_id_(common::OB_INVALID_ID), unit_id_(common::OB_INVALID_ID)
+  ObTURepSortKey() : unit_id_(common::OB_INVALID_ID)
   {}
-  ObTURepSortKey(const uint64_t tenant_id, const uint64_t unit_id)
-      : tenant_id_(tenant_id), unit_id_(unit_id)
+  ObTURepSortKey(const uint64_t unit_id)
+      : unit_id_(unit_id)
   {}
   bool operator==(const ObTURepSortKey &rtur) const
   {
-    return (tenant_id_ == rtur.tenant_id_) && (unit_id_ == rtur.unit_id_);
+    return (true) && (unit_id_ == rtur.unit_id_);
   }
   bool operator!=(const ObTURepSortKey &rtur) const
   { return !(*this == rtur); }
   bool operator<(const ObTURepSortKey &rtur) const
   {
-    bool bret = tenant_id_ < rtur.tenant_id_;
-    if (false == bret && tenant_id_ == rtur.tenant_id_) {
+    bool bret = false;
+    if (false == bret && true) {
       bret = unit_id_ < rtur.unit_id_;
     }
     return bret;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(unit_id));
+  TO_STRING_KV(K_(unit_id));
 
-  uint64_t tenant_id_;
   uint64_t unit_id_;
 };
 
@@ -121,19 +120,16 @@ struct TenantUnitRepCnt
 {
   UnitReplicaCounter unit_rep_cnt_;
   uint64_t unit_id_;
-  uint64_t tenant_id_;
   int64_t non_table_cnt_;
   int64_t now_time_;
 public:
   TenantUnitRepCnt()
-    : unit_rep_cnt_(), unit_id_ (common::OB_INVALID_ID),
-      tenant_id_(common::OB_INVALID_ID), non_table_cnt_(0),
+    : unit_rep_cnt_(), unit_id_ (common::OB_INVALID_ID), non_table_cnt_(0),
       now_time_(common::OB_INVALID_TIMESTAMP) {}
 
-  TenantUnitRepCnt(const uint64_t unit_id, 
-                   const uint64_t tenant_id,
+  TenantUnitRepCnt(const uint64_t unit_id,
                    const UnitReplicaCounter &unit_rep_cnt)
-    : unit_rep_cnt_(unit_rep_cnt), unit_id_(unit_id), tenant_id_(tenant_id),
+    : unit_rep_cnt_(unit_rep_cnt), unit_id_(unit_id),
       non_table_cnt_(0), now_time_(common::OB_INVALID_TIMESTAMP) {}
 
   static bool cmp(const TenantUnitRepCnt* ltur, const TenantUnitRepCnt* rtur)
@@ -144,17 +140,16 @@ public:
 
   TenantUnitRepCnt &operator=(const TenantUnitRepCnt &other);
   ObTURepSortKey get_sort_key() const
-  { return ObTURepSortKey(tenant_id_, unit_id_); }
+  { return ObTURepSortKey(unit_id_); }
 
   TO_STRING_KV(K_(unit_rep_cnt), K_(unit_id),
-               K_(tenant_id), K_(non_table_cnt),
+               K_(non_table_cnt),
                K_(now_time));
 };
 
 inline TenantUnitRepCnt &TenantUnitRepCnt::operator=(const TenantUnitRepCnt &other)
 {
   unit_rep_cnt_ = other.unit_rep_cnt_;
-  tenant_id_ = other.tenant_id_;
   non_table_cnt_ = other.non_table_cnt_;
   unit_id_ = other.unit_id_;
   now_time_ = other.now_time_;

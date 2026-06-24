@@ -38,7 +38,6 @@ using namespace oceanbase::share::schema;
 
 int ObForkTableUtil::collect_complete_domain_index_schemas(
     ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const ObTableSchema &table_schema,
     hash::ObHashMap<uint64_t, ObTableSchema> &complete_index_schema_map)
 {
@@ -66,11 +65,11 @@ int ObForkTableUtil::collect_complete_domain_index_schemas(
       const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
       if (OB_INVALID_ID == index_table_id) {
         continue;
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
-        LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
+      } else if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
+        LOG_WARN("get index table schema failed", K(ret), K(index_table_id));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+        LOG_WARN("index table schema is null", K(ret), K(index_table_id));
       } else if (index_schema->is_in_recyclebin() ||
                  INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
         continue;
@@ -159,7 +158,6 @@ bool ObForkTableUtil::is_domain_or_aux_index(const ObTableSchema &index_schema)
 
 int ObForkTableUtil::collect_tablet_ids_from_table(
     schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const uint64_t table_id,
     common::ObIArray<common::ObTabletID> &tablet_ids)
 {
@@ -167,12 +165,12 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
   const ObTableSchema *table_schema = nullptr;
   tablet_ids.reset();
 
-  if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
+  if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(table_id));
-  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id, *table_schema, tablet_ids))) {
+  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, *table_schema, tablet_ids))) {
     LOG_WARN("fail to collect tablet ids", K(ret), K(table_id));
   }
 
@@ -181,17 +179,13 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
 
 int ObForkTableUtil::collect_tablet_ids_from_table(
     ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const ObTableSchema &table_schema,
     common::ObIArray<common::ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
   tablet_ids.reset();
 
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else {
+  {
     // 1. Get main table tablet IDs
     ObSEArray<ObTabletID, 4> main_tablet_ids;
     if (OB_FAIL(table_schema.get_tablet_ids(main_tablet_ids))) {
@@ -206,13 +200,13 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
 
     // 2. Get all index table tablet IDs (including domain index auxiliary tables)
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(collect_index_tablet_ids(schema_guard, tenant_id, table_schema, tablet_ids))) {
+    } else if (OB_FAIL(collect_index_tablet_ids(schema_guard, table_schema, tablet_ids))) {
       LOG_WARN("failed to collect index tablet ids", K(ret));
     }
 
     // 3. Get LOB auxiliary table tablet IDs
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(collect_lob_aux_tablet_ids(schema_guard, tenant_id, table_schema, tablet_ids))) {
+    } else if (OB_FAIL(collect_lob_aux_tablet_ids(schema_guard, table_schema, tablet_ids))) {
       LOG_WARN("failed to collect LOB aux tablet ids", K(ret));
     }
   }
@@ -221,7 +215,6 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
 
 int ObForkTableUtil::collect_index_tablet_ids(
     ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const ObTableSchema &table_schema,
     common::ObIArray<common::ObTabletID> &tablet_ids)
 {
@@ -234,7 +227,6 @@ int ObForkTableUtil::collect_index_tablet_ids(
     hash::ObHashMap<uint64_t, ObTableSchema> complete_index_schema_map;
     if (OB_FAIL(ObForkTableUtil::collect_complete_domain_index_schemas(
             schema_guard,
-            tenant_id,
             table_schema,
             complete_index_schema_map))) {
       LOG_WARN("fail to collect complete domain index schemas", K(ret), K(table_schema.get_table_id()));
@@ -243,11 +235,11 @@ int ObForkTableUtil::collect_index_tablet_ids(
       const ObTableSchema *index_schema = nullptr;
       const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
 
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
-        LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
+      if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
+        LOG_WARN("get index table schema failed", K(ret), K(index_table_id));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+        LOG_WARN("index table schema is null", K(ret), K(index_table_id));
       } else if (index_schema->is_in_recyclebin() ||
                  INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
         // Skip indexes not yet built or already recycled to keep tablet counts aligned.
@@ -292,7 +284,6 @@ int ObForkTableUtil::collect_index_tablet_ids(
 
 int ObForkTableUtil::collect_lob_aux_tablet_ids(
     ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const ObTableSchema &table_schema,
     common::ObIArray<common::ObTabletID> &tablet_ids)
 {
@@ -302,7 +293,7 @@ int ObForkTableUtil::collect_lob_aux_tablet_ids(
 
   if (OB_INVALID_ID != lob_meta_tid) {
     const ObTableSchema *lob_meta_schema = nullptr;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, lob_meta_tid, lob_meta_schema))) {
+    if (OB_FAIL(schema_guard.get_table_schema( lob_meta_tid, lob_meta_schema))) {
       LOG_WARN("get LOB meta table schema failed", K(ret), K(lob_meta_tid));
     } else if (OB_ISNULL(lob_meta_schema)) {
       ret = OB_TABLE_NOT_EXIST;
@@ -323,7 +314,7 @@ int ObForkTableUtil::collect_lob_aux_tablet_ids(
 
   if (OB_SUCC(ret) && OB_INVALID_ID != lob_piece_tid) {
     const ObTableSchema *lob_piece_schema = nullptr;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, lob_piece_tid, lob_piece_schema))) {
+    if (OB_FAIL(schema_guard.get_table_schema( lob_piece_tid, lob_piece_schema))) {
       LOG_WARN("get LOB piece table schema failed", K(ret), K(lob_piece_tid));
     } else if (OB_ISNULL(lob_piece_schema)) {
       ret = OB_TABLE_NOT_EXIST;
@@ -346,17 +337,11 @@ int ObForkTableUtil::collect_lob_aux_tablet_ids(
 
 int ObForkTableUtil::collect_table_ids_from_table(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const share::schema::ObTableSchema &table_schema,
     common::ObIArray<uint64_t> &table_ids)
 {
   int ret = OB_SUCCESS;
   table_ids.reset();
-
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  }
 
   // 1. main table
   const uint64_t main_table_id = table_schema.get_table_id();
@@ -373,7 +358,6 @@ int ObForkTableUtil::collect_table_ids_from_table(
       hash::ObHashMap<uint64_t, ObTableSchema> complete_index_schema_map;
       if (OB_FAIL(ObForkTableUtil::collect_complete_domain_index_schemas(
               schema_guard,
-              tenant_id,
               table_schema,
               complete_index_schema_map))) {
         LOG_WARN("fail to collect complete domain index schemas", K(ret), K(table_schema.get_table_id()));
@@ -383,11 +367,11 @@ int ObForkTableUtil::collect_table_ids_from_table(
           const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
           if (OB_INVALID_ID == index_table_id) {
             continue;
-          } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
-            LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
+          } else if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
+            LOG_WARN("get index table schema failed", K(ret), K(index_table_id));
           } else if (OB_ISNULL(index_schema)) {
             ret = OB_TABLE_NOT_EXIST;
-            LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+            LOG_WARN("index table schema is null", K(ret), K(index_table_id));
           } else if (index_schema->is_in_recyclebin() ||
                      INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
             continue;
@@ -447,7 +431,6 @@ int ObForkTableUtil::get_tablet_ids(
 int ObForkTableUtil::obtain_snapshot(
     common::ObMySQLTransaction &trans,
     schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const common::ObIArray<const ObTableSchema*> &data_table_schemas,
     int64_t &new_fetched_snapshot)
 {
@@ -458,13 +441,10 @@ int ObForkTableUtil::obtain_snapshot(
   SCN snapshot_scn;
   int64_t max_schema_version = 0;
 
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_UNLIKELY(data_table_schemas.empty())) {
+  if (OB_UNLIKELY(data_table_schemas.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("data_table_schemas is empty", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(new_fetched_snapshot, tenant_id))) {
+  } else if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(new_fetched_snapshot))) {
     LOG_WARN("fail to calc snapshot with gts", K(ret), K(new_fetched_snapshot));
   } else if (new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -479,7 +459,7 @@ int ObForkTableUtil::obtain_snapshot(
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("table schema is null", K(ret), K(i));
       } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
-                     schema_guard, tenant_id, *table_schema, tablet_ids))) {
+                     schema_guard, *table_schema, tablet_ids))) {
         LOG_WARN("fail to collect tablet ids", K(ret), K(table_schema->get_table_id()));
       } else {
         max_schema_version = std::max(max_schema_version, table_schema->get_schema_version());
@@ -492,18 +472,18 @@ int ObForkTableUtil::obtain_snapshot(
     int64_t retry_count = 0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
-              trans, SNAPSHOT_FOR_DDL, tenant_id, max_schema_version,
+              trans, SNAPSHOT_FOR_DDL, max_schema_version,
               snapshot_scn, nullptr, tablet_ids))) {
         if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret) {
           const bool has_timeout = THIS_WORKER.is_timeout_ts_valid();
           const bool timeouted = has_timeout ? THIS_WORKER.is_timeout() : true;
           if (timeouted) {
             LOG_WARN("batch acquire snapshot timeout on nowait conflict",
-                     KR(ret), K(tenant_id), K(retry_count), K(has_timeout), K(tablet_ids));
+                     KR(ret), K(retry_count), K(has_timeout), K(tablet_ids));
           } else {
             if (REACH_TIME_INTERVAL(1000 * 1000)) { // 1s
               LOG_INFO("retry batch acquire snapshot on nowait conflict",
-                       KR(ret), K(tenant_id), K(retry_count));
+                       KR(ret), K(retry_count));
             }
             // clear last error to keep transaction usable for next retry
             trans.reset_last_error();
@@ -531,7 +511,6 @@ int ObForkTableUtil::obtain_snapshot(
 int ObForkTableUtil::release_snapshot(
     rootserver::ObDDLTask* task,
     schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t tenant_id,
     const common::ObIArray<uint64_t> &table_ids,
     const int64_t snapshot_version)
 {
@@ -543,23 +522,20 @@ int ObForkTableUtil::release_snapshot(
   } else if (!task->is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("args have not been inited", K(ret), K(task->get_task_type()));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
   } else if (OB_UNLIKELY(table_ids.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("table_ids is empty", K(ret));
   } else {
     int64_t schema_version = task->get_src_schema_version();
-    if (OB_FAIL(DDL_SIM(tenant_id, task->get_task_id(), DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task->get_task_id()));
+    if (OB_FAIL(DDL_SIM(task->get_task_id(), DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {
+      LOG_WARN("ddl sim failure", K(ret), K(task->get_task_id()));
     } else {
       // Collect tablet ids from all tables
       for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
         const uint64_t table_id = table_ids.at(i);
         if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
-                schema_guard, tenant_id, table_id, tablet_ids))) {
-          LOG_WARN("failed to get tablet ids", K(ret), K(tenant_id), K(table_id));
+                schema_guard, table_id, tablet_ids))) {
+          LOG_WARN("failed to get tablet ids", K(ret), K(table_id));
         }
       }
     }

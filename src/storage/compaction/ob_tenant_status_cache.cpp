@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_tenant_status_cache.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -52,15 +53,6 @@ int ObTenantStatusCache::init_or_refresh()
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
-    if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-      if (OB_FAIL(inner_refresh_restore_status())) {
-        LOG_WARN("failed to refresh tenant restore status ", KR(ret));
-      } else if (!during_restore_ && OB_FAIL(inner_refresh_remote_tenant())) {
-        if (OB_NEED_WAIT != ret) {
-          LOG_WARN("failed to refresh remote tenant", KR(ret));
-        }
-      }
-    }
     if (OB_SUCC(ret)) {
       IGNORE_RETURN refresh_data_version();
       is_inited_ = true;
@@ -97,11 +89,11 @@ int ObTenantStatusCache::inner_refresh_restore_status()
   if (REACH_THREAD_TIME_INTERVAL(REFRESH_TENANT_STATUS_INTERVAL)) {
     ObSchemaGetterGuard schema_guard;
     const ObSimpleTenantSchema *tenant_schema = nullptr;
-    const uint64_t tenant_id = MTL_ID();
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret), K(tenant_id));
-    } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", K(ret), K(tenant_id));
+    
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get schema guard", K(ret));
+    } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+      LOG_WARN("fail to get tenant schema", K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("tenant schema is null", K(ret));
@@ -120,7 +112,7 @@ int ObTenantStatusCache::get_min_data_version(uint64_t &min_data_version)
   min_data_version = min_data_version_;
   if (0 == min_data_version) { // force call GET_MIN_DATA_VERSION
     uint64_t compat_version = 0;
-    if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), compat_version))) {
+    if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
       LOG_WARN("fail to get data version", KR(ret));
     } else {
       uint64_t old_version = min_data_version_;
@@ -145,7 +137,7 @@ int ObTenantStatusCache::refresh_data_version()
   int ret = OB_SUCCESS;
   uint64_t compat_version = 0;
   const uint64_t cached_data_version = min_data_version_;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), compat_version))) {
+  if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
     LOG_WARN_RET(ret, "fail to get data version");
   } else if (OB_UNLIKELY(compat_version < cached_data_version)) {
     ret = OB_ERR_UNEXPECTED;
@@ -163,7 +155,7 @@ bool ObTenantStatusCache::enable_adaptive_compaction_with_cpu_load() const
   bool bret = enable_adaptive_compaction_;
   if (!bret || !enable_adaptive_merge_schedule()) {
     // do nothing
-  } else if (MTL(ObTenantTabletStatMgr *)->is_high_tenant_cpu_load()) {
+  } else if (share::g_mp->tenant_tablet_stat_mgr()->is_high_tenant_cpu_load()) {
     bret = false;
     if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INVERVAL)) {
       FLOG_INFO("disable adaptive compaction due to the high load CPU", K(bret));

@@ -39,7 +39,7 @@ public:
   void set_priv_set(ObPrivSet priv_set);
   int set_database_name(const common::ObString &database_name);
   int set_table_name(const common::ObString &table_name);
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_revoke_all(bool revoke_all) { revoke_all_ = revoke_all; }
   void set_object_id(uint64_t obj_id) { obj_id_ = obj_id; }
   void set_grantor_id(uint64_t grantor_id) { grantor_id_ = grantor_id; }
@@ -60,7 +60,7 @@ public:
   bool get_revoke_all_ora() const { return revoke_all_ora_; }
 
   ObPrivSet get_priv_set() const;
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   bool get_revoke_all() const { return revoke_all_; }
   const common::ObStrings& get_grantees() const { return grantees_; }
   virtual bool cause_implicit_commit() const { return true; }
@@ -91,7 +91,6 @@ private:
   share::schema::ObPrivLevel grant_level_;
   common::ObString database_;
   common::ObString table_;
-  uint64_t tenant_id_;
   common::ObArray<uint64_t, common::ModulePageAllocator, true> users_;
   bool revoke_all_;
   common::ObStrings grantees_;

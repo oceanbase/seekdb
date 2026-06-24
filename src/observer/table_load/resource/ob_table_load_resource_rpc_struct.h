@@ -161,24 +161,22 @@ class ObDirectLoadResourceApplyArg final
 
 public:
   ObDirectLoadResourceApplyArg() 
-    : tenant_id_(common::OB_INVALID_ID)
-  {
+    {
   }
   ObDirectLoadResourceApplyArg(const ObDirectLoadResourceApplyArg& arg)
-    : tenant_id_(arg.tenant_id_), task_key_(arg.task_key_), apply_array_(arg.apply_array_)
+    : task_key_(arg.task_key_), apply_array_(arg.apply_array_)
   {
   }
   bool is_valid()
   {
-    bool valid = tenant_id_ != common::OB_INVALID_ID && task_key_.is_valid();
+    bool valid = true && task_key_.is_valid();
     for (int64_t i = 0; valid && i < apply_array_.count(); i++) {
       valid = (apply_array_[i].addr_.is_valid() && apply_array_[i].thread_count_ >= 0 && apply_array_[i].memory_size_ >= 0);
     }
     return valid;
   }
-  TO_STRING_KV(K_(tenant_id), K_(task_key), K_(apply_array));
+  TO_STRING_KV(K_(task_key), K_(apply_array));
 public:
-  uint64_t tenant_id_;
 	ObTableLoadUniqueKey task_key_;
 	common::ObSArray<ObDirectLoadResourceUnit> apply_array_;
 };
@@ -189,20 +187,18 @@ class ObDirectLoadResourceReleaseArg final
   
 public:
   ObDirectLoadResourceReleaseArg() 
-    : tenant_id_(common::OB_INVALID_ID) 
-  {
+    {
   }
   ObDirectLoadResourceReleaseArg(const ObDirectLoadResourceReleaseArg &arg)
-    : tenant_id_(arg.tenant_id_), task_key_(arg.task_key_)
+    : task_key_(arg.task_key_)
   {
   }
   bool is_valid() 
   { 
-    return tenant_id_ != common::OB_INVALID_ID && task_key_.is_valid(); 
+    return true && task_key_.is_valid(); 
   }
-  TO_STRING_KV(K_(tenant_id), K_(task_key));
+  TO_STRING_KV(K_(task_key));
 public:
-  uint64_t tenant_id_;
 	ObTableLoadUniqueKey task_key_;
 };
 
@@ -212,23 +208,21 @@ class ObDirectLoadResourceUpdateArg final
   
 public:
   ObDirectLoadResourceUpdateArg()
-   : tenant_id_(common::OB_INVALID_ID), thread_count_(0), memory_size_(0)
+   : thread_count_(0), memory_size_(0)
   {
   }
   ObDirectLoadResourceUpdateArg(const ObDirectLoadResourceUpdateArg &arg)
-    : tenant_id_(arg.tenant_id_),
-      thread_count_(arg.thread_count_),
+    : thread_count_(arg.thread_count_),
       memory_size_(arg.memory_size_),
       addrs_(arg.addrs_)
   {
   }
   bool is_valid() 
   { 
-    return tenant_id_ != common::OB_INVALID_ID && thread_count_ >= 0 && memory_size_ >= 0; 
+    return true && thread_count_ >= 0 && memory_size_ >= 0; 
   }
-  TO_STRING_KV(K_(tenant_id), K_(thread_count), K_(memory_size), K_(addrs));
+  TO_STRING_KV(K_(thread_count), K_(memory_size), K_(addrs));
 public:
-  uint64_t tenant_id_;
   int64_t thread_count_;
   int64_t memory_size_;
   common::ObSArray<ObAddr> addrs_;
@@ -240,22 +234,20 @@ class ObDirectLoadResourceCheckArg final
   
 public:
   ObDirectLoadResourceCheckArg() 
-    : tenant_id_(common::OB_INVALID_ID), avail_memory_(0), first_check_(false)
+    : avail_memory_(0), first_check_(false)
   {
   }
   ObDirectLoadResourceCheckArg(const ObDirectLoadResourceCheckArg &arg)
-    : tenant_id_(arg.tenant_id_), 
-      avail_memory_(arg.avail_memory_), 
+    : avail_memory_(arg.avail_memory_), 
       first_check_(arg.first_check_)
   {
   }
   bool is_valid()
   { 
-    return tenant_id_ != common::OB_INVALID_ID; 
+    return true; 
   }
-  TO_STRING_KV(K_(tenant_id), K_(avail_memory));
+  TO_STRING_KV(K_(avail_memory));
 public:
-  uint64_t tenant_id_;
   int64_t avail_memory_;
   bool first_check_;
 };

@@ -250,7 +250,7 @@ int ObCGMicroBlockWriteOp::execute(const ObChunk &input_chunk,
         } else {
           cg_block_file = cg_block_file_arr_.at(cg_idx);
           if (nullptr == cg_block_file) {
-            cg_block_file = OB_NEW(ObCGBlockFile, ObMemAttr(MTL_ID(), "CGBlockFile"));
+            cg_block_file = OB_NEW(ObCGBlockFile, ObMemAttr("CGBlockFile"));
             if (OB_UNLIKELY(nullptr == cg_block_file)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to new cg block file", K(ret));

@@ -127,11 +127,6 @@ public:
       estimator_store_(allocator_)
   {}
 
-  explicit ObSelEstimatorFactory(int64_t tenant_id)
-    : allocator_("ObOptSel", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id),
-      estimator_store_(allocator_)
-  {}
-
   ~ObSelEstimatorFactory() {
     destory();
   }

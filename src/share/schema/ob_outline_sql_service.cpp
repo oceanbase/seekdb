@@ -43,7 +43,7 @@ int ObOutlineSqlService::insert_outline(const ObOutlineInfo &outline_info,
       LOG_WARN("failed to add outline", K(ret));
     } else {
       ObSchemaOperation opt;
-      opt.tenant_id_ = outline_info.get_tenant_id();
+      
       opt.database_id_ = outline_info.get_database_id();
       opt.outline_id_ = outline_info.get_outline_id();
       opt.table_id_ = outline_info.get_outline_id();
@@ -68,8 +68,8 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
     LOG_WARN("outline info is invalid", K(outline_info), K(ret));
   } else {
     ObSqlString sql;
-    uint64_t tenant_id = outline_info.get_tenant_id();
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
+    
     uint64_t outline_id = outline_info.get_outline_id();
     ObString outline_params_hex_str;
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -81,9 +81,9 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
       }
 
       if (OB_SUCC(ret)) {
-        ObDMLExecHelper exec(sql_client, exec_tenant_id);
+        ObDMLExecHelper exec(sql_client);
         ObDMLSqlSplicer dml;
-        if (OB_FAIL(dml.add_pk_column("outline_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, outline_id)))
+        if (OB_FAIL(dml.add_pk_column("outline_id", ObSchemaUtils::get_extract_schema_id(outline_id)))
             || OB_FAIL(dml.add_column("outline_content", ObHexEscapeSqlStr(
                         outline_info.get_outline_content_str().empty() ? ObString::make_string("")
                         : outline_info.get_outline_content_str())))
@@ -130,7 +130,7 @@ int ObOutlineSqlService::replace_outline(const ObOutlineInfo &outline_info,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-      opt.tenant_id_ = outline_info.get_tenant_id();
+      
       opt.database_id_ = outline_info.get_database_id();
       opt.outline_id_ = outline_info.get_outline_id();
       opt.table_id_ = outline_info.get_outline_id();//reuse table_id
@@ -155,8 +155,8 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
     LOG_WARN("outline info is invalid", K(outline_info), K(ret));
   } else {
     ObSqlString sql;
-    uint64_t tenant_id = outline_info.get_tenant_id();
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
+    
     uint64_t outline_id = outline_info.get_outline_id();
     ObString outline_params_hex_str;
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -168,9 +168,9 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
 
       // outline_content is described by sql_test here.
       if (OB_SUCC(ret)) {
-        ObDMLExecHelper exec(sql_client, exec_tenant_id);
+        ObDMLExecHelper exec(sql_client);
         ObDMLSqlSplicer dml;
-        if (OB_FAIL(dml.add_pk_column("outline_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, outline_id)))
+        if (OB_FAIL(dml.add_pk_column("outline_id", ObSchemaUtils::get_extract_schema_id(outline_id)))
             || OB_FAIL(dml.add_column("outline_content", ObHexEscapeSqlStr(
                         outline_info.get_outline_content_str().empty() ? ObString::make_string("")
                         : outline_info.get_outline_content_str())))
@@ -208,7 +208,7 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-      opt.tenant_id_ = outline_info.get_tenant_id();
+      
       opt.database_id_ = outline_info.get_database_id();
       opt.outline_id_ = outline_info.get_outline_id();
       opt.table_id_ = outline_info.get_outline_id();//reuse table_id
@@ -223,8 +223,7 @@ int ObOutlineSqlService::alter_outline(const ObOutlineInfo &outline_info,
   return ret;
 }
 
-int ObOutlineSqlService::delete_outline(const uint64_t tenant_id,
-                                        const uint64_t database_id,
+int ObOutlineSqlService::delete_outline(const uint64_t database_id,
                                         const uint64_t outline_id,
                                         const int64_t new_schema_version,
                                         common::ObISQLClient &sql_client,
@@ -234,12 +233,12 @@ int ObOutlineSqlService::delete_outline(const uint64_t tenant_id,
   int64_t affected_rows = 0;
   ObSqlString sql;
   const int64_t IS_DELETED = 1;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
 
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == database_id
+  if (OB_UNLIKELY(OB_INVALID_ID == database_id
                         || OB_INVALID_ID == outline_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid outline info in drop outline", K(tenant_id), K(database_id),
+    LOG_WARN("invalid outline info in drop outline", K(database_id),
              K(outline_id), K(ret));
   } else {
     // insert into __all_table_history
@@ -247,11 +246,11 @@ int ObOutlineSqlService::delete_outline(const uint64_t tenant_id,
                    "INSERT INTO %s(outline_id,schema_version,is_deleted)"
                    " VALUES(%lu,%ld,%ld)",
                    OB_ALL_OUTLINE_HISTORY_TNAME,
-                   ObSchemaUtils::get_extract_schema_id(exec_tenant_id, outline_id),
+                   ObSchemaUtils::get_extract_schema_id(outline_id),
                    new_schema_version, IS_DELETED))) {
       LOG_WARN("assign insert into all outline history fail",
-               K(tenant_id), K(outline_id), K(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+               K(outline_id), K(ret));
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
@@ -261,10 +260,10 @@ int ObOutlineSqlService::delete_outline(const uint64_t tenant_id,
     // delete from __all_outline
     if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE outline_id=%lu",
                                OB_ALL_OUTLINE_TNAME,
-                               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, outline_id)))) {
+                               ObSchemaUtils::get_extract_schema_id(outline_id)))) {
       LOG_WARN("append_fmt failed", K(ret));
-    } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(tenant_id), K(sql), K(ret));
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
@@ -273,7 +272,7 @@ int ObOutlineSqlService::delete_outline(const uint64_t tenant_id,
     // log operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation opt;
-      opt.tenant_id_ = tenant_id;
+      
       opt.outline_id_ = outline_id;
       opt.table_id_ = outline_id;
       opt.database_id_ = database_id;
@@ -298,8 +297,8 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
   const char *tname[] = {OB_ALL_OUTLINE_TNAME, OB_ALL_OUTLINE_HISTORY_TNAME};
   ObString max_outline_params_hex_str;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-  uint64_t tenant_id = outline_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_FAIL(outline_info.get_hex_str_from_outline_params(max_outline_params_hex_str, allocator))) {
     LOG_WARN("fail to get_hex_str_from_outline_params", K(ret));
   }
@@ -310,8 +309,8 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
       STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
-      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(exec_tenant_id, outline_info.get_outline_id()), "outline_id", "%lu");
-      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(exec_tenant_id, outline_info.get_database_id()), "database_id", "%lu");
+      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_outline_id()), "outline_id", "%lu");
+      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(outline_info.get_database_id()), "database_id", "%lu");
       SQL_COL_APPEND_VALUE(sql, values, outline_info.get_schema_version(), "schema_version", "%ld");
       SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, outline_info.get_name(),
                                       outline_info.get_name_str().length(), "name");
@@ -352,7 +351,7 @@ int ObOutlineSqlService::add_outline(common::ObISQLClient &sql_client,
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
           LOG_WARN("append sql failed, ", K(ret));
-        } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+        } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
           LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else {
           if (!is_single_row(affected_rows)) {

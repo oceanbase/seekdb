@@ -316,7 +316,7 @@ OB_INLINE int datum_lob_locator_hash(const ObDatum &datum,
     res = seed;
   } else {
     ObString inrow_data = datum.get_string();
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     // all lob tc can use longtext type for lob iter
     if (OB_FAIL(datum_lob_locator_get_string(datum, allocator, inrow_data))) {
       COMMON_LOG(WARN, "Lob: get string failed ", K(ret), K(datum));
@@ -758,7 +758,7 @@ struct DatumStrHashCalculator<CS_TYPE_UTF8MB4_BIN, calc_end_space, T, true /* is
   {
     int ret = OB_SUCCESS;
     ObString inrow_data = datum.get_string();
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     // all lob tc can use longtext type for lob iter
     if (OB_FAIL(datum_lob_locator_get_string(datum, allocator, inrow_data))) {
       COMMON_LOG(WARN, "Lob: get string failed ", K(ret), K(datum));
@@ -1080,7 +1080,7 @@ struct DatumJsonHashCalculator : public DefHashMethod<T>
     int ret = OB_SUCCESS;
     common::ObString j_bin_str;
     res = 0;
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTextStringIter str_iter(ObJsonType, CS_TYPE_BINARY, datum.get_string(), HAS_LOB_HEADER);
     if (datum.is_null()) {
       res = seed;

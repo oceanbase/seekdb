@@ -957,7 +957,6 @@ int ObObjectDevice::buf_append_part(
     const ObIOFd &fd,
     const char *buf,
     const int64_t size,
-    const uint64_t tenant_id,
     bool &is_full)
 {
   int ret = OB_SUCCESS;
@@ -975,12 +974,12 @@ int ObObjectDevice::buf_append_part(
     OB_LOG(WARN, "fd ctx is null!", K(flag), K(ret));
   } else if (flag == OB_STORAGE_ACCESS_DIRECT_MULTIPART_WRITER) {
     ObStorageDirectMultiPartWriter *multipart_writer = static_cast<ObStorageDirectMultiPartWriter*>(ctx);
-    if (OB_FAIL(multipart_writer->buf_append_part(buf, size, tenant_id, is_full))) {
+    if (OB_FAIL(multipart_writer->buf_append_part(buf, size, is_full))) {
       OB_LOG(WARN, "fail to do multipart writer buf_append_part!", K(ret));
     }
   } else if (flag == OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER) {
     ObStorageBufferedMultiPartWriter *multipart_writer = static_cast<ObStorageBufferedMultiPartWriter*>(ctx);
-    if (OB_FAIL(multipart_writer->buf_append_part(buf, size, tenant_id, is_full))) {
+    if (OB_FAIL(multipart_writer->buf_append_part(buf, size, is_full))) {
       OB_LOG(WARN, "fail to do multipart writer buf_append_part!", K(ret));
     }
   } else {
@@ -1235,9 +1234,8 @@ int ObObjectDevice::io_getevents(ObIOContext *io_context, int64_t min_nr,
   return OB_NOT_SUPPORTED;
 }
 
-ObIOCB *ObObjectDevice::alloc_iocb(const uint64_t tenant_id)
+ObIOCB *ObObjectDevice::alloc_iocb()
 {
-  UNUSED(tenant_id);
   OB_LOG_RET(WARN, OB_NOT_SUPPORTED, "alloc_iocb is not support in object device !", K(device_type_));
   return NULL;
 }

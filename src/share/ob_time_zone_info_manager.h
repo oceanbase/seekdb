@@ -43,13 +43,12 @@ class ObRequestTZInfoArg
 {
   OB_UNIS_VERSION(1);
 public:
-  explicit ObRequestTZInfoArg(const common::ObAddr &addr, uint64_t tenant_id) : obs_addr_(addr),
-  tenant_id_(tenant_id) {}
+  explicit ObRequestTZInfoArg(const common::ObAddr &addr) : obs_addr_(addr) {}
   ObRequestTZInfoArg() : obs_addr_() {}
   ~ObRequestTZInfoArg() {}
 public:
   common::ObAddr obs_addr_;
-  uint64_t tenant_id_;
+  
 };
 
 class ObRequestTZInfoResult
@@ -108,15 +107,13 @@ private:
   };
 
 public:
-ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy,
-                      int64_t tenant_id)
+ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy)
     : sql_proxy_(sql_proxy),
       tz_info_map_(),
       tz_info_map_buf_(),
       inited_(false),
       is_usable_(false),
-      last_version_(-1),
-      tenant_id_(tenant_id)
+      last_version_(-1)
       {}
   ~ObTimeZoneInfoManager()
   {}
@@ -137,8 +134,7 @@ ObTimeZoneInfoManager(common::ObMySQLProxy &sql_proxy,
   static const char *FETCH_LATEST_TZ_VERSION_SQL;
   // calculate the offset between any two time zones
   static int calc_tz_info_offsets(ObTZInfoMap &tz_info_map);
-  static int fill_tz_info_map(common::sqlclient::ObMySQLResult &result, ObTZInfoMap &tz_info_map,
-                              uint64_t tenant_id = common::OB_SERVER_TENANT_ID);
+  static int fill_tz_info_map(common::sqlclient::ObMySQLResult &result, ObTZInfoMap &tz_info_map);
   static int set_tz_info_map(
       ObTimeZoneInfoPos *&stored_tz_info,
       ObTimeZoneInfoPos &new_tz_info,
@@ -165,8 +161,8 @@ private:
   //If the time_zone_info_version in __all_zone is greater than 0, set to true after brushing timezone info
   volatile bool is_usable_;
   int64_t last_version_;
-  // Record tenant_id_ for obtaining the tz_info_version of this tenant
-  int64_t tenant_id_;
+  // Record tenant_ for obtaining the tz_info_version of this tenant
+  
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeZoneInfoManager);
 };

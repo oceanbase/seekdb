@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "observer/ob_inner_sql_connection_pool.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "ob_sql_plan.h"
 using namespace oceanbase::common;
@@ -466,8 +467,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       plan_item->other_xml_
       ))) {
       LOG_WARN("failed to assign sql string", K(ret));
-    } else if (OB_FAIL(conn->execute_write(session->get_effective_tenant_id(), 
-                                          sql.ptr(), 
+    } else if (OB_FAIL(conn->execute_write(sql.ptr(), 
                                           affected_rows))) {
       LOG_WARN("failed to exec inner sql", K(ret));
     }
@@ -2513,7 +2513,7 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
     session_value = 0;
     // release curr
     if (OB_NOT_NULL(new_tx_desc)) {
-      auto txs = MTL(transaction::ObTransService*);
+      auto txs = share::g_mp->trans_service();
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("can not acquire MTL TransService", KR(ret));

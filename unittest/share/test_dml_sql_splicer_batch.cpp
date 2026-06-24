@@ -189,13 +189,11 @@ class MockSQLClient : public ObISQLClient
 {
 public:
   using ReadResult = ObISQLClient::ReadResult;
-  int read(ReadResult &res, const int64_t cluster_id, const uint64_t tenant_id, const char *sql) override { return OB_OP_NOT_ALLOW; }
-  int read(ReadResult &res, const uint64_t tenant_id, const char *sql) override { return OB_OP_NOT_ALLOW; }
-  int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const int32_t group_id) override { return OB_OP_NOT_ALLOW; }
+  int read(ReadResult &res, const int64_t cluster_id, const char *sql) override { return OB_OP_NOT_ALLOW; }
+  int read(ReadResult &res, const char *sql, const int32_t group_id) override { return OB_OP_NOT_ALLOW; }
   int escape(const char *from, const int64_t from_size, char *to, const int64_t to_size, int64_t &out_size) { return OB_OP_NOT_ALLOW; }
 
-  MOCK_METHOD3(write, int(const uint64_t tenant_id, const char *sql, int64_t &affected_rows));
-  int write(const uint64_t tenant_id, const char *sql,  const int32_t group_id, int64_t &affected_rows) override { return OB_OP_NOT_ALLOW; }
+  MOCK_METHOD3(write, int(const char *sql, const int32_t group_id, int64_t &affected_rows));
 
   sqlclient::ObISQLConnectionPool *get_pool() { return nullptr; }
   sqlclient::ObISQLConnection *get_connection() { return nullptr; }
@@ -209,8 +207,8 @@ TEST_F(TestDMLSqlSplicer, exec)
   MockSQLClient mock_sql;
   bool has_error = false;
   int64_t index = 0;
-  EXPECT_CALL(mock_sql, write(OB_SYS_TENANT_ID, _, _))
-    .WillRepeatedly(Invoke([&](const uint64_t tenant_id, const char *sql, int64_t &affected_rows) -> int {
+  EXPECT_CALL(mock_sql, write(_, _, _))
+    .WillRepeatedly(Invoke([&](const char *sql, const int32_t group_id, int64_t &affected_rows) -> int {
           int ret = OB_SUCCESS;
           if (index < 0 || index >= sqls.count()) {
             has_error = true;
@@ -221,7 +219,7 @@ TEST_F(TestDMLSqlSplicer, exec)
           index++;
           return OB_SUCCESS;
       }));
-  ObDMLExecHelper exec(mock_sql, OB_SYS_TENANT_ID);
+  ObDMLExecHelper exec(mock_sql);
   int64_t affected_rows = 1;
 
   ASSERT_SUCCESS(add_column("a", 1));

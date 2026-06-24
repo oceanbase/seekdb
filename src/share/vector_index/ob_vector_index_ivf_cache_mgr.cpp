@@ -65,7 +65,7 @@ void ObIvfCacheMgr::reset()
   is_reach_limit_ = false;
   reach_limit_cnt_ = 0;
   is_inited_ = false;
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   cache_mgr_key_.reset();
   vec_param_.reset();
   ObIAllocator &allocator = get_self_allocator();
@@ -88,14 +88,14 @@ int ObIvfCacheMgr::init(lib::MemoryContext &parent_mem_ctx,
                         int64_t dim, int64_t table_id, uint64_t* all_vsag_use_mem)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id_, "IvfCacheCtx");
+  ObMemAttr attr("IvfCacheCtx");
   if (!key.is_valid() || dim <= 0 || OB_ISNULL(all_vsag_use_mem)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablet id or dim", K(ret), K(key), K(dim), KP(all_vsag_use_mem));
   } else if (OB_ISNULL(mem_ctx_ = OB_NEWx(ObIvfMemContext, &get_self_allocator(), all_vsag_use_mem))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create mem_ctx", K(ret)); 
-  } else if (OB_FAIL(mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem, tenant_id_))) {
+  } else if (OB_FAIL(mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem))) {
     LOG_WARN("failed to init memory context", K(ret));
     reset();
   } else if (OB_FAIL(cache_objs_.create(DEFAULT_IVF_CACHE_HASH_SIZE, attr, attr))) {
@@ -138,8 +138,8 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
     LOG_WARN("mem ctx is null", K(ret));
   } else if (!is_reach_limit_) {
     if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id_, tenant_mem_size))) {
-      LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id_));
+            ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_mem_size))) {
+      LOG_WARN("failed to get vector mem limit size.", K(ret));
     } else if (curr_used + base > tenant_mem_size) {
       is_reach_limit_ = true;
     }
@@ -147,8 +147,8 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
     // check is memory limit changed
     reach_limit_cnt_ = 0;
     if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id_, tenant_mem_size))) {
-      LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id_));
+            ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_mem_size))) {
+      LOG_WARN("failed to get vector mem limit size.", K(ret));
     } else if (curr_used + base < tenant_mem_size) {
       is_reach_limit_ = false;
     }
@@ -190,7 +190,7 @@ int ObIvfCacheMgr::create_cache_obj(const IvfCacheKey &key, ObIvfICache *&cache_
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc tmp_buf", K(ret)); 
     } else {
-      tmp_cent_cache = new(tmp_buf) ObIvfCentCache(get_self_allocator(), tenant_id_);
+      tmp_cent_cache = new(tmp_buf) ObIvfCentCache(get_self_allocator());
       cache_obj = tmp_cent_cache;
     }
     break;
@@ -352,7 +352,7 @@ int ObIvfICache::inner_init(ObIvfMemContext *parent_mem_ctx, uint64_t* all_vsag_
   if (OB_ISNULL(sub_mem_ctx_ = OB_NEWx(ObIvfMemContext, &get_self_allocator(), all_vsag_use_mem))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create mem_ctx", K(ret)); 
-  } else if (OB_FAIL(sub_mem_ctx_->init(parent_mem_ctx->get_mem_context(), all_vsag_use_mem, tenant_id_))) {
+  } else if (OB_FAIL(sub_mem_ctx_->init(parent_mem_ctx->get_mem_context(), all_vsag_use_mem))) {
     LOG_WARN("failed to init memory context", K(ret));
     reset();
   }

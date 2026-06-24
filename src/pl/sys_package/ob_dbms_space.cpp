@@ -169,24 +169,24 @@ int ObDbmsSpace::extract_info_from_stmt(ObExecContext &ctx,
       || OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(stmt), KP(schema_guard));
-  } else if (OB_FAIL(schema_guard->get_table_schema(session->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     stmt->get_table_id(),
                                                     table_schema))) {
     SQL_ENG_LOG(WARN, "fail to get table_schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     SQL_ENG_LOG(WARN, "can't find table_schema", K(ret));
-  } else if (OB_FAIL(get_svr_info_from_schema(table_schema, info.svr_addr_, info.tablet_ids_, info.table_tenant_id_))) {
+  } else if (OB_FAIL(get_svr_info_from_schema(table_schema, info.svr_addr_, info.tablet_ids_))) {
     SQL_ENG_LOG(WARN, "fail to get info from schema", K(ret));
   } else if (OB_FAIL(get_index_column_ids(table_schema, stmt->get_create_index_arg(), info))) {
     SQL_ENG_LOG(WARN, "fail to get index column ids", K(ret));
   } else {
-    info.tenant_id_ = session->get_effective_tenant_id();
-    info.table_id_ = ObSchemaUtils::get_extract_schema_id(info.tenant_id_, stmt->get_table_id());
+    
+    info.table_id_ = ObSchemaUtils::get_extract_schema_id(stmt->get_table_id());
     if (table_schema->is_partitioned_table()) {
       partition_id = -1;
     } else {
-      partition_id = ObSchemaUtils::get_extract_schema_id(info.tenant_id_, info.table_id_);
+      partition_id = ObSchemaUtils::get_extract_schema_id(info.table_id_);
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(info.part_ids_.push_back(partition_id))) {
@@ -241,13 +241,11 @@ int ObDbmsSpace::get_optimizer_stats(const IndexCostInfo &info,
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(info.table_tenant_id_,
-                                                              info.table_id_,
+  if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(info.table_id_,
                                                               info.part_ids_,
                                                               opt_stats.table_stats_))) {
     SQL_ENG_LOG(WARN, "fail to get table stat", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(info.table_tenant_id_,
-                                                                      info.table_id_,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(info.table_id_,
                                                                       info.part_ids_,
                                                                       info.column_ids_,
                                                                       opt_stats.column_stats_))) {
@@ -307,7 +305,7 @@ int ObDbmsSpace::inner_get_compressed_ratio(ObMySQLProxy *sql_proxy,
                                                    static_cast<int32_t>(tablet_predicate.length()),
                                                    tablet_predicate.ptr()))) {
         SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(result, OB_SYS_TENANT_ID, compression_ratio_sql.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(result, compression_ratio_sql.ptr()))) {
         SQL_ENG_LOG(WARN, "exec query fail", K(ret));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -531,7 +529,7 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
                                                  static_cast<int32_t>(tablet_predicate.length()),
                                                  tablet_predicate.ptr()))) {
         SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(result, OB_SYS_TENANT_ID, get_tablet_size_sql.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(result, get_tablet_size_sql.ptr()))) {
         SQL_ENG_LOG(WARN, "exec query fail", K(ret));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -562,13 +560,12 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
   ObSqlString tablet_predicate;
   ObSEArray<ObAddr, 4> svr_addr;
   ObSEArray<ObTabletID, 4> tablet_ids;
-  uint64_t table_tenant_id = OB_INVALID_TENANT_ID;
   tablet_size.reset();
 
   if (OB_ISNULL(sql_proxy) || OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(sql_proxy), KP(table_schema));
-  } else if (OB_FAIL(get_svr_info_from_schema(table_schema, svr_addr, tablet_ids, table_tenant_id))) {
+  } else if (OB_FAIL(get_svr_info_from_schema(table_schema, svr_addr, tablet_ids))) {
     SQL_ENG_LOG(WARN, "fail to get svr_info", K(ret));
   } else if (OB_FAIL(generate_part_key_str(svr_addr_predicate, svr_addr))) {
     SQL_ENG_LOG(WARN, "fail to get svr_addr_predicate", K(ret));
@@ -583,7 +580,7 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
                                                  static_cast<int32_t>(tablet_predicate.length()),
                                                  tablet_predicate.ptr()))) {
         SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
-      } else if (OB_FAIL(sql_proxy->read(result, OB_SYS_TENANT_ID, get_tablet_size_sql.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(result, get_tablet_size_sql.ptr()))) {
         SQL_ENG_LOG(WARN, "exec query fail", K(ret));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -806,8 +803,7 @@ int ObDbmsSpace::estimate_index_table_size_by_opt_stats(ObMySQLProxy *sql_proxy,
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(sql_proxy), KP(table_schema));
   } else if (OB_FAIL(get_svr_info_from_schema(table_schema,
                                               info.svr_addr_,
-                                              info.tablet_ids_,
-                                              info.table_tenant_id_))) {
+                                              info.tablet_ids_))) {
     SQL_ENG_LOG(WARN, "fail to get info from schema", K(ret));
   } else if (OB_FALSE_IT(info.compression_ratio_ = 0.5)) {
   } else {
@@ -928,11 +924,9 @@ int ObDbmsSpace::get_default_index_column_len(const ObTableSchema *table_schema,
 
 int ObDbmsSpace::get_svr_info_from_schema(const ObTableSchema *table_schema,
                                           ObIArray<ObAddr> &addr_list,
-                                          ObIArray<ObTabletID> &tablet_list,
-                                          uint64_t &tenant_id)
+                                          ObIArray<ObTabletID> &tablet_list)
 {
   int ret = OB_SUCCESS;
-  tenant_id = OB_INVALID_TENANT_ID;
   addr_list.reset();
   tablet_list.reset();
   
@@ -951,7 +945,6 @@ int ObDbmsSpace::get_svr_info_from_schema(const ObTableSchema *table_schema,
     ObAddr leader_addr;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_list.count(); i++) {
       if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
-                                                    table_schema->get_tenant_id(),
                                                     tablet_list.at(i),
                                                     rpc_timeout,
                                                     dummy_ls_id,
@@ -961,9 +954,6 @@ int ObDbmsSpace::get_svr_info_from_schema(const ObTableSchema *table_schema,
       } else if (OB_FAIL(add_var_to_array_no_dup(addr_list, leader_addr))) {
         SQL_ENG_LOG(WARN, "fail to add add to addr_list", K(ret));
       }
-    }
-    if (OB_SUCC(ret)) {
-      tenant_id = table_schema->get_tenant_id();
     }
   }
 

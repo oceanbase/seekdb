@@ -41,22 +41,21 @@ class ObAllVirtualSchemaMemory: public common::ObVirtualTableScannerIterator
   };
 public:
   explicit ObAllVirtualSchemaMemory(share::schema::ObMultiVersionSchemaService &schema_service)
-             : tenant_idx_(OB_INVALID_INDEX), mem_idx_(0),
-               schema_service_(schema_service), tenant_ids_() {}
+             : t_loop_idx_(OB_INVALID_INDEX), mem_idx_(0),
+               schema_service_(schema_service) {}
   virtual ~ObAllVirtualSchemaMemory() {}
 public:
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   int get_next_tenant_mem_info(ObSchemaMemory &schema_mem);
 private:
-  int64_t tenant_idx_;
+  int64_t t_loop_idx_;
   int64_t mem_idx_;
   const static int64_t DEFAULT_TENANT_NUM = 10;
   const static int64_t DEFAULT_ALLOCATOR_COUNT = 2;
   char ip_buffer_[OB_MAX_SERVER_ADDR_SIZE];
   share::schema::ObMultiVersionSchemaService &schema_service_;
   common::ObSEArray<ObSchemaMemory, DEFAULT_ALLOCATOR_COUNT> schema_mem_infos_;
-  common::ObSEArray<uint64_t, DEFAULT_TENANT_NUM> tenant_ids_;
 }; //class ObAllVirtualServerSchemaMem
 }//namespace observer
 }//namespace oceanbase

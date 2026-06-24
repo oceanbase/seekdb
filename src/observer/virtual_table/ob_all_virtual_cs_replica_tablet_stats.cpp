@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_cs_replica_tablet_stats.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -74,10 +75,10 @@ int ObAllVirtualTableLSTabletIter::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-bool ObAllVirtualTableLSTabletIter::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualTableLSTabletIter::is_need_process()
 {
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
+  if (!false &&
+      (true || true)) {
     return true;
   }
   return false;
@@ -131,7 +132,7 @@ int ObAllVirtualTableLSTabletIter::get_next_tablet(ObTabletHandle &tablet_handle
   int ret = OB_SUCCESS;
   // when switch to a next new tenant, guard is reset and need rebuild ls iter.
   if (OB_ISNULL(ls_iter_guard_.get_ptr())) {
-    ObLSService *ls_service = MTL(ObLSService*);
+    ObLSService *ls_service = share::g_mp->ls_service();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));

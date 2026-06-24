@@ -33,14 +33,12 @@ class ObHJPartition {
 public:
   ObHJPartition(
       common::ObIAllocator &alloc,
-      uint64_t tenant_id,
       int32_t part_level,
       int64_t part_shift,
       int64_t partno)
   : part_level_(part_level),
     part_shift_(part_shift),
     partno_(partno),
-    tenant_id_(tenant_id),
     pre_total_size_(0),
     pre_bucket_number_(0),
     pre_part_count_(0)
@@ -169,7 +167,6 @@ private:
   int32_t part_level_;
   int64_t part_shift_;
   int64_t partno_; // high: batch_round low: part_id
-  uint64_t tenant_id_;
 
   int64_t pre_total_size_;
   int64_t pre_bucket_number_;

@@ -141,12 +141,12 @@ public:
   // for user like OBCDC.
   OB_INLINE bool is_valid() const
   {
-    return OB_INVALID_TENANT_ID != tenant_id_
+    return true
         && OB_INVALID_VERSION != schema_version_
         && ! tenant_name_.empty();
   }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
-  OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   OB_INLINE const char *get_tenant_name() const { return extract_str(tenant_name_); }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
   OB_INLINE share::schema::ObTenantStatus get_status() const { return tenant_status_; }
@@ -162,7 +162,7 @@ public:
 
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
-      K_(tenant_id),
+      
       K_(schema_version),
       K_(tenant_name),
       K_(tenant_status),
@@ -171,12 +171,12 @@ public:
 
 private:
   ObIAllocator *allocator_;
-  // Won't serialize tenant_id in dict.
-  // DATADICT of StandBy is the same with Promary tenant. However tenant_id of standby tenant may not consist with primary tenant
+  // Won't serialize tenant in dict.
+  // DATADICT of StandBy is the same with Promary tenant. However tenant of standby tenant may not consist with primary tenant
   //
-  // OBCDC will set tenant_id when consume and replay DATADICT
+  // OBCDC will set tenant when consume and replay DATADICT
   // Anyother consumer of DATADICT should also notice this feature.
-  uint64_t tenant_id_;
+  
   int64_t schema_version_;
   common::ObString tenant_name_;
   share::schema::ObTenantStatus tenant_status_;
@@ -206,8 +206,8 @@ public:
         && OB_INVALID_VERSION != schema_version_
         && ! database_name_.empty();
   }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
-  OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   OB_INLINE uint64_t get_database_id() const { return database_id_; }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
   OB_INLINE const char *get_database_name() const { return extract_str(database_name_); }
@@ -219,7 +219,7 @@ public:
 
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
-      K_(tenant_id),
+      
       K_(database_id),
       K_(schema_version),
       K_(database_name),
@@ -231,12 +231,12 @@ private:
 
 private:
   ObIAllocator *allocator_;
-  // Won't serialize tenant_id in dict.
-  // DATADICT of StandBy is the same with Promary tenant. However tenant_id of standby tenant may not consist with primary tenant
+  // Won't serialize tenant in dict.
+  // DATADICT of StandBy is the same with Promary tenant. However tenant of standby tenant may not consist with primary tenant
   //
-  // OBCDC will set tenant_id when consume and replay DATADICT
+  // OBCDC will set tenant when consume and replay DATADICT
   // Anyother consumer of DATADICT should also notice this feature.
-  uint64_t tenant_id_;
+  
   uint64_t database_id_;
   int64_t schema_version_;
   // OB_MAX_DATABASE_NAME_LENGTH
@@ -387,8 +387,8 @@ public:
 
 public:
   // for user like OBCDC
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
-  OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   OB_INLINE uint64_t get_database_id() const { return database_id_; }
   OB_INLINE uint64_t get_table_id() const { return table_id_; }
   OB_INLINE const char *get_table_name() const { return extract_str(table_name_); }
@@ -486,7 +486,7 @@ public:
 public:
   NEED_SERIALIZE_AND_DESERIALIZE_DICT;
   TO_STRING_KV(
-      K_(tenant_id),
+      
       K_(database_id),
       K_(table_id),
       K_(schema_version),
@@ -516,12 +516,12 @@ private:
 
 private:
   ObIAllocator *allocator_;
-  // Won't serialize tenant_id in dict.
-  // DATADICT of StandBy is the same with Promary tenant. However tenant_id of standby tenant may not consist with primary tenant
+  // Won't serialize tenant in dict.
+  // DATADICT of StandBy is the same with Promary tenant. However tenant of standby tenant may not consist with primary tenant
   //
-  // OBCDC will set tenant_id when consume and replay DATADICT
+  // OBCDC will set tenant when consume and replay DATADICT
   // Anyother consumer of DATADICT should also notice this feature.
-  uint64_t tenant_id_;
+  
   uint64_t database_id_;
   uint64_t table_id_;
   int64_t schema_version_;

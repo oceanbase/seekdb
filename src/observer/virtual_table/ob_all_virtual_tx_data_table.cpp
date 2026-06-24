@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_data_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -57,10 +58,10 @@ void ObAllVirtualTxDataTable::release_last_tenant()
   ls_iter_guard_.reset();
 }
 
-bool ObAllVirtualTxDataTable::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualTxDataTable::is_need_process()
 {
   bool bool_ret = false;
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
+  if (true || true) {
     bool_ret = true;
   }
 
@@ -79,7 +80,7 @@ int ObAllVirtualTxDataTable::process_curr_tenant(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (ls_iter_guard_.get_ptr() == nullptr &&
-             OB_FAIL(MTL(ObLSService *)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+             OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "get_ls_iter fail", KR(ret));
   } else if (OB_FAIL(get_next_tx_data_table_(tx_data_table))) {
     if (OB_ITER_END != ret) {

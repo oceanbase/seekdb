@@ -129,7 +129,7 @@ int ObTableLoadTableBuilderMgr::init(ObDirectLoadTableStore *table_store,
                          OB_ISNULL(file_mgr) || OB_ISNULL(table_mgr))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KPC(table_store), KP(file_mgr), KP(table_mgr));
-  } else if (OB_FAIL(table_builder_map_.create(1024, "TLD_TBMap", "TLD_TBMap", MTL_ID()))) {
+  } else if (OB_FAIL(table_builder_map_.create(1024, "TLD_TBMap", "TLD_TBMap"))) {
     LOG_WARN("fail to create hashmap", KR(ret));
   } else {
     table_store_ = table_store;

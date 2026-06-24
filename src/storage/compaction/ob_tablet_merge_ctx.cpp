@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tablet_merge_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/filter/ob_tx_data_minor_filter.h"
@@ -218,7 +219,7 @@ int ObTabletMiniMergeCtx::try_report_tablet_stat_after_mini()
     report_stat.insert_row_cnt_ = tnode_stat.insert_row_count_;
     report_stat.update_row_cnt_ = tnode_stat.update_row_count_;
     report_stat.delete_row_cnt_ = tnode_stat.delete_row_count_;
-    if (OB_FAIL(MTL(ObTenantTabletStatMgr *)->report_stat(report_stat, report_succ))) {
+    if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->report_stat(report_stat, report_succ))) {
       LOG_WARN("failed to report tablet stat", KR(ret));
     }
   }
@@ -399,7 +400,7 @@ int ObTabletMajorMergeCtx::prepare_schema()
     ret = OB_CANCELED;
     LOG_INFO("Merge has been paused", KR(ret), "param", get_dag_param());
   } else {
-    ObArenaAllocator allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObMediumCompactionInfo *medium_info = nullptr;
     if (OB_FAIL(OB_FAIL(ObTabletMediumInfoReader::get_medium_info_with_merge_version(get_merge_version(), *get_tablet(), allocator, medium_info)))) {
     LOG_WARN("fail to get medium info with merge version", K(ret), KPC(this));

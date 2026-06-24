@@ -81,16 +81,14 @@ public:
 
   static int cast_number_to_double(const number::ObNumber &src_val, double &dst_val);
 
-  static int check_table_read_write_valid(const uint64_t tenant_id, bool &is_valid);
+  static int check_table_read_write_valid(bool &is_valid);
 
   static int check_is_stat_table(share::schema::ObSchemaGetterGuard &schema_guard,
-                                 const uint64_t tenant_id,
                                  const int64_t table_id,
                                  bool need_index_table,
                                  bool &is_valid);
 
   static int check_is_sys_table(share::schema::ObSchemaGetterGuard &schema_guard,
-                                   const uint64_t tenant_id,
                                    const int64_t table_id,
                                    bool &is_valid);
 
@@ -180,8 +178,7 @@ public:
                                          ObIArray<uint64_t> &column_ids,
                                          bool need_stat_column = false);
 
-  static int erase_stat_cache(const uint64_t tenant_id,
-                              const uint64_t table_id,
+  static int erase_stat_cache(const uint64_t table_id,
                               const ObIArray<int64_t> &part_ids,
                               const ObIArray<uint64_t> &column_ids);
 
@@ -207,16 +204,13 @@ public:
 
   static int implicit_commit_before_gather_stats(sql::ObExecContext &ctx);
 
-  static int scale_col_stats(const uint64_t tenant_id,
-                             const common::ObIArray<ObOptTableStat*> &tab_stats,
+  static int scale_col_stats(const common::ObIArray<ObOptTableStat*> &tab_stats,
                              common::ObIArray<ObOptColumnStat*> &col_stats);
 
-  static int scale_col_stats(const uint64_t tenant_id,
-                             const TabStatIndMap &table_stats,
+  static int scale_col_stats(const TabStatIndMap &table_stats,
                              common::ObIArray<ObOptColumnStat*> &col_stats);
 
   static int get_sys_online_estimate_percent(sql::ObExecContext &ctx,
-                                             const uint64_t tenant_id,
                                              const uint64_t table_id,
                                              double &percent);
   static int check_can_async_gather_stats(sql::ObExecContext &ctx);
@@ -224,12 +218,10 @@ public:
   static int cancel_async_gather_stats(sql::ObExecContext &ctx);
 
   static int build_index_part_to_table_part_maps(share::schema::ObSchemaGetterGuard *schema_guard,
-                                                 uint64_t tenant_id,
                                                  uint64_t index_table_id,
                                                  common::hash::ObHashMap<ObObjectID, ObObjectID> &part_id_map);
 
   static int deduce_index_column_stat_to_table(share::schema::ObSchemaGetterGuard *schema_guard,
-                                               uint64_t tenant_id,
                                                uint64_t index_table_id,
                                                uint64_t data_table_id,
                                                ObPartitionLevel part_level,
@@ -239,7 +231,6 @@ public:
                                             int64_t &length);
 
   static int get_prefix_index_text_pairs(share::schema::ObSchemaGetterGuard *schema_guard,
-                                         uint64_t tenant_id,
                                          uint64_t data_table_id,
                                          ObIArray<uint64_t> &func_idxs,
                                          ObIArray<uint64_t> &ignore_cols,
@@ -256,7 +247,6 @@ public:
                                                     ObIAllocator &allocator,
                                                     const ObIArray<ObOptColumnStat*> &column_stats,
                                                     const ObIArray<PrefixColumnPair> &pairs,
-                                                    uint64_t tenant_id,
                                                     uint64_t data_table_id,
                                                     ObIArray<ObOptColumnStat *> &all_column_stats);
   static int copy_prefix_column_stat_to_text(ObIAllocator &allocator,
@@ -264,18 +254,16 @@ public:
                                              const ObObjMeta &text_col_meta,
                                              ObOptColumnStat *&text_column_stat);
 
-  static int get_max_work_area_size(uint64_t tenant_id, int64_t &max_wa_memory_size);
+  static int get_max_work_area_size(int64_t &max_wa_memory_size);
 
 
   static int get_table_index_infos(share::schema::ObSchemaGetterGuard *schema_guard,
-                                   const uint64_t tenant_id,
                                    const uint64_t table_id,
                                    uint64_t *index_tid_arr,
                                    int64_t &index_count);
 
 private:
   static int batch_write(share::schema::ObSchemaGetterGuard *schema_guard,
-                         const uint64_t tenant_id,
                          sqlclient::ObISQLConnection *conn,
                          ObIArray<ObOptTableStat *> &table_stats,
                          ObIArray<ObOptColumnStat*> &column_stats,

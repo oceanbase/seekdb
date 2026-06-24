@@ -31,7 +31,7 @@ namespace storage
 ObMdsMergeMultiVersionRowStore::ObMdsMergeMultiVersionRowStore()
   : data_store_desc_(nullptr),
     macro_writer_(nullptr),
-    row_queue_allocator_(common::ObMemAttr(MTL_ID(), "MdsMVRowStore")),
+    row_queue_allocator_(common::ObMemAttr("MdsMVRowStore")),
     shadow_row_(),
     cur_key_(),
     last_key_(),
@@ -231,7 +231,7 @@ int ObMdsMergeMultiVersionRowStore::dump_shadow_row()
 ObMdsMiniMergeOperator::ObMdsMiniMergeOperator()
   : is_inited_(false),
     row_store_(),
-    cur_allocator_(common::ObMemAttr(MTL_ID(), "MdsMiniOP")),
+    cur_allocator_(common::ObMemAttr("MdsMiniOP")),
     cur_row_()
 {
 }
@@ -351,7 +351,7 @@ int ObTabletDumpMediumMds2MiniOperator::operator()(const mds::MdsDumpKV &kv)
 ------------------------------------------ObMdsTableMiniMerger-----------------------------------
 */
 ObMdsTableMiniMerger::ObMdsTableMiniMerger()
-  : allocator_(common::ObMemAttr(MTL_ID(), "MdsMiniMerger")),
+  : allocator_(common::ObMemAttr("MdsMiniMerger")),
     data_desc_(),
     macro_writer_(),
     sstable_builder_(false/*not use double buffer*/),
@@ -386,7 +386,7 @@ int ObMdsTableMiniMerger::init(compaction::ObTabletMergeCtx &ctx, ObMdsMiniMerge
     ObMacroDataSeq macro_start_seq(0);
     ObMacroSeqParam macro_seq_param;
     macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
-    if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), data_version))) {
+    if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_EAGAIN;
       } else {

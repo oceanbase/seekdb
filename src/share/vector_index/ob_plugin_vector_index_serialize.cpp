@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_plugin_vector_index_serialize.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/vector_index/ob_plugin_vector_index_adaptor.h"
@@ -183,7 +184,7 @@ int ObIStreamBuf::do_callback()
 /*
  * ObVectorIndexSerializer implement
  * */
-int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_param, ObOStreamBuf::Callback &cb, uint64_t tenant_id, const int64_t capacity)
+int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_param, ObOStreamBuf::Callback &cb, const int64_t capacity)
 {
   int ret = OB_SUCCESS;
   char *data = nullptr;
@@ -196,7 +197,7 @@ int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_pa
   } else {
     ObOStreamBuf streambuf(data, capacity, cb_param, cb);
     std::ostream out(&streambuf);
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, "VIndexVsagADP"));
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
     lib::ObLightBacktraceGuard light_backtrace_guard(false);
     if (OB_FAIL(obvectorutil::fserialize(index, out))) {
       LOG_WARN("fail to do vsag serialize", K(ret));
@@ -214,7 +215,7 @@ int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_pa
   return ret;
 }
 
-int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb_param, ObIStreamBuf::Callback &cb, uint64_t tenant_id)
+int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb_param, ObIStreamBuf::Callback &cb)
 {
   int ret = OB_SUCCESS;
   char *data = nullptr;
@@ -228,7 +229,7 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
       LOG_WARN("failed to init istreambuf", K(ret));
     }
   } else {
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id, "VIndexVsagADP"));
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
     lib::ObLightBacktraceGuard light_backtrace_guard(false);
     if (OB_FAIL(obvectorutil::fdeserialize(index, in))) {
       LOG_WARN("fail to do vsag deserialize", K(ret));
@@ -383,7 +384,7 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
   ObLobLocatorV2 src_lob(const_cast<char*>(data), data_size, false); // data from vsag must has no header
   ObHNSWSerializeCallback::CbParam &param = static_cast<ObHNSWSerializeCallback::CbParam&>(cb_param);
   ObVecIdxSnapshotDataWriteCtx *vctx = reinterpret_cast<ObVecIdxSnapshotDataWriteCtx*>(param.vctx_);
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   ObLobAccessParam lob_param;
   lob_param.set_tmp_allocator(param.tmp_allocator_);
   lob_param.allocator_ = param.allocator_;
@@ -392,7 +393,7 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
   lob_param.lob_meta_tablet_id_ = vctx->get_lob_meta_tablet_id();
   lob_param.lob_piece_tablet_id_ = vctx->get_lob_piece_tablet_id();
   lob_param.inrow_threshold_ = param.lob_inrow_threshold_;
-  lob_param.src_tenant_id_ = MTL_ID(); // Data supplementation will not cross tenants
+   // Data supplementation will not cross tenants
   lob_param.coll_type_ = CS_TYPE_BINARY;
   lob_param.offset_ = 0;
   lob_param.scan_backward_ = false;

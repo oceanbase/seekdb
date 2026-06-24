@@ -66,8 +66,8 @@ int ObConstDatumRow::set_datums_ptr(char *datums_ptr)
  *ObDatumRow
  */
 
-ObDatumRow::ObDatumRow(const uint64_t tenant_id)
-  : local_allocator_("ObDatumRow", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id, ObCtxIds::DEFAULT_CTX_ID),
+ObDatumRow::ObDatumRow()
+  : local_allocator_("ObDatumRow", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID),
     count_(0),
     read_flag_(0),
     row_flag_(),

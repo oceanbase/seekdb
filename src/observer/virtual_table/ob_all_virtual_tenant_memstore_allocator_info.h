@@ -65,12 +65,9 @@ private:
     ADDRESS,
     REF_COUNT
   };
-  int fill_tenant_ids();
-  int fill_memstore_infos(const uint64_t tenant_id);
-  common::ObArray<uint64_t> tenant_ids_;
+  int fill_memstore_infos();
   common::ObArray<MemstoreInfo> memstore_infos_;
   int64_t memstore_infos_idx_;
-  int64_t tenant_ids_idx_;
   int64_t col_count_;
   int64_t retire_clock_;
   char mt_addr_[32];

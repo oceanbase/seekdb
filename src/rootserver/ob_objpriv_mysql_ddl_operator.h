@@ -48,15 +48,13 @@ public:
                     const bool gen_ddl_stmt = true,
                     const common::ObString &grantor = "",
                     const common::ObString &grantor_host = "");
-  static int drop_obj_mysql_privs(const uint64_t tenant_id,
-                            const ObString &obj_name,
+  static int drop_obj_mysql_privs(const ObString &obj_name,
                             const uint64_t obj_type,
                             common::ObMySQLTransaction &trans,
                             share::schema::ObMultiVersionSchemaService &schema_service,
                             share::schema::ObSchemaGetterGuard &schema_guard);
 private:
-  int drop_obj_mysql_privs(const uint64_t tenant_id,
-                           const ObString& obj_name,
+  int drop_obj_mysql_privs(const ObString& obj_name,
                            const uint64_t obj_ypte,
                            common::ObMySQLTransaction &trans);
   share::schema::ObMultiVersionSchemaService &schema_service_;

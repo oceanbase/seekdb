@@ -197,14 +197,6 @@ public:
       ObTabletIdxMap &idx_map);
   static int find_dml_ops(common::ObIArray<const ObTableModifySpec *> &insert_ops,
                           const ObOpSpec &op);
-  static int get_external_table_loc(
-      ObExecContext &ctx,
-      uint64_t table_id,
-      uint64_t ref_table_id,
-      const ObQueryRangeProvider &pre_query_range,
-      ObDfo &dfo,
-      ObDASTableLoc *&table_loc);
-
   static int init_px_node_exec_info(ObExecContext &exec_ctx);
   // Because the begin and end interfaces need to be used,
   // ObIArray cannot be used here.
@@ -229,10 +221,8 @@ public:
                                   sql::ObTMArray<ObAddr> &addrs,
                                   bool &is_empty,
                                   int64_t &data_node_cnt);
-  static int get_tenant_server_set(const int64_t &tenant_id,
-                                  ObAddrSet &tenant_server_set);
-  static int get_tenant_servers(const int64_t &tenant_id,
-                              ObIArray<ObAddr> &tenant_servers);
+  static int get_tenant_server_set(ObAddrSet &tenant_server_set);
+  static int get_tenant_servers(ObIArray<ObAddr> &tenant_servers);
   static int shuffle_px_node_pool(sql::ObTMArray<ObAddr> &addrs,
                                     int64_t data_node_cnt);
   static int get_zone_server_cnt(const ObIArray<ObAddr> &server_list,
@@ -249,7 +239,6 @@ private:
 
   static int build_tablet_idx_map(
       ObTaskExecutorCtx &task_exec_ctx,
-      int64_t tenant_id,
       uint64_t ref_table_id,
       ObTabletIdxMap &idx_map);
   static int reorder_all_partitions(
@@ -320,13 +309,6 @@ private:
   static int do_random_dfo_distribution(const common::ObIArray<common::ObAddr> &src_addrs,
                                         int64_t dst_addrs_count,
                                         common::ObIArray<common::ObAddr> &dst_addrs);
-  static int sort_and_collect_local_file_distribution(common::ObIArray<share::ObExternalFileInfo> &files,
-                                                      common::ObIArray<common::ObAddr> &dst_addrs);
-  static int assign_external_files_to_sqc(ObDfo &dfo,
-                                          ObExecContext &exec_ctx,
-                                          bool is_file_on_disk,
-                                          common::ObIArray<ObPxSqcMeta> &sqcs,
-                                          int64_t parallel);
 private:
   static int generate_dh_map_info(ObDfo &dfo);
   DISALLOW_COPY_AND_ASSIGN(ObPXServerAddrUtil);
@@ -953,9 +935,8 @@ public:
   int add_partition(int64_t tablet_id,
       int64_t tablet_idx,
       int64_t worker_cnt,
-      uint64_t tenant_id,
       ObPxTabletInfo &partition_row_info);
-  int do_random(bool use_partition_info, uint64_t tenant_id);
+  int do_random(bool use_partition_info);
   const ObIArray<TabletHashValue> &get_result() { return tablet_hash_values_; }
   static int get_tablet_info(int64_t tablet_id, ObIArray<ObPxTabletInfo> &partitions_info, ObPxTabletInfo &partition_info);
 private:
@@ -975,44 +956,41 @@ public:
   // and partition map
   static int build_slave_mapping_mn_ch_map(ObExecContext &ctx,
                                            ObDfo &child,
-                                           ObDfo &parent,
-                                           uint64_t tenant_id);
+                                           ObDfo &parent);
   static int build_pkey_mn_ch_map(ObExecContext &ctx,
                                   ObDfo &child,
-                                  ObDfo &parent,
-                                  uint64_t tenant_id);
+                                  ObDfo &parent);
   // build channel map
   static int build_mn_channel(ObPxChTotalInfos *dfo_ch_total_infos,
                               ObDfo &child,
-                              ObDfo &parent,
-                              const uint64_t tenant_id);
+                              ObDfo &parent);
 private:
   // ----------------- for slave mapping scenes ----------------------
   // for SlaveMappingType::SM_PWJ_HASH_HASH, channel built inside each sqc
-  static int build_pwj_slave_map_mn_group(ObDfo &parent, ObDfo &child, uint64_t tenant_id);
+  static int build_pwj_slave_map_mn_group(ObDfo &parent, ObDfo &child);
   static int build_mn_channel_per_sqcs(ObPxChTotalInfos *dfo_ch_total_infos, ObDfo &child,
-                                       ObDfo &parent, int64_t sqc_count, uint64_t tenant_id);
+                                       ObDfo &parent, int64_t sqc_count);
 
   // for SlaveMappingType::SM_PPWJ_HASH_HASH
-  static int build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child, uint64_t tenant_id);
+  static int build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child);
 
   // for SlaveMappingType::SM_PPWJ_BCAST_NONE && SlaveMappingType::SM_PPWJ_NONE_BCAST
-  static int build_ppwj_bcast_slave_mn_map(ObDfo &parent, ObDfo &child, uint64_t tenant_id);
+  static int build_ppwj_bcast_slave_mn_map(ObDfo &parent, ObDfo &child);
 
 
 
   // ----------------- for normal pkey -----------------
   // for child with ObPQDistributeMethod::Type::PARTITION
-  static int build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDfo &child, uint64_t tenant_id);
+  static int build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDfo &child);
 
 
 
   // ----------------- for pdml -------------------------------------
   // for child with ObPQDistributeMethod::Type::PARTITION_RANDOM
-  static int build_pkey_random_ch_mn_map(ObDfo &parent, ObDfo &child, uint64_t tenant_id);
+  static int build_pkey_random_ch_mn_map(ObDfo &parent, ObDfo &child);
 
   // for child with ObPQDistributeMethod::Type::PARTITION_HASH or PARTITION_RANGE
-  static int build_pkey_affinitized_ch_mn_map(ObDfo &parent, ObDfo &child, uint64_t tenant_id);
+  static int build_pkey_affinitized_ch_mn_map(ObDfo &parent, ObDfo &child);
   static int build_affinitized_partition_map_by_sqcs(common::ObIArray<ObPxSqcMeta> &sqcs,
                                                      ObDfo &child,
                                                      ObIArray<int64_t> &prefix_task_counts,

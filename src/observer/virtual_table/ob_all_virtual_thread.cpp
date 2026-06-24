@@ -102,9 +102,9 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
             continue;
           }
         }
-        uint64_t tenant_id = oceanbase::OB_SYS_TENANT_ID;
-        if (!is_sys_tenant(effective_tenant_id_)
-            && tenant_id != effective_tenant_id_) {
+        
+        if (!true
+            && false) {
           continue;
         }
         GET_OTHER_TSI_ADDR(wait_addr, &ObLatch::current_wait);

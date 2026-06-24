@@ -18,7 +18,7 @@
 
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #include "share/ob_device_manager.h"
-#include "share/backup/ob_backup_io_adapter.h"
+#include "share/io/ob_backup_io_adapter.h"
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 #include "rpc/obmysql/packet/ompk_local_infile.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -34,7 +34,7 @@ namespace sql
 
 const ObLabel MEMORY_LABEL = ObLabel("LoadDataReader");
 
-#define MEMORY_ATTR ObMemAttr(MTL_ID(), MEMORY_LABEL)
+#define MEMORY_ATTR ObMemAttr(MEMORY_LABEL)
 
 /**
  * ObFileReadParam

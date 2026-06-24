@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/ob_exec_context.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
 using namespace oceanbase::common;
@@ -32,7 +33,7 @@ int ob_obj_read_lob_data(
     ObString &data)
 {
   int ret = OB_SUCCESS;
-  if (MTL(storage::ObLobManager*) == nullptr) {
+  if (share::g_mp->lob_manager() == nullptr) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("lob manager is null", K(ret), K(obj), K(lbt()));
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, obj, data, nullptr))) {
@@ -112,10 +113,10 @@ int ObTextStringHelper::read_real_string_data(
 {
   int ret = OB_SUCCESS;
   if (is_lob_storage(type)) {
-    uint64_t tenant_id = MTL_ID();
+    
     ObArenaAllocator *tmp_alloc_ptr = nullptr;
-    ObArenaAllocator tmp_allocator("ObLobRRSD", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
-    if (tenant_id != OB_INVALID_TENANT_ID) {
+    ObArenaAllocator tmp_allocator("ObLobRRSD", OB_MALLOC_NORMAL_BLOCK_SIZE);
+    {
       tmp_alloc_ptr = &tmp_allocator;
     }
     ObTextStringIter str_iter(type, cs_type, str, has_lob_header);

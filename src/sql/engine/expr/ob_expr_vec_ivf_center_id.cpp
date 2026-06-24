@@ -96,7 +96,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {;
-    common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;
     ObTabletID tablet_id;
     ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;

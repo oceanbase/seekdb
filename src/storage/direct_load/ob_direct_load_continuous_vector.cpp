@@ -76,7 +76,7 @@ int ObDirectLoadContinuousVector::expand(const int64_t need_size)
     if (need_capacity > new_capacity) {
       new_capacity = ALIGN_UP(need_capacity, ALLOC_PAGE_SIZE);
     }
-    ObMemAttr mem_attr(MTL_ID(), "TLD_Continuous");
+    ObMemAttr mem_attr("TLD_Continuous");
     char *new_data = static_cast<char *>(ob_malloc_align(16, new_capacity, mem_attr));
     if (OB_ISNULL(new_data)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

@@ -34,7 +34,7 @@ using namespace oceanbase::sql;
 
 ObLobMacroBlockWriter::ObLobMacroBlockWriter()
   : is_inited_(false), lob_column_count_(0),
-    lob_arena_("lob_meta_iter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    lob_arena_("lob_meta_iter", OB_MALLOC_NORMAL_BLOCK_SIZE),
     meta_write_iter_(&lob_arena_, ObLobMetaUtil::LOB_OPER_PIECE_DATA_SIZE),
     macro_block_writer_(nullptr), total_lob_cell_count_(0), inrow_lob_cell_count_(0)
 {
@@ -140,7 +140,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
                                                                   datum,
                                                                   timeout_ts,
                                                                   true/*has_lob_header*/,
-                                                                  MTL_ID(),
                                                                   meta_write_iter_))) {
       LOG_WARN("insert lob column failed", K(ret));
     }
@@ -214,7 +213,7 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(macro_block_writer_)) {
-    if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObCgMacroBlockWriter, ObMemAttr(MTL_ID(), "lob_mb_writer")))) {
+    if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObCgMacroBlockWriter, ObMemAttr("lob_mb_writer")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alocate memory for cg macro block writer failed", K(ret));
     }
@@ -275,8 +274,8 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
       static const int64_t AUTO_INC_CACHE_INTERVAL = 5000000L; // 500w.
       ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
       lob_id_cache_.cache_size_ = AUTO_INC_CACHE_INTERVAL;
-      if (OB_FAIL(auto_inc.get_tablet_cache_interval(MTL_ID(), lob_id_cache_))) {
-        LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()));
+      if (OB_FAIL(auto_inc.get_tablet_cache_interval(lob_id_cache_))) {
+        LOG_WARN("autoinc service get tablet cache failed", K(ret));
       }
     }
     FLOG_INFO("switch lob id cache", K(ret), K(tablet_id_), K(slice_idx_), "is_idem", lob_id_generator_.is_inited(), K(old_value), K(total_lob_cell_count_), K(inrow_lob_cell_count_), "new_cache", lob_id_cache_);

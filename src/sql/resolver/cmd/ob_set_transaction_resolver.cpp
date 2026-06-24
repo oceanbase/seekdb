@@ -121,7 +121,6 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid session info", K(ret), K(session_info_));
       } else {
-        stmt->set_actual_tenant_id(session_info_->get_effective_tenant_id());
       }
     }
   }

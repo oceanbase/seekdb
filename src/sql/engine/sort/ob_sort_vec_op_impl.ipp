@@ -187,7 +187,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::init_temp_row_store(
   int ret = OB_SUCCESS;
   const bool enable_trunc = true;
   const bool reorder_fixed_expr = true;
-  ObMemAttr mem_attr(tenant_id_, ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA);
+  ObMemAttr mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA);
   if (OB_FAIL(row_store.init(exprs, batch_size, mem_attr, mem_limit, enable_dump,
                              extra_size /* row_extra_size */, compress_type, reorder_fixed_expr,
                              enable_trunc))) {
@@ -277,7 +277,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext &ctx
     local_merge_sort_ = ctx.in_local_order_;
     need_rewind_ = ctx.need_rewind_;
     enable_encode_sortkey_ = ctx.enable_encode_sortkey_;
-    tenant_id_ = ctx.tenant_id_;
+    
     addon_collations_ = ctx.addon_collations_;
     sk_collations_ = ctx.prefix_pos_ > 0 ? ctx.base_sk_collations_ : ctx.sk_collations_;
     sk_exprs_ = ctx.sk_exprs_;
@@ -1145,7 +1145,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::update_max_available_mem_siz
     got_first_row_ = true;
     // heap sort will extend rowsize twice to reuse the space
     int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_ * 2;
-    if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), tenant_id_, size,
+    if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                         op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                         &eval_ctx_->exec_ctx_))) {
       SQL_ENG_LOG(WARN, "failed to init sql mem processor", K(ret));
@@ -1763,7 +1763,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::before_add_row()
     } else {
       got_first_row_ = true;
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
-      if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), tenant_id_, size,
+      if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size,
                                           op_monitor_info_.op_type_, op_monitor_info_.op_id_,
                                           exec_ctx_))) {
         SQL_ENG_LOG(WARN, "failed to init sql mem processor", K(ret));

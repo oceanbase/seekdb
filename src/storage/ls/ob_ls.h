@@ -31,26 +31,23 @@
 #include "storage/ls/ob_freezer.h"
 #include "storage/ls/ob_ls_sync_tablet_seq_handler.h"
 #include "storage/ls/ob_ls_ddl_log_handler.h"
-#include "storage/tx/wrs/ob_ls_wrs_handler.h"
+#include "storage/ls/ob_ls_wrs_handler.h"
 #include "storage/ls/ob_ls_reserved_snapshot_mgr.h"
 #include "storage/ls/ob_ls_storage_clog_handler.h"
 #include "storage/checkpoint/ob_checkpoint_executor.h"
-#include "storage/high_availability/ob_restore_status.h"
+#include "share/ls/ob_restore_status.h"
 #include "storage/checkpoint/ob_data_checkpoint.h"
 #include "storage/tx_table/ob_tx_table.h"
 #include "storage/tx/ob_keep_alive_ls_handler.h"
-#include "storage/high_availability/ob_restore_handler.h"
 #include "logservice/applyservice/ob_log_apply_service.h"
 #include "logservice/replayservice/ob_replay_handler.h"
 #include "logservice/replayservice/ob_replay_status.h"
 #include "logservice/rcservice/ob_role_change_handler.h"
 #include "logservice/ob_log_handler.h"
-#include "logservice/restoreservice/ob_log_restore_handler.h"
 #include "storage/ls/ob_ls_meta_package.h"
 #include "storage/ls/ob_ls_get_mod.h"
 #include "storage/tablelock/ob_lock_table.h"
 #include "lib/hash/ob_multi_mod_ref_mgr.h"
-#include "logservice/leader_coordinator/election_priority_impl/election_priority_impl.h"
 #include "storage/tx_storage/ob_tablet_gc_service.h"
 #include "storage/tx_storage/ob_empty_shell_task.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
@@ -204,7 +201,6 @@ public:
   ObLS();
   virtual ~ObLS();
   int init(const share::ObLSID &ls_id,
-           const uint64_t tenant_id,
            const ObMigrationStatus &migration_status,
            const ObRestoreStatus &restore_status,
            const share::SCN &create_scn,
@@ -233,20 +229,17 @@ public:
   ObLSTabletService *get_tablet_svr() { return &ls_tablet_svr_; }
   share::ObLSID get_ls_id() const { return ls_meta_.ls_id_; }
   bool is_sys_ls() const { return ls_meta_.ls_id_.is_sys_ls(); }
-  uint64_t get_tenant_id() const { return ls_meta_.tenant_id_; }
+  
   ObFreezer *get_freezer() { return &ls_freezer_; }
   common::ObMultiModRefMgr<ObLSGetMod> &get_ref_mgr() { return ref_mgr_; }
   checkpoint::ObCheckpointExecutor *get_checkpoint_executor() { return &checkpoint_executor_; }
   checkpoint::ObDataCheckpoint *get_data_checkpoint() { return &data_checkpoint_; }
   transaction::ObKeepAliveLSHandler *get_keep_alive_ls_handler() { return &keep_alive_ls_handler_; }
-  restore::ObRestoreHandler *get_ls_restore_handler() { return &ls_restore_handler_; }
   ObLSDDLLogHandler *get_ddl_log_handler() { return &ls_ddl_log_handler_; }
   // ObObLogHandler interface:
   // get the log_service pointer
   logservice::ObLogHandler *get_log_handler() { return &log_handler_; }
-  logservice::ObLogRestoreHandler *get_log_restore_handler() { return &restore_handler_; }
   logservice::ObRoleChangeHandler *get_role_change_handler() { return &role_change_handler_;}
-    logservice::ObRoleChangeHandler *get_restore_role_change_handler() { return &restore_role_change_handler_;}
 
   //remove member handler
 
@@ -910,9 +903,7 @@ private:
   // log service for ls
   // log_service manager: create, remove and get
   logservice::ObLogHandler log_handler_;
-  logservice::ObLogRestoreHandler restore_handler_;
   logservice::ObRoleChangeHandler role_change_handler_;
-  logservice::ObRoleChangeHandler restore_role_change_handler_;
   // trans service for ls
   ObLSTxService ls_tx_svr_;
 
@@ -928,7 +919,6 @@ private:
   // for rebuild
   // ObLSRebuildHandler ls_rebuild_handler_;
   // for restore
-  restore::ObRestoreHandler ls_restore_handler_;
   ObTxTable tx_table_;
   checkpoint::ObDataCheckpoint data_checkpoint_;
   // for lock table
@@ -949,12 +939,18 @@ private:
   ObLSReservedSnapshotMgr reserved_snapshot_mgr_;
   ObLSResvSnapClogHandler reserved_snapshot_clog_handler_;
   ObMediumCompactionClogHandler medium_compaction_clog_handler_;
-  // vector index scheduler (previously hosted in ObTenantTabletTTLMgr)
-  int vec_tg_id_;
+  int init_vector_idx_scheduler_();
+  void stop_vector_idx_scheduler_();
+  void destroy_vector_idx_scheduler_();
+  int vector_idx_scheduler_safe_to_destroy_(bool &is_safe);
+  // table_api removed from build: the vector index scheduler used to be hosted by
+  // table::ObTenantTabletTTLMgr (together with tablet TTL); only the vector index
+  // scheduler part is preserved here, driven by its own timer.
   share::ObPluginVectorIndexLoadScheduler vector_idx_scheduler_;
+  int vec_idx_scheduler_tg_id_ = 0;
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
+  
   // set running state of ls.
   // WARN: MUST PROTECT WITH LS LOCK.
   ObLSRunningState running_state_;
@@ -965,7 +961,6 @@ private:
   int64_t ls_epoch_;
   ObLSLock lock_;
   common::ObMultiModRefMgr<ObLSGetMod> ref_mgr_;
-  logservice::coordinator::ElectionPriorityImpl election_priority_;
   // this is used for the meta lock, and will be removed later
   RWLock meta_rwlock_;
 

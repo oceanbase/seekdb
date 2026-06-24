@@ -60,13 +60,12 @@ bool ObCreateTableHelper::MockFKParentTableNameWrapper::operator==(const MockFKP
 
 ObCreateTableHelper::ObCreateTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObCreateTableArg &arg,
     obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans,
     bool enable_ddl_parallel)
-  : ObDDLHelper(schema_service, tenant_id, "[parallel create table]", external_trans, enable_ddl_parallel),
-    ObTableHelper(schema_service, tenant_id, "[parallel create table]", external_trans, enable_ddl_parallel),
+  : ObDDLHelper(schema_service, "[parallel create table]", external_trans, enable_ddl_parallel),
+    ObTableHelper(schema_service, "[parallel create table]", external_trans, enable_ddl_parallel),
     arg_(arg),
     res_(res),
     replace_mock_fk_parent_table_id_(common::OB_INVALID_ID),
@@ -98,20 +97,20 @@ int ObCreateTableHelper::lock_objects_()
   }
   // 1. lock database name first
   if (FAILEDx(lock_database_by_obj_name_())) {
-    LOG_WARN("fail to lock databases by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock databases by obj name", KR(ret));
   }
   // 2. lock objects by name
   if (FAILEDx(lock_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by name", KR(ret));
   }
   DEBUG_SYNC(AFTER_PARALLEL_DDL_LOCK_OBJ_BY_NAME);
   // 3. prefetch schemas
   if (FAILEDx(prefetch_schemas_())) {
-    LOG_WARN("fail to prefetch schemas", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to prefetch schemas", KR(ret));
   }
   // 4. lock objects by id
   if (FAILEDx(lock_objects_by_id_())) {
-    LOG_WARN("fail to lock objects by id", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock objects by id", KR(ret));
   }
   // 5. lock objects by id after related objects are locked.
   if (FAILEDx(post_lock_objects_by_id_())) {
@@ -139,23 +138,23 @@ int ObCreateTableHelper::lock_database_by_obj_name_()
   } else {
     const ObString &database_name = arg_.db_name_;
     if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-      LOG_WARN("fail to lock database by name", KR(ret), K_(tenant_id), K(database_name));
+      LOG_WARN("fail to lock database by name", KR(ret), K(database_name));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
       const obcall::ObCreateForeignKeyArg &foreign_key_arg = arg_.foreign_key_arg_list_.at(i);
       const ObString &parent_database_name = foreign_key_arg.parent_database_;
        if (OB_FAIL(add_lock_object_by_database_name_(parent_database_name, transaction::tablelock::SHARE))) {
-         LOG_WARN("fail to lock database by name", KR(ret), K_(tenant_id), K(parent_database_name));
+         LOG_WARN("fail to lock database by name", KR(ret), K(parent_database_name));
        }
     } // end for
 
     if (FAILEDx(lock_databases_by_name_())) {
-      LOG_WARN("fail to lock databases by name", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to lock databases by name", KR(ret));
     }
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-  LOG_INFO("lock databases", KR(ret), K_(tenant_id), K(cost_ts));
+  LOG_INFO("lock databases", KR(ret), K(cost_ts));
   return ret;
 }
 
@@ -184,7 +183,7 @@ int ObCreateTableHelper::lock_objects_by_name_()
     const ObString &table_name = table.get_table_name();
     if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
         share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-      LOG_WARN("fail to lock object by table name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
+      LOG_WARN("fail to lock object by table name", KR(ret), K(database_name), K(table_name));
     }
 
     // 3. constraint
@@ -192,7 +191,7 @@ int ObCreateTableHelper::lock_objects_by_name_()
       const ObString &cst_name = arg_.constraint_list_.at(i).get_constraint_name_str();
       if (OB_FAIL(add_lock_object_by_name_(database_name, cst_name,
           share::schema::CONSTRAINT_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-        LOG_WARN("fail to lock object by constraint name", KR(ret), K_(tenant_id), K(database_name), K(cst_name));
+        LOG_WARN("fail to lock object by constraint name", KR(ret), K(database_name), K(cst_name));
       }
     } // end for
 
@@ -201,7 +200,7 @@ int ObCreateTableHelper::lock_objects_by_name_()
       const ObString &fk_name = arg_.foreign_key_arg_list_.at(i).foreign_key_name_;
       if (OB_FAIL(add_lock_object_by_name_(database_name, fk_name,
           share::schema::FOREIGN_KEY_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-        LOG_WARN("fail to lock object by foreign key name", KR(ret), K_(tenant_id), K(database_name), K(fk_name));
+        LOG_WARN("fail to lock object by foreign key name", KR(ret), K(database_name), K(fk_name));
       }
     } // end for
 
@@ -211,7 +210,7 @@ int ObCreateTableHelper::lock_objects_by_name_()
       ObString mock_database_name(OB_SYS_DATABASE_NAME);  // consider that tablegroup may across databases.
       if (OB_FAIL(add_lock_object_by_name_(mock_database_name, tablegroup_name,
           share::schema::TABLEGROUP_SCHEMA, transaction::tablelock::SHARE))) {
-        LOG_WARN("fail to lock object by tablegroup name", KR(ret), K_(tenant_id), K(database_name), K(tablegroup_name));
+        LOG_WARN("fail to lock object by tablegroup name", KR(ret), K(database_name), K(tablegroup_name));
       }
     }
 
@@ -227,16 +226,16 @@ int ObCreateTableHelper::lock_objects_by_name_()
       if (OB_FAIL(add_lock_object_by_name_(parent_database_name, parent_table_name,
           share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
         LOG_WARN("fail to lock object by parent table", KR(ret),
-                 K_(tenant_id), K(parent_database_name), K(parent_table_name));
+                 K(parent_database_name), K(parent_table_name));
       }
     } // end for
 
     if (FAILEDx(lock_existed_objects_by_name_())) {
-      LOG_WARN("fail to lock objects by name", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to lock objects by name", KR(ret));
     }
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-  LOG_INFO("lock objects by name", KR(ret), K_(tenant_id), K(cost_ts));
+  LOG_INFO("lock objects by name", KR(ret), K(cost_ts));
   return ret;
 }
 
@@ -271,7 +270,7 @@ int ObCreateTableHelper::lock_objects_by_id_()
   if (OB_SUCC(ret) && OB_INVALID_ID != tablegroup_id) {
     if (OB_FAIL(add_lock_object_by_id_(tablegroup_id, // filled in set_tablegroup_id_()
         share::schema::TABLEGROUP_SCHEMA, transaction::tablelock::SHARE))) {
-      LOG_WARN("fail to lock tablegroup_id", KR(ret), K_(tenant_id), K(tablegroup_id));
+      LOG_WARN("fail to lock tablegroup_id", KR(ret), K(tablegroup_id));
     }
   }
   // 4. parent table/mock fk parent table
@@ -281,7 +280,7 @@ int ObCreateTableHelper::lock_objects_by_id_()
       if (OB_FAIL(add_lock_object_by_id_(foreign_key_arg.parent_table_id_,
           share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
         LOG_WARN("fail to lock parent table id",
-                 KR(ret), K_(tenant_id), "parent_table_id", foreign_key_arg.parent_table_id_);
+                 KR(ret), "parent_table_id", foreign_key_arg.parent_table_id_);
       }
     }
   } // end for
@@ -293,13 +292,13 @@ int ObCreateTableHelper::lock_objects_by_id_()
     if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_id(
         database_id, table_name, replace_mock_fk_parent_table_id_))) {
       LOG_WARN("fail to ge mock fk parent table id",
-               KR(ret), K_(tenant_id), K(database_id), K(table_name));
+               KR(ret), K(database_id), K(table_name));
     } else if (OB_INVALID_ID != replace_mock_fk_parent_table_id_) {
       // has existed mock fk parent table
       if (OB_FAIL(add_lock_object_by_id_(replace_mock_fk_parent_table_id_,
           share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
         LOG_WARN("fail to lock mock fk parent table id",
-                 KR(ret), K_(tenant_id), K_(replace_mock_fk_parent_table_id));
+                 KR(ret), K_(replace_mock_fk_parent_table_id));
       }
     }
   }
@@ -312,7 +311,7 @@ int ObCreateTableHelper::lock_objects_by_id_()
     LOG_WARN("fail to lock objects by id", KR(ret));
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-  LOG_INFO("lock objects by id", KR(ret), K_(tenant_id), K(cost_ts));
+  LOG_INFO("lock objects by id", KR(ret), K(cost_ts));
   return ret;
 }
 
@@ -340,11 +339,11 @@ int ObCreateTableHelper::post_lock_objects_by_id_()
     if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_schema(
         replace_mock_fk_parent_table_id_, mock_fk_parent_table))) {
       LOG_WARN("fail to get mock fk parent table schema",
-               KR(ret), K_(tenant_id), K_(replace_mock_fk_parent_table_id));
+               KR(ret), K_(replace_mock_fk_parent_table_id));
     } else if (OB_ISNULL(mock_fk_parent_table)) {
       ret = OB_ERR_PARALLEL_DDL_CONFLICT;
       LOG_WARN("mock fk parent table not exist, ddl need retry",
-               KR(ret), K_(tenant_id), K_(replace_mock_fk_parent_table_id));
+               KR(ret), K_(replace_mock_fk_parent_table_id));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < mock_fk_parent_table->get_foreign_key_infos().count(); i++) {
         const ObForeignKeyInfo &foreign_key = mock_fk_parent_table->get_foreign_key_infos().at(i);
@@ -353,11 +352,11 @@ int ObCreateTableHelper::post_lock_objects_by_id_()
         if (OB_FAIL(add_lock_object_by_id_(child_table_id,
             share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
           LOG_WARN("fail to lock child table",
-                   KR(ret), K_(tenant_id), K(child_table_id));
+                   KR(ret), K(child_table_id));
         } else if (OB_FAIL(add_lock_object_by_id_(foreign_key_id,
             share::schema::FOREIGN_KEY_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
           LOG_WARN("fail to lock foreign key",
-                   KR(ret), K_(tenant_id), K(foreign_key_id));
+                   KR(ret), K(foreign_key_id));
         }
       } // end for
     }
@@ -371,7 +370,7 @@ int ObCreateTableHelper::post_lock_objects_by_id_()
     LOG_WARN("fail to lock objects by id", KR(ret));
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-  LOG_INFO("lock objects by id in post", KR(ret), K_(tenant_id), K(cost_ts));
+  LOG_INFO("lock objects by id in post", KR(ret), K(cost_ts));
   return ret;
 }
 
@@ -405,7 +404,7 @@ int ObCreateTableHelper::check_ddl_conflict_()
         if (OB_SUCC(ret) && !find) {
           ret = OB_ERR_PARALLEL_DDL_CONFLICT;
           LOG_WARN("parent table may change, ddl need retry",
-                   KR(ret), K_(tenant_id), K(info));
+                   KR(ret), K(info));
         }
       }
     } // end for
@@ -422,28 +421,28 @@ int ObCreateTableHelper::check_ddl_conflict_()
       if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_schema(
           replace_mock_fk_parent_table_id_, mock_fk_parent_table))) {
         LOG_WARN("fail to get mock fk parent table schema",
-                 KR(ret), K_(tenant_id), K_(replace_mock_fk_parent_table_id));
+                 KR(ret), K_(replace_mock_fk_parent_table_id));
       } else if (OB_ISNULL(mock_fk_parent_table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("mock fk parent table not exist after lock obj",
-                 KR(ret), K_(tenant_id), K_(replace_mock_fk_parent_table_id));
+                 KR(ret), K_(replace_mock_fk_parent_table_id));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < mock_fk_parent_table->get_foreign_key_infos().count(); i++) {
         const ObForeignKeyInfo &foreign_key = mock_fk_parent_table->get_foreign_key_infos().at(i);
         const uint64_t child_table_id = foreign_key.child_table_id_;
         const ObTableSchema *child_table = NULL;
         if (OB_FAIL(schema_guard_wrapper_.get_table_schema(child_table_id, child_table))) {
-          LOG_WARN("fail to get table schema", KR(ret), K_(tenant_id), K(child_table_id));
+          LOG_WARN("fail to get table schema", KR(ret), K(child_table_id));
         } else if (OB_ISNULL(child_table)) {
           ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-          LOG_WARN("child table is not exist", KR(ret), K_(tenant_id), K(child_table_id));
+          LOG_WARN("child table is not exist", KR(ret), K(child_table_id));
         }
       } // end for
     }
 
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-  LOG_INFO("check ddl confict", KR(ret), K_(tenant_id), K(cost_ts));
+  LOG_INFO("check ddl confict", KR(ret), K(cost_ts));
   return ret;
 }
 
@@ -463,7 +462,7 @@ int ObCreateTableHelper::prefetch_schemas_()
     LOG_WARN("fail to check and set parent table id", KR(ret));
   }
   const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-  LOG_INFO("prefetch schemas", KR(ret), K_(tenant_id), K(cost_ts));
+  LOG_INFO("prefetch schemas", KR(ret), K(cost_ts));
   return ret;
 }
 
@@ -476,21 +475,21 @@ int ObCreateTableHelper::check_and_set_database_id_()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_id(database_name, database_id))) {
-    LOG_WARN("fail to get database id", KR(ret), K_(tenant_id), K(database_name));
+    LOG_WARN("fail to get database id", KR(ret), K(database_name));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("database not exist",  KR(ret), K_(tenant_id), K(database_name));
+    LOG_WARN("database not exist",  KR(ret), K(database_name));
     LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(), database_name.ptr());
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id, database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K(database_id), K(database_name));
+    LOG_WARN("fail to get database schema", KR(ret), K(database_id), K(database_name));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("database not exist", KR(ret), K_(tenant_id), K(database_id), K(database_name));
+    LOG_WARN("database not exist", KR(ret), K(database_id), K(database_name));
     LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(), database_name.ptr());
   } else if (!arg_.is_inner_ && database_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("Can't not create table in database which is in recyclebin",
-             KR(ret), K_(tenant_id), K(database_id), K(database_name));
+             KR(ret), K(database_id), K(database_name));
   } else {
     (void) const_cast<ObTableSchema&>(arg_.schema_).set_database_id(database_id);
   }
@@ -514,7 +513,7 @@ int ObCreateTableHelper::check_table_name_()
     int64_t schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(schema_guard_wrapper_.get_table_id(
                 database_id, session_id, table_name, table_id, table_type, schema_version))) {
-      LOG_WARN("fail to get table_id", KR(ret), K_(tenant_id), K(database_id), K(session_id), K(table_name));
+      LOG_WARN("fail to get table_id", KR(ret), K(database_id), K(session_id), K(table_name));
     } else if (OB_UNLIKELY(OB_INVALID_ID != table_id)) {
       if (table.is_mysql_tmp_table()
           && !(is_inner_table(table_id) || is_mysql_tmp_table(table_type))) {
@@ -525,7 +524,7 @@ int ObCreateTableHelper::check_table_name_()
         ret = OB_ERR_TABLE_EXIST;
         res_.table_id_ = table_id;
         res_.schema_version_ = schema_version;
-        LOG_WARN("table exist", KR(ret), K_(tenant_id), K(database_id),
+        LOG_WARN("table exist", KR(ret), K(database_id),
                  K(session_id), K(table_name), K(table_id), K(schema_version),
                  K(arg_.if_not_exist_));
       }
@@ -548,21 +547,21 @@ int ObCreateTableHelper::set_tablegroup_id_()
       const uint64_t database_id = table.get_database_id();
       const ObDatabaseSchema *database_schema = NULL;
       if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id, database_schema))) {
-        LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K(database_id));
+        LOG_WARN("fail to get database schema", KR(ret), K(database_id));
       } else if (OB_ISNULL(database_schema)) {
         ret = OB_ERR_BAD_DATABASE;
-        LOG_WARN("database not exist", KR(ret), K_(tenant_id), K(database_id));
+        LOG_WARN("database not exist", KR(ret), K(database_id));
       } else {
         tablegroup_id = database_schema->get_default_tablegroup_id();
       }
 
       if (OB_SUCC(ret) && OB_INVALID_ID == tablegroup_id) {
         const ObTenantSchema *tenant_schema = NULL;
-        if (OB_FAIL(schema_guard_wrapper_.get_tenant_schema(tenant_id_, tenant_schema))) {
-          LOG_WARN("fail to get tenant schema", KR(ret), K_(tenant_id));
+        if (OB_FAIL(schema_guard_wrapper_.get_tenant_schema( tenant_schema))) {
+          LOG_WARN("fail to get tenant schema", KR(ret));
         } else if (OB_ISNULL(tenant_schema)) {
           ret = OB_TENANT_NOT_EXIST;
-          LOG_WARN("tenant not exist", KR(ret), K_(tenant_id));
+          LOG_WARN("tenant not exist", KR(ret));
         } else {
           tablegroup_id = tenant_schema->get_default_tablegroup_id();
         }
@@ -574,10 +573,10 @@ int ObCreateTableHelper::set_tablegroup_id_()
       LOG_WARN("table which has no partitions with tablegroup", KR(ret), K(table));
     } else if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_id(
                tablegroup_name, tablegroup_id))) {
-      LOG_WARN("fail to get tablegroup id", KR(ret), K_(tenant_id), K(tablegroup_name));
+      LOG_WARN("fail to get tablegroup id", KR(ret), K(tablegroup_name));
     } else if (OB_UNLIKELY(OB_INVALID_ID == tablegroup_id)) {
       ret = OB_TABLEGROUP_NOT_EXIST;
-      LOG_WARN("tabelgroup not exist ", KR(ret), K_(tenant_id), K(tablegroup_name));
+      LOG_WARN("tabelgroup not exist ", KR(ret), K(tablegroup_name));
     } else {}
   }
 
@@ -585,10 +584,10 @@ int ObCreateTableHelper::set_tablegroup_id_()
     // TODO:(yanmu.ztl) after 4.2, we can use ObSimpleTableSchema instead of ObTablegroupSchema
     const ObTablegroupSchema *tablegroup_schema = NULL;
     if (OB_FAIL(schema_guard_wrapper_.get_tablegroup_schema(tablegroup_id, tablegroup_schema))) {
-      LOG_WARN("fail to get tablegroup schema", KR(ret), K_(tenant_id), K(tablegroup_id));
+      LOG_WARN("fail to get tablegroup schema", KR(ret), K(tablegroup_id));
     } else if (OB_ISNULL(tablegroup_schema)) {
       ret = OB_TABLEGROUP_NOT_EXIST;
-      LOG_WARN("tabelgroup not exist ", KR(ret), K_(tenant_id), K(tablegroup_id));
+      LOG_WARN("tabelgroup not exist ", KR(ret), K(tablegroup_id));
     } else if (OB_UNLIKELY(ObDuplicateScope::DUPLICATE_SCOPE_NONE != table.get_duplicate_scope()
                && OB_INVALID_ID != tablegroup_id)) {
       ret = OB_NOT_SUPPORTED;
@@ -629,19 +628,19 @@ int ObCreateTableHelper::check_and_set_parent_table_id_()
         if (0 == parent_database_name.case_compare(database_name)) {
           parent_database_id = table.get_database_id();
         } else if (OB_FAIL(schema_guard_wrapper_.get_database_id(parent_database_name, parent_database_id))) {
-          LOG_WARN("fail to get database id", KR(ret), K_(tenant_id), K(parent_database_name));
+          LOG_WARN("fail to get database id", KR(ret), K(parent_database_name));
         } else if (OB_UNLIKELY(OB_INVALID_ID == parent_database_id)) {
           ret = OB_ERR_BAD_DATABASE;
-          LOG_WARN("parent database not exist", KR(ret), K_(tenant_id), K(parent_database_name));
+          LOG_WARN("parent database not exist", KR(ret), K(parent_database_name));
           LOG_USER_ERROR(OB_ERR_BAD_DATABASE, parent_database_name.length(), parent_database_name.ptr());
         } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(parent_database_id, parent_database))) {
-          LOG_WARN("fail to get database schema", KR(ret), K_(tenant_id), K(parent_database_id));
+          LOG_WARN("fail to get database schema", KR(ret), K(parent_database_id));
         } else if (OB_ISNULL(parent_database)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("database schema is null", KR(ret), K_(tenant_id), K(parent_database_id));
+          LOG_WARN("database schema is null", KR(ret), K(parent_database_id));
         } else if (parent_database->is_in_recyclebin()) {
           ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-          LOG_WARN("Can't not do ddl on db in recyclebin", KR(ret), K_(tenant_id), K(parent_database_id));
+          LOG_WARN("Can't not do ddl on db in recyclebin", KR(ret), K(parent_database_id));
         }
 
         uint64_t parent_table_id = OB_INVALID_ID;
@@ -650,12 +649,12 @@ int ObCreateTableHelper::check_and_set_parent_table_id_()
         if (FAILEDx(schema_guard_wrapper_.get_table_id(
             parent_database_id, session_id, parent_table_name,
             parent_table_id, parent_table_type, parent_table_schema_version))) {
-          LOG_WARN("fail to get parent table id", KR(ret), K_(tenant_id),
+          LOG_WARN("fail to get parent table id", KR(ret),
                    K(session_id), K(parent_database_id), K(parent_table_name));
         } else if (OB_UNLIKELY(OB_INVALID_ID == parent_table_id)) {
           if (!foreign_key_arg.is_parent_table_mock_) {
             ret = OB_TABLE_NOT_EXIST;
-            LOG_WARN("parent table not exist", KR(ret), K_(tenant_id),
+            LOG_WARN("parent table not exist", KR(ret),
                      K(session_id), K(parent_database_id), K(parent_table_name));
             ObCStringHelper helper;
             LOG_USER_ERROR(OB_TABLE_NOT_EXIST,
@@ -666,9 +665,9 @@ int ObCreateTableHelper::check_and_set_parent_table_id_()
             if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_id(
                 parent_database_id, parent_table_name, parent_table_id))) {
               LOG_WARN("fail to get mock fk parent table id", KR(ret),
-                       K_(tenant_id), K(parent_database_id), K(parent_table_name));
+                       K(parent_database_id), K(parent_table_name));
             } else if (OB_UNLIKELY(OB_INVALID_ID == parent_table_id)) {
-              LOG_INFO("mock fk parent table not exist", KR(ret), K_(tenant_id),
+              LOG_INFO("mock fk parent table not exist", KR(ret),
                        K(parent_database_id), K(parent_table_name));
             }
           }
@@ -676,7 +675,7 @@ int ObCreateTableHelper::check_and_set_parent_table_id_()
           if (foreign_key_arg.is_parent_table_mock_) {
             ret = OB_ERR_PARALLEL_DDL_CONFLICT;
             LOG_WARN("parenet table already exist, should retry",
-                     KR(ret), K_(tenant_id), K(parent_table_id), K(foreign_key_arg));
+                     KR(ret), K(parent_table_id), K(foreign_key_arg));
           }
         }
         // parent_table_id will be OB_INVALID_ID in the following cases:
@@ -699,7 +698,7 @@ int ObCreateTableHelper::generate_table_schema_()
 
     // to make try_format_partition_schema() passed
     if (OB_FAIL(new_table.assign(arg_.schema_))) {
-      LOG_WARN("fail to assign table schema", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to assign table schema", KR(ret));
     } else if (OB_FAIL(inner_generate_table_schema_(arg_, new_table))) {
       LOG_WARN("fail to generate table schema");
     }
@@ -729,8 +728,7 @@ int ObCreateTableHelper::generate_aux_table_schemas_()
     // After index processing (e.g., hybrid vec index), the data table may have gained
     // LOB columns that were not present when has_lob_column was checked in
     // inner_generate_aux_table_schema_. Check again and create LOB aux tables if needed.
-    if (!data_table.is_external_table()
-        && !data_table.has_lob_aux_table()
+    if (!data_table.has_lob_aux_table()
         && data_table.has_lob_column(true)) {
       HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema)) {
         ObLobMetaBuilder lob_meta_builder(*ddl_service_);
@@ -738,7 +736,7 @@ int ObCreateTableHelper::generate_aux_table_schemas_()
         ObIDGenerator id_generator;
         uint64_t object_id = OB_INVALID_ID;
         if (OB_FAIL(gen_object_ids_(2, id_generator))) {
-          LOG_WARN("fail to gen object ids for lob aux tables", KR(ret), K_(tenant_id));
+          LOG_WARN("fail to gen object ids for lob aux tables", KR(ret));
         } else if (OB_FAIL(id_generator.next(object_id))) {
           LOG_WARN("fail to get next object_id", KR(ret));
         } else if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
@@ -783,7 +781,7 @@ int ObCreateTableHelper::generate_foreign_keys_()
     ObIDGenerator id_generator; // for foreign key
     const uint64_t object_cnt = arg_.foreign_key_arg_list_.count();
     if (OB_FAIL(gen_object_ids_(object_cnt, id_generator))) {
-      LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id), K(object_cnt));
+      LOG_WARN("fail to gen object ids", KR(ret), K(object_cnt));
     }
     // genernate foreign keys
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_.foreign_key_arg_list_.count(); i++) {
@@ -796,7 +794,7 @@ int ObCreateTableHelper::generate_foreign_keys_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fk name is empty", KR(ret), K(foreign_key_arg));
       } else if (OB_FAIL(check_constraint_name_exist_(data_table, foreign_key_name, true /*is_foreign_key*/, fk_exist))) {
-        LOG_WARN("fail to check foreign key name exist", KR(ret), K_(tenant_id), K(foreign_key_name));
+        LOG_WARN("fail to check foreign key name exist", KR(ret), K(foreign_key_name));
       } else if (fk_exist) {
         ret = OB_ERR_DUP_KEY;
         LOG_USER_ERROR(OB_ERR_DUP_KEY,
@@ -837,7 +835,7 @@ int ObCreateTableHelper::generate_foreign_keys_()
           } else {
             const uint64_t parent_table_id = foreign_key_arg.parent_table_id_;
             if (OB_FAIL(schema_guard_wrapper_.get_table_schema(parent_table_id, parent_table))) {
-              LOG_WARN("fail to get table schema", KR(ret), K_(tenant_id), K(parent_table_id));
+              LOG_WARN("fail to get table schema", KR(ret), K(parent_table_id));
             } else if (OB_ISNULL(parent_table)) {
               ret = OB_TABLE_NOT_EXIST;
               LOG_WARN("parent table is not exist", KR(ret), K(foreign_key_arg));
@@ -972,10 +970,10 @@ int ObCreateTableHelper::get_mock_fk_parent_table_info_(
       // mock fk parent table already exist
       if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_schema(
           foreign_key_arg.parent_table_id_, ori_mock_fk_parent_table_schema))) {
-        LOG_WARN("fail to get mock fk parent table", KR(ret), K_(tenant_id), K(foreign_key_arg));
+        LOG_WARN("fail to get mock fk parent table", KR(ret), K(foreign_key_arg));
       } else if (OB_ISNULL(ori_mock_fk_parent_table_schema)) {
         ret = OB_ERR_PARALLEL_DDL_CONFLICT;
-        LOG_WARN("mock fk parent table may be dropped, ddl need retry", KR(ret), K_(tenant_id), K(foreign_key_arg));
+        LOG_WARN("mock fk parent table may be dropped, ddl need retry", KR(ret), K(foreign_key_arg));
       }
     }
 
@@ -987,11 +985,11 @@ int ObCreateTableHelper::get_mock_fk_parent_table_info_(
         // skip
       } else if (OB_HASH_NOT_EXIST != hash_ret) {
         ret = hash_ret;
-        LOG_WARN("fail to get new mock fk parent table from map", KR(ret), K_(tenant_id), K(name_wrapper));
+        LOG_WARN("fail to get new mock fk parent table from map", KR(ret), K(name_wrapper));
       } else {
         // 1. try init new mock fk parent table schema
         if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, new_mock_fk_parent_table_schema))) {
-          LOG_WARN("fail to new ObMockFKParentTableSchema", KR(ret), K_(tenant_id));
+          LOG_WARN("fail to new ObMockFKParentTableSchema", KR(ret));
         } else if (OB_INVALID_ID != foreign_key_arg.parent_table_id_) {
           // mock fk parent table already exist
           if (OB_ISNULL(ori_mock_fk_parent_table_schema)) {
@@ -1010,13 +1008,13 @@ int ObCreateTableHelper::get_mock_fk_parent_table_info_(
           const uint64_t object_cnt = 1;
           uint64_t object_id = OB_INVALID_ID;
           if (OB_FAIL(gen_object_ids_(object_cnt, id_generator))) {
-            LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id), K(object_cnt));
+            LOG_WARN("fail to gen object ids", KR(ret), K(object_cnt));
           } else if (OB_FAIL(id_generator.next(object_id))) {
             LOG_WARN("fail to get next object_id", KR(ret));
           } else if (OB_FAIL(new_mock_fk_parent_table_schema->set_mock_fk_parent_table_name(foreign_key_arg.parent_table_))) {
             LOG_WARN("fail to set mock fk parent table name", KR(ret), K(foreign_key_arg));
           } else {
-            (void) new_mock_fk_parent_table_schema->set_tenant_id(tenant_id_);
+            (void) (void)0;
             (void) new_mock_fk_parent_table_schema->set_database_id(foreign_key_arg.parent_database_id_);
             (void) new_mock_fk_parent_table_schema->set_mock_fk_parent_table_id(object_id);
             (void) new_mock_fk_parent_table_schema->set_operation_type(
@@ -1053,7 +1051,7 @@ int ObCreateTableHelper::get_mock_fk_parent_table_info_(
         // 2. add new column to mock fk parent table at the first time.
         if (OB_ISNULL(ori_mock_fk_parent_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("mock fk parent table doesn't exist", KR(ret), K_(tenant_id), K(foreign_key_arg));
+          LOG_WARN("mock fk parent table doesn't exist", KR(ret), K(foreign_key_arg));
         } else if (OB_UNLIKELY(ori_mock_fk_parent_table_schema->get_column_array().count() <= 0)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("column cnt unexpected", KR(ret), KPC(ori_mock_fk_parent_table_schema));
@@ -1072,7 +1070,7 @@ int ObCreateTableHelper::get_mock_fk_parent_table_info_(
         if (!is_column_exist && is_alter_table) {
           if (OB_ISNULL(ori_mock_fk_parent_table_schema)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("mock fk parent table doesn't exist", KR(ret), K_(tenant_id), K(foreign_key_arg));
+            LOG_WARN("mock fk parent table doesn't exist", KR(ret), K(foreign_key_arg));
           } else {
             (void) ori_mock_fk_parent_table_schema->get_column_id_by_column_name(column_name, column_id, is_column_exist);
           }
@@ -1161,8 +1159,8 @@ int ObCreateTableHelper::clean_on_fail_commit_()
     if (OB_ISNULL(ddl_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl_service_ is null", KR(ret));
-    } else if (OB_FAIL(ddl_service_->get_index_name_checker().reset_cache(tenant_id_))) {
-      LOG_ERROR("fail to reset cache", KR(ret), KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(ddl_service_->get_index_name_checker().reset_cache())) {
+      LOG_ERROR("fail to reset cache", KR(ret), KR(ret));
     }
   }
   return ret;
@@ -1193,12 +1191,10 @@ int ObCreateTableHelper::construct_and_adjust_result_(int &return_ret) {
     //create table xx if not exist (...)
     if (arg_.if_not_exist_) {
       LOG_INFO("table is exist, no need to create again",
-               "tenant_id", table.get_tenant_id(),
                "database_id", table.get_database_id(),
                "table_name", table.get_table_name());
     } else {
       LOG_WARN("table is exist, cannot create it twice", KR(ret),
-               "tenant_id", table.get_tenant_id(),
                "database_id", table.get_database_id(),
                "table_name", table.get_table_name());
       LOG_USER_ERROR(OB_ERR_TABLE_EXIST,

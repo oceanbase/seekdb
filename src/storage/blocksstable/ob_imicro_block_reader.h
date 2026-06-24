@@ -495,7 +495,7 @@ class ObBlockReaderAllocator
 {
 public:
   ObBlockReaderAllocator(const lib::ObLabel &label, bool reserve_memory = false)
-    : inner_allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    : inner_allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE),
       reserve_memory_ (reserve_memory)
   {
   }

@@ -40,10 +40,9 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
                                 const ObLSID &ls_id)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = ls->get_tenant_id();
+  
   ObTxReplayExecutor replay_executor(ls,
                                      ls_id,
-                                     tenant_id,
                                      ls_tx_srv,
                                      lsn,
                                      log_timestamp,
@@ -54,7 +53,7 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
     TRANS_LOG(ERROR, "invaild arguments", K(replay_executor), K(buf), K(size));
   } else if (OB_FAIL(replay_executor.do_replay_(buf, size, skip_pos))) {
     TRANS_LOG(WARN, "replay_executor.do_replay failed", K(ret),
-        K(replay_executor), K(buf), K(size), K(skip_pos), K(ls_id), K(tenant_id));
+        K(replay_executor), K(buf), K(size), K(skip_pos), K(ls_id));
   } else {
     if (log_timestamp <= ls->get_ls_wrs_handler()->get_ls_weak_read_ts()) {
       SCN min_log_service_scn;
@@ -67,8 +66,7 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
                                                                     K(size),
                                                                     K(skip_pos),
                                                                     K(min_log_service_scn),
-                                                                    K(ls_id),
-                                                                    K(tenant_id));
+                                                                    K(ls_id));
     }
   }
   return ret;
@@ -283,7 +281,6 @@ int ObTxReplayExecutor::try_get_tx_ctx_()
       const uint64_t cluster_version = log_block_.get_header().get_cluster_version();
       ObTxCreateArg arg(true, /* for_replay */
                         PartCtxSource::REPLAY,
-                        tenant_id_,
                         tx_id,
                         ls_id_,
                         log_block_.get_header().get_org_cluster_id(),
@@ -804,7 +801,7 @@ int ObTxReplayExecutor::replay_row_(storage::ObStoreCtx &store_ctx,
                 K(ret), K(ls_id), K(tablet_id), K(log_ts_ns_),
                 K(tx_part_log_no_), K(mmi_ptr->get_row_head()));
     } else if (OB_TABLET_NOT_EXIST == ret) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (OB_UNLIKELY(!tenant_config.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "tenant config is invalid", K(ret));

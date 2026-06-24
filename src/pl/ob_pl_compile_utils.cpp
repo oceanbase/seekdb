@@ -30,7 +30,6 @@ using namespace sql;
 namespace pl {
 
 int ObPLCompilerUtils::compile(ObExecContext &ctx,
-                               uint64_t tenant_id,
                                const ObString &database_name,
                                const ObString &object_name,
                                CompileType object_type,
@@ -41,12 +40,12 @@ int ObPLCompilerUtils::compile(ObExecContext &ctx,
   const ObDatabaseSchema *db_schema = nullptr;
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-  OZ (ctx.get_sql_ctx()->schema_guard_->get_database_schema(tenant_id, database_name, db_schema));
+  OZ (ctx.get_sql_ctx()->schema_guard_->get_database_schema( database_name, db_schema));
   CK (OB_NOT_NULL(db_schema));
-  OZ (compile(ctx, tenant_id, db_schema->get_database_id(), object_name, object_type, schema_version, is_recompile));
+  OZ (compile(ctx, db_schema->get_database_id(), object_name, object_type, schema_version, is_recompile));
   if (OB_FAIL(ret)) {
     LOG_WARN("fail to compile object",
-              K(ret), K(tenant_id), K(object_type), K(database_name), K(object_name), K(schema_version));
+              K(ret), K(object_type), K(database_name), K(object_name), K(schema_version));
     ret = OB_SUCCESS;
     common::ob_reset_tsi_warning_buffer();
     if (NULL != ctx.get_my_session()) {
@@ -57,7 +56,6 @@ int ObPLCompilerUtils::compile(ObExecContext &ctx,
 }
 
 int ObPLCompilerUtils::compile(ObExecContext &ctx,
-                               uint64_t tenant_id,
                                uint64_t database_id,
                                const ObString &object_name,
                                CompileType object_type,
@@ -67,19 +65,19 @@ int ObPLCompilerUtils::compile(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   switch (object_type) {
     case COMPILE_PROCEDURE: {
-      OZ (compile_routine(ctx, tenant_id, database_id, object_name, ROUTINE_PROCEDURE_TYPE, schema_version, is_recompile));
+      OZ (compile_routine(ctx, database_id, object_name, ROUTINE_PROCEDURE_TYPE, schema_version, is_recompile));
     } break;
     case COMPILE_FUNCTION: {
-      OZ (compile_routine(ctx, tenant_id, database_id, object_name, ROUTINE_FUNCTION_TYPE, schema_version, is_recompile));
+      OZ (compile_routine(ctx, database_id, object_name, ROUTINE_FUNCTION_TYPE, schema_version, is_recompile));
     } break;
     case COMPILE_PACKAGE_SPEC: {
-      OZ (compile_package(ctx, tenant_id, database_id, object_name, schema::ObPackageType::PACKAGE_TYPE, schema_version, is_recompile));
+      OZ (compile_package(ctx, database_id, object_name, schema::ObPackageType::PACKAGE_TYPE, schema_version, is_recompile));
     } break;
     case COMPILE_PACKAGE_BODY: {
-      OZ (compile_package(ctx, tenant_id, database_id, object_name, schema::ObPackageType::PACKAGE_BODY_TYPE, schema_version, is_recompile));
+      OZ (compile_package(ctx, database_id, object_name, schema::ObPackageType::PACKAGE_BODY_TYPE, schema_version, is_recompile));
     } break;
     case COMPILE_TRIGGER: {
-      OZ (compile_trigger(ctx, tenant_id, database_id, object_name, schema_version, is_recompile));
+      OZ (compile_trigger(ctx, database_id, object_name, schema_version, is_recompile));
     } break;
     default: {
       ret = OB_ERR_UNEXPECTED;
@@ -88,7 +86,7 @@ int ObPLCompilerUtils::compile(ObExecContext &ctx,
   }
   if (OB_FAIL(ret)) {
     LOG_WARN("fail to compile object",
-              K(ret), K(tenant_id), K(object_type), K(database_id), K(object_name), K(schema_version));
+              K(ret), K(object_type), K(database_id), K(object_name), K(schema_version));
     ret = OB_SUCCESS;
     common::ob_reset_tsi_warning_buffer();
     if (NULL != ctx.get_my_session()) {
@@ -99,7 +97,6 @@ int ObPLCompilerUtils::compile(ObExecContext &ctx,
 }
 
 int ObPLCompilerUtils::compile_routine(ObExecContext &ctx,
-                                       uint64_t tenant_id,
                                        uint64_t database_id,
                                        const ObString &routine_name,
                                        ObRoutineType routine_type,
@@ -115,9 +112,9 @@ int ObPLCompilerUtils::compile_routine(ObExecContext &ctx,
   CK (OB_NOT_NULL(schema_guard = ctx.get_sql_ctx()->schema_guard_));
 
   if (ROUTINE_PROCEDURE_TYPE == routine_type) {
-    OZ (schema_guard->get_standalone_procedure_info(tenant_id, database_id, routine_name, routine_info));
+    OZ (schema_guard->get_standalone_procedure_info(database_id, routine_name, routine_info));
   } else {
-    OZ (schema_guard->get_standalone_function_info(tenant_id, database_id, routine_name, routine_info));
+    OZ (schema_guard->get_standalone_function_info(database_id, routine_name, routine_info));
   }
   OZ (ctx.get_my_session()->get_database_id(db_id));
 
@@ -157,8 +154,7 @@ int ObPLCompilerUtils::compile_routine(ObExecContext &ctx,
         OX (routine->get_stat_for_update().type_ = pl::ObPLCacheObjectType::STANDALONE_ROUTINE_TYPE);
         OZ (ctx.get_pl_engine()->add_pl_lib_cache(routine, pc_ctx));
       }
-      OZ (pl::ObPLCompiler::update_schema_object_dep_info(routine->get_dependency_table(), 
-                                                          routine->get_tenant_id(),
+      OZ (pl::ObPLCompiler::update_schema_object_dep_info(routine->get_dependency_table(),
                                                           routine->get_owner(),
                                                           routine_info->get_routine_id(),
                                                           routine_info->get_schema_version(), 
@@ -169,7 +165,6 @@ int ObPLCompilerUtils::compile_routine(ObExecContext &ctx,
 }
 
 int ObPLCompilerUtils::compile_package(ObExecContext &ctx,
-                                       uint64_t tenant_id,
                                        uint64_t database_id,
                                        const ObString &package_name,
                                        schema::ObPackageType package_type,
@@ -182,7 +177,7 @@ int ObPLCompilerUtils::compile_package(ObExecContext &ctx,
   int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   OZ (schema_checker.init(*ctx.get_sql_ctx()->schema_guard_, ctx.get_my_session()->get_server_sid()));
-  OZ (ctx.get_sql_ctx()->schema_guard_->get_package_info(tenant_id, database_id, package_name, package_type, compatible_mode, package_info));
+  OZ (ctx.get_sql_ctx()->schema_guard_->get_package_info( database_id, package_name, package_type, compatible_mode, package_info));
   CK (OB_NOT_NULL(package_info));
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(ctx.get_pl_engine()));
@@ -193,7 +188,7 @@ int ObPLCompilerUtils::compile_package(ObExecContext &ctx,
     const ObPackageInfo *package_body_info = NULL;
     pl::ObPLPackage *package_spec = nullptr;
     pl::ObPLPackage *package_body = nullptr;
-    pl::ObPLPackageGuard package_guard(ctx.get_my_session()->get_effective_tenant_id());
+    pl::ObPLPackageGuard package_guard{};
     pl::ObPLResolveCtx resolve_ctx(ctx.get_allocator(),
                                     *ctx.get_my_session(),
                                     *ctx.get_sql_ctx()->schema_guard_,
@@ -217,7 +212,6 @@ int ObPLCompilerUtils::compile_package(ObExecContext &ctx,
 }
 
 int ObPLCompilerUtils::compile_trigger(ObExecContext &ctx,
-                                       uint64_t tenant_id,
                                        uint64_t database_id,
                                        const ObString &trigger_name,
                                        int64_t schema_version,
@@ -228,7 +222,7 @@ int ObPLCompilerUtils::compile_trigger(ObExecContext &ctx,
   const ObPackageInfo *package_spec_info = NULL;
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-  OZ (ctx.get_sql_ctx()->schema_guard_->get_trigger_info(tenant_id, database_id, trigger_name, trigger_info));
+  OZ (ctx.get_sql_ctx()->schema_guard_->get_trigger_info( database_id, trigger_name, trigger_info));
   
   if (OB_SUCC(ret) && OB_ISNULL(trigger_info)) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
@@ -242,7 +236,7 @@ int ObPLCompilerUtils::compile_trigger(ObExecContext &ctx,
       && (OB_INVALID_VERSION == schema_version || schema_version == trigger_info->get_schema_version())) {
     ObPLPackage *package_spec = nullptr;
     ObPLPackage *package_body = nullptr;
-    pl::ObPLPackageGuard package_guard(ctx.get_my_session()->get_effective_tenant_id());
+    pl::ObPLPackageGuard package_guard{};
     pl::ObPLResolveCtx resolve_ctx(ctx.get_allocator(),
                                     *ctx.get_my_session(),
                                     *ctx.get_sql_ctx()->schema_guard_,

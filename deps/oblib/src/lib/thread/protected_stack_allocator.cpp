@@ -61,20 +61,17 @@ ssize_t ProtectedStackAllocator::page_size()
        aligned with page_size-^                       ^-return
 */
 
-void *ProtectedStackAllocator::alloc(const uint64_t tenant_id,
-                                     const ssize_t stack_size)
+void *ProtectedStackAllocator::alloc(const ssize_t stack_size)
 {
-  return _alloc(tenant_id, ObCtxIds::CO_STACK, stack_size, true);
+  return _alloc(ObCtxIds::CO_STACK, stack_size, true);
 }
 
-void *ProtectedStackAllocator::smart_call_alloc(const uint64_t tenant_id,
-                                                const ssize_t stack_size)
+void *ProtectedStackAllocator::smart_call_alloc(const ssize_t stack_size)
 {
-  return _alloc(tenant_id, ObCtxIds::DEFAULT_CTX_ID, stack_size, false);
+  return _alloc(ObCtxIds::DEFAULT_CTX_ID, stack_size, false);
 }
 
-void *ProtectedStackAllocator::_alloc(const uint64_t tenant_id,
-                                      const uint64_t ctx_id,
+void *ProtectedStackAllocator::_alloc(const uint64_t ctx_id,
                                       const ssize_t stack_size,
                                       const bool guard_page)
 {
@@ -85,7 +82,7 @@ void *ProtectedStackAllocator::_alloc(const uint64_t tenant_id,
   const ssize_t alloc_size = stack_size + ps * 2 + sizeof(ObStackHeader);
   if (stack_size < ps || ACHUNK_PURE_HEADER_SIZE + sizeof(ObStackHeader) > ps) {
     LOG_ERROR("invalid arg", K(stack_size), K(alloc_size));
-  } else if (OB_ISNULL(ptr = __alloc(tenant_id, ctx_id, alloc_size, guard_page))) {
+  } else if (OB_ISNULL(ptr = __alloc(ctx_id, alloc_size, guard_page))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc failed", K(ret));
   } else {
@@ -95,15 +92,14 @@ void *ProtectedStackAllocator::_alloc(const uint64_t tenant_id,
   return ptr;
 }
 
-void *ProtectedStackAllocator::__alloc(const uint64_t tenant_id,
-                                       const uint64_t ctx_id,
+void *ProtectedStackAllocator::__alloc(const uint64_t ctx_id,
                                        const ssize_t size,
                                        const bool guard_page)
 {
   void *ptr = nullptr;
 
   const ssize_t ps = page_size();
-  ObMemAttr attr(tenant_id, "CoStack", ctx_id);
+  ObMemAttr attr("CoStack", ctx_id);
   // page at bottom will be used as guard-page
   char *buffer = (char *)ob_malloc(size, attr);
   if (OB_ISNULL(buffer)) {
@@ -116,7 +112,7 @@ void *ProtectedStackAllocator::__alloc(const uint64_t tenant_id,
     }
     base = align_up2(base, ps);
     header = new ((char *)base - sizeof(ObStackHeader)) ObStackHeader;
-    header->tenant_id_ = tenant_id;
+    
     header->size_ = size;
     header->pth_ = 0;
     header->base_ = buffer;
@@ -159,7 +155,7 @@ void ProtectedStackAllocator::dealloc(void *ptr)
       LOG_WARN_RET(OB_ERR_SYS, "mprotect failed", K(errno), K(header), K(ps));
     } else {
 #endif
-      const uint64_t tenant_id = header->tenant_id_;
+      
       const ssize_t size = header->size_;
       g_stack_mgr.erase(header);
       ob_free(base);

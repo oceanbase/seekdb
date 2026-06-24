@@ -46,7 +46,6 @@ struct ObDSFailTabInfo
 struct ObDSTableParam
 {
   ObDSTableParam () :
-    tenant_id_(0),
     table_id_(OB_INVALID_ID),
     db_name_(),
     table_name_(),
@@ -60,11 +59,9 @@ struct ObDSTableParam
     partition_infos_()
  {}
 
-  bool is_valid() const { return tenant_id_ != 0 &&
-                                 table_id_ != OB_INVALID_ID &&
+  bool is_valid() const { return table_id_ != OB_INVALID_ID &&
                                  ds_level_ != ObDynamicSamplingLevel::NO_DYNAMIC_SAMPLING &&
                                  max_ds_timeout_ > 0; }
-  uint64_t tenant_id_;
   uint64_t table_id_;
   ObString db_name_;
   ObString table_name_;
@@ -77,8 +74,7 @@ struct ObDSTableParam
   bool need_specify_partition_;
   ObSEArray<PartInfo, 4, common::ModulePageAllocator, true> partition_infos_;
 
-  TO_STRING_KV(K(tenant_id_),
-               K(table_id_),
+  TO_STRING_KV(K(table_id_),
                K(db_name_),
                K(table_name_),
                K(alias_name_),
@@ -339,8 +335,7 @@ private:
                              ObOptDSStat &ds_stat,
                              ObSqlString &filters_str);
   int64_t get_dynamic_sampling_micro_block_num(const ObDSTableParam &param);
-  int get_table_dml_info(const uint64_t tenant_id,
-                         const uint64_t table_id,
+  int get_table_dml_info(const uint64_t table_id,
                          int64_t &cur_modified_dml_cnt,
                          double &stale_percent_threshold);
   int add_ds_result_cache(ObIArray<ObDSResultItem> &ds_result_items);

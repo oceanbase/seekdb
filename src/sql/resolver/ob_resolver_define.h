@@ -333,7 +333,6 @@ struct ObResolverParams
        force_trace_log_(false),
        expr_factory_(NULL),
        stmt_factory_(NULL),
-       show_tenant_id_(common::OB_INVALID_ID),
        show_seed_(false),
        is_from_show_resolver_(false),
        is_restore_(false),
@@ -400,7 +399,7 @@ public:
   bool force_trace_log_;
   ObRawExprFactory *expr_factory_;
   ObStmtFactory *stmt_factory_;
-  uint64_t show_tenant_id_;
+  
   bool show_seed_;
   bool is_from_show_resolver_;
   bool is_restore_;

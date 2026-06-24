@@ -34,7 +34,7 @@ namespace sql
 {
 
 ObExprInnerInfoColsColumnDefPrinter::ObExprInnerInfoColsColumnDefPrinter(ObIAllocator &alloc)
-    : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_DEF_PRINTER, N_INNER_INFO_COLS_COLUMN_DEF_PRINTER, 3,
+    : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_DEF_PRINTER, N_INNER_INFO_COLS_COLUMN_DEF_PRINTER, 2,
                            VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
@@ -43,17 +43,15 @@ ObExprInnerInfoColsColumnDefPrinter::~ObExprInnerInfoColsColumnDefPrinter()
 {
 }
 
-inline int ObExprInnerInfoColsColumnDefPrinter::calc_result_type3(ObExprResType &type,
+inline int ObExprInnerInfoColsColumnDefPrinter::calc_result_type2(ObExprResType &type,
                                                                   ObExprResType &type1,
                                                                   ObExprResType &type2,
-                                                                  ObExprResType &type3,
                                                                   common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   type1.set_calc_type(ObIntType);
   type2.set_calc_type(ObIntType);
-  type3.set_calc_type(ObIntType);
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
@@ -66,7 +64,7 @@ inline int ObExprInnerInfoColsColumnDefPrinter::calc_result_type3(ObExprResType 
 int ObExprInnerInfoColsColumnDefPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 {
   int ret = OB_SUCCESS;
-  CK(3 == rt_expr.arg_cnt_);
+  CK(2 == rt_expr.arg_cnt_);
   rt_expr.eval_func_ = &ObExprInnerInfoColsColumnDefPrinter::eval_column_def;
   return ret;
 }
@@ -74,12 +72,11 @@ int ObExprInnerInfoColsColumnDefPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr 
 int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *tenant_id = nullptr;
   ObDatum *table_id = nullptr;
   ObDatum *column_id = nullptr;
-  if (OB_FAIL(expr.eval_param_value(ctx, tenant_id, table_id, column_id))) {
-    LOG_WARN("failed to eval tenant id", K(ret));
-  } else if (tenant_id->is_null() || table_id->is_null() || column_id->is_null()) {
+  if (OB_FAIL(expr.eval_param_value(ctx, table_id, column_id))) {
+    LOG_WARN("failed to eval table id", K(ret));
+  } else if (table_id->is_null() || column_id->is_null()) {
     expr_datum.set_null();
   } else {
     share::schema::ObSchemaGetterGuard schema_guard;
@@ -87,9 +84,9 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema_service", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id->get_int(), schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id->get_int(), table_id->get_int(), table_schema))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       expr_datum.set_null();
@@ -431,14 +428,13 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     share::schema::ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(ctx.exec_ctx_.get_my_session()->get_effective_tenant_id(),
-                                                              schema_guard))) {
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get schema guard", K(ret));
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_session_priv_info(session_priv))) {
       LOG_WARN( "fail to get session priv info", K(ret));
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN( "session priv is invalid", "tenant_id", session_priv.tenant_id_,
+      LOG_WARN( "session priv is invalid", 
                   "user_id", session_priv.user_id_, K(ret));
     } else if (OB_ISNULL(buf = static_cast<char*>(calc_alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -855,7 +851,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprInnerInfoColsColumnTypePrinter, raw_expr) {
 
 
 ObExprInnerInfoColsColumnKeyPrinter::ObExprInnerInfoColsColumnKeyPrinter(ObIAllocator &alloc)
-    : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_KEY_PRINTER, N_INNER_INFO_COLS_COLUMN_KEY_PRINTER, 3,
+    : ObExprOperator(alloc, T_FUN_SYS_INNER_INFO_COLS_COLUMN_KEY_PRINTER, N_INNER_INFO_COLS_COLUMN_KEY_PRINTER, 2,
                            VALID_FOR_GENERATED_COL, INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
 }
@@ -864,17 +860,15 @@ ObExprInnerInfoColsColumnKeyPrinter::~ObExprInnerInfoColsColumnKeyPrinter()
 {
 }
 
-inline int ObExprInnerInfoColsColumnKeyPrinter::calc_result_type3(ObExprResType &type,
+inline int ObExprInnerInfoColsColumnKeyPrinter::calc_result_type2(ObExprResType &type,
                                                                   ObExprResType &type1,
                                                                   ObExprResType &type2,
-                                                                  ObExprResType &type3,
                                                                   common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   type1.set_calc_type(ObIntType);
   type2.set_calc_type(ObIntType);
-  type3.set_calc_type(ObIntType);
   type.set_varchar();
   type.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
   type.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
@@ -887,7 +881,7 @@ inline int ObExprInnerInfoColsColumnKeyPrinter::calc_result_type3(ObExprResType 
 int ObExprInnerInfoColsColumnKeyPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 {
   int ret = OB_SUCCESS;
-  CK(3 == rt_expr.arg_cnt_);
+  CK(2 == rt_expr.arg_cnt_);
   rt_expr.eval_func_ = &ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key;
   return ret;
 }
@@ -895,12 +889,11 @@ int ObExprInnerInfoColsColumnKeyPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr 
 int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *tenant_id = nullptr;
   ObDatum *table_id = nullptr;
   ObDatum *column_id = nullptr;
-  if (OB_FAIL(expr.eval_param_value(ctx, tenant_id, table_id, column_id))) {
+  if (OB_FAIL(expr.eval_param_value(ctx, table_id, column_id))) {
     LOG_WARN("failed to eval data type", K(ret));
-  } else if (tenant_id->is_null() || table_id->is_null() || column_id->is_null()) {
+  } else if (table_id->is_null() || column_id->is_null()) {
     expr_datum.set_null();
   } else {
     share::schema::ObSchemaGetterGuard schema_guard;
@@ -908,9 +901,9 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema_service", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id->get_int(), schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("failed to get schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id->get_int(), table_id->get_int(), table_schema))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       expr_datum.set_string("");

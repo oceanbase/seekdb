@@ -42,8 +42,7 @@ int ObDDLService::fork_database(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(fork_database_arg));
   } else {
-    LOG_INFO("fork database request accepted", "tenant_id",
-             fork_database_arg.tenant_id_, "src_db",
+    LOG_INFO("fork database request accepted", "src_db",
              fork_database_arg.src_database_name_, "dst_db",
              fork_database_arg.dst_database_name_, "session_id",
              fork_database_arg.session_id_);
@@ -52,7 +51,7 @@ int ObDDLService::fork_database(
     const ObDatabaseSchema *src_db_schema = nullptr;
     uint64_t dst_db_id = OB_INVALID_ID;
     bool is_dst_db_exist = false;
-    const uint64_t tenant_id = fork_database_arg.tenant_id_;
+    
     int64_t refreshed_schema_version = 0;
     bool is_db_in_recyclebin = false;
     ObArray<const ObTableSchema *> src_db_table_schemas;
@@ -61,17 +60,16 @@ int ObDDLService::fork_database(
 
     ObDDLSQLTransaction trans(schema_service_);
     if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(
-            tenant_id, schema_guard))) {
+            schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(
-                   tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
+                   refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
     }
 
     // Database existence basic check.
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(schema_guard.get_database_schema(
-              tenant_id, fork_database_arg.src_database_name_,
+      if (OB_FAIL(schema_guard.get_database_schema( fork_database_arg.src_database_name_,
               src_db_schema))) {
         LOG_WARN("failed to get src database schema", KR(ret));
       } else if (NULL == src_db_schema) {
@@ -80,11 +78,10 @@ int ObDDLService::fork_database(
                        fork_database_arg.src_database_name_.length(),
                        fork_database_arg.src_database_name_.ptr());
         LOG_WARN("source database not exist", K(fork_database_arg), K(ret));
-      } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(
-                     tenant_id, src_db_schema->get_database_id(),
+      } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(src_db_schema->get_database_id(),
                      is_db_in_recyclebin))) {
         LOG_WARN("check source database in recyclebin failed", K(ret),
-                 K(tenant_id), K(*src_db_schema));
+                 K(*src_db_schema));
       } else if (is_db_in_recyclebin || src_db_schema->is_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
         LOG_WARN("can not fork database from database in recyclebin", K(ret),
@@ -94,10 +91,9 @@ int ObDDLService::fork_database(
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database from system or internal database");
         LOG_WARN("fork database from system/internal database is not supported", K(ret),
                  K(*src_db_schema));
-      } else if (OB_FAIL(schema_service_->check_database_exist(
-                     tenant_id, fork_database_arg.dst_database_name_, dst_db_id,
+      } else if (OB_FAIL(schema_service_->check_database_exist(fork_database_arg.dst_database_name_, dst_db_id,
                      is_dst_db_exist))) {
-        LOG_WARN("check database exist failed", K(ret), K(tenant_id),
+        LOG_WARN("check database exist failed", K(ret),
                  K(fork_database_arg.dst_database_name_));
       } else if (is_dst_db_exist) {
         // Currently, we do not support fork database to an existing database.
@@ -106,7 +102,7 @@ int ObDDLService::fork_database(
                        fork_database_arg.dst_database_name_.length(),
                        fork_database_arg.dst_database_name_.ptr());
         LOG_WARN("destination database already exists", "database_name",
-                 fork_database_arg.dst_database_name_, K(tenant_id), K(ret));
+                 fork_database_arg.dst_database_name_, K(ret));
       }
     }
 
@@ -116,45 +112,43 @@ int ObDDLService::fork_database(
 
       // Check if database has Routine (procedures/functions)
       ObArray<uint64_t> routine_ids;
-      if (OB_FAIL(schema_guard.get_routine_ids_in_database(
-              tenant_id, database_id, routine_ids))) {
+      if (OB_FAIL(schema_guard.get_routine_ids_in_database( database_id, routine_ids))) {
         LOG_WARN("failed to get routine ids in database", KR(ret),
-                 K(tenant_id), K(database_id));
+                 K(database_id));
       } else if (routine_ids.count() > 0) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "fork database containing routines (procedures/functions)");
         LOG_WARN("fork database with routines is not supported", K(ret),
-                 K(tenant_id), K(database_id), "routine_count", routine_ids.count());
+                 K(database_id), "routine_count", routine_ids.count());
       }
 
       // Check if database has Package
       ObArray<const ObSimplePackageSchema *> packages;
       if (OB_SUCC(ret)) {
         if (OB_FAIL(schema_guard.get_simple_package_schemas_in_database(
-                tenant_id, database_id, packages))) {
+                database_id, packages))) {
           LOG_WARN("failed to get package schemas in database", KR(ret),
-                   K(tenant_id), K(database_id));
+                   K(database_id));
         } else if (packages.count() > 0) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database containing packages");
           LOG_WARN("fork database with packages is not supported", K(ret),
-                   K(tenant_id), K(database_id), "package_count", packages.count());
+                   K(database_id), "package_count", packages.count());
         }
       }
 
       // Check if database has Trigger
       ObArray<uint64_t> trigger_ids;
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(schema_guard.get_trigger_ids_in_database(
-                tenant_id, database_id, trigger_ids))) {
+        if (OB_FAIL(schema_guard.get_trigger_ids_in_database(database_id, trigger_ids))) {
           LOG_WARN("failed to get trigger ids in database", KR(ret),
-                   K(tenant_id), K(database_id));
+                   K(database_id));
         } else if (trigger_ids.count() > 0) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database containing triggers");
           LOG_WARN("fork database with triggers is not supported", K(ret),
-                   K(tenant_id), K(database_id), "trigger_count", trigger_ids.count());
+                   K(database_id), "trigger_count", trigger_ids.count());
         }
       }
 
@@ -162,14 +156,14 @@ int ObDDLService::fork_database(
       ObArray<const ObSequenceSchema *> sequences;
       if (OB_SUCC(ret)) {
         if (OB_FAIL(schema_guard.get_sequence_schemas_in_database(
-                tenant_id, database_id, sequences))) {
+                database_id, sequences))) {
           LOG_WARN("failed to get sequence schemas in database", KR(ret),
-                   K(tenant_id), K(database_id));
+                   K(database_id));
         } else if (sequences.count() > 0) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database containing sequences");
           LOG_WARN("fork database with sequences is not supported", K(ret),
-                   K(tenant_id), K(database_id), "sequence_count", sequences.count());
+                   K(database_id), "sequence_count", sequences.count());
         }
       }
 
@@ -177,14 +171,14 @@ int ObDDLService::fork_database(
       ObArray<const ObSimpleOutlineSchema *> outlines;
       if (OB_SUCC(ret)) {
         if (OB_FAIL(schema_guard.get_simple_outline_schemas_in_database(
-                tenant_id, database_id, outlines))) {
+                database_id, outlines))) {
           LOG_WARN("failed to get outline schemas in database", KR(ret),
-                   K(tenant_id), K(database_id));
+                   K(database_id));
         } else if (outlines.count() > 0) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork database containing outlines");
           LOG_WARN("fork database with outlines is not supported", K(ret),
-                   K(tenant_id), K(database_id), "outline_count", outlines.count());
+                   K(database_id), "outline_count", outlines.count());
         }
       }
     }
@@ -192,10 +186,10 @@ int ObDDLService::fork_database(
     // Get all user tables in source database
     if (OB_SUCC(ret)) {
       if (OB_FAIL(schema_guard.get_table_schemas_in_database(
-              tenant_id, src_db_schema->get_database_id(),
+              src_db_schema->get_database_id(),
               src_db_table_schemas))) {
         LOG_WARN("failed to get table schemas in database", KR(ret),
-                 K(tenant_id), "database_id", src_db_schema->get_database_id());
+                 "database_id", src_db_schema->get_database_id());
       } else {
         // Filter user tables only and check for LOB aux tables
         for (int64_t i = 0; OB_SUCC(ret) && i < src_db_table_schemas.count();
@@ -214,7 +208,7 @@ int ObDDLService::fork_database(
           }
         }
         if (OB_SUCC(ret)) {
-          LOG_INFO("user tables in source database", K(tenant_id),
+          LOG_INFO("user tables in source database",
                    "database_name", src_db_schema->get_database_name(),
                    "total_table_count", src_db_table_schemas.count(),
                    "user_table_count", user_table_schemas.count());
@@ -243,8 +237,7 @@ int ObDDLService::fork_database(
                        K(fk_info.child_table_id_), K(fk_info.parent_table_id_));
             } else {
               const ObTableSchema *parent_table_schema = nullptr;
-              if (OB_FAIL(schema_guard.get_table_schema(
-                      tenant_id, fk_info.parent_table_id_, parent_table_schema))) {
+              if (OB_FAIL(schema_guard.get_table_schema( fk_info.parent_table_id_, parent_table_schema))) {
                 LOG_WARN("failed to get parent table schema", KR(ret),
                          K(fk_info.parent_table_id_));
               } else if (OB_ISNULL(parent_table_schema)) {
@@ -265,7 +258,7 @@ int ObDDLService::fork_database(
         }
       }
       if (OB_SUCC(ret)) {
-        LOG_INFO("intra-database foreign keys collected", K(tenant_id),
+        LOG_INFO("intra-database foreign keys collected",
                  "fk_count", intra_db_fk_infos.count());
       }
     }
@@ -273,9 +266,9 @@ int ObDDLService::fork_database(
     // Start transaction and create destination database.
     ObDatabaseSchema dst_db_schema;
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(trans.start(&get_sql_proxy(), tenant_id,
+      if (OB_FAIL(trans.start(&get_sql_proxy(), 
                               refreshed_schema_version))) {
-        LOG_WARN("start transaction failed", KR(ret), K(tenant_id),
+        LOG_WARN("start transaction failed", KR(ret),
                  K(refreshed_schema_version));
       } else if (OB_FAIL(dst_db_schema.assign(*src_db_schema))) {
         LOG_WARN("failed to assign database schema", KR(ret));
@@ -291,7 +284,7 @@ int ObDDLService::fork_database(
           LOG_WARN("failed to create destination database", KR(ret),
                    K(dst_db_schema));
         } else {
-          LOG_INFO("destination database created", K(tenant_id), "dst_db_id",
+          LOG_INFO("destination database created", "dst_db_id",
                    dst_db_schema.get_database_id(), "dst_db_name",
                    dst_db_schema.get_database_name());
         }
@@ -322,24 +315,23 @@ int ObDDLService::fork_database(
                    "table_id", table_schema->get_table_id());
         } else if (has_async_vec_index) {
           if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
-                         tenant_id, table_schema->get_table_id(),
+                         table_schema->get_table_id(),
                          transaction::tablelock::SHARE, lock_timeout_us, iconn))) {
             LOG_WARN("fail to lock source table for async index sync", KR(ret),
-                     K(tenant_id), "table_id", table_schema->get_table_id());
+                     "table_id", table_schema->get_table_id());
           } else {
             need_wait = true;
             LOG_INFO("locked source table for async index sync",
-                     K(tenant_id), "table_id", table_schema->get_table_id());
+                     "table_id", table_schema->get_table_id());
           }
         }
       }
       if (OB_SUCC(ret) && need_wait) {
         if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
-                       get_sql_proxy(), tenant_id, lock_timeout_us))) {
-          LOG_WARN("fail to wait change stream refresh", KR(ret), K(tenant_id));
+                       get_sql_proxy(), lock_timeout_us))) {
+          LOG_WARN("fail to wait change stream refresh", KR(ret));
         } else {
-          LOG_INFO("async index sync completed before fork database snapshot",
-                   K(tenant_id));
+          LOG_INFO("async index sync completed before fork database snapshot");
         }
       }
     }
@@ -349,9 +341,8 @@ int ObDDLService::fork_database(
     int64_t fork_snapshot_version = 0;
     if (OB_SUCC(ret)) {
       if (user_table_schemas.count() == 0) {
-        LOG_INFO("no user tables to fork", K(tenant_id), "src_database_name", fork_database_arg.src_database_name_);
-      } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(trans, schema_guard,
-                                                   tenant_id, user_table_schemas,
+        LOG_INFO("no user tables to fork", "src_database_name", fork_database_arg.src_database_name_);
+      } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(trans, schema_guard, user_table_schemas,
                                                    fork_snapshot_version))) {
         LOG_WARN("fail to obtain snapshot for all tables", K(ret),
                  "table_count", user_table_schemas.count());
@@ -359,7 +350,7 @@ int ObDDLService::fork_database(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid snapshot version", K(ret), K(fork_snapshot_version));
       } else {
-        LOG_INFO("fork database snapshot acquired for all tables", K(tenant_id),
+        LOG_INFO("fork database snapshot acquired for all tables",
                  K(fork_snapshot_version), "table_count", user_table_schemas.count());
       }
     }
@@ -386,8 +377,7 @@ int ObDDLService::fork_database(
         ObString empty_ddl_stmt_str;
         ObSArray<ObTableSchema> dst_table_schemas_for_table;
 
-        if (OB_FAIL(fork_single_table_in_trans_(
-                tenant_id, *src_table_schema, *src_db_schema, dst_db_schema,
+        if (OB_FAIL(fork_single_table_in_trans_(*src_table_schema, *src_db_schema, dst_db_schema,
                 src_table_schema->get_table_name_str(),
                 fork_snapshot_version, fork_database_arg.session_id_,
                 empty_ddl_stmt_str, schema_guard, trans, allocator,
@@ -406,9 +396,7 @@ int ObDDLService::fork_database(
 
     // Rebuild foreign keys before committing the transaction.
     if (OB_SUCC(ret) && need_fk_rebuild) {
-      if (OB_FAIL(rebuild_fk_in_trans_(
-              tenant_id,
-              user_table_schemas,
+      if (OB_FAIL(rebuild_fk_in_trans_(user_table_schemas,
               intra_db_fk_infos,
               table_id_map,
               all_dst_table_schemas,
@@ -432,8 +420,8 @@ int ObDDLService::fork_database(
 
     // Publish schema.
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(publish_schema(tenant_id))) {
-        LOG_WARN("publish_schema failed", KR(ret), K(tenant_id));
+      if (OB_FAIL(publish_schema())) {
+        LOG_WARN("publish_schema failed", KR(ret));
       }
     }
 
@@ -451,10 +439,11 @@ int ObDDLService::fork_database(
     // Set response - use the first task if available, otherwise use database
     // id.
     if (OB_SUCC(ret)) {
-      res.tenant_id_ = tenant_id;
+    
+      
       res.schema_id_ = dst_db_schema.get_database_id();
       res.task_id_ = task_records.count() > 0 ? task_records.at(0).task_id_ : 0;
-      LOG_INFO("fork database completed", K(tenant_id), "dst_db_id",
+      LOG_INFO("fork database completed", "dst_db_id",
                dst_db_schema.get_database_id(), "dst_db_name",
                dst_db_schema.get_database_name(), "forked_table_count",
                task_records.count(), "first_task_id", res.task_id_);
@@ -463,9 +452,7 @@ int ObDDLService::fork_database(
   return ret;
 }
 
-int ObDDLService::rebuild_fk_in_trans_(
-    const uint64_t tenant_id,
-    const common::ObIArray<const share::schema::ObTableSchema *> &user_table_schemas,
+int ObDDLService::rebuild_fk_in_trans_(const common::ObIArray<const share::schema::ObTableSchema *> &user_table_schemas,
     const common::ObIArray<share::schema::ObForeignKeyInfo> &intra_db_fk_infos,
     common::hash::ObHashMap<uint64_t, uint64_t> &table_id_map,
     const common::ObIArray<common::ObSArray<share::schema::ObTableSchema>> &all_dst_table_schemas,
@@ -555,9 +542,8 @@ int ObDDLService::rebuild_fk_in_trans_(
         // fetch_new_constraint_id only allocates a fresh ID when the input is OB_INVALID_ID;
         // if passed a non-OB_INVALID_ID value smaller than the current counter it returns
         // that value unchanged, causing a primary-key duplicate on __all_foreign_key.
-      } else if (OB_FAIL(schema_service->fetch_new_constraint_id(
-                     tenant_id, fk_info.foreign_key_id_))) {
-        LOG_WARN("failed to fetch new foreign key id", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(schema_service->fetch_new_constraint_id(fk_info.foreign_key_id_))) {
+        LOG_WARN("failed to fetch new foreign key id", KR(ret));
       } else if (OB_FAIL(table_id_map.get_refactored(fk_info.child_table_id_, fk_info.child_table_id_))) {
         LOG_WARN("failed to map child table id", KR(ret), K(fk_info.child_table_id_));
       } else {

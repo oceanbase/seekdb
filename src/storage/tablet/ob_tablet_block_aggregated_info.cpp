@@ -71,15 +71,15 @@ int ObBlockInfoSet::init(
       const int64_t shared_data_bucket_num)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(meta_block_info_set_.create(meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  if (OB_FAIL(meta_block_info_set_.create(meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create meta block id set", K(ret), K(meta_bucket_num));
-  } else if (OB_FAIL(data_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(data_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create data block id set", K(ret), K(data_bucket_num));
-  } else if (OB_FAIL(backup_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(backup_block_info_set_.create(data_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create quick_resotre_remote_block id set", K(ret), K(data_bucket_num));
-  } else if (OB_FAIL(shared_meta_block_info_set_.create(shared_meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode", MTL_ID()))) {
+  } else if (OB_FAIL(shared_meta_block_info_set_.create(shared_meta_bucket_num, "ObBlockInfoSet", "ObBlockSetNode"))) {
     LOG_WARN("fail to create shared meta block id set", K(ret), K(shared_meta_bucket_num));
-  } else if (OB_FAIL(clustered_data_block_info_map_.create(shared_data_bucket_num, "ObBlockInfoMap", "ObBlockMapNode", MTL_ID()))) {
+  } else if (OB_FAIL(clustered_data_block_info_map_.create(shared_data_bucket_num, "ObBlockInfoMap", "ObBlockMapNode"))) {
     LOG_WARN("fail to create shared data block id set", K(ret), K(shared_meta_bucket_num));
   }
   return ret;

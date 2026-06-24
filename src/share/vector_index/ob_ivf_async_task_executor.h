@@ -78,12 +78,11 @@ private:
   struct LoadTaskCallback final
   {
   public:
-    LoadTaskCallback(ObVecIndexAsyncTaskOption &task_opt, int64_t tenant_id, storage::ObLS &ls,
+    LoadTaskCallback(ObVecIndexAsyncTaskOption &task_opt, storage::ObLS &ls,
                      ObVecIndexTaskCtxArray &task_status_array,
                      ObSchemaGetterGuard &schema_guard, uint64_t &task_trace_base_num)
         : task_opt_(task_opt),
           trace_base_num_(0),
-          tenant_id_(tenant_id),
           ls_(&ls),
           task_status_array_(task_status_array),
           schema_guard_(schema_guard),
@@ -95,12 +94,12 @@ private:
     int operator()(IvfCacheMgrEntry &entry);
     int is_cache_mgr_deprecated(ObIvfCacheMgr &cache_mgr, bool &is_deprecated);
     int is_cache_writable(const ObIvfAuxTableInfo &table_info, int64_t idx, bool &is_writable);
-    TO_STRING_KV(K(task_opt_), K(trace_base_num_), K(tenant_id_), KP(ls_));
+    TO_STRING_KV(K(task_opt_), K(trace_base_num_), K(1UL), KP(ls_));
 
   public:
     ObVecIndexAsyncTaskOption &task_opt_;
     uint64_t trace_base_num_;
-    int64_t tenant_id_;
+    
     storage::ObLS *ls_;
     ObVecIndexTaskCtxArray &task_status_array_;
     ObSchemaGetterGuard &schema_guard_;

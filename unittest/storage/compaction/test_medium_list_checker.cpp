@@ -44,7 +44,6 @@ public:
   void set_basic_info(ObMediumCompactionInfo &medium_info, const int64_t compat_version)
   {
     medium_info.compaction_type_ = ObMediumCompactionInfo::MEDIUM_COMPACTION;
-    medium_info.tenant_id_ = MTL_ID();
     medium_info.data_version_ = 100;
     medium_info.cluster_id_ = INIT_CLUSTER_ID;
     medium_info.medium_compat_version_ = compat_version;

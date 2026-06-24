@@ -436,9 +436,7 @@ int ObMPStmtExecute::send_eof_packet_for_arraybinding(ObSQLSessionInfo &session_
   // only is_save_exception_ will use this func in prexecute protocol.
   flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = is_prexecute() && is_save_exception_
                                                         ? false : true;
-  if (!session_info.is_obproxy_mode()) {
-    flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_info.partition_hit().get_bool();
-  }
+  flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_info.partition_hit().get_bool();
   eofp.set_server_status(flags);
   OZ (response_packet(eofp, &session_info));
 
@@ -480,8 +478,7 @@ int ObMPStmtExecute::response_result_for_arraybinding(
                 dtc_params,
                 session_info,
                 arraybinding_columns_,
-                ctx_.schema_guard_,
-                session_info.get_effective_tenant_id());
+                ctx_.schema_guard_);
         OMPKRow rp(sm_row);
         OZ (response_packet(rp, &session_info));
       }
@@ -637,7 +634,7 @@ int ObMPStmtExecute::before_process()
     }
   }
   if (OB_FAIL(ret)) {
-    send_error_packet(ret, NULL, (void *)(ctx_.get_reroute_info()));
+    send_error_packet(ret, NULL);
     if (OB_ERR_PREPARE_STMT_CHECKSUM == ret) {
       force_disconnect();
       LOG_WARN("prepare stmt checksum error, disconnect connection", K(ret));
@@ -877,10 +874,9 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
   ObCollationType cs_conn = CS_TYPE_INVALID;
   ObCollationType cs_server = CS_TYPE_INVALID;
   share::schema::ObSchemaGetterGuard schema_guard;
-  const uint64_t tenant_id = session->get_effective_tenant_id();
-  session->set_proxy_version(get_proxy_version());
+  
 
-  if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(session->get_character_set_connection(charset))) {
     LOG_WARN("get charset for client failed", K(ret));
@@ -1432,7 +1428,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
         // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
         // May cause the client to hang waiting for a response.
         bool is_partition_hit = session.get_err_final_partition_hit(ret);
-        int err = send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info());
+        int err = send_error_packet(ret, NULL, is_partition_hit);
         if (OB_SUCCESS != err) {  // send error packet
           LOG_WARN("send error packet failed", K(ret), K(err));
         }
@@ -1593,8 +1589,7 @@ OB_NOINLINE int ObMPStmtExecute::process_retry(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   //create a temporary memory context to process retry, avoid memory bloat caused by retries
   lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(),
-      ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr(ObModIds::OB_SQL_EXECUTOR, ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(!lib::is_mini_mode() ? OB_MALLOC_BIG_BLOCK_SIZE
         : OB_MALLOC_MIDDLE_BLOCK_SIZE)
@@ -1627,10 +1622,9 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
     int64_t tenant_version = 0;
     int64_t sys_version = 0;
     retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
-    OZ (gctx_.schema_service_->get_tenant_schema_guard(session.get_effective_tenant_id(),
-                                                       schema_guard));
-    OZ (schema_guard.get_schema_version(session.get_effective_tenant_id(), tenant_version));
-    OZ (schema_guard.get_schema_version(OB_SYS_TENANT_ID, sys_version));
+    OZ (gctx_.schema_service_->get_tenant_schema_guard(schema_guard));
+    OZ (schema_guard.get_schema_version(tenant_version));
+    OZ (schema_guard.get_schema_version(sys_version));
     OX (ctx_.schema_guard_ = &schema_guard);
     OX (retry_ctrl_.set_tenant_local_schema_version(tenant_version));
     OX (retry_ctrl_.set_sys_local_schema_version(sys_version));
@@ -1773,17 +1767,12 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
     // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
     // observer will force refresh schema if local_schema_version < last_schema_version;
-    if (OB_FAIL(check_and_refresh_schema(session.get_login_tenant_id(),
-                                         session.get_effective_tenant_id()))) {
+    if (OB_FAIL(check_and_refresh_schema())) {
       LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (OB_FAIL(session.update_timezone_info())) {
       LOG_WARN("fail to update time zone info", K(ret));
     } else if (is_arraybinding_) {
       bool optimization_done = false;
-      if (ctx_.can_reroute_sql_) {
-        ctx_.can_reroute_sql_ = false;
-        LOG_INFO("arraybinding not support reroute sql.");
-      }
       ObSEArray<ObSavedException, 4> exception_array;
       if (OB_UNLIKELY(arraybinding_size_ <= 0)) {
         ret = OB_NOT_SUPPORTED;
@@ -1848,7 +1837,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
   do_after_process(session, async_resp_used);
 
   if (OB_FAIL(ret) && need_response_error && is_conn_valid()) {
-    send_error_packet(ret, NULL, (void *)(ctx_.get_reroute_info()));
+    send_error_packet(ret, NULL);
   }
 
   return ret;
@@ -1898,7 +1887,6 @@ int ObMPStmtExecute::process()
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
     session.set_thread_id(GETTID());
-    session.set_proxy_version(get_proxy_version());
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     int64_t packet_len = pkt.get_clen();
     const bool enable_flt = session.get_control_info().is_valid();
@@ -1911,16 +1899,16 @@ int ObMPStmtExecute::process()
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id),
-               K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
+               K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, ctx_.cur_sql_))) {
       LOG_WARN("fail to check and init retry info", K(ret), K(*cur_trace_id), K(ctx_.cur_sql_));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
       LOG_WARN("fail to get query timeout", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                session.get_effective_tenant_id(), tenant_version))) {
+                tenant_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                OB_SYS_TENANT_ID, sys_version))) {
+                sys_version))) {
       LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (!is_prexecute()
                && pkt.exist_trace_info()
@@ -1940,7 +1928,7 @@ int ObMPStmtExecute::process()
       LOG_WARN("failed to init flt extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
-      LOG_INFO("unit has been migrated, need deny new request", K(ret), K(MTL_ID()));
+      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
       LOG_WARN("fail to generate configuration string that can influence execution plan", K(ret));
     } else if (is_arraybinding_ && OB_FAIL(check_precondition_for_arraybinding(session))) {
@@ -2020,7 +2008,7 @@ int ObMPStmtExecute::process()
 
   if (OB_FAIL(ret) && is_conn_valid()) {
     if (need_response_error) {
-      send_error_packet(ret, NULL, (void *)(ctx_.get_reroute_info()));
+      send_error_packet(ret, NULL);
     }
     if (need_disconnect) {
       force_disconnect();
@@ -2061,7 +2049,7 @@ int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
   CK (OB_NOT_NULL(ctx_.session_info_->get_pl_engine()));
   if (OB_SUCC(ret) && OB_ISNULL(pl_type ))
   OZ (schema_checker.init(*ctx_.schema_guard_, ctx_.session_info_->get_server_sid()));
-  OZ (schema_checker.get_package_info(ctx_.session_info_->get_effective_tenant_id(),
+  OZ (schema_checker.get_package_info(
                                       type_info->relation_name_,
                                       type_info->package_name_,
                                       share::schema::PACKAGE_TYPE,
@@ -2071,7 +2059,7 @@ int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
   if (OB_SUCC(ret)) {
     pl::ObPLPackageManager &package_manager
       = ctx_.session_info_->get_pl_engine()->get_package_manager();
-    pl::ObPLPackageGuard package_guard(ctx_.session_info_->get_effective_tenant_id());
+    pl::ObPLPackageGuard package_guard{};
     pl::ObPLResolveCtx resolve_ctx(allocator,
                                    *(ctx_.session_info_),
                                    *(ctx_.schema_guard_),

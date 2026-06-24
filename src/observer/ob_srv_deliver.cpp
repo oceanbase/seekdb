@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_srv_deliver.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
 #include "lib/vtoa/ob_vtoa_util.h"
@@ -41,7 +42,6 @@ namespace observer
 {
 ObString extract_user_name(const ObString &in);
 int extract_user_tenant(const ObString &in, ObString &user_name, ObString &tenant_name);
-int extract_tenant_id(const ObString &tenant_name, uint64_t &tenant_id);
 }  // namespace observer
 int get_endpoint_tenant(char *endpoint_tenant_mapping_buf, const int64_t vid, const ObAddr &vaddr, ObString &tenant_name)
 {
@@ -236,29 +236,20 @@ int get_user_tenant(ObRequest &req, char *user_name_buf, char *tenant_name_buf)
   return ret;
 }
 
-static void set_sql_sock_mem_pool_tenant_id(ObRequest &req, int64_t tenant_id)
-{
-  if (req.get_nio_protocol() == ObRequest::TRANSPORT_PROTO_POC) {
-    obmysql::ObSqlSockSession* sess = (obmysql::ObSqlSockSession*)req.get_server_handle_context();
-    sess->pool_.set_tenant_id(tenant_id);
-  }
-}
-
 int dispatch_req(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = OB_SYS_TENANT_ID;
-  MTL_SWITCH(tenant_id) {
+  
+  MOD_SCOPE {
     ObTenant *tenant = static_cast<ObTenant *>(MTL_CTX());
     if (OB_ISNULL(tenant)) {
       ret = OB_TENANT_NOT_IN_SERVER;
-      LOG_WARN("tenant is NULL", K(ret), K(tenant_id));
+      LOG_WARN("tenant is NULL", K(ret));
     } else if (tenant->has_stopped()) {
       ret = OB_TENANT_NOT_IN_SERVER;
-      LOG_WARN("tenant is stopped", K(ret), K(tenant_id));
-    } else if (FALSE_IT(set_sql_sock_mem_pool_tenant_id(req, tenant_id))) {
+      LOG_WARN("tenant is stopped", K(ret));
     } else if (OB_FAIL(tenant->recv_request(req))) {
-      LOG_WARN("dispatch request fail", K(ret), K(tenant_id), K(req));
+      LOG_WARN("dispatch request fail", K(ret), K(req));
       if (OB_SIZE_OVERFLOW == ret) {
         LOG_DBA_ERROR_V2(OB_TENANT_REQUEST_QUEUE_FULL, ret,
           "deliver mysql request to tenant: ", tenant->id(), " queue failed, the queue is full. ",
@@ -267,7 +258,7 @@ int dispatch_req(ObRequest &req)
       }
     }
   } else {
-    LOG_WARN("cannot switch to tenant", K(ret), K(tenant_id));
+    LOG_WARN("cannot switch to tenant", K(ret));
   }
 
   return ret;
@@ -394,7 +385,6 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
       } else {
         char user_name_buf[OB_MAX_USER_NAME_BUF_LENGTH] = "";
         char tenant_name_buf[OB_MAX_TENANT_NAME_LENGTH + 1] = "";
-        uint64_t tenant_id = OB_INVALID_TENANT_ID;
         if (OB_FAIL(get_user_tenant(req, user_name_buf, tenant_name_buf))) {
           LOG_WARN("fail to get username and tenant name", K(ret), K(req));
         } else if (0 != STRLEN(user_name_buf)) {
@@ -407,20 +397,10 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           conn->user_name_buf_[STRLEN(user_name_buf)] = '\0';
           MEMCPY(conn->tenant_name_buf_, tenant_name_buf, STRLEN(tenant_name_buf));
           conn->tenant_name_buf_[STRLEN(tenant_name_buf)] = '\0';
-          ObString tenant_name(tenant_name_buf);
-          if (OB_FAIL(extract_tenant_id(tenant_name, tenant_id))) {
-            LOG_WARN("extract tenant_id fail", K(ret), K(tenant_name), K(tenant_id));
-            // ignore error and handle in ObMPConnect
-            ret = OB_SUCCESS;
-          } else {
-            conn->tenant_id_ = tenant_id;
-            conn->mysql_pkt_context_.set_tenant_id(tenant_id);
-            conn->proto20_pkt_context_.set_tenant_id(tenant_id);
-          }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(dispatch_req(req))) {
-            LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(tenant_id), K(req));
+            LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(req));
           }
         }
       }
@@ -433,17 +413,6 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
         EVENT_ADD(MYSQL_PACKET_IN_BYTES, pkt.get_clen() + OB_MYSQL_HEADER_LENGTH);
       }
       // The tenant check has been done in the recv_request method. For performance considerations, the check here is removed;
-      /*
-      const int64_t tenant_id = conn->tenant_id_;
-      if (NULL == gctx_.omt_) {
-        ret = OB_SERVER_IS_INIT;
-        LOG_ERROR("gctx is not valid", K(ret));
-      } else if (!gctx_.omt_->has_tenant(tenant_id)) {
-        ret = OB_TENANT_NOT_IN_SERVER;
-        LOG_WARN(
-            "receive mysql packet with tenant not in this server",
-            K(tenant_id), K(ret));
-      }*/
 
       if (OB_FAIL(ret)) {
             // do nothing

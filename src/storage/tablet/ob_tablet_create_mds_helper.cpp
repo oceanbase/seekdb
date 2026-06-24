@@ -15,6 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
 #include "storage/tablet/ob_tablet_create_replay_executor.h"
@@ -202,12 +203,12 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
   const ObTabletCreateThrottlingLevel level)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   int64_t tablet_cnt_per_gb = 20000; // default value
 
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (OB_UNLIKELY(!tenant_config.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get invalid tenant config", K(ret));
@@ -234,7 +235,7 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
 
     if (OB_UNLIKELY(cur_tablet_cnt + inc_tablet_cnt > max_tablet_cnt)) {
       ret = OB_TOO_MANY_PARTITIONS_ERROR;
-      LOG_WARN("too many partitions of tenant", K(ret), K(tenant_id), K(level), K(hard_memory_limit), K(tablet_cnt_per_gb),
+      LOG_WARN("too many partitions of tenant", K(ret), K(level), K(hard_memory_limit), K(tablet_cnt_per_gb),
           K(max_tablet_cnt), K(cur_tablet_cnt), K(inc_tablet_cnt));
     }
   }
@@ -432,7 +433,7 @@ int ObTabletCreateMdsHelper::check_pure_data_or_mixed_tablets_info(
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletMapKey key;
   key.ls_id_ = ls_id;
 
@@ -461,7 +462,7 @@ int ObTabletCreateMdsHelper::check_pure_aux_tablets_info(
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletMapKey key;
   key.ls_id_ = ls_id;
 
@@ -501,7 +502,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObTabletMapKey key;
   key.ls_id_ = ls_id;
 
@@ -1053,7 +1054,7 @@ int ObTabletCreateMdsHelper::rollback_remove_tablets(
 {
   MDS_TG(100_ms);
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   const share::SCN transfer_start_scn(share::SCN::min_scn());
@@ -1081,7 +1082,7 @@ int ObTabletCreateMdsHelper::get_ls(
     ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
 
   if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
     LOG_WARN("failed to get ls", K(ret), K(ls_id));

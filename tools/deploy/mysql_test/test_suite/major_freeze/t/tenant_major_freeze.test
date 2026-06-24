@@ -42,15 +42,6 @@ let $merge_stage = 0;
 
 ############################################################
 connection sys_conn;
-## invalid tenant name
---error 5160
-alter system major freeze tenant = xxx;
-## invalid tenant name
---error 5160
-alter system major freeze tenant = xxx, mysql;
-## invalid argument
---error 1210
-alter system major freeze tenant = '';
 --source mysql_test/include/check_merge_status.inc
 
 ############################################################

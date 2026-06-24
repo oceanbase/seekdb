@@ -1071,7 +1071,6 @@ struct ObUDFInfo
     udf_name_(),
     udf_package_(),
     udf_database_(),
-    dblink_name_(),
     param_names_(),
     param_exprs_(),
     udf_param_num_(0),
@@ -1119,7 +1118,6 @@ struct ObUDFInfo
   TO_STRING_KV(K_(udf_name),
                K_(udf_package),
                K_(udf_database),
-               K_(dblink_name),
                K_(param_names),
                K_(param_exprs),
                K_(udf_param_num),
@@ -1132,7 +1130,6 @@ struct ObUDFInfo
   common::ObString udf_name_;
   common::ObString udf_package_;
   common::ObString udf_database_;
-  common::ObString dblink_name_;
   common::ObArray<common::ObString> param_names_;
   common::ObArray<ObRawExpr*> param_exprs_;
 	int64_t	udf_param_num_;
@@ -1255,7 +1252,6 @@ public:
         database_name_(),
         tbl_name_(),
         col_name_(),
-        dblink_name_(),
         is_star_(false),
         ref_expr_(NULL),
         parents_expr_info_(),
@@ -1273,7 +1269,6 @@ public:
     database_name_ = other.database_name_;
     tbl_name_ = other.tbl_name_;
     col_name_ = other.col_name_;
-    dblink_name_ = other.dblink_name_;
     is_star_ = other.is_star_;
     ref_expr_ = other.ref_expr_;
     parents_expr_info_ = other.parents_expr_info_;
@@ -1321,12 +1316,6 @@ public:
     }
     return bret;
   }
-  inline bool is_dblink_udf() const
-  {
-    bool bret = !access_idents_.empty()
-        && access_idents_.at(access_idents_.count() - 1).is_pl_udf();
-    return bret && !dblink_name_.empty();
-  }
   inline bool is_udf_return_access() const
   {
     bool bret = !access_idents_.empty()
@@ -1367,7 +1356,6 @@ public:
   TO_STRING_KV(N_DATABASE_NAME, database_name_,
                N_TABLE_NAME, tbl_name_,
                N_COLUMN, col_name_,
-               K_(dblink_name),
                K_(is_star),
                K_(ref_expr),
                K_(parents_expr_info),
@@ -1381,7 +1369,6 @@ public:
   common::ObString database_name_;
   common::ObString tbl_name_; // When used for UDF, indicates package name
   common::ObString col_name_; // When used for UDF, indicates function name
-  common::ObString dblink_name_;
   bool is_star_;
   ObColumnRefRawExpr *ref_expr_;
   ObExprInfo parents_expr_info_;
@@ -2839,7 +2826,6 @@ public:
     ObConstRawExpr(),
     outer_expr_(NULL),
     is_onetime_(false),
-    ref_same_dblink_(false),
     exec_param_idx_(-1),
     eval_by_storage_(false)
   {
@@ -2850,7 +2836,6 @@ public:
     : ObConstRawExpr(alloc),
       outer_expr_(NULL),
       is_onetime_(false),
-      ref_same_dblink_(false),
       exec_param_idx_(-1),
       eval_by_storage_(false)
   {
@@ -2871,8 +2856,6 @@ public:
   ObRawExpr*& get_ref_expr() { return outer_expr_; }
 
   bool is_onetime() const { return is_onetime_; }
-  bool is_ref_same_dblink() const { return ref_same_dblink_; }
-  void set_ref_same_dblink(bool ref_same_dblink) { ref_same_dblink_ = ref_same_dblink; }
   bool is_eval_by_storage() const { return eval_by_storage_; }
   void set_eval_by_storage(bool eval_by_storage) { eval_by_storage_ = eval_by_storage; }
   int assign(const ObRawExpr &other) override;
@@ -2894,7 +2877,6 @@ private:
   // the refered expr in the outer stmt
   ObRawExpr *outer_expr_;
   bool is_onetime_;
-  bool ref_same_dblink_;
   int64_t exec_param_idx_; // used to print exec_param self index in explain
   bool eval_by_storage_;
 };
@@ -3930,7 +3912,6 @@ public:
   const share::schema::ObUDFMeta get_udf_meta() { return udf_meta_; }
 
   int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const;
-  const char *get_name_dblink(ObItemType expr_type) const;
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
                                             N_RESULT_TYPE, result_type_,
                                             N_EXPR_INFO, info_,
@@ -4074,11 +4055,6 @@ public:
   int64_t get_op_id() const { return extra_.operator_id_; }
   void set_mview_id(uint64_t mview_id) { extra_.mview_id_ = mview_id; }
   uint64_t get_mview_id() const { return extra_.mview_id_; }
-  virtual const common::ObString &get_dblink_name() const
-  {
-    static const ObString EMPTY_STR;
-    return EMPTY_STR;
-  }
   int get_type_demotion_name(char *buf, int64_t buf_len, int64_t &pos, ExplainType type) const;
 
   VIRTUAL_TO_STRING_KV_CHECK_STACK_OVERFLOW(N_ITEM_TYPE, type_,
@@ -4132,8 +4108,6 @@ private:
   common::ObString name_; // sequence object name
   common::ObString action_; // NEXTVAL or CURRVAL
   uint64_t sequence_id_; // this value is also wrapped as expr and put into the param of ObSysFunRawExpr
-  common::ObString dblink_name_;
-  uint64_t dblink_id_;
 };
 
 class ObNormalDllUdfRawExpr : public ObSysFunRawExpr
@@ -4390,9 +4364,7 @@ public:
       loc_(0),
       is_udt_cons_(false),
       params_name_(),
-      params_desc_v2_(),
-      dblink_name_(),
-      dblink_id_(common::OB_INVALID_ID) {
+      params_desc_v2_() {
     set_expr_class(EXPR_UDF);
     is_deterministic_ = false;
   }
@@ -4419,9 +4391,7 @@ public:
       loc_(0),
       is_udt_cons_(false),
       params_name_(),
-      params_desc_v2_(),
-      dblink_name_(),
-      dblink_id_(common::OB_INVALID_ID) {
+      params_desc_v2_() {
     set_expr_class(EXPR_UDF);
     is_deterministic_ = false;
   }
@@ -4588,8 +4558,6 @@ public:
                                             K_(is_udt_cons),
                                             K_(params_desc_v2),
                                             K_(params_type),
-                                            K_(dblink_name),
-                                            K_(dblink_id),
                                             N_CHILDREN, exprs_,
                                             K_(expr_hash));
 private:
@@ -4614,8 +4582,6 @@ private:
   bool is_udt_cons_;
   common::ObSEArray<common::ObString, 5, common::ModulePageAllocator, true> params_name_;
   common::ObSEArray<ObUDFParamDesc, 5, common::ModulePageAllocator, true> params_desc_v2_;
-  common::ObString dblink_name_;
-  uint64_t dblink_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObUDFRawExpr);
 };

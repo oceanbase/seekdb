@@ -29,8 +29,8 @@ class ObExpr;
 class ObPartitionStore
 {
 public:
-  ObPartitionStore(int64_t tenant_id, common::ObIAllocator &alloc)
-      : tenant_id_(tenant_id), alloc_this_from_(&alloc), row_store_(&alloc)
+  ObPartitionStore(common::ObIAllocator &alloc)
+      : alloc_this_from_(&alloc), row_store_(&alloc)
   {}
   virtual ~ObPartitionStore();
 
@@ -90,7 +90,6 @@ public:
   TO_STRING_KV(K(n_get_rows_), K(extra_size_));
 
 protected:
-  uint64_t tenant_id_;
   const common::ObIAllocator *alloc_this_from_;
   ObTempRowStore row_store_;
   ObTempRowStore::Iterator store_iter_;

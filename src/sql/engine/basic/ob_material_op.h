@@ -67,7 +67,7 @@ public:
   virtual int inner_get_next_batch(int64_t max_row_cnt) override;
   virtual int inner_close() override;
   virtual void destroy() override;
-  int init_material_impl(int64_t tenant_id, int64_t row_count);
+  int init_material_impl(int64_t row_count);
 
   int get_material_row_count(int64_t &count) const
   {

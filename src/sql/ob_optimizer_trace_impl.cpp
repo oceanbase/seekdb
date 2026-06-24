@@ -1005,8 +1005,8 @@ int ObOptimizerTraceImpl::trace_parameters()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session_info_)) {
-    int64_t tenant_id = session_info_->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       new_line();
       append("tenant config:");
@@ -1024,7 +1024,6 @@ int ObOptimizerTraceImpl::trace_session_info()
   if (OB_NOT_NULL(session_info_)) {
     ObSQLSessionInfo *session = session_info_;
     const common::ObAddr &client_addr = session->get_peer_addr();
-    common::ObAddr proxy_addr = session->get_proxy_addr();
     char trace_id[common::OB_MAX_TRACE_ID_BUFFER_SIZE];
     int64_t trace_len = session->get_current_trace_id().to_string(trace_id, sizeof(trace_id));
     char buf[1024];
@@ -1035,12 +1034,6 @@ int ObOptimizerTraceImpl::trace_session_info()
     } else if (OB_FAIL(client_addr.addr_to_buffer(buf, len, buf_len))) {
       LOG_WARN("failed to print addr", K(ret));
     } else if (OB_FAIL(append_key_value("Client Address", ObString(buf_len,buf)))) {
-      LOG_WARN("failed to append msg", K(ret));
-    } else if (OB_FAIL(new_line())) {
-      LOG_WARN("failed to append msg", K(ret));
-    } else if (OB_FAIL(proxy_addr.addr_to_buffer(buf, len, buf_len))) {
-      LOG_WARN("failed to print addr", K(ret));
-    } else if (OB_FAIL(append_key_value("Proxy Address", ObString(buf_len,buf)))) {
       LOG_WARN("failed to append msg", K(ret));
     } else if (OB_FAIL(new_line())) {
       LOG_WARN("failed to append msg", K(ret));

@@ -88,9 +88,9 @@ class ObTenantMdsService;
   namespace checkpoint {
     class ObCheckPointService;
     class ObTabletGCService;
+    class ObCheckpointDiagnoseMgr;
   }
   class ObLobManager;
-  class ObTenantRestoreInfoMgr;
   class ObTableScanIterator;
   class ObTenantCGReadInfoMgr;
   struct ObDDLMergeBucketLock;
@@ -102,10 +102,8 @@ class ObTenantMdsService;
 } // namespace storage
 
 namespace transaction {
-  class ObTenantWeakReadService; // tenant weak consistency read service
   class ObTransService;          // transaction service
   class ObTimestampService;
-  class ObStandbyTimestampService;
   class ObTimestampAccess;
   class ObTransIDService;
   class ObUniqueIDService;
@@ -156,7 +154,6 @@ namespace rootserver
 {
   class ObPrimaryMajorFreezeService;
   class ObRestoreMajorFreezeService;
-  class ObBackupTaskScheduler;
   class ObDBMSSchedService;
   class ObMViewMaintenanceService;
   class ObDDLScheduler;
@@ -231,7 +228,7 @@ namespace detector
 #define PublicBlockGCService
 #define StorageCachePolicyService
 // List the types of tenant-local variables that need to be added here, the tenant will create an instance for each type.
-// The initialization and destruction logic of the instance is specified by the MTL_BIND interface.
+// The lifecycle of each instance is driven by ObServer's explicit obs_* routines.
 // Use the MTL interface to obtain an instance.
 using ObPartTransCtxObjPool = common::ObServerObjectPool<transaction::ObPartTransCtx>;
 using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage::ObTableScanIterator>;
@@ -267,7 +264,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       observer::ObTenantMetaChecker*,                \
       observer::ObTabletTableUpdater*,               \
       storage::ObStorageHAHandlerService*,           \
-      rootserver::ObBackupTaskScheduler*,            \
       storage::ObTenantSSTableMergeInfoMgr*,         \
       share::ObDagWarningHistoryManager*,            \
       compaction::ObScheduleSuspectInfoMgr*,         \
@@ -277,7 +273,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       share::ObGlobalAutoIncService*,                \
       share::detector::ObDeadLockDetectorMgr*,       \
       transaction::ObTimestampService*,              \
-      transaction::ObStandbyTimestampService*,       \
       transaction::ObTimestampAccess*,               \
       transaction::ObTransIDService*,                \
       transaction::ObUniqueIDService*,               \
@@ -287,7 +282,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       sql::dtl::ObTenantDfc*,                        \
       omt::ObPxPools*,                               \
       lib::Worker::CompatMode,                       \
-      transaction::ObTenantWeakReadService*,         \
       sql::ObTenantSqlMemoryManager*,                \
       sql::dtl::ObDTLIntermResultManager*,           \
       sql::ObPlanMonitorNodeList*,                   \
@@ -334,7 +328,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       storage::ObGlobalIteratorPool*,                \
       common::ObRbMemMgr*,                           \
       share::ObPluginVectorIndexService*,            \
-      storage::ObTenantRestoreInfoMgr*,              \
       share::ObAutoSplitTaskCache*    ,              \
       observer::ObTenantQueryRespTimeCollector*,     \
       table::ObTableGroupCommitMgr*,                 \
@@ -348,8 +341,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       omt::ObTenantAiService*,                       \
       share::ObChangeStreamMgr*                        \
   )
-// Get tenant ID
-#define MTL_ID() (oceanbase::OB_SYS_TENANT_ID)
 // Get tenant epoch id
 #define MTL_EPOCH_ID() share::ObTenantEnv::get_tenant_local()->get_epoch()
 // tenant switchover epoch
@@ -358,11 +349,9 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
 // Get whether it is the primary tenant
 #define MTL_TENANT_ROLE_CACHE_IS_PRIMARY() share::ObTenantEnv::get_tenant()->is_primary_tenant()
 //Since the previous tenant was default as the primary database, this is a compatibility writing method
-#define MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID() share::ObTenantEnv::get_tenant()->is_primary_or_invalid_tenant()
 // Tenant role is initialized successfully, not invalid
 #define MTL_TENANT_ROLE_CACHE_IS_INVALID() share::ObTenantEnv::get_tenant()->is_invalid_tenant()
 // Is the tenant in the process of recovery
-#define MTL_TENANT_ROLE_CACHE_IS_RESTORE() share::ObTenantEnv::get_tenant()->is_restore_tenant()
 // Update tenant role
 #define MTL_SET_TENANT_ROLE_CACHE(tenant_role) share::ObTenantEnv::get_tenant()->set_tenant_role(tenant_role)
 // get tenant role
@@ -371,8 +360,8 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
 #define MTL_CTX() (share::ObTenantEnv::get_tenant())
 // Get tenant initialization parameters, used only during initialization
 #define MTL_INIT_CTX() (share::ObTenantEnv::get_tenant_local()->get_mtl_init_ctx())
-// Get tenant module to check tenant ID
-#define MTL_WITH_CHECK_TENANT(TYPE, tenant_id) share::ObTenantEnv::mtl<TYPE>(tenant_id)
+// Get tenant module (single sys tenant)
+#define MTL_WITH_CHECK(TYPE) ::oceanbase::share::mtl_checked<TYPE>()
 // Register thread pool dynamic change
 #define MTL_REGISTER_THREAD_DYNAMIC(factor, th) \
   share::ObTenantEnv::get_tenant() == nullptr ? OB_ERR_UNEXPECTED : share::ObTenantEnv::get_tenant()->register_module_thread_dynamic(factor, th)
@@ -386,14 +375,14 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
 #define MTL_SET_TENANT_PREPARE_GC_STATE() share::ObTenantEnv::get_tenant()->set_prepare_unit_gc()
 // Get tenant prepare gc status
 #define MTL_GET_TENANT_PREPARE_GC_STATE() share::ObTenantEnv::get_tenant()->is_prepare_unit_gc()
-// Note that the MTL_BIND call must be made before tenant creation, otherwise it will result in the bound functions not being callable during tenant creation.
-#define MTL_BIND2(NEW, INIT, START, STOP, WAIT, DESTROY) \
-  share::ObTenantBase::mtl_bind_func(NEW, INIT, START, STOP, WAIT, DESTROY);
+// Per-module bind + lifecycle iteration machinery removed. ObServer owns the modules
+// and brings them up via explicit ordered obs_construct/init/start/stop/wait/destroy
+// routines (omt/ob_multi_tenant.cpp). The slot below is now a transitional read-alias only.
 // Get the tenant-local instance
 //
 // Need to be used in conjunction with the tenant context to obtain the specified type of tenant local instance.
 // For example, MTL(ObPxPools*) can be used to obtain the current tenant's PX pool.
-#define MTL(TYPE) ::oceanbase::share::ObTenantEnv::mtl<TYPE>()
+// MTL(TYPE) read macro removed; low-layer code uses share::g_mp->xxx().
 // Helper function
 #define MTL_LIST(...) __VA_ARGS__
 
@@ -529,11 +518,11 @@ public:
   int register_module_thread_dynamic(double dynamic_factor, lib::Threads *th);
 
 public:
-  ObTenantBase(const uint64_t id, const int64_t epoch = 0, bool enable_tenant_ctx_check = false);
+  ObTenantBase(const int64_t epoch = 0, bool enable_tenant_ctx_check = false);
   ObTenantBase &operator=(const ObTenantBase &ctx);
   int init(ObCgroupCtrl *cgroup = nullptr);
   void destroy();
-  virtual inline uint64_t id() const override { return id_; }
+  virtual inline uint64_t id() const override { return 1; }
   OB_INLINE int64_t get_epoch() const { return epoch_; }
   ObCgroupCtrl *get_cgroup();
 
@@ -557,7 +546,6 @@ public:
     return share::is_primary_tenant(ATOMIC_LOAD(&tenant_role_value_));
   }
 
-  bool is_primary_or_invalid_tenant();
 
   bool is_restore_tenant()
   {
@@ -587,61 +575,15 @@ public:
   /// ObTenant to hook schema publish events (e.g., wake CSFetcher from IDLE).
   virtual void on_schema_publish() {}
 
-  template<class T>
-  T get() { return inner_get(Identity<T>()); }
-
-  template<class T>
-  void set(T v) { return inner_set(v); }
+  // Typed slot get<T>/set<T> removed (no slot storage anymore).
 
 private:
-  int create_mtl_module();
-  int init_mtl_module();
-  int start_mtl_module();
-  void stop_mtl_module();
-  void wait_mtl_module();
-  void destroy_mtl_module();
+  // Per-tenant module lifecycle (create/init/start/stop/wait/destroy_mtl_module)
+  // removed; ObServer owns the modules and drives them via explicit obs_* routines.
+  // The slot below survives only as a transitional read-alias for the not-yet-migrated
+  // MTL(T*) readers + the oblib get_di_container bridge (removed in the next wave).
 
-#define MEMBER(TYPE, IDX)                                       \
-public:                                                         \
-  typedef int (*new_m##IDX##_func_name)(TYPE &);                \
-  typedef int (*init_m##IDX##_func_name)(TYPE &);               \
-  typedef int (*start_m##IDX##_func_name)(TYPE &);              \
-  typedef void (*stop_m##IDX##_func_name)(TYPE &);              \
-  typedef void (*wait_m##IDX##_func_name)(TYPE &);              \
-  typedef void (*destroy_m##IDX##_func_name)(TYPE &);           \
-  static void mtl_bind_func(                                    \
-      new_m##IDX##_func_name new_func,                          \
-      init_m##IDX##_func_name init_func,                        \
-      start_m##IDX##_func_name start_func,                      \
-      stop_m##IDX##_func_name stop_func,                        \
-      wait_m##IDX##_func_name wait_func,                        \
-      destroy_m##IDX##_func_name destroy_func)                  \
-  {                                                             \
-    new_m##IDX##_func = new_func;                               \
-    init_m##IDX##_func = init_func;                             \
-    start_m##IDX##_func = start_func;                           \
-    stop_m##IDX##_func = stop_func;                             \
-    wait_m##IDX##_func = wait_func;                             \
-    destroy_m##IDX##_func = destroy_func;                       \
-  }                                                             \
-private:                                                        \
-TYPE inner_get(Identity<TYPE>)                                  \
-  {                                                             \
-    return m##IDX##_;                                           \
-  }                                                             \
-void inner_set(TYPE v)                                          \
-  {                                                             \
-    m##IDX##_ = v;                                              \
-  }                                                             \
-TYPE m##IDX##_;                                                 \
-static new_m##IDX##_func_name new_m##IDX##_func;                \
-static init_m##IDX##_func_name init_m##IDX##_func;              \
-static start_m##IDX##_func_name start_m##IDX##_func;            \
-static stop_m##IDX##_func_name stop_m##IDX##_func;              \
-static wait_m##IDX##_func_name wait_m##IDX##_func;              \
-static destroy_m##IDX##_func_name destroy_m##IDX##_func;
-
-  LST_DO2(MEMBER, (), MTL_MEMBERS);
+  // Per-tenant typed module slots removed (ObServer owns the modules).
 
 protected:
   virtual int unlock()
@@ -650,8 +592,6 @@ protected:
   }
 
 protected:
-  // tenant id
-  uint64_t id_;
   int64_t epoch_;
   bool inited_;
   bool created_;
@@ -681,13 +621,17 @@ private:
 };
 
 using ReleaseCbFunc = std::function<int ()>;
-extern int get_tenant_base_with_lock(uint64_t tenant_id, ObTenantBase *&ctx, ReleaseCbFunc &release_cb);
+extern int get_tenant_base_with_lock(ObTenantBase *&ctx, ReleaseCbFunc &release_cb);
 
 // g_tenant_ctx is a dummy to avoid nullptr deref before create_tenant_module().
 // Once g_tenant_ptr = this (after create_mtl_module), all MTL reads go directly
 // to the real ObTenant — no copies, no dual objects.
 extern ObTenantBase g_tenant_ctx;
 inline ObTenantBase *g_tenant_ptr = &g_tenant_ctx;
+// Non-tenant readiness flag, set true once the (single) sys tenant's MTL
+// modules are created. Replaces MTL_SWITCH's switch_to() readiness guard with a
+// de-tenanted run-once guard (MOD_SCOPE; readiness-by-construction).
+inline bool g_modules_ready = false;
 
 class ObTenantEnv
 {
@@ -701,20 +645,7 @@ public:
   {
     return g_tenant_ptr;
   }
-  template<class T>
-  static inline T mtl()
-  {
-    return get_tenant_local()->get<T>();
-  }
-  template<class T>
-  static inline T mtl(uint64_t tenant_id)
-  {
-    T obj = T();
-    if (tenant_id == MTL_ID()) {
-      obj = get_tenant_local()->get<T>();
-    }
-    return obj;
-  }
+  // ObTenantEnv::mtl<T> slot accessors removed (use share::g_mp->xxx()).
 };
 
 class ObTenantSwitchGuard
@@ -736,7 +667,7 @@ public:
   {
     release();
   }
-  int switch_to(uint64_t tenant_id, bool need_check_allow = true);
+  int switch_to(bool need_check_allow = true);
   int switch_to(ObTenantBase *ctx);
   void release();
   void reset()
@@ -763,16 +694,19 @@ inline ObTenantSwitchGuard _make_tenant_switch_guard()
 #define MAKE_TENANT_SWITCH_SCOPE_GUARD(guard) \
   share::ObTenantSwitchGuard guard = share::_make_tenant_switch_guard()
 
-#define MTL_SWITCH(tenant_id) \
-  for (share::ObTenantSwitchGuard g = share::_make_tenant_switch_guard(); g.loop_num_ == 0; g.loop_num_++) \
-    if (OB_SUCC(g.switch_to(tenant_id)))
+// De-tenanted run-once readiness guard (was MTL_SWITCH(tenant) -> switch_to).
+// Keeps the for-once structure so any break/continue in the body behaves exactly as
+// before; gates on the non-tenant g_modules_ready instead of a tenant switch.
+#define MOD_SCOPE \
+  for (int64_t _mod_loop = 0; _mod_loop == 0; ++_mod_loop) \
+    if (OB_LIKELY(::oceanbase::share::g_modules_ready))
 
   inline void *mtl_malloc(int64_t nbyte, const common::ObMemAttr &attr)
   {
     common::ObMemAttr inner_attr = attr;
-    if (OB_SERVER_TENANT_ID == inner_attr.tenant_id_ &&
+    if (true &&
         nullptr != MTL_CTX()) {
-      inner_attr.tenant_id_ = MTL_ID();
+      
     }
     return ob_malloc(nbyte, inner_attr);
   }
@@ -792,9 +726,9 @@ inline ObTenantSwitchGuard _make_tenant_switch_guard()
   inline void *mtl_malloc_align(int64_t alignment, int64_t nbyte, const common::ObMemAttr &attr)
   {
     common::ObMemAttr inner_attr = attr;
-    if (OB_SERVER_TENANT_ID == inner_attr.tenant_id_ &&
+    if (true &&
         nullptr != MTL_CTX()) {
-      inner_attr.tenant_id_ = MTL_ID();
+      
     }
     return ob_malloc_align(alignment, nbyte, inner_attr);
   }
@@ -835,18 +769,18 @@ inline ObTenantSwitchGuard _make_tenant_switch_guard()
 
 #define mtl_sop_borrow(type)                                                                                    \
   ({                                                                                                            \
-    type *iter = MTL(common::ObServerObjectPool<type>*)->borrow_object();                                       \
+    type *iter = ::oceanbase::share::mtl_obj_pool<type>()->borrow_object();                                       \
     (iter);                                                                                                     \
   })
 
 #define mtl_sop_return(type, ptr)                                                                               \
   do {                                                                                                          \
-    MTL(common::ObServerObjectPool<type>*)->return_object(ptr);                                                 \
+    ::oceanbase::share::mtl_obj_pool<type>()->return_object(ptr);                                                 \
   } while (false)
 
 #define mtl_sop_borrow_checked(type)                                                                                    \
   ({                                                                                                            \
-    type *iter = MTL(common::ObServerObjectPool<type>*)->borrow_object();                                       \
+    type *iter = ::oceanbase::share::mtl_obj_pool<type>()->borrow_object();                                       \
     if (OB_NOT_NULL(iter)) {                                                                                    \
       storage::ObStorageLeakChecker::get_instance().handle_hold(iter); \
     }                                                                                                           \
@@ -858,7 +792,7 @@ inline ObTenantSwitchGuard _make_tenant_switch_guard()
     if (OB_NOT_NULL(iter)) {                                                                                    \
       storage::ObStorageLeakChecker::get_instance().handle_reset(iter); \
     }                                                                                                           \
-    MTL(common::ObServerObjectPool<type>*)->return_object(iter);                                                 \
+    ::oceanbase::share::mtl_obj_pool<type>()->return_object(iter);                                                 \
   } while (false)
 
 } // end of namespace share

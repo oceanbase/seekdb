@@ -15,6 +15,7 @@
  */
 
 #include "storage/ddl/ob_ddl_tablet_context.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -110,7 +111,7 @@ int ObDDLSlice::init(const ObTabletID &tablet_id, const int64_t slice_idx, const
   } else if (OB_UNLIKELY(!tablet_id.is_valid() || slice_idx < 0 || column_group_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx), K(column_group_count));
-  } else if (OB_FAIL(chunk_queue_.init(queue_cap, "DDL_ChunkQueue", MTL_ID()))) {
+  } else if (OB_FAIL(chunk_queue_.init(queue_cap, "DDL_ChunkQueue"))) {
     LOG_WARN("init chunk queue failed", K(ret));
   } else if (OB_FAIL(remain_cg_blocks_.reserve(column_group_count))) {
     LOG_WARN("reserve remain cg blocks failed", K(ret), K(column_group_count));
@@ -221,7 +222,7 @@ int ObDDLSlice::get_remain_block(const int64_t cg_idx, ObRemainCgBlock &remain_b
 }
 
 ObDDLTabletContext::ObDDLTabletContext()
-  : is_inited_(false), arena_(ObMemAttr(MTL_ID(), "ddl_tblt_ctx")),
+  : is_inited_(false), arena_(ObMemAttr("ddl_tblt_ctx")),
     slice_count_(0), table_slice_offset_(0), scan_task_(nullptr),
     last_lob_id_(0), last_autoinc_val_(0), bucket_count_(0),
     macro_meta_store_mgr_(nullptr), vector_index_ctx_(nullptr)
@@ -276,7 +277,10 @@ int ObDDLTabletContext::init(
     ls_id_ = ls_id;
     tablet_id_ = tablet_id;
     bucket_count_ = ddl_thread_count * 2;
-    if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr(MTL_ID(), "tblt_slice_map")))) {
+    if (GCTX.is_shared_storage_mode() && OB_ISNULL(macro_meta_store_mgr_ = OB_NEW(ObMacroMetaStoreManager, ObMemAttr("mb_meta_mgr")))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory for macro meta manager failed", K(ret));
+    } else if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr("tblt_slice_map")))) {
       LOG_WARN("create slice map failed", K(ret), K(bucket_count_));
     } else if (OB_FAIL(bucket_lock_.init(bucket_count_))) {
       LOG_WARN("init bucket lock failed", K(ret), K(bucket_count_));
@@ -284,7 +288,7 @@ int ObDDLTabletContext::init(
       ObLSHandle ls_handle;
       ObTabletHandle tablet_handle;
       ObTabletBindingMdsUserData mds_data;
-      if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
+      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
         LOG_WARN("get ls failed", K(ret), K(ls_id));
       } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
         LOG_WARN("ddl get tablet failed", K(ret), K(ls_handle), K(tablet_id));
@@ -442,7 +446,7 @@ int ObDDLTabletContext::get_or_create_slice(const int64_t slice_idx, ObDDLSlice 
       ObStorageSchema *storage_schema = tablet_param_.with_cs_replica_ ?
                                         tablet_param_.cs_replica_storage_schema_ :
                                         tablet_param_.storage_schema_;
-      ObDDLSlice *tmp_slice = OB_NEW(ObDDLSlice, ObMemAttr(MTL_ID(), "dag_ddl_slice"));
+      ObDDLSlice *tmp_slice = OB_NEW(ObDDLSlice, ObMemAttr("dag_ddl_slice"));
       if (OB_ISNULL(tmp_slice)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));

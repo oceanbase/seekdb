@@ -15,6 +15,7 @@
  */
 
 #include "ob_partition_parallel_merge_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "ob_tablet_merge_ctx.h"
 #include "storage/compaction/ob_compaction_dag_ranker.h"
@@ -83,7 +84,7 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
   } else if (!merge_ctx.get_need_parallel_minor_merge()) {
     enable_parallel_minor_merge = false;
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       enable_parallel_minor_merge = tenant_config->_enable_parallel_minor_merge;
     }
@@ -92,7 +93,7 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
   if (OB_FAIL(ret)) {
   } else if (tablet_size <= 0
           || (!enable_parallel_minor_merge && !is_major_merge_type(merge_type))
-          || (is_mini_merge(merge_type) && ObTenantCompactionMemPool::NORMAL_MODE != MTL(ObTenantCompactionMemPool *)->get_memory_mode())) {
+          || (is_mini_merge(merge_type) && ObTenantCompactionMemPool::NORMAL_MODE != share::g_mp->tenant_compaction_mem_pool()->get_memory_mode())) {
     if (OB_FAIL(init_serial_merge())) {
       STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret), K(tablet_size), K(merge_ctx));
     }
@@ -304,7 +305,7 @@ int ObParallelMergeCtx::init_parallel_mini_merge(compaction::ObBasicTabletMergeC
 
 
     ObArray<ObStoreRange> store_ranges;
-    store_ranges.set_attr(lib::ObMemAttr(MTL_ID(), "TmpMiniRanges", ObCtxIds::MERGE_NORMAL_CTX_ID));
+    store_ranges.set_attr(lib::ObMemAttr("TmpMiniRanges", ObCtxIds::MERGE_NORMAL_CTX_ID));
 
     ObStoreRange input_range;
     input_range.set_whole_range();
@@ -423,7 +424,7 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
   int tmp_ret = OB_SUCCESS;
   int64_t dag_worker_limit = 0;
 
-  if (OB_TMP_FAIL(MTL(ObTenantDagScheduler *)->get_limit(prio, dag_worker_limit))) {
+  if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_limit(prio, dag_worker_limit))) {
     dag_worker_limit = ObCompactionEstimator::DEFAULT_MERGE_THREAD_CNT;
     STORAGE_LOG_RET(WARN, tmp_ret, "failed to get worker thread cnt, use dfault value", K(prio), K(dag_worker_limit));
   }
@@ -431,8 +432,8 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
 
   if (parallel_degree <= 2) {
     // do nothing
-  } else if (MTL(ObTenantTabletScheduler *)->enable_adaptive_merge_schedule()) {
-    int64_t tenant_free_mem_byte = lib::get_tenant_memory_remain(MTL_ID());
+  } else if (share::g_mp->tenant_tablet_scheduler()->enable_adaptive_merge_schedule()) {
+    int64_t tenant_free_mem_byte = lib::get_tenant_memory_remain();
     int64_t mem_allow_max_thread_cnt = tenant_free_mem_byte * ADAPTIVE_PERCENT / MAX(mem_per_thread, 1);
     if (mem_allow_max_thread_cnt < parallel_degree) {
       parallel_degree = MAX(parallel_degree / 2, 2); // fix the parallel degree

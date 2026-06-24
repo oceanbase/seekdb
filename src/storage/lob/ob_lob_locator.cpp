@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_lob_locator.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -34,7 +35,7 @@ ObLobLocatorHelper::ObLobLocatorHelper()
     tx_read_snapshot_(),
     fb_snapshot_(),
     rowid_objs_(),
-    locator_allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    locator_allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     rowkey_str_(),
     enable_locator_v2_(),
     is_inited_(false),
@@ -450,7 +451,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           share::ObLSID tmp_ls_id(ls_id_);
           ObLSHandle ls_handle;
           ObTabletHandle tablet_handle;
-          if (OB_FAIL(MTL(ObLSService *)->get_ls(tmp_ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+          if (OB_FAIL(share::g_mp->ls_service()->get_ls(tmp_ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
             LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
           } else if (OB_ISNULL(ls_handle.get_ls())) {
             ret = OB_ERR_UNEXPECTED;
@@ -503,7 +504,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           } 
         } else if ((!is_src_inrow) && is_dst_inrow) { //src outrow, load to inrow result
           OB_ASSERT(payload.length() >= sizeof(ObLobCommon));
-          storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+          storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
           ObString disk_loc_str;
           if (OB_FAIL(locator.get_disk_locator(disk_loc_str))) {
             STORAGE_LOG(WARN, "Lob: get disk locator failed", K(ret), K(column_id));
@@ -522,7 +523,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
 
             // read full data to new locator
             // use tmp allocator for read lob col instead of batch level allocator
-            ObArenaAllocator tmp_lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+            ObArenaAllocator tmp_lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObLobAccessParam param;
             param.tx_desc_ = NULL;
             param.ls_id_ = share::ObLSID(ls_id_);

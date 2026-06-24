@@ -120,11 +120,10 @@ public:
 class ObGlobalUniqueIndexCallback : public ObIUniqueCheckingCompleteCallback
 {
 public:
-  ObGlobalUniqueIndexCallback(const uint64_t tenant_id, const common::ObTabletID &tablet_id, const uint64_t index_id,
+  ObGlobalUniqueIndexCallback(const common::ObTabletID &tablet_id, const uint64_t index_id,
       const uint64_t data_table_id, const int64_t schema_version, const int64_t task_id);
   int operator()(const int ret_code) override;
 private:
-  uint64_t tenant_id_;
   common::ObTabletID tablet_id_;
   uint64_t index_id_;
   uint64_t data_table_id_;
@@ -143,15 +142,14 @@ struct ObUniqueCheckingParam final
 {
 public:
   ObUniqueCheckingParam():
-    is_inited_(false), tenant_id_(common::OB_INVALID_TENANT_ID), ls_id_(share::ObLSID::INVALID_LS_ID), tablet_id_(),
+    is_inited_(false), ls_id_(share::ObLSID::INVALID_LS_ID), tablet_id_(),
     is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK), 
     index_schema_(nullptr), data_table_schema_(nullptr), callback_(nullptr), execution_id_(0),
     snapshot_version_(0), task_id_(0), compat_mode_(lib::Worker::CompatMode::INVALID), user_parallelism_(0), 
-    concurrent_cnt_(0), ranges_(), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    concurrent_cnt_(0), ranges_(), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE)
     {}
   ~ObUniqueCheckingParam() { destroy(); }
-  int init(const uint64_t tenant_id,
-          const ObLSID &ls_id,
+  int init(const ObLSID &ls_id,
           const ObTabletID &tablet_id,
           const bool is_scan_index,
           const uint64_t index_table_id,
@@ -163,7 +161,7 @@ public:
   int prepare_task_ranges();
   bool is_valid() const
   {
-    return common::OB_INVALID_TENANT_ID != tenant_id_ && ls_id_.is_valid() && tablet_id_.is_valid() && snapshot_version_ > 0
+    return true && ls_id_.is_valid() && tablet_id_.is_valid() && snapshot_version_ > 0
     && schema_service_ != nullptr && compat_mode_ != lib::Worker::CompatMode::INVALID && execution_id_ >= 0 && task_id_ > 0 
     && user_parallelism_ > 0;
   }
@@ -174,7 +172,6 @@ public:
   void destroy()
   {
     is_inited_ = false;
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
     ls_id_.reset();
     tablet_id_.reset();
     is_scan_index_ = false;
@@ -194,12 +191,11 @@ public:
     concurrent_cnt_ = 0;
     ranges_.reset();
   }
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(ls_id), K_(tablet_id), K_(is_scan_index), KP_(index_schema),
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(tablet_id), K_(is_scan_index), KP_(index_schema),
     KP_(data_table_schema), K_(execution_id), K_(snapshot_version), K_(task_id), K_(compat_mode),
     K_(user_parallelism), K_(concurrent_cnt), K_(ranges));
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
   bool is_scan_index_;
@@ -254,7 +250,6 @@ public:
   ObUniqueCheckingDag();
   virtual ~ObUniqueCheckingDag() = default;
   int init(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
       const bool is_scan_index,
@@ -279,7 +274,7 @@ public:
   virtual uint64_t hash() const override;
   virtual bool operator ==(const share::ObIDag &other) const;
   common::ObTabletID get_tablet_id() const { return param_.tablet_id_; }
-  uint64_t get_tenant_id() const { return param_.tenant_id_; }
+  
   share::ObLSID get_ls_id() const { return param_.ls_id_; }
   virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override;
   virtual bool ignore_warning() override;

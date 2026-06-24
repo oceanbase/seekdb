@@ -90,7 +90,7 @@ int ObDirectLoadPartitionMergeTask::process()
     ObMacroDataSeq block_start_seq;
     ObArenaAllocator allocator("TLD_MergeExec");
     ObArray<ObDirectLoadIStoreRowIterator *> row_iters;
-    allocator.set_tenant_id(MTL_ID());
+    
     row_iters.set_block_allocator(ModulePageAllocator(allocator));
     ObDirectLoadMgrAgent ddl_agent;
     if (OB_FAIL(merge_param_->insert_table_ctx_->get_tablet_context(tablet_id, insert_tablet_ctx_))) {
@@ -219,7 +219,7 @@ int ObDirectLoadPartitionMergeTask::init_iterator(ObITabletSliceRowIterator *&ro
   } else {
     row_iterator = nullptr;
     ObDirectLoadDagInsertTableRowIterator *iter = nullptr;
-    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    ObMemAttr attr("TLD_SliceIter");
     if (OB_ISNULL(iter = OB_NEW(ObDirectLoadDagInsertTableRowIterator, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret));
@@ -370,7 +370,7 @@ int ObDirectLoadPartitionOriginDataUnrescanMergeTask::process()
     ObDirectLoadInsertTableBatchRowDirectWriter direct_writer;
     ObDirectLoadInsertTableRowInfo row_info;
     ObArenaAllocator allocator("TLD_UODMerge");
-    allocator.set_tenant_id(MTL_ID());
+    
     ObDirectLoadOriginTableScanner *row_iter = nullptr;
     if (OB_FAIL(origin_table_->scan(*range_, allocator, row_iter, false /*skip_read_lob*/))) {
       LOG_WARN("fail to scan origin table", KR(ret));

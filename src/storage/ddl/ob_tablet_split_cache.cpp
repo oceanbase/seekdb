@@ -27,18 +27,18 @@ namespace storage
 * ObTabletSplitCacheKey
 * */
 ObTabletSplitCacheKey::ObTabletSplitCacheKey()
-  : tenant_id_(OB_INVALID_TENANT_ID), tablet_id_(), bucket_id_(0)
+  : tablet_id_(), bucket_id_(0)
 {
 }
 
-ObTabletSplitCacheKey::ObTabletSplitCacheKey(const uint64_t tenant_id, const ObTabletID &tablet_id, const uint8_t bucket_id)
-  : tenant_id_(tenant_id), tablet_id_(tablet_id), bucket_id_(bucket_id)
+ObTabletSplitCacheKey::ObTabletSplitCacheKey(const ObTabletID &tablet_id, const uint8_t bucket_id)
+  : tablet_id_(tablet_id), bucket_id_(bucket_id)
 {
 }
 
 bool ObTabletSplitCacheKey::is_valid() const
 {
-  return tenant_id_ > 0 && tablet_id_.is_valid();
+  return tablet_id_.is_valid();
 }
 
 int ObTabletSplitCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
@@ -49,7 +49,7 @@ int ObTabletSplitCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid data", KR(ret), KPC(this), K(other_key));
   } else {
-    equal = (tenant_id_ == other_key.tenant_id_ && tablet_id_ == other_key.tablet_id_ && bucket_id_ == other_key.bucket_id_);
+    equal = (true && tablet_id_ == other_key.tablet_id_ && bucket_id_ == other_key.bucket_id_);
   }
   return ret;
 }
@@ -57,7 +57,6 @@ int ObTabletSplitCacheKey::equal(const ObIKVCacheKey &other, bool &equal) const
 int ObTabletSplitCacheKey::hash(uint64_t &hash_val) const
 {
   int ret = OB_SUCCESS;
-  hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
   hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
   hash_val = murmurhash(&bucket_id_, sizeof(bucket_id_), hash_val);
   return ret;
@@ -73,7 +72,7 @@ int ObTabletSplitCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCach
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid truncate info cache key", K(ret), K(*this));
   } else {
-    key = new (buf) ObTabletSplitCacheKey(tenant_id_, tablet_id_, bucket_id_);
+    key = new (buf) ObTabletSplitCacheKey(tablet_id_, bucket_id_);
   }
   return ret;
 }

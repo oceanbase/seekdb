@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_virtual_table_iterator_factory.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "observer/virtual_table/ob_tenant_all_tables.h"
 #include "observer/virtual_table/ob_tenant_show_catalog_databases.h"
@@ -80,16 +81,10 @@
 #include "observer/virtual_table/ob_all_virtual_memory_info.h"
 #include "observer/virtual_table/ob_all_virtual_raid_stat.h"
 #include "observer/virtual_table/ob_virtual_span_info.h"
-#include "observer/virtual_table/ob_all_virtual_proxy_schema.h"
-#include "observer/virtual_table/ob_virtual_proxy_sys_variable.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_sstable_macro_info.h"
 #include "observer/virtual_table/ob_virtual_sql_plan_monitor.h"
 #include "observer/virtual_table/ob_virtual_sql_monitor_statname.h"
 #include "observer/virtual_table/ob_tenant_virtual_concurrent_limit_sql.h"
-#include "observer/virtual_table/ob_all_virtual_proxy_partition_info.h"
-#include "observer/virtual_table/ob_all_virtual_proxy_partition.h"
-#include "observer/virtual_table/ob_all_virtual_proxy_sub_partition.h"
-#include "observer/virtual_table/ob_all_virtual_proxy_routine.h" // ObAllVirtualProxyRoutine
 #include "observer/virtual_table/ob_all_virtual_sys_task_status.h"
 #include "observer/virtual_table/ob_all_virtual_macro_block_marker_status.h"
 #include "observer/virtual_table/ob_all_virtual_lock_wait_stat.h"
@@ -98,13 +93,10 @@
 #include "observer/virtual_table/ob_all_virtual_server_object_pool.h"
 #include "observer/virtual_table/ob_all_virtual_io_stat.h"
 #include "observer/virtual_table/ob_all_virtual_bad_block_table.h"
-#include "observer/virtual_table/ob_agent_virtual_table.h"
-#include "observer/virtual_table/ob_iterate_virtual_table.h"
 #include "observer/virtual_table/ob_all_virtual_id_service.h"
 #include "observer/virtual_table/ob_all_virtual_timestamp_service.h"
 #include "rootserver/ob_root_service.h"
 #include "rootserver/virtual_table/ob_virtual_core_inner_table.h"
-#include "observer/virtual_table/ob_iterate_private_virtual_table.h" // ObIteratePrivateVirtualTable
 #include "observer/virtual_table/ob_tenant_virtual_charset.h"
 #include "observer/virtual_table/ob_tenant_virtual_collation.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_channel.h"
@@ -146,7 +138,6 @@
 #include "observer/virtual_table/ob_information_triggers_table.h"
 #include "observer/virtual_table/ob_show_create_trigger.h"
 #include "observer/virtual_table/ob_all_virtual_px_target_monitor.h"
-#include "observer/virtual_table/ob_all_virtual_dblink_info.h"
 #include "observer/virtual_table/ob_all_virtual_load_data_stat.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
 #include "observer/virtual_table/ob_all_virtual_log_stat.h"
@@ -157,14 +148,12 @@
 #include "observer/virtual_table/ob_all_virtual_server.h"
 #include "observer/virtual_table/ob_all_virtual_server_storage.h"
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
-#include "observer/virtual_table/ob_all_virtual_ls_archive_stat.h"
 #include "observer/virtual_table/ob_tenant_virtual_privilege.h"
 #include "observer/virtual_table/ob_all_virtual_kvcache_store_memblock.h"
 #include "observer/virtual_table/ob_information_query_response_time.h"
 #include "observer/virtual_table/ob_all_virtual_storage_leak_info.h"
 #include "observer/virtual_table/ob_all_virtual_schema_memory.h"
 #include "observer/virtual_table/ob_all_virtual_schema_slot.h"
-#include "observer/virtual_table/ob_all_virtual_archive_dest_status.h"
 #include "observer/virtual_table/ob_virtual_show_trace.h"
 #include "observer/virtual_table/ob_all_virtual_sql_plan.h"
 #include "observer/virtual_table/ob_all_virtual_mds_node_stat.h"
@@ -172,7 +161,6 @@
 #include "observer/virtual_table/ob_all_virtual_opt_stat_gather_monitor.h"
 #include "observer/virtual_table/ob_all_virtual_thread.h"
 #include "observer/virtual_table/ob_all_virtual_px_p2p_datahub.h"
-#include "observer/virtual_table/ob_all_virtual_ls_log_restore_status.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_buffer_info.h"
 #include "observer/virtual_table/ob_all_virtual_cgroup_config.h"
 #include "observer/virtual_table/ob_virtual_flt_config.h"
@@ -190,6 +178,7 @@
 #include "observer/virtual_table/ob_all_virtual_sql_stat.h"
 #include "observer/virtual_table/ob_all_virtual_vector_index_info.h"
 #include "observer/virtual_table/ob_all_virtual_tmp_file.h"
+#include "observer/virtual_table/ob_all_virtual_dml_stats.h"
 #include "observer/virtual_table/ob_all_virtual_log_transport_dest_stat.h"
 #include "observer/virtual_table/ob_all_virtual_plugin_info.h"
 #include "observer/virtual_table/ob_all_virtual_ddl_diagnose_info.h"
@@ -200,7 +189,6 @@
 #include "observer/virtual_table/ob_all_virtual_tenant_vector_mem_info.h"
 #include "observer/virtual_table/ob_all_virtual_ccl_status.h"
 #include "observer/virtual_table/ob_show_create_location.h"
-#include "observer/virtual_table/ob_all_virtual_external_location_list_file.h"
 
 namespace oceanbase
 {
@@ -229,7 +217,6 @@ namespace observer
           SERVER_LOG(WARN, "fail to set key ranges", K(ret), K(params));                \
       } else {                                                                          \
         vt_iter->set_session(session);                                                  \
-        vt_iter->set_effective_tenant_id(real_tenant_id);                               \
         vt_iter->set_schema_guard(&schema_guard);                                       \
         vt_iter->set_table_schema(table_schema);                                        \
         vt_iter->set_index_schema(index_schema);                                        \
@@ -307,7 +294,6 @@ int ObVirtualTableIteratorFactory::check_can_create_iter(common::ObVTableScanPar
 }
 
 int ObVTIterCreator::get_latest_expected_schema(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const int64_t table_version,
     ObSchemaGetterGuard &schema_guard,
@@ -320,8 +306,8 @@ int ObVTIterCreator::get_latest_expected_schema(
   // FIXME: ATTENTION!!! get_cluster_schema_guard() will be deprecated soon, don't use again.
   } else if (OB_FAIL(root_service_.get_schema_service().get_cluster_schema_guard(schema_guard))) {
     SERVER_LOG(WARN, "get schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, t_schema))) {
-    SERVER_LOG(WARN, "get table schema failed", K(tenant_id), K(table_id), K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, t_schema))) {
+    SERVER_LOG(WARN, "get table schema failed", K(table_id), K(ret));
   } else if(NULL == t_schema
             || OB_UNLIKELY(table_version != t_schema->get_schema_version())) {
     ret = OB_SCHEMA_ERROR;
@@ -373,12 +359,11 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
   ObSchemaGetterGuard &schema_guard = params.get_schema_guard();
   // We also support index on virtual table.
   uint64_t index_id = params.index_id_;
-  const uint64_t tenant_id = params.tenant_id_;
+  
   if (OB_UNLIKELY(OB_INVALID_ID == index_id)) {
      ret = OB_INVALID_ARGUMENT;
      SERVER_LOG(WARN, "invalid index_id", K(index_id), K(ret));
-  } else if (OB_FAIL(get_latest_expected_schema(tenant_id,
-                                                index_id,
+  } else if (OB_FAIL(get_latest_expected_schema(index_id,
                                                 params.schema_version_,
                                                 schema_guard,
                                                 index_schema))) {
@@ -393,7 +378,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
     if (index_schema->is_index_table()) {
       // access via index
       if (OB_FAIL(schema_guard.get_table_schema(
-                  index_schema->get_tenant_id(),
                   index_schema->get_data_table_id(),
                   table_schema))) {
         LOG_WARN("get data table schema failed", K(ret), K(index_id), K(index_schema->get_data_table_id()));
@@ -448,7 +432,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
         void *tmp_ptr = NULL;
         ObIAllocator &allocator = *params.scan_allocator_;
         ObSQLSessionInfo *session = params.op_->get_eval_ctx().exec_ctx_.get_my_session();
-        uint64_t real_tenant_id = session->get_effective_tenant_id();
 
         bool processed = false;
 
@@ -459,7 +442,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "fail to new", K(ret), K(pure_tid));
             } else {
               schema_privileges->set_allocator(&allocator);
-              schema_privileges->set_tenant_id(real_tenant_id);
+              
               schema_privileges->set_user_id(session->get_user_id());
               vt_iter = static_cast<ObVirtualTableIterator *>(schema_privileges);
             }
@@ -471,7 +454,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "fail to new", K(ret), K(pure_tid));
             } else {
               user_privileges->set_allocator(&allocator);
-              user_privileges->set_tenant_id(real_tenant_id);
+              
               user_privileges->set_user_id(session->get_user_id());
               vt_iter = static_cast<ObVirtualTableIterator *>(user_privileges);
             }
@@ -492,7 +475,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "fail to new", K(ret), K(pure_tid));
             } else {
               table_privileges->set_allocator(&allocator);
-              table_privileges->set_tenant_id(real_tenant_id);
+              
               table_privileges->set_user_id(session->get_user_id());
               vt_iter = static_cast<ObVirtualTableIterator *>(table_privileges);
             }
@@ -504,7 +487,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "fail to new", K(ret), K(pure_tid));
             } else {
               tenant_all_tables->set_allocator(&allocator);
-              tenant_all_tables->set_tenant_id(real_tenant_id);
+              
               tenant_all_tables->set_sql_proxy(GCTX.sql_proxy_);
               vt_iter = static_cast<ObVirtualTableIterator *>(tenant_all_tables);
             }
@@ -516,7 +499,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "fail to new", K(ret), K(pure_tid));
             } else {
               tenant_show_tables->set_allocator(&allocator);
-              tenant_show_tables->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(tenant_show_tables);
             }
             break;
@@ -527,44 +510,15 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               LOG_ERROR("fail to new", K(ret), K(pure_tid));
             } else {
               show_catalog_databases->set_allocator(&allocator);
-              show_catalog_databases->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(show_catalog_databases);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_PROXY_SCHEMA_TID: {
-            ObAllVirtualProxySchema *avps = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualProxySchema, avps))) {
-              SERVER_LOG(ERROR, "fail to new", KR(ret), K(pure_tid));
-            } else if (OB_FAIL(avps->init(
-                params.force_refresh_lc_,
-                root_service_.get_schema_service(),
-                GCTX.location_service_,
-                GCTX.sql_proxy_,
-                &allocator))) {
-              LOG_WARN("fail to init ObAllVirtualProxySchema", KR(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(avps);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_PROXY_ROUTINE_TID: {
-            ObAllVirtualProxyRoutine *proxy_routine = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualProxyRoutine, proxy_routine))) {
-              LOG_ERROR("ObAllVirtualProxyRoutine construct failed", KR(ret));
-            } else if (OB_FAIL(proxy_routine->init(
-                root_service_.get_schema_service(),
-                &allocator))) {
-              LOG_WARN("fail to init ObAllVirtualProxyRoutine", KR(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(proxy_routine);
             }
             break;
           }
           case OB_ALL_VIRTUAL_CORE_ALL_TABLE_TID: {
             ObVritualCoreInnerTable *core_all_table = NULL;
             const char *table_name = NULL;
-            if (OB_FAIL(ObSchemaUtils::get_all_table_name(real_tenant_id, table_name))) {
+            if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name))) {
               LOG_WARN("fail to get all table name", K(ret));
             } else if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_all_table))) {
               SERVER_LOG(ERROR, "ObCoreAllTable construct failed", K(ret));
@@ -818,7 +772,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           }
           case OB_ALL_VIRTUAL_TRANS_CTX_MGR_STAT_TID: {
             ObGVTxCtxMgrStat *gv_tx_ctx_mgr_stat = NULL;
-            transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+            transaction::ObTransService *txs = share::g_mp->trans_service();
             if (OB_UNLIKELY(NULL == txs)) {
               SERVER_LOG(WARN, "invalid argument", KP(txs));
               ret = OB_INVALID_ARGUMENT;
@@ -837,7 +791,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                 LOG_WARN("check is index failed", K(ret));
               } else if (is_index) {
                 SERVER_LOG(DEBUG,
-                            "scan __all_virtual_plan_cache_stat table using tenant_id",
+                            "scan __all_virtual_plan_cache_stat table",
                             K(pure_tid));
                 if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllPlanCacheStatI1, pcs))) {
                   LOG_WARN("new virtual table failed", K(ret));
@@ -906,42 +860,9 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PROXY_PARTITION_INFO_TID: {
-            ObAllVirtualProxyPartitionInfo *pi = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualProxyPartitionInfo, pi))) {
-              SERVER_LOG(ERROR, "fail to new", K(pure_tid), K(ret));
-            } else {
-              pi->set_schema_service(root_service_.get_schema_service());
-              pi->set_allocator(&allocator);
-              vt_iter = static_cast<ObVirtualTableIterator *>(pi);
-            }
-            break;
-          }
         END_CREATE_VT_ITER_SWITCH_LAMBDA
 
         BEGIN_CREATE_VT_ITER_SWITCH_LAMBDA
-          case OB_ALL_VIRTUAL_PROXY_PARTITION_TID: {
-            ObAllVirtualProxyPartition *pi = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualProxyPartition, pi))) {
-              SERVER_LOG(ERROR, "fail to new", K(pure_tid), K(ret));
-            } else {
-              pi->set_schema_service(root_service_.get_schema_service());
-              pi->set_allocator(&allocator);
-              vt_iter = static_cast<ObVirtualTableIterator *>(pi);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_PROXY_SUB_PARTITION_TID: {
-            ObAllVirtualProxySubPartition *pi = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualProxySubPartition, pi))) {
-              SERVER_LOG(ERROR, "fail to new", K(pure_tid), K(ret));
-            } else {
-              pi->set_schema_service(root_service_.get_schema_service());
-              pi->set_allocator(&allocator);
-              vt_iter = static_cast<ObVirtualTableIterator *>(pi);
-            }
-            break;
-          }
           case OB_TENANT_VIRTUAL_SESSION_VARIABLE_TID:
           {
             ObSessionVariables *session_variables = NULL;
@@ -949,7 +870,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "fail to new", K(ret), K(pure_tid));
             } else {
               const ObSysVariableSchema *sys_variable_schema = NULL;
-              if (OB_FAIL(schema_guard.get_sys_variable_schema(real_tenant_id, sys_variable_schema))) {
+              if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
                 SERVER_LOG(WARN, "get sys variable schema failed", K(ret));
               } else if (OB_ISNULL(sys_variable_schema)) {
                 ret = OB_TENANT_NOT_EXIST;
@@ -969,7 +890,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             } else {
               global_variables->set_sql_proxy(GCTX.sql_proxy_);
               const ObSysVariableSchema *sys_variable_schema = NULL;
-              if (OB_FAIL(schema_guard.get_sys_variable_schema(real_tenant_id, sys_variable_schema))) {
+              if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
                 SERVER_LOG(WARN, "get sys variable schema failed", K(ret));
               } else if (OB_ISNULL(sys_variable_schema)) {
                 ret = OB_TENANT_NOT_EXIST;
@@ -985,7 +906,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           {
             ObTableColumns *table_columns = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTableColumns, table_columns))) {
-              if (OB_FAIL(table_columns->init(real_tenant_id))) {
+              if (OB_FAIL(table_columns->init())) {
                 SERVER_LOG(WARN, "fail to init tenant_virtual_table_column", K(ret));
               } else {
                 vt_iter = static_cast<ObVirtualTableIterator *>(table_columns);
@@ -996,7 +917,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_TENANT_VIRTUAL_TABLE_INDEX_TID: {
             ObTableIndex *table_index = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTableIndex, table_index))) {
-              if (OB_FAIL(table_index->init(real_tenant_id))) {
+              if (OB_FAIL(table_index->init())) {
                 SERVER_LOG(WARN, "fail to init tenant_virtual_table_index", K(ret));
               } else {
                 vt_iter = static_cast<ObVirtualTableIterator *>(table_index);
@@ -1069,7 +990,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           {
             ObShowGrants *show_grants = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowGrants, show_grants))) {
-              show_grants->set_tenant_id(real_tenant_id);
+              
               show_grants->set_user_id(session->get_user_id());
               if (OB_FAIL(session->get_session_priv_info(show_grants->get_session_priv()))) {
                 SERVER_LOG(WARN, "fail to get session priv info", K(ret));
@@ -1086,7 +1007,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaSessionVariablesTable,
                                           session_variables))) {
               const ObSysVariableSchema *sys_variable_schema = NULL;
-              if (OB_FAIL(schema_guard.get_sys_variable_schema(real_tenant_id, sys_variable_schema))) {
+              if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
                 SERVER_LOG(WARN, "get sys variable schema failed", K(ret));
               } else if (OB_ISNULL(sys_variable_schema)) {
                 ret = OB_TENANT_NOT_EXIST;
@@ -1124,7 +1045,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObInfoSchemaReferentialConstraintsTable *referential_constraint = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaReferentialConstraintsTable,
                                           referential_constraint))) {
-              referential_constraint->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(referential_constraint);
             }
             break;
@@ -1133,7 +1054,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObInfoSchemaTableConstraintsTable *table_constraint = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaTableConstraintsTable,
                                           table_constraint))) {
-              table_constraint->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(table_constraint);
             }
             break;
@@ -1141,7 +1062,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_CHECK_CONSTRAINTS_OLD_TID: {
             ObInfoSchemaCheckConstraintsTable* check_constraint = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaCheckConstraintsTable, check_constraint))) {
-              check_constraint->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator*>(check_constraint);
             }
             break;
@@ -1153,20 +1074,13 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_TENANT_VIRTUAL_LIST_FILE_TID: {
-            ObAllVirtualExternalLocationListFile *listfile = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualExternalLocationListFile, listfile))) {
-              vt_iter = static_cast<ObVirtualTableIterator *>(listfile);
-            }
-            break;
-          }
         END_CREATE_VT_ITER_SWITCH_LAMBDA
 
         BEGIN_CREATE_VT_ITER_SWITCH_LAMBDA
           case OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID: {
             ObInfoSchemaColumnsTable *columns = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaColumnsTable, columns))) {
-              columns->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(columns);
             }
             break;
@@ -1192,7 +1106,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_TENANT_VIRTUAL_DATABASE_STATUS_TID: {
             ObShowDatabaseStatus *database_status = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowDatabaseStatus, database_status))) {
-              database_status->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(database_status);
             }
             break;
@@ -1200,7 +1114,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_TENANT_VIRTUAL_TENANT_STATUS_TID: {
             ObShowTenantStatus *tenant_status = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowTenantStatus, tenant_status))) {
-              tenant_status->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(tenant_status);
             }
             break;
@@ -1208,7 +1122,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_USER_TID: {
             ObMySQLUserTable *mysql_user_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObMySQLUserTable, mysql_user_table))) {
-              mysql_user_table->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(mysql_user_table);
             }
             break;
@@ -1216,7 +1130,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_DB_TID: {
             ObMySQLDBTable *mysql_db_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObMySQLDBTable, mysql_db_table))) {
-              mysql_db_table->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(mysql_db_table);
             }
             break;
@@ -1224,7 +1138,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_PROC_OLD_TID: {
             ObMySQLProcTable *mysql_proc_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObMySQLProcTable, mysql_proc_table))) {
-              mysql_proc_table->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(mysql_proc_table);
             }
             break;
@@ -1232,7 +1146,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_TRIGGERS_OLD_TID: {
             ObInfoSchemaTriggersTable *tg_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaTriggersTable, tg_table))) {
-              tg_table->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(tg_table);
             }
             break;
@@ -1240,7 +1154,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_PARAMETERS_OLD_TID: {
             ObInformationParametersTable *information_parameters_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInformationParametersTable, information_parameters_table))) {
-              information_parameters_table->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObInformationParametersTable *>(information_parameters_table);
             }
             break;
@@ -1248,7 +1162,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_PARTITIONS_OLD_TID: {
             ObInfoSchemaPartitionsTable *partitions_table = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaPartitionsTable, partitions_table))) {
-              partitions_table->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(partitions_table);
             }
             break;
@@ -1292,7 +1206,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObMemLeakCheckerInfo *leak_checker = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObMemLeakCheckerInfo, leak_checker))) {
               leak_checker->set_allocator(&allocator);
-              leak_checker->set_tenant_id(session->get_priv_tenant_id());
+              
               leak_checker->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(leak_checker);
             }
@@ -1443,19 +1357,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_ARCHIVE_STAT_TID: {
-            ObAllVirtualLSArchiveStat *ls_archive_stat = NULL;
-            omt::ObMultiTenant *omt = GCTX.omt_;
-            if (OB_UNLIKELY(NULL == omt)) {
-              ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "get tenant fail", K(ret));
-            } else if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualLSArchiveStat, ls_archive_stat, omt))) {
-              SERVER_LOG(ERROR, "ObAllVirtualLSArchiveStat construct fail", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(ls_archive_stat);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_HA_DIAGNOSE_TID: {
             ObAllVirtualHADiagnose *diagnose_info = NULL;
             omt::ObMultiTenant *omt = GCTX.omt_;
@@ -1480,17 +1381,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_PROXY_SYS_VARIABLE_TID: {
-            ObVirtualProxySysVariable *sys_variable = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualProxySysVariable, sys_variable))) {
-              SERVER_LOG(ERROR, "fail to new ObVirtualProxySysVariable", K(pure_tid), K(ret));
-            } else if (OB_FAIL(sys_variable->init(*GCTX.schema_service_, config_))) {
-              SERVER_LOG(WARN, "fail to init ObVirtualProxySysVariable", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(sys_variable);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID: {
             ObAllVirtualTabletSSTableMacroInfo *sstable_macro_info = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualTabletSSTableMacroInfo, sstable_macro_info))) {
@@ -1507,7 +1397,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObVirtualSqlPlanMonitor, plan_monitor))) {
               plan_monitor->set_allocator(&allocator);
               plan_monitor->set_addr(addr_);
-              // optimizer choose to use index i1('tenant_id', 'request_id') to scan
+              // optimizer choose to use index i1('tenant', 'request_id') to scan
               bool is_index = false;
               if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
                 LOG_WARN("check is index failed", K(ret));
@@ -1530,7 +1420,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_TENANT_VIRTUAL_OUTLINE_TID: {
             ObTenantVirtualOutline *outline = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTenantVirtualOutline, outline))) {
-              outline->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(outline);
             }
             break;
@@ -1538,7 +1428,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_TENANT_VIRTUAL_CONCURRENT_LIMIT_SQL_TID: {
             ObTenantVirtualConcurrentLimitSql *limit_sql = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTenantVirtualConcurrentLimitSql, limit_sql))) {
-              limit_sql->set_tenant_id(real_tenant_id);
+              
               vt_iter = static_cast<ObVirtualTableIterator *>(limit_sql);
             }
             break;
@@ -1584,17 +1474,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObAllVirtualLockWaitStat *lock_wait_stat = NULL;
             if (OB_SUCCESS == NEW_VIRTUAL_TABLE(ObAllVirtualLockWaitStat, lock_wait_stat)) {
               vt_iter = static_cast<ObVirtualTableIterator *>(lock_wait_stat);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_ARCHIVE_DEST_STATUS_TID: {
-            ObVirtualArchiveDestStatus *archive_dest_status = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualArchiveDestStatus, archive_dest_status))) {
-              SERVER_LOG(ERROR, "fail to new ObVirtualArchiveDestStatus", K(ret));
-            } else if (OB_FAIL(archive_dest_status->init(GCTX.sql_proxy_))) {
-              SERVER_LOG(ERROR, "fail to init ObVirtualArchiveDestStatus", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(archive_dest_status);
             }
             break;
           }
@@ -2080,18 +1959,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_DBLINK_INFO_TID: {
-            ObAllVirtualDblinkInfo *dblink_info = NULL;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualDblinkInfo, dblink_info))) {
-              SERVER_LOG(ERROR, "ObVirtual dblink info table failed", K(ret));
-            } else {
-              dblink_info->set_allocator(&allocator);
-              dblink_info->set_tenant_id(real_tenant_id);
-              OZ (dblink_info->set_addr(addr_));
-              OX (vt_iter = static_cast<ObAllVirtualDblinkInfo*>(dblink_info));
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_LOAD_DATA_STAT_TID: {
             ObAllVirtualLoadDataStat *load_data_stat = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualLoadDataStat, load_data_stat))) {
@@ -2189,18 +2056,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               opt_stats_gather_stat->set_allocator(&allocator);
               opt_stats_gather_stat->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(opt_stats_gather_stat);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_LS_LOG_RESTORE_STATUS_TID: {
-            ObVirtualLSLogRestoreStatus *ls_log_restore_status = NULL;
-            omt::ObMultiTenant *omt = GCTX.omt_;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVirtualLSLogRestoreStatus, ls_log_restore_status))) {
-              SERVER_LOG(ERROR, "failed to init ObVirtualLSLogRestoreStatus", K(ret));
-            } else if (OB_FAIL(ls_log_restore_status->init(omt))) {
-              SERVER_LOG(WARN, "fail to init ObVirtualLSLogRestoreStatus with omt", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(ls_log_restore_status);
             }
             break;
           }
@@ -2431,21 +2286,11 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           }
         END_CREATE_VT_ITER_SWITCH_LAMBDA
 
-#define AGENT_VIRTUAL_TABLE_CREATE_ITER
-#include "share/inner_table/ob_inner_table_schema_misc.ipp"
-#undef AGENT_VIRTUAL_TABLE_CREATE_ITER
-
-#define ITERATE_VIRTUAL_TABLE_CREATE_ITER
-#include "share/inner_table/ob_inner_table_schema_misc.ipp"
-#undef ITERATE_VIRTUAL_TABLE_CREATE_ITER
-
+// iterate / agent / iterate-private virtual table dispatch removed
+// (single-tenant: iterate VT mechanism deleted)
 #define SQLITE_VIRTUAL_TABLE_CREATE_ITER
 #include "share/inner_table/ob_inner_table_schema_misc.ipp"
 #undef SQLITE_VIRTUAL_TABLE_CREATE_ITER
-
-#define ITERATE_PRIVATE_VIRTUAL_TABLE_CREATE_ITER
-#include "share/inner_table/ob_inner_table_schema_misc.ipp"
-#undef ITERATE_PRIVATE_VIRTUAL_TABLE_CREATE_ITER
 
         if (OB_SUCC(ret) && !processed) {
           ret = OB_ERR_UNEXPECTED;
@@ -2475,12 +2320,11 @@ int ObVTIterCreator::check_can_create_iter(ObVTableScanParam &params)
   ObSchemaGetterGuard &schema_guard = params.get_schema_guard();
   // We also support index on virtual table.
   uint64_t index_id = params.index_id_;
-  const uint64_t tenant_id = params.tenant_id_;
+  
   if (OB_UNLIKELY(OB_INVALID_ID == index_id)) {
      ret = OB_INVALID_ARGUMENT;
      SERVER_LOG(WARN, "invalid index_id", K(index_id), K(ret));
-  } else if (OB_FAIL(get_latest_expected_schema(tenant_id,
-                                                index_id,
+  } else if (OB_FAIL(get_latest_expected_schema(index_id,
                                                 params.schema_version_,
                                                 schema_guard,
                                                 index_schema))) {
@@ -2491,7 +2335,6 @@ int ObVTIterCreator::check_can_create_iter(ObVTableScanParam &params)
     if (index_schema->is_index_table()) {
       // access via index
       if (OB_FAIL(schema_guard.get_table_schema(
-                  index_schema->get_tenant_id(),
                   index_schema->get_data_table_id(),
                   table_schema))) {
         LOG_WARN("get table schema failed", K(ret), K(index_id), K(index_schema->get_data_table_id()));

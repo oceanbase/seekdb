@@ -36,8 +36,8 @@ ObTruncatePartitionFilter::ObTruncatePartitionFilter()
     schema_rowkey_cnt_(-1),
     base_version_(-1),
     has_combined_to_pd_filter_(false),
-    filter_allocator_("TruncateFilter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-    truncate_info_allocator_("TruncateInfo", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    filter_allocator_("TruncateFilter", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    truncate_info_allocator_("TruncateInfo", OB_MALLOC_NORMAL_BLOCK_SIZE),
     filter_factory_(&filter_allocator_),
     mds_info_mgr_(),
     truncate_info_array_(),
@@ -52,7 +52,7 @@ ObTruncatePartitionFilter::ObTruncatePartitionFilter()
     outer_allocator_(nullptr),
     ref_column_idxs_()
 {
-  ref_column_idxs_.set_attr(ObMemAttr(MTL_ID(), "TruncateFilter"));
+  ref_column_idxs_.set_attr(ObMemAttr("TruncateFilter"));
 }
 
 ObTruncatePartitionFilter::~ObTruncatePartitionFilter()

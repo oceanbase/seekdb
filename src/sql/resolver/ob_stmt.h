@@ -467,8 +467,6 @@ public:
         // || stmt_type == stmt::T_CREATE_TRIGGER
         // || stmt_type == stmt::T_DROP_TRIGGER
         // || stmt_type == stmt::T_ALTER_TRIGGER
-        // || stmt_type == stmt::T_CREATE_DBLINK
-        // || stmt_type == stmt::T_DROP_DBLINK
 
         // keystore
         // || stmt_type == stmt::T_CREATE_KEYSTORE
@@ -515,7 +513,6 @@ public:
            || stmt_type == stmt::T_SHOW_CHARSET
            || stmt_type == stmt::T_SHOW_COLLATION
            || stmt_type == stmt::T_SHOW_STATUS
-           || stmt_type == stmt::T_SHOW_TENANT
            || stmt_type == stmt::T_SHOW_CREATE_TENANT
            || stmt_type == stmt::T_SHOW_TRACE
            || stmt_type == stmt::T_SHOW_ENGINES

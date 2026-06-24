@@ -209,8 +209,7 @@ struct LogFlashbackMsg {
   OB_UNIS_VERSION(1);
 public:
   LogFlashbackMsg();
-  LogFlashbackMsg(const uint64_t src_tenant_id,
-                  const common::ObAddr &src,
+  LogFlashbackMsg(const common::ObAddr &src,
                   const int64_t ls_id,
                   const int64_t mode_version,
                   const share::SCN &flashback_scn,
@@ -222,8 +221,8 @@ public:
   bool is_valid() const;
   void reset();
   bool is_flashback_req() const { return is_flashback_req_; }
-  TO_STRING_KV(K_(src_tenant_id), K_(src), K_(ls_id), K_(mode_version), K_(flashback_scn), K_(is_flashback_req));
-  uint64_t src_tenant_id_;
+  TO_STRING_KV(K_(src), K_(ls_id), K_(mode_version), K_(flashback_scn), K_(is_flashback_req));
+  
   common::ObAddr src_;
   int64_t ls_id_;
   int64_t mode_version_;
@@ -234,16 +233,14 @@ public:
 struct LogGetCkptReq {
   OB_UNIS_VERSION(1);
 public:
-  LogGetCkptReq(): src_(), tenant_id_(OB_INVALID_TENANT_ID), ls_id_() { }
+  LogGetCkptReq(): src_(), ls_id_() { }
   LogGetCkptReq(const common::ObAddr &src,
-                const uint64_t tenant_id,
                 const share::ObLSID &ls_id);
   ~LogGetCkptReq();
   bool is_valid() const;
   void reset();
-  TO_STRING_KV(K_(src), K_(tenant_id), K_(ls_id));
+  TO_STRING_KV(K_(src), K_(ls_id));
   common::ObAddr src_;
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
 };
 

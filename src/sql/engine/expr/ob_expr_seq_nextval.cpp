@@ -82,12 +82,12 @@ int ObExprSeqNextval::calc_sequence_nextval(const ObExpr &expr, ObEvalCtx &ctx, 
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     common::number::ObNumber num;
     ObNumStackOnceAlloc tmp_alloc;
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     int64_t seq_id = arg_datum->get_int();
     ObSequenceValue value;
-    if (OB_FAIL(session->get_sequence_value(tenant_id, seq_id, value))) {
+    if (OB_FAIL(session->get_sequence_value(seq_id, value))) {
       LOG_WARN("failed to get sequence value from session",
-               K(tenant_id), K(seq_id), K(ret));
+               K(seq_id), K(ret));
     } else if (OB_FAIL(num.from(value.val(), tmp_alloc))) {
       LOG_WARN("fail deep copy value", K(ret));
     } else {

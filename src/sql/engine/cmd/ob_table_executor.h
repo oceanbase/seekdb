@@ -183,15 +183,7 @@ private:
 
   int set_index_arg_list(ObExecContext &ctx, ObAlterTableStmt &stmt);
 
-  int refresh_schema_for_table(const uint64_t tenant_id);
-  int execute_alter_external_table(ObExecContext &ctx, ObAlterTableStmt &stmt);
-  static int get_external_file_list(
-    const ObString &location,
-    common::ObIArray<common::ObString> &file_urls,
-    common::ObIArray<int64_t> &file_sizes,
-    const common::ObString &access_info,
-    common::ObIAllocator &allocator,
-    common::ObStorageType &storage_type);
+  int refresh_schema_for_table();
   int populate_based_schema_obj_info_(obcall::ObAlterTableArg &alter_table_arg);
 
 private:
@@ -312,7 +304,6 @@ public:
   virtual ~ObOptimizeTenantExecutor() = default;
   int execute(ObExecContext &ctx, ObOptimizeTenantStmt &stmt);
   static int optimize_tenant(const obcall::ObOptimizeTenantArg &arg,
-      const uint64_t tenant_id,
       share::schema::ObMultiVersionSchemaService &schema_service);
 };
 

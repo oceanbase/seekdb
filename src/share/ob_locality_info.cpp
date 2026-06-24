@@ -24,13 +24,11 @@ namespace share
 {
 void ObLocalityZone::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   region_priority_ = UINT64_MAX;
 }
 
-int ObLocalityZone::init(const uint64_t tenant_id, const uint64_t region_priority)
+int ObLocalityZone::init(const uint64_t region_priority)
 {
-  tenant_id_ = tenant_id;
   region_priority_ = region_priority;
 
   return OB_SUCCESS;
@@ -38,7 +36,6 @@ int ObLocalityZone::init(const uint64_t tenant_id, const uint64_t region_priorit
 
 ObLocalityZone &ObLocalityZone::operator = (const ObLocalityZone &item)
 {
-  tenant_id_ = item.tenant_id_;
   region_priority_ = item.region_priority_;
   return *this;
 }
@@ -103,13 +100,13 @@ ObZoneType ObLocalityInfo::get_local_zone_type()
 }
 
 
-int ObLocalityInfo::get_locality_zone(const uint64_t tenant_id, ObLocalityZone &item)
+int ObLocalityInfo::get_locality_zone(ObLocalityZone &item)
 {
   int ret = OB_SUCCESS;
   int64_t i = 0;
   item.reset();
   for (i = 0;i < locality_zone_array_.count(); i++) {
-    if (locality_zone_array_.at(i).get_tenant_id() == tenant_id) {
+    {
       item = locality_zone_array_.at(i);
       break;
     }

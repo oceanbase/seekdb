@@ -260,8 +260,7 @@ int ObResolverUtils::collect_schema_version(share::schema::ObSchemaGetterGuard &
     uint64_t database_id = OB_INVALID_ID;
     CK (OB_NOT_NULL(udf_expr));
     if (OB_SUCC(ret) && udf_expr->need_add_dependency()) {
-      OZ (schema_guard.get_database_id(session_info->get_effective_tenant_id(),
-                                        (udf_expr->get_database_name().empty() || (0 == udf_expr->get_database_name().case_compare(OB_SYS_DATABASE_NAME)))
+      OZ (schema_guard.get_database_id((udf_expr->get_database_name().empty() || (0 == udf_expr->get_database_name().case_compare(OB_SYS_DATABASE_NAME)))
                                         ? session_info->get_database_name() : udf_expr->get_database_name(),
 					database_id));
       ObArray<ObSchemaObjVersion> vers;
@@ -718,7 +717,6 @@ int ObResolverUtils::check_routine_exists(ObSchemaChecker &schema_checker,
   exists = false;
   common::ObArray<const share::schema::ObIRoutineInfo *> routines;
   if (OB_FAIL(get_candidate_routines(schema_checker,
-                                     session_info.get_effective_tenant_id(),
                                      session_info.get_database_name(),
                                      db_name,
                                      package_name,
@@ -735,8 +733,7 @@ int ObResolverUtils::check_routine_exists(ObSchemaChecker &schema_checker,
   return ret;
 }
 
-int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
-  uint64_t tenant_id, const ObString &current_database, const ObString &db_name,
+int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, const ObString &current_database, const ObString &db_name,
   const ObString &package_name, const ObString &routine_name,
   const share::schema::ObRoutineType routine_type,
   common::ObIArray<const share::schema::ObIRoutineInfo *> &routines,
@@ -750,9 +747,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
   ObString object_name;
   ObString real_db_name;
   int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
-  if (OB_SYS_TENANT_ID != tenant_id) {
-    compatible_mode = COMPATIBLE_MYSQL_MODE;
-  } else {
+  {
     compatible_mode = COMPATIBLE_MYSQL_MODE;
   }
 
@@ -778,18 +773,18 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
   if (OB_FAIL(ret)) {                                                                         \
   } else if (ROUTINE_PROCEDURE_TYPE == routine_type) {                                        \
     if (OB_FAIL(schema_checker.get_standalone_procedure_info(                                 \
-          tenant_id, object_db_id, object_name, routine_info))) {                             \
+          object_db_id, object_name, routine_info))) {                             \
       LOG_WARN("failed to get procedure info",                                                \
-            K(ret), K(tenant_id), K(real_db_name), K(routine_name), K(object_name), K(ret));  \
+            K(ret), K(real_db_name), K(routine_name), K(object_name), K(ret));  \
     } else {                                                                                  \
       LOG_DEBUG("success get procedure info",                                                 \
-            K(ret), K(tenant_id), K(real_db_name), K(routine_name), K(object_name), K(ret));  \
+            K(ret), K(real_db_name), K(routine_name), K(object_name), K(ret));  \
     }                                                                                         \
   } else {                                                                                    \
     if (OB_FAIL(schema_checker.get_standalone_function_info(                                  \
-          tenant_id, object_db_id, object_name, routine_info))) {                             \
+          object_db_id, object_name, routine_info))) {                             \
       LOG_WARN("failed to get function info",                                                 \
-               K(ret), K(tenant_id), K(real_db_name), K(package_name), K(routine_name),       \
+               K(ret), K(real_db_name), K(package_name), K(routine_name),       \
                K(object_db_id), K(db_name), K(object_name), K(ret));                          \
     }                                                                                         \
   }                                                                                           \
@@ -802,7 +797,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
   } else if (package_name.empty()) { // must be standalone procedure/function.
     const share::schema::ObRoutineInfo *routine_info = NULL;
     bool need_try_synonym = false;
-    OZ (schema_checker.get_database_id(tenant_id, real_db_name, database_id));
+    OZ (schema_checker.get_database_id(real_db_name, database_id));
     OX (object_db_id = database_id);
     OX (object_name = routine_name);
     if (OB_SUCC(ret)) {
@@ -812,20 +807,20 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
       GET_STANDALONE_ROUTINE();
     }
   } else { // try package routines
-    OZ (schema_checker.get_database_id(tenant_id, real_db_name, database_id));
+    OZ (schema_checker.get_database_id(real_db_name, database_id));
     OX (object_db_id = database_id);
     OX (object_name = package_name);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_checker.get_package_id( // try user package now!
-          tenant_id, object_db_id, object_name, compatible_mode, package_id))
+          object_db_id, object_name, compatible_mode, package_id))
         || OB_INVALID_ID == package_id) {
       if (ObPLResolver::is_unrecoverable_error(ret)) {
         LOG_WARN("failed to get_package_id",
-                 K(ret), K(tenant_id), K(object_db_id), K(object_name), K(compatible_mode), K(package_id));
+                 K(ret), K(object_db_id), K(object_name), K(compatible_mode), K(package_id));
       }
     } else { // it`s user pacakge, get package routines
       OZ (schema_checker.get_package_routine_infos(
-        tenant_id, package_id, object_db_id, routine_name, routine_type, routines));
+        package_id, object_db_id, routine_name, routine_type, routines));
     }
     // try system package or udt
     if (OB_FAIL(ret) || OB_INVALID_ID == package_id) {
@@ -833,12 +828,11 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
         // do nothing
       } else { // mysql mode only has system package
         if (OB_FAIL(schema_checker.get_package_id( // try system pacakge
-            OB_SYS_TENANT_ID, OB_SYS_DATABASE_NAME, package_name, compatible_mode, package_id))
+            OB_SYS_DATABASE_NAME, package_name, compatible_mode, package_id))
             || OB_INVALID_ID == package_id) {
           LOG_WARN("failed to get package id", K(ret));
         } else {
-          OZ (schema_checker.get_package_routine_infos(OB_SYS_TENANT_ID,
-            package_id, OB_SYS_DATABASE_NAME, routine_name, routine_type, routines));
+          OZ (schema_checker.get_package_routine_infos(package_id, OB_SYS_DATABASE_NAME, routine_name, routine_type, routines));
         }
       }
       // get routine failed, print parameters for debug.
@@ -869,7 +863,7 @@ int ObResolverUtils::check_type_match(ObResolverParams &params,
                                       ObPLDataType &dst_pl_type)
 {
   int ret = OB_SUCCESS;
-  ObPLPackageGuard package_guard(params.session_info_->get_effective_tenant_id());
+  ObPLPackageGuard package_guard{};
   ObPLResolveCtx resolve_ctx(*(params.allocator_),
                              *(params.session_info_),
                              *(params.schema_checker_->get_schema_guard()),
@@ -1173,7 +1167,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
     OZ (match_info.match_info_.push_back(ObRoutineMatchInfo::MatchInfo()));
   }
 
-  OX (is_sys_package = (get_tenant_id_by_object_id(routine_info->get_package_id()) == OB_SYS_TENANT_ID));
+  OX (is_sys_package = (true));
 
   int64_t offset = 0;
   if (OB_FAIL(ret)) {
@@ -1508,7 +1502,6 @@ int ObResolverUtils::pick_routine(const pl::ObPLResolveCtx &resolve_ctx,
 
 int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
                                  ObResolverParams &params,
-                                 uint64_t tenant_id,
                                  const ObString &current_database,
                                  const ObString &db_name,
                                  const ObString &package_name,
@@ -1520,14 +1513,6 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
                                  ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-#define COPY_DBLINK_ROUTINE(dblink_routine) \
-  ObRoutineInfo *copy_routine = NULL; \
-  CK (OB_NOT_NULL(allocator)); \
-  OZ (ObSchemaUtils::alloc_schema(*allocator, \
-                                  *(static_cast<const ObRoutineInfo *>(dblink_routine)), \
-                                  copy_routine)); \
-  OX (routine = copy_routine);
-
   const ObRoutineInfo *tmp_routine_info = NULL;
   CK (OB_NOT_NULL(params.allocator_));
   CK (OB_NOT_NULL(params.session_info_));
@@ -1549,7 +1534,6 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
     resolve_ctx.params_.is_execute_call_stmt_ = params.is_execute_call_stmt_;
     if (dblink_name.empty()) {
       OZ (get_routine(resolve_ctx,
-                      tenant_id,
                       current_database,
                       db_name,
                       package_name,
@@ -1583,7 +1567,6 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
 }
 
 int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
-                                 uint64_t tenant_id,
                                  const ObString &current_database,
                                  const ObString &db_name,
                                  const ObString &package_name,
@@ -1600,7 +1583,6 @@ int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
   OZ (schema_checker.init(resolve_ctx.schema_guard_, resolve_ctx.session_info_.get_server_sid()));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_candidate_routines(schema_checker,
-                                     tenant_id,
                                      current_database,
                                      db_name,
                                      package_name,
@@ -1638,7 +1620,6 @@ int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
 
 //TODO(guangang.gg):consider invoker and definer semantics
 int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
-                                            uint64_t tenant_id,
                                             const ObString &current_database,
                                             const ParseNode &sp_access_name_node,
                                             ObString &db_name,
@@ -1687,10 +1668,10 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
           LOG_WARN("package_or_db_node is invalid", K(package_or_db_node));
         } else {
           package_or_db_name.assign_ptr(package_or_db_node->str_value_, static_cast<int32_t>(package_or_db_node->str_len_));
-          OZ (schema_checker.get_database_id(tenant_id, current_database, database_id));
+          OZ (schema_checker.get_database_id(current_database, database_id));
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (OB_SUCC(schema_checker.get_package_id(tenant_id, database_id,
+          } else if (OB_SUCC(schema_checker.get_package_id(database_id,
                                                             package_or_db_name,
                                                             COMPATIBLE_MYSQL_MODE,
                                                             package_id))) {
@@ -1700,10 +1681,10 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
           if (OB_FAIL(ret)) {
             // If package_or_db_name as package retrieval fails, then treat package_or_db_name as database to retrieve
             ret = OB_SUCCESS;
-            if (OB_FAIL(schema_checker.get_database_id(tenant_id, package_or_db_name, database_id))) {
+            if (OB_FAIL(schema_checker.get_database_id(package_or_db_name, database_id))) {
               int64_t old_ret = ret;
               if (OB_FAIL(schema_checker.get_package_id(
-                  OB_SYS_TENANT_ID, OB_SYS_DATABASE_ID,
+                  OB_SYS_DATABASE_ID,
                   package_or_db_name, COMPATIBLE_MYSQL_MODE, package_id))) {
                 ret = old_ret;
                 LOG_WARN("get database id failed", K(package_or_db_name), K(ret));
@@ -1999,7 +1980,6 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_HELP);
       SET_STMT_TYPE(T_SHOW_RECYCLEBIN);
       SET_STMT_TYPE(T_SHOW_PROFILE);
-      SET_STMT_TYPE(T_SHOW_TENANT);
       SET_STMT_TYPE(T_SHOW_SEQUENCES);
       SET_STMT_TYPE(T_SHOW_STATUS);
       SET_STMT_TYPE(T_SHOW_CREATE_TENANT);
@@ -2045,8 +2025,6 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_DROP_LOCATION);
       SET_STMT_TYPE(T_SHOW_LOCATIONS);
       SET_STMT_TYPE(T_SHOW_CREATE_LOCATION);
-      SET_STMT_TYPE(T_LOCATION_UTILS_LIST);
-      SET_STMT_TYPE(T_LOCATION_UTILS);
 #undef SET_STMT_TYPE
       case T_ROLLBACK:
       case T_COMMIT: {
@@ -4031,505 +4009,6 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
   return ret;
 }
 
-int ObResolverUtils::calc_file_column_idx(const ObString &column_name, uint64_t &file_column_idx)
-{
-  int ret = OB_SUCCESS;
-  if (column_name.case_compare(N_EXTERNAL_FILE_URL) == 0) {
-    file_column_idx = UINT64_MAX;
-  } else {
-    int32_t PREFIX_LEN = -1;
-    if (column_name.prefix_match_ci(N_PARTITION_LIST_COL)) {
-      PREFIX_LEN = str_length(N_PARTITION_LIST_COL);
-    } else if (column_name.prefix_match_ci(N_EXTERNAL_FILE_COLUMN_PREFIX)) {
-      PREFIX_LEN = str_length(N_EXTERNAL_FILE_COLUMN_PREFIX);
-    } else if (column_name.prefix_match_ci(N_EXTERNAL_TABLE_COLUMN_PREFIX)) {
-      PREFIX_LEN = str_length(N_EXTERNAL_TABLE_COLUMN_PREFIX);
-    } else if (column_name.prefix_match_ci(N_EXTERNAL_FILE_POS)) {
-      PREFIX_LEN = str_length(N_EXTERNAL_FILE_POS);
-    }
-    if (column_name.length() <= PREFIX_LEN) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      int err = 0;
-      file_column_idx = ObCharset::strntoull(column_name.ptr() + PREFIX_LEN, column_name.length() - PREFIX_LEN, 10, &err);
-      if (err != 0) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid file column name", K(column_name));
-      }
-    }
-  }
-  return ret;
-}
-
-ObRawExpr *ObResolverUtils::find_file_column_expr(ObIArray<ObRawExpr *> &pseudo_exprs,
-                                        int64_t table_id,
-                                        int64_t column_idx,
-                                        const ObString &expr_name)
-{
-  ObRawExpr *expr = nullptr;
-  for (int i = 0; i < pseudo_exprs.count(); ++i) {
-    ObPseudoColumnRawExpr *pseudo_expr = static_cast<ObPseudoColumnRawExpr *>(pseudo_exprs.at(i));
-    if (pseudo_expr->get_table_id() == table_id
-        && pseudo_expr->get_column_idx() == column_idx
-        && pseudo_expr->get_expr_name().prefix_match_ci(expr_name)) {
-      expr = pseudo_expr;
-      break;
-    }
-  }
-  return expr;
-}
-
-int ObResolverUtils::resolve_external_table_column_def(ObRawExprFactory &expr_factory,
-                                                       const ObSQLSessionInfo &session_info,
-                                                       const ObQualifiedName &q_name,
-                                                       ObIArray<ObRawExpr *> &real_exprs,
-                                                       ObRawExpr *&expr,
-                                                       const ObColumnSchemaV2 *gen_col_schema)
-{
-  int ret = OB_SUCCESS;
-  ObRawExpr *file_column_expr = nullptr;
-  uint64_t file_column_idx = UINT64_MAX;
-  if (!ObResolverUtils::is_external_pseudo_column_name(q_name.col_name_)) {
-    ret = OB_ERR_BAD_FIELD_ERROR;
-    ObString scope_name = "external file column";
-    LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, q_name.col_name_.length(), q_name.col_name_.ptr(),
-                   scope_name.length(), scope_name.ptr());
-  } else {
-    if (0 == q_name.col_name_.case_compare(N_EXTERNAL_FILE_URL)) {
-      if (nullptr == (file_column_expr = ObResolverUtils::find_file_column_expr(
-                               real_exprs, OB_INVALID_ID, UINT64_MAX, q_name.col_name_))) {
-        if (OB_FAIL(ObResolverUtils::build_file_column_expr_for_file_url(expr_factory, session_info,
-                                    OB_INVALID_ID, ObString(), q_name.col_name_, file_column_expr))) {
-          LOG_WARN("fail to build external table file column expr", K(ret));
-        }
-      }
-    } else if (q_name.col_name_.prefix_match_ci(N_PARTITION_LIST_COL)) {
-      if (OB_FAIL(ObResolverUtils::calc_file_column_idx(q_name.col_name_, file_column_idx))) {
-        LOG_WARN("fail to calc file column idx", K(ret));
-      } else if (nullptr == (file_column_expr = ObResolverUtils::find_file_column_expr(
-                               real_exprs, OB_INVALID_ID, file_column_idx, q_name.col_name_))) {
-        if (OB_FAIL(ObResolverUtils::build_file_column_expr_for_partition_list_col(expr_factory,
-                                            session_info, OB_INVALID_ID, ObString(),
-                                            q_name.col_name_, file_column_idx, file_column_expr, gen_col_schema))) {
-          LOG_WARN("fail to build external table file column expr", K(ret));
-        }
-      }
-    } else if (ObExternalFileFormat::CSV_FORMAT == ObResolverUtils::resolve_external_file_column_type(q_name.col_name_)) {
-      if (OB_FAIL(ObResolverUtils::calc_file_column_idx(q_name.col_name_, file_column_idx))) {
-        LOG_WARN("fail to calc file column idx", K(ret));
-      } else if (nullptr == (file_column_expr = ObResolverUtils::find_file_column_expr(
-                               real_exprs, OB_INVALID_ID, file_column_idx, q_name.col_name_))) {
-        ObExternalFileFormat temp_format;
-        temp_format.csv_format_.init_format(ObDataInFileStruct(), 0, CS_TYPE_UTF8MB4_BIN);
-        if (OB_FAIL(ObResolverUtils::build_file_column_expr_for_csv(expr_factory, session_info,
-                    OB_INVALID_ID, ObString(), q_name.col_name_, file_column_idx, file_column_expr, temp_format))) {
-          LOG_WARN("fail to build external table file column expr", K(ret));
-        }
-      }
-    } else if (ObExternalFileFormat::ODPS_FORMAT == ObResolverUtils::resolve_external_file_column_type(q_name.col_name_)) {
-      if (OB_FAIL(ObResolverUtils::calc_file_column_idx(q_name.col_name_, file_column_idx))) {
-        LOG_WARN("fail to calc file column idx", K(ret));
-      } else if (nullptr == (file_column_expr = ObResolverUtils::find_file_column_expr(
-                               real_exprs, OB_INVALID_ID, file_column_idx, q_name.col_name_))) {
-        if (OB_FAIL(ObResolverUtils::build_file_column_expr_for_odps(expr_factory, session_info,
-                    OB_INVALID_ID, ObString(), q_name.col_name_, file_column_idx, gen_col_schema, file_column_expr))) {
-          LOG_WARN("fail to build external table file column expr", K(ret));
-        }
-      }
-    } else {
-      if (OB_FAIL(ObResolverUtils::build_file_row_expr_for_parquet(expr_factory, session_info,
-                                                                   OB_INVALID_ID, ObString(),
-                                                                   q_name.col_name_, file_column_expr))) {
-        LOG_WARN("fail to build file column expr", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(real_exprs.push_back(file_column_expr))) {
-        LOG_WARN("fail to push back expr", K(ret));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObTransformUtils::replace_expr(q_name.ref_expr_, file_column_expr, expr))) {
-      LOG_WARN("fail replace expr", K(ret));
-    }
-  }
-  LOG_TRACE("resolve external table column ref", K(q_name.col_name_), KP(expr), KPC(expr));
-  return ret;
-}
-
-bool ObResolverUtils::is_external_pseudo_column_name(const ObString &name)
-{
-  return is_external_file_column_name(name)
-        || 0 == name.case_compare(N_EXTERNAL_FILE_URL)
-        || name.prefix_match_ci(N_PARTITION_LIST_COL);
-}
-
-bool ObResolverUtils::is_external_file_column_name(const ObString &name)
-{
-  ObExternalFileFormat::FormatType type = resolve_external_file_column_type(name);
-  return (type > ObExternalFileFormat::INVALID_FORMAT && type < ObExternalFileFormat::MAX_FORMAT);
-}
-
-ObExternalFileFormat::FormatType ObResolverUtils::resolve_external_file_column_type(const ObString &name)
-{
-  ObExternalFileFormat::FormatType type = ObExternalFileFormat::INVALID_FORMAT;
-  if (name.prefix_match_ci(N_EXTERNAL_FILE_COLUMN_PREFIX)) {
-    type = ObExternalFileFormat::CSV_FORMAT;
-  } else if (name.prefix_match_ci(N_EXTERNAL_TABLE_COLUMN_PREFIX)) {
-    type = ObExternalFileFormat::ODPS_FORMAT;
-  } else if (0 == name.case_compare(N_EXTERNAL_FILE_ROW) || name.prefix_match_ci(N_EXTERNAL_FILE_POS)) {
-    type = ObExternalFileFormat::PARQUET_FORMAT;
-  }
-  return type;
-}
-
-int ObResolverUtils::build_file_column_expr_for_parquet(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const ObString &table_name,
-    const ObString &column_name,
-    ObRawExpr *get_path_expr,
-    ObRawExpr *cast_expr,
-    const ObColumnSchemaV2 *generated_column,
-    bool is_index_by_pos,
-    uint64_t column_idx,
-    ObRawExpr *&expr)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *file_column_expr = nullptr;
-  ObRawExpr *path_expr = nullptr;
-
-  if (OB_FAIL(expr_factory.create_raw_expr(T_PSEUDO_EXTERNAL_FILE_COL, file_column_expr))) {
-    LOG_WARN("create nextval failed", K(ret));
-  } else if (OB_ISNULL(file_column_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else {
-    file_column_expr->set_expr_name(column_name);
-    file_column_expr->set_table_name(table_name);
-    file_column_expr->set_table_id(table_id);
-    file_column_expr->set_explicited_reference();
-
-    if (!is_index_by_pos &&
-        (OB_ISNULL(get_path_expr) || OB_ISNULL(path_expr = get_path_expr->get_param_expr(1)))) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    if (OB_SUCC(ret)) {
-      //get type
-      ObExprTypeCtx type_ctx; // used to pass session etc. global variables into calc_result_type
-      type_ctx.set_raw_expr(expr);
-      ObSQLUtils::init_type_ctx(&session_info, type_ctx);
-      if (OB_NOT_NULL(cast_expr)) {
-        bool enable_decimalint = false;
-        ObRawExprResType dst_type;
-        ObConstRawExpr *const_cast_type_expr = static_cast<ObConstRawExpr *>(cast_expr->get_param_expr(1));
-        if (!const_cast_type_expr->get_value().is_int()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support non-const expr", K(ret), KPC(const_cast_type_expr));
-        } else if (OB_FAIL(const_cast_type_expr->formalize(&session_info))) {
-          LOG_WARN("fail to formalize expr", K(ret));
-        } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(&session_info, enable_decimalint))) {
-          LOG_WARN("fail to check_enable_decimalint", K(ret));
-        } else {
-          ObExprResType param_type(const_cast_type_expr->get_result_type());
-          param_type.set_param(const_cast_type_expr->get_value());
-          if (OB_FAIL(ObExprCast::get_cast_type(enable_decimalint, param_type,
-                                                cast_expr->get_cast_mode(), type_ctx, dst_type))) {
-            LOG_WARN("get cast dest type failed", K(ret));
-          } else {
-            if (dst_type.is_string_or_lob_locator_type() || dst_type.is_enum_or_set()) {
-              // string data stored in parquet file as UTF8 format
-              dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-            }
-            file_column_expr->set_result_type(dst_type);
-          }
-        }
-      } else if (OB_NOT_NULL(generated_column)) {
-        ObColumnRefRawExpr *column_expr = nullptr;
-        if (OB_FAIL(ObRawExprUtils::build_column_expr(expr_factory, *generated_column, &session_info, column_expr))) {
-          LOG_WARN("failed to build column expr", K(ret));
-        } else {
-          file_column_expr->set_accuracy(column_expr->get_accuracy());
-          file_column_expr->set_data_type(column_expr->get_data_type());
-          file_column_expr->set_collation_type(column_expr->get_collation_type());
-          file_column_expr->set_collation_level(column_expr->get_collation_level());
-          if ((column_expr->get_result_type().is_string_or_lob_locator_type()
-               || column_expr->get_result_type().is_enum_or_set())
-              && ObCharset::charset_type_by_coll(column_expr->get_collation_type()) != CHARSET_UTF8MB4) {
-            // string data stored in parquet file as UTF8 format
-            file_column_expr->set_collation_type(CS_TYPE_UTF8MB4_BIN);
-          }
-          if (ob_is_enum_or_set_type(column_expr->get_data_type())
-              || ob_is_text_tc(column_expr->get_data_type())) {
-            if (ob_is_enum_or_set_type(column_expr->get_data_type())) {
-              file_column_expr->set_data_type(ObCharType);
-              file_column_expr->set_length(OB_MAX_MYSQL_VARCHAR_LENGTH);
-            } else {
-              file_column_expr->set_data_type(ObVarcharType);
-            }
-          }
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected arg", K(ret));
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (is_index_by_pos) {
-        file_column_expr->set_column_idx(column_idx);
-      } else {
-        //get path
-        if (OB_FAIL(path_expr->formalize(&session_info))) {
-          LOG_WARN("fail to formalize expr", K(ret));
-        } else if (!path_expr->is_static_const_expr()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support non-const expr", K(ret), KPC(path_expr));
-        } else {
-          ObConstRawExpr *const_path_expr = static_cast<ObConstRawExpr *>(path_expr);
-          if (!const_path_expr->get_value().is_string_type()) {
-            ret = OB_NOT_SUPPORTED;
-          } else {
-            file_column_expr->set_data_access_path(const_path_expr->get_value().get_string());
-          }
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(file_column_expr->formalize(&session_info))) {
-      LOG_WARN("failed to extract info", K(ret));
-    } else {
-      expr = file_column_expr;
-    }
-  }
-
-  return ret;
-}
-
-int ObResolverUtils::build_file_row_expr_for_parquet(
-    ObRawExprFactory &expr_factory,
-    const ObSQLSessionInfo &session_info,
-    const uint64_t table_id,
-    const ObString &table_name,
-    const ObString &column_name,
-    ObRawExpr *&expr)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *file_column_expr = nullptr;
-
-  if (OB_FAIL(expr_factory.create_raw_expr(T_PSEUDO_EXTERNAL_FILE_ROW, file_column_expr))) {
-    LOG_WARN("create nextval failed", K(ret));
-  } else if (OB_ISNULL(file_column_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else {
-    file_column_expr->set_expr_name(column_name);
-    file_column_expr->set_table_name(table_name);
-    file_column_expr->set_table_id(table_id);
-    file_column_expr->set_explicited_reference();
-    file_column_expr->set_data_type(ObVarcharType);
-    file_column_expr->set_collation_type(CS_TYPE_BINARY);
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(file_column_expr->formalize(&session_info))) {
-      LOG_WARN("failed to extract info", K(ret));
-    } else {
-      expr = file_column_expr;
-    }
-  }
-
-  return ret;
-}
-
-int ObResolverUtils::build_file_column_expr_for_odps(ObRawExprFactory &expr_factory,
-                                                    const ObSQLSessionInfo &session_info,
-                                                    const uint64_t table_id,
-                                                    const ObString &table_name,
-                                                    const ObString &column_name,
-                                                    int64_t column_idx,
-                                                    const ObColumnSchemaV2 *column_schema,
-                                                    ObRawExpr *&expr)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *file_column_expr = nullptr;
-  ObItemType type = T_PSEUDO_EXTERNAL_FILE_COL;
-  if (OB_ISNULL(column_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexcepted null ptr", K(ret));
-  } else if (OB_FAIL(expr_factory.create_raw_expr(type, file_column_expr))) {
-    LOG_WARN("create nextval failed", K(ret));
-  } else if (OB_ISNULL(file_column_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else {
-    file_column_expr->set_expr_name(column_name);
-    file_column_expr->set_table_name(table_name);
-    file_column_expr->set_table_id(table_id);
-    file_column_expr->set_explicited_reference();
-    file_column_expr->set_column_idx(column_idx);
-    if (column_schema->get_meta_type().is_json()) {
-      // if odps column type is json, we read it as string, then convert to json
-      common::ObObjMeta meta_type;
-      meta_type.set_type(ObObjType::ObVarcharType);
-      meta_type.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-      file_column_expr->set_meta_type(meta_type);
-    } else {
-      file_column_expr->set_meta_type(column_schema->get_meta_type());
-    }
-    file_column_expr->set_collation_level(CS_LEVEL_IMPLICIT);
-    file_column_expr->set_accuracy(column_schema->get_accuracy());
-    if (column_schema->is_collection()) {
-      uint16_t subschema_id = 0;
-      if (OB_FAIL(generate_subschema_id(const_cast<ObSQLSessionInfo&>(session_info),
-                                        column_schema->get_extended_type_info(),
-                                        subschema_id))) {
-        LOG_WARN("generate subschema id failed", K(ret));
-      } else {
-        file_column_expr->set_subschema_id(subschema_id);
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(file_column_expr->formalize(&session_info))) {
-      LOG_WARN("failed to extract info", K(ret));
-    } else {
-      expr = file_column_expr;
-    }
-  }
-
-  return ret;
-}
-
-int ObResolverUtils::build_file_column_expr_for_csv(ObRawExprFactory &expr_factory,
-                                                    const ObSQLSessionInfo &session_info,
-                                                    const uint64_t table_id,
-                                                    const ObString &table_name,
-                                                    const ObString &column_name,
-                                                    int64_t column_idx,
-                                                    ObRawExpr *&expr,
-                                                    const ObExternalFileFormat &format)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *file_column_expr = nullptr;
-  ObItemType type = T_PSEUDO_EXTERNAL_FILE_COL;
-
-  if (OB_FAIL(expr_factory.create_raw_expr(type, file_column_expr))) {
-    LOG_WARN("create nextval failed", K(ret));
-  } else if (OB_ISNULL(file_column_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else {
-    file_column_expr->set_expr_name(column_name);
-    file_column_expr->set_table_name(table_name);
-    file_column_expr->set_table_id(table_id);
-    file_column_expr->set_explicited_reference();
-    file_column_expr->set_column_idx(column_idx);
-
-    file_column_expr->set_data_type(ObVarcharType);
-    file_column_expr->set_collation_type(ObCharset::get_default_collation(format.csv_format_.cs_type_));
-    file_column_expr->set_collation_level(CS_LEVEL_IMPLICIT);
-    file_column_expr->set_length(OB_MAX_VARCHAR_LENGTH);
-    if (OB_FAIL(file_column_expr->formalize(&session_info))) {
-      LOG_WARN("failed to extract info", K(ret));
-    } else {
-      expr = file_column_expr;
-    }
-  }
-
-  return ret;
-}
-
-int ObResolverUtils::build_file_column_expr_for_partition_list_col(
-  ObRawExprFactory &expr_factory,
-  const ObSQLSessionInfo &session_info,
-  const uint64_t table_id,
-  const ObString &table_name,
-  const ObString &column_name,
-  int64_t column_idx,
-  ObRawExpr *&expr,
-  const ObColumnSchemaV2 *generated_column)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *file_column_expr = nullptr;
-  ObColumnRefRawExpr *column_expr = nullptr;
-  ObItemType type = T_PSEUDO_PARTITION_LIST_COL;
-
-  if (OB_FAIL(expr_factory.create_raw_expr(type, file_column_expr))) {
-    LOG_WARN("create nextval failed", K(ret));
-  } else if (OB_ISNULL(file_column_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else if (OB_ISNULL(generated_column)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("gen column schema is null", K(ret));
-  } else {
-    file_column_expr->set_expr_name(column_name);
-    file_column_expr->set_table_name(table_name);
-    file_column_expr->set_table_id(table_id);
-    file_column_expr->set_explicited_reference();
-    file_column_expr->set_column_idx(column_idx);
-
-    if (OB_FAIL(ObRawExprUtils::build_column_expr(expr_factory, *generated_column, &session_info, column_expr))) {
-      LOG_WARN("failed to build column expr", K(ret));
-    } else {
-      file_column_expr->set_accuracy(column_expr->get_accuracy());
-      file_column_expr->set_data_type(column_expr->get_data_type());
-      file_column_expr->set_collation_type(column_expr->get_collation_type());
-      file_column_expr->set_collation_level(column_expr->get_collation_level());
-      if (OB_FAIL(file_column_expr->formalize(&session_info))) {
-        LOG_WARN("failed to extract info", K(ret));
-      } else {
-        expr = file_column_expr;
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObResolverUtils::build_file_column_expr_for_file_url(
-  ObRawExprFactory &expr_factory,
-  const ObSQLSessionInfo &session_info,
-  const uint64_t table_id,
-  const ObString &table_name,
-  const ObString &column_name,
-  ObRawExpr *&expr)
-{
-  int ret = OB_SUCCESS;
-  ObPseudoColumnRawExpr *file_column_expr = nullptr;
-  ObItemType type = T_PSEUDO_EXTERNAL_FILE_URL;
-
-  if (OB_FAIL(expr_factory.create_raw_expr(type, file_column_expr))) {
-    LOG_WARN("create nextval failed", K(ret));
-  } else if (OB_ISNULL(file_column_expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else {
-    file_column_expr->set_expr_name(column_name);
-    file_column_expr->set_table_name(table_name);
-    file_column_expr->set_table_id(table_id);
-    file_column_expr->set_explicited_reference();
-    file_column_expr->set_column_idx(UINT64_MAX);
-
-    file_column_expr->set_data_type(ObVarcharType);
-    file_column_expr->set_collation_type(CS_TYPE_UTF8MB4_BIN);
-    file_column_expr->set_collation_level(CS_LEVEL_IMPLICIT);
-    file_column_expr->set_length(OB_MAX_VARCHAR_LENGTH);
-    if (OB_FAIL(file_column_expr->formalize(&session_info))) {
-      LOG_WARN("failed to extract info", K(ret));
-    } else {
-      expr = file_column_expr;
-    }
-  }
-
-  return ret;
-}
-
 int ObResolverUtils::generate_subschema_id(ObSQLSessionInfo &session_info,
                                            const common::ObIArray<common::ObString> &extended_type_info,
                                            uint16_t &subschema_id)
@@ -4592,21 +4071,7 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
     }
 
     if (OB_SUCC(ret)) {
-      if (tbl_schema.is_external_table()) {
-        // c1 int as( concat(file$col1, file$col2) )
-        // defination of external generated column can only contain file columns
-        if (NULL != col_schema) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "Refering a normal external table column");
-        } else if (OB_FAIL(ObResolverUtils::resolve_external_table_column_def(*params.expr_factory_,
-                                                                              *params.session_info_,
-                                                                              q_name,
-                                                                              real_exprs,
-                                                                              expr,
-                                                                              &generated_column))) {
-          LOG_WARN("fail to resolve external table column def", K(ret));
-        }
-      } else {
+      {
         if (NULL == col_schema || (col_schema->is_hidden())) {
           ret = OB_ERR_BAD_FIELD_ERROR;
           ObString scope_name = "generated column function";
@@ -5338,7 +4803,6 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
                                        const int is_oracle_mode /*always 0 (MySQL)*/,
                                        const bool is_for_pl_type,
                                        const ObSessionNLSParams &nls_session_param,
-                                       uint64_t tenant_id,
                                        const bool enable_decimal_int_type,
                                        const bool enable_mysql_compatible_dates,
                                        const bool convert_real_type_to_decimal /*false*/)
@@ -5953,7 +5417,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
       // Enumerate all index
       for (int64_t i = 0; OB_SUCC(ret) && !is_pk_uk_match && i < simple_index_infos.count(); ++i) {
         const ObTableSchema *index_table_schema = NULL;
-        if (OB_FAIL(schema_checker.get_table_schema(parent_table_schema.get_tenant_id(), simple_index_infos.at(i).table_id_, index_table_schema))) {
+        if (OB_FAIL(schema_checker.get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
           LOG_WARN("get_table_schema failed", K(ret), "table id", simple_index_infos.at(i).table_id_);
         } else if (OB_ISNULL(index_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -6622,16 +6086,14 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   if (udf_raw_expr.is_parallel_enable()) {
     //do nothing
   } else {
-    uint64_t tenant_id = session_info.get_effective_tenant_id();
+    
     bool enable_parallel = true;
     if (udf_raw_expr.get_is_udt_udf()) {
-      tenant_id = pl::get_tenant_id_by_object_id(udf_raw_expr.get_pkg_id());
-      OZ (schema_guard.get_routine_info_in_udt(tenant_id, udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
+      OZ (schema_guard.get_routine_info_in_udt( udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
     } else if (udf_raw_expr.get_pkg_id() != OB_INVALID_ID) {
-      tenant_id = pl::get_tenant_id_by_object_id(udf_raw_expr.get_pkg_id());
-      OZ (schema_guard.get_routine_info_in_package(tenant_id, udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
+      OZ (schema_guard.get_routine_info_in_package( udf_raw_expr.get_pkg_id(), udf_raw_expr.get_udf_id(), routine_info));
     } else {
-      OZ (schema_guard.get_routine_info(tenant_id,
+      OZ (schema_guard.get_routine_info(
                                         udf_raw_expr.get_udf_id(),
                                         routine_info));
       if (OB_FAIL(ret)) {
@@ -7547,7 +7009,7 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       }
     }
   }
-  if (OB_ERR_NO_PRIVILEGE == ret && OB_SYS_TENANT_ID == MTL_ID()) {
+  if (OB_ERR_NO_PRIVILEGE == ret) {
     char buf[DEFAULT_BUF_LENGTH] = { 0 };
     const int list_size = ARRAYSIZEOF(sys_tenant_white_list);
     for (int i = 0; OB_ERR_NO_PRIVILEGE == ret && i < list_size; i++) {
@@ -9021,10 +8483,10 @@ int ObResolverUtils::create_values_table_query(ObSQLSessionInfo *session_info,
   return ret;
 }
 
-int64_t ObResolverUtils::get_mysql_max_partition_num(const uint64_t tenant_id)
+int64_t ObResolverUtils::get_mysql_max_partition_num()
 {
   int64_t max_partition_num = OB_MAX_PARTITION_NUM_MYSQL;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     max_partition_num = tenant_config->max_partition_num;
   }
@@ -9039,37 +8501,6 @@ int ObResolverUtils::check_schema_valid_for_mview(const ObTableSchema &table_sch
     if (OB_ISNULL(column_schema = table_schema.get_column_schema_by_idx(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column schema is null", KR(ret));
-    }
-  }
-  return ret;
-}
-
-bool ObResolverUtils::is_external_pseudo_column(const ObRawExpr &expr)
-{
-  bool ret = false;
-  if (T_PSEUDO_EXTERNAL_FILE_COL == expr.get_expr_type()
-      || T_PSEUDO_EXTERNAL_FILE_URL == expr.get_expr_type()
-      || T_PSEUDO_EXTERNAL_FILE_ROW == expr.get_expr_type()) {
-    ret = true;
-  }
-  return ret;
-}
-
-int ObResolverUtils::cnt_external_pseudo_column(const ObRawExpr &expr, bool &contain)
-{
-  int ret = OB_SUCCESS;
-  contain = false;
-  if (is_external_pseudo_column(expr)) {
-    contain = true;
-  } else {
-    for (int64_t i = 0; !contain && i < expr.get_param_count(); i++) {
-      const ObRawExpr *child = expr.get_param_expr(i);
-      if (OB_ISNULL(child)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid child", K(child));
-      } else if (OB_FAIL(SMART_CALL(cnt_external_pseudo_column(*child, contain)))) {
-        LOG_WARN("failed to check if need to check col duplicate", K(ret));
-      }
     }
   }
   return ret;

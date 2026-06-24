@@ -58,7 +58,7 @@ int ObDumpTaskGenerator::generate_task_from_file()
   int ret = OB_SUCCESS;
   auto &mem_dump = ObMemoryDump::get_instance();
   ObArenaAllocator allocator;
-  ObMemAttr attr(common::OB_SERVER_TENANT_ID, "dumpParser", ObCtxIds::DEFAULT_CTX_ID);
+  ObMemAttr attr("dumpParser", ObCtxIds::DEFAULT_CTX_ID);
   allocator.set_attr(attr);
   ObParser parser(allocator, SMO_DEFAULT);
   ParseResult parse_result;
@@ -115,7 +115,7 @@ int ObDumpTaskGenerator::generate_task_from_file()
         // do-nothing
       } else if (CHUNK_OF_TENANT_CTX == node->value_) {
         task.dump_tenant_ctx_ = true;
-        task.tenant_id_ = node->children_[0]->value_;
+        
         uint64_t ctx_id = 0;
         if (!get_global_ctx_info().is_valid_ctx_name(node->children_[1]->str_value_, ctx_id)) {
           ret = OB_INVALID_ARGUMENT;
@@ -151,7 +151,7 @@ void ObDumpTaskGenerator::dump_memory_leak()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create new file failed", K(strerror(errno)));
   } else {
-    ObMemAttr attr(common::OB_SERVER_TENANT_ID, "dumpLeak", ObCtxIds::DEFAULT_CTX_ID);
+    ObMemAttr attr("dumpLeak", ObCtxIds::DEFAULT_CTX_ID);
     const int buf_len = 1L << 20;
     char *buf = (char*)ob_malloc(buf_len, attr);
     if (OB_ISNULL(buf)) {

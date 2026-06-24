@@ -53,7 +53,6 @@ public:
 protected:
   struct PartInfo
   {
-    uint64_t tenant_id_;
     uint64_t table_id_;
     ObTabletID tablet_id_;
     int64_t schema_version_;
@@ -72,8 +71,7 @@ protected:
     common::ObString external_location_;
     storage::ObStorageCachePolicyType part_storage_cache_policy_type_;
 
-    TO_STRING_KV(K_(tenant_id),
-                 K_(table_id),
+    TO_STRING_KV(K_(table_id),
                  K_(tablet_id),
                  K_(schema_version),
                  K_(status),
@@ -95,12 +93,10 @@ protected:
   virtual int convert_to_dml(const PartInfo &part_info, ObDMLSqlSplicer &dml) = 0;
   int gen_high_bound_val_str(const common::ObRowkey &high_bound_val,
                              common::ObString &high_bound_val_str,
-                             common::ObString &b_high_bound_val_str,
-                             uint64_t tenant_id);
+                             common::ObString &b_high_bound_val_str);
   int gen_list_val_str(const common::ObIArray<common::ObNewRow>& list_value,
                        common::ObString &list_val_str,
-                       common::ObString &b_list_val_str,
-                       uint64_t tenant_id);
+                       common::ObString &b_list_val_str);
   int gen_interval_part_name(int64_t part_id,
                              ObString &part_name);
 
@@ -195,30 +191,25 @@ private:
 class ObPartSqlHelper
 {
 public:
-  ObPartSqlHelper(common::ObISQLClient &sql_client, const uint64_t tenant_id)
+  ObPartSqlHelper(common::ObISQLClient &sql_client)
   : tables_(),
-    sql_client_(sql_client),
-    tenant_id_(tenant_id) {}
+    sql_client_(sql_client) {}
   int init(const ObPartitionSchema *table);
   int init(ObIArray<const ObPartitionSchema *> &tables);
   virtual ~ObPartSqlHelper() {}
 protected:
   virtual bool is_deleted() const = 0;
-  virtual int add_part_info_dml_column(const uint64_t exec_tenant_id,
-                                       const ObPartitionSchema *table,
+  virtual int add_part_info_dml_column(const ObPartitionSchema *table,
                                        ObDMLSqlSplicer &dml) = 0;
-  virtual int add_part_dml_column(const uint64_t exec_tenant_id,
-                                  const ObPartitionSchema *table,
+  virtual int add_part_dml_column(const ObPartitionSchema *table,
                                   const ObPartition &part,
                                   ObDMLSqlSplicer &dml) = 0;
-  virtual int add_subpart_dml_column(const uint64_t exec_tenant_id,
-                                     const ObPartitionSchema *table,
+  virtual int add_subpart_dml_column(const ObPartitionSchema *table,
                                      const int64_t part_id,
                                      const int64_t subpart_id,
                                      const ObSubPartition &subpart,
                                      ObDMLSqlSplicer &dml) = 0;
-  virtual int add_def_subpart_dml_column(const uint64_t exec_tenant_id,
-                                         const ObPartitionSchema *table,
+  virtual int add_def_subpart_dml_column(const ObPartitionSchema *table,
                                          const int64_t def_subpart_idx,
                                          const ObSubPartition &subpart,
                                          ObDMLSqlSplicer &dml) = 0;
@@ -262,36 +253,31 @@ protected:
   static const int64_t MAX_DML_NUM = 128;
   ObSEArray<const ObPartitionSchema *, 1> tables_;
   common::ObISQLClient &sql_client_;
-  const uint64_t tenant_id_;
 };
 
 // for create table
 class ObAddPartInfoHelper : public ObPartSqlHelper
 {
 public:
-  ObAddPartInfoHelper(common::ObISQLClient &sql_client, const uint64_t tenant_id)
-    : ObPartSqlHelper(sql_client, tenant_id),
+  ObAddPartInfoHelper(common::ObISQLClient &sql_client)
+    : ObPartSqlHelper(sql_client),
       high_bound_val_(NULL), list_val_(NULL), allocator_() {
   }
   virtual ~ObAddPartInfoHelper() {}
   int add_partition_info();
 protected:
   bool is_deleted() const { return false; }
-  int add_part_info_dml_column(const uint64_t exec_tenant_id,
-                               const ObPartitionSchema *table,
+  int add_part_info_dml_column(const ObPartitionSchema *table,
                                ObDMLSqlSplicer &dml);
-  int add_part_dml_column(const uint64_t exec_tenant_id,
-                          const ObPartitionSchema *table,
+  int add_part_dml_column(const ObPartitionSchema *table,
                           const ObPartition &part,
                           ObDMLSqlSplicer &dml);
-  int add_subpart_dml_column(const uint64_t exec_tenant_id,
-                             const ObPartitionSchema *table,
+  int add_subpart_dml_column(const ObPartitionSchema *table,
                              const int64_t part_id,
                              const int64_t subpart_id,
                              const ObSubPartition &subpart,
                              ObDMLSqlSplicer &dml);
-  int add_def_subpart_dml_column(const uint64_t exec_tenant_id,
-                                 const ObPartitionSchema *table,
+  int add_def_subpart_dml_column(const ObPartitionSchema *table,
                                  const int64_t def_subpart_idx,
                                  const ObSubPartition &subpart,
                                  ObDMLSqlSplicer &dml);
@@ -336,27 +322,23 @@ private:
 class ObDropPartInfoHelper : public ObPartSqlHelper
 {
 public:
-  ObDropPartInfoHelper(common::ObISQLClient &sql_client, const uint64_t tenant_id)
-   : ObPartSqlHelper(sql_client, tenant_id) {}
+  ObDropPartInfoHelper(common::ObISQLClient &sql_client)
+   : ObPartSqlHelper(sql_client) {}
   virtual ~ObDropPartInfoHelper() {}
   int delete_partition_info();
 protected:
   bool is_deleted() const { return true; }
-  int add_part_info_dml_column(const uint64_t exec_tenant_id,
-                               const ObPartitionSchema *table,
+  int add_part_info_dml_column(const ObPartitionSchema *table,
                                ObDMLSqlSplicer &dml);
-  int add_part_dml_column(const uint64_t exec_tenant_id,
-                          const ObPartitionSchema *table,
+  int add_part_dml_column(const ObPartitionSchema *table,
                           const ObPartition &part,
                           ObDMLSqlSplicer &dml);
-  int add_subpart_dml_column(const uint64_t exec_tenant_id,
-                             const ObPartitionSchema *table,
+  int add_subpart_dml_column(const ObPartitionSchema *table,
                              const int64_t part_id,
                              const int64_t subpart_id,
                              const ObSubPartition &subpart,
                              ObDMLSqlSplicer &dml);
-  int add_def_subpart_dml_column(const uint64_t exec_tenant_id,
-                                 const ObPartitionSchema *table,
+  int add_def_subpart_dml_column(const ObPartitionSchema *table,
                                  const int64_t def_subpart_idx,
                                  const ObSubPartition &subpart,
                                  ObDMLSqlSplicer &dml);

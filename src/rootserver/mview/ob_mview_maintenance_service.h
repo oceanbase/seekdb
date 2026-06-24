@@ -137,7 +137,6 @@ public:
                              ObIArray<uint64_t> &mview_refresh_scns);
   int get_mview_last_refresh_info(const ObIArray<uint64_t> &src_mview_ids,
                                   ObMySQLProxy *sql_proxy,
-                                  const uint64_t tenant_id,
                                   const share::SCN &scn,
                                   ObIArray<uint64_t> &mview_ids,
                                   ObIArray<uint64_t> &last_refresh_scns,
@@ -180,7 +179,6 @@ private:
   void sys_ls_task_stop_();
   int get_mview_last_refresh_info_sql_(const share::SCN &scn,
                                        const ObIArray<uint64_t> &mview_ids,
-                                       const uint64_t tenant_id,
                                        ObSqlString &sql);
 
 private:

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_tablet_dml.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_table_dml_param.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/lob/ob_lob_locator_struct.h"
@@ -244,7 +245,7 @@ int ObLobTabletDmlHelper::insert_lob_col(
     const bool try_flush_redo)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   ObLobAccessParam lob_param;
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
@@ -297,7 +298,7 @@ int ObLobTabletDmlHelper::delete_lob_col(
     const bool try_flush_redo)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -377,7 +378,7 @@ int ObLobTabletDmlHelper::process_delta_lob(
     blocksstable::ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -427,7 +428,7 @@ int ObLobTabletDmlHelper::prepare_lob_write(
   if (is_sys_table(run_ctx.relative_table_.get_table_id())) {
     // sys table just write
     need_do_write = true;
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), data_version))) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
     LOG_WARN("failed to get data version", K(ret));
   } else {
     ObString raw_data = (new_datum.is_null() || new_datum.is_nop_value())
@@ -437,7 +438,7 @@ int ObLobTabletDmlHelper::prepare_lob_write(
     bool is_outrow = false;
     ObLobAccessParam lob_param;
     ObLobDataInsertTask info;
-    ObLobManager *lob_mngr = MTL(ObLobManager*);
+    ObLobManager *lob_mngr = share::g_mp->lob_manager();
     info.src_data_locator_ = src_data_locator;
     bool skip_task = run_ctx.relative_table_.is_index_table() || col_idx < run_ctx.relative_table_.get_rowkey_column_num();
     if (OB_FAIL(build_common_lob_param_for_dml(run_ctx, data_row, col_idx, old_disk_locator, lob_param))) {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "share/interrupt/ob_interrupt_message.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_opt_stat_service.h"
 
 namespace oceanbase {
@@ -23,8 +24,7 @@ namespace common {
 
 using namespace share::schema;
 
-int ObOptStatService::get_table_stat(const uint64_t tenant_id,
-                                     const ObOptTableStat::Key &key,
+int ObOptStatService::get_table_stat(const ObOptTableStat::Key &key,
                                      ObOptTableStat &tstat)
 {
   int ret = OB_SUCCESS;
@@ -36,7 +36,7 @@ int ObOptStatService::get_table_stat(const uint64_t tenant_id,
     // we need to fetch statistics from inner table if it is not yet available from cache
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("get table stat from cache failed", K(ret), K(key));
-    } else if (OB_FAIL(load_table_stat_and_put_cache(tenant_id, key, handle))) {
+    } else if (OB_FAIL(load_table_stat_and_put_cache( key, handle))) {
       LOG_WARN("load and put cache table stat failed.", K(ret), K(key));
     }
   }
@@ -52,8 +52,7 @@ int ObOptStatService::get_table_stat(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatService::batch_get_table_stats(const uint64_t tenant_id,
-                                            ObIArray<const ObOptTableStat::Key *> &keys,
+int ObOptStatService::batch_get_table_stats(ObIArray<const ObOptTableStat::Key *> &keys,
                                             ObIArray<ObOptTableStatHandle> &handles)
 {
   int ret = OB_SUCCESS;
@@ -89,7 +88,7 @@ int ObOptStatService::batch_get_table_stats(const uint64_t tenant_id,
     }
 
     if (OB_SUCC(ret) && !regather_keys.empty()) {
-      if (OB_FAIL(batch_load_table_stats_and_put_cache(tenant_id, regather_keys, handles, regather_handles_indices))) {
+      if (OB_FAIL(batch_load_table_stats_and_put_cache( regather_keys, handles, regather_handles_indices))) {
         LOG_WARN("failed to load column stat and put cache", K(ret), K(regather_keys));
       } else {/*do nothing*/}
     }
@@ -99,8 +98,7 @@ int ObOptStatService::batch_get_table_stats(const uint64_t tenant_id,
 }
 
 
-int ObOptStatService::get_column_stat(const uint64_t tenant_id,
-                                      const ObOptColumnStat::Key &key,
+int ObOptStatService::get_column_stat(const ObOptColumnStat::Key &key,
                                       ObOptColumnStatHandle &handle)
 {
   int ret = OB_SUCCESS;
@@ -108,7 +106,7 @@ int ObOptStatService::get_column_stat(const uint64_t tenant_id,
   ObSEArray<ObOptColumnStatHandle, 1> handles;
   if (OB_FAIL(keys.push_back(&key))) {
     LOG_WARN("failed to push back", K(ret));
-  } else if (OB_FAIL(get_column_stat(tenant_id, keys, handles))) {
+  } else if (OB_FAIL(get_column_stat(keys, handles))) {
     LOG_WARN("failed to get column stat", K(ret));
   } else if (OB_UNLIKELY(handles.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -119,8 +117,7 @@ int ObOptStatService::get_column_stat(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatService::get_column_stat(const uint64_t tenant_id,
-                                      ObIArray<const ObOptColumnStat::Key*> &keys,
+int ObOptStatService::get_column_stat(ObIArray<const ObOptColumnStat::Key*> &keys,
                                       ObIArray<ObOptColumnStatHandle> &handles)
 {
   int ret = OB_SUCCESS;
@@ -150,7 +147,7 @@ int ObOptStatService::get_column_stat(const uint64_t tenant_id,
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret) && !regather_keys.empty()) {
-      if (OB_FAIL(load_column_stat_and_put_cache(tenant_id, regather_keys, handles))) {
+      if (OB_FAIL(load_column_stat_and_put_cache( regather_keys, handles))) {
         LOG_WARN("failed to load column stat and put cache", K(ret), K(regather_keys));
       } else {/*do nothing*/}
     }
@@ -158,8 +155,7 @@ int ObOptStatService::get_column_stat(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatService::load_table_stat_and_put_cache(const uint64_t tenant_id,
-                                                    const ObOptTableStat::Key &key,
+int ObOptStatService::load_table_stat_and_put_cache(const ObOptTableStat::Key &key,
                                                     ObOptTableStatHandle &handle)
 {
   int ret = OB_SUCCESS;
@@ -169,7 +165,7 @@ int ObOptStatService::load_table_stat_and_put_cache(const uint64_t tenant_id,
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("table statistics service is not initialized. ", K(ret), K(key));
-  } else if (OB_FAIL(sql_service_.fetch_table_stat(tenant_id, key, all_part_stats))) {
+  } else if (OB_FAIL(sql_service_.fetch_table_stat(key, all_part_stats))) {
     if (OB_ENTRY_NOT_EXIST != ret &&
         !is_sys_table(key.table_id_) &&
         !is_virtual_table(key.table_id_)) {//sys table and virtual table failed, use default
@@ -181,8 +177,7 @@ int ObOptStatService::load_table_stat_and_put_cache(const uint64_t tenant_id,
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_part_stats.count(); ++i) {
-      ObOptTableStat::Key tmp_key(tenant_id,
-                                  all_part_stats.at(i).get_table_id(),
+      ObOptTableStat::Key tmp_key(all_part_stats.at(i).get_table_id(),
                                   all_part_stats.at(i).get_partition_id());
       ObOptTableStatHandle hd;
       if (OB_FAIL(table_stat_cache_.put_and_fetch_value(tmp_key, all_part_stats.at(i), hd))) {
@@ -204,14 +199,13 @@ int ObOptStatService::load_table_stat_and_put_cache(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatService::batch_load_table_stats_and_put_cache(const uint64_t tenant_id,
-                                                           ObIArray<const ObOptTableStat::Key *> &keys,
+int ObOptStatService::batch_load_table_stats_and_put_cache(ObIArray<const ObOptTableStat::Key *> &keys,
                                                            ObIArray<ObOptTableStatHandle> &handles,
                                                            ObIArray<int64_t> &regather_handles_indices)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObOptTableStat*, 4> all_part_stats;
-  ObArenaAllocator arena("ObOptTblStatGet", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+  ObArenaAllocator arena("ObOptTblStatGet", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   bool added = false;
   if (!inited_) {
@@ -221,7 +215,7 @@ int ObOptStatService::batch_load_table_stats_and_put_cache(const uint64_t tenant
     //do nothing
   } else if (OB_FAIL(init_table_stats(arena, keys, all_part_stats))) {
     LOG_WARN("failed to init table stats", K(ret));
-  } else if (OB_FAIL(sql_service_.fetch_table_stat(tenant_id, keys, all_part_stats))) {
+  } else if (OB_FAIL(sql_service_.fetch_table_stat(keys, all_part_stats))) {
     if (OB_ENTRY_NOT_EXIST != ret &&
         !is_sys_table(keys.at(0)->table_id_) &&
         !is_virtual_table(keys.at(0)->table_id_)) {//sys table and virtual table failed, use default
@@ -250,12 +244,11 @@ int ObOptStatService::batch_load_table_stats_and_put_cache(const uint64_t tenant
   return ret;
 }
 
-int ObOptStatService::load_column_stat_and_put_cache(const uint64_t tenant_id,
-                                                     ObIArray<const ObOptColumnStat::Key*> &keys,
+int ObOptStatService::load_column_stat_and_put_cache(ObIArray<const ObOptColumnStat::Key*> &keys,
                                                      ObIArray<ObOptColumnStatHandle> &handles)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator arena("ObOptColStatGet", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+  ObArenaAllocator arena("ObOptColStatGet", OB_MALLOC_NORMAL_BLOCK_SIZE);
   LOG_TRACE("begin load column stat and put cache", K(keys));
   ObSEArray<ObOptKeyColumnStat, 4> key_column_stats;
   // generate new entrys and load from global statistics table and store it in cache.
@@ -266,7 +259,7 @@ int ObOptStatService::load_column_stat_and_put_cache(const uint64_t tenant_id,
     //do nothing
   } else if (OB_FAIL(init_key_column_stats(arena, keys, key_column_stats))) {
     LOG_WARN("failed to init key column stats", K(ret));
-  } else if (OB_FAIL(sql_service_.fetch_column_stat(tenant_id, arena, key_column_stats))) {
+  } else if (OB_FAIL(sql_service_.fetch_column_stat(arena, key_column_stats))) {
     LOG_WARN("failed to fetch column stat", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < key_column_stats.count(); ++i) {
@@ -384,8 +377,7 @@ int ObOptStatService::init_table_stats(ObIAllocator &allocator,
   return ret;
 }
 
-int ObOptStatService::get_table_rowcnt(const uint64_t tenant_id,
-                                       const uint64_t table_id,
+int ObOptStatService::get_table_rowcnt(const uint64_t table_id,
                                        const ObIArray<ObTabletID> &all_tablet_ids,
                                        const ObIArray<share::ObLSID> &all_ls_ids,
                                        int64_t &table_rowcnt)
@@ -401,7 +393,7 @@ int ObOptStatService::get_table_rowcnt(const uint64_t tenant_id,
     storage::ObTabletStat unused_tablet_stat;
     share::schema::ObTableModeFlag unused_mode;
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tablet_ids.count(); ++i) {
-      ObOptTableStat::Key key(tenant_id, table_id, all_tablet_ids.at(i).id());
+      ObOptTableStat::Key key(table_id, all_tablet_ids.at(i).id());
       ObOptTableStatHandle handle;
       if (OB_FAIL(table_stat_cache_.get_value(key, handle))) {
         // we need to fetch statistics from inner table if it is not yet available from cache
@@ -421,7 +413,7 @@ int ObOptStatService::get_table_rowcnt(const uint64_t tenant_id,
           LOG_WARN("failed to push back", K(ret));
         } else {/*do nothing*/}
       } else {
-        storage::ObTenantTabletStatMgr *stat_mgr = MTL(storage::ObTenantTabletStatMgr *);
+        storage::ObTenantTabletStatMgr *stat_mgr = share::g_mp->tenant_tablet_stat_mgr();
         storage::ObTabletStat tablet_stat;
         //try check the latest tablet stat from stroage
         if (stat_mgr != NULL) {
@@ -446,7 +438,7 @@ int ObOptStatService::get_table_rowcnt(const uint64_t tenant_id,
     }
     if (OB_SUCC(ret) && !reload_tablet_ids.empty()) {
       int64_t reload_row_cnt = 0;
-      if (OB_FAIL(load_table_rowcnt_and_put_cache(tenant_id, table_id, reload_tablet_ids,
+      if (OB_FAIL(load_table_rowcnt_and_put_cache( table_id, reload_tablet_ids,
                                                   reload_ls_ids, reload_row_cnt))) {
         LOG_WARN("load and put cache table stat failed.", K(ret));
       } else {
@@ -459,8 +451,7 @@ int ObOptStatService::get_table_rowcnt(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatService::load_table_rowcnt_and_put_cache(const uint64_t tenant_id,
-                                                      const uint64_t table_id,
+int ObOptStatService::load_table_rowcnt_and_put_cache(const uint64_t table_id,
                                                       const ObIArray<ObTabletID> &all_tablet_ids,
                                                       const ObIArray<share::ObLSID> &all_ls_ids,
                                                       int64_t &table_rowcnt)
@@ -471,7 +462,7 @@ int ObOptStatService::load_table_rowcnt_and_put_cache(const uint64_t tenant_id,
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("table statistics service is not initialized. ", K(ret));
-  } else if (OB_FAIL(sql_service_.fetch_table_rowcnt(tenant_id, table_id,
+  } else if (OB_FAIL(sql_service_.fetch_table_rowcnt(table_id,
                                                      all_tablet_ids, all_ls_ids,
                                                      tstats))) {
     if (!is_sys_table(table_id) && !is_virtual_table(table_id)) {//sys table and virtual table failed, use default
@@ -481,7 +472,7 @@ int ObOptStatService::load_table_rowcnt_and_put_cache(const uint64_t tenant_id,
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tstats.count(); ++i) {
-      ObOptTableStat::Key key(tenant_id, table_id, tstats.at(i).get_tablet_id());
+      ObOptTableStat::Key key(table_id, tstats.at(i).get_tablet_id());
       ObOptTableStatHandle handle;
       if (OB_FAIL(table_stat_cache_.put_and_fetch_value(key, tstats.at(i), handle))) {
         LOG_WARN("put and fetch table stat failed.", K(ret), K(key));
@@ -534,8 +525,7 @@ int ObOptStatService::erase_ds_stat(const ObOptDSStat::Key &key)
   return ds_stat_cache_.erase(key);
 }
 
-int ObOptStatService::get_system_stat(const uint64_t tenant_id,
-                                      const ObOptSystemStat::Key &key,
+int ObOptStatService::get_system_stat(const ObOptSystemStat::Key &key,
                                       ObOptSystemStat &stat)
 {
   int ret = OB_SUCCESS;
@@ -547,7 +537,7 @@ int ObOptStatService::get_system_stat(const uint64_t tenant_id,
     // we need to fetch statistics from inner table if it is not yet available from cache
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("get system stat from cache failed", K(ret), K(key));
-    } else if (OB_FAIL(load_system_stat_and_put_cache(tenant_id, key, handle))) {
+    } else if (OB_FAIL(load_system_stat_and_put_cache( key, handle))) {
       LOG_WARN("load and put cache system stat failed.", K(ret), K(key));
     }
   }
@@ -562,8 +552,7 @@ int ObOptStatService::get_system_stat(const uint64_t tenant_id,
   return ret;
 }
 
-int ObOptStatService::load_system_stat_and_put_cache(const uint64_t tenant_id,
-                                                    const ObOptSystemStat::Key &key,
+int ObOptStatService::load_system_stat_and_put_cache(const ObOptSystemStat::Key &key,
                                                     ObOptSystemStatHandle &handle)
 {
   int ret = OB_SUCCESS;
@@ -573,7 +562,7 @@ int ObOptStatService::load_system_stat_and_put_cache(const uint64_t tenant_id,
     LOG_WARN("statistics service is not initialized. ", K(ret), K(key));
   } else if (OB_FAIL(system_stat_cache_.put_and_fetch_value(key, stat, handle))) {
     LOG_WARN("put and fetch table stat failed.", K(ret), K(key));
-  } else if (OB_FAIL(sql_service_.fetch_system_stat(tenant_id, key, stat))) {
+  } else if (OB_FAIL(sql_service_.fetch_system_stat(key, stat))) {
     system_stat_cache_.erase(key);
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("fetch system stat failed. ", K(ret), K(key));

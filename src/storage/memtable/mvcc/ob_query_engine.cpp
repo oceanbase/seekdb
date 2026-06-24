@@ -438,7 +438,7 @@ int ObQueryEngine::init_raw_iter_for_estimate(Iterator<BtreeRawIterator>*& iter,
     TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else {
-    void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr(OB_SYS_TENANT_ID, "BtreeRawIter"));
+    void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr("BtreeRawIter"));
     if (OB_ISNULL(buf)) {
       TRANS_LOG(WARN, "alloc raw iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -676,7 +676,7 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid param", KR(ret));
   } else {
-    void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr(OB_SYS_TENANT_ID, "BtreeRawIter"));
+    void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr("BtreeRawIter"));
     if (OB_ISNULL(buf)) {
       TRANS_LOG(WARN, "alloc raw iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;

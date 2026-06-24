@@ -93,21 +93,13 @@ desc v1;
 | database() | varchar(128) | NO   |     |         |       |
 +------------+--------------+------+-----+---------+-------+
 drop view v1;
-create view v1 as select effective_tenant_id() from dual limit 10;
+create view v1 as select 1 from dual limit 10;
 desc v1;
-+-----------------------+---------------------+------+-----+---------+-------+
-| Field                 | Type                | Null | Key | Default | Extra |
-+-----------------------+---------------------+------+-----+---------+-------+
-| effective_tenant_id() | bigint(20) unsigned | NO   |     |         |       |
-+-----------------------+---------------------+------+-----+---------+-------+
-drop view v1;
-create view v1 as select effective_tenant() from dual limit 10;
-desc v1;
-+--------------------+-------------+------+-----+---------+-------+
-| Field              | Type        | Null | Key | Default | Extra |
-+--------------------+-------------+------+-----+---------+-------+
-| effective_tenant() | varchar(64) | NO   |     |         |       |
-+--------------------+-------------+------+-----+---------+-------+
++-------+-----------+------+-----+---------+-------+
+| Field | Type      | Null | Key | Default | Extra |
++-------+-----------+------+-----+---------+-------+
+| 1     | bigint(1) | NO   |     |         |       |
++-------+-----------+------+-----+---------+-------+
 drop view v1;
 create view v1 as select found_rows() from dual limit 10;
 desc v1;

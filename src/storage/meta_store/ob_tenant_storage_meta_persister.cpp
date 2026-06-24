@@ -38,9 +38,9 @@ int ObTenantStorageMetaPersister::init(
   int ret = OB_SUCCESS;
 
   const int64_t MEM_LIMIT = 512UL << 20;
-  lib::ObMemAttr attr(MTL_ID(), "TntMetaPersist");
+  lib::ObMemAttr attr("TntMetaPersist");
   const int64_t MAP_BUCKET_CNT = 256;
-  lib::ObMemAttr map_attr(MTL_ID(), "PendingFreeMap");
+  lib::ObMemAttr map_attr("PendingFreeMap");
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -174,7 +174,7 @@ int ObTenantStorageMetaPersister::batch_update_tablet(const ObIArray<ObUpdateTab
     LOG_WARN("not init", K(ret));
   } else {
     ObSArray<ObStorageLogParam> param_arr;
-    param_arr.set_attr(ObMemAttr(MTL_ID(), "BatchUpdateTab"));
+    param_arr.set_attr(ObMemAttr("BatchUpdateTab"));
     ObStorageLogParam log_param;
     log_param.cmd_ = ObIRedoModule::gen_cmd(
         ObRedoLogMainType::OB_REDO_LOG_TENANT_STORAGE,
@@ -616,6 +616,7 @@ int ObTenantStorageMetaPersister::delete_items_from_pending_free_tablet_array(
 }
 
 //=================================== Shared-Storage =============================================//
+
 
 } // namespace storage
 } // namespace oceanbase

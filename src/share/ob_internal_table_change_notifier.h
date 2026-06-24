@@ -30,7 +30,7 @@ namespace share
 class ObInternalTableChangeNotifier : public logservice::ObIRoleChangeSubHandler
 {
 public:
-  using ModuleCallback = common::ObFunction<int(uint64_t tenant_id)>;
+  using ModuleCallback = common::ObFunction<int()>;
 
   static ObInternalTableChangeNotifier &get_instance();
 
@@ -42,8 +42,7 @@ public:
 
   // Schedule refresh for one module. Called by import executor and
   // switch_to_leader. Returns immediately — the actual work is async.
-  int notify(table::ObModuleDataArg::ObExecModule module,
-             uint64_t tenant_id);
+  int notify(table::ObModuleDataArg::ObExecModule module);
 
   // ObIRoleChangeSubHandler — called by ObRoleChangeHandler when LS switches role.
   void switch_to_follower_forcedly() override;

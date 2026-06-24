@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tenant_tablet_scheduler.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ob_bloom_filter_task.h"
 #include "ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -53,7 +54,7 @@ ObFastFreezeChecker::~ObFastFreezeChecker()
 int ObFastFreezeChecker::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(store_map_.create(FAST_FREEZE_TABLET_STAT_KEY_BUCKET_NUM, "FastFrezCkr", "FastFrezCkr", MTL_ID()))) {
+  if (OB_FAIL(store_map_.create(FAST_FREEZE_TABLET_STAT_KEY_BUCKET_NUM, "FastFrezCkr", "FastFrezCkr"))) {
     LOG_WARN("failed to init fast freeze checker", K(ret));
   }
   return ret;
@@ -82,7 +83,7 @@ int ObFastFreezeChecker::check_need_fast_freeze(
   const share::ObLSID &ls_id = tablet.get_tablet_meta().ls_id_;
   const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   ObTableQueuingModeCfg queuing_cfg;
-  if (OB_TMP_FAIL(MTL(ObTenantTabletStatMgr *)->get_queuing_cfg(ls_id, tablet_id, queuing_cfg))) {
+  if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_queuing_cfg(ls_id, tablet_id, queuing_cfg))) {
     LOG_WARN_RET(tmp_ret, "[FastFreeze] failed to get table queuing mode, treat it as normal table", K(ls_id), K(tablet_id));
   }
   const int64_t memtable_alive_threshold = queuing_cfg.get_memtable_alive_threshold(FAST_FREEZE_INTERVAL_US);
@@ -198,7 +199,7 @@ void ObFastFreezeChecker::try_update_tablet_threshold(
   ObTabletStat tablet_stat;
   ObTabletStat total_stat;
   ObTableModeFlag mode = ObTableModeFlag::TABLE_MODE_NORMAL;
-  if (OB_TMP_FAIL(MTL(ObTenantTabletStatMgr *)->get_latest_tablet_stat(key.ls_id_, key.tablet_id_, tablet_stat, total_stat, mode))) {
+  if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_latest_tablet_stat(key.ls_id_, key.tablet_id_, tablet_stat, total_stat, mode))) {
     if (OB_HASH_NOT_EXIST != tmp_ret) {
       LOG_WARN_RET(tmp_ret, "[FastFreeze] failed to get tablet stat", K(key));
     }
@@ -246,7 +247,7 @@ int ObCSReplicaChecksumHelper::check_column_type(
     LOG_WARN("get invalid arguments", K(ret), K(tablet_id), K(column_idxs));
   } else if (OB_UNLIKELY(column_idxs.empty())) {
     // do nothing
-  } else if (OB_ISNULL(schema_service = MTL(ObTenantSchemaService *)->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null schema service", K(ret));
   } else if (OB_FAIL(ObMediumCompactionScheduleFunc::get_table_id(*schema_service,
@@ -254,8 +255,7 @@ int ObCSReplicaChecksumHelper::check_column_type(
                                                                   freeze_info.schema_version_,
                                                                   table_id))) {
     LOG_WARN("failed to get table id", K(ret), K(tablet_id));
-  } else if (OB_FAIL(MTL(ObTenantSchemaService *)->get_schema_service()->retry_get_schema_guard(MTL_ID(),
-                                                                                                freeze_info.schema_version_,
+  } else if (OB_FAIL(share::g_mp->tenant_schema_service()->get_schema_service()->retry_get_schema_guard(freeze_info.schema_version_,
                                                                                                 table_id,
                                                                                                 schema_guard,
                                                                                                 save_schema_version))) {
@@ -263,7 +263,7 @@ int ObCSReplicaChecksumHelper::check_column_type(
   } else if (OB_UNLIKELY(save_schema_version < freeze_info.schema_version_)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("can not use older schema version", K(ret), K(freeze_info), K(save_schema_version), K(table_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("Fail to get table schema", K(ret), K(table_id));
   } else if (NULL == table_schema) {
     ret = OB_TABLE_IS_DELETED;
@@ -340,7 +340,7 @@ int ObTenantTabletScheduler::init()
   int64_t schedule_batch_size = ObScheduleBatchSizeMgr::DEFAULT_TABLET_BATCH_CNT;
 
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       schedule_interval = tenant_config->ob_compaction_schedule_interval;
       enable_adaptive_compaction = tenant_config->_enable_adaptive_compaction;
@@ -363,7 +363,6 @@ int ObTenantTabletScheduler::init()
                                     BF_TASK_TOTAL_LIMIT,
                                     BF_TASK_HOLD_LIMIT,
                                     BF_TASK_PAGE_SIZE,
-                                    MTL_ID(),
                                     "bf_queue"))) {
     LOG_WARN("Fail to init bloom filter queue", K(ret));
   } else if (OB_FAIL(fast_freeze_checker_.init())) {
@@ -404,7 +403,7 @@ int ObTenantTabletScheduler::reload_tenant_config()
     int64_t merge_schedule_interval = ObTenantTabletSchedulerTaskMgr::DEFAULT_COMPACTION_SCHEDULE_INTERVAL;
     int64_t schedule_batch_size = ObScheduleBatchSizeMgr::DEFAULT_TABLET_BATCH_CNT;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         merge_schedule_interval = tenant_config->ob_compaction_schedule_interval;
         enable_adaptive_compaction = tenant_config->_enable_adaptive_compaction;
@@ -513,13 +512,13 @@ int ObTenantTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
          * 2. new_upper_trans array comes from old table store, use end_scn of last minor to check if table store is updated by other thread.
          */
         ObSEArray<int64_t, 8> new_upper_trans;
-        new_upper_trans.set_attr(ObMemAttr(MTL_ID(), "NewUpTxnVer"));
+        new_upper_trans.set_attr(ObMemAttr("NewUpTxnVer"));
         UpdateUpperTransParam upper_trans_param;
         upper_trans_param.new_upper_trans_ = &new_upper_trans;
         if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(ls, *tablet, multi_version_start, upper_trans_param, need_update))) {
           LOG_WARN("faild to check need gc or update", K(tmp_ret), K(ls_id), K(tablet_id));
         } else if (need_update) {
-          ObArenaAllocator tmp_arena("RmOldTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+          ObArenaAllocator tmp_arena("RmOldTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
           ObStorageSchema *storage_schema = nullptr;
           if (OB_TMP_FAIL(tablet->load_storage_schema(tmp_arena, storage_schema))) {
             LOG_WARN("failed to load storage schema", K(tmp_ret), K(tablet));
@@ -589,7 +588,7 @@ int ObTenantTabletScheduler::check_ls_compaction_finish(const ObLSID &ls_id)
   if (OB_UNLIKELY(!ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id));
-  } else if (OB_FAIL(MTL(ObTenantDagScheduler*)->check_ls_compaction_dag_exist_with_cancel(ls_id, exist))) {
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->check_ls_compaction_dag_exist_with_cancel(ls_id, exist))) {
     LOG_WARN("failed to check ls compaction dag", K(ret), K(ls_id));
   } else if (exist) {
     // the compaction dag exists, need retry later.
@@ -604,11 +603,11 @@ int ObTenantTabletScheduler::gc_info()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("The ObTenantTabletScheduler has not been inited", K(ret));
-  } else if (OB_FAIL(MTL(ObScheduleSuspectInfoMgr *)->gc_info())) {
+  } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->gc_info())) {
     LOG_WARN("failed to gc in ObScheduleSuspectInfoMgr", K(ret));
-  } else if (OB_FAIL(MTL(ObDagWarningHistoryManager *)->gc_info())) {
+  } else if (OB_FAIL(share::g_mp->dag_warning_history_manager()->gc_info())) {
     LOG_WARN("failed to gc in ObDagWarningHistoryManager", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantSSTableMergeInfoMgr *)->gc_info())) {
+  } else if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->gc_info())) {
     LOG_WARN("failed to gc in ObTenantSSTableMergeInfoMgr", K(ret));
   }
   return ret;
@@ -620,11 +619,11 @@ int ObTenantTabletScheduler::set_max()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("The ObTenantTabletScheduler has not been inited", K(ret));
-  } else if (OB_FAIL(MTL(ObScheduleSuspectInfoMgr *)->set_max(ObScheduleSuspectInfoMgr::cal_max()))) {
+  } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->set_max(ObScheduleSuspectInfoMgr::cal_max()))) {
     LOG_WARN("failed to set_max int ObScheduleSuspectInfoMgr", K(ret));
-  } else if (OB_FAIL(MTL(ObDagWarningHistoryManager *)->set_max(ObDagWarningHistoryManager::cal_max()))) {
+  } else if (OB_FAIL(share::g_mp->dag_warning_history_manager()->set_max(ObDagWarningHistoryManager::cal_max()))) {
     LOG_WARN("failed to set_max in ObDagWarningHistoryManager", K(ret));
-  } else if (OB_FAIL(MTL(ObTenantSSTableMergeInfoMgr *)->set_max(ObTenantSSTableMergeInfoMgr::cal_max()))) {
+  } else if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->set_max(ObTenantSSTableMergeInfoMgr::cal_max()))) {
     LOG_WARN("failed to set_max int ObTenantSSTableMergeInfoMgr", K(ret));
   }
   return ret;
@@ -655,7 +654,7 @@ int ObTenantTabletScheduler::schedule_build_bloomfilter(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(macro_id), K(prefix_len));
   } else {
-    ObBloomFilterBuildTask task(MTL_ID(), table_id, macro_id, prefix_len);
+    ObBloomFilterBuildTask task(table_id, macro_id, prefix_len);
     if (OB_FAIL(bf_queue_.add_task(task))) {
       if (OB_LIKELY(OB_EAGAIN == ret)) {
         ret = OB_SUCCESS;
@@ -681,7 +680,7 @@ int ObTenantTabletScheduler::schedule_merge(const int64_t broadcast_version)
     update_frozen_version_and_merge_progress(broadcast_version);
     LOG_INFO("schedule merge major version", K(broadcast_version));
 
-    MTL(ObTenantMediumChecker*)->clear_error_tablet_cnt();
+    share::g_mp->tenant_medium_checker()->clear_error_tablet_cnt();
 
     medium_loop_.start_merge(broadcast_version); // set all statistics
   }
@@ -715,7 +714,7 @@ int ObTenantTabletScheduler::check_ready_for_major_merge(
     ObLSHandle ls_handle;
     ObLS *ls = nullptr;
     bool need_wait_major_convert = false;
-    if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::HA_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::HA_MOD))) {
       LOG_WARN("failed to get ls", K(ret), K(ls_id)); 
     } else if (OB_UNLIKELY(!ls_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -805,7 +804,7 @@ int ObTenantTabletScheduler::get_co_merge_type_for_compaction(
 {
   int ret = OB_SUCCESS;
   co_major_merge_type = ObCOMajorMergePolicy::INVALID_CO_MAJOR_MERGE_TYPE;
-  ObArenaAllocator temp_allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()); // for load medium info
+  ObArenaAllocator temp_allocator("GetMediumInfo", OB_MALLOC_NORMAL_BLOCK_SIZE); // for load medium info
   ObMediumCompactionInfo *medium_info = nullptr;
   if (OB_UNLIKELY(tablet.get_multi_version_start() > merge_version)) {
     ret = OB_SNAPSHOT_DISCARDED;
@@ -872,7 +871,7 @@ int ObTenantTabletScheduler::schedule_tablet_meta_merge(
     const ObTabletID &tablet_id = tablet->get_tablet_meta().tablet_id_;
     const int64_t last_major_snapshot_version = tablet->get_last_major_snapshot_version();
     int64_t max_sync_medium_scn = 0;
-    ObArenaAllocator allocator("GetMediumList", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator allocator("GetMediumList", OB_MALLOC_NORMAL_BLOCK_SIZE);
     const compaction::ObMediumCompactionInfoList *medium_list = nullptr;
     ObGetMergeTablesParam param;
     param.merge_type_ = META_MAJOR_MERGE;
@@ -923,7 +922,7 @@ int ObTenantTabletScheduler::schedule_tablet_meta_merge(
       }
 
       if (OB_SUCC(ret) && has_created_dag) {
-        MTL(ObTenantTabletStatMgr *)->clear_tablet_stat(ls_id, tablet_id);
+        share::g_mp->tenant_tablet_stat_mgr()->clear_tablet_stat(ls_id, tablet_id);
         LOG_INFO("success to schedule meta merge", K(ret), K(tablet_id), "is_row_store", tablet->is_row_store());
       }
     }
@@ -1019,7 +1018,7 @@ int ObTenantTabletScheduler::schedule_tablet_minor_merge(
     result.transfer_seq_ = tablet_handle.get_obj()->get_transfer_seq();
     int64_t minor_compact_trigger = ObPartitionMergePolicy::DEFAULT_MINOR_COMPACT_TRIGGER;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         minor_compact_trigger = tenant_config->minor_compact_trigger;
       }
@@ -1069,7 +1068,7 @@ int ObTenantTabletScheduler::schedule_tablet_ddl_major_merge(
   ObDDLTableMergeDagParam param;
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   bool is_major_sstable_exist = false;
   bool has_freezed_ddl_kv = false;
   SCN ddl_commit_scn;
@@ -1083,7 +1082,7 @@ int ObTenantTabletScheduler::schedule_tablet_ddl_major_merge(
     }
   } else if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected error", K(ret));
   } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
           ls_id,
           tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
@@ -1133,14 +1132,14 @@ int ObTenantTabletScheduler::schedule_merge_execute_dag(
     ret = OB_EAGAIN;
     LOG_INFO("tx table is not ready. waiting for max_decided_log_ts ...", KR(ret),
              "merge_scn", result.scn_range_.end_scn_);
-  } else if (OB_FAIL(MTL(share::ObTenantDagScheduler *)->alloc_dag(merge_exe_dag))) {
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->alloc_dag(merge_exe_dag))) {
     LOG_WARN("failed to alloc dag", K(ret), K(param));
   } else if (OB_FAIL(merge_exe_dag->prepare_init(param,
                                                  tablet_handle.get_obj()->get_tablet_meta().compat_mode_,
                                                  result,
                                                  ls_handle))) {
     LOG_WARN("failed to init dag", K(ret), K(result));
-  } else if (OB_FAIL(MTL(share::ObTenantDagScheduler *)->add_dag(merge_exe_dag, emergency))) {
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(merge_exe_dag, emergency))) {
     if (OB_EAGAIN != ret) {
       LOG_WARN("failed to add dag", K(ret), KPC(merge_exe_dag));
     }
@@ -1148,7 +1147,7 @@ int ObTenantTabletScheduler::schedule_merge_execute_dag(
     LOG_INFO("success to scheudle merge execute dag", K(ret), KP(merge_exe_dag), K(emergency));
   }
   if (OB_FAIL(ret) && nullptr != merge_exe_dag) {
-    MTL(share::ObTenantDagScheduler *)->free_dag(*merge_exe_dag);
+    share::g_mp->tenant_dag_scheduler()->free_dag(*merge_exe_dag);
     merge_exe_dag = nullptr;
   }
   return ret;
@@ -1171,7 +1170,7 @@ int ObTenantTabletScheduler::schedule_ls_minor_merge(
     int tmp_ret = OB_SUCCESS;
     bool schedule_minor_flag = true;
     ObSEArray<ObTabletID, MERGE_BACTH_FREEZE_CNT> need_fast_freeze_tablets;
-    need_fast_freeze_tablets.set_attr(ObMemAttr(MTL_ID(), "MinorBatch"));
+    need_fast_freeze_tablets.set_attr(ObMemAttr("MinorBatch"));
     int64_t start_time_us = 0;
     while (OB_SUCC(ret)) { // loop all tablet in ls
       bool need_fast_freeze_flag = false;
@@ -1268,7 +1267,7 @@ int ObTenantTabletScheduler::schedule_tablet_minor(
       LOG_WARN("failed to check need fast freeze", K(tmp_ret), K(tablet_handle));
     }
 
-    if (MTL(ObTenantTabletStatMgr *)->contain_extreme_tablet()) {
+    if (share::g_mp->tenant_tablet_stat_mgr()->contain_extreme_tablet()) {
       bool unused_create_dag = false; // unused
       if (OB_TMP_FAIL(ObTenantTabletScheduler::try_schedule_adaptive_merge(ls_handle, tablet_handle, 
             ObAdaptiveMergePolicy::SCHEDULE_META, 0 /*update_cnt*/, 0 /*delete_cnt*/, unused_create_dag))) {
@@ -1360,7 +1359,7 @@ int ObTenantTabletScheduler::user_request_schedule_medium_merge(
   } else if (!could_major_merge_start()) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("major compaction is suspended", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::COMPACT_MODE))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::COMPACT_MODE))) {
     LOG_WARN("failed to get ls", K(ret), K(ls_id));
   } else {
     const int64_t merge_version = get_frozen_version();
@@ -1387,7 +1386,7 @@ int ObTenantTabletScheduler::get_min_dependent_schema_version(int64_t &min_schem
   int ret = OB_SUCCESS;
   min_schema_version = OB_INVALID_VERSION;
   share::ObFreezeInfo freeze_info;
-  if (OB_FAIL(MTL(storage::ObTenantFreezeInfoMgr*)->get_min_dependent_freeze_info(freeze_info))) {
+  if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_min_dependent_freeze_info(freeze_info))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_WARN("freeze info is not exist", K(ret));
     } else {

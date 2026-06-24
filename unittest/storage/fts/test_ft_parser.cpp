@@ -194,7 +194,7 @@ TEST_F(FTParserTest, test_cache)
   dat.mem_block_size_ = sizeof(ObFTDAT);
   ObFTDAT *ptr = &dat;
 
-  ObDictCacheKey key(1, 1, ObFTDictType::DICT_IK_MAIN, 0);
+  ObDictCacheKey key(1, ObFTDictType::DICT_IK_MAIN, 0);
   ObDictCacheValue value(ptr);
   ret = cache.put(key, value);
   ASSERT_EQ(OB_SUCCESS, ret);

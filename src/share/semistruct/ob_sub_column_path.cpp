@@ -134,7 +134,7 @@ int ObSubColumnPathItem::compare(const ObSubColumnPathItem &other, const bool us
 
 ObSubColumnPath::ObSubColumnPath()
 {
-  items_.set_attr(lib::ObMemAttr(MTL_ID(), "SemiPath"));
+  items_.set_attr(lib::ObMemAttr("SemiPath"));
 }
 
 OB_DEF_SERIALIZE_SIZE(ObSubColumnPath)

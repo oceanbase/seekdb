@@ -163,10 +163,9 @@ int ObGroupJoinBufffer::init(ObOperator *op,
     left_rescan_params_ = left_rescan_params;
     right_rescan_params_ = right_rescan_params;
     ObSQLSessionInfo *session = ctx_->get_my_session();
-    uint64_t tenant_id =session->get_effective_tenant_id();
+    
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id,
-                       ObModIds::OB_SQL_NLJ_CACHE,
+    param.set_mem_attr(ObModIds::OB_SQL_NLJ_CACHE,
                        ObCtxIds::WORK_AREA)
             .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -174,7 +173,7 @@ int ObGroupJoinBufffer::init(ObOperator *op,
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity", KR(ret));
-    } else if (OB_FAIL(left_store_.init(UINT64_MAX, tenant_id, ObCtxIds::WORK_AREA))) {
+    } else if (OB_FAIL(left_store_.init(UINT64_MAX, ObCtxIds::WORK_AREA))) {
       LOG_WARN("init row store failed", KR(ret));
     } else if (FALSE_IT(left_store_.set_allocator(mem_context_->get_malloc_allocator()))) {
     }

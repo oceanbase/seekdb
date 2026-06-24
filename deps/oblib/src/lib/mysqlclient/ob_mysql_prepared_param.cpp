@@ -21,7 +21,6 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/mysqlclient/ob_mysql_prepared_statement.h"
 #include "lib/mysqlclient/ob_mysql_prepared_param.h"
-#include "lib/mysqlclient/ob_dblink_error_trans.h"
 
 namespace oceanbase
 {
@@ -76,7 +75,6 @@ int ObMySQLPreparedParam::bind_param()
     char errmsg[256] = {0};
     const char *srcmsg = mysql_stmt_error(stmt);
     MEMCPY(errmsg, srcmsg, MIN(255, STRLEN(srcmsg)));
-    TRANSLATE_CLIENT_ERR(ret, errmsg);
     LOG_WARN("fail to bind param", K(ret), "errmsg", errmsg);
   }
   return ret;

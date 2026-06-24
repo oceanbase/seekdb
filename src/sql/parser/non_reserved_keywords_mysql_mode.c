@@ -1006,7 +1006,6 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"temporary", TEMPORARY},
   {"temptable", TEMPTABLE},
   {"tenant", TENANT},
-  {"tenant_id", TENANT_ID},
   {"terminated", TERMINATED},
   {"text", TEXT},
   {"than", THAN},

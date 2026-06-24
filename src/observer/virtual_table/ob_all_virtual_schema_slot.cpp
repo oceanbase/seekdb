@@ -47,20 +47,6 @@ int ObAllVirtualSchemaSlot::inner_open()
   if (false == addr.ip_to_string(ip_buffer_, sizeof(ip_buffer_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to convert ip to string", KR(ret), K(addr));
-  } else if (OB_INVALID_TENANT_ID == effective_tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant_id", KR(ret), K_(effective_tenant_id));
-  } else if(is_sys_tenant(effective_tenant_id_)) {
-    if (OB_FAIL(schema_service_.get_schema_store_tenants(tenant_ids_))) {
-      LOG_WARN("fail to get schema store tenants", KR(ret));
-    }
-  } else {
-    // user/meta tenant can see its own schema
-    if (schema_service_.check_schema_store_tenant_exist(effective_tenant_id_)) {
-      if (OB_FAIL(tenant_ids_.push_back(effective_tenant_id_))) {
-        LOG_WARN("fail to push back effective_tenant_id", KR(ret), K_(effective_tenant_id));
-      }
-    }
   }
   return ret;
 }
@@ -75,16 +61,12 @@ int ObAllVirtualSchemaSlot::get_next_tenant_slot_info(ObSchemaSlot &schema_slot)
   } else if (slot_idx_ >= schema_slot_infos_.count()) {
     do {
       reset(*allocator_, schema_slot_infos_);
-      if (++tenant_idx_ >= tenant_ids_.count()) {
+      if (++t_loop_idx_ >= 1) {
         ret = OB_ITER_END;
       } else {
-        uint64_t tenant_id = tenant_ids_[tenant_idx_];
-        if (OB_INVALID_TENANT_ID == tenant_id) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid tenant_id", KR(ret), K(tenant_idx_));
-        // ignore single failture
-        } else if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_slot_info(*allocator_, tenant_id, schema_slot_infos_))) {
-          LOG_WARN("fail to get tenant slot info", KR(tmp_ret), K(tenant_id));
+        
+        if (OB_SUCCESS != (tmp_ret = schema_service_.get_tenant_slot_info(*allocator_, 1UL, schema_slot_infos_))) {
+          LOG_WARN("fail to get tenant slot info", KR(tmp_ret), K(1UL));
           reset(*allocator_, schema_slot_infos_);
         } else {
           slot_idx_ = 0;
@@ -114,7 +96,7 @@ int ObAllVirtualSchemaSlot::inner_get_next_row(common::ObNewRow *&row)
     }
   }
   if (OB_SUCC(ret)) {
-    const uint64_t tenant_id = schema_slot.get_tenant_id();
+    
     const int64_t slot_id = schema_slot.get_slot_id();
     const int64_t total_ref_cnt = schema_slot.get_ref_cnt();
     const int64_t schema_version = schema_slot.get_schema_version();

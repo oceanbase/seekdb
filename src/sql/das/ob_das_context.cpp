@@ -78,7 +78,7 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
   bool is_vt = is_virtual_table(ref_table_id);
   bool is_external_object = is_external_object_id(ref_table_id);
   uint64_t real_table_id = ref_table_id;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (tablet_mapper.is_non_partition_optimized()) {
     // table ids has calced for no partition entity table, continue
   } else if (!is_vt) {
@@ -91,8 +91,8 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(schema_guard));
       } else if (OB_ISNULL(tablet_mapper.table_schema_)
-          && OB_FAIL(schema_guard->get_table_schema(tenant_id, real_table_id, tablet_mapper.table_schema_))) {
-        LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(real_table_id));
+          && OB_FAIL(schema_guard->get_table_schema( real_table_id, tablet_mapper.table_schema_))) {
+        LOG_WARN("get table schema failed", K(ret), K(real_table_id));
       } else if (OB_ISNULL(tablet_mapper.table_schema_)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table schema is not found", K(ret), K(real_table_id));
@@ -106,7 +106,7 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
         LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(sql_schema_guard));
       } else if (OB_ISNULL(tablet_mapper.table_schema_) &&
           OB_FAIL(sql_schema_guard->get_mocked_table_schema(real_table_id, tablet_mapper.table_schema_))) {
-        LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(real_table_id));
+        LOG_WARN("get table schema failed", K(ret), K(real_table_id));
       } else if (OB_ISNULL(tablet_mapper.table_schema_)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table schema is not found", K(ret), K(real_table_id));
@@ -134,64 +134,6 @@ ObDASTableLoc *ObDASCtx::get_table_loc_by_id(uint64_t table_loc_id, uint64_t ref
     }
   }
   return table_loc;
-}
-
-ObDASTableLoc *ObDASCtx::get_external_table_loc_by_id(uint64_t table_loc_id, uint64_t ref_table_id)
-{
-  ObDASTableLoc *table_loc = nullptr;
-  FOREACH(tmp_node, external_table_locs_) {
-    if ((*tmp_node)->loc_meta_->table_loc_id_ == table_loc_id &&
-        (*tmp_node)->loc_meta_->ref_table_id_ == ref_table_id) {
-      table_loc = *tmp_node;
-    }
-  }
-  return table_loc;
-}
-
-int ObDASCtx::build_external_table_location(
-    uint64_t table_loc_id,
-    uint64_t ref_table_id,
-    ObIArray<ObAddr> &locations)
-{
-  int ret = OB_SUCCESS;
-  ObDASTableLoc *local_location = NULL;
-  ObDASTabletLoc *local_tablet_loc = NULL;
-  if (OB_ISNULL(local_location = get_table_loc_by_id(table_loc_id, ref_table_id))
-      || OB_ISNULL(local_tablet_loc = local_location->get_first_tablet_loc())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected location", K(ret), K(local_location), K(local_tablet_loc));
-  } else {
-    ObDASTableLoc *table_loc = NULL;
-    ObDASTableLocMeta *loc_meta = NULL;
-
-    if (OB_ISNULL(table_loc = OB_NEWx(ObDASTableLoc, (&allocator_), (allocator_)))
-        || OB_ISNULL(loc_meta = OB_NEWx(ObDASTableLocMeta, (&allocator_), (allocator_)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret));
-    } else if (OB_FAIL(loc_meta->assign(*(local_tablet_loc->loc_meta_)))) {
-      LOG_WARN("fail to assign loc meta", K(ret));
-    } else {
-      table_loc->loc_meta_ = loc_meta;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < locations.count(); i++) {
-      ObDASTabletLoc *tablet_loc = NULL;
-      if (OB_ISNULL(tablet_loc = OB_NEWx(ObDASTabletLoc, (&allocator_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(ret));
-      } else {
-        tablet_loc->loc_meta_ = loc_meta;
-        tablet_loc->tablet_id_ = local_tablet_loc->tablet_id_;
-        tablet_loc->ls_id_ = local_tablet_loc->ls_id_;
-        tablet_loc->server_ = locations.at(i);
-        if (OB_FAIL(table_loc->add_tablet_loc(tablet_loc))) {
-          LOG_WARN("fail to add tablet location", K(ret));
-        }
-      }
-    }
-    OZ (external_table_locs_.push_back(table_loc));
-    LOG_DEBUG("external table distribution", K(locations), KPC(table_loc));
-  }
-  return ret;
 }
 
 int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,

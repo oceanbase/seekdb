@@ -68,7 +68,7 @@ public:
     is_inited_(false),
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     slice_idx_(-1),
-    allocator_(ObMemAttr(MTL_ID(), "DAGCGMBWOp")),
+    allocator_(ObMemAttr("DAGCGMBWOp")),
     cg_block_files_iter_arr_(),
     flushed_bitmap_(allocator_),
     cg_macro_block_writer_(),

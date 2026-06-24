@@ -80,10 +80,7 @@ public:
       const int64_t blacklist_survival_time_upper_limit_min = 4,
       const int64_t blacklist_survival_time_penalty_period_min = 1,
       const int64_t blacklist_history_overdue_time_min = 30,
-      const int64_t blacklist_history_clear_interval_min = 20,
-      const bool is_tenant_mode = false,
-      const uint64_t tenant_id = OB_INVALID_TENANT_ID,
-      const uint64_t self_tenant_id = OB_SERVER_TENANT_ID);
+      const int64_t blacklist_history_clear_interval_min = 20);
   int start();
   void stop();
   void wait();
@@ -98,7 +95,6 @@ public:
   // 2. After returning OB_ITER_END, the list of servers will be iterated over from the beginning next time
   // 3. If no servers are available, return OB_ITER_END
   //
-  // @param [in] tenant_id        tenantID
   // @param [in] ls_id            LS ID
   // @param [in] next_lsn         next LSN
   // @param [out] svr             return fetch log server
@@ -107,25 +103,21 @@ public:
   // @retval OB_ITER_END          Server list iterations complete one round, need to query server
   // @retval Other return values  Failed, may be network anomaly and so on.
   int next_server(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const palf::LSN &next_lsn,
       common::ObAddr &svr);
 
-  // @param [in] tenant_id        tenantID
   // @param [in] ls_id            LS ID
   // @param [out] svr_array       return fetch log server
   //
   // @retval OB_SUCCESS           Success
   // @retval Other return values  Failed
   int get_server_array_for_locate_start_lsn(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       ObIArray<common::ObAddr> &svr_array);
 
   // Determine if the server needs to be switched
   //
-  // @param [in] tenant_id        tenantID
   // @param [in] ls_id            LS ID
   // @param [in] next_lsn         next LSN
   // @param [in] cur_svr          current fetch log server
@@ -133,34 +125,29 @@ public:
   // @retval true                 Need to switch server
   // @retval false                Don't need to switch server
   bool need_switch_server(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const palf::LSN &next_lsn,
       const common::ObAddr &cur_svr);
 
   // Get available server count
   //
-  // @param [in] tenant_id        tenantID
   // @param [in] ls_id            LS ID
   // @param [out] avail_svr_count available server count
   //
   // @retval OB_SUCCESS           Success
   // @retval Other error codes    Fail
   int get_server_count(
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       int64_t &avail_svr_count) const;
 
   // Launch an asynchronous update task for the server list of LS
   //
-  // @param [in] tenant_id        tenantID
   // @param [in] ls_id            LS ID
   //
   // @retval OB_SUCCESS           Success
   // @retval OB_EAGAIN            thread queue is already full
   // @retval Other return values  Failed
    int async_server_query_req(
-       const uint64_t tenant_id,
        const share::ObLSID &ls_id);
 
 private:
@@ -183,8 +170,6 @@ private:
 private:
   bool is_inited_;
   int64_t cluster_id_;
-  int64_t source_tenant_id_;
-  uint64_t self_tenant_id_;
   volatile bool is_stopped_ CACHE_ALIGNED;
   ObLSRouteTimerTask ls_route_timer_task_;
   // For single machine: track if next_server has been called to return OB_ITER_END on second call

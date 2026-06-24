@@ -186,7 +186,7 @@ inline int ObIndexTreePrefetcher::lookup_in_cache(ObSSTableReadHandle &read_hand
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(read_handle));
   } else if (access_ctx_->enable_get_row_cache()) {
-    ObRowCacheKey key(MTL_ID(), sstable_->get_key().get_tablet_id(), read_handle.get_rowkey(),
+    ObRowCacheKey key(sstable_->get_key().get_tablet_id(), read_handle.get_rowkey(),
                       *datum_utils_, data_version_, sstable_->get_key().table_type_);
     if (OB_FAIL(ObStorageCacheSuite::get_instance().get_row_cache().get_row(key, read_handle.row_handle_))) {
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
@@ -350,8 +350,7 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
       // Otherwise, this border row may be filtered out incorrectly.
       // At present, when we check bf, we just mindlessly skip the first row in the rowkeys idx range.
       const int64_t tmp_rowkey_begin_idx = index_info.rowkey_begin_idx_ + 1;
-      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(MTL_ID(),
-                                                            macro_id,
+      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(macro_id,
                                                             index_info.rows_info_,
                                                             tmp_rowkey_begin_idx,
                                                             index_info.rowkey_end_idx_,
@@ -364,8 +363,7 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
         is_contain = true;
       }
     } else if (read_handle.is_sorted_multi_get_) {
-      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(MTL_ID(),
-                                                            macro_id,
+      if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(macro_id,
                                                             index_info.rowkeys_info_,
                                                             index_info.rowkey_begin_idx_,
                                                             index_info.rowkey_end_idx_,
@@ -375,8 +373,7 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
           LOG_WARN("Fail to check bloomfilter", K(ret));
         }
       }
-    } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(MTL_ID(),
-                                                                 macro_id,
+    } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().may_contain(macro_id,
                                                                  read_handle.get_rowkey(),
                                                                  *datum_utils_,
                                                                  is_contain))) {
@@ -649,7 +646,7 @@ inline int ObIndexTreeMultiPrefetcher::multi_prefetch()
         LOG_WARN("Fail to prefetch, unexpected cur level", K(ret), K(read_handle.cur_level_), K(index_tree_height_), K(read_handle), KPC(this));
       } else if (ObSSTableRowState::IN_BLOCK == read_handle.row_state_) {
         bool stop_prefetch = false;
-        int64_t tenant_id = MTL_ID();
+        
         ObMicroIndexInfo &cur_index_info = read_handle.index_block_info_;
         ObMicroBlockDataHandle &next_handle = read_handle.get_read_handle();
         if (OB_UNLIKELY(!cur_index_info.is_valid() ||

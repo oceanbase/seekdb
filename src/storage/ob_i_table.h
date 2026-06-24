@@ -592,7 +592,6 @@ public:
   typedef common::ObArray<storage::ObTableHandleV2> HandlesArray;
   typedef bool (*IS_RIGH_SSTABLE_TYPE_FUNC)(const ObITable::TableType table_type);
   ObTablesHandleArray();
-  ObTablesHandleArray(const uint64_t tenant_id);
   ~ObTablesHandleArray();
   void reset();
   OB_INLINE bool empty() const { return handles_array_.empty(); }

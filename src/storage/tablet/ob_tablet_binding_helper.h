@@ -74,14 +74,14 @@ public:
   ~ObBatchUnbindTabletArg() {}
   int assign(const ObBatchUnbindTabletArg &other);
   inline bool is_redefined() const { return schema_version_ != OB_INVALID_VERSION; }
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(schema_version), K_(orig_tablet_ids), K_(hidden_tablet_ids), K_(is_write_defensive));
+  TO_STRING_KV(K_(ls_id), K_(schema_version), K_(orig_tablet_ids), K_(hidden_tablet_ids), K_(is_write_defensive));
   bool is_valid() { return true; }
   static int is_old_mds(const char *buf, const int64_t len, bool &is_old_mds);
   static int skip_array_len(const char *buf, int64_t data_len, int64_t &pos);
   OB_UNIS_VERSION_V(1);
 
 public:
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   int64_t schema_version_;
   ObSArray<ObTabletID> orig_tablet_ids_;
@@ -98,12 +98,12 @@ public:
   ObBatchUnbindLobTabletArg();
   ~ObBatchUnbindLobTabletArg() {}
   int assign(const ObBatchUnbindLobTabletArg &other);
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(data_tablet_ids));
+  TO_STRING_KV(K_(ls_id), K_(data_tablet_ids));
   bool is_valid() { return true; }
   OB_UNIS_VERSION_V(1);
 
 public:
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   ObSArray<ObTabletID> data_tablet_ids_;
 private:
@@ -166,9 +166,9 @@ public:
   ~ObTabletBindingMdsArg() {}
   bool is_valid() const;
   void reset();
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_ids), K_(binding_datas));
+  TO_STRING_KV(K_(ls_id), K_(tablet_ids), K_(binding_datas));
 public:
-  uint64_t tenant_id_;
+  
   uint64_t tenant_data_version_;
   share::ObLSID ls_id_;
   ObSArray<ObTabletID> tablet_ids_;
@@ -278,59 +278,44 @@ public:
   static int on_replay(const char* buf, const int64_t len, const share::SCN &scn, mds::BufferCtx &ctx);
 
 public:
-  static int get_sorted_ls_tablets(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int get_sorted_ls_tablets(const ObIArray<ObTabletID> &tablet_ids,
     ObArray<std::pair<share::ObLSID, ObTabletID>> &ls_tablets,
     ObMySQLTransaction &trans);
   static int batch_get_tablet_binding(
     const int64_t abs_timeout_us,
     const obcall::ObBatchGetTabletBindingArg &arg,
     obcall::ObBatchGetTabletBindingRes &res);
-  static int get_tablet_binding_mds_by_rpc(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  static int get_tablet_binding_mds_by_rpc(const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     ObIArray<ObTabletBindingMdsUserData> &datas);
-  static int modify_tablet_binding_for_create(
-    const uint64_t tenant_id,
-    const obcall::ObBatchCreateTabletArg &arg,
+  static int modify_tablet_binding_for_create(const obcall::ObBatchCreateTabletArg &arg,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
   static int modify_tablet_binding_for_unbind(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletID> &orig_tablet_ids,
     const ObIArray<ObTabletID> &hidden_tablet_ids,
     const int64_t redefined_schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
-  static int modify_tablet_binding_for_rw_defensive(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int modify_tablet_binding_for_rw_defensive(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
-  static int modify_tablet_binding_for_write_defensive(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int modify_tablet_binding_for_write_defensive(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
 
 private:
   template<typename F>
-  static int modify_tablet_binding_(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  static int modify_tablet_binding_(const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans);
   template<typename F>
-  static int modify_tablet_binding_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+  static int modify_tablet_binding_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans);

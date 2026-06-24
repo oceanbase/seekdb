@@ -102,7 +102,6 @@ public:
       const ObIOFd &fd,
       const char *buf,
       const int64_t size,
-      const uint64_t tenant_id,
       bool &is_full) override;
   virtual int get_part_id(const ObIOFd &fd, bool &is_exist, int64_t &part_id) override;
   virtual int get_part_size(const ObIOFd &fd, const int64_t part_id, int64_t &part_size) override;
@@ -217,7 +216,7 @@ protected:
     int64_t min_nr,
     ObIOEvents *events,
     struct timespec *timeout) override;
-  virtual ObIOCB *alloc_iocb(const uint64_t tenant_id) override;
+  virtual ObIOCB *alloc_iocb() override;
   virtual ObIOEvents *alloc_io_events(const uint32_t max_events) override;
   virtual void free_iocb(ObIOCB *iocb) override;
   virtual void free_io_events(ObIOEvents *io_event) override;

@@ -39,7 +39,7 @@ TEST_F(TestDagScheduler, test_error_handling)
 {
   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
   ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
+  ASSERT_EQ(OB_SUCCESS, scheduler->init( time_slice));
 
   AtomicOperator op(0);
   TestDag *dag = NULL;

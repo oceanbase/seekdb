@@ -21,7 +21,7 @@ using namespace oceanbase::sql;
 
 ObSetPasswordStmt::ObSetPasswordStmt(ObIAllocator *name_pool)
     : ObDDLStmt(name_pool, stmt::T_SET_PASSWORD),
-      masked_sql_(), tenant_id_(false), need_enc_(false), for_current_user_(false),
+      masked_sql_(), need_enc_(false), for_current_user_(false),
       modify_max_connections_(false), max_connections_per_hour_(OB_INVALID_ID),
       max_user_connections_(OB_INVALID_ID)
 {
@@ -29,7 +29,7 @@ ObSetPasswordStmt::ObSetPasswordStmt(ObIAllocator *name_pool)
 
 ObSetPasswordStmt::ObSetPasswordStmt()
     : ObDDLStmt(NULL, stmt::T_SET_PASSWORD),
-      masked_sql_(), tenant_id_(false), need_enc_(false), for_current_user_(false),
+      masked_sql_(), need_enc_(false), for_current_user_(false),
       modify_max_connections_(false), max_connections_per_hour_(OB_INVALID_ID),
       max_user_connections_(OB_INVALID_ID)
 {

@@ -424,7 +424,7 @@ int ObXmlUtil::xml_bin_to_text(
     ObString &text) {
   INIT_SUCC(ret);
   // oblib can not dep src/share/rc/ob_tenant_base.h,
-  // so can not use MTL_ID(), so there just use defualt tenant.
+  // so use default allocator context.
   // and this function is used for obcdc, not observer, is fine.
   ObArenaAllocator tmp_alloc(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObStringBuffer *buffer = nullptr;

@@ -177,14 +177,10 @@ private:
   int set_local_index_partition_schema(const share::schema::ObTableSchema &data_schema,
                                        share::schema::ObTableSchema &index_schema);
 
-  int check_has_none_shared_index_tables_for_fts_or_multivalue_index_(
-      const uint64_t tenant_id,
-      const uint64_t data_table_id,
+  int check_has_none_shared_index_tables_for_fts_or_multivalue_index_(const uint64_t data_table_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       bool &has_fts_or_multivalue_index);
-  int check_has_none_shared_index_tables_for_vector_index_(
-      const uint64_t tenant_id,
-      const uint64_t data_table_id,
+  int check_has_none_shared_index_tables_for_vector_index_(const uint64_t data_table_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       bool &has_none_share_vector_index);
   bool ignore_error_code_for_domain_index(
@@ -199,8 +195,7 @@ private:
                               const int64_t aux_doc_rowkey_ith,
                               const int64_t schema_count);
 
-  int check_index_for_if_not_exist_(const uint64_t tenant_id,
-                                    const ObString database_name,
+  int check_index_for_if_not_exist_(const ObString database_name,
                                     const ObString index_name,
                                     share::schema::ObSchemaGetterGuard &schema_guard,
                                     obcall::ObAlterTableRes &res);

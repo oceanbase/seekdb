@@ -263,13 +263,12 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
   } else if (OB_UNLIKELY(index_param.is_global_index_ && gather_part_ids.count() != 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(index_param.is_global_index_), K(gather_part_ids.count()));
-  } else if (OB_FAIL(mgr.get_table_stat(data_param.tenant_id_, data_param.table_id_, gather_part_ids, data_table_stats))) {
+  } else if (OB_FAIL(mgr.get_table_stat(data_param.table_id_, gather_part_ids, data_table_stats))) {
     LOG_WARN("failed to get table stat", K(ret));
   } else if (index_param.need_estimate_block_ &&
              OB_FAIL(partition_id_block_map.create(10000,
                                                    ObModIds::OB_HASH_BUCKET_TABLE_STATISTICS,
-                                                   ObModIds::OB_HASH_BUCKET_TABLE_STATISTICS,
-                                                   index_param.tenant_id_))) {
+                                                   ObModIds::OB_HASH_BUCKET_TABLE_STATISTICS))) {
     LOG_WARN("failed to create hash map", K(ret));
   } else if (index_param.need_estimate_block_ &&
              OB_FAIL(ObBasicStatsEstimator::estimate_block_count(ctx, index_param,
@@ -341,10 +340,9 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
     }
     if (OB_SUCC(ret) && is_continued && !index_table_stats.empty()) {
       ObMySQLTransaction trans;
-      if (OB_FAIL(trans.start(ctx.get_sql_proxy(), index_param.tenant_id_))) {
+      if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
           LOG_WARN("fail to start transaction", K(ret));
-      } else if (OB_FAIL(mgr.update_table_stat(index_param.tenant_id_,
-                                               trans.get_connection(),
+      } else if (OB_FAIL(mgr.update_table_stat(trans.get_connection(),
                                                index_table_stats,
                                                index_param.is_index_stat_))) {
         LOG_WARN("failed to update table stats", K(ret));
@@ -403,8 +401,7 @@ int ObIndexStatsEstimator::fast_get_index_avg_len(const int64_t data_partition_i
     ObOptStatManager &mgr = ObOptStatManager::get_instance();
     if (OB_FAIL(partition_ids.push_back(data_partition_id))) {
       LOG_WARN("failed to push back", K(ret));
-    } else if (OB_FAIL(mgr.get_column_stat(data_param.tenant_id_,
-                                           data_param.table_id_,
+    } else if (OB_FAIL(mgr.get_column_stat(data_param.table_id_,
                                            partition_ids,
                                            column_ids,
                                            col_stat_handles))) {

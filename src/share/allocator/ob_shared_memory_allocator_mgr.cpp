@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_shared_memory_allocator_mgr.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase {
 namespace share {
@@ -35,17 +36,14 @@ namespace share {
 
 void ObSharedMemAllocMgr::update_throttle_config()
 {
-  if (MTL_ID() != tenant_id_) {
-    SHARE_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "update throttle config in an invalid tenant", K(MTL_ID()), K(tenant_id_));
-    return;
-  }
+  
 
-  int64_t total_memory = lib::get_tenant_memory_limit(tenant_id_);
+  int64_t total_memory = lib::get_tenant_memory_limit();
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     int64_t share_mem_limit_percentage = tenant_config->_tx_share_memory_limit_percentage;
-    int64_t tenant_memstore_limit_percentage = MTL(ObTenantFreezer*)->get_memstore_limit_percentage();
+    int64_t tenant_memstore_limit_percentage = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
     int64_t tx_data_limit_percentage = tenant_config->_tx_data_memory_limit_percentage;
     int64_t mds_limit_percentage = tenant_config->_mds_memory_limit_percentage;
     int64_t trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
@@ -86,7 +84,6 @@ void ObSharedMemAllocMgr::update_throttle_config()
         vector_config_changed) {
       SHARE_LOG(INFO,
                 "[Throttle] Update Config",
-                K(tenant_id_),
                 K(total_memory),
                 K(share_mem_limit_percentage),
                 K(share_mem_limit),
@@ -103,7 +100,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
 
     }
   } else {
-    SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "invalid tenant config", K(tenant_id_), K(total_memory));
+    SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "invalid tenant config", K(total_memory));
   }
 }
 

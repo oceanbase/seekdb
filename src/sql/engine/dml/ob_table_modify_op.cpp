@@ -217,8 +217,7 @@ int ForeignKeyHandle::check_exist_inner_sql(ObTableModifyOp &op,
   int ret = OB_SUCCESS;
   const char *select_fmt = "select /*+ no_parallel */ 1 from `%.*s`.`%.*s` where %.*s for update";
   ObArenaAllocator alloc(ObModIds::OB_MODULE_PAGE_ALLOCATOR,
-                          OB_MALLOC_NORMAL_BLOCK_SIZE,
-                          op.get_eval_ctx().exec_ctx_.get_my_session()->get_effective_tenant_id());
+                          OB_MALLOC_NORMAL_BLOCK_SIZE);
   char *stmt_buf = nullptr;
   int64_t stmt_len = 0;
   char *where_buf = nullptr;
@@ -342,8 +341,7 @@ int ForeignKeyHandle::cascade(ObTableModifyOp &op,
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator alloc(ObModIds::OB_MODULE_PAGE_ALLOCATOR,
-                          OB_MALLOC_NORMAL_BLOCK_SIZE,
-                          op.get_eval_ctx().exec_ctx_.get_my_session()->get_effective_tenant_id());
+                          OB_MALLOC_NORMAL_BLOCK_SIZE);
   char *stmt_buf = nullptr;
   int64_t stmt_len = 0;
   char *where_buf = nullptr;
@@ -425,8 +423,7 @@ int ForeignKeyHandle::set_null(ObTableModifyOp &op,
   int ret = OB_SUCCESS;
   
   ObArenaAllocator alloc(ObModIds::OB_MODULE_PAGE_ALLOCATOR,
-                          OB_MALLOC_NORMAL_BLOCK_SIZE,
-                          MTL_ID());
+                          OB_MALLOC_NORMAL_BLOCK_SIZE);
   char *stmt_buf = nullptr;
   int64_t stmt_len = 0;
   char *where_buf = nullptr;
@@ -669,7 +666,6 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
   : ObOperator(ctx, spec, input),
     sql_proxy_(NULL),
     inner_conn_(NULL),
-    tenant_id_(0),
     saved_conn_(),
     need_foreign_key_check_(false),
     need_close_conn_(false),
@@ -741,27 +737,7 @@ void ObTableModifyOp::clear_dml_evaluated_flag()
 ObDasParallelType ObTableModifyOp::check_das_parallel_type()
 {
   ObDasParallelType type = DAS_SERIALIZATION;
-  ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
-  if (MY_SPEC.is_pdml_) {
-    type = DAS_SERIALIZATION;
-  } else if (!is_user_tenant(MTL_ID())) {
-    type = DAS_SERIALIZATION;
-    LOG_TRACE("not user tenant, can't submit task parallel", K(MTL_ID()));
-  } else if (execute_single_row_) {
-    type = DAS_SERIALIZATION;
-    LOG_TRACE("execute_single_row is true, can't submit task parallel", K(execute_single_row_));
-  } else if (session->is_inner()) {
-    type = DAS_SERIALIZATION;
-    LOG_TRACE("session is inner, can't submit task parallel", K(session->is_inner()));
-  } else if (MY_SPEC.plan_->has_nested_sql()) {
-    type = DAS_SERIALIZATION;
-    LOG_TRACE("has nested sql, can't submit task parallel", K(MY_SPEC.plan_->has_nested_sql()));
-  } else if (MY_SPEC.plan_->get_das_dop() > 1 && MY_SPEC.das_dop_ > 1) {
-    type = DAS_STREAMING_PARALLEL;
-  } else {
-    type = DAS_SERIALIZATION;
-    LOG_TRACE("das dop not larger than 1", K(MY_SPEC.plan_->get_das_dop()), K(MY_SPEC.das_dop_));
-  }
+  // lite: sys tenant (not user) -> DAS always serial
   return type;
 }
 
@@ -786,7 +762,7 @@ OB_INLINE int ObTableModifyOp::init_das_dml_ctx()
     label = "DmlDASCtx";
     break;
   }
-  ObMemAttr memattr(session->get_effective_tenant_id(), label, ObCtxIds::EXECUTE_CTX_ID);
+  ObMemAttr memattr(label, ObCtxIds::EXECUTE_CTX_ID);
   dml_rtctx_.das_ref_.set_expr_frame_info(nullptr != MY_SPEC.expr_frame_info_
                                         ? MY_SPEC.expr_frame_info_
                                         : &MY_SPEC.plan_->get_expr_frame_info());
@@ -1048,7 +1024,6 @@ int ObTableModifyOp::open_inner_conn()
   }
   if (OB_SUCC(ret)) {
     inner_conn_ = static_cast<ObInnerSQLConnection *>(session->get_inner_conn());
-    tenant_id_ = session->get_effective_tenant_id();
   }
   return ret;
 }
@@ -1110,8 +1085,8 @@ int ObTableModifyOp::execute_write(const char *sql)
   } else if (OB_ISNULL(sql)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql is NULL");
-  } else if (OB_FAIL(inner_conn_->execute_write(tenant_id_, sql, affected_rows))) {
-    LOG_WARN("failed to execute sql", K(ret), K(tenant_id_), K(sql));
+  } else if (OB_FAIL(inner_conn_->execute_write(sql, affected_rows))) {
+    LOG_WARN("failed to execute sql", K(ret), K(sql));
   }
   return ret;
 }
@@ -1125,8 +1100,8 @@ int ObTableModifyOp::execute_read(const char *sql, ObMySQLProxy::MySQLResult &re
   } else if (OB_ISNULL(sql)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql is NULL");
-  } else if (OB_FAIL(inner_conn_->execute_read(tenant_id_, sql, res))) {
-    LOG_WARN("failed to execute sql", K(ret), K(tenant_id_), K(sql));
+  } else if (OB_FAIL(inner_conn_->execute_read(sql, res))) {
+    LOG_WARN("failed to execute sql", K(ret), K(sql));
   }
  return ret;
 }

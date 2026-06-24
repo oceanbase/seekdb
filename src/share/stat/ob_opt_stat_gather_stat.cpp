@@ -38,7 +38,6 @@ int ObOptStatTaskInfo::init(common::ObIAllocator &allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret), K(trace_id_buf));
   } else {
-    tenant_id_ = session->get_effective_tenant_id();
     session_id_ = session->get_sid();
     int64_t len = session->get_current_trace_id().to_string(trace_id_buf, max_trace_id_len);
     trace_id_.assign_ptr(trace_id_buf, static_cast<int32_t>(len));
@@ -62,7 +61,6 @@ int ObOptStatTaskInfo::deep_copy(ObOptStatTaskInfo &other, char *buf, int64_t bu
     MEMCPY(buf + pos, other.trace_id_.ptr(), other.trace_id_.length());
     trace_id_.assign_ptr(buf + pos, other.trace_id_.length());
     pos += other.trace_id_.length();
-    tenant_id_ = other.tenant_id_;
     MEMCPY(buf + pos, other.task_id_.ptr(), other.task_id_.length());
     task_id_.assign_ptr(buf + pos, other.task_id_.length());
     pos += other.task_id_.length();
@@ -376,7 +374,6 @@ void ObOptStatGatherStatList::update_gather_stat_audit(const ObString &audit,
 }
 
 int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,
-                                           const uint64_t target_tenant_id,
                                            ObIArray<ObOptStatGatherStat> &stat_array)
 {
   int ret = OB_SUCCESS;
@@ -387,9 +384,7 @@ int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,
     // sys tenant list all tenant stat
     // non-sys tennat list self tenant stat
     ObOptStatGatherStat *tmp_stat = NULL;
-    if (!is_sys_tenant(target_tenant_id) && cur->get_tenant_id() != target_tenant_id) {
-      //do nothing
-    } else if (cur->deep_copy(allocator, tmp_stat)) {
+    if (cur->deep_copy(allocator, tmp_stat)) {
       LOG_WARN("failed to deep copy", K(ret));
     } else if (OB_ISNULL(tmp_stat)) {
       ret = OB_ERR_UNEXPECTED;
@@ -401,8 +396,7 @@ int ObOptStatGatherStatList::list_to_array(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObOptStatGatherStatList::cancel_gather_stats(const uint64_t tenant_id,
-                                                 const ObString &task_id)
+int ObOptStatGatherStatList::cancel_gather_stats(const ObString &task_id)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
@@ -411,9 +405,7 @@ int ObOptStatGatherStatList::cancel_gather_stats(const uint64_t tenant_id,
     // sys tenant list all tenant stat
     // non-sys tennat list self tenant stat
     ObOptStatGatherStat *tmp_stat = NULL;
-    if (!is_sys_tenant(tenant_id) && cur->get_tenant_id() != tenant_id) {
-      //do nothing
-    } else if (0 != cur->get_task_id().case_compare(task_id) || OB_ISNULL(cur->get_session())) {
+    if (0 != cur->get_task_id().case_compare(task_id) || OB_ISNULL(cur->get_session())) {
       //do nothing
     } else if (OB_FAIL(sql::ObSQLSessionMgr::kill_query(*cur->get_session(), ObSQLSessionState::QUERY_KILLED))) {
       LOG_WARN("kill query failed", K(ret));

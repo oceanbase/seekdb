@@ -105,9 +105,9 @@ struct ObSPICursor
     row_store_(), row_desc_(), allocator_(&allocator), cur_(0), fields_(allocator), complex_objs_(),
     session_info_(session_info)
   {
-    row_desc_.set_tenant_id(MTL_ID());
+    
     complex_objs_.reset();
-    complex_objs_.set_tenant_id(MTL_ID());
+    
   }
 
   ~ObSPICursor()
@@ -166,7 +166,7 @@ public:
       need_end_nested_stmt_(EST_NEED_NOT),
       mem_context_(nullptr),
       mem_context_destroy_guard_(mem_context_),
-      allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE),
       result_set_(NULL),
       sql_ctx_(),
       schema_guard_(share::schema::ObSchemaMgrItem::MOD_SPI_RESULT_SET),
@@ -305,7 +305,6 @@ public:
     ps_sql_(),
     is_bulk_(false),
     has_dup_column_name_(false),
-    has_link_table_(false),
     is_skip_locked_(false)
     {}
     stmt::StmtType type_; // statement type for prepare
@@ -321,7 +320,6 @@ public:
     ObString ps_sql_; // sql prepared parameterized sql
     bool is_bulk_;
     bool has_dup_column_name_;
-    bool has_link_table_;
     bool is_skip_locked_;
   };
 
@@ -733,8 +731,7 @@ public:
                                    ObIAllocator *alloc);
 
 
-  static int spi_set_collection(int64_t tenant_id,
-                                  const pl::ObPLINS *ns,
+  static int spi_set_collection(const pl::ObPLINS *ns,
                                   pl::ObPLCollection &coll,
                                   int64_t n,
                                   bool extend_mode = false);
@@ -873,7 +870,7 @@ public:
                              bool &skip_locked,
                              ParamStore *params,
                              common::ColumnsFieldArray *field_list = NULL);
-  static int force_refresh_schema(uint64_t tenant_id, int64_t refresh_version = OB_INVALID_VERSION);
+  static int force_refresh_schema(int64_t refresh_version = OB_INVALID_VERSION);
 
   static int spi_update_package_change_info(
     pl::ObPLExecCtx *ctx, uint64_t package_id, uint64_t var_idx);

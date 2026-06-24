@@ -45,8 +45,7 @@ public:
           const ObDataTypeCastParams &dtc_params,
           const sql::ObSQLSessionInfo &session,
           const ColumnsFieldIArray *fields = NULL,
-          share::schema::ObSchemaGetterGuard *schema_guard = NULL,
-          uint64_t tenant = common::OB_INVALID_ID);
+          share::schema::ObSchemaGetterGuard *schema_guard = NULL);
 
   virtual ~ObSMRow() {}
 
@@ -67,7 +66,6 @@ private:
   const sql::ObSQLSessionInfo &session_;
   const ColumnsFieldIArray *fields_;
   share::schema::ObSchemaGetterGuard *schema_guard_;
-  uint64_t tenant_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ObSMRow);
 }; // end of class OBMP

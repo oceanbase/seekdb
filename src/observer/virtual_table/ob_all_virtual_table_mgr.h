@@ -70,7 +70,7 @@ public:
   inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
   // Filter to get the tenants that need processing
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   // Process the tenant of the current iteration
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
   // Release the resources of the previous tenant

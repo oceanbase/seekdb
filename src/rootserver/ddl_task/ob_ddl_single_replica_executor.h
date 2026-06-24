@@ -31,9 +31,7 @@ struct ObDDLReplicaBuildExecutorParam final
 {
 public:
   ObDDLReplicaBuildExecutorParam ()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      dest_tenant_id_(OB_INVALID_TENANT_ID),
-      ddl_type_(share::DDL_INVALID),
+    : ddl_type_(share::DDL_INVALID),
       source_tablet_ids_(),
       dest_tablet_ids_(),
       source_table_ids_(OB_INVALID_ID),
@@ -55,8 +53,8 @@ public:
   {}
   ~ObDDLReplicaBuildExecutorParam () = default;
   bool is_valid() const {
-    bool is_valid =  tenant_id_ != OB_INVALID_TENANT_ID &&
-                     dest_tenant_id_ != OB_INVALID_TENANT_ID &&
+    bool is_valid =  true &&
+                     true &&
                      ddl_type_ != share::DDL_INVALID &&
                      source_tablet_ids_.count() > 0 &&
                      dest_tablet_ids_.count() == source_tablet_ids_.count() &&
@@ -79,15 +77,14 @@ public:
     return is_valid;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(dest_tenant_id), K_(ddl_type), K_(source_tablet_ids),
+  TO_STRING_KV(K_(ddl_type), K_(source_tablet_ids),
                K_(dest_tablet_ids), K_(source_table_ids), K_(dest_table_ids),
                K_(source_schema_versions), K_(dest_schema_versions), K_(snapshot_version),
                K_(task_id), K_(parallelism), K_(execution_id), 
                K_(data_format_version), K_(consumer_group_id), K_(can_reuse_macro_blocks),
                K_(parallel_datum_rowkey_list), K(min_split_start_scn_), K_(is_no_logging));
 public:
-  uint64_t tenant_id_;
-  uint64_t dest_tenant_id_;
+  
   share::ObDDLType ddl_type_;
   ObArray<ObTabletID> source_tablet_ids_;
   ObSArray<ObTabletID> dest_tablet_ids_;
@@ -199,8 +196,6 @@ class ObDDLReplicaBuildExecutor
 public:
   ObDDLReplicaBuildExecutor()
     : is_inited_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
-      dest_tenant_id_(OB_INVALID_TENANT_ID),
       ddl_type_(share::ObDDLType::DDL_INVALID),
       ddl_task_id_(0),
       snapshot_version_(0),
@@ -226,7 +221,7 @@ public:
                             const int64_t physical_row_count);
   int get_progress(int64_t &row_inserted, int64_t &physical_row_count_, double& percent);
   
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), K(dest_tenant_id_), K(ddl_type_),
+  TO_STRING_KV(K(is_inited_), K(ddl_type_),
                K(ddl_task_id_), K(snapshot_version_), K(parallelism_),
                K(execution_id_), K(data_format_version_), K(consumer_group_id_),
                K(lob_col_idxs_), K(src_tablet_ids_), K(dest_tablet_ids_),
@@ -271,8 +266,7 @@ private:
 
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
-  uint64_t dest_tenant_id_;
+  
   share::ObDDLType ddl_type_;
   int64_t ddl_task_id_;
   int64_t snapshot_version_;

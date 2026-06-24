@@ -98,7 +98,7 @@ int ObIndexBlockDataHeader::deep_copy_transformed_index_block(
 }
 
 ObIndexBlockDataTransformer::ObIndexBlockDataTransformer()
-  : allocator_(SET_USE_500(lib::ObMemAttr(OB_SERVER_TENANT_ID, "IdxBlkDataTrans"))), micro_reader_helper_() {}
+  : allocator_(SET_USE_500(lib::ObMemAttr("IdxBlkDataTrans"))), micro_reader_helper_() {}
 
 ObIndexBlockDataTransformer::~ObIndexBlockDataTransformer()
 {

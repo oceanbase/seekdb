@@ -53,8 +53,8 @@ int ObShowCreateProcedure::inner_get_next_row(common::ObNewRow *&row)
     } else if (OB_UNLIKELY(OB_INVALID_ID == show_procedure_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this procedure is used for show clause, can't be selected");
-    } else if (OB_FAIL(schema_guard_->get_routine_info(effective_tenant_id_, show_procedure_id, proc_info))) {
-      SERVER_LOG(WARN, "fail to get table schema", K(ret), K_(effective_tenant_id), K(show_procedure_id));
+    } else if (OB_FAIL(schema_guard_->get_routine_info( show_procedure_id, proc_info))) {
+      SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_procedure_id));
     } else if (OB_UNLIKELY(NULL == proc_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get procedure info", K(ret), K(show_procedure_id));
@@ -167,8 +167,7 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
           } else {
             ObSchemaPrinter schema_printer(*schema_guard_, false, sql_quote_show_create, ansi_quotes);
             int64_t pos = 0;
-            if (OB_FAIL(schema_printer.print_routine_definition(effective_tenant_id_,
-                                                                show_procedure_id,
+            if (OB_FAIL(schema_printer.print_routine_definition(show_procedure_id,
                                                                 exec_env,
                                                                 routine_def_buf,
                                                                 OB_MAX_VARCHAR_LENGTH,

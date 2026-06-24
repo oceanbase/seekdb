@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX CLOG
 #include "ob_server_log_block_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include <regex>                                // std::regex
 #ifdef __APPLE__
 #include <fcntl.h>                              // For fcntl, F_PREALLOCATE on macOS
@@ -341,21 +342,16 @@ bool ObServerLogBlockMgr::check_space_is_enough_(const int64_t log_disk_size) co
 int ObServerLogBlockMgr::get_all_tenants_log_disk_size_(int64_t &all_tenants_log_disk_size) const
 {
   int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  int64_t tenant_count = 0;
-  auto func = [&all_tenants_log_disk_size] () -> int{
-    int ret = OB_SUCCESS;
-    ObLogService *log_service = MTL(ObLogService*);
-    PalfOptions opts;
-    if (OB_FAIL(log_service->get_palf_options(opts))) {
-      CLOG_LOG(WARN, "get_palf_options failed", K(ret), K(all_tenants_log_disk_size));
-    } else {
-      all_tenants_log_disk_size += opts.disk_options_.log_disk_usage_limit_size_;
-    }
-    return ret;
-  };
-  if (OB_FAIL(omt->operate_in_each_tenant(func))) {
-    CLOG_LOG(WARN, "operate_in_each_tenant failed", K(ret), K(all_tenants_log_disk_size));
+  // NOTE: load-bearing readiness guard preserved from the collapsed operate_in_each_tenant
+  // (its !tenant_active_ check). Called at boot before the sys tenant's modules are constructed,
+  // so log_service may be null here -> contribute 0 (was: iterator skipped the inactive tenant).
+  ObLogService *log_service = share::g_mp->log_service();
+  PalfOptions opts;
+  if (NULL == log_service) {
+  } else if (OB_FAIL(log_service->get_palf_options(opts))) {
+    CLOG_LOG(WARN, "get_palf_options failed", K(ret), K(all_tenants_log_disk_size));
+  } else {
+    all_tenants_log_disk_size += opts.disk_options_.log_disk_usage_limit_size_;
   }
   return ret;
 }
@@ -530,37 +526,6 @@ int ObServerLogBlockMgr::fsync_until_success_(const FileDesc &dest_dir_fd)
   }
   return ret;
 }
-
-int ObServerLogBlockMgr::force_update_tenant_log_disk(const uint64_t tenant_id,
-                                                      const int64_t new_log_disk_size)
-{
-  int ret = OB_SUCCESS;
-  MTL_SWITCH(tenant_id) {
-    int64_t unused_size = 0;
-    int64_t old_log_disk_size = 0;
-    int64_t allowed_new_log_disk_size = 0;
-    ObLogService *log_service = MTL(ObLogService*);
-    if (NULL == log_service) {
-      ret = OB_ERR_UNEXPECTED;
-      CLOG_LOG(ERROR, "unexpected error, ObLogService is nullptr", KR(ret), KP(log_service));
-    } else if (OB_FAIL(log_service->get_palf_stable_disk_usage(unused_size, old_log_disk_size))) {
-      CLOG_LOG(ERROR, "get_palf_stable_disk_usage failed", KR(ret), KP(log_service));
-    } else if (OB_FAIL(update_tenant(old_log_disk_size, new_log_disk_size, allowed_new_log_disk_size, log_service))) {
-      CLOG_LOG(WARN, "update_tenant failed", KR(ret), KP(log_service));
-    } else if (allowed_new_log_disk_size != new_log_disk_size) {
-      ret = OB_STATE_NOT_MATCH;
-      CLOG_LOG(WARN, "can not force update tenant log disk, force_update_tenant_log_disk failed", KR(ret), KP(log_service), K(new_log_disk_size),
-               K(allowed_new_log_disk_size), K(old_log_disk_size));
-    } else {
-    }
-    CLOG_LOG(INFO, "force_update_tenant_log_disk finished", KR(ret), KP(log_service), K(new_log_disk_size),
-             K(allowed_new_log_disk_size), K(old_log_disk_size));
-  } else {
-    CLOG_LOG(WARN, "force_update_tenant_log_disk failed, no such tenant", KR(ret),  K(tenant_id), K(new_log_disk_size));
-  }
-  return ret;
-}
-
 // the prefix is tenant_xxx
 int ObServerLogBlockMgr::scan_tenant_dir_(const char *tenant_dir,
                                           int64_t &has_allocated_block_cnt)

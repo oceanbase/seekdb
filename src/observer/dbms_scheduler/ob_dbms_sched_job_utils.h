@@ -101,7 +101,6 @@ class ObDBMSSchedJobInfo
 {
 public:
   ObDBMSSchedJobInfo() :
-    tenant_id_(common::OB_INVALID_ID),
     user_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
     job_(common::OB_INVALID_ID),
@@ -150,8 +149,7 @@ public:
     this_exec_addr_(),
     this_exec_trace_id_() {}
 
-  TO_STRING_KV(K(tenant_id_),
-               K(user_id_),
+  TO_STRING_KV(K(user_id_),
                K(database_id_),
                K(job_),
                K(job_name_),
@@ -189,16 +187,16 @@ public:
 
   bool valid()
   {
-    return tenant_id_ != common::OB_INVALID_ID
+    return true
             && job_ != common::OB_INVALID_ID
             && !exec_env_.empty();
   }
 
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   uint64_t get_user_id() { return user_id_; }
   uint64_t get_database_id() { return database_id_; }
   uint64_t get_job_id() { return job_; }
-  uint64_t get_job_id_with_tenant() { return common::combine_two_ids(tenant_id_, job_); }
+  uint64_t get_job_id_with_tenant() { return job_; }
   int64_t  get_this_date() { return this_date_; }
   int64_t  get_next_date() { return next_date_; }
   int64_t  get_last_date() { return last_date_; }
@@ -246,7 +244,6 @@ public:
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobInfo &other);
 
 public:
-  uint64_t tenant_id_;
   uint64_t user_id_;
   uint64_t database_id_;
   uint64_t job_;
@@ -304,7 +301,6 @@ class ObDBMSSchedJobClassInfo
 {
 public:
   ObDBMSSchedJobClassInfo() :
-    tenant_id_(common::OB_INVALID_ID),
     job_class_name_(),
     resource_consumer_group_(),
     logging_level_(),
@@ -312,8 +308,7 @@ public:
     comments_(),
     is_oracle_tenant_(true) {}
 
-  TO_STRING_KV(K(tenant_id_),
-              K(job_class_name_),
+  TO_STRING_KV(K(job_class_name_),
               K(service_),
               K(resource_consumer_group_),
               K(logging_level_),
@@ -321,10 +316,10 @@ public:
               K(comments_));
   bool valid()
   {
-    return tenant_id_ != common::OB_INVALID_ID
+    return true
             && !job_class_name_.empty();
   }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   common::number::ObNumber &get_log_history() { return log_history_; }
   common::ObString &get_job_class_name() { return job_class_name_; }
   common::ObString &get_service() { return service_; }
@@ -334,7 +329,6 @@ public:
   bool is_oracle_tenant() { return is_oracle_tenant_; }
   int deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobClassInfo &other);
 public:
-  uint64_t tenant_id_;
   common::ObString job_class_name_;
   common::ObString service_;
   common::ObString resource_consumer_group_;
@@ -412,11 +406,10 @@ public:
   */
   static int check_is_valid_max_run_duration(const int64_t max_run_duration);
   //TO DO DELETE continuous rain
-  static int generate_job_id(int64_t tenant_id, int64_t &max_job_id);
+  static int generate_job_id(int64_t &max_job_id);
   /**
    * @brief  Create a job
    * @param [in] sql_client
-   * @param [in] tenant_id  - tenant id
    * @param [in] job_id  - job id
    * @retval OB_SUCCESS execute success
    * @retval OB_ERR_UNEXPECTED unknown error
@@ -424,13 +417,11 @@ public:
    * @retval OB_ERR_NO_PRIVILEGE the user passed in for the current JOB does not have permission to modify
    */
   static int create_dbms_sched_job(common::ObISQLClient &sql_client,
-                                   const uint64_t tenant_id,
                                    const int64_t job_id,
                                    const ObDBMSSchedJobInfo &job_info);
   /**
    * @brief  Directly delete a job
    * @param [in] sql_client
-   * @param [in] tenant_id  - tenant id
    * @param [in] job_name  - job name
    * @param [in] if_exists  - if true (deleting a non-existent JOB will result in an error)
    * @retval OB_SUCCESS execute success
@@ -438,7 +429,6 @@ public:
    * @retval OB_INVALID_ARGUMENT current JOB does not exist
    */
   static int remove_dbms_sched_job(common::ObISQLClient &sql_client,
-                                   const uint64_t tenant_id,
                                    const common::ObString &job_name,
                                    const bool if_exists = false);
   /**
@@ -472,7 +462,6 @@ public:
                                         const bool from_pl_set_attr = false);
   /**
    * @brief  Get JOB information
-   * @param [in] tenant_id  - tenant id
    * @param [in] is_oracle_tenant  - whether it is an oracle tenant, internal table does not have this value, determined by the caller
    * @param [in] job_name  - job name
    * @param [in] allocator  - reasonable allocator, to prevent job_info from becoming invalid
@@ -482,7 +471,6 @@ public:
    * @retval OB_ENTRY_NOT_EXIST JOB does not exist
    */
   static int get_dbms_sched_job_info(common::ObISQLClient &sql_client,
-                                     const uint64_t tenant_id,
                                      const bool is_oracle_tenant,
                                      const ObString &job_name,
                                      common::ObIAllocator &allocator,
@@ -507,9 +495,9 @@ public:
    * @retval OB_INVALID_ARGUMENT invalid argument
    */
   static int calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time);
-  static int zone_check_impl(int64_t tenant_id, const ObString &zone);
-  static int job_class_check_impl(int64_t tenant_id, const ObString &job_class_name);
-  static int get_max_failures_value(int64_t tenant_id, const ObString &src_str, int64_t &value);
+  static int zone_check_impl(const ObString &zone);
+  static int job_class_check_impl(const ObString &job_class_name);
+  static int get_max_failures_value(const ObString &src_str, int64_t &value);
   static int reserve_user_with_minimun_id(ObIArray<const share::schema::ObUserInfo *> &user_infos); // TO DO Lianyu delete
 };
 }

@@ -3067,7 +3067,6 @@ int ObSelectLogPlan::check_if_union_all_match_set_partition_wise(const ObIArray<
     ObLogicalOperator *child_op = NULL;
     ObShardingInfo *child_sharding = NULL;
     const ObSelectStmt *child_stmt = NULL;
-    bool has_external_table_scan = false;
     if (OB_ISNULL(child_op = child_ops.at(i))
         || OB_ISNULL(child_sharding = child_op->get_sharding())
         || !child_ops.at(i)->get_plan()->get_stmt()->is_select_stmt()
@@ -3077,11 +3076,6 @@ int ObSelectLogPlan::check_if_union_all_match_set_partition_wise(const ObIArray<
     } else if (!child_sharding->is_distributed()) {
       is_union_all_set_pw = false;
       OPT_TRACE("not distributed sharding, can not use set partition wise");
-    } else if (OB_FAIL(check_external_table_scan(const_cast<ObSelectStmt*>(child_stmt), has_external_table_scan))) {
-      LOG_WARN("fail to check has external table scan", K(ret));
-    } else if (has_external_table_scan) {
-      is_union_all_set_pw = false;
-      OPT_TRACE("has external table scan, can not use set partition wise");
     } else if (i == 0) {
       if (OB_FAIL(check_sharding_inherit_from_access_all(child_op, 
                                                          is_inherit_from_access_all))) {
@@ -8861,26 +8855,6 @@ int ObSelectLogPlan::init_selectivity_metas_for_set(ObSelectLogPlan *sub_plan,
   return ret;
 }
 
-
-int ObSelectLogPlan::check_external_table_scan(ObSelectStmt *stmt, bool &has_external_table)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObSelectStmt*> child_stmts;
-  if (OB_ISNULL(stmt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
-  } else if (stmt->has_external_table()) {
-    has_external_table = true;
-  } else {
-    if (OB_FAIL(stmt->get_child_stmts(child_stmts))) {
-      LOG_WARN("fail to get child stmt", K(ret));
-    }
-    for (int i = 0; OB_SUCC(ret) && !has_external_table && i < child_stmts.count(); i++) {
-      ret = SMART_CALL(check_external_table_scan(child_stmts.at(i), has_external_table));
-    }
-  }
-  return ret;
-}
 
 int ObSelectLogPlan::contain_enum_set_rowkeys(const ObLogTableScan &table_scan, bool &contain) {
   int ret = OB_SUCCESS;

@@ -77,7 +77,6 @@ int ObStandardGroupChecker::check_only_full_group_by()
     // do nothing
   } else {
     ObArenaAllocator alloc("CheckUnique", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                            session_info_->get_effective_tenant_id(),
                             ObCtxIds::DEFAULT_CTX_ID);
     ObRawExprFactory expr_factory(alloc);
     ObFdItemFactory fd_item_factory(alloc);

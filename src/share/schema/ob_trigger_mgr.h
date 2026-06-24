@@ -34,49 +34,39 @@ struct ObTenantTriggerId
 {
 public:
   ObTenantTriggerId()
-    : tenant_id_(common::OB_INVALID_TENANT_ID),
-      trigger_id_(common::OB_INVALID_ID)
+    : trigger_id_(common::OB_INVALID_ID)
   {}
-  ObTenantTriggerId(uint64_t tenant_id, uint64_t trigger_id)
-    : tenant_id_(tenant_id),
-      trigger_id_(trigger_id)
+  ObTenantTriggerId(uint64_t trigger_id)
+    : trigger_id_(trigger_id)
   {}
   ObTenantTriggerId(const ObTenantTriggerId &other)
-    : tenant_id_(other.tenant_id_),
-      trigger_id_(other.trigger_id_)
+    : trigger_id_(other.trigger_id_)
   {}
   ObTenantTriggerId &operator =(const ObTenantTriggerId &other)
   {
-    tenant_id_ = other.tenant_id_;
     trigger_id_ = other.trigger_id_;
     return *this;
   }
   bool operator ==(const ObTenantTriggerId &rhs) const
-  { return (tenant_id_ == rhs.tenant_id_) && (trigger_id_ == rhs.trigger_id_); }
+  { return (true) && (trigger_id_ == rhs.trigger_id_); }
   bool operator !=(const ObTenantTriggerId &rhs) const
   { return !(*this == rhs); }
   bool operator <(const ObTenantTriggerId &rhs) const
   {
-    bool bret = tenant_id_ < rhs.tenant_id_;
-    if (tenant_id_ == rhs.tenant_id_) {
-      bret = trigger_id_ < rhs.trigger_id_;
-    }
-    return bret;
+    return trigger_id_ < rhs.trigger_id_;
   }
   inline uint64_t hash() const
   {
     uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
-    hash_ret = common::murmurhash(&trigger_id_, sizeof(trigger_id_), hash_ret);
+    hash_ret = common::murmurhash(&trigger_id_, sizeof(trigger_id_), 0);
     return hash_ret;
   }
   bool is_valid() const
-  { return (tenant_id_ != common::OB_INVALID_TENANT_ID) && (trigger_id_ != common::OB_INVALID_ID); }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  { return (true) && (trigger_id_ != common::OB_INVALID_ID); }
+  
   inline uint64_t get_trigger_id() const { return trigger_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(trigger_id));
+  TO_STRING_KV(K_(trigger_id));
 private:
-  uint64_t tenant_id_;
   uint64_t trigger_id_;
 };
 
@@ -98,7 +88,7 @@ public:
   ObSimpleTriggerSchema &operator =(const ObSimpleTriggerSchema &other);
   virtual void reset()
   {
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
     trigger_id_ = common::OB_INVALID_ID;
     database_id_ = common::OB_INVALID_ID;
     schema_version_ = common::OB_INVALID_VERSION;
@@ -109,7 +99,7 @@ public:
   virtual bool is_valid() const
   {
     return (ObSchema::is_valid() &&
-            common::OB_INVALID_TENANT_ID != tenant_id_ &&
+            true &&
             common::OB_INVALID_ID != trigger_id_ &&
             common::OB_INVALID_ID != database_id_ &&
             !trigger_name_.empty() &&
@@ -117,36 +107,36 @@ public:
   }
   virtual int deep_copy(const ObSimpleTriggerSchema &other);
 
-  virtual void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   virtual void set_trigger_id(uint64_t trigger_id) { trigger_id_ = trigger_id; }
   virtual void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   virtual void set_schema_version(int64_t schema_version) { schema_version_ = schema_version; }
   virtual int set_trigger_name(const common::ObString &trigger_name)
   { return deep_copy_str(trigger_name, trigger_name_); }
 
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_trigger_id() const { return trigger_id_; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline const common::ObString &get_trigger_name() const { return trigger_name_; }
   inline ObTenantTriggerId get_tenant_trigger_id() const
-  { return ObTenantTriggerId(tenant_id_, trigger_id_); }
+  { return ObTenantTriggerId(trigger_id_); }
   // TODO(jiuren):
   // consider if the database is in recyclebin after we support trigger in mysql mode.
   // we can not drop database in oracle mode
   inline bool is_in_recyclebin() const
   { return common::OB_RECYCLEBIN_SCHEMA_ID == database_id_; }
-  uint64_t get_exec_tenant_id() const;
+  
   inline uint64_t get_object_id() const { return get_trigger_id(); }
   inline ObObjectType get_object_type() const { return ObObjectType::TRIGGER; }
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(trigger_id),
                K_(database_id),
                K_(schema_version),
                K_(trigger_name));
 protected:
-  uint64_t tenant_id_;
+  
   uint64_t trigger_id_;
   uint64_t database_id_;
   int64_t schema_version_;
@@ -157,36 +147,33 @@ class ObTriggerNameHashWrapper
 {
 public:
   ObTriggerNameHashWrapper()
-    : tenant_id_(common::OB_INVALID_TENANT_ID),
-      database_id_(common::OB_INVALID_ID),
+    : database_id_(common::OB_INVALID_ID),
       trigger_name_()
   {}
-  ObTriggerNameHashWrapper(uint64_t tenant_id, uint64_t database_id,
+  ObTriggerNameHashWrapper(uint64_t database_id,
                            const common::ObString &trigger_name)
-    : tenant_id_(tenant_id),
-      database_id_(database_id),
+    : database_id_(database_id),
       trigger_name_(trigger_name)
   {}
   ~ObTriggerNameHashWrapper() {}
   inline uint64_t hash() const;
   inline bool operator ==(const ObTriggerNameHashWrapper &rv) const;
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   inline void set_trigger_name(const common::ObString &trigger_name) { trigger_name_ = trigger_name;}
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_database_id() const { return database_id_; }
   inline const common::ObString &get_trigger_name() const { return trigger_name_; }
-  TO_STRING_KV(K_(tenant_id), K_(database_id), K_(trigger_name));
+  TO_STRING_KV(K_(database_id), K_(trigger_name));
 private:
-  uint64_t tenant_id_;
   uint64_t database_id_;
   common::ObString trigger_name_;
 };
 
 inline bool ObTriggerNameHashWrapper::operator ==(const ObTriggerNameHashWrapper &rv) const
 {
-  ObCompareNameWithTenantID name_cmp(tenant_id_);
-  return (tenant_id_ == rv.get_tenant_id())
+  ObCompareNameWithTenantID name_cmp;
+  return (true)
       && (database_id_ == rv.get_database_id())
       && (0 == name_cmp.compare(trigger_name_, rv.get_trigger_name()));
 }
@@ -195,8 +182,7 @@ inline uint64_t ObTriggerNameHashWrapper::hash() const
 {
   uint64_t hash_ret = 0;
   common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
-  hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), hash_ret);
+  hash_ret = common::murmurhash(&database_id_, sizeof(uint64_t), 0);
   hash_ret = common::ObCharset::hash(cs_type, trigger_name_, hash_ret);
   return hash_ret;
 }
@@ -227,7 +213,7 @@ struct ObGetTriggerKey<ObTriggerNameHashWrapper, ObSimpleTriggerSchema *>
   {
     ObTriggerNameHashWrapper name_wrap;
     if (trigger_schema != NULL) {
-      name_wrap.set_tenant_id(trigger_schema->get_tenant_id());
+      
       name_wrap.set_database_id(trigger_schema->get_database_id());
       name_wrap.set_trigger_name(trigger_schema->get_trigger_name());
     }
@@ -260,13 +246,11 @@ public:
   int del_trigger(const ObTenantTriggerId &tenant_trigger_id);
   int add_triggers(const common::ObIArray<ObSimpleTriggerSchema> &trigger_schemas);
   int get_trigger_schema(uint64_t trigger_id, const ObSimpleTriggerSchema *&trigger_schema) const;
-  int get_trigger_schema(uint64_t tenant_id, uint64_t database_id,
+  int get_trigger_schema( uint64_t database_id,
                          const common::ObString &trigger_name,
                          const ObSimpleTriggerSchema *&trigger_schema) const;
-  int get_trigger_schemas_in_tenant(uint64_t tenant_id,
-                                    common::ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const;
-  int del_trigger_schemas_in_tenant(uint64_t tenant_id);
-  int get_trigger_schemas_in_database(uint64_t tenant_id, uint64_t database_id,
+  int get_trigger_schemas_in_tenant(common::ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const;
+  int get_trigger_schemas_in_database(uint64_t database_id,
                                       common::ObIArray<const ObSimpleTriggerSchema *> &trigger_schemas) const;
   int try_rebuild_trigger_hashmap();
 private:

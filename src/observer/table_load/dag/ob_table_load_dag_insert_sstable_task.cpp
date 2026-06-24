@@ -377,7 +377,7 @@ void ObTableLoadMemoryFriendWriteMacroBlockPipeline::reset()
 {
   is_inited_ = false;
   if (OB_LIKELY(nullptr != row_iterator_)) {
-    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    ObMemAttr attr("TLD_SliceIter");
     OB_DELETE(ObITabletSliceRowIterator, attr, row_iterator_);
     row_iterator_ = nullptr;
   }
@@ -451,7 +451,7 @@ int ObTableLoadMacroBlockWriteTask::process()
   int ret = OB_SUCCESS;
   ObITabletSliceRowIterator *row_iter = nullptr;
   ObITabletSliceWriter *storage_writer = nullptr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "TLMBWTask"));
+  ObArenaAllocator allocator(ObMemAttr("TLMBWTask"));
   if (OB_FAIL(merge_task_->init_iterator(row_iter))) {
     LOG_WARN("fail to init iterator", KR(ret));
   } else {
@@ -489,7 +489,7 @@ int ObTableLoadMacroBlockWriteTask::process()
     }
   }
   if (OB_LIKELY(nullptr != row_iter)) {
-    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    ObMemAttr attr("TLD_SliceIter");
     OB_DELETE(ObITabletSliceRowIterator, attr, row_iter);
   }
   if (OB_LIKELY(nullptr != storage_writer)) {

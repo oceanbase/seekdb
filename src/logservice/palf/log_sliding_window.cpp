@@ -166,7 +166,7 @@ int LogSlidingWindow::flashback(const PalfBaseInfo &palf_base_info, const int64_
     PALF_LOG(WARN, "group_buffer_ init failed", K(ret), K(palf_id));
   } else if (OB_FAIL(checksum_.init(palf_id, prev_log_info.accum_checksum_))) {
     PALF_LOG(WARN, "checksum_ init failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(match_lsn_map_.init("MatchOffsetMap", MTL_ID()))) {
+  } else if (OB_FAIL(match_lsn_map_.init("MatchOffsetMap"))) {
     PALF_LOG(WARN, "match_lsn_map_ init failed", K(ret), K(palf_id));
   } else {
     last_submit_lsn_ = prev_log_info.lsn_;
@@ -292,7 +292,7 @@ int LogSlidingWindow::do_init_mem_(const int64_t palf_id,
     PALF_LOG(WARN, "group_buffer_ init failed", K(ret), K(palf_id));
   } else if (OB_FAIL(checksum_.init(palf_id, prev_log_info.accum_checksum_))) {
     PALF_LOG(WARN, "checksum_ init failed", K(ret), K(palf_id));
-  } else if (OB_FAIL(match_lsn_map_.init("MatchLsnMap", MTL_ID()))) {
+  } else if (OB_FAIL(match_lsn_map_.init("MatchLsnMap"))) {
     PALF_LOG(WARN, "match_lsn_map_ init failed", K(ret), K(palf_id));
   }
   return ret;
@@ -878,7 +878,7 @@ int LogSlidingWindow::try_push_log_to_children_(const int64_t curr_proposal_id,
   const bool need_presend_log = (state_mgr_->is_leader_active()) ? true : false;
   const bool is_fetch_log = false;
   const bool need_batch_push = need_use_batch_rpc_(log_write_buf.get_total_size(), is_fetch_log);
-  const PushLogType to_child_log_type = (GET_MIN_CLUSTER_VERSION() >= CLUSTER_CURRENT_VERSION)? PUSH_LOG_WO_ACK: PUSH_LOG;
+  const PushLogType to_child_log_type = PUSH_LOG_WO_ACK;
   if (OB_FAIL(mm_->get_log_sync_children_list(children_list))) {
     PALF_LOG(WARN, "get_children_list failed", K(ret), K_(palf_id));
   } else if (children_list.is_valid()

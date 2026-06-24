@@ -22,7 +22,7 @@
 #include "lib/string/ob_string_holder.h"
 #include "lib/container/ob_array.h"
 #include "share/ob_ls_id.h"
-#include "storage/tx/wrs/ob_ls_wrs_handler.h"
+#include "storage/ls/ob_ls_wrs_handler.h"
 #include "storage/checkpoint/ob_freeze_checkpoint.h"
 #include "logservice/ob_log_handler.h"
 #include "lib/container/ob_array_serialization.h"

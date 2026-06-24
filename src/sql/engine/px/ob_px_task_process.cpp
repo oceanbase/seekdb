@@ -91,7 +91,6 @@ void ObPxTaskProcess::run()
             KP(this));
   ObPxWorkerStat stat;
   stat.init(get_session_id(),
-            get_tenant_id(),
             *ObCurTraceId::get_trace_id(),
             get_qc_id(),
             get_sqc_id(),
@@ -160,7 +159,7 @@ int ObPxTaskProcess::process()
       exec_start_timestamp_ = enqueue_timestamp_;
 
       if (OB_FAIL(do_process())) {
-        LOG_WARN("failed to process", K(get_tenant_id()), K(ret), K(get_qc_id()), K(get_dfo_id()));
+        LOG_WARN("failed to process", K(1UL), K(ret), K(get_qc_id()), K(get_dfo_id()));
       }
       // Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
@@ -392,11 +391,10 @@ int ObPxTaskProcess::do_process()
                   KP(arg_.exec_ctx_),
                   KP(gctx_.executor_rpc_));
       } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
-                  arg_.exec_ctx_->get_my_session()->get_effective_tenant_id(),
                   schema_guard_))) {
         LOG_WARN("fail to get schema guard", K(ret));
       } else if (OB_FAIL(schema_guard_.get_schema_version(
-                 arg_.exec_ctx_->get_my_session()->get_effective_tenant_id(), arg_.task_.px_worker_execute_start_schema_version_))) {
+                 arg_.task_.px_worker_execute_start_schema_version_))) {
         LOG_WARN("get px worker start schema version failed", K(ret));
       } else {
         // Used for the initialization of parameters of the virtual table for remote execution
@@ -923,18 +921,5 @@ uint64_t ObPxTaskProcess::get_session_id() const
   return session_id;
 }
 
-uint64_t ObPxTaskProcess::get_tenant_id() const
-{
-  uint64_t tenant_id = 0;
-  ObExecContext *exec_ctx = NULL;
-  ObSQLSessionInfo *session = NULL;
-  if (OB_ISNULL(exec_ctx = arg_.exec_ctx_)) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "exec ctx is NULL", K(exec_ctx));
-  } else if (OB_ISNULL(session = exec_ctx->get_my_session())) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "session is NULL", K(exec_ctx));
-  } else {
-    tenant_id = session->get_effective_tenant_id();
-  }
-  return tenant_id;
-}
+
 

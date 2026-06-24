@@ -131,7 +131,6 @@ int ObMPStmtPrexecute::before_process()
       bool need_response_error = false;
       session->set_current_trace_id(ObCurTraceId::get_trace_id());
       session->init_use_rich_format();
-      session->set_proxy_version(get_proxy_version());
       ObReqTimeGuard req_timeinfo_guard;
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(!session->is_valid())) {
@@ -142,7 +141,7 @@ int ObMPStmtPrexecute::before_process()
       } else if (OB_UNLIKELY(session->is_zombie())) {
         ret = OB_ERR_SESSION_INTERRUPTED;
         LOG_WARN("session has been killed", K(session->get_session_state()), K_(sql),
-                K(session->get_server_sid()), "proxy_sessid", session->get_proxy_sessid(), K(ret));
+                K(session->get_server_sid()), K(ret));
       } else if (pkt.exist_trace_info()
                  && OB_FAIL(session->update_sys_variable(SYS_VAR_OB_TRACE_INFO,
                                                          pkt.get_trace_info()))) {
@@ -162,10 +161,10 @@ int ObMPStmtPrexecute::before_process()
         } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
           LOG_WARN("fail to get query timeout", K_(sql), K(ret));
         } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                    session->get_effective_tenant_id(), tenant_version))) {
+                    tenant_version))) {
           LOG_WARN("fail get tenant broadcast version", K(ret));
         } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
-                    OB_SYS_TENANT_ID, sys_version))) {
+                    sys_version))) {
           LOG_WARN("fail get tenant broadcast version", K(ret));
         } else if (OB_FAIL(ObMPStmtPrepare::multiple_query_check(*session,
                                                                   sql_,
@@ -178,8 +177,7 @@ int ObMPStmtPrexecute::before_process()
           retry_ctrl_.set_sys_global_schema_version(sys_version);
           if (OB_FAIL(init_process_var(get_ctx(), ObMultiStmtItem(false, 0, ObString()), *session))) {
             LOG_WARN("init process var faield.", K(ret));
-          } else if (OB_FAIL(check_and_refresh_schema(session->get_login_tenant_id(),
-                                                      session->get_effective_tenant_id()))) {
+          } else if (OB_FAIL(check_and_refresh_schema())) {
             LOG_WARN("failed to check_and_refresh_schema", K(ret));
           } else {
             do {
@@ -188,17 +186,17 @@ int ObMPStmtPrexecute::before_process()
               SMART_VAR(ObMySQLResultSet, result, *session, THIS_WORKER.get_allocator()) {
                 result.set_has_more_result(false);
                 share::schema::ObSchemaGetterGuard schema_guard;
-                const uint64_t tenant_id = session->get_effective_tenant_id();
+                
                 ObVirtualTableIteratorFactory vt_iter_factory(*gctx_.vt_iter_creator_);
                 retry_ctrl_.clear_state_before_each_retry(session->get_retry_info_for_update());
                 if (OB_FAIL(ret)) {
-                } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+                } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
                   LOG_WARN("get schema guard failed", K(ret));
                 } else if (OB_FAIL(schema_guard.get_schema_version(
-                                    session->get_effective_tenant_id(), tenant_version))) {
+                                    tenant_version))) {
                   LOG_WARN("fail get schema version", K(ret));
                 } else if (OB_FAIL(schema_guard.get_schema_version(
-                                    OB_SYS_TENANT_ID, sys_version))) {
+                                    sys_version))) {
                   LOG_WARN("fail get sys schema version", K(ret));
                 } else if (OB_ISNULL(result.get_exec_context().get_task_executor_ctx())) {
                   ret = OB_ERR_UNEXPECTED;
@@ -273,10 +271,6 @@ int ObMPStmtPrexecute::before_process()
           stmt_type_ = ps_session_info->get_stmt_type();
           if (is_arraybinding_has_result_type(stmt_type_) && iteration_count_ > 1) {
             set_arraybounding(true);
-            if (get_ctx().can_reroute_sql_) {
-              get_ctx().can_reroute_sql_ = false;
-              LOG_INFO("arraybinding not support reroute sql.");
-            }
             // only init param_store
             // array_binding_row_ and array_binding_columns_ will init later
             OZ (init_arraybinding_paramstore(*allocator_));
@@ -498,8 +492,8 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
         } else if (OB_FAIL(response_param_query_header(session, &cursor->get_field_columns(),
                                           get_params(), stmt_id_, has_result, 0))) {
           LOG_WARN("send header packet faild.", K(ret));
-        } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(session.get_effective_tenant_id(), schema_guard))) {
-          LOG_WARN("get tenant schema guard failed ", K(ret), K(session.get_effective_tenant_id()));
+        } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+          LOG_WARN("get tenant schema guard failed ", K(ret));
         }
         if (-1 == cursor->get_current_position() && iteration_count_ > 0) {
           // execute if data is returned, need to update the cursor's pointer position
@@ -1306,7 +1300,7 @@ int ObMPStmtPrexecute::send_eof_packet(ObSQLSessionInfo &session,
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = cursor_exist ? 1 : 0;
     flags.status_flags_.OB_SERVER_STATUS_LAST_ROW_SENT = last_row ? 1 : 0;
     flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = ps_out ? 1 : 0;
-    if (!session.is_obproxy_mode()) {
+    {
       flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session.partition_hit().get_bool();
     }
     eofp.set_server_status(flags);

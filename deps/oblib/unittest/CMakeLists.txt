@@ -44,5 +44,4 @@ function(oblib_addtest_simd mainfile)
 endfunction()
 
 add_subdirectory(lib)
-add_subdirectory(grpc)
 add_subdirectory(common)

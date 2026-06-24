@@ -96,7 +96,7 @@ public:
   ObPxInterruptID get_interrupt_id()
       { return arg_.task_.get_interrupt_id(); }
   uint64_t get_session_id() const;
-  uint64_t get_tenant_id() const;
+  
 
   int execute(const ObOpSpec &root);
 

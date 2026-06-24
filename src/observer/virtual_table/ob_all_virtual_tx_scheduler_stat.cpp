@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_scheduler_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::common;
@@ -54,10 +55,10 @@ void ObGVTxSchedulerStat::release_last_tenant()
   tx_scheduler_stat_iter_.reset();
 }
 
-bool ObGVTxSchedulerStat::is_need_process(uint64_t tenant_id)
+bool ObGVTxSchedulerStat::is_need_process()
 {
   bool bool_ret = false;
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
+  if (true || true) {
     bool_ret = true;
   }
 
@@ -88,7 +89,7 @@ int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator_ shouldn't be nullptr", K(allocator_), KR(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (!tx_scheduler_stat_iter_.is_ready()) {
-    if (OB_FAIL(MTL(ObTransService*)->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
+    if (OB_FAIL(share::g_mp->trans_service()->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
       SERVER_LOG(WARN, "iterate transaction scheduler error", KR(ret));
       if (OB_NOT_RUNNING == ret || OB_NOT_INIT == ret) {
         ret = OB_SUCCESS;

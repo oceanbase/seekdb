@@ -40,14 +40,14 @@ int64_t get_memory_used();
 int64_t get_memory_avail();
 int64_t get_hard_memory_remain();
 
-void set_tenant_memory_limit(uint64_t tenant_id, int64_t bytes);
-int64_t get_tenant_memory_limit(uint64_t tenant_id);
-int64_t get_tenant_memory_hold(uint64_t tenant_id);
-int64_t get_tenant_memory_hold(const uint64_t tenant_id, const uint64_t ctx_id);
-int64_t get_tenant_cache_hold(uint64_t tenant_id);
-int64_t get_tenant_memory_remain(uint64_t tenant_id);
+void set_tenant_memory_limit(int64_t bytes);
+int64_t get_tenant_memory_limit();
+int64_t get_tenant_memory_hold();
+int64_t get_tenant_memory_hold(const uint64_t ctx_id);
+int64_t get_tenant_cache_hold();
+int64_t get_tenant_memory_remain();
 void get_tenant_label_memory(
-  uint64_t tenant_id, ObLabel &label, common::ObLabelItem &item);
+  ObLabel &label, common::ObLabelItem &item);
 void ob_set_reserved_memory(const int64_t bytes);
 int64_t ob_get_reserved_memory();
 
@@ -56,16 +56,16 @@ int64_t ob_get_reserved_memory();
 // pc_pctg: percentage limitation of tenant memory can be used by Plan Cache
 // wa_pctg: percentage limitation of tenant memory can be used by Work Area
 
-int set_ctx_limit(uint64_t tenant_id, uint64_t ctx_id, const int64_t limit);
-int set_wa_limit(uint64_t tenand_id, int64_t wa_pctg);
+int set_ctx_limit(uint64_t ctx_id, const int64_t limit);
+int set_wa_limit(int64_t wa_pctg);
 
 // set meta object memory limit for specified tenant.
 // - meta_obj_pct_lmt: percentage limitation of tenant memory can be used for meta object.
-int set_meta_obj_limit(uint64_t tenant_id, int64_t meta_obj_pct_lmt);
+int set_meta_obj_limit(int64_t meta_obj_pct_lmt);
 
 bool errsim_alloc(const ObMemAttr &attr);
 
-int set_req_chunkmgr_parallel(uint64_t tenant_id, uint64_t ctx_id, int32_t parallel);
+int set_req_chunkmgr_parallel(uint64_t ctx_id, int32_t parallel);
 } // end of namespace lib
 } // end of namespace oceanbase
 

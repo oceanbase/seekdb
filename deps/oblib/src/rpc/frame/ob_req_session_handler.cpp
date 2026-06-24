@@ -28,7 +28,7 @@ using namespace oceanbase::rpc::frame;
 ObReqSessionHandler::ObReqSessionHandler()
 {
   sessid_ = ObTimeUtility::current_time();
-  ObMemAttr attr(OB_SERVER_TENANT_ID, ObModIds::OB_HASH_NODE_NEXT_WAIT_MAP);
+  ObMemAttr attr(ObModIds::OB_HASH_NODE_NEXT_WAIT_MAP);
   SET_USE_500(attr);
   next_wait_map_.create(MAX_COND_COUNT, attr, attr);
   max_waiting_thread_count_ = MAX_WAIT_THREAD_COUNT;

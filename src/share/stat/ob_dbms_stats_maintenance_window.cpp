@@ -38,7 +38,6 @@ const char *async_gather_stats_job_proc = "ASYNC_GATHER_STATS_JOB_PROC";
 const int64_t OPT_STATS_HISTORY_MANAGER_JOB_ID = 8;
 
 int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const ObSysVariableSchema &sys_variable,
-                                                                        const uint64_t tenant_id,
                                                                         common::ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
@@ -51,7 +50,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   int32_t offset_sec = 0;
   if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
     LOG_WARN("failed to gen exec env", K(ret));
-  } else if (OB_FAIL(get_time_zone_offset(sys_variable, tenant_id, offset_sec))) {
+  } else if (OB_FAIL(get_time_zone_offset(sys_variable, offset_sec))) {
     LOG_WARN("failed to get time zone offset", K(ret));
   } else {
     ObString exec_env(pos, buf);
@@ -66,7 +65,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(start_usec), K(job_action));
         } else {
-          if (OB_FAIL(get_stat_window_job_info(tenant_id,
+          if (OB_FAIL(get_stat_window_job_info(
                                                     job_id,
                                                     windows_name[i],
                                                     exec_env,
@@ -74,7 +73,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
                                                     job_action,
                                                     job_info))) {
             LOG_WARN("failed to get stat window job info", K(ret));
-          } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
+          } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
             LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
           } else {
             ++ job_id;
@@ -83,10 +82,10 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
       }
       if (OB_SUCC(ret)) {
         //set stats history manager job
-        if (OB_FAIL(get_stats_history_manager_job_info(tenant_id,
+        if (OB_FAIL(get_stats_history_manager_job_info(
                                                       job_id, exec_env, job_info))) {
           LOG_WARN("failed to get stats history manager job sql", K(ret));
-        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
+        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
           LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
         } else {
           ++ job_id;
@@ -94,10 +93,10 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
 
         //set async gather stats job
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(get_async_gather_stats_job_info(tenant_id,
+        } else if (OB_FAIL(get_async_gather_stats_job_info(
                                                   job_id, exec_env, job_info))) {
           LOG_WARN("failed to get async gather stats job sql", K(ret));
-        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
+        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
           LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
         } else {
           ++ job_id;
@@ -108,7 +107,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const uint64_t tenant_id,
+int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(
                                                           const int64_t job_id,
                                                           const char *job_name,
                                                           const ObString &exec_env,
@@ -120,7 +119,7 @@ int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const uint64_t tenant
   int64_t interval_ts = DEFAULT_WEEK_INTERVAL_USEC;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
   int64_t default_duration_sec = DEFAULT_WORKING_DAY_DURATION_SEC;
-  job_info.tenant_id_ = tenant_id;
+  
   job_info.job_name_ = ObString(job_name);
   job_info.job_ = job_id;
   job_info.job_action_ = job_action.string();
@@ -142,7 +141,7 @@ int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const uint64_t tenant
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const uint64_t tenant_id,
+int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(
                                                                     const int64_t job_id,
                                                                     const ObString &exec_env,
                                                                     dbms_scheduler::ObDBMSSchedJobInfo &job_info)
@@ -151,7 +150,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const uint6
   int64_t interval_ts = DEFAULT_DAY_INTERVAL_USEC;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
   int64_t current = ObTimeUtility::current_time() + DEFAULT_DAY_INTERVAL_USEC;
-  job_info.tenant_id_ = tenant_id;
+  
   job_info.job_name_ = ObString(opt_stats_history_manager);
   job_info.job_ = job_id;
   job_info.job_action_ = ObString("DBMS_STATS.PURGE_STATS(NULL)");
@@ -173,7 +172,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const uint6
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const uint64_t tenant_id,
+int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(
                                                                  const int64_t job_id,
                                                                  const ObString &exec_env,
                                                                  dbms_scheduler::ObDBMSSchedJobInfo &job_info)
@@ -182,7 +181,7 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const uint64_t
   int64_t interval_ts = DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC;
   int64_t end_date = 64060560000000000;//4000-01-01 00:00:00.000000
   int64_t current = ObTimeUtility::current_time() + DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC;
-  job_info.tenant_id_ = tenant_id;
+  
   job_info.job_name_ = ObString(async_gather_stats_job_proc);
   job_info.job_ = job_id;
   job_info.job_action_ = ObString("DBMS_STATS.ASYNC_GATHER_STATS_JOB_PROC(600000000)");
@@ -394,7 +393,6 @@ bool ObDbmsStatsMaintenanceWindow::is_stats_job(const ObString &job_name)
 }
 
 int ObDbmsStatsMaintenanceWindow::get_time_zone_offset(const ObSysVariableSchema &sys_variable,
-                                                       const uint64_t tenant_id,
                                                        int32_t &offset_sec)
 {
   int ret = OB_SUCCESS;
@@ -429,7 +427,7 @@ int ObDbmsStatsMaintenanceWindow::get_time_zone_offset(const ObSysVariableSchema
         ObTimeZoneInfoPos tz_info;
         ObTZMapWrap tz_map_wrap;
         ObTimeZoneInfoManager *tz_info_mgr = NULL;
-        if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tenant_id, tz_map_wrap, tz_info_mgr))) {
+        if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
           LOG_WARN("get tenant timezone failed", K(ret));
         } else if (OB_ISNULL(tz_info_mgr)) {
           ret = OB_ERR_UNEXPECTED;
@@ -476,8 +474,7 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy,
-                                                                         const uint64_t tenant_id)
+int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common::ObMySQLProxy *sql_proxy)
 {
   int ret = OB_SUCCESS;
   lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
@@ -487,11 +484,11 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
   bool is_join_exists = false;
   //bug:
   ObArenaAllocator allocator("AsyncStatsJob");
-  if (OB_FAIL(check_job_exists(sql_proxy, tenant_id, async_gather_stats_job_proc, is_join_exists))) {
+  if (OB_FAIL(check_job_exists(sql_proxy, async_gather_stats_job_proc, is_join_exists))) {
     LOG_WARN("failed to check async gather job exists", K(ret));
   } else if (is_join_exists) {
     //do nothing
-  } else if (OB_FAIL(get_next_job_id_and_exec_env(sql_proxy, allocator, tenant_id, job_id, exec_env))) {
+  } else if (OB_FAIL(get_next_job_id_and_exec_env(sql_proxy, allocator, job_id, exec_env))) {
     LOG_WARN("failed to get async gather stats job id and exec env", K(ret));
   } else if (OB_UNLIKELY(job_id > dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET ||
                          exec_env.empty())) {
@@ -500,9 +497,9 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
   } else {
     compat_mode = lib::Worker::CompatMode::MYSQL;
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-      if (OB_FAIL(get_async_gather_stats_job_info(tenant_id, job_id, exec_env, job_info))) {
+      if (OB_FAIL(get_async_gather_stats_job_info(job_id, exec_env, job_info))) {
         LOG_WARN("failed to get async gather stats job info", K(ret), K(job_info));
-      } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(*sql_proxy, tenant_id, job_id, job_info))) {
+      } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(*sql_proxy, job_id, job_info))) {
         LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
       }
     }
@@ -512,7 +509,6 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
 
 int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLProxy *sql_proxy,
                                                                ObIAllocator &allocator,
-                                                               const uint64_t tenant_id,
                                                                int64_t &job_id,
                                                                ObString &exec_env)
 {
@@ -532,7 +528,7 @@ int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLPr
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -578,7 +574,6 @@ int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLPr
 }
 
 int ObDbmsStatsMaintenanceWindow::check_job_exists(common::ObMySQLProxy *sql_proxy,
-                                                   const uint64_t tenant_id,
                                                    const char* job_name,
                                                    bool &is_join_exists)
 {
@@ -594,7 +589,7 @@ int ObDbmsStatsMaintenanceWindow::check_job_exists(common::ObMySQLProxy *sql_pro
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;

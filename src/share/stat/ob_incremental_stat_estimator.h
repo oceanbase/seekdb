@@ -130,8 +130,7 @@ private:
                                      ObHistogram &histogram,
                                      bool &need_gather_hist);
 
-  static int get_no_regather_partition_stats(const uint64_t tenant_id,
-                                             const uint64_t table_id,
+  static int get_no_regather_partition_stats(const uint64_t table_id,
                                              const ObIArray<uint64_t> &column_ids,
                                              const ObIArray<int64_t> &no_regather_partition_ids,
                                              ObIArray<ObOptTableStat> &no_regather_table_stats,

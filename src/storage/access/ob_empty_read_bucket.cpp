@@ -22,7 +22,7 @@ namespace oceanbase
 namespace storage
 {
 ObEmptyReadBucket::ObEmptyReadBucket()
-  : allocator_(ObModIds::OB_BLOOM_FILTER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+  : allocator_(ObModIds::OB_BLOOM_FILTER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     buckets_(NULL),
     bucket_size_(0)
 {

@@ -15,7 +15,7 @@
  */
 
 #include "ob_timestamp_service.h"
-#include "ob_standby_timestamp_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_srv_network_frame.h"
 #include "ob_timestamp_access.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -124,7 +124,7 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
     TRANS_LOG(DEBUG, "handle gts request", K(request));
     int64_t gts = 0;
     const MonotonicTs srr = request.get_srr();
-    const uint64_t tenant_id = request.get_tenant_id();
+    
     const ObAddr &requester = request.get_sender();
     if (requester == self_) {
      // Go local call to get gts
@@ -136,11 +136,11 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
         TRANS_LOG(WARN, "get timestamp failed", KR(ret));
       }
       int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
+      if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
         TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
       }
     } else {
-      if (OB_FAIL(result.init(tenant_id, ret, srr, gts, gts))) {
+      if (OB_FAIL(result.init(ret, srr, gts, gts))) {
         TRANS_LOG(WARN, "gts result init failed", KR(ret), K(request));
       }
     }
@@ -155,7 +155,7 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
     TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "gts request fly too much time", K(request), K(result), K(cost_us));
   }
   ATOMIC_INC(&total_cnt);
-  ObTransStatistic::get_instance().add_gts_request_total_count(request.get_tenant_id(), 1);
+  ObTransStatistic::get_instance().add_gts_request_total_count( 1);
   (void)ATOMIC_FAA(&total_rt, end.mts_ - start.mts_);
   if (REACH_TIME_INTERVAL(STATISTICS_INTERVAL_US)) {
     TRANS_LOG(INFO, "handle gts request statistics", K(total_rt), K(total_cnt),
@@ -175,7 +175,7 @@ int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcal
 {
   int ret = OB_SUCCESS;
   int64_t gts = 0;
-  const uint64_t tenant_id = request.get_tenant_id();
+  
   const MonotonicTs srr = request.get_srr();
 #ifndef ERRSIM
   ret = EN_GTS_HANDLE_REQUEST;
@@ -184,7 +184,7 @@ int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcal
   if (OB_SUCCESS != ret) {
     TRANS_LOG(WARN, "errsim for gts handle local request", KR(ret));
     int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
+    if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
       TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
     }
   } else if (OB_FAIL(get_timestamp(gts))) {
@@ -192,11 +192,11 @@ int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcal
       TRANS_LOG(WARN, "get timestamp failed", KR(ret));
     }
     int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
+    if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
       TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
     }
   } else {
-    if (OB_FAIL(result.init(tenant_id, ret, srr, gts, gts))) {
+    if (OB_FAIL(result.init(ret, srr, gts, gts))) {
       TRANS_LOG(WARN, "local gts result init failed", KR(ret), K(request));
     }
   }
@@ -206,41 +206,41 @@ int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcal
 int ObTimestampService::switch_to_follower_gracefully()
 {
   (void)ObIDService::switch_to_follower_gracefully();
-  int64_t type = MTL(ObTimestampAccess *)->get_service_type();
+  int64_t type = share::g_mp->timestamp_access()->get_service_type();
   if (ObTimestampAccess::ServiceType::GTS_LEADER == type) {
-    MTL(ObTimestampAccess *)->set_service_type(ObTimestampAccess::ServiceType::FOLLOWER);
+    share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::FOLLOWER);
   }
-  TRANS_LOG(INFO, "ObTimestampService switch to follower gracefully success", K(type), "service_type", MTL(ObTimestampAccess *)->get_service_type());
+  TRANS_LOG(INFO, "ObTimestampService switch to follower gracefully success", K(type), "service_type", share::g_mp->timestamp_access()->get_service_type());
   return OB_SUCCESS;
 }
 
 void ObTimestampService::switch_to_follower_forcedly()
 {
-  int64_t type = MTL(ObTimestampAccess *)->get_service_type();
+  int64_t type = share::g_mp->timestamp_access()->get_service_type();
   if (ObTimestampAccess::ServiceType::GTS_LEADER == type) {
-    MTL(ObTimestampAccess *)->set_service_type(ObTimestampAccess::ServiceType::FOLLOWER);
+    share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::FOLLOWER);
   }
-  TRANS_LOG(INFO, "ObTimestampService switch to follower forcedly success", K(type), "service_type", MTL(ObTimestampAccess *)->get_service_type());
+  TRANS_LOG(INFO, "ObTimestampService switch to follower forcedly success", K(type), "service_type", share::g_mp->timestamp_access()->get_service_type());
 }
 
 int ObTimestampService::resume_leader()
 {
-  MTL(ObTimestampAccess *)->set_service_type(ObTimestampAccess::ServiceType::GTS_LEADER);
-  TRANS_LOG(INFO, "ObTimestampService resume leader success", "service_type", MTL(ObTimestampAccess *)->get_service_type());
+  share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::GTS_LEADER);
+  TRANS_LOG(INFO, "ObTimestampService resume leader success", "service_type", share::g_mp->timestamp_access()->get_service_type());
   return OB_SUCCESS;
 }
 
 int ObTimestampService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  TRANS_LOG(INFO, "ObTimestampService switch_to_leader called", K(ret), K(MTL_ID()));
+  TRANS_LOG(INFO, "ObTimestampService switch_to_leader called", K(ret));
 
   if (OB_FAIL(check_and_fill_ls())) {
-    TRANS_LOG(WARN, "ls set fail", K(ret), K(MTL_ID()));
+    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else {
     SCN version;
     if (OB_FAIL(ls_->get_log_handler()->get_max_scn(version))) {
-      TRANS_LOG(WARN, "get max ts fail", K(ret), K(MTL_ID()));
+      TRANS_LOG(WARN, "get max ts fail", K(ret));
     } else {
       int64_t version_val = version.is_valid() ? version.get_val_for_gts() : -1;
       if (version_val >= ATOMIC_LOAD(&limited_id_)) {
@@ -251,22 +251,15 @@ int ObTimestampService::switch_to_leader()
       } else {
         // do nothing
       }
-      const int64_t standby_last_id = MTL(ObStandbyTimestampService *)->get_last_id();
-      const int64_t tmp_last_id = ATOMIC_LOAD(&tmp_last_id_);
-      if ((tmp_last_id != 0 && standby_last_id > tmp_last_id)
-           || (tmp_last_id == 0 && standby_last_id > ATOMIC_LOAD(&last_id_))) {
-        TRANS_LOG(ERROR, "snapshot rolls back", K(standby_last_id), K(tmp_last_id), "limit_id", ATOMIC_LOAD(&limited_id_), 
-                         "last_id", ATOMIC_LOAD(&last_id_), K(version));
-      }
-      MTL(ObTimestampAccess *)->set_service_type(ObTimestampAccess::ServiceType::GTS_LEADER);
+      share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::GTS_LEADER);
       TRANS_LOG(INFO, "ObTimestampService switch to leader success", K(ret), K(version), K(last_id_), K(limited_id_), 
-                      "service_type", MTL(ObTimestampAccess *)->get_service_type());
+                      "service_type", share::g_mp->timestamp_access()->get_service_type());
     }
   }
 
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "ObTimestampService switch_to_leader failed", K(ret), K(MTL_ID()), 
-              "service_type", MTL(ObTimestampAccess *)->get_service_type());
+    TRANS_LOG(WARN, "ObTimestampService switch_to_leader failed", K(ret), 
+              "service_type", share::g_mp->timestamp_access()->get_service_type());
   }
 
   return ret;

@@ -209,7 +209,6 @@ int ObPxDistTransmitOp::do_transmit()
         dfc_,
         task_ch_set_,
         task_channels_,
-        ctx_.get_my_session()->get_effective_tenant_id(),
         phy_plan_ctx->get_timeout_timestamp()))) {
       LOG_WARN("failed to init chs agent", K(ret));
     }
@@ -468,15 +467,14 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   uint64_t repart_ref_table_id = MY_SPEC.repartition_ref_table_id_;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-      tenant_id, schema_guard))) {
+      schema_guard))) {
     LOG_WARN("faile to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(
-      tenant_id, repart_ref_table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( repart_ref_table_id, table_schema))) {
     LOG_WARN("faile to get table schema", K(ret), K(repart_ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
@@ -494,7 +492,7 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
                                           task_channels_.count(),
                                           part_ch_info_,
                                           MY_SPEC.repartition_type_);
-    if (OB_FAIL(slice_idx_calc.init(tenant_id))) {
+    if (OB_FAIL(slice_idx_calc.init())) {
       LOG_WARN("init slice calc failed", K(ret));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::SM_BROADCAST>(slice_idx_calc))) {
       LOG_WARN("row distribution failed", K(ret));
@@ -515,10 +513,9 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-      ctx_.get_my_session()->get_effective_tenant_id(), schema_guard))) {
+      schema_guard))) {
     LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(
-    ctx_.get_my_session()->get_effective_tenant_id(),
     repart_ref_table_id, table_schema))) {
     LOG_WARN("faile to get table schema", K(ret), K(repart_ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
@@ -603,13 +600,13 @@ int ObPxDistTransmitOp::build_row_sample_piece_msg(int64_t expected_range_count,
   piece_msg.target_dfo_id_ = proxy.get_dfo_id();
   piece_msg.op_id_ = MY_SPEC.id_;;
 
-  int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
 
   ObChunkDatumStore *sample_store = OB_NEWx(ObChunkDatumStore, &ctx_.get_allocator(), "DYN_SAMPLE_CTX");
   OV(NULL != sample_store, OB_ALLOCATE_MEMORY_FAILED);
 
   bool sample_store_dump = false;
-  OZ(sample_store->init(0, tenant_id,
+  OZ(sample_store->init(0,
                         ObCtxIds::DEFAULT_CTX_ID, "DYN_SAMPLE_CTX", sample_store_dump));
 
   OZ(piece_msg.row_stores_.push_back(sample_store));
@@ -621,18 +618,17 @@ int ObPxDistTransmitOp::build_row_sample_piece_msg(int64_t expected_range_count,
           &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count));
 
   lib::ContextParam param;
-  param.set_mem_attr(tenant_id, "PxSampleRow", ObCtxIds::WORK_AREA);
+  param.set_mem_attr("PxSampleRow", ObCtxIds::WORK_AREA);
   OZ(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param));
   sampled_input_rows_.set_mem_stat(&sql_mem_processor_);
   OZ(sql_mem_processor_.init(
           &mem_context_->get_malloc_allocator(),
-          tenant_id,
           row_count * MY_SPEC.width_, MY_SPEC.type_, MY_SPEC.id_, &ctx_));
   bool updated = false;
   OZ(sql_mem_processor_.update_max_available_mem_size_periodically(
           &mem_context_->get_malloc_allocator(), [](int64_t) { return true; }, updated));
   OZ(sampled_input_rows_.init(
-          sql_mem_processor_.get_mem_bound(), tenant_id,
+          sql_mem_processor_.get_mem_bound(),
           ObCtxIds::WORK_AREA, "PxSampleRow"));
   sampled_input_rows_.set_io_observer(&io_event_observer_);
   if (is_vectorized()) {
@@ -674,7 +670,6 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
           } else {
             ObChunkDatumStore *sample_store = new (chunk_buf) ObChunkDatumStore("DYN_SAMPLE_CTX");
             if (OB_FAIL(sample_store->init(0,
-              ctx.get_my_session()->get_effective_tenant_id(),
                   ObCtxIds::DEFAULT_CTX_ID, "DYN_SAMPLE_CTX", false/*enable dump*/))) {
               LOG_WARN("init sample chunk store failed", K(ret));
             } else if (OB_FAIL(ctx.get_sqc_handler()->get_sqc_proxy().

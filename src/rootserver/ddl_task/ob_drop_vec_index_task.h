@@ -31,7 +31,6 @@ public:
   virtual ~ObDropVecIndexTask();
 
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const uint64_t data_table_id,
       const share::ObDDLType ddl_type,
@@ -52,7 +51,6 @@ public:
       const int64_t buf_size,
       int64_t &pos) const override;
   virtual int deserialize_params_from_message(
-      const uint64_t tenant_id,
       const char *buf,
       const int64_t buf_size,
       int64_t &pos) override;
@@ -83,9 +81,7 @@ private:
   int check_and_cancel_del_dag(bool &all_dag_exit);
   int exit_all_dags_and_clean();
   int finish();
-  int check_drop_index_finish(
-      const uint64_t tenant_id,
-      const int64_t task_id,
+  int check_drop_index_finish(const int64_t task_id,
       const int64_t table_id,
       bool &has_finished);
   int wait_child_task_finish(

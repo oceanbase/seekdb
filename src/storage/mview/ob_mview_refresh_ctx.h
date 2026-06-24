@@ -33,7 +33,6 @@ struct ObMViewRefreshCtx
 public:
   ObMViewRefreshCtx()
     : allocator_("MVRefCtx"),
-      tenant_id_(OB_INVALID_TENANT_ID),
       mview_id_(OB_INVALID_ID),
       trans_(nullptr),
       refresh_type_(share::schema::ObMVRefreshType::MAX),
@@ -64,14 +63,13 @@ public:
     base_table_scn_range_.reset();
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(mview_id), KP_(trans), K_(mview_info), K_(refresh_stats_params),
+  TO_STRING_KV(K_(mview_id), KP_(trans), K_(mview_info), K_(refresh_stats_params),
                K_(dependency_infos), K_(based_schema_object_infos), K_(mlog_infos),
                K_(refresh_type), K_(refresh_sqls), K_(refresh_parallelism),
                K_(target_data_sync_scn), K_(mview_refresh_scn_range), K_(base_table_scn_range));
 
 public:
   ObArenaAllocator allocator_;
-  uint64_t tenant_id_;
   uint64_t mview_id_;
   ObMViewTransaction *trans_;
   share::schema::ObMViewInfo mview_info_;

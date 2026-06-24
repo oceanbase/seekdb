@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ls_ddl_log_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/ddl/ob_ddl_replay_executor.h"
@@ -380,7 +381,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
 {
   int ret = OB_SUCCESS;
   ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   ObTabletHandle tablet_handle;
   if (OB_FAIL(ls_->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
     LOG_WARN("failed to build ls tablet iter", K(ret), K(ls_));
@@ -390,7 +391,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
       LOG_INFO("ddl log handler is offline, no need to flush", K(ret), "ls_meta", ls_->get_ls_meta());
     } else if (OB_ISNULL(tenant_direct_load_mgr)) {
       ret = OB_ERR_SYS;
-      LOG_WARN("error sys", K(ret), K(MTL_ID()));
+      LOG_WARN("error sys", K(ret));
     } else {
       while (OB_SUCC(ret)) {
         ObArray<ObDDLKVHandle> ddl_kvs_handle;
@@ -450,7 +451,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           }
           (void)tenant_direct_load_mgr->gc_tablet_direct_load();
         } else {
-          ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DdlCom_LsHan"));
+          ObArenaAllocator arena(ObMemAttr("DdlCom_LsHan"));
           ObTabletDDLCompleteMdsUserData  ddl_complete;
           if (OB_FAIL(ls_->get_tablet(ddl_kv_mgr_handle.get_obj()->get_tablet_id(),
                                            tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
@@ -520,7 +521,7 @@ SCN ObLSDDLLogHandler::get_rec_scn()
   }
 
   // gc tablet direct load periodically
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   if (OB_NOT_NULL(tenant_direct_load_mgr)) {
     (void)tenant_direct_load_mgr->gc_tablet_direct_load();
   }
@@ -631,7 +632,6 @@ int ObLSDDLLogHandler::replay_tablet_split_start_log_(const char *log_buf,
 void ObLSDDLLogHandler::add_ddl_event(const int ret, const ObString &ddl_event_stmt)
 {
   SERVER_EVENT_ADD("ddl", ddl_event_stmt.ptr(),
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "last_rec_scn", last_rec_scn_);

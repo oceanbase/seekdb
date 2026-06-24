@@ -38,7 +38,6 @@ int PCVSchemaObj::init(const ObTableSchema *schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected null argument", K(ret), K(schema), K(inner_alloc_));
   } else {
-    tenant_id_ = schema->get_tenant_id();
     database_id_ = schema->get_database_id();
     schema_id_ = schema->get_table_id();
     schema_version_ = schema->get_schema_version();
@@ -66,7 +65,7 @@ bool PCVSchemaObj::operator==(const PCVSchemaObj &other) const
   if (schema_type_ != other.schema_type_) {
     ret = false;
   } else if (TABLE_SCHEMA == other.schema_type_) {
-    ret = tenant_id_ == other.tenant_id_ &&
+    ret = true &&
           database_id_ == other.database_id_ &&
           schema_id_ == other.schema_id_ &&
           schema_version_ == other.schema_version_ &&
@@ -86,7 +85,6 @@ int PCVSchemaObj::init_without_copy_name(const ObSimpleTableSchemaV2 *schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected null argument", K(ret), K(schema));
   } else {
-    tenant_id_ = schema->get_tenant_id();
     database_id_ = schema->get_database_id();
     schema_id_ = schema->get_table_id();
     schema_version_ = schema->get_schema_version();
@@ -110,7 +108,6 @@ int PCVSchemaObj::init_with_version_obj(const ObSchemaObjVersion &schema_obj_ver
 
 void PCVSchemaObj::reset()
 {
-  tenant_id_ = common::OB_INVALID_ID;
   database_id_ = common::OB_INVALID_ID;
   schema_id_ = common::OB_INVALID_ID;
   schema_type_ = OB_MAX_SCHEMA;
@@ -152,13 +149,13 @@ ObPlanCacheValue::ObPlanCacheValue()
 {
   MEMSET(sql_id_, 0, sizeof(sql_id_));
   MEMSET(format_sql_id_, 0, sizeof(format_sql_id_));
-  not_param_index_.set_attr(ObMemAttr(MTL_ID(), "NotParamIdex"));
-  neg_param_index_.set_attr(ObMemAttr(MTL_ID(), "NegParamIdex"));
-  must_be_positive_idx_.set_attr(ObMemAttr(MTL_ID(), "MustBePosiIdx"));
-  not_param_info_.set_attr(ObMemAttr(MTL_ID(), "NotParamInfo"));
-  not_param_var_.set_attr(ObMemAttr(MTL_ID(), "NotParamVar"));
-  param_charset_type_.set_attr(ObMemAttr(MTL_ID(), "ParamCharsType"));
-  fmt_int_or_ch_decint_idx_.set_attr(ObMemAttr(MTL_ID(), "FMTIntPrecIdx"));
+  not_param_index_.set_attr(ObMemAttr("NotParamIdex"));
+  neg_param_index_.set_attr(ObMemAttr("NegParamIdex"));
+  must_be_positive_idx_.set_attr(ObMemAttr("MustBePosiIdx"));
+  not_param_info_.set_attr(ObMemAttr("NotParamInfo"));
+  not_param_var_.set_attr(ObMemAttr("NotParamVar"));
+  param_charset_type_.set_attr(ObMemAttr("ParamCharsType"));
+  fmt_int_or_ch_decint_idx_.set_attr(ObMemAttr("FMTIntPrecIdx"));
 }
 
 int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj, ObPlanCacheCtx &pc_ctx)
@@ -413,7 +410,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   bool is_old_version = false;
   plan_out = NULL;
   ObSQLSessionInfo *session = NULL;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   ObPlanCacheObject *plan = NULL;
   int64_t outline_param_idx = 0;
   // Check the version of the view and table involved in this SQL cached in pcv,
@@ -436,9 +433,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
     SQL_PC_LOG(ERROR, "got session is NULL", K(ret));
   } else if (FALSE_IT(orig_rich_format_status = session->get_force_rich_format_status())) {
   } else if (FALSE_IT(session->set_stmt_type(stmt_type_))) {
-  } else if (OB_INVALID_ID == (tenant_id = session->get_effective_tenant_id())) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_PC_LOG(ERROR, "got effective tenant id is invalid", K(ret));
   } else if (OB_UNLIKELY(switchover_epoch_ != new_switchover_epoch)) {
     ret = OB_OLD_SCHEMA_VERSION;
     switchover_epoch_ = new_switchover_epoch;
@@ -446,7 +440,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   } else if (OB_FAIL(check_value_version_for_get(pc_ctx.sql_ctx_.schema_guard_,
                                                  need_check_schema,
                                                  schema_array,
-                                                 tenant_id,
                                                  is_old_version))) {
     SQL_PC_LOG(WARN, "fail to check table version", K(ret));
   } else if (true == is_old_version) {
@@ -537,7 +530,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
                 if (plan_set->resource_map_rule_.use_hint_control_resource()) {
                 } else {
                   // 2. check col res map rule
-                  uint64_t tenant_id = OB_INVALID_ID;
+                  
                   ObString param_text;
                   ObCollationType cs_type = CS_TYPE_INVALID;
                   if (OB_UNLIKELY(param_idx < 0 || param_idx >= params->count())) {
@@ -546,9 +539,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
                               K(params->count()));
                   } else if (OB_FAIL(session->get_collation_connection(cs_type))) {
                     LOG_WARN("get collation connection failed", K(ret));
-                  } else if (OB_INVALID_ID == (tenant_id = session->get_effective_tenant_id())) {
-                    ret = OB_ERR_UNEXPECTED;
-                    SQL_PC_LOG(ERROR, "got effective tenant id is invalid", K(ret));
                   } else if (OB_FAIL(ObObjCaster::get_obj_param_text(
                                params->at(param_idx), pc_ctx.raw_sql_, pc_ctx.allocator_, cs_type,
                                param_text))) {
@@ -1340,7 +1330,6 @@ int ObPlanCacheValue::check_value_version_for_add(const ObPlanCacheObject &cache
 int ObPlanCacheValue::check_value_version_for_get(share::schema::ObSchemaGetterGuard *schema_guard,
                                                   bool need_check_schema,
                                                   const ObIArray<PCVSchemaObj> &schema_array,
-                                                  const uint64_t tenant_id,
                                                   bool &result)
 {
   int ret = OB_SUCCESS;
@@ -1351,9 +1340,8 @@ int ObPlanCacheValue::check_value_version_for_get(share::schema::ObSchemaGetterG
     LOG_WARN("invalid argument", K(ret), K(schema_guard));
   } else if (need_check_schema
              &&OB_FAIL(get_outline_version(*schema_guard,
-                                           tenant_id,
                                            local_outline_version))) {
-    LOG_WARN("failed to get local outline version", K(ret), K(tenant_id));
+    LOG_WARN("failed to get local outline version", K(ret));
   } else if (OB_FAIL(check_value_version(need_check_schema,
                                          local_outline_version,
                                          schema_array,
@@ -1427,7 +1415,6 @@ int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &sch
 }
 // Check if outline version is expired
 int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
-                                          const uint64_t tenant_id,
                                           ObSchemaObjVersion &local_outline_version)
 {
   int ret = OB_SUCCESS;
@@ -1437,9 +1424,6 @@ int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
   if (OB_ISNULL(pcv_set_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("pcv_set_ is null");
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tenant_id), K(database_id));
   } else if (OB_INVALID_ID == (database_id = pcv_set_->get_plan_cache_key().db_id_)
              || ObLibCacheNameSpace::NS_PRCR == pcv_set_->get_plan_cache_key().namespace_
              || ObLibCacheNameSpace::NS_SFC == pcv_set_->get_plan_cache_key().namespace_
@@ -1450,36 +1434,32 @@ int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
     const ObString &signature = outline_signature_;
     const ObString &format_signature = outline_format_signature_;
     // try normal
-    if (OB_FAIL(schema_guard.get_outline_info_with_signature(tenant_id,
-            database_id,
+    if (OB_FAIL(schema_guard.get_outline_info_with_signature(database_id,
             signature,
             false,
             outline_info))) {
-      LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+      LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     // try format
     } else if (NULL == outline_info && 
-              OB_FAIL(schema_guard.get_outline_info_with_signature(tenant_id,
-                      database_id,
+              OB_FAIL(schema_guard.get_outline_info_with_signature(database_id,
                       format_signature,
                       true,
                       outline_info))) {
-        LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+        LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     // try normal
     } else if (NULL == outline_info && !ObString::make_string(sql_id_).empty() &&
-              OB_FAIL(schema_guard.get_outline_info_with_sql_id(tenant_id,
-                      database_id,
+              OB_FAIL(schema_guard.get_outline_info_with_sql_id(database_id,
                       ObString::make_string(sql_id_),
                       false,
                       outline_info))) {
-        LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+        LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     // try format
     } else if (NULL == outline_info && !ObString::make_string(format_sql_id_).empty() &&
-              OB_FAIL(schema_guard.get_outline_info_with_sql_id(tenant_id,
-                      database_id,
+              OB_FAIL(schema_guard.get_outline_info_with_sql_id(database_id,
                       ObString::make_string(format_sql_id_),
                       true,
                       outline_info))) {
-        LOG_WARN("failed to get_outline_info", K(tenant_id), K(database_id), K(signature));
+        LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
     }
     if (OB_SUCC(ret)) {
       if (NULL == outline_info) {
@@ -1599,7 +1579,7 @@ bool ObPlanCacheValue::is_contain_sys_pl_object() const
     if (nullptr != stored_schema_objs_.at(i)
         && (PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
             || UDT_SCHEMA == stored_schema_objs_.at(i)->schema_type_)
-        && OB_SYS_TENANT_ID == get_tenant_id_by_object_id(stored_schema_objs_.at(i)->schema_id_)) {
+        && true) {
       is_contain = true;
     }
   }
@@ -1707,7 +1687,6 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
           pcv_schema_obj = nullptr;
         }
       } else if (OB_FAIL(schema_guard->get_table_schema(
-                  MTL_ID(),
                   table_version.get_object_id(),
                   table_schema))) { // now deal with table schema
         LOG_WARN("failed to get table schema", K(ret), K(table_version), K(table_schema));
@@ -1734,8 +1713,7 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
         // In addition, if the sql contains internal tables, changes in the schema version of internal tables will not be reflected in the tenant schema version of normal tenants
         // In order to update the plan in a timely manner, it is necessary to check the schema version number of the corresponding internal table. The internal tables of Oracle tenants are under sys, mysql tenants
         // Under oceanbase.
-        if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(MTL_ID(),
-                                                                               OB_SYS_DATABASE_ID,
+        if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
           LOG_WARN("failed to check sys table", K(ret));
@@ -1799,9 +1777,8 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
     schema_array.reset();
     const ObSimpleTableSchemaV2 *table_schema = nullptr;
     PCVSchemaObj tmp_schema_obj;
-    uint64_t tenant_id = OB_INVALID_ID;
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < stored_schema_objs_.count(); i++) {
-      tenant_id = MTL_ID();
       ObSchemaGetterGuard &schema_guard = *pc_ctx.sql_ctx_.schema_guard_;
       PCVSchemaObj *pcv_schema = stored_schema_objs_.at(i);
       if (OB_ISNULL(pcv_schema)) {
@@ -1812,15 +1789,13 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
         int64_t new_version = 0;
         if (PACKAGE_SCHEMA == stored_schema_objs_.at(i)->schema_type_
             || UDT_SCHEMA == stored_schema_objs_.at(i)->schema_type_) {
-          tenant_id = get_tenant_id_by_object_id(stored_schema_objs_.at(i)->schema_id_);
         }
         if (OB_FAIL(ret)) { 
         } else if (OB_FAIL(schema_guard.get_schema_version(pcv_schema->schema_type_,
-                                                    tenant_id,
                                                     pcv_schema->schema_id_,
                                                     new_version))) {
           LOG_WARN("failed to get schema version",
-                   K(ret), K(tenant_id), K(pcv_schema->schema_type_), K(pcv_schema->schema_id_));
+                   K(ret), K(pcv_schema->schema_type_), K(pcv_schema->schema_id_));
         } else {
           if (SYNONYM_SCHEMA != pcv_schema->schema_type_) {
             tmp_schema_obj.schema_id_ = pcv_schema->schema_id_;
@@ -1833,13 +1808,13 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
             tmp_schema_obj.reset();
           }
         }
-      } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id,
+      } else if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                               pcv_schema->database_id_,
                                                               pcv_schema->table_name_,
                                                               false,
                                                               table_schema))) { // mysql mode directly use pcv schema cached db id query
         LOG_WARN("failed to get table schema",
-                 K(ret), K(pcv_schema->tenant_id_), K(pcv_schema->database_id_),
+                 K(ret), K(pcv_schema->database_id_),
                  K(pcv_schema->table_name_));
       } else {
         // do nothing
@@ -1967,8 +1942,7 @@ int ObPlanCacheValue::get_all_dep_schema(ObSchemaGetterGuard &schema_guard,
       } else {
         tmp_schema_obj.reset();
       }
-    } else if (OB_FAIL(schema_guard.get_simple_table_schema(
-                 MTL_ID(), dep_schema_objs.at(i).get_object_id(), table_schema))) {
+    } else if (OB_FAIL(schema_guard.get_simple_table_schema( dep_schema_objs.at(i).get_object_id(), table_schema))) {
       LOG_WARN("failed to get table schema",
                K(ret), K(dep_schema_objs.at(i)));
     } else if (nullptr == table_schema) {
@@ -2000,8 +1974,7 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
 {
   int ret = OB_SUCCESS;
   need_check = false;
-  if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_schema_version(pc_ctx.sql_ctx_.session_info_->get_effective_tenant_id(),
-                                                                new_schema_version))) {
+  if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_schema_version(new_schema_version))) {
     LOG_WARN("failed to get tenant schema version", K(ret));
   } else {
     int64_t cached_tenant_schema_version = ATOMIC_LOAD(&tenant_schema_version_);

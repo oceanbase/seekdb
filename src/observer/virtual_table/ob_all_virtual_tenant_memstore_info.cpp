@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tenant_memstore_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 
 using namespace oceanbase::common;
@@ -55,37 +56,29 @@ int ObAllVirtualTenantMemstoreInfo::inner_get_next_row(ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
     } else {
-      uint64_t tenant_id = OB_INVALID_ID;
+      
       char ip_buf[common::OB_IP_STR_BUFF];
       omt::ObMultiTenant *omt = GCTX.omt_;
-      omt::TenantIdList current_ids(nullptr, ObModIds::OMT);
       if (OB_ISNULL(omt)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "omt is null", K(ret));
-      } else {
-        omt->get_tenant_ids(current_ids);
       }
-      // does not check ret code, we need iter all the tenant.
-      for (int64_t i = 0; i < current_ids.size(); ++i) {
-        tenant_id = current_ids.at(i);
+      // does not check ret code, run for the single (sys) tenant.
+      {
         int64_t active_span = 0;
         int64_t memstore_used = 0;
         int64_t freeze_trigger = 0;
         int64_t memstore_limit = 0;
         int64_t freeze_cnt = 0;
-        if (is_virtual_tenant_id(tenant_id)
-            || (!is_sys_tenant(effective_tenant_id_) && tenant_id != effective_tenant_id_)) {
-          continue;
-        }
-        MTL_SWITCH(tenant_id) {
+        MOD_SCOPE {
           storage::ObTenantFreezer *freezer = nullptr;
-          if (FALSE_IT(freezer = MTL(storage::ObTenantFreezer *))) {
+          if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
           } else if (OB_FAIL(freezer->get_tenant_memstore_cond(active_span,
                                                                memstore_used,
                                                                freeze_trigger,
                                                                memstore_limit,
                                                                freeze_cnt))) {
-            SERVER_LOG(WARN, "fail to get memstore used", K(ret), K(tenant_id));
+            SERVER_LOG(WARN, "fail to get memstore used", K(ret));
           }
           for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
             uint64_t col_id = output_column_ids_.at(i);

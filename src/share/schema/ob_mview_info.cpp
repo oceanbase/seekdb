@@ -49,7 +49,7 @@ ObMViewInfo &ObMViewInfo::operator=(const ObMViewInfo &src_schema)
   if (this != &src_schema) {
     reset();
     int &ret = error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
+    
     mview_id_ = src_schema.mview_id_;
     build_mode_ = src_schema.build_mode_;
     refresh_mode_ = src_schema.refresh_mode_;
@@ -88,7 +88,7 @@ bool ObMViewInfo::is_valid() const
 {
   bool bret = false;
   if (OB_LIKELY(ObSchema::is_valid())) {
-    bret = (OB_INVALID_TENANT_ID != tenant_id_ && OB_INVALID_ID != mview_id_ &&
+    bret = (true && OB_INVALID_ID != mview_id_ &&
             ObMViewBuildMode::MAX != build_mode_ && ObMVRefreshMode::MAX != refresh_mode_ &&
             ObMVRefreshMethod::MAX != refresh_method_ && OB_INVALID_VERSION != schema_version_ && 
             0 <= refresh_dop_);
@@ -98,7 +98,7 @@ bool ObMViewInfo::is_valid() const
 
 void ObMViewInfo::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   mview_id_ = OB_INVALID_ID;
   build_mode_ = ObMViewBuildMode::MAX;
   refresh_mode_ = ObMVRefreshMode::MAX;
@@ -130,7 +130,6 @@ int64_t ObMViewInfo::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObMViewInfo,
-                    tenant_id_,
                     mview_id_,
                     build_mode_,
                     refresh_mode_,
@@ -149,7 +148,7 @@ OB_SERIALIZE_MEMBER(ObMViewInfo,
                     is_synced_,
                     nested_refresh_mode_);
 
-int ObMViewInfo::gen_insert_mview_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const
+int ObMViewInfo::gen_insert_mview_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
@@ -190,16 +189,16 @@ int ObMViewInfo::gen_insert_mview_dml(const uint64_t exec_tenant_id, ObDMLSqlSpl
 int ObMViewInfo::insert_mview_info(ObISQLClient &sql_client, const ObMViewInfo &mview_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mview_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_UNLIKELY(!mview_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_info));
-  } else if (OB_FAIL(mview_info.gen_insert_mview_dml(exec_tenant_id, dml))) {
+  } else if (OB_FAIL(mview_info.gen_insert_mview_dml(dml))) {
     LOG_WARN("fail to gen insert mview dml", KR(ret), K(mview_info));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_insert(OB_ALL_MVIEW_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
@@ -216,8 +215,7 @@ int ObMViewInfo::insert_mview_info(ObISQLClient &sql_client, const ObMViewInfo &
   return ret;
 }
 
-int ObMViewInfo::gen_update_mview_attribute_dml(const uint64_t exec_tenant_id,
-                                                ObDMLSqlSplicer &dml) const
+int ObMViewInfo::gen_update_mview_attribute_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
@@ -249,16 +247,16 @@ int ObMViewInfo::gen_update_mview_attribute_dml(const uint64_t exec_tenant_id,
 int ObMViewInfo::update_mview_attribute(ObISQLClient &sql_client, const ObMViewInfo &mview_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mview_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_UNLIKELY(!mview_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_info));
-  } else if (OB_FAIL(mview_info.gen_update_mview_attribute_dml(exec_tenant_id, dml))) {
+  } else if (OB_FAIL(mview_info.gen_update_mview_attribute_dml(dml))) {
     LOG_WARN("fail to gen update mview attribute dml", KR(ret), K(mview_info));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_MVIEW_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
@@ -270,8 +268,7 @@ int ObMViewInfo::update_mview_attribute(ObISQLClient &sql_client, const ObMViewI
   return ret;
 }
 
-int ObMViewInfo::gen_update_mview_last_refresh_info_dml(const uint64_t exec_tenant_id,
-                                                        ObDMLSqlSplicer &dml) const
+int ObMViewInfo::gen_update_mview_last_refresh_info_dml(ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_SCN_VAL == last_refresh_scn_ ||
@@ -303,16 +300,16 @@ int ObMViewInfo::update_mview_last_refresh_info(ObISQLClient &sql_client,
                                                 const ObMViewInfo &mview_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mview_info.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   ObDMLSqlSplicer dml;
   if (OB_UNLIKELY(!mview_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_info));
-  } else if (OB_FAIL(mview_info.gen_update_mview_last_refresh_info_dml(exec_tenant_id, dml))) {
+  } else if (OB_FAIL(mview_info.gen_update_mview_last_refresh_info_dml(dml))) {
     LOG_WARN("fail to gen update mview last refresh info dml", KR(ret), K(mview_info));
   } else {
-    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_MVIEW_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
@@ -327,31 +324,31 @@ int ObMViewInfo::update_mview_last_refresh_info(ObISQLClient &sql_client,
 int ObMViewInfo::drop_mview_info(ObISQLClient &sql_client, const ObMViewInfo &mview_info)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = mview_info.get_tenant_id();
+  
   if (OB_UNLIKELY(!mview_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mview_info));
-  } else if (OB_FAIL(drop_mview_info(sql_client, mview_info.get_tenant_id(),
+  } else if (OB_FAIL(drop_mview_info(sql_client,
                                      mview_info.get_mview_id()))) {
     LOG_WARN("fail to drop mview info", KR(ret), K(mview_info));
   }
   return ret;
 }
 
-int ObMViewInfo::drop_mview_info(ObISQLClient &sql_client, const uint64_t tenant_id,
+int ObMViewInfo::drop_mview_info(ObISQLClient &sql_client,
                                  const uint64_t mview_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mview_id)) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == mview_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mview_id));
+    LOG_WARN("invalid args", KR(ret), K(mview_id));
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
       LOG_WARN("add column failed", KR(ret));
     } else {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MVIEW_TNAME, dml, affected_rows))) {
         LOG_WARN("execute delete failed", KR(ret));
@@ -364,11 +361,11 @@ int ObMViewInfo::drop_mview_info(ObISQLClient &sql_client, const uint64_t tenant
   return ret;
 }
 
-int ObMViewInfo::fetch_mview_info(ObISQLClient &sql_client, uint64_t tenant_id, uint64_t mview_id,
+int ObMViewInfo::fetch_mview_info(ObISQLClient &sql_client, uint64_t mview_id,
                                   ObMViewInfo &mview_info, bool for_update, bool nowait)
 {
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
   SMART_VAR(ObMySQLProxy::MySQLResult, res)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
@@ -380,7 +377,7 @@ int ObMViewInfo::fetch_mview_info(ObISQLClient &sql_client, uint64_t tenant_id, 
       LOG_WARN("fail to append sql", KR(ret));
     } else if (for_update && nowait && OB_FAIL(sql.append(" for update nowait"))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -390,22 +387,22 @@ int ObMViewInfo::fetch_mview_info(ObISQLClient &sql_client, uint64_t tenant_id, 
         LOG_WARN("fail to get next", KR(ret));
       } else {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("mview info not exist", KR(ret), K(tenant_id), K(mview_id));
+        LOG_WARN("mview info not exist", KR(ret), K(mview_id));
       }
-    } else if (OB_FAIL(extract_mview_info(result, tenant_id, mview_info))){
+    } else if (OB_FAIL(extract_mview_info(result, mview_info))){
       LOG_WARN("fail to extract mview info", K(ret));
     }
   }
   return ret;
 }
 
-int ObMViewInfo::batch_fetch_mview_ids(ObISQLClient &sql_client, uint64_t tenant_id,
+int ObMViewInfo::batch_fetch_mview_ids(ObISQLClient &sql_client,
                                        uint64_t last_mview_id, ObIArray<uint64_t> &mview_ids,
                                        int64_t limit)
 {
   int ret = OB_SUCCESS;
   mview_ids.reset();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
   SMART_VAR(ObMySQLProxy::MySQLResult, res)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
@@ -421,7 +418,7 @@ int ObMViewInfo::batch_fetch_mview_ids(ObISQLClient &sql_client, uint64_t tenant
       LOG_WARN("fail to append sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -443,8 +440,7 @@ int ObMViewInfo::batch_fetch_mview_ids(ObISQLClient &sql_client, uint64_t tenant
   return ret;
 }
 
-int ObMViewInfo::update_major_refresh_mview_scn(ObISQLClient &sql_client,
-                                                const uint64_t tenant_id, const share::SCN &scn)
+int ObMViewInfo::update_major_refresh_mview_scn(ObISQLClient &sql_client, const share::SCN &scn)
 {
   int ret = OB_SUCCESS;
 
@@ -465,7 +461,7 @@ int ObMViewInfo::update_major_refresh_mview_scn(ObISQLClient &sql_client,
                                ObMVRefreshMode::MAJOR_COMPACTION,
                                scn_val))) {
       LOG_WARN("fail to assign sql", KR(ret));
-    } else if (OB_FAIL(sql_client.write(tenant_id, sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_UNLIKELY(affected_rows < 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -476,7 +472,7 @@ int ObMViewInfo::update_major_refresh_mview_scn(ObISQLClient &sql_client,
   return ret;
 }
 
-int ObMViewInfo::get_min_major_refresh_mview_scn(ObISQLClient &sql_client, const uint64_t tenant_id,
+int ObMViewInfo::get_min_major_refresh_mview_scn(ObISQLClient &sql_client,
                                                  int64_t snapshot_for_tx, share::SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -503,7 +499,7 @@ int ObMViewInfo::get_min_major_refresh_mview_scn(ObISQLClient &sql_client, const
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -522,8 +518,7 @@ int ObMViewInfo::get_min_major_refresh_mview_scn(ObISQLClient &sql_client, const
   return ret;
 }
 
-int ObMViewInfo::contains_major_refresh_mview_in_creation(ObISQLClient &sql_client,
-                                                          const uint64_t tenant_id, bool &contains)
+int ObMViewInfo::contains_major_refresh_mview_in_creation(ObISQLClient &sql_client, bool &contains)
 {
   int ret = OB_SUCCESS;
   contains = false;
@@ -536,7 +531,7 @@ int ObMViewInfo::contains_major_refresh_mview_in_creation(ObISQLClient &sql_clie
             "SELECT count(*) cnt FROM %s WHERE refresh_mode = %ld and last_refresh_scn = 0",
             OB_ALL_MVIEW_TNAME, ObMVRefreshMode::MAJOR_COMPACTION))) {
       LOG_WARN("fail to assign sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -554,8 +549,7 @@ int ObMViewInfo::contains_major_refresh_mview_in_creation(ObISQLClient &sql_clie
 
   return ret;
 }
-int ObMViewInfo::contains_major_refresh_mview(ObISQLClient &sql_client,
-                                              const uint64_t tenant_id, bool &contains)
+int ObMViewInfo::contains_major_refresh_mview(ObISQLClient &sql_client, bool &contains)
 {
   int ret = OB_SUCCESS;
   contains = false;
@@ -568,7 +562,7 @@ int ObMViewInfo::contains_major_refresh_mview(ObISQLClient &sql_client,
             "SELECT count(*) cnt FROM %s WHERE refresh_mode = %ld",
             OB_ALL_MVIEW_TNAME, ObMVRefreshMode::MAJOR_COMPACTION))) {
       LOG_WARN("fail to assign sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -589,7 +583,6 @@ int ObMViewInfo::contains_major_refresh_mview(ObISQLClient &sql_client,
 
 
 int ObMViewInfo::extract_mview_info(common::sqlclient::ObMySQLResult *result,
-                                    const uint64_t tenant_id,
                                     ObMViewInfo &mview_info)
 {
   int ret = OB_SUCCESS;
@@ -598,7 +591,7 @@ int ObMViewInfo::extract_mview_info(common::sqlclient::ObMySQLResult *result,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("result is null", KR(ret));
   } else {
-    mview_info.set_tenant_id(tenant_id);
+    
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(*result, mview_id, mview_info, uint64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(*result, build_mode, mview_info, ObMViewBuildMode);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(*result, refresh_mode, mview_info, ObMVRefreshMode);
@@ -627,15 +620,14 @@ int ObMViewInfo::extract_mview_info(common::sqlclient::ObMySQLResult *result,
 }
 
 int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
-                                         const uint64_t tenant_id,
                                          const uint64_t refresh_scn,
                                          const ObIArray<uint64_t> &mview_ids,
                                          ObIArray<ObMViewInfo> &mview_infos)
 {
   int ret = OB_SUCCESS;
-  if (mview_ids.empty() || tenant_id == OB_INVALID_TENANT_ID) {
+  if (mview_ids.empty() || false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res)
     {
@@ -661,7 +653,7 @@ int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
       } else if (OB_FAIL(sql.append_fmt(" WHERE mview_id IN (%.*s)",
                          (int)mview_id_array.length(), mview_id_array.ptr()))) {
         LOG_WARN("fail to append fmt sql", K(ret));
-      } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+      } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -676,7 +668,7 @@ int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
               ret = OB_SUCCESS;
               break;
             }
-          } else if (OB_FAIL(extract_mview_info(result, tenant_id, mview_info))) {
+          } else if (OB_FAIL(extract_mview_info(result, mview_info))) {
             LOG_WARN("fail to extract mview info", K(ret), K(mview_info)); 
           } else if (OB_FAIL(mview_infos.push_back(mview_info))) {
             LOG_WARN("fail to push back mivew inot", K(ret), K(mview_info));
@@ -696,7 +688,6 @@ int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
                                           
 // update data_sync_scn and is_synced
 int ObMViewInfo::update_mview_data_attr(ObISQLClient &sql_client,
-                                        const uint64_t tenant_id,
                                         const uint64_t refresh_scn,
                                         const uint64_t target_data_sync_scn,
                                         ObMViewInfo &mview_info)
@@ -709,24 +700,22 @@ int ObMViewInfo::update_mview_data_attr(ObISQLClient &sql_client,
   uint64_t data_sync_scn = OB_INVALID_SCN_VAL;
   bool is_synced = true, dep_mview = false, dep_base_table = false;
   const bool nested_consistent_refresh = target_data_sync_scn == OB_INVALID_SCN_VAL ? false : true; 
-  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(ObMVDepUtils::get_mview_dep_infos(sql_client,
-                     tenant_id, mview_info.get_mview_id(), mv_dep_infos))) {
+  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(ObMVDepUtils::get_mview_dep_infos(sql_client, mview_info.get_mview_id(), mv_dep_infos))) {
     LOG_WARN("fail to get mv dep infos", K(ret), K(mview_info));
   } else if (mv_dep_infos.count() <= 0) {
     ret = OB_ERR_MVIEW_MISSING_DEPENDENCE;
     const ObTableSchema *mview_table_schema = nullptr;
     const ObDatabaseSchema *db_schema = nullptr;
     uint64_t mview_table_id = mview_info.get_mview_id();
-    if (OB_TMP_FAIL(schema_guard.get_table_schema(tenant_id, mview_table_id, mview_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(tmp_ret), K(tenant_id), K(mview_table_id));
+    if (OB_TMP_FAIL(schema_guard.get_table_schema( mview_table_id, mview_table_schema))) {
+      LOG_WARN("fail to get table schema", KR(tmp_ret), K(mview_table_id));
     } else if (OB_ISNULL(mview_table_schema)) {
       tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table schema is null", KR(tmp_ret), K(tenant_id), K(mview_table_id));
-    } else if (OB_TMP_FAIL(schema_guard.get_database_schema(
-                           tenant_id, mview_table_schema->get_database_id(), db_schema))) {
-      LOG_WARN("fail to get db schema", KR(tmp_ret), K(tenant_id),
+      LOG_WARN("table schema is null", KR(tmp_ret), K(mview_table_id));
+    } else if (OB_TMP_FAIL(schema_guard.get_database_schema( mview_table_schema->get_database_id(), db_schema))) {
+      LOG_WARN("fail to get db schema", KR(tmp_ret),
                K(mview_table_schema->get_database_id()));
     } else if (OB_ISNULL(db_schema)) {
       tmp_ret = OB_ERR_UNEXPECTED;
@@ -739,11 +728,11 @@ int ObMViewInfo::update_mview_data_attr(ObISQLClient &sql_client,
     ARRAY_FOREACH(mv_dep_infos, idx) {
       ObMVDepInfo &dep_info = mv_dep_infos.at(idx);
       const ObTableSchema *table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, dep_info.p_obj_, table_schema))) {
-          LOG_WARN("fail to get table schema", K(ret), K(tenant_id));
+      if (OB_FAIL(schema_guard.get_table_schema( dep_info.p_obj_, table_schema))) {
+          LOG_WARN("fail to get table schema", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema is null", KR(ret), K(tenant_id), K(dep_info.p_obj_));
+        LOG_WARN("table schema is null", KR(ret), K(dep_info.p_obj_));
       } else if (table_schema->is_materialized_view()) {
         if (OB_FAIL(dep_mview_ids.push_back(dep_info.p_obj_))) {
           LOG_WARN("fail to push back dep mview id", K(ret));
@@ -774,7 +763,7 @@ int ObMViewInfo::update_mview_data_attr(ObISQLClient &sql_client,
     }
     is_synced = true;
   } else if (dep_mview) {
-    if (OB_FAIL(bacth_fetch_mview_infos(sql_client, tenant_id,
+    if (OB_FAIL(bacth_fetch_mview_infos(sql_client,
                 refresh_scn, dep_mview_ids, dep_mview_infos))) {
     LOG_WARN("fail to batch fetch mview info", K(ret));
     } else {
@@ -854,7 +843,7 @@ int ObMViewInfo::check_satisfy_target_data_sync_scn(
   return ret;
 }
 
-int ObMViewInfo::get_mview_id_from_container_id(ObISQLClient &sql_client, uint64_t tenant_id,
+int ObMViewInfo::get_mview_id_from_container_id(ObISQLClient &sql_client,
                                                 uint64_t container_id, uint64_t &mview_id)
 {
   int ret = OB_SUCCESS;
@@ -866,7 +855,7 @@ int ObMViewInfo::get_mview_id_from_container_id(ObISQLClient &sql_client, uint64
             "SELECT table_id FROM %s WHERE table_type = %d and data_table_id = %ld",
             OB_ALL_TABLE_TNAME, share::schema::ObTableType::MATERIALIZED_VIEW, container_id))) {
       LOG_WARN("fail to assign sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+    } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -876,7 +865,7 @@ int ObMViewInfo::get_mview_id_from_container_id(ObISQLClient &sql_client, uint64
         LOG_WARN("fail to get next", KR(ret));
       } else {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("mview not exist", KR(ret), K(tenant_id), K(container_id));
+        LOG_WARN("mview not exist", KR(ret), K(container_id));
       }
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "table_id", mview_id, uint64_t);

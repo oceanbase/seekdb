@@ -23,6 +23,7 @@
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/mock_ob_log_handler.h"
 #include "logservice/ob_log_handler.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -103,7 +104,7 @@ public:
       ls_id_(1),
       tenant_id_(1),
       freezer_(&ls_),
-      t3m_(common::OB_SERVER_TENANT_ID),
+      t3m_(),
       mt_mgr_(nullptr),
       ctx_mt_mgr_(nullptr),
       tenant_base_(tenant_id_)
@@ -130,21 +131,21 @@ protected:
     freezer_.init(&ls_);
     EXPECT_EQ(OB_SUCCESS, t3m_.init());
     EXPECT_EQ(OB_SUCCESS,
-              ls_tx_ctx_mgr_.init(tenant_id_, /*tenant_id*/
+              ls_tx_ctx_mgr_.init(
                                   ls_id_,
                                   &ls_.tx_table_,
                                   ls_.get_lock_table(),
                                   (ObTsMgr *)(0x01),
-                                  MTL(transaction::ObTransService*),
+                                  nullptr,
                                   &palf_param,
                                   nullptr));
     EXPECT_EQ(OB_SUCCESS,
-              ls_tx_ctx_mgr2_.init(tenant_id_, /*tenant_id*/
+              ls_tx_ctx_mgr2_.init(
                                   ls_id_,
                                   &ls_.tx_table_,
                                   ls_.get_lock_table(),
                                   (ObTsMgr *)(0x01),
-                                  MTL(transaction::ObTransService*),
+                                  nullptr,
                                   &palf_param,
                                   nullptr));
     ref_count_ = 0;
@@ -158,6 +159,11 @@ protected:
     // tenant_base_.set(t3m_);
     ObTenantEnv::set_tenant(&tenant_base_);
     ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+    // single-tenant: g_mp defaults null in unittests; the TestBody's memtable
+    // dec_ref() dereferences share::g_mp. Provide a stub provider (its getters
+    // return nullptr, which the hit path tolerates).
+    static share::ObIModuleProvider tx_ctx_table_module_provider;
+    share::g_mp = &tx_ctx_table_module_provider;
   }
   virtual void TearDown() override
   {
@@ -175,6 +181,7 @@ protected:
 
     tenant_base_.destroy();
     ObTenantEnv::set_tenant(nullptr);
+    share::g_mp = nullptr;
   }
 public:
   ObTabletID tablet_id_;
@@ -265,7 +272,6 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
   ObTransID id1(1);
   ObLSID ls_id(1);
   static ObPartTransCtx ctx1;
-  ctx1.tenant_id_ = 1;
   ctx1.trans_id_ = id1;
   ctx1.is_inited_ = true;
   ctx1.ls_id_ = ls_id;
@@ -278,7 +284,6 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
 
   ObTransID id2(2);
   static ObPartTransCtx ctx2;
-  ctx2.tenant_id_ = 1;
   ctx2.trans_id_ = id2;
   ctx2.is_inited_ = true;
   ctx2.ls_id_ = ls_id;
@@ -298,7 +303,6 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
   ObSliceAlloc slice_allocator;
   ObTxDataTable tx_data_table;
   ObMemAttr attr;
-  attr.tenant_id_ = MTL_ID();
   tx_data_allocator_.init("test");
   tx_data_table.tx_data_allocator_ = &tx_data_allocator_;
   tx_data_op_allocator_.init();
@@ -317,12 +321,12 @@ TEST_F(TestTxCtxTable, test_tx_ctx_memtable_mgr)
   for (int64_t ctx_idx = 0; ctx_idx < 2; ++ctx_idx) {
     ls_tx_ctx_mgr_recover->reset();
     EXPECT_EQ(OB_SUCCESS,
-              ls_tx_ctx_mgr_recover->init(TestTxCtxTable::tenant_id_, /*tenant_id*/
+              ls_tx_ctx_mgr_recover->init(
                                           TestTxCtxTable::ls_id_,
                                           &ls_.tx_table_,
                                           &ls_.lock_table_,
                                           (ObTsMgr *)(0x01),
-                                          MTL(transaction::ObTransService*),
+                                          nullptr,
                                           &palf_param,
                                           nullptr));
     ObTxCtxMemtableScanIterator* tx_ctx_memtable_iter = dynamic_cast<ObTxCtxMemtableScanIterator*>(row_iter);
@@ -402,8 +406,7 @@ void ObTxData::dec_ref()
 
 namespace transaction
 {
-int ObLSTxCtxMgr::init(const int64_t tenant_id,
-                       const ObLSID &ls_id,
+int ObLSTxCtxMgr::init(const ObLSID &ls_id,
                        ObTxTable *tx_table,
                        ObLockTable *lock_table,
                        ObTsMgr *ts_mgr,
@@ -439,7 +442,7 @@ int ObLSTxCtxMgr::init(const int64_t tenant_id,
     //    // do nothing
     //  }
     //}
-    if (OB_FAIL(ls_tx_ctx_map_.init(lib::ObMemAttr(tenant_id, "LSTxCtxMgr")))) {
+    if (OB_FAIL(ls_tx_ctx_map_.init(lib::ObMemAttr("LSTxCtxMgr")))) {
       TRANS_LOG(WARN, "ls_tx_ctx_map_ init fail", KR(ret));
     } else if (OB_FAIL(tx_ls_state_mgr_.init(ls_id))) {
       TRANS_LOG(WARN, "init tx_ls_state_mgr_ failed", KR(ret));
@@ -447,7 +450,6 @@ int ObLSTxCtxMgr::init(const int64_t tenant_id,
       TRANS_LOG(WARN, "start ls_tx_ctx_mgr failed",K(ret),K(tx_ls_state_mgr_));
     } else {
       is_inited_ = true;
-      tenant_id_ = tenant_id;
       ls_id_ = ls_id;
       tx_table_ = tx_table;
       lock_table_ = lock_table,

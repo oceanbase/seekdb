@@ -16,12 +16,12 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_result_set.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "rpc/obmysql/ob_mysql_field.h"
 #include "sql/engine/px/ob_px_admission.h"
 #include "sql/engine/cmd/ob_table_direct_insert_service.h"
 #include "src/sql/plan_cache/ob_plan_cache.h"
-#include "sql/dblink/ob_tm_service.h"
 #include "src/rootserver/mview/ob_mview_maintenance_service.h"
 #include "src/sql/ob_sql_ccl_rule_manager.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
@@ -46,7 +46,7 @@ ObResultSet::~ObResultSet()
   }
 
   if (my_session_.is_enable_sql_ccl_rule() && my_session_.has_ccl_rule()) {
-    sql::ObSQLCCLRuleManager *sql_ccl_rule_mgr = MTL(sql::ObSQLCCLRuleManager *);
+    sql::ObSQLCCLRuleManager *sql_ccl_rule_mgr = share::g_mp->sqlccl_rule_manager();
     if (!is_inner_result_set_ && sql_ccl_rule_mgr->is_inited() && OB_NOT_NULL(sql_ccl_rule_mgr) && OB_NOT_NULL(get_exec_context().get_sql_ctx())) {
       FOREACH(p_value_wrapper, get_exec_context().get_sql_ctx()->matched_ccl_rule_level_values_) {
         sql_ccl_rule_mgr->dec_rule_level_concurrency(*p_value_wrapper);
@@ -128,7 +128,7 @@ OB_INLINE int ObResultSet::open_plan()
           //session has been killed some moment ago
           ret = OB_ERR_SESSION_INTERRUPTED;
           LOG_WARN("session has been killed", K(ret), K(my_session_.get_session_state()),
-                  K(my_session_.get_server_sid()), "proxy_sessid", my_session_.get_proxy_sessid());
+                  K(my_session_.get_server_sid()));
         } else {
           if (OB_SUCC(ret)) {
             do {
@@ -275,9 +275,6 @@ int ObResultSet::implicit_commit_before_cmd_execute(ObSQLSessionInfo &session_in
       ret = OB_TRANS_XA_ERR_COMMIT;
       LOG_WARN("COMMIT is not allowed in a xa trans", K(ret), K(xid), K(global_tx_type),
           KPC(tx_desc));
-    } else if (transaction::ObGlobalTxType::DBLINK_TRANS == global_tx_type) {
-      ret = OB_NOT_IMPLEMENT;
-      LOG_WARN("dblink is not implement", K(ret));
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected global trans type", K(ret), K(xid), K(global_tx_type), KPC(tx_desc));
@@ -309,10 +306,6 @@ int ObResultSet::start_stmt()
   } else if (OB_FAIL(my_session_.get_autocommit(ac))) {
     LOG_WARN("fail to get autocommit", K(ret));
   } else {
-    if (phy_plan->has_link_udf() && ac) {
-      my_session_.set_autocommit(false);
-      my_session_.set_restore_auto_commit(); 
-    }
     bool in_trans = my_session_.get_in_transaction();
     // 1. Regardless of whether it is within a transaction, as long as it is not a select and the plan is REMOTE, feedback to the client that it does not hit
     // 2. feedback this misshit to obproxy (bug#6255177)
@@ -370,11 +363,6 @@ int ObResultSet::end_stmt(const bool is_rollback)
     get_trans_state().clear_start_stmt_executed();
   } else {
     // do nothing
-  }
-  if (need_revert_tx_) { // ignore ret
-    int tmp_ret = sql::ObTMService::revert_tx_for_callback(get_exec_context());
-    need_revert_tx_ = false;
-    LOG_DEBUG("revert tx for callback", K(tmp_ret));
   }
   NG_TRACE(end_stmt);
   return ret;
@@ -500,7 +488,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   ctx.reset_op_env();
   exec_result_ = &(ctx.get_task_exec_ctx().get_execute_result());
   rootserver::ObMViewMaintenanceService *mview_maintenance_service = 
-                                        MTL(rootserver::ObMViewMaintenanceService*);
+                                        share::g_mp->m_view_maintenance_service();
   if (stmt::T_PREPARE != stmt_type_) {
     if (OB_FAIL(ctx.init_phy_op(physical_plan_->get_phy_operator_size()))) {
       LOG_WARN("fail init exec phy op ctx", K(ret));
@@ -616,9 +604,6 @@ OB_INLINE void ObResultSet::store_affected_rows(ObPhysicalPlanCtx &plan_ctx)
     affected_row = get_affected_rows();
   }
   NG_TRACE_EXT(affected_rows, OB_ID(affected_rows), affected_row);
-  if (my_session_.is_session_sync_support()) {
-    my_session_.set_affected_rows_is_changed(affected_row);
-  }
   my_session_.set_affected_rows(affected_row);
 }
 
@@ -802,7 +787,7 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     }
 
     ObPxAdmission::exit_query_admission(my_session_, get_exec_context(), get_stmt_type(), *get_physical_plan());
-    // Finishing direct-insert must be executed after ObPxTargetMgr::release_target()
+    // Finishing direct-insert must be executed after ObPxTargetMonitor::release_target()
     if (plan_ctx->get_is_direct_insert_plan()) {
       // for insert /*+ append */ into select clause
       int tmp_ret = OB_SUCCESS;
@@ -1037,7 +1022,7 @@ OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
       // if txn will be rollbacked and it may has been rollbacked in end-stmt phase
       // we need account this for stat
       if (is_rollback && !is_will_retry_() && is_tx_active && !in_trans) {
-        ObTransStatistic::get_instance().add_rollback_trans_count(MTL_ID(), 1);
+        ObTransStatistic::get_instance().add_rollback_trans_count( 1);
       }
       bool lock_conflict_skip_end_trans = false;
       // if err is lock conflict retry, do not rollback transaction, but cleanup transaction
@@ -1330,7 +1315,6 @@ int ObResultSet::ExternalRetrieveInfo::build(
   OX (is_bulk_ = session_info.get_cur_exec_ctx()->get_sql_ctx()->is_bulk_);
   OX (session_info.get_cur_exec_ctx()->get_sql_ctx()->is_bulk_ = false);
   if (stmt.is_dml_stmt()) {
-    OX (has_link_table_ = static_cast<ObDMLStmt&>(stmt).has_link_table());
   }
   if (OB_SUCC(ret)) {
     ObSchemaGetterGuard *schema_guard = NULL;

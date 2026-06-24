@@ -31,7 +31,7 @@ void ObMemTrackerGuard::update_mem_limit()
   int ret = common::OB_SUCCESS;
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t mem_quota_pct = 100;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_UNLIKELY(tenant_config.is_valid())) {
     mem_quota_pct = tenant_config->query_memory_limit_percentage;
   }

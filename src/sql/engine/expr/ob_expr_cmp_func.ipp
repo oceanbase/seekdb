@@ -557,7 +557,7 @@ struct ObRelationalExtraFunc
       int ret = OB_SUCCESS;
       ObString l_data;
       ObString r_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter l_instr_iter(ObLongTextType, cs_type, l.get_string(), true);
       ObTextStringIter r_instr_iter(ObLongTextType, cs_type, r.get_string(), true);
       if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
@@ -592,7 +592,7 @@ struct ObRelationalExtraFunc
     {
       int ret = OB_SUCCESS;
       ObString l_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter l_instr_iter(ObLongTextType, cs_type, l.get_string(), true);
       if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
         COMMON_LOG(WARN, "Lob: init left text str iter failed", K(ret), K(cs_type), K(l));
@@ -622,7 +622,7 @@ struct ObRelationalExtraFunc
     {
       int ret = OB_SUCCESS;
       ObString r_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter r_instr_iter(ObLongTextType, cs_type, r.get_string(), true);
       if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
         COMMON_LOG(WARN, "Lob: init right text str iter failed", K(ret), K(ret), K(r));

@@ -156,8 +156,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(conn), K(ret));
-        } else if (conn->is_proxy_ && conn->proxy_version_ < PROXY_VERSION_4_3_0_0) {
-          NEW_MYSQL_PROCESSOR(ObMPDefault, gctx_);
         } else {
           char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessInfo *p = new (buf) ObMPProcessInfo(gctx_);
@@ -176,8 +174,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(conn), K(ret));
-        } else if (conn->is_proxy_ && conn->proxy_version_ < PROXY_VERSION_4_3_0_0) {
-          NEW_MYSQL_PROCESSOR(ObMPDefault, gctx_);
         } else {
           char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessKill *p = new (buf) ObMPProcessKill(gctx_);
@@ -227,29 +223,12 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
             break;
           }
           case obmysql::COM_FIELD_LIST: {
-          /*To adapt with proxy, for the support of COM_FIELD_LIST command, follow these principles:
-          * 1. If it is not in Proxy mode, return a normal query result packet
-          * 2. If it is in Proxy mode:
-          *   2.1. If there is a version number: return an unsupported error packet for versions below 1.7.6;
-          *                    return a normal query result for versions 1.7.6 and above;
-          *                    return an unsupported error packet for invalid version numbers
-          *   2.2. If there is no version number, return an unsupported error packet;
-          */
+            // obproxy support removed: COM_FIELD_LIST is served as a normal query
             ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
                 SQL_REQ_OP.get_sql_session(&req));
             if (OB_ISNULL(conn)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("get unexpected null", K(conn), K(ret));
-            } else if (conn->is_proxy_) {
-              const char *sup_proxy_min_version = "1.7.6";
-              uint64_t min_proxy_version = 0;
-              if (OB_FAIL(ObClusterVersion::get_version(sup_proxy_min_version, min_proxy_version))) {
-                LOG_WARN("failed to get version", K(ret));
-              } else if (conn->proxy_version_ < min_proxy_version) {
-                NEW_MYSQL_PROCESSOR(ObMPDefault, gctx_);
-              } else {
-                NEW_MYSQL_PROCESSOR(ObMPQuery, gctx_);
-              }
             } else {
               NEW_MYSQL_PROCESSOR(ObMPQuery, gctx_);
             }
@@ -273,9 +252,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_ISNULL(conn) || OB_ISNULL(dynamic_cast<ObMPBase *>(processor))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(dynamic_cast<ObMPBase *>(processor)));
-        } else {
-          uint64_t proxy_version = conn->is_proxy_ ? conn->proxy_version_ : 0;
-          static_cast<ObMPBase *>(processor)->set_proxy_version(proxy_version);
         }
       }
     }

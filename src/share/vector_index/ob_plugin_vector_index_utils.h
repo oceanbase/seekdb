@@ -125,7 +125,6 @@ public:
   static int get_data_table_out_column_id(ObSEArray<uint64_t, 4> &vector_column_ids,
                                           uint64_t incr_index_table_id,
                                           uint64_t data_table_id,
-                                          uint64_t tenant_id,
                                           ObPluginVectorIndexAdaptor *adapter);
   static int get_extra_info_objs(storage::ObTableScanParam &scan_param,
                                  ObIAllocator &allocator,
@@ -158,7 +157,7 @@ public:
                                          ObIArray<ObLSTabletPair> &partial_tablet_ids,
                                          ObIArray<ObLSTabletPair> &cache_tablet_ids,
                                          char *buf, int64_t buf_len, int64_t &pos);
-  static int get_tenant_vector_index_ids(const uint64_t tenant_id, bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array);
+  static int get_tenant_vector_index_ids(bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array);
 
 private:
   static const int EMBEDDED_TABLE_BASE_COLUMN_CNT = 2;
@@ -181,12 +180,10 @@ private:
   static int get_non_shared_index_aux_table_colum_count(schema::ObIndexType type, uint32 &col_cnt);
   static int get_non_shared_index_aux_table_rowkey_colum_count(schema::ObIndexType type, uint32 &col_cnt);
   static int get_special_index_aux_table_column_count(schema::ObIndexType type,
-                                                      uint64_t tenant_id,
                                                       uint64_t table_id,
                                                       uint32 &col_cnt,
                                                       storage::ObTableScanParam& scan_param);
   static int get_shared_table_rowkey_colum_count(schema::ObIndexType type,
-                                                 uint64_t tenant_id,
                                                  uint64_t table_id,
                                                  uint32 &col_cnt);
   static int try_sync_snapshot_memdata(ObLSID &ls_id,

@@ -83,8 +83,7 @@ public:
   virtual ~ObPsCache();
   static int mtl_init(ObPsCache* &ps_cache);
   static void mtl_stop(ObPsCache * &ps_cache);
-  int init(const int64_t hash_bucket,
-           const uint64_t tenant_id);
+  int init(const int64_t hash_bucket);
   bool is_inited() const { return inited_; }
   int set_mem_conf(const ObPCMemPctConf &conf);
   int update_memory_conf();
@@ -92,7 +91,7 @@ public:
 
 public:
   // always make sure stmt_id is inner_stmt_id!!!
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   int get_stmt_info_guard(const ObPsStmtId ps_stmt_id, ObPsStmtInfoGuard &guard);
   int ref_stmt_item(const ObPsSqlKey &ps_sql_key, ObPsStmtItem *&stmt_item);
   int ref_stmt_info(const ObPsStmtId stmt_id, ObPsStmtInfo *&ps_stmt_info);
@@ -149,7 +148,7 @@ private:
   {
     const double PS_EVICT_PERCENT_ON_PC = 0.5;
     const int64_t MAX_TENANT_MEM = ((int64_t)(1) << 40); // 1T
-    int64_t tenant_mem = lib::get_tenant_memory_limit(tenant_id_);
+    int64_t tenant_mem = lib::get_tenant_memory_limit();
     int64_t mem_limit = -1;
     if (OB_UNLIKELY(0 >= tenant_mem || tenant_mem >= MAX_TENANT_MEM)) {
       mem_limit = MAX_TENANT_MEM * PS_EVICT_PERCENT_ON_PC;
@@ -174,7 +173,7 @@ private:
 
   ObPsStmtId next_ps_stmt_id_;
   bool inited_;
-  int64_t tenant_id_;
+  
   common::ObAddr host_;
   PsStmtIdMap stmt_id_map_;
   PsStmtInfoMap stmt_info_map_;

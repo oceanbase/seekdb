@@ -1589,7 +1589,7 @@ int ObConflictDetectorGenerator::deduce_redundant_join_conds(const ObDMLStmt *st
   ObSEArray<ObRelIds, 8> connect_infos;
   ObSEArray<ObRelIds, 8> single_table_ids;
   ObRelIds table_ids;
-  ObArenaAllocator allocator(ObModIds::OB_SQL_OPTIMIZER_EQUAL_SETS, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator allocator(ObModIds::OB_SQL_OPTIMIZER_EQUAL_SETS, OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(quals,
                                                        subquery_quals,
                                                        normal_quals,

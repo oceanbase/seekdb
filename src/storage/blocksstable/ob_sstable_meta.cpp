@@ -982,7 +982,7 @@ bool ObSSTableMeta::is_shared_table() const
 
 //================================== ObMigrationSSTableParam ==================================
 ObMigrationSSTableParam::ObMigrationSSTableParam()
-  : allocator_("SSTableParam", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+  : allocator_("SSTableParam", OB_MALLOC_NORMAL_BLOCK_SIZE),
     basic_meta_(),
     column_checksums_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(allocator_)),
     table_key_(),

@@ -16,8 +16,8 @@
 
 
 #include "ob_trans_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_trans_functor.h"
-#include "wrs/ob_i_weak_read_service.h"           // ObIWeakReadService
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/ob_srv_network_frame.h"
 
@@ -87,8 +87,8 @@ int ObTransService::init(const ObAddr &self,
 {
   int ret = OB_SUCCESS;
   set_run_wrapper(MTL_CTX());
-  const int64_t tenant_id = MTL_ID();
-  const int64_t tenant_memory_limit = lib::get_tenant_memory_limit(tenant_id);
+  
+  const int64_t tenant_memory_limit = lib::get_tenant_memory_limit();
   int64_t msg_task_cnt = MSG_TASK_CNT_PER_GB * (tenant_memory_limit / (1024 * 1024 * 1024));
   if (msg_task_cnt < MSG_TASK_CNT_PER_GB) {
     msg_task_cnt = MSG_TASK_CNT_PER_GB;
@@ -112,23 +112,23 @@ int ObTransService::init(const ObAddr &self,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
     TRANS_LOG(ERROR, "timer init error", KR(ret));
-  } else if (OB_FAIL(ObLinkQueueThreadPool::init(1, msg_task_cnt, "TransService", tenant_id))) {
+  } else if (OB_FAIL(ObLinkQueueThreadPool::init(1, msg_task_cnt, "TransService"))) {
     TRANS_LOG(WARN, "thread pool init error", KR(ret), K(msg_task_cnt));
   } else if (OB_FAIL(tx_desc_mgr_.init(std::bind(&ObTransService::gen_trans_id,
                                                  this, std::placeholders::_1),
-                                       lib::ObMemAttr(tenant_id, "TxDescMgr")))) {
+                                       lib::ObMemAttr("TxDescMgr")))) {
     TRANS_LOG(WARN, "ObTxDescMgr init error", K(ret));
-  } else if (OB_FAIL(tx_ctx_mgr_.init(tenant_id, ts_mgr, this))) {
+  } else if (OB_FAIL(tx_ctx_mgr_.init(ts_mgr, this))) {
     TRANS_LOG(WARN, "tx_ctx_mgr_ init error", KR(ret));
-  } else if (OB_FAIL(rollback_sp_msg_mgr_.init(lib::ObMemAttr(tenant_id, "RollbackSPMgr")))) {
+  } else if (OB_FAIL(rollback_sp_msg_mgr_.init(lib::ObMemAttr("RollbackSPMgr")))) {
     TRANS_LOG(WARN, "init rollback msg map failed", KR(ret));
-  } else if (OB_FAIL(tablet_to_ls_cache_.init(tenant_id, &tx_ctx_mgr_))) {
+  } else if (OB_FAIL(tablet_to_ls_cache_.init(&tx_ctx_mgr_))) {
     TRANS_LOG(WARN, "init tablet to ls cache failed", K(ret));
-  } else if (OB_FAIL(read_only_checker_.init(tenant_id))) {
+  } else if (OB_FAIL(read_only_checker_.init())) {
     TRANS_LOG(WARN, "read only checker init failed", K(ret));
   } else {
     self_ = self;
-    tenant_id_ = tenant_id;
+    
     gti_source_ = gti_source;
     rpc_ = rpc;
     location_adapter_ = location_adapter;
@@ -144,12 +144,12 @@ int ObTransService::init(const ObAddr &self,
     if (!GCONF.enable_defensive_check()) {
       // do nothing
     } else if (NULL == (p = ob_malloc(sizeof(ObDefensiveCheckMgr),
-                                      lib::ObMemAttr(tenant_id, "ObDefenCheckMgr")))) {
+                                      lib::ObMemAttr("ObDefenCheckMgr")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "memory alloc failed", KR(ret));
     } else {
       defensive_check_mgr_ = new(p) ObDefensiveCheckMgr();
-      if (OB_FAIL(defensive_check_mgr_->init(lib::ObMemAttr(tenant_id, "ObDefenCheckMgr")))) {
+      if (OB_FAIL(defensive_check_mgr_->init(lib::ObMemAttr("ObDefenCheckMgr")))) {
         TRANS_LOG(ERROR, "defensive check mgr init failed", K(ret), KP(defensive_check_mgr_));
         defensive_check_mgr_->destroy();
         ob_free(defensive_check_mgr_);
@@ -210,7 +210,7 @@ void ObTransService::stop()
     TRANS_LOG(WARN, "tx_desc_mgr stop error", KR(ret));
   } else if (OB_FAIL(timer_.stop())) {
     TRANS_LOG(WARN, "ObTransTimer stop error", K(ret));
-  } else if (OB_FAIL(ts_mgr_->remove_dropped_tenant(tenant_id_))) {
+  } else if (OB_FAIL(ts_mgr_->interrupt_gts_callbacks())) {
     TRANS_LOG(WARN, "gts_mgr stop error", K(ret));
   } else {
     rpc_->stop();
@@ -288,7 +288,7 @@ int ObTransService::get_trans_start_session_id(const share::ObLSID &ls_id, const
   } else if (OB_UNLIKELY(!is_running_)) {
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
     TRANS_LOG(WARN, "get ls failed", K(ret), K(ls_id), K(tx_id));
   } else if (!ls_handle.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -529,8 +529,7 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
     seq_no = tx_desc.inc_and_get_tx_seq(0);
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(arg.init(tx_desc.tenant_id_,
-                              tx_desc,
+  } else if (OB_FAIL(arg.init(tx_desc,
                               ls_id,
                               type,
                               str,
@@ -554,7 +553,7 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
                   K(retry_cnt));
       } else if (OB_ISNULL(location_adapter_)
                  || OB_FAIL(location_adapter_->nonblock_get_leader(
-                     tx_desc.cluster_id_, tx_desc.tenant_id_, ls_id, ls_leader_addr))) {
+                     tx_desc.cluster_id_, ls_id, ls_leader_addr))) {
         TRANS_LOG(WARN, "get leader failed", KR(ret), K(ls_id));
       } else if (ls_leader_addr == self_) {
         local_retry_cnt = 0;
@@ -656,7 +655,7 @@ int ObTransService::register_mds_into_ctx_(ObTxDesc &tx_desc,
   if (OB_UNLIKELY(!tx_desc.is_valid() || !ls_id.is_valid() || OB_ISNULL(buf) || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(tx_desc), K(ls_id), KP(buf), K(buf_len));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
     TRANS_LOG(WARN, "get ls handle fail", K(ret), K(ls_id));
   } else if (FALSE_IT(store_ctx.ls_id_ = ls_id)) {
   } else if (FALSE_IT(store_ctx.ls_ = ls_handle.get_ls())) {

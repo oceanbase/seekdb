@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "ob_log_request_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -34,7 +35,7 @@ int LogRequestHandler::get_palf_handle_guard_(const int64_t palf_id,
   int ret = OB_SUCCESS;
   logservice::ObLogService *log_service = nullptr;
   share::ObLSID ls_id(palf_id);
-  if (OB_ISNULL(log_service = MTL(logservice::ObLogService*))) {
+  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_FAIL(log_service->open_palf(ls_id, palf_handle_guard))) {
@@ -49,7 +50,7 @@ int LogRequestHandler::get_log_handler_(
     logservice::ObLogHandler *&log_handler) const
 {
   log_handler = nullptr;
-  storage::ObLSService *ls_svr = MTL(ObLSService*);
+  storage::ObLSService *ls_svr = share::g_mp->ls_service();
   storage::ObLS *ls = nullptr;
   share::ObLSID ls_id(palf_id);
   int ret = OB_SUCCESS;
@@ -84,14 +85,14 @@ int LogRequestHandler::get_flashback_service_(ObLogFlashbackService *&flashback_
 {
   int ret = OB_SUCCESS;
   logservice::ObLogService *log_service = NULL;
-  if (OB_ISNULL(log_service = MTL(logservice::ObLogService*))) {
+  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_ISNULL(flashback_srv = log_service->get_flashback_service())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "log_service.get_flashback_service failed", K(ret));
   } else {
-    CLOG_LOG(TRACE, "get_flashback_service success", KP(flashback_srv), KP(log_service), K(MTL_ID()));
+    CLOG_LOG(TRACE, "get_flashback_service success", KP(flashback_srv), KP(log_service));
   }
   return ret;
 }
@@ -100,14 +101,14 @@ int LogRequestHandler::get_replay_service_(ObLogReplayService *&replay_srv) cons
 {
   int ret = OB_SUCCESS;
   logservice::ObLogService *log_service = NULL;
-  if (OB_ISNULL(log_service = MTL(logservice::ObLogService*))) {
+  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_ISNULL(replay_srv = log_service->get_log_replay_service())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "log_service.get_log_replay_service failed", K(ret));
   } else {
-    CLOG_LOG(TRACE, "get_replay_service success", KP(replay_srv), KP(log_service), K(MTL_ID()));
+    CLOG_LOG(TRACE, "get_replay_service success", KP(replay_srv), KP(log_service));
   }
   return ret;
 }
@@ -308,7 +309,7 @@ int LogRequestHandler::handle_request<LogFlashbackMsg>(const LogFlashbackMsg &re
       CLOG_LOG(WARN, "get_flashback_service_ failed", K(ret), K(palf_id));
     } else {
       // single-replica: deliver flashback response in-process (sender is always self)
-      LogFlashbackMsg flashback_resp(MTL_ID(), self, palf_id, req.mode_version_, req.flashback_scn_, false);
+      LogFlashbackMsg flashback_resp(self, palf_id, req.mode_version_, req.flashback_scn_, false);
       if (OB_FAIL(flashback_srv->handle_flashback_resp(flashback_resp))) {
         CLOG_LOG(WARN, "handle_flashback_resp failed", K(ret), K(palf_id), K(server), K(flashback_resp));
       }
@@ -333,7 +334,7 @@ int LogRequestHandler::handle_sync_request<LogGetCkptReq, LogGetCkptResp>(
     LogGetCkptResp &resp)
 {
   int ret = common::OB_SUCCESS;
-  storage::ObLSService *ls_svr = MTL(ObLSService*);
+  storage::ObLSService *ls_svr = share::g_mp->ls_service();
   storage::ObLS *ls = nullptr;
   const share::ObLSID &ls_id = req.ls_id_;
   storage::ObLSHandle handle;

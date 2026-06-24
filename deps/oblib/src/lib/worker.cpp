@@ -86,7 +86,6 @@ Worker::Worker()
       func_type_(0),
       timeout_ts_(INT64_MAX),
       ntp_offset_(0),
-      rpc_tenant_id_(0),
       disable_wait_(false)
 {
   worker_node_.get_data() = this;

@@ -277,7 +277,7 @@ int main(int argc, char **argv)
   }
   init_sql_factories();
   ContextParam param;
-  param.set_mem_attr(1001, "Transformer", ObCtxIds::WORK_AREA)
+  param.set_mem_attr("Transformer", ObCtxIds::WORK_AREA)
        .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE);
 
   ::testing::InitGoogleTest(&argc,argv);

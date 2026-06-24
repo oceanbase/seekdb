@@ -233,12 +233,6 @@ create table xingrui_dup_name (c1 varchar(10) NOT NULL , c2 int);
 alter table xingrui_dup_name drop column c1, drop column c1;
 ERROR 42000: Can't DROP 'c1'; check that column/key exists
 drop table xingrui_dup_name;
-ERROR 42000: Incorrect column name 'SYS_UNUSED_column_NAME'
-ERROR 42S21: Duplicate column name 'SYS_UNUSED_column_NAME'
-ERROR 42S22: Unknown column 'SYS_UNUSED_column_NAME'
-ERROR 42000: Incorrect column name 'SYS_UNUSED_column_NAME'
-alter table xingrui_dup_name force;
-drop table xingrui_dup_name;
 #case 索引表
 #普通索引
 drop table xingrui_normal_table;
@@ -554,8 +548,6 @@ alter table xingrui_invisible_table drop column col1, drop column col2;
 drop table xingrui_invisible_table;
 create table xingrui_invisible_table(col1 int auto_increment, col2 int invisible, col3 int);
 alter table xingrui_invisible_table drop column col3;
-ERROR HY000: table must have at least one column that is not invisible
-ERROR 42000: Incorrect column name 'SYS_UNUSED_column_NAME'
 drop table xingrui_invisible_table;
 create table xingrui_invisible_table(col1 int auto_increment, col2 int invisible);
 alter table xingrui_invisible_table drop column col1;

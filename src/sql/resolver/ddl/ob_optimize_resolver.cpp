@@ -37,9 +37,10 @@ int ObOptimizeTableResolver::resolve(const ParseNode &parser_tree)
     }
   }
   if (OB_SUCC(ret)) {
-    stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     obcall::ObOptimizeTableArg &arg = stmt->get_optimize_table_arg();
-    arg.tenant_id_ = session_info_->get_effective_tenant_id();
+    
+    
     void *buf = nullptr;
     ObPlacementHashSet<obcall::ObTableItem> *table_item_set = nullptr;
     if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObPlacementHashSet<obcall::ObTableItem>)))) {

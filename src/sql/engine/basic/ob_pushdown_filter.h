@@ -1007,7 +1007,7 @@ public:
   }
   inline int create(int param_num)
   {
-    ObMemAttr attr(MTL_ID(), common::ObModIds::OB_HASH_BUCKET);
+    ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     return set_.create(param_num, attr);
   }
   inline int64_t count() const
@@ -1065,7 +1065,7 @@ public:
   inline int create(int param_num, const ObExprHashFuncType hash_func)
   {
     hash_func_ = hash_func;
-    return set_.init(param_num, MTL_ID());
+    return set_.init(param_num);
   }
   inline int64_t count() const
   {

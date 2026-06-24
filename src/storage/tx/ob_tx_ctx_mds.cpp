@@ -22,12 +22,12 @@ namespace oceanbase
 namespace transaction
 {
 
-int ObTxMDSCache::init(const int64_t tenant_id, const share::ObLSID ls_id, const ObTransID tx_id)
+int ObTxMDSCache::init(const share::ObLSID ls_id, const ObTransID tx_id)
 {
   int ret = OB_SUCCESS;
 
 #ifdef  ENABLE_DEBUG_LOG 
-  tenant_id_ = tenant_id;
+  owner_id_ = 1UL;
   ls_id_ = ls_id;
   tx_id_ = tx_id;
   record_mem_ret_ = OB_SUCCESS;
@@ -46,7 +46,7 @@ void ObTxMDSCache::reset()
   need_retry_submit_mds_ = false;
   max_register_no_ = 0;
 #ifdef  ENABLE_DEBUG_LOG
-  tenant_id_ = 0;
+  owner_id_ = 0;
   ls_id_.reset();
   tx_id_.reset();
   mem_stat_hash_.destroy();
@@ -67,7 +67,7 @@ void ObTxMDSCache::destroy()
   }
 
 #ifdef ENABLE_DEBUG_LOG
-  tenant_id_ = 0;
+  owner_id_ = 0;
   ls_id_.reset();
   tx_id_.reset();
   mem_stat_hash_.destroy();
@@ -106,10 +106,10 @@ int ObTxMDSCache::alloc_mds_node(const ObPartTransCtx *tx_ctx,
 
 #ifdef ENABLE_DEBUG_LOG
   if (!mem_stat_hash_.created()) {
-    ObMemAttr attr(tenant_id_, "MdsMemHash");
+    ObMemAttr attr(owner_id_, "MdsMemHash");
     if (OB_TMP_FAIL(mem_stat_hash_.create(16, attr, attr))) {
       record_mem_ret_ = tmp_ret;
-      TRANS_LOG(WARN, "create mds mem stat failed", K(ret), K(tmp_ret), K(tenant_id_), K(ls_id_),
+      TRANS_LOG(WARN, "create mds mem stat failed", K(ret), K(tmp_ret), K(owner_id_), K(ls_id_),
                 K(tx_id_), K(record_mem_ret_));
     }
   }
@@ -117,7 +117,7 @@ int ObTxMDSCache::alloc_mds_node(const ObPartTransCtx *tx_ctx,
     if (OB_TMP_FAIL(mem_stat_hash_.get_refactored(cur_register_no, tmp_mem_stat))) {
       if (OB_HASH_NOT_EXIST != tmp_ret) {
         TRANS_LOG(ERROR, "get tmp_mem_stat from mem_stat_hash failed", K(ret), K(tmp_ret),
-                  K(cur_register_no), K(tmp_mem_stat), K(tenant_id_), K(ls_id_), K(tx_id_),
+                  K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_), K(tx_id_),
                   K(record_mem_ret_));
       }
       tmp_mem_stat.reset();
@@ -129,7 +129,7 @@ int ObTxMDSCache::alloc_mds_node(const ObPartTransCtx *tx_ctx,
     if (OB_TMP_FAIL(mem_stat_hash_.set_refactored(cur_register_no, tmp_mem_stat, 1))) {
       record_mem_ret_ = tmp_ret;
       TRANS_LOG(WARN, "insert mem_stat_ into hash table failed", K(ret), K(tmp_ret),
-                K(cur_register_no), K(tmp_mem_stat), K(tenant_id_), K(ls_id_), K(tx_id_),
+                K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_), K(tx_id_),
                 K(record_mem_ret_));
     }
   }
@@ -157,11 +157,11 @@ void ObTxMDSCache::free_mds_node(common::ObString &data, uint64_t register_no)
   if (OB_TMP_FAIL(mem_stat_hash_.get_refactored(cur_register_no, tmp_mem_stat))) {
     if (record_mem_ret_ != OB_SUCCESS) {
       TRANS_LOG_RET(WARN, tmp_ret, "get tmp_mem_stat from mem_stat_hash failed", K(ret), K(tmp_ret),
-                    K(cur_register_no), K(tmp_mem_stat), K(tenant_id_), K(ls_id_), K(tx_id_),
+                    K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_), K(tx_id_),
                     K(record_mem_ret_));
     } else {
       TRANS_LOG_RET(ERROR, tmp_ret, "get tmp_mem_stat from mem_stat_hash failed", K(ret),
-                    K(tmp_ret), K(cur_register_no), K(tmp_mem_stat), K(tenant_id_), K(ls_id_),
+                    K(tmp_ret), K(cur_register_no), K(tmp_mem_stat), K(owner_id_), K(ls_id_),
                     K(tx_id_), K(record_mem_ret_));
     }
     tmp_mem_stat.reset();
@@ -172,7 +172,7 @@ void ObTxMDSCache::free_mds_node(common::ObString &data, uint64_t register_no)
     if (tmp_mem_stat.free_cnt_ >= tmp_mem_stat.alloc_cnt_) {
       if (OB_TMP_FAIL(mem_stat_hash_.erase_refactored(cur_register_no))) {
         TRANS_LOG_RET(ERROR, tmp_ret, "insert mem_stat_ into hash table failed", K(ret), K(tmp_ret),
-                      K(cur_register_no), K(tmp_mem_stat), K(tmp_mem_stat), K(tenant_id_),
+                      K(cur_register_no), K(tmp_mem_stat), K(tmp_mem_stat), K(owner_id_),
                       K(ls_id_), K(tx_id_), K(record_mem_ret_));
       }
     }
@@ -191,10 +191,10 @@ bool ObTxMDSCache::is_mem_leak()
          iter++) {
       if (record_mem_ret_ != OB_SUCCESS) {
         TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "mds node mem leak", K(iter->first), K(iter->second),
-                      K(tenant_id_), K(ls_id_), K(tx_id_), K(record_mem_ret_));
+                      K(owner_id_), K(ls_id_), K(tx_id_), K(record_mem_ret_));
       } else {
         TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "mds node mem leak", K(iter->first),
-                      K(iter->second), K(tenant_id_), K(ls_id_), K(tx_id_), K(record_mem_ret_));
+                      K(iter->second), K(owner_id_), K(ls_id_), K(tx_id_), K(record_mem_ret_));
       }
     }
   }

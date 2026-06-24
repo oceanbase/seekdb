@@ -97,7 +97,7 @@ public:
       allocator_(allocator),
       inner_allocated_num_(0),
       inner_used_num_(0),
-      free_list_allocator_(SET_USE_500(ObMemAttr(mem_attr.tenant_id_, "PoolFreeList", mem_attr.ctx_id_)),
+      free_list_allocator_(SET_USE_500(ObMemAttr("PoolFreeList", mem_attr.ctx_id_)),
                            OB_MALLOC_NORMAL_BLOCK_SIZE),
       slice_max_used_num_(0),
       max_idle_num_(0),
@@ -303,7 +303,7 @@ template <class T, class RPLabel>
 ObResourcePool<T, RPLabel>::ObResourcePool()
   : ObBaseResourcePool<T, RPLabel>(MAX_FREE_LIST_NUM,
                                    &allocator_,
-                                   SET_USE_500(lib::ObMemAttr(OB_SERVER_TENANT_ID, RPLabel::LABEL)))
+                                   SET_USE_500(lib::ObMemAttr(RPLabel::LABEL)))
 {
   int ret = OB_SUCCESS;
   const int64_t page_size =

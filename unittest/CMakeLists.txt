@@ -35,11 +35,7 @@ function(ob_unittest case)
     target_link_libraries(${case} PRIVATE mock_di oceanbase gtest gmock)
   endif()
   target_include_directories(${case}
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/unittest ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
-  # oblib_grpc generates grpc/*.grpc.pb.h at build time; many headers (e.g. via ob_ls.h ->
-  # ob_restore_helper_ctx.h -> ob_storage_grpc.h) need those files before any TU compiles.
-  # add_dependencies(ob_storage oblib_grpc) is not enough: unittest objects can compile in parallel.
-  add_dependencies(${case} oblib_grpc)
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/unittest ${CMAKE_SOURCE_DIR}/mittest ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
 endfunction()
 
 file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.test")

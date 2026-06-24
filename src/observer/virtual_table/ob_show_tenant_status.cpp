@@ -26,8 +26,7 @@ namespace observer
 {
 
 ObShowTenantStatus::ObShowTenantStatus()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -38,7 +37,6 @@ ObShowTenantStatus::~ObShowTenantStatus()
 
 void ObShowTenantStatus::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -107,12 +105,12 @@ int ObShowTenantStatus::add_all_tenant_status()
   } else {
     const ObTenantSchema *tenant_schema = NULL;
     const ObSysVariableSchema *sys_variable_schema = NULL;
-    if (OB_FAIL(schema_guard_->get_tenant_info(tenant_id_, tenant_schema))) {
-      SERVER_LOG(WARN, "get_tenant_info failed", K(ret), K_(tenant_id));
+    if (OB_FAIL(schema_guard_->get_tenant_info(tenant_schema))) {
+      SERVER_LOG(WARN, "get_tenant_info failed", K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
-      SERVER_LOG(WARN, "tenant not exist!", K_(tenant_id));
-    } else if (OB_FAIL(schema_guard_->get_sys_variable_schema(tenant_id_, sys_variable_schema))) {
+      SERVER_LOG(WARN, "tenant not exist!");
+    } else if (OB_FAIL(schema_guard_->get_sys_variable_schema( sys_variable_schema))) {
       SERVER_LOG(WARN, "get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -141,9 +139,6 @@ int ObShowTenantStatus::inner_get_next_row(ObNewRow *&row)
   } else if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema manager is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K_(tenant_id), K(ret));
   } else {
     if (!start_to_read_) {
       if (OB_FAIL(add_all_tenant_status())) {

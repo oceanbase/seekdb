@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_META_OBJ_STRUCT_H_
 
 #include "common/log/ob_log_constants.h"
+#include "share/rc/ob_module_provider.h"
 #include "common/ob_clock_generator.h"
 #include "share/ob_define.h"
 #include "storage/meta_mem/ob_tenant_meta_obj_pool.h"
@@ -211,7 +212,7 @@ ObMetaObj<T>::ObMetaObj()
   : pool_(nullptr),
     allocator_(nullptr),
     ptr_(nullptr),
-    t3m_(MTL(ObTenantMetaMemMgr*))
+    t3m_(share::g_mp->tenant_meta_mem_mgr())
 {
 }
 

@@ -73,7 +73,7 @@ public:
   ObSharedObjectsWriteCtx()
     : addr_(), block_ids_(), next_opt_()
   {
-    block_ids_.set_attr(ObMemAttr(MTL_ID(), "SharedBlkWCtx"));
+    block_ids_.set_attr(ObMemAttr("SharedBlkWCtx"));
   }
   ~ObSharedObjectsWriteCtx();
   bool is_valid() const;

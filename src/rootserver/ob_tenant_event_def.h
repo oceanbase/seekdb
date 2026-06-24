@@ -35,8 +35,7 @@
    *
    * Use the TENANT_EVENT macro to record the EVENT of the tenant,
    * and fill in the field values in the order defined by DEF_EVENT.
-   *    TENANT_EVENT(tenant_id, MODULE, EVENT, event_timestamp, user_ret, cost_us, VALUE1 ...)
-   *      @param[in] tenant_id The tenant ID of the ordinary tenant
+   *    TENANT_EVENT(MODULE, EVENT, event_timestamp, user_ret, cost_us, VALUE1 ...)
    *      @param[in] MODULE The label of MODULE
    *      @param[in] EVENT The label of EVENT
    *      @param[in] event_timestamp the timestamp when the event occurs
@@ -45,7 +44,7 @@
    *      @param[in] VALUE1 The value of the field of the key information of EVENT,
    *                        fill in the value of the field according to the order defined by DEF_EVENT
    * The EVENT recorded by TENANT_EVENT will be stored in the inner table
-   * (__all_tenant_event_history) under the META tenant space corresponding to tenant_id,
+   * (__all_tenant_event_history) under the META tenant space,
    *  and displayed through the views CDB_OB_TENANT_EVENT_HISTORY/DBA_OB_TENANT_EVENT_HISTORY.
    *
    * ******  NOTICE  *********
@@ -160,53 +159,53 @@ namespace tenant_event
 #define ThreeArguments(MODULE, EVENT, EVENT_STR) \
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us); \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us); \
     return ;\
   }
 #define FourArguments(MODULE, EVENT, EVENT_STR, NAME1) \
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<typename T1> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us, \
                                const T1 &value1) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us, #NAME1, value1); \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us, #NAME1, value1); \
     return ;\
   }
 #define FiveArguments(MODULE, EVENT, EVENT_STR, NAME1, NAME2) \
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<typename T1, typename T2> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us, \
                                const T1 &value1, const T2 &value2) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2); \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2); \
     return ;\
   }
 #define SixArguments(MODULE, EVENT, EVENT_STR, NAME1, NAME2, NAME3) \
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<typename T1, typename T2, typename T3> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us, \
                                const T1 &value1, const T2 &value2, \
                                const T3 &value3) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
                      #NAME3, value3); \
     return ;\
   }
 #define SevenArguments(MODULE, EVENT, EVENT_STR, NAME1, NAME2, NAME3, NAME4) \
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<typename T1, typename T2, typename T3, typename T4> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us, \
                                const T1 &value1, const T2 &value2, \
                                const T3 &value3, const T4 &value4) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
                      #NAME3, value3, #NAME4, value4); \
     return ;\
   }
@@ -214,13 +213,13 @@ namespace tenant_event
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<typename T1, typename T2, typename T3, typename T4, \
       typename T5> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us, \
                                const T1 &value1, const T2 &value2, \
                                const T3 &value3, const T4 &value4, \
                                const T5 &value5) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
                      #NAME3, value3, #NAME4, value4, #NAME5, value5); \
     return ;\
   }
@@ -228,13 +227,13 @@ namespace tenant_event
   DEF_EVENT_COMMON(EVENT, EVENT_STR) \
   template<typename T1, typename T2, typename T3, typename T4, \
       typename T5, typename T6> \
-  static void MODULE##_##EVENT##_func(const uint64_t tenant_id, const char * const module, const char * const event, \
+  static void MODULE##_##EVENT##_func(const char * const module, const char * const event, \
                                const int64_t event_timestamp, const int user_ret, const int64_t cost_us, \
                                const T1 &value1, const T2 &value2, \
                                const T3 &value3, const T4 &value4, \
                                const T5 &value5, const T6 &value6) \
   { \
-    TENANT_EVENT_ADD(tenant_id, module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
+    TENANT_EVENT_ADD(module, event, event_timestamp, user_ret, cost_us, #NAME1, value1, #NAME2, value2, \
                      #NAME3, value3, #NAME4, value4, #NAME5, value5, #NAME6, value6); \
     return ;\
   }
@@ -243,8 +242,8 @@ namespace tenant_event
 #define DEF_EVENT(...) \
   GetMacro(__VA_ARGS__, NineArguments, EightArguments, SevenArguments, SixArguments, FiveArguments, FourArguments, ThreeArguments, TwoArguments, OneArgument, ...)(__VA_ARGS__)
 
-#define TENANT_EVENT(tenant_id, MODULE, EVENT, event_timestamp, user_ret, cost_us, args...) \
-  MODULE::MODULE##_##EVENT##_func(tenant_id, MODULE::MODULE##_STR, MODULE::EVENT##_STR, event_timestamp, user_ret, cost_us, args)
+#define TENANT_EVENT(MODULE, EVENT, event_timestamp, user_ret, cost_us, args...) \
+  MODULE::MODULE##_##EVENT##_func(MODULE::MODULE##_STR, MODULE::EVENT##_STR, event_timestamp, user_ret, cost_us, args)
 
 #include "ob_tenant_event_def.h"
 #undef DEF_MODULE

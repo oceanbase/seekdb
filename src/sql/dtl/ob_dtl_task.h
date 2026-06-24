@@ -52,11 +52,10 @@ public:
   // channels whereas task at top only has puller and bottom task only
   // has pusher.
   DTL_CHAN_ROLE role_;
-  uint64_t tenant_id_;
   // no need to serialize
   DTL_CHAN_STATE state_;
 
-  TO_STRING_KV(K_(chid), K_(type), K_(peer), K_(role), K_(tenant_id), K(state_));
+  TO_STRING_KV(K_(chid), K_(type), K_(peer), K_(role), K(state_));
 };
 
 class ObDtlChSet
@@ -119,7 +118,7 @@ class ObDtlChTotalInfo
 public:
   ObDtlChTotalInfo()
     : start_channel_id_(0), transmit_exec_server_(), receive_exec_server_(),
-      channel_count_(0), tenant_id_(common::OB_INVALID_ID), is_local_shuffle_(false)
+      channel_count_(0), is_local_shuffle_(false)
   {}
   int assign(const ObDtlChTotalInfo &other);
   void reset()
@@ -128,7 +127,6 @@ public:
     transmit_exec_server_.reset();
     receive_exec_server_.reset();
     channel_count_ = 0;
-    tenant_id_ = 0;
   }
   bool is_valid() const
   {
@@ -139,14 +137,12 @@ public:
               K_(transmit_exec_server),
               K_(receive_exec_server),
               K_(channel_count),
-              K_(tenant_id),
               K_(is_local_shuffle));
 public:
   int64_t start_channel_id_;
   ObDtlExecServer transmit_exec_server_;
   ObDtlExecServer receive_exec_server_;
   int64_t channel_count_;   // theoretically should equal tranmit_total_task_cnt_ * receive_total_task_cnt_
-  uint64_t tenant_id_;
   bool is_local_shuffle_;
 };
 

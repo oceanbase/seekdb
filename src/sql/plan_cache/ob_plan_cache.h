@@ -60,7 +60,6 @@ class ObPhysicalPlan;
 class ObLibCacheAtomicOp;
 class ObEvolutionPlan;
 
-typedef common::hash::ObHashMap<uint64_t, ObPlanCache *> PlanCacheMap;
 
 struct ObKVEntryTraverseOp
 {
@@ -130,7 +129,6 @@ struct ObDumpAllCacheObjOp
     } else if (should_dump(entry.second)
               && OB_FAIL(key_array_->push_back(AllocCacheObjInfo(
                   entry.second->get_object_id(),
-                  entry.second->get_tenant_id(),
                   entry.second->get_logical_del_time(),
                   safe_timestamp_,
                   entry.second->get_ref_count(),
@@ -240,7 +238,7 @@ public:
   virtual ~ObPlanCache();
   static int mtl_init(ObPlanCache* &plan_cache);
   static void mtl_stop(ObPlanCache * &plan_cache);
-  int init(int64_t hash_bucket, uint64_t tenant_id);
+  int init(int64_t hash_bucket);
   bool is_inited() { return inited_; }
 
   static int check_can_do_insert_opt(common::ObIAllocator &allocator,
@@ -369,11 +367,11 @@ public:
   void destroy();
   common::ObAddr &get_host() { return host_; }
   void set_host(common::ObAddr &addr) { host_ = addr; }
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_tenant_memory() const {
-    return lib::get_tenant_memory_limit(tenant_id_);
+    return lib::get_tenant_memory_limit();
   }
-  void set_tenant_id(int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   common::ObIAllocator *get_pc_allocator() { return &inner_allocator_; }
   common::ObIAllocator &get_pc_allocator_ref() { return inner_allocator_; }
   int64_t get_cache_obj_size() const { return co_mgr_.get_cache_obj_size(); }
@@ -383,7 +381,7 @@ public:
   int remove_cache_node(ObILibCacheKey *key);
   ObLCObjectManager &get_cache_obj_mgr() { return co_mgr_; }
   ObLCNodeFactory &get_cache_node_factory() { return cn_factory_; }
-  int alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns, uint64_t tenant_id);
+  int alloc_cache_obj(ObCacheObjGuard& guard, ObLibCacheNameSpace ns);
   void free_cache_obj(ObILibCacheObject *&cache_obj, const CacheRefHandleID ref_handle);
   int destroy_cache_obj(const bool is_leaked, const uint64_t object_id);
   static int construct_fast_parser_result(common::ObIAllocator &allocator,
@@ -406,12 +404,12 @@ public:
   common::ObMemAttr get_mem_attr() {
     common::ObMemAttr attr;
     attr.label_ = ObNewModIds::OB_SQL_PLAN_CACHE;
-    attr.tenant_id_ = tenant_id_;
+    
     attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
     return attr;
   }
 
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(mem_limit_pct),
                K_(mem_high_pct),
                K_(mem_low_pct));
@@ -469,7 +467,7 @@ private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
-  int64_t tenant_id_;
+  
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage
   int64_t mem_low_pct_;                      // low water mark percentage
@@ -481,7 +479,6 @@ private:
   ObPlanCacheStat pc_stat_;
   // ref handle infos
   ObCacheRefHandleMgr ref_handle_mgr_;
-  PlanCacheMap* pcm_;
   // mark this Plan Cache whether is destroying.
   volatile int64_t destroy_;
   ObLCObjectManager co_mgr_;

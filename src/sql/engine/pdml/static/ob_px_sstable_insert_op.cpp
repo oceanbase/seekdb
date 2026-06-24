@@ -144,7 +144,7 @@ int ObPxMultiPartSSTableInsertOp::inner_open()
         LOG_WARN("check need idempotence failed", K(ret));
       } else if (OB_FAIL(locate_exprs())) {
         LOG_WARN("locate exprs failed", K(ret));
-      } else if (is_heap_plan() && OB_FAIL(heap_tablet_writer_map_.create(MAP_HASH_BUCKET_NUM, ObMemAttr(MTL_ID(), "tblt_writer_map")))) {
+      } else if (is_heap_plan() && OB_FAIL(heap_tablet_writer_map_.create(MAP_HASH_BUCKET_NUM, ObMemAttr("tblt_writer_map")))) {
         LOG_WARN("init tablet writer map failed", K(ret));
       }
     }
@@ -489,7 +489,7 @@ int ObPxMultiPartSSTableInsertOp::check_need_idempotence()
     if (OB_ISNULL(sql_ctx = ctx_.get_sql_ctx()) || OB_ISNULL(sql_ctx->schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, schema guard not be nullptr", K(ret));
-    } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(MTL_ID(), MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
+    } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
       LOG_WARN("get table schema failed", K(ret), K(MY_SPEC.plan_->get_ddl_table_id()));
     } else if (OB_ISNULL(ddl_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -505,7 +505,7 @@ int ObPxMultiPartSSTableInsertOp::check_need_idempotence()
       if (ddl_table_schema->is_rowkey_doc_id()
           && ddl_dag_->get_ddl_task_param().is_offline_index_rebuild_
           && !is_incremental_direct_load(ddl_dag_->get_direct_load_type())) {
-        if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(MTL_ID(), ddl_table_schema->get_data_table_id(), data_table_schema))) {
+        if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
           LOG_WARN("get table schema failed", K(ret), K(ddl_table_schema->get_data_table_id()));
         } else if (OB_ISNULL(data_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -570,7 +570,7 @@ int ObPxMultiPartSSTableInsertOp::write_heap_slice_by_batch()
   ObInsertMonitor insert_monitor(unused_row_scan_cnt, op_monitor_info_.otherstat_2_value_, op_monitor_info_.otherstat_1_value_);
 
   if (OB_SUCC(ret) && nullptr != tablet_id_expr_) {
-    if (OB_FAIL(slice_writer_map.create(max_batch_size, ObMemAttr(MTL_ID(), "act_writer_map")))) {
+    if (OB_FAIL(slice_writer_map.create(max_batch_size, ObMemAttr("act_writer_map")))) {
       LOG_WARN("create slice writer map failed", K(ret));
     }
   }
@@ -912,7 +912,7 @@ int ObPxMultiPartSSTableInsertOp::switch_slice_if_need(
         LOG_WARN("init write param failed", K(ret), K(tablet_id), K(slice_idx));
     } else if (ddl_dag_->get_ddl_table_schema().table_item_.is_column_store_ || ddl_dag_->get_ddl_table_schema().table_item_.vec_dim_ > 0) {
       const bool direct_write_macro_block = false;
-      if (OB_ISNULL(slice_writer = OB_NEW(ObCsSliceWriter, ObMemAttr(MTL_ID(), "cs_slice_writer")))) {
+      if (OB_ISNULL(slice_writer = OB_NEW(ObCsSliceWriter, ObMemAttr("cs_slice_writer")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory for column store slice writer failed", K(ret));
       } else if (OB_FAIL(static_cast<ObCsSliceWriter *>(slice_writer)->init(write_param,
@@ -922,7 +922,7 @@ int ObPxMultiPartSSTableInsertOp::switch_slice_if_need(
         LOG_WARN("init column store slice writer failed", K(ret), K(write_param));
       }
     } else {
-      if (OB_ISNULL(slice_writer = OB_NEW(ObRsSliceWriter, ObMemAttr(MTL_ID(), "rs_slice_writer")))) {
+      if (OB_ISNULL(slice_writer = OB_NEW(ObRsSliceWriter, ObMemAttr("rs_slice_writer")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory for row store slice writer failed", K(ret));
       } else if (OB_FAIL(static_cast<ObRsSliceWriter *>(slice_writer)->init(write_param))) {
@@ -990,12 +990,12 @@ int ObPxMultiPartSSTableInsertOp::get_data_tablet_id(const ObTabletID &tablet_id
   if (OB_ISNULL(sql_ctx = ctx_.get_sql_ctx()) || OB_ISNULL(sql_ctx->schema_guard_) || OB_ISNULL(MY_SPEC.plan_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard, sql_ctx or plan is null", K(ret));
-  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(MTL_ID(), MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
+  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
     LOG_WARN("fail to get ddl table schema", K(ret), K(MY_SPEC.plan_->get_ddl_table_id()));
   } else if (OB_ISNULL(ddl_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl table schema is null", K(ret), K(MY_SPEC.plan_->get_ddl_table_id()));
-  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema(MTL_ID(), ddl_table_schema->get_data_table_id(), data_table_schema))) {
+  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
     LOG_WARN("fail to get data table schema", K(ret), K(ddl_table_schema->get_data_table_id()));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;

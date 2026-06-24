@@ -40,7 +40,7 @@ int ObBasicStatsEstimator::estimate(const ObOptStatGatherParam &param,
   src_opt_stat.table_stat_ = &tab_stat;
   ObOptTableStat *src_tab_stat = src_opt_stat.table_stat_;
   ObIArray<ObOptColumnStat*> &src_col_stats = src_opt_stat.column_stats_;
-  ObArenaAllocator allocator("ObBasicStatsEst", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+  ObArenaAllocator allocator("ObBasicStatsEst", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSqlString raw_sql;
   int64_t duration_time = -1;
   bool use_plan_cache = dst_opt_stats.count() == 1 && !param.partition_infos_.empty() && 
@@ -173,7 +173,7 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
   } else if (OB_FAIL(generate_column_group_ids(param, column_group_ids))) {
     LOG_WARN("failed to generate column group ids", K(ret), K(param));
   } else if (OB_FAIL(do_estimate_block_count(
-                 ctx, param.tenant_id_, table_id, tablet_ids, partition_ids, column_group_ids, estimate_result))) {
+                 ctx, table_id, tablet_ids, partition_ids, column_group_ids, estimate_result))) {
     LOG_WARN("failed to do estimate block count", K(ret));
   } else {
     int64_t total_sstable_row_cnt = 0;
@@ -319,7 +319,6 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
 }
 
 int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
-                                                   const uint64_t tenant_id,
                                                    const uint64_t table_id,
                                                    const ObIArray<ObTabletID> &tablet_ids,
                                                    const ObIArray<ObObjectID> &partition_ids,
@@ -333,7 +332,7 @@ int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
     if (OB_FAIL(THIS_WORKER.check_status())) {
       LOG_WARN("failed to check status", K(ret));
       retry_cnt = MAX_RETRY_CNT;
-    } else if (OB_FAIL(do_estimate_block_count_and_row_count(ctx, tenant_id, table_id,
+    } else if (OB_FAIL(do_estimate_block_count_and_row_count(ctx, table_id,
                                                              false, tablet_ids,
                                                              partition_ids, column_group_ids, estimate_res))) {
       LOG_WARN("failed to do estimate block count and row count", K(ret));
@@ -350,7 +349,6 @@ int ObBasicStatsEstimator::do_estimate_block_count(ObExecContext &ctx,
 }
 
 int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &ctx,
-                                                                 const uint64_t tenant_id,
                                                                  const uint64_t table_id,
                                                                  bool force_leader,
                                                                  const ObIArray<ObTabletID> &tablet_ids,
@@ -409,7 +407,8 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
                                 K(candi_tablet_locs.at(j).get_partition_location().get_tablet_id()));
               } else {
                 obcall::ObEstBlockArgElement arg_element;
-                arg_element.tenant_id_ = tenant_id;
+                
+                
                 arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
                 arg_element.ls_id_ = candi_tablet_locs.at(j).get_partition_location().get_ls_id();
                 if (OB_FAIL(arg_element.column_group_ids_.assign(column_group_ids))) {
@@ -530,7 +529,6 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
 }
 
 int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
-                                                   const uint64_t tenant_id,
                                                    const uint64_t table_id,
                                                    int64_t &result,
                                                    const bool need_inc_modified_count/*default true*/)
@@ -540,7 +538,7 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
   const int64_t obj_pos = 0;
   ObObj result_obj;
   bool is_valid = true;
-  if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid(tenant_id, is_valid))) {
+  if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid( is_valid))) {
     LOG_WARN("failed to check table read write valid", K(ret));
   } else if (!is_valid) {
     // do nothing
@@ -550,21 +548,21 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
         "last_deletes) as signed) as inc_mod_count " \
         "from %s where table_id = %lu;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
+        share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else if (!need_inc_modified_count &&
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) as signed) as modified_count " \
         "from %s where table_id = %lu;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
+        share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -598,7 +596,6 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
 
 
 int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
-                                                    const uint64_t tenant_id,
                                                     const uint64_t table_id,
                                                     const int64_t global_part_id,
                                                     const ObIArray<PartInfo> &partition_infos,
@@ -612,7 +609,7 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
   bool is_check_global = false;
   int64_t table_inc_modified = 0;
   bool has_part_invalid_inc = false;
-  if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid(tenant_id, is_valid))) {
+  if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid( is_valid))) {
     LOG_WARN("failed to check table read write valid", K(ret));
   } else if (!is_valid) {
     // do nothing
@@ -621,14 +618,14 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
           "last_updates - last_deletes) as inc_mod_count "\
           "from %s where table_id = %lu order by 1;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
+        share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -762,7 +759,7 @@ int ObBasicStatsEstimator::update_last_modified_count(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
-  if (OB_FAIL(trans.start(ctx.get_sql_proxy(), param.tenant_id_))) {
+  if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
     LOG_WARN("fail to start transaction", K(ret));
   } else if (OB_FAIL(update_last_modified_count(trans.get_connection(), param))) {
     LOG_WARN("failed to update last modified count", K(ret));
@@ -798,7 +795,7 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(conn));
-  } else if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid(param.tenant_id_, is_valid))) {
+  } else if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid( is_valid))) {
     LOG_WARN("failed to check table read write valid", K(ret));
   } else if (!is_valid) {
     // do nothing
@@ -810,11 +807,11 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
         "update %s set last_inserts = inserts, last_updates = updates, last_deletes = deletes " \
         "where table_id = %lu %s %s;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_schema_id(param.tenant_id_, table_id),
+        share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
         !tablet_list.empty() ? "and tablet_id in" : " ",
         !tablet_list.empty() ? tablet_list.ptr() : " "))) {
     LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(conn->execute_write(param.tenant_id_, udpate_sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(conn->execute_write(udpate_sql.ptr(), affected_rows))) {
     LOG_WARN("failed to execute sql", K(ret), K(udpate_sql));
   } else {
     LOG_TRACE("succeed to update last modified count", K(udpate_sql), K(affected_rows));
@@ -824,7 +821,6 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
 }
 
 int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
-                                                        const uint64_t tenant_id,
                                                         const uint64_t table_id,
                                                         const int64_t global_part_id,
                                                         bool &is_locked,
@@ -834,7 +830,7 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
   ObSqlString select_sql;
   bool is_valid = true;
   is_locked = false;
-  if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid(tenant_id, is_valid))) {
+  if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid( is_valid))) {
     LOG_WARN("failed to check table read write valid", K(ret));
   } else if (!is_valid) {
     // do nothing
@@ -842,14 +838,14 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
                  "select partition_id, stattype_locked, row_cnt, spare2 from %s where "
                  "table_id = %lu and (last_analyzed > 0 or spare2 >= 5) order by 1;",
                  share::OB_ALL_TABLE_STAT_TNAME,
-                 share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
+                 share::schema::ObSchemaUtils::get_extract_schema_id(table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1023,7 +1019,6 @@ int ObBasicStatsEstimator::get_all_tablet_id_and_object_id(const ObTableStatPara
 }
 
 int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
-                                                 const int64_t tenant_id,
                                                  const int64_t last_table_id,
                                                  const int64_t slice_cnt,
                                                  ObIArray<int64_t> &table_ids)
@@ -1053,7 +1048,7 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1290,8 +1285,7 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
   int ret = OB_SUCCESS;
   int64_t table_type_arr[] = {share::schema::ObTableType::SYSTEM_TABLE,
                               share::schema::ObTableType::VIRTUAL_TABLE,
-                              share::schema::ObTableType::USER_TABLE,
-                              share::schema::ObTableType::EXTERNAL_TABLE};
+                              share::schema::ObTableType::USER_TABLE};
   int64_t table_type_cnt = sizeof(table_type_arr)/sizeof(table_type_arr[0]);
   for (int64_t i = 0; OB_SUCC(ret) && i < table_type_cnt; ++i) {
     char prefix = (i == 0 ? '(' : ' ');
@@ -1306,7 +1300,6 @@ int ObBasicStatsEstimator::get_gather_table_type_list(ObSqlString &gather_table_
 
 
 int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
-                                                         const int64_t tenant_id,
                                                          const int64_t max_table_cnt,
                                                          int64_t &last_table_id,
                                                          int64_t &last_tablet_id,
@@ -1346,7 +1339,7 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, select_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, select_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1733,7 +1726,8 @@ int ObBasicStatsEstimator::do_estimate_skip_rate(ObExecContext &ctx,
                                 K(candi_tablet_locs.at(j).get_partition_location().get_tablet_id()));
               } else {
                 obcall::ObEstSkipRateArgElement arg_element;
-                arg_element.tenant_id_ = param.tenant_id_;
+                
+                
                 arg_element.table_id_ = table_id;
                 arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
                 arg_element.ls_id_ = candi_tablet_locs.at(j).get_partition_location().get_ls_id();

@@ -25,7 +25,7 @@ namespace sql
 bool is_mock_stmt_flush_table_enabled()
 {
   bool is_enabled = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     is_enabled = tenant_config->_enable_mock_stmt_flush_table;
   }

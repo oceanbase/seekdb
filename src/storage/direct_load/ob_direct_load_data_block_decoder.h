@@ -153,7 +153,7 @@ int ObDirectLoadDataBlockDecoder<Header>::realloc_decompress_buf(const int64_t s
       ob_free(decompress_buf_);
       decompress_buf_ = nullptr;
     }
-    decompress_buf_ = (char *)ob_malloc(size, ObMemAttr(MTL_ID(), "TLD_DBDecoder"));
+    decompress_buf_ = (char *)ob_malloc(size, ObMemAttr("TLD_DBDecoder"));
     if (decompress_buf_ == nullptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to alloc mem", KR(ret), K(size));

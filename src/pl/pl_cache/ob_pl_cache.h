@@ -115,7 +115,6 @@ struct ObPLTableColumnInfo
 //todo:when PCVSchemaObj has been moved to appropriate header file, use PCVSchemaObj to instead of PCVPlSchemaObj
 struct PCVPlSchemaObj
 {
-  uint64_t tenant_id_;
   uint64_t database_id_;
   int64_t schema_id_;
   int64_t schema_version_;
@@ -130,7 +129,6 @@ struct PCVPlSchemaObj
   common::ObFixedArray<ObPLTableColumnInfo *, common::ObIAllocator> column_infos_;
 
   PCVPlSchemaObj():
-  tenant_id_(common::OB_INVALID_ID),
   database_id_(common::OB_INVALID_ID),
   schema_id_(common::OB_INVALID_ID),
   schema_version_(0),
@@ -145,7 +143,6 @@ struct PCVPlSchemaObj
   column_infos_(inner_alloc_) {}
 
   explicit PCVPlSchemaObj(ObIAllocator *alloc):
-    tenant_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
     schema_id_(common::OB_INVALID_ID),
     schema_version_(0),
@@ -171,7 +168,7 @@ struct PCVPlSchemaObj
   bool compare_schema(const share::schema::ObTableSchema &schema) const
   {
     bool ret = false;
-    ret = tenant_id_ == schema.get_tenant_id() &&
+    ret = true &&
           database_id_ == schema.get_database_id() &&
           schema_id_ == schema.get_table_id() &&
           schema_version_ == schema.get_schema_version() &&
@@ -182,7 +179,7 @@ struct PCVPlSchemaObj
   bool match_compare(const PCVPlSchemaObj &other) const
   {
     bool ret = true;
-    ret = tenant_id_ == other.tenant_id_
+    ret = true
           && database_id_ == other.database_id_
           && table_type_ == other.table_type_;
     return ret;
@@ -200,8 +197,7 @@ struct PCVPlSchemaObj
   void reset();
   ~PCVPlSchemaObj();
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(database_id),
+  TO_STRING_KV(K_(database_id),
                K_(schema_id),
                K_(schema_version),
                K_(invoker_db_id),

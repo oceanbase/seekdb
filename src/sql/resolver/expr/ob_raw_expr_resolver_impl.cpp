@@ -1108,11 +1108,6 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         }
         break;
       }
-      case T_REMOTE_SEQUENCE: {
-        ret = OB_NOT_IMPLEMENT;
-        LOG_WARN("remote sequence not implement", K(ret));
-        break;
-      }
       case T_FUN_SYS_LAST_REFRESH_SCN: {
         if (OB_FAIL(process_last_refresh_scn_node(node, expr))) {
           LOG_WARN("failed to process last refresh scn node", K(ret));
@@ -7883,7 +7878,7 @@ int ObRawExprResolverImpl::process_dll_udf_node(const ParseNode *node, ObRawExpr
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Malloc function name failed", K(ret));
     } else if (FALSE_IT(IGNORE_RETURN ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, udf_name))) {
-    } else if (OB_FAIL(ctx_.schema_checker_->get_udf_info(ctx_.session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(ctx_.schema_checker_->get_udf_info(
                                                           udf_name,
                                                           udf_info,
                                                           exist))) {

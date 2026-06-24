@@ -130,7 +130,6 @@ int ObHashSetVecOp::build_hash_table_from_left_batch(bool from_child, const int6
       LOG_WARN("failed to init hash table", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
-                  ctx_.get_my_session()->get_effective_tenant_id(),
                   hp_infras_.get_cur_part_file_size(InputSide::LEFT),
                   spec_.type_,
                   spec_.id_,
@@ -201,14 +200,12 @@ int ObHashSetVecOp::init_hash_partition_infras()
     LOG_WARN("failed to get px size", K(ret));
   } else if (OB_FAIL(sql_mem_processor_.init(
                   &mem_context_->get_malloc_allocator(),
-                  ctx_.get_my_session()->get_effective_tenant_id(),
                   est_rows * get_spec().width_,
                   get_spec().type_,
                   get_spec().id_,
                   &ctx_))) {
     LOG_WARN("failed to init sql mem processor", K(ret));
-  } else if (OB_FAIL(hp_infras_.init(ctx_.get_my_session()->get_effective_tenant_id(),
-                                     GCONF.is_sql_operator_dump_enabled(),
+  } else if (OB_FAIL(hp_infras_.init(GCONF.is_sql_operator_dump_enabled(),
                                      true, true, 1, (get_spec()).max_batch_size_,
                                      static_cast<const ObHashSetVecSpec &>(get_spec()).set_exprs_,
                                      &sql_mem_processor_, (get_spec()).compress_type_))) {
@@ -252,8 +249,7 @@ int ObHashSetVecOp::init_mem_context()
   int ret = OB_SUCCESS;
   if (NULL == mem_context_) {
     lib::ContextParam param;
-    param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-        "ObHashSetRows",
+    param.set_mem_attr("ObHashSetRows",
         ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("memory entity create failed", K(ret));

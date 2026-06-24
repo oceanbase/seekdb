@@ -33,20 +33,20 @@ struct ObDeleteLobMetaRowParam final
 {
 public:
   ObDeleteLobMetaRowParam():
-    is_inited_(false), tenant_id_(common::OB_INVALID_TENANT_ID),  
+    is_inited_(false),  
     table_id_(common::OB_INVALID_ID), schema_id_(common::OB_INVALID_ID), ls_id_(share::ObLSID::INVALID_LS_ID), 
     tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), schema_version_(0), 
     snapshot_version_(0), task_id_(0), execution_id_(-1), tablet_task_id_(0), delete_lob_meta_ret_(common::OB_SUCCESS),
     compat_mode_(lib::Worker::CompatMode::INVALID), data_format_version_(0),
-    allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObDeleteLobMetaRowParam() { destroy(); }
   int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   
   bool is_valid() const
   {
-    return common::OB_INVALID_TENANT_ID != tenant_id_ && ls_id_.is_valid() && common::OB_INVALID_ID != schema_id_
+    return true && ls_id_.is_valid() && common::OB_INVALID_ID != schema_id_
            && common::OB_INVALID_ID != table_id_ && tablet_id_.is_valid() && dest_tablet_id_.is_valid()
            && snapshot_version_ > 0 && compat_mode_ != lib::Worker::CompatMode::INVALID 
            && execution_id_ >= 0 && tablet_task_id_ > 0 && data_format_version_ > 0;
@@ -56,7 +56,6 @@ public:
   void destroy()
   {
     is_inited_ = false;
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
     ls_id_.reset();
     table_id_ = common::OB_INVALID_ID;
     schema_id_ = common::OB_INVALID_ID;
@@ -72,12 +71,11 @@ public:
     compat_mode_ = lib::Worker::CompatMode::INVALID;
     data_format_version_ = 0;
   }
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(ls_id), K_(table_id), K_(tablet_id),  
+  TO_STRING_KV(K_(is_inited), K_(ls_id), K_(table_id), K_(tablet_id),  
       K_(tablet_task_id), K_(schema_version), K_(snapshot_version), K_(task_id), 
       K_(execution_id), K_(compat_mode), K_(data_format_version));
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t schema_id_;
   share::ObLSID ls_id_;

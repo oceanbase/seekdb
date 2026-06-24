@@ -75,7 +75,7 @@ public:
     set_run_wrapper(MTL_CTX());
   }
 
-  void worker(int64_t &tenant_id, int64_t &req_recv_timestamp, int32_t &worker_level);
+  void worker(int64_t &tid, int64_t &req_recv_timestamp, int32_t &worker_level);
   void run(int64_t idx) override;
 
   OB_INLINE void pause() { pause_flag_ = true; }
@@ -92,7 +92,7 @@ public:
   OB_INLINE const char *get_module_name() const { return module_name_; }
   OB_INLINE bool is_doing_ddl() const { return OB_NOT_NULL(is_doing_ddl_) ? (*is_doing_ddl_) : false; }
 
-  static thread_local uint64_t serving_tenant_id_;
+  static thread_local bool thread_name_set_;
 private:
   void set_th_worker_thread_name();
   void process_request(rpc::ObRequest &req);

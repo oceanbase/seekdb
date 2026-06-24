@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_TENANT_FREEZE_INFO_MGR_
 
 #include <stdint.h>
+#include "share/rc/ob_module_provider.h"
 
 #include "lib/allocator/ob_slice_alloc.h"
 #include "lib/lock/ob_tc_rwlock.h"
@@ -98,7 +99,7 @@ public:
 public:
   static int mtl_init(ObTenantFreezeInfoMgr* &freeze_info_mgr);
 
-  int init(const uint64_t tenant_id, common::ObISQLClient &sql_proxy);
+  int init(common::ObISQLClient &sql_proxy);
   void init_for_test() { inited_ = true; }
   bool is_inited() const { return inited_; }
   int start();
@@ -193,7 +194,6 @@ private:
   common::RWLock lock_;
   int64_t cur_idx_;
   int64_t last_change_ts_;
-  uint64_t tenant_id_;
   int tg_id_;
   bool inited_;
 };
@@ -202,7 +202,7 @@ private:
 #define MTL_CALL_FREEZE_INFO_MGR(func, args...)                                    \
   ({                                                                               \
     int ret = common::OB_SUCCESS;                                                  \
-    storage::ObTenantFreezeInfoMgr *mgr = MTL(storage::ObTenantFreezeInfoMgr *);   \
+    storage::ObTenantFreezeInfoMgr *mgr = share::g_mp->tenant_freeze_info_mgr();   \
     if (OB_UNLIKELY(NULL == mgr)) {                                                \
       ret = common::OB_ERR_UNEXPECTED;                                             \
       STORAGE_LOG(ERROR, "failed to get tenant freeze info mgr from mtl", K(ret)); \

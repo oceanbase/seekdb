@@ -43,8 +43,7 @@ public:
   TO_STRING_KV(K_(first_schema_id));
 public:
   union{
-    uint64_t first_schema_id_; // without tenant_id
-    uint64_t tenant_id_;
+    uint64_t first_schema_id_; // without tenant
     uint64_t table_id_;
     uint64_t tablegroup_id_;
     uint64_t database_id_;
@@ -167,31 +166,23 @@ private:
   int64_t get_recycle_interval_us() const;
   bool is_valid_recycle_schema_version(const int64_t recycle_schema_version);
   int try_recycle_schema_history();
-  int try_recycle_schema_history(const common::ObIArray<uint64_t> &tenant_ids);
+  int try_recycle_schema_history(const common::ObIArray<uint64_t> &batch_ids);
   int try_recycle_schema_history(
-      const uint64_t tenant_id,
       const int64_t recycle_schema_version);
   int check_can_skip_tenant(
-      const uint64_t tenant_id,
       bool &skip);
   int calc_recycle_schema_versions(
-      const common::ObIArray<uint64_t> &tenant_ids);
+      const common::ObIArray<uint64_t> &batch_ids);
   int get_recycle_schema_version_by_server(
-      const common::ObIArray<uint64_t> &tenant_ids,
-      common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions);
+      const common::ObIArray<uint64_t> &batch_ids);
   int get_recycle_schema_version_for_ddl(
-      const common::ObIArray<uint64_t> &tenant_ids,
-      common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions);
+      const common::ObIArray<uint64_t> &batch_ids);
   int get_recycle_schema_version_by_global_stat(
-      const common::ObIArray<uint64_t> &tenant_ids,
-      common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions);
+      const common::ObIArray<uint64_t> &batch_ids);
   int fill_recycle_schema_versions(
-      const uint64_t tenant_id,
-      const int64_t schema_version,
-      common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions);
+      const int64_t schema_version);
   int update_recycle_schema_versions(
-      const common::ObIArray<uint64_t> &tenant_ids,
-      common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions);
+      const common::ObIArray<uint64_t> &batch_ids);
 public:
   static const int64_t BUCKET_NUM = 10;
 private:
@@ -200,7 +191,12 @@ private:
   share::schema::ObMultiVersionSchemaService *schema_service_;
   //ObFreezeInfoManager *freeze_info_mgr_;
   common::ObMySQLProxy *sql_proxy_;
-  common::hash::ObHashMap<uint64_t, int64_t, common::hash::ReadWriteDefendMode> recycle_schema_versions_;
+  // single-tenant: only sys tenant entry, collapsed to single member + valid flag
+  int64_t recycle_schema_version_member_;
+  bool recycle_schema_version_valid_;
+  // transient per-round accumulator (was local ObHashMap<tenant,version>, single OB_SYS entry)
+  int64_t tmp_recycle_schema_version_;
+  bool tmp_recycle_schema_version_valid_;
   int64_t last_recycle_ts_;
   DISALLOW_COPY_AND_ASSIGN(ObSchemaHistoryRecycler);
 };
@@ -224,8 +220,7 @@ public:
   static const int64_t BUCKET_NUM = 10000;
 public:
   ObIRecycleSchemaExecutor() = delete;
-  ObIRecycleSchemaExecutor(const uint64_t tenant_id,
-                           const int64_t schema_version,
+  ObIRecycleSchemaExecutor(const int64_t schema_version,
                            const char* table_name,
                            common::ObMySQLProxy *sql_proxy,
                            ObSchemaHistoryRecycler *recycler);
@@ -242,7 +237,7 @@ protected:
   virtual int recycle_schema_history() = 0;
   virtual int compress_schema_history() = 0;
 protected:
-  uint64_t tenant_id_;
+  
   int64_t schema_version_;
   const char* table_name_;
   common::ObMySQLProxy *sql_proxy_;
@@ -254,8 +249,7 @@ class ObRecycleSchemaExecutor : public ObIRecycleSchemaExecutor
 {
 public:
   ObRecycleSchemaExecutor() = delete;
-  ObRecycleSchemaExecutor(const uint64_t tenant_id,
-                          const int64_t schema_version,
+  ObRecycleSchemaExecutor(const int64_t schema_version,
                           const char* table_name,
                           const char* schema_key_name,
                           const RecycleMode mode,
@@ -309,7 +303,6 @@ class ObSecondRecycleSchemaExecutor : public ObIRecycleSchemaExecutor
 public:
   ObSecondRecycleSchemaExecutor() = delete;
   ObSecondRecycleSchemaExecutor(
-    const uint64_t tenant_id,
     const int64_t schema_version,
     const char* table_name,
     const char* schema_key_name,
@@ -357,7 +350,6 @@ class ObThirdRecycleSchemaExecutor : public ObIRecycleSchemaExecutor
 public:
   ObThirdRecycleSchemaExecutor() = delete;
   ObThirdRecycleSchemaExecutor(
-    const uint64_t tenant_id,
     const int64_t schema_version,
     const char* table_name,
     const char* schema_key_name,
@@ -442,7 +434,6 @@ class ObSystemVariableRecycleSchemaExecutor : public ObIRecycleSchemaExecutor
 public:
   ObSystemVariableRecycleSchemaExecutor() = delete;
   ObSystemVariableRecycleSchemaExecutor(
-    const uint64_t tenant_id,
     const int64_t schema_version,
     const char* table_name,
     common::ObMySQLProxy *sql_proxy,
@@ -527,7 +518,6 @@ class ObObjectPrivRecycleSchemaExecutor : public ObIRecycleSchemaExecutor
 public:
   ObObjectPrivRecycleSchemaExecutor() = delete;
   ObObjectPrivRecycleSchemaExecutor(
-    const uint64_t tenant_id,
     const int64_t schema_version,
     const char* table_name,
     common::ObMySQLProxy *sql_proxy,

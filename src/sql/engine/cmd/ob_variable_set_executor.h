@@ -69,7 +69,6 @@ public:
                                ObSQLSessionInfo *session);
   static int cast_value(ObExecContext &ctx,
                         const ObVariableSetStmt::VariableSetNode &var_node,
-                        uint64_t actual_tenant_id,
                         common::ObIAllocator &calc_buf,
                         const share::ObBasicSysVar &sys_val,
                         const common::ObObj &in_val,
@@ -88,9 +87,8 @@ private:
       cur_number_count_(0),
       cur_special_count_(0)
     {}
-    int init(uint64_t tenant_id);
+    int init();
     int get_current_val(share::schema::ObSchemaGetterGuard &schema_guard,
-                        uint64_t tenant_id,
                         share::ObSysVarClassType var_id,
                         uint64_t &val);
     int update_expect_length();
@@ -110,7 +108,7 @@ private:
                                   const ObSQLMode sql_mode,
                                   const common::ObString var_name,
                                   common::ObObj &val);
-  int update_resource_mapping_rule_version(ObMySQLProxy &sql_proxy, uint64_t tenant_id);
+  int update_resource_mapping_rule_version(ObMySQLProxy &sql_proxy);
 
   int update_global_variables(ObExecContext &ctx,
                               ObDDLStmt &stmt,

@@ -859,22 +859,22 @@ int ObStoragePerfRead::flush_cache_or_not()
 {
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret) && config_->flush_block_index_cache_) {
-    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache(OB_SYS_TENANT_ID, "block_index_cache"))) {
+    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache("block_index_cache"))) {
       STORAGE_LOG(WARN, "failed to flush cache", K(ret));
     }
   }
   if (OB_SUCC(ret) && config_->flush_block_cache_) {
-    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache(OB_SYS_TENANT_ID, "user_block_cache"))) {
+    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache("user_block_cache"))) {
       STORAGE_LOG(WARN, "failed to flush cache", K(ret));
     }
   }
   if (OB_SUCC(ret) && config_->flush_row_cache_) {
-    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache(OB_SYS_TENANT_ID, "user_row_cache"))) {
+    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache("user_row_cache"))) {
       STORAGE_LOG(WARN, "failed to flush cache", K(ret));
     }
   }
   if (OB_SUCC(ret) && config_->flush_bf_cache_) {
-    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache(OB_SYS_TENANT_ID, "bf_cache"))) {
+    if (OB_FAIL(ObKVGlobalCache::get_instance().erase_cache("bf_cache"))) {
       STORAGE_LOG(WARN, "failed to flush cache", K(ret));
     }
   }

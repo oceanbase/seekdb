@@ -27,23 +27,6 @@ using namespace oceanbase::common::hash;
 using namespace oceanbase::common::sqlclient;
 using namespace oceanbase::obcall;
 
-int ObTenantUtils::get_tenant_ids(
-    ObMultiVersionSchemaService *schema_service,
-    ObIArray<uint64_t> &tenant_ids)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("schema service not init", K(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-    LOG_WARN("get_schema_guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-    LOG_WARN("get_tenant_ids failed", K(ret));
-  }
-  return ret;
-}
-
 int ObRootUtils::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;

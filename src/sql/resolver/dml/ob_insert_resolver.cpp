@@ -130,9 +130,6 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("view not insertable", K(ret));
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(check_insert_into_external_table())) {
-    LOG_WARN("check insert into external table failed", K(ret));
-  }
 
   return ret;
 }
@@ -479,10 +476,9 @@ int ObInsertResolver::resolve_insert_field(const ParseNode &insert_into, TableIt
 
   if (OB_SUCC(ret)) {
     const ObTableSchema *table_schema = NULL;
-    OZ(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+    OZ(schema_checker_->get_table_schema(
                                          table_item->get_base_table_item().ref_id_,
-                                         table_schema,
-                                         table_item->is_link_table()));
+                                         table_schema));
   }
 
   OZ(remove_dup_dep_cols_for_heap_table(insert_stmt->get_insert_table_info().part_generated_col_dep_cols_,
@@ -959,7 +955,7 @@ int ObInsertResolver::check_insert_select_field(ObInsertStmt &insert_stmt,
                                                                    &insert_stmt,
                                                                    is_generated_column))) {
           LOG_WARN("check basic column generated failed", K(ret));
-    } else if (is_generated_column && schema::EXTERNAL_TABLE != insert_table->table_type_) {
+    } else if (is_generated_column) {
       if (select_stmt.get_table_size() == 1 &&
           select_stmt.get_table_item(0) != NULL &&
           select_stmt.get_table_item(0)->is_values_table()) {
@@ -1091,27 +1087,6 @@ int ObInsertResolver::replace_column_to_default(ObRawExpr *&origin)
         }
       }
     }
-  }
-  return ret;
-}
-
-int ObInsertResolver::check_insert_into_external_table()
-{
-  int ret = OB_SUCCESS;
-  ObInsertStmt *insert_stmt = get_insert_stmt();
-  TableItem *table = NULL;
-  if (OB_ISNULL(insert_stmt) || insert_stmt->get_table_items().empty()
-      || OB_ISNULL(table = insert_stmt->get_table_item(0))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid stmt", K(ret), K(insert_stmt));
-  } else if (schema::EXTERNAL_TABLE != table->table_type_) {
-    // do nothing
-  } else if (!insert_stmt->value_from_select() || insert_stmt->is_replace()
-             || insert_stmt->is_ignore() || insert_stmt->is_returning()
-             || insert_stmt->is_insert_up()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support insert into external table with values, replace, ignore, returning, update", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "insert into external table with values, replace, ignore, returning, update");
   }
   return ret;
 }

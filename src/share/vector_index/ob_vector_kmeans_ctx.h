@@ -42,7 +42,6 @@ class ObKmeansCtx {
 public:
   explicit ObKmeansCtx(ObIvfMemContext &ivf_build_mem_ctx)
     : is_inited_(false),
-      tenant_id_(OB_INVALID_ID),
       dim_(0),
       lists_(0),
       max_sample_count_(0),
@@ -59,7 +58,6 @@ public:
   }
   void destroy();
   int init(
-    const int64_t tenant_id,
     const int64_t lists,
     const int64_t samples_per_nlist,
     const int64_t dim,
@@ -74,7 +72,7 @@ public:
   TO_STRING_KV(K(is_inited_), 
                K(dim_), 
                K(lists_), 
-               K(tenant_id_), 
+               
                K(max_sample_count_), 
                K(total_scan_count_), 
                K(dist_algo_),
@@ -84,7 +82,7 @@ public:
 
 public:
   bool is_inited_;
-  int64_t tenant_id_;
+  
   // for FLAT/SQ sample dim == dim, for PQ dim = sample_dim / m
   int64_t sample_dim_;
   int64_t dim_;
@@ -186,7 +184,6 @@ public:
     is_inited_ = false;
   }
   virtual int init(ObKmeansAlgoType algo_type,
-           const int64_t tenant_id,
            const int64_t lists,
            const int64_t samples_per_nlist,
            const int64_t dim,
@@ -220,7 +217,6 @@ public:
     }
   }
   virtual int init(ObKmeansAlgoType algo_type,
-           const int64_t tenant_id,
            const int64_t lists,
            const int64_t samples_per_nlist,
            const int64_t dim,
@@ -245,12 +241,11 @@ class ObMultiKmeansExecutor : public ObKmeansExecutor
 {
 public:
   ObMultiKmeansExecutor(ObIvfMemContext &ivf_build_mem_ctx) : ObKmeansExecutor(ivf_build_mem_ctx), pq_m_size_(0) {
-    algos_.set_attr(ObMemAttr(MTL_ID(), "MKmeansExu"));
+    algos_.set_attr(ObMemAttr("MKmeansExu"));
   }
   virtual ~ObMultiKmeansExecutor();
   virtual int init(
           ObKmeansAlgoType algo_type,
-          const int64_t tenant_id,
           const int64_t lists,
           const int64_t samples_per_nlist,
           const int64_t dim,
@@ -282,9 +277,8 @@ private:
 class ObIvfBuildHelper
 {
 public:
-  explicit ObIvfBuildHelper(common::ObIAllocator *allocator, uint64_t tenant_id)
+  explicit ObIvfBuildHelper(common::ObIAllocator *allocator)
   : is_inited_(false),
-    tenant_id_(tenant_id),
     ref_cnt_(0),
     allocator_(allocator),
     param_(),
@@ -304,11 +298,11 @@ public:
   bool dec_ref_and_check_release();
   int64_t get_free_vector_mem_size();
   OB_INLINE const ObVectorIndexParam &get_param() const { return param_; }
-  VIRTUAL_TO_STRING_KV(K_(tenant_id), K_(ref_cnt), KP_(allocator), K_(param), K_(first_ret_code));
+  VIRTUAL_TO_STRING_KV(K_(ref_cnt), KP_(allocator), K_(param), K_(first_ret_code));
 
 protected:
   bool is_inited_;
-  uint64_t tenant_id_;
+  
   int64_t ref_cnt_;
   ObIAllocator *allocator_; // allocator for alloc helper self
   lib::ObMutex lock_;
@@ -321,8 +315,8 @@ protected:
 class ObIvfFlatBuildHelper : public ObIvfBuildHelper
 {
 public:
-  ObIvfFlatBuildHelper(common::ObIAllocator *allocator, uint64_t tenant_id)
-  : ObIvfBuildHelper(allocator, tenant_id),
+  ObIvfFlatBuildHelper(common::ObIAllocator *allocator)
+  : ObIvfBuildHelper(allocator),
     executor_(nullptr),
     norm_info_()
   {}
@@ -330,7 +324,7 @@ public:
   virtual int init_kmeans_ctx(const int64_t dim) override;
   ObSingleKmeansExecutor *get_kmeans_ctx() { return executor_; }
 
-  TO_STRING_KV(K_(tenant_id), K_(ref_cnt), KP_(allocator), KP_(executor), K_(param), KPC_(executor));
+  TO_STRING_KV(K_(ref_cnt), KP_(allocator), KP_(executor), K_(param), KPC_(executor));
 private:
   ObSingleKmeansExecutor *executor_; // for build centers
   ObVectorNormalizeInfo norm_info_;
@@ -339,8 +333,8 @@ private:
 class ObIvfSq8BuildHelper : public ObIvfBuildHelper
 {
 public:
-  ObIvfSq8BuildHelper(common::ObIAllocator *allocator, uint64_t tenant_id)
-  : ObIvfBuildHelper(allocator, tenant_id),
+  ObIvfSq8BuildHelper(common::ObIAllocator *allocator)
+  : ObIvfBuildHelper(allocator),
     min_vector_(nullptr),
     max_vector_(nullptr),
     step_vector_(nullptr),
@@ -364,8 +358,8 @@ private:
 class ObIvfPqBuildHelper : public ObIvfBuildHelper
 {
 public:
-  ObIvfPqBuildHelper(common::ObIAllocator *allocator, uint64_t tenant_id)
-  : ObIvfBuildHelper(allocator, tenant_id),
+  ObIvfPqBuildHelper(common::ObIAllocator *allocator)
+  : ObIvfBuildHelper(allocator),
     executor_(nullptr),
     norm_info_()
   {}
@@ -375,7 +369,7 @@ public:
   ObMultiKmeansExecutor *get_kmeans_ctx() { return executor_; }
   int build(const common::ObTableID &table_id, const common::ObTabletID &tablet_id, ObInsertMonitor* insert_monitor);
 
-  TO_STRING_KV(K_(tenant_id), K_(ref_cnt), KP_(allocator), KP_(executor), K_(param));
+  TO_STRING_KV(K_(ref_cnt), KP_(allocator), KP_(executor), K_(param));
 private:
   ObMultiKmeansExecutor *executor_; // for build centers
   ObVectorNormalizeInfo norm_info_;

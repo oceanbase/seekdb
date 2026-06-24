@@ -28,7 +28,7 @@ class ObIDiskReport
 public:
   ObIDiskReport() {}
   virtual ~ObIDiskReport() {}
-  virtual int delete_tenant_usage_stat(const uint64_t tenant_id) = 0;
+  virtual int delete_tenant_usage_stat() = 0;
 };
 
 }

@@ -18,6 +18,7 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_
 
 #include "share/allocator/ob_memstore_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_tenant_mgr.h"
 #include "share/ob_cluster_version.h"
 #include "lib/literals/ob_literals.h"
@@ -29,6 +30,8 @@
 #include "storage/memtable/mvcc/ob_query_engine.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/blocksstable/ob_row_writer.h"
+
+#include "storage/checkpoint/ob_checkpoint_diagnose.h"
 
 namespace oceanbase
 {
@@ -180,6 +183,52 @@ public:
 
 class ObMemtable : public ObITabletMemtable
 {
+public:
+struct TabletMemtableUpdateFreezeInfo
+{
+public:
+  TabletMemtableUpdateFreezeInfo(ObMemtable &memtable) : memtable_(memtable) {}
+  TabletMemtableUpdateFreezeInfo& operator=(const TabletMemtableUpdateFreezeInfo&) = delete;
+  void operator()(const checkpoint::ObCheckpointDiagnoseParam& param) const
+  {
+    checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
+    if (OB_NOT_NULL(cdm)) {
+      cdm->update_freeze_info(param, memtable_.get_rec_scn(),
+       memtable_.get_start_scn(), memtable_.get_end_scn(), memtable_.get_btree_alloc_memory());
+    }
+  }
+private:
+  ObMemtable &memtable_;
+};
+
+struct UpdateMergeInfoForMemtable
+{
+public:
+  UpdateMergeInfoForMemtable(int64_t merge_start_time,
+    int64_t merge_finish_time,
+    int64_t occupy_size,
+    int64_t concurrent_cnt)
+    : merge_start_time_(merge_start_time),
+      merge_finish_time_(merge_finish_time),
+      occupy_size_(occupy_size),
+      concurrent_cnt_(concurrent_cnt)
+  {}
+  UpdateMergeInfoForMemtable& operator=(const UpdateMergeInfoForMemtable&) = delete;
+  void operator()(const checkpoint::ObCheckpointDiagnoseParam& param) const
+  {
+    checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
+    if (OB_NOT_NULL(cdm)) {
+      cdm->update_merge_info_for_memtable(param, merge_start_time_, merge_finish_time_,
+          occupy_size_, concurrent_cnt_);
+    }
+  }
+private:
+  int64_t merge_start_time_;
+  int64_t merge_finish_time_;
+  int64_t occupy_size_;
+  int64_t concurrent_cnt_;
+};
+
 public:
   typedef share::ObMemstoreAllocator::AllocHandle ObSingleMemstoreAllocator;
 public:

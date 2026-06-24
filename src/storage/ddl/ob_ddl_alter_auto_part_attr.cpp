@@ -35,7 +35,7 @@ int ObAlterAutoPartAttrOp::check_alter_table_partition_attr(
     share::ObDDLType &ddl_type)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = orig_table_schema.get_tenant_id();
+  
   const uint64_t tablegroup_id = orig_table_schema.get_tablegroup_id();
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();
   const AlterTableSchema &alter_table_schema =  alter_table_arg.alter_table_schema_;
@@ -192,12 +192,12 @@ int ObAlterAutoPartAttrOp::lock_for_modify_auto_part_size(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const uint64_t data_table_id = table_schema.get_table_id();
   ObArray<uint64_t> global_index_table_ids;
   ObArray<ObAuxTableMetaInfo> simple_index_infos;
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", KR(ret), K(tenant_id));
+    LOG_WARN("get simple_index_infos failed", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
@@ -209,7 +209,7 @@ int ObAlterAutoPartAttrOp::lock_for_modify_auto_part_size(
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLLock::lock_for_modify_auto_part_size_in_trans(tenant_id, data_table_id, global_index_table_ids, trans))) {
+  } else if (OB_FAIL(ObDDLLock::lock_for_modify_auto_part_size_in_trans(data_table_id, global_index_table_ids, trans))) {
     LOG_WARN("failed to lock for modify auto part size", K(ret));
   }
   return ret;
@@ -239,7 +239,7 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
   } else {
     const AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     const ObPartitionOption &alter_part_option = alter_table_schema.get_part_option();
-    const uint64_t tenant_id = table_schema.get_tenant_id();
+    
     if (alter_part_option.is_enable_auto_part()) {
       ObString alter_part_func_expr = alter_part_option.get_part_func_expr_str(); // no ref
       bool is_valid_column_type = true;
@@ -297,7 +297,7 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
       ObArray<ObTabletID> tablet_ids;
       if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
         LOG_WARN("failed to get tablet ids", K(ret));
-      } else if (OB_FAIL(ObTabletSplitMdsHelper::modify_auto_part_size(tenant_id, tablet_ids, table_schema.get_auto_part_size(), abs_timeout_us, trans))) {
+      } else if (OB_FAIL(ObTabletSplitMdsHelper::modify_auto_part_size(tablet_ids, table_schema.get_auto_part_size(), abs_timeout_us, trans))) {
         LOG_WARN("failed to modify auto part size", K(ret));
       }
     }
@@ -380,15 +380,15 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_online(
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   const ObTableSchema *index_schema = nullptr;
-  const int64_t tenant_id = table_schema.get_tenant_id();
+  
   uint64_t index_table_id = OB_INVALID_ID;
 
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", KR(ret), K(tenant_id));
+    LOG_WARN("get simple_index_infos failed", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     index_table_id = simple_index_infos.at(i).table_id_;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
+    if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
       LOG_WARN("fail to get to_table_schema schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -414,7 +414,7 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_online(
           ObArray<ObTabletID> tablet_ids;
           if (OB_FAIL(new_index_schema.get_tablet_ids(tablet_ids))) {
             LOG_WARN("failed to get tablet ids", K(ret));
-          } else if (OB_FAIL(ObTabletSplitMdsHelper::modify_auto_part_size(tenant_id, tablet_ids, new_index_schema.get_auto_part_size(), abs_timeout_us, trans))) {
+          } else if (OB_FAIL(ObTabletSplitMdsHelper::modify_auto_part_size(tablet_ids, new_index_schema.get_auto_part_size(), abs_timeout_us, trans))) {
             LOG_WARN("failed to modify auto part size", K(ret));
           }
         }
@@ -447,7 +447,7 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
     ObArray<uint64_t> &modified_index_type_ids)
 {
   int ret = OB_SUCCESS;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   ObSEArray<uint64_t, 20> aux_table_ids;
 
@@ -487,7 +487,7 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
     const uint64_t aux_table_id = aux_table_ids.at(i);
     const ObTableSchema *aux_table_schema = nullptr;
     const ObString ddl_stmt_str("");
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, aux_table_id, aux_table_schema))) {
+    if (OB_FAIL(schema_guard.get_table_schema( aux_table_id, aux_table_schema))) {
       LOG_WARN("fail to get to_table_schema schema", K(ret), K(aux_table_id));
     } else if (OB_ISNULL(aux_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -703,34 +703,33 @@ int ObAlterAutoPartAttrOp::check_auto_part_table_unique_index(
     ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  const int64_t tenant_id = table_schema.get_tenant_id();
+  
   const int64_t table_id = table_schema.get_table_id();
   bool has_unique_local_index = false;
-  if (OB_UNLIKELY(tenant_id == OB_INVALID_TENANT_ID || table_id == OB_INVALID_ID)) {
+  if (OB_UNLIKELY(false || table_id == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("invalid argument.", K(ret), K(table_id));
   } else if (table_schema.get_part_level() > PARTITION_LEVEL_ZERO) {
     // skip
   } else if (!table_schema.is_user_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support none user table do auto part attr modification", K(ret));
-  } else if (OB_FAIL(schema_guard.check_has_local_unique_index(
-      tenant_id, table_id, has_unique_local_index))) {
-    LOG_WARN("fail to check has local unique index of main table", K(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.check_has_local_unique_index(table_id, has_unique_local_index))) {
+    LOG_WARN("fail to check has local unique index of main table", K(table_id));
   } else if (!has_unique_local_index) {
     // skip
   } else {
     // get index table id 
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
-      LOG_WARN("get simple_index_infos failed", KR(ret), K(tenant_id), K(table_id));
+      LOG_WARN("get simple_index_infos failed", KR(ret), K(table_id));
     }
     const ObTableSchema *index_schema = nullptr;
     int64_t index_table_id = OB_INVALID_ID;
     ObArray<ObString> rowkey_name_columns;
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       index_table_id = simple_index_infos.at(i).table_id_;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
+      if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
         LOG_WARN("fail to get to_table_schema schema", K(ret));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;

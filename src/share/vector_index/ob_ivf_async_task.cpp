@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "ob_ivf_async_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "share/ob_ls_id.h"
 #include "share/vector_index/ob_vector_index_ivf_cache_util.h"
@@ -64,18 +65,17 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null aux_table_info", K(ret), KP(ctx_->extra_data_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-                 tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
+                 schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_param_with_dim(
                  schema_guard,
-                 tenant_id_,
                  ctx_->task_status_.table_id_,
                  aux_table_info->data_table_id_,
                  ObVectorIndexType::VIT_IVF_INDEX,
                  vec_param))) {
     LOG_WARN("fail to get vector index param with dim",
              K(ret),
-             K(tenant_id_),
+             K(1UL),
              K(ctx_->task_status_.table_id_),
              KPC(aux_table_info));
   } else if (OB_FAIL(vector_index_service.acquire_ivf_cache_mgr_guard(ls_id_,
@@ -123,7 +123,7 @@ int ObIvfAsyncTask::do_work()
 {
   int ret = OB_SUCCESS;
   bool is_deprecated = false;
-  ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
   DEBUG_SYNC(HANDLE_VECTOR_INDEX_ASYNC_TASK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -133,7 +133,7 @@ int ObIvfAsyncTask::do_work()
     LOG_WARN("unexpected nullptr", K(ret), KP(ctx_), KP(vector_index_service));
   } else if (OB_ISNULL(vec_idx_mgr_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("get invalid vector index ls mgr", KR(ret), K(tenant_id_), K(ls_id_));
+    LOG_WARN("get invalid vector index ls mgr", KR(ret), K(ls_id_));
   } else if (ctx_->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
     if (OB_FAIL(delete_deprecated_cache(*vector_index_service))) {
       LOG_WARN("fail to delete deprecated cache", K(ret));

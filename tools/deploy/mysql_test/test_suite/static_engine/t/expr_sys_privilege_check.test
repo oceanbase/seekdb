@@ -14,8 +14,8 @@ sleep 2;
 connection default;
 set @@ob_enable_plan_cache = 0;
 
-select sys_privilege_check('table_acc', effective_tenant_id(), 'oceanbase', '__all_user');
-select sys_privilege_check('db_acc', effective_tenant_id(), 'oceanbase_', '__all_user_');
+select sys_privilege_check('table_acc', 1, 'oceanbase', '__all_user');
+select sys_privilege_check('db_acc', 1, 'oceanbase_', '__all_user_');
 
 --disable_warnings
 drop database if exists espcndb;
@@ -30,8 +30,8 @@ sleep 2;
 connect (con1, $OBMYSQL_MS0,espcnouser,,test,$OBMYSQL_PORT);
 
 connection con1;
-select sys_privilege_check('db_acc', effective_tenant_id(), 'test', 't');
-select sys_privilege_check('db_acc', effective_tenant_id(), 'espcndb', 't');
+select sys_privilege_check('db_acc', 1, 'test', 't');
+select sys_privilege_check('db_acc', 1, 'espcndb', 't');
 
 connection default;
 drop user espcnouser;

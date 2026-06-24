@@ -49,7 +49,7 @@ int ObConstraint::assign(const ObConstraint &src_schema)
   if (this != &src_schema) {
     reset();
     error_ret_ = src_schema.error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
+    
     table_id_ = src_schema.table_id_;
     constraint_id_ = src_schema.constraint_id_;
     schema_version_ = src_schema.schema_version_;
@@ -129,7 +129,7 @@ int ObConstraint::get_not_null_column_name(ObString &cst_col_name) const
 
 void ObConstraint::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
+  
   table_id_ = OB_INVALID_ID;
   constraint_id_ = OB_INVALID_ID;
   schema_version_ = 0;
@@ -154,7 +154,6 @@ OB_DEF_SERIALIZE(ObConstraint)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               table_id_,
               constraint_id_,
               schema_version_,
@@ -192,7 +191,7 @@ OB_DEF_DESERIALIZE(ObConstraint)
   ObString check_expr;
 
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
+              
               table_id_,
               constraint_id_,
               schema_version_,
@@ -246,7 +245,6 @@ OB_DEF_SERIALIZE_SIZE(ObConstraint)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               table_id_,
               constraint_id_,
               schema_version_,
@@ -274,8 +272,7 @@ int64_t ObConstraint::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
 
   J_OBJ_START();
-  J_KV(K_(tenant_id),
-    K_(table_id),
+  J_KV(K_(table_id),
     K_(constraint_id),
     K_(schema_version),
     K_(constraint_name),

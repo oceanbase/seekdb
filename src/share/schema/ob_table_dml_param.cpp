@@ -1031,8 +1031,7 @@ int ObTableDMLParam::prepare_storage_param(const ObIArray<uint64_t> &column_ids)
 }
 
 int ObTableDMLParam::set_data_table_rowkey_tags(share::schema::ObSchemaGetterGuard *guard,
-                                                const ObTableSchema *index_schema,
-                                                const uint64_t tenant_id)
+                                                const ObTableSchema *index_schema)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == guard || nullptr == index_schema)) {
@@ -1043,7 +1042,7 @@ int ObTableDMLParam::set_data_table_rowkey_tags(share::schema::ObSchemaGetterGua
     common::ObSEArray<uint64_t, 4> data_table_rowkey_cids;
     const common::ObIArray<ObColumnParam *> &columns = data_table_.get_columns();
     if (index_schema->is_index_table()) {
-      if (OB_FAIL(guard->get_table_schema(tenant_id, index_schema->get_data_table_id(), data_table_schema))) {
+      if (OB_FAIL(guard->get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
         LOG_WARN("fail to get data_table_schema", K(ret), K(index_schema->get_data_table_id()));
       } else if (OB_ISNULL(data_table_schema)) {
         ret = OB_SCHEMA_ERROR;

@@ -1220,7 +1220,6 @@ static int build_json_datum(ObIAllocator& allocator, const ObString& j_text, ObD
 
 TEST_F(TestSemiStructEncoding, test_bug1)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   
   ObColDatums datums(allocator);
@@ -1270,7 +1269,6 @@ TEST_F(TestSemiStructEncoding, test_bug1)
 
 TEST_F(TestSemiStructEncoding, test_bug2)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   
   ObColDatums datums(allocator);
@@ -1365,7 +1363,6 @@ TEST_F(TestSemiStructEncoding, test_bug3)
 
 TEST_F(TestSemiStructEncoding, test_complex_situation)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 5;
   ObColDatums datums(allocator);
@@ -1683,7 +1680,6 @@ TEST_F(TestSemiStructEncoding, test_complex_situation)
 
 TEST_F(TestSemiStructEncoding, test_flat_json)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 20;
   ObColDatums datums(allocator);
@@ -1830,7 +1826,6 @@ TEST_F(TestSemiStructEncoding, test_flat_json)
 
 TEST_F(TestSemiStructEncoding, test_spare)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 20;
   ObColDatums datums(allocator);
@@ -1960,7 +1955,6 @@ TEST_F(TestSemiStructEncoding, test_spare)
 
 TEST_F(TestSemiStructEncoding, test_without_null_row)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 20;
   ObColDatums datums(allocator);
@@ -2095,7 +2089,6 @@ TEST_F(TestSemiStructEncoding, test_without_null_row)
 
 TEST_F(TestSemiStructEncoding, test_spare_null_row)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 20;
   ObColDatums datums(allocator);
@@ -2173,7 +2166,6 @@ TEST_F(TestSemiStructEncoding, test_spare_null_row)
 
 TEST_F(TestSemiStructEncoding, test_full_json_type)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 20;
   ObColDatums datums(allocator);
@@ -2309,7 +2301,6 @@ TEST_F(TestSemiStructEncoding, test_full_json_type)
 // Test the scenario with less than 4 rows ObCSEncodingUtil::ENCODING_ROW_COUNT_THRESHOLD
 TEST_F(TestSemiStructEncoding, test_ENCODING_ROW_COUNT_THRESHOLD)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 3;
   ObColDatums datums(allocator);
@@ -2404,7 +2395,6 @@ TEST_F(TestSemiStructEncoding, test_ENCODING_ROW_COUNT_THRESHOLD)
 
 TEST_F(TestSemiStructEncoding, test_string_to_uint)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 2000;
   ObColDatums datums(allocator);
@@ -2494,7 +2484,6 @@ TEST_F(TestSemiStructEncoding, test_string_to_uint)
 
 TEST_F(TestSemiStructEncoding, test_lexicographical_order)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 2000;
   ObColDatums datums(allocator);
@@ -3286,7 +3275,6 @@ int check_json_datum(ObIAllocator& allocator, const ObDatum& src_datum, const Ob
 
 TEST_F(TestSemiStructEncoding, test_zero_stream)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   const int64_t row_cnt = 4;
   ObColDatums datums(allocator);
@@ -4377,7 +4365,6 @@ TEST_F(TestSemiStructEncoding, test_read_file)
 
 TEST_F(TestSemiStructEncoding, test_bug_var_size)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   
   ObColDatums datums(allocator);
@@ -4424,7 +4411,6 @@ TEST_F(TestSemiStructEncoding, test_bug_var_size)
 
 TEST_F(TestSemiStructEncoding, test_empty_array)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   
   ObColDatums datums(allocator);
@@ -4471,7 +4457,6 @@ TEST_F(TestSemiStructEncoding, test_empty_array)
 
 TEST_F(TestSemiStructEncoding, test_empty_array_v2)
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   ObArenaAllocator allocator(ObModIds::TEST);
   
   ObColDatums datums(allocator);

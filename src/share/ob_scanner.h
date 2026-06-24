@@ -49,12 +49,10 @@ public:
   ObScanner(const char *label = ObModIds::OB_NEW_SCANNER,
             ObIAllocator *allocator = NULL,
             int64_t mem_size_limit = DEFAULT_MAX_SERIALIZE_SIZE,
-            uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
             bool use_row_compact = true);
   ObScanner(ObIAllocator &allocator,
             const char *label = ObModIds::OB_NEW_SCANNER,
             int64_t mem_size_limit = DEFAULT_MAX_SERIALIZE_SIZE,
-            uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
             bool use_row_compact = true);
   virtual ~ObScanner();
   int init(int64_t mem_size_limit = DEFAULT_MAX_SERIALIZE_SIZE);
@@ -143,11 +141,7 @@ public:
   int assign(const ObScanner &other_scanner);
 
   /// dump all data for debug purpose
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-    row_store_.set_tenant_id(tenant_id);
-  }
+  
   ObIArray<sql::ObTableRowCount> &get_table_row_counts() { return table_row_counts_; }
   int assign_implicit_cursor(const common::ObIArray<sql::ObImplicitCursorInfo> &implicit_cursors)
   { return implicit_cursors_.assign(implicit_cursors); }
@@ -173,7 +167,7 @@ public:
 protected:
   ObRowStore row_store_;
   int64_t mem_size_limit_;  /**< memory size of row store */
-  uint64_t tenant_id_;
+  
   const char *label_;
   int64_t affected_rows_;   /**< affected rows of modify operation, e.g. UPDATE, DELETE etc.*/
   int64_t last_insert_id_to_client_;  /**< last auto-increment column value */

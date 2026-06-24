@@ -61,8 +61,7 @@ bool ObStorageCheckerKey::operator== (const ObStorageCheckerKey &other) const
  * ---------------------------------------------- ObStorageCheckerValue ----------------------------------------------
  */
 ObStorageCheckerValue::ObStorageCheckerValue()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    check_id_(ObStorageCheckID::INVALID_ID),
+  : check_id_(ObStorageCheckID::INVALID_ID),
     bt_()
 {
 }
@@ -81,7 +80,7 @@ int ObStorageCheckerValue::hash(uint64_t &hash_value) const
 
 bool ObStorageCheckerValue::operator== (const ObStorageCheckerValue &other) const
 {
-  return tenant_id_ == other.tenant_id_
+  return true
       && check_id_ == other.check_id_
       && 0 == STRNCMP(bt_, other.bt_, sizeof(bt_));
 }
@@ -89,7 +88,6 @@ bool ObStorageCheckerValue::operator== (const ObStorageCheckerValue &other) cons
 ObStorageCheckerValue & ObStorageCheckerValue::operator= (const ObStorageCheckerValue &other)
 {
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     check_id_ = other.check_id_;
     MEMCPY(bt_, other.bt_, sizeof(bt_));
   }
@@ -136,7 +134,7 @@ OB_NOINLINE void ObStorageLeakChecker::inner_handle_hold(
   } else if (checker_info_.size() > MAP_SIZE_LIMIT) {
   } else {
     value.check_id_ = check_id;
-    value.tenant_id_ = MTL_ID();
+    
     lbt(value.bt_, sizeof(value.bt_));
     if (OB_FAIL(checker_info_.set_refactored(key, value))) {
       COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to record backtrace", K(ret), K(key), K(value));

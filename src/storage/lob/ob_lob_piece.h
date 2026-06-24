@@ -43,8 +43,8 @@ private:
 class ObLobPieceManager
 {
 public:
-  explicit ObLobPieceManager(const uint64_t tenant_id):
-    persistent_lob_adapter_(tenant_id)
+  explicit ObLobPieceManager():
+    persistent_lob_adapter_{}
   {}
   ~ObLobPieceManager() {}
   TO_STRING_KV("[LOB]", "piece mngr");

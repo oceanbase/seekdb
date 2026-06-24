@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_freezer_common.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
@@ -92,8 +93,7 @@ void ObTenantStatistic::reset()
 }
 
 ObTenantInfo::ObTenantInfo()
-  :	tenant_id_(INT64_MAX),
-    is_loaded_(false),
+  :	is_loaded_(false),
     frozen_scn_(0),
     freeze_cnt_(0),
     last_halt_ts_(0),
@@ -110,7 +110,7 @@ ObTenantInfo::ObTenantInfo()
 
 void ObTenantInfo::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID; // i64 max as invalid.
+// i64 max as invalid.
   is_loaded_ = false;
   frozen_scn_ = 0;
   freeze_cnt_ = 0;
@@ -244,7 +244,7 @@ ObTenantFreezeGuard::ObTenantFreezeGuard(int &err_code, const ObTenantInfo &tena
       error_code_(err_code),
       time_guard_("FREEZE_CHECKER", warn_threshold)
 {
-  ObMemstoreAllocator &tenant_allocator = MTL(ObSharedMemAllocMgr *)->memstore_allocator();
+  ObMemstoreAllocator &tenant_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
   pre_retire_pos_ = tenant_allocator.get_retire_clock();
 }
 
@@ -254,7 +254,7 @@ ObTenantFreezeGuard::~ObTenantFreezeGuard()
   if (OB_FAIL(error_code_)) {
     LOG_WARN("[FREEZE_CHECKER]tenant freeze failed, skip check frozen memstore", KR(error_code_));
   } else {
-    ObMemstoreAllocator &tenant_allocator = MTL(ObSharedMemAllocMgr *)->memstore_allocator();
+    ObMemstoreAllocator &tenant_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
     int64_t curr_frozen_pos = 0;
     curr_frozen_pos = tenant_allocator.get_frozen_memstore_pos();
     const bool retired_mem_frozen = (curr_frozen_pos >= pre_retire_pos_);

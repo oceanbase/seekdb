@@ -129,7 +129,6 @@ int StatTable::assign(const StatTable &other)
 int ObTableStatParam::assign(const ObTableStatParam &other)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = other.tenant_id_;
   db_name_ = other.db_name_;
   db_id_ = other.db_id_;
   tab_name_ = other.tab_name_;
@@ -248,7 +247,6 @@ int ObTableStatParam::assign_common_property(const ObTableStatParam &other)
 int ObOptStatGatherParam::assign(const ObOptStatGatherParam &other)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = other.tenant_id_;
   db_name_ = other.db_name_;
   tab_name_ = other.tab_name_;
   table_id_ = other.table_id_;
@@ -338,7 +336,7 @@ int AsyncStatTable::assign(const AsyncStatTable &other)
 }
 
 OB_SERIALIZE_MEMBER(ObOptDmlStat,
-                    tenant_id_,
+                    
                     table_id_,
                     tablet_id_,
                     insert_row_count_,

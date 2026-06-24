@@ -45,9 +45,9 @@ ObWkbConstIterator<T, O>::ObWkbConstIterator(self& iter, bool do_array_assign)
   int ret = OB_SUCCESS; // for log
   if (iter.offsets_ptr_ != nullptr && do_array_assign) {
     // If the tenant ID can be obtained, use tenant memory
-    ObMemAttr mem_attr(OB_SERVER_TENANT_ID, "GeoWkbIter");
+    ObMemAttr mem_attr("GeoWkbIter");
     if (nullptr != MTL_CTX()) {
-      mem_attr.tenant_id_ = MTL_ID();
+      
     }
     void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
     if (nullptr == buf || nullptr == (offsets_ptr_ = new(buf) ObWkbIterOffsetArray(*iter.offsets_ptr_))) {
@@ -67,9 +67,9 @@ ObWkbConstIterator<T, O>::ObWkbConstIterator(const self& iter, bool do_array_ass
   int ret = OB_SUCCESS; // for log
   if (iter.offsets_ptr_ != nullptr && do_array_assign) {
     // If the tenant ID can be obtained, use tenant memory
-    ObMemAttr mem_attr(OB_SERVER_TENANT_ID, "GeoWkbIter");
+    ObMemAttr mem_attr("GeoWkbIter");
     if (nullptr != MTL_CTX()) {
-      mem_attr.tenant_id_ = MTL_ID();
+      
     }
     void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
     if (nullptr == buf || nullptr == (offsets_ptr_ = new(buf) ObWkbIterOffsetArray(*iter.offsets_ptr_))) {
@@ -131,9 +131,9 @@ const typename ObWkbConstIterator<T, O>::self& ObWkbConstIterator<T, O>::operato
     } else {
       int ret = OB_SUCCESS; // for log
       // If the tenant ID can be obtained, use tenant memory
-      ObMemAttr mem_attr(OB_SERVER_TENANT_ID, "GeoWkbIter");
+      ObMemAttr mem_attr("GeoWkbIter");
       if (nullptr != MTL_CTX()) {
-        mem_attr.tenant_id_ = MTL_ID();
+        
       }
       void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
       if (nullptr == buf || nullptr == (offsets_ptr_ = new(buf) ObWkbIterOffsetArray(*iter.offsets_ptr_))) {
@@ -364,9 +364,9 @@ void ObWkbUtils::get_sub_addr_common(const T& obj,
   bool enable_offset_info = true;
   if (offsets == nullptr) {
     // If the tenant ID can be obtained, use tenant memory
-    ObMemAttr mem_attr(OB_SERVER_TENANT_ID, "GeoWkbIter");
+    ObMemAttr mem_attr("GeoWkbIter");
     if (nullptr != MTL_CTX()) {
-      mem_attr.tenant_id_ = MTL_ID();
+      
     }
     void *buf = ob_malloc(sizeof(ObWkbIterOffsetArray), mem_attr);
     if (nullptr == buf || nullptr == (offsets = new(buf) ObWkbIterOffsetArray())) {

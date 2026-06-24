@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "observer/virtual_table/ob_virtual_span_info.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
@@ -110,12 +111,11 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
   if (OB_SUCC(ret)) {
     if (nullptr == cur_flt_span_mgr_) {
       cur_flt_span_mgr_ = nullptr;
-      uint64_t t_id = effective_tenant_id_;
-      cur_flt_span_mgr_ = MTL(sql::ObFLTSpanMgr*);
+      cur_flt_span_mgr_ = share::g_mp->flt_span_mgr();
 
       if (nullptr == cur_flt_span_mgr_) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "req manager doest not exist", K(t_id));
+        SERVER_LOG(WARN, "req manager doest not exist");
       } else if (OB_SUCC(ret)) {
         start_id_ = cur_flt_span_mgr_->get_start_idx();
         end_id_ = cur_flt_span_mgr_->get_end_idx();
@@ -125,7 +125,7 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
           cur_id_ = start_id_;
         }
         SERVER_LOG(TRACE, "start to get rows from virtual span info",
-                   K(start_id_), K(end_id_), K(cur_id_), K(t_id));
+                   K(start_id_), K(end_id_), K(cur_id_));
       }
     }
 

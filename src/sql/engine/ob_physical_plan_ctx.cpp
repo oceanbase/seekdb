@@ -56,7 +56,6 @@ DEF_TO_STRING(ObRemoteSqlInfo)
 
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
-      tenant_id_(OB_INVALID_ID),
       tsc_snapshot_timestamp_(0),
       ts_timeout_us_(0),
       consistency_level_(INVALID_CONSISTENCY),
@@ -113,10 +112,6 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       all_local_session_vars_(allocator),
       mview_ids_(allocator),
       last_refresh_scns_(allocator),
-      tx_id_(0),
-      tm_sessid_(0),
-      hint_xa_trans_stop_check_lock_(false),
-      main_xa_trans_branch_(false),
       total_memstore_read_row_count_(0),
       total_ssstore_read_row_count_(0),
       is_direct_insert_plan_(false),
@@ -567,7 +562,6 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
     param_store = &param_store_;
   }
   // Follow the old sequence method
-  OB_UNIS_ENCODE(tenant_id_);
   OB_UNIS_ENCODE(tsc_snapshot_timestamp_);
   OB_UNIS_ENCODE(cur_time_);
   OB_UNIS_ENCODE(merging_frozen_time_);
@@ -698,7 +692,6 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
     param_store = &param_store_;
   }
   // Follow the old sequence method
-  OB_UNIS_ADD_LEN(tenant_id_);
   OB_UNIS_ADD_LEN(tsc_snapshot_timestamp_);
   OB_UNIS_ADD_LEN(cur_time_);
   OB_UNIS_ADD_LEN(merging_frozen_time_);
@@ -792,7 +785,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
   char message_[1] = {'\0'}; //error msg buffer, unused anymore
   // Follow the old sequence method
-  OB_UNIS_DECODE(tenant_id_);
   OB_UNIS_DECODE(tsc_snapshot_timestamp_);
   OB_UNIS_DECODE(cur_time_);
   OB_UNIS_DECODE(merging_frozen_time_);
@@ -1082,15 +1074,14 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
       } else if (OB_FAIL(ObSqlUdtMetaUtils::generate_udt_meta_from_schema(schema_guard,
                                                                           &subschema_ctx_,
                                                                           allocator_,
-                                                                          get_tenant_id(),
                                                                           udt_type_id,
                                                                           *udt_meta))) {
-        LOG_WARN("generate udt_meta failed", K(ret), K(get_tenant_id()), K(udt_type_id));
+        LOG_WARN("generate udt_meta failed", K(ret), K(1UL), K(udt_type_id));
       } else if (OB_FAIL(subschema_ctx_.get_subschema_id_from_fields(udt_type_id, new_subschema_id))) {
-        LOG_WARN("failed to get subschema id from result fields", K(ret), K(get_tenant_id()), K(udt_type_id));
+        LOG_WARN("failed to get subschema id from result fields", K(ret), K(1UL), K(udt_type_id));
       } else if (new_subschema_id == ObInvalidSqlType // not get from fields, generate new
                  && OB_FAIL(subschema_ctx_.get_new_subschema_id(new_subschema_id))) {
-        LOG_WARN("failed to get new subschema id", K(ret), K(get_tenant_id()), K(udt_type_id));
+        LOG_WARN("failed to get new subschema id", K(ret), K(1UL), K(udt_type_id));
       } else {
         value.type_ = OB_SUBSCHEMA_UDT_TYPE;
         value.signature_ = udt_type_id;
@@ -1178,7 +1169,7 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
       if (OB_FAIL(src_meta.deep_copy(allocator_, dst_meta))) {
         LOG_WARN("fail to deep copy enumset meta", K(ret));
       } else if (OB_FAIL(subschema_ctx_.get_new_subschema_id(new_subschema_id))) {
-        LOG_WARN("failed to get new subschema id", K(ret), K(get_tenant_id()));
+        LOG_WARN("failed to get new subschema id", K(ret), K(1UL));
       } else {
         value.type_ = OB_SUBSCHEMA_ENUM_SET_TYPE;
         value.signature_ = dst_meta->get_signature();

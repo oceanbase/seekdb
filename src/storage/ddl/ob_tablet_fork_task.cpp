@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_tablet_fork_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet.h"
@@ -299,7 +300,6 @@ int ObForkSnapshotRowScan::get_next_row(const ObDatumRow *&tmp_row)
 
 ObTabletForkParam::ObTabletForkParam()
   : is_inited_(false),
-    tenant_id_(OB_INVALID_ID),
     ls_id_(),
     table_id_(OB_INVALID_ID),
     schema_version_(0),
@@ -315,7 +315,6 @@ ObTabletForkParam::ObTabletForkParam()
 
 ObTabletForkParam::ObTabletForkParam(const ObTabletForkParam &other)
   : is_inited_(other.is_inited_),
-    tenant_id_(other.tenant_id_),
     ls_id_(other.ls_id_),
     table_id_(other.table_id_),
     schema_version_(other.schema_version_),
@@ -333,7 +332,7 @@ ObTabletForkParam &ObTabletForkParam::operator=(const ObTabletForkParam &other)
 {
   if (this != &other) {
     is_inited_ = other.is_inited_;
-    tenant_id_ = other.tenant_id_;
+    
     ls_id_ = other.ls_id_;
     table_id_ = other.table_id_;
     schema_version_ = other.schema_version_;
@@ -356,7 +355,7 @@ ObTabletForkParam::~ObTabletForkParam()
 void ObTabletForkParam::reset()
 {
   is_inited_ = false;
-  tenant_id_ = OB_INVALID_ID;
+  
   ls_id_.reset();
   table_id_ = OB_INVALID_ID;
   schema_version_ = 0;
@@ -371,8 +370,7 @@ void ObTabletForkParam::reset()
 
 bool ObTabletForkParam::is_valid() const
 {
-  return OB_INVALID_ID != tenant_id_
-      && ls_id_.is_valid()
+  return ls_id_.is_valid()
       && OB_INVALID_ID != table_id_
       && schema_version_ > 0
       && task_id_ > 0
@@ -394,7 +392,7 @@ int ObTabletForkParam::init(const ObTabletForkParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(param));
   } else {
-    tenant_id_ = param.tenant_id_;
+    
     ls_id_ = param.ls_id_;
     table_id_ = param.table_id_;
     schema_version_ = param.schema_version_;
@@ -411,8 +409,8 @@ int ObTabletForkParam::init(const ObTabletForkParam &param)
 }
 
 ObTabletForkCtx::ObTabletForkCtx()
-  : range_allocator_("ForkRangeCtx", OB_MALLOC_NORMAL_BLOCK_SIZE /*8KB*/, MTL_ID()),
-    allocator_("ForkCtx", OB_MALLOC_NORMAL_BLOCK_SIZE /*8KB*/, MTL_ID()),
+  : range_allocator_("ForkRangeCtx", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    allocator_("ForkCtx", OB_MALLOC_NORMAL_BLOCK_SIZE),
     allocator_lock_(),
     is_inited_(false),
     complement_data_ret_(OB_SUCCESS),
@@ -501,7 +499,7 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
     } else {
       LOG_DEBUG("fork condition not satisfied yet, need retry", K(param));
     }
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(param.ls_id_, ls_handle_, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.ls_id_, ls_handle_, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle_,
       param.source_tablet_id_, src_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -750,7 +748,7 @@ uint64_t ObTabletForkDag::hash() const
     ret = OB_ERR_SYS;
     LOG_ERROR("invalid argument", K(ret), K(is_inited_), K(param_));
   } else {
-    hash_val = param_.tenant_id_ + param_.ls_id_.hash() 
+    hash_val = param_.ls_id_.hash() 
              + param_.table_id_ + param_.schema_version_
              + param_.source_tablet_id_.hash() + param_.dest_tablet_id_.hash()
              + static_cast<uint64_t>(param_.fork_snapshot_version_)
@@ -771,7 +769,7 @@ bool ObTabletForkDag::operator==(const ObIDag &other) const
       ret = OB_ERR_SYS;
       LOG_WARN("invalid argument", K(ret), K(param_), K(dag.param_));
     } else {
-      is_equal = param_.tenant_id_ == dag.param_.tenant_id_
+      is_equal = true
               && param_.ls_id_ == dag.param_.ls_id_
               && param_.schema_version_ == dag.param_.schema_version_
               && param_.source_tablet_id_ == dag.param_.source_tablet_id_
@@ -804,9 +802,9 @@ int ObTabletForkDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), K(param_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, 
-      "Fork table: src_tablet_id=%ld, dst_tablet_id=%ld, fork_snapshot_version=%ld, tenant_id=%lu, ls_id=%ld, schema_version=%ld",
+      "Fork table: src_tablet_id=%ld, dst_tablet_id=%ld, fork_snapshot_version=%ld, ls_id=%ld, schema_version=%ld",
       param_.source_tablet_id_.id(), param_.dest_tablet_id_.id(), param_.fork_snapshot_version_,
-      param_.tenant_id_, param_.ls_id_.id(), param_.schema_version_))) {
+      param_.ls_id_.id(), param_.schema_version_))) {
     LOG_WARN("fail to fill dag key", K(ret), K(param_));
   }
   return ret;
@@ -896,7 +894,7 @@ ObTabletForkReuseTask::ObTabletForkReuseTask()
     param_(nullptr),
     context_(nullptr),
     sstable_(nullptr),
-    allocator_("ForkReuseTask", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    allocator_("ForkReuseTask", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -1000,7 +998,7 @@ ObTabletForkRewriteTask::ObTabletForkRewriteTask()
     param_(nullptr),
     context_(nullptr),
     sstable_(nullptr),
-    allocator_("ForkRewriteTask", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    allocator_("ForkRewriteTask", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -1556,7 +1554,7 @@ int ObTabletForkUtil::check_satisfy_fork_condition(
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(param.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(param.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get ls", K(ret), K(param.ls_id_));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, param.source_tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(param.source_tablet_id_));
@@ -1622,7 +1620,7 @@ int ObTabletForkUtil::check_fork_data_complete(
   if (OB_UNLIKELY(!dest_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(SYS_LS), K(dest_tablet_id));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(SYS_LS, ls_handle, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(SYS_LS, ls_handle, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(SYS_LS));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, dest_tablet_id, 
       tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
@@ -1723,7 +1721,6 @@ int ObTabletForkUtil::try_schedule_fork_dags(const ObTableForkInfo &fork_info)
     int64_t fail_cnt = 0;
     LOG_INFO("fork table: schedule fork dags begin",
         "task_id", fork_info.task_id_,
-        "tenant_id", fork_info.tenant_id_,
         K(fork_info.ls_id_),
         "table_id", fork_info.table_id_,
         "schema_version", fork_info.schema_version_,
@@ -1748,7 +1745,6 @@ int ObTabletForkUtil::try_schedule_fork_dags(const ObTableForkInfo &fork_info)
     }
     LOG_INFO("fork table: schedule fork dags finish",
         "task_id", fork_info.task_id_,
-        "tenant_id", fork_info.tenant_id_,
         K(fork_info.ls_id_),
         "tablet_cnt", fork_params.count(),
         K(scheduled_cnt), K(exist_cnt), K(fail_cnt),
@@ -1762,7 +1758,7 @@ int ObTabletForkUtil::freeze_tablet(
     const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObTenantFreezer *tenant_freezer = MTL(ObTenantFreezer*);
+  ObTenantFreezer *tenant_freezer = share::g_mp->tenant_freezer();
   
   if (OB_ISNULL(tenant_freezer)) {
     ret = OB_ERR_UNEXPECTED;

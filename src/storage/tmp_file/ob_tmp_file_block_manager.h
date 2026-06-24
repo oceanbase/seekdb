@@ -171,7 +171,7 @@ class ObTmpFileBlockManager final
 public:
   ObTmpFileBlockManager();
   ~ObTmpFileBlockManager();
-  int init(const uint64_t tenant_id);
+  int init();
   void destroy();
   int create_tmp_file_block(const int64_t begin_page_id, const int64_t page_num,
                             int64_t &block_index);
@@ -188,7 +188,7 @@ public:
   int get_block_usage_stat(int64_t &used_page_num, int64_t &macro_block_count);
   void print_block_usage();
   OB_INLINE common::ObConcurrentFIFOAllocator &get_block_allocator() { return block_allocator_; }
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), K(used_page_num_),
+  TO_STRING_KV(K(is_inited_), K(used_page_num_),
                K(physical_block_num_), K(block_index_generator_));
 private:
   int remove_tmp_file_block_(const int64_t block_index);
@@ -209,7 +209,6 @@ private:
   };
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   uint64_t used_page_num_;
   uint64_t physical_block_num_;
   uint64_t block_index_generator_;

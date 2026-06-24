@@ -50,7 +50,7 @@ public:
       int64_t ctx_limit_;
     };
     struct {
-      uint64_t tenant_id_;
+      
       int64_t tenant_hold_;
       int64_t tenant_limit_;
     };
@@ -75,7 +75,7 @@ public:
 char *alloc_failed_msg();
 
 AllocFailedCtx &g_alloc_failed_ctx();
-void print_alloc_failed_msg(uint64_t tenant_id, uint64_t ctx_id,
+void print_alloc_failed_msg(uint64_t ctx_id,
                             int64_t ctx_hold, int64_t ctx_limit,
                             int64_t tenant_hold, int64_t tenant_limit);
 

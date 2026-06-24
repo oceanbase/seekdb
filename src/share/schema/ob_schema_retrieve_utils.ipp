@@ -74,9 +74,7 @@ namespace schema
  *********************************************************************/
 
 template<typename T, typename TABLE_SCHEMA>
-int ObSchemaRetrieveUtils::retrieve_table_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted,
     T &result,
     ObIAllocator &allocator,
     ObIArray<TABLE_SCHEMA *> &table_schema_array)
@@ -90,7 +88,7 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(
     tmp_allocator.reuse();
     bool is_deleted = false;
     TABLE_SCHEMA *allocated_table_schema = NULL;
-    if (OB_FAIL(fill_table_schema(tenant_id, check_deleted, result, table_schema, is_deleted))) {
+    if (OB_FAIL(fill_table_schema(check_deleted, result, table_schema, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill table schema", KR(ret), K(check_deleted));
     } else if (table_schema.get_table_id() == prev_table_id) {
       ret = common::OB_SUCCESS;
@@ -119,9 +117,9 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(
     prev_table_id = table_schema.get_table_id();
   }
   if (ret != common::OB_ITER_END) {
-    SHARE_SCHEMA_LOG(WARN, "fail to get all table schema. iter quit. ", KR(ret), K(tenant_id));
+    SHARE_SCHEMA_LOG(WARN, "fail to get all table schema. iter quit. ", KR(ret));
   } else {
-    SHARE_SCHEMA_LOG(INFO, "retrieve table schema array", K(tenant_id));
+    SHARE_SCHEMA_LOG(INFO, "retrieve table schema array");
     ret = common::OB_SUCCESS;
   }
   return ret;
@@ -129,7 +127,6 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(
 
 template<typename TABLE_SCHEMA, typename SCHEMA, typename T>
 int ObSchemaRetrieveUtils::retrieve_schema(
-    const uint64_t tenant_id,
     const bool check_deleted,
     T &result,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
@@ -144,7 +141,7 @@ int ObSchemaRetrieveUtils::retrieve_schema(
   while (OB_SUCC(ret) && common::OB_SUCCESS == (ret = result.next())) {
     bool is_deleted = false;
     SCHEMA &current = helper.get_and_reset_current();
-    if (OB_FAIL(helper.fill_current(tenant_id, check_deleted, result, current, is_deleted))) {
+    if (OB_FAIL(helper.fill_current(check_deleted, result, current, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fill schema failed", K(ret));
     } else if (current.get_table_id() == last_table_id
                && helper.get_curr_schema_id() == last_schema_id) {
@@ -181,15 +178,12 @@ int ObSchemaRetrieveUtils::retrieve_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_column_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_column_schema(const bool check_deleted,
     T &result,
     ObArray<ObTableSchema *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL((retrieve_schema<ObTableSchema, ObColumnSchemaV2>(
-                                          tenant_id,
                                           check_deleted,
                                           result,
                                           table_schema_array)))) {
@@ -199,8 +193,7 @@ int ObSchemaRetrieveUtils::retrieve_column_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_column_group_schema(const uint64_t tenant_id,
-                                                        const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_column_group_schema(const bool check_deleted,
                                                         T &result,
                                                         ObArray<ObTableSchema *> &table_schema_array)
 {
@@ -278,15 +271,12 @@ int ObSchemaRetrieveUtils::retrieve_column_group_schema(const uint64_t tenant_id
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_constraint(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_constraint(const bool check_deleted,
     T &result,
     ObArray<ObTableSchema *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL((retrieve_schema<ObTableSchema, ObConstraint>(
-                                          tenant_id,
                                           check_deleted,
                                           result,
                                           table_schema_array)))) {
@@ -296,15 +286,12 @@ int ObSchemaRetrieveUtils::retrieve_constraint(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_part_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_part_info(const bool check_deleted,
     T &result,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL((retrieve_schema<TABLE_SCHEMA, ObPartition>(
-                                          tenant_id,
                                           check_deleted,
                                           result,
                                           table_schema_array)))) {
@@ -314,17 +301,13 @@ int ObSchemaRetrieveUtils::retrieve_part_info(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_def_subpart_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_def_subpart_info(const bool check_deleted,
     T &result,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
   bool is_subpart_template = true;
-  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(
-                                          tenant_id,
-                                          check_deleted,
+  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                           is_subpart_template,
                                           result,
                                           table_schema_array)))) {
@@ -334,17 +317,13 @@ int ObSchemaRetrieveUtils::retrieve_def_subpart_info(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_subpart_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_subpart_info(const bool check_deleted,
     T &result,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
   bool is_subpart_template = false;
-  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(
-                                          tenant_id,
-                                          check_deleted,
+  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                           is_subpart_template,
                                           result,
                                           table_schema_array)))) {
@@ -355,9 +334,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_info(
 
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_table_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted, T &result,
+int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted, T &result,
     ObIAllocator &allocator,
     ObTableSchema *&table_schema)
 {
@@ -375,7 +352,7 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(
   } else {
     bool is_deleted = false;
     ObTableSchema tmp_table_schema;
-    if (OB_FAIL(fill_table_schema(tenant_id, check_deleted, result, tmp_table_schema, is_deleted))) {
+    if (OB_FAIL(fill_table_schema(check_deleted, result, tmp_table_schema, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill table schema. ", K(check_deleted), K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, tmp_table_schema, table_schema))) {
       SHARE_SCHEMA_LOG(WARN, "alloc_table_schema failed", K(ret));
@@ -394,9 +371,7 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_tablegroup_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_tablegroup_schema(T &result,
     ObIAllocator &allocator,
     ObTablegroupSchema *&tablegroup_schema)
 {
@@ -414,7 +389,7 @@ int ObSchemaRetrieveUtils::retrieve_tablegroup_schema(
   } else {
     bool is_deleted = false;
     ObTablegroupSchema tmp_tablegroup_schema;
-    if (OB_FAIL(fill_tablegroup_schema(tenant_id, result, tmp_tablegroup_schema, is_deleted))) {
+    if (OB_FAIL(fill_tablegroup_schema(result, tmp_tablegroup_schema, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill tablegroup schema. ", K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, tmp_tablegroup_schema, tablegroup_schema))) {
       SHARE_SCHEMA_LOG(WARN, "alloc_tablegroup_schema failed", K(ret));
@@ -480,34 +455,34 @@ int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::add_schema(TABLE_SCHE
 
 template<typename TABLE_SCHEMA>
 template<typename T>
-int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObColumnSchemaV2>::fill_current(const uint64_t tenant_id,
+int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObColumnSchemaV2>::fill_current(
                                                                              const bool check_deleted,
                                                                              T &result, ObColumnSchemaV2 &p,
                                                                              bool &is_deleted)
 {
-  return ObSchemaRetrieveUtils::fill_column_schema(tenant_id, check_deleted,
+  return ObSchemaRetrieveUtils::fill_column_schema(check_deleted,
                                                    result, p, is_deleted);
 }
 
 template<typename TABLE_SCHEMA>
 template<typename T>
-int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObConstraint>::fill_current(const uint64_t tenant_id,
+int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObConstraint>::fill_current(
                                                                          const bool check_deleted,
                                                                          T &result, ObConstraint &p,
                                                                          bool &is_deleted)
 {
-  return ObSchemaRetrieveUtils::fill_constraint(tenant_id, check_deleted,
+  return ObSchemaRetrieveUtils::fill_constraint(check_deleted,
                                                 result, p, is_deleted);
 }
 
 template<typename TABLE_SCHEMA>
 template<typename T>
-int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::fill_current(const uint64_t tenant_id,
+int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::fill_current(
                                                                         const bool check_deleted,
                                                                         T &result, ObPartition &p,
                                                                         bool &is_deleted)
 {
-  return ObSchemaRetrieveUtils::fill_part_info(tenant_id, check_deleted,
+  return ObSchemaRetrieveUtils::fill_part_info(check_deleted,
                                                result, p, is_deleted);
 }
 
@@ -596,7 +571,6 @@ int64_t ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA>::get_curr_schema_id()
 template<typename TABLE_SCHEMA>
 template<typename T>
 int ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA>::fill_current(
-    const uint64_t tenant_id,
     const bool check_deleted,
     T &result,
     ObSubPartition &p,
@@ -604,13 +578,11 @@ int ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA>::fill_current(
 {
   int ret = OB_SUCCESS;
   if (is_subpart_template_) {
-    if (OB_FAIL(ObSchemaRetrieveUtils::fill_def_subpart_info(
-                tenant_id, check_deleted, result, p, is_deleted))) {
+    if (OB_FAIL(ObSchemaRetrieveUtils::fill_def_subpart_info(check_deleted, result, p, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to retrieve def sub part info", K(ret));
     }
   } else {
-    if (OB_FAIL(ObSchemaRetrieveUtils::fill_subpart_info(
-                tenant_id, check_deleted, result, p, is_deleted))) {
+    if (OB_FAIL(ObSchemaRetrieveUtils::fill_subpart_info(check_deleted, result, p, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to retrieve sub part info", K(ret));
     }
   }
@@ -675,16 +647,15 @@ int64_t ObSchemaRetrieveHelper<TABLE_SCHEMA, SCHEMA>::get_curr_schema_id()
 template<typename TABLE_SCHEMA, typename SCHEMA>
 template<typename T>
 int ObSchemaRetrieveHelper<TABLE_SCHEMA, SCHEMA>::fill_current(
-    const uint64_t tenant_id,
     const bool check_deleted,
     T &result, SCHEMA &p,
     bool &is_deleted)
 {
-  return ObSchemaRetrieveHelperBase<TABLE_SCHEMA, SCHEMA>::fill_current(tenant_id, check_deleted, result, p, is_deleted);
+  return ObSchemaRetrieveHelperBase<TABLE_SCHEMA, SCHEMA>::fill_current(check_deleted, result, p, is_deleted);
 }
 
 template<typename TABLE_SCHEMA, typename SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_schema(const uint64_t tenant_id,
+int ObSchemaRetrieveUtils::retrieve_schema(
                                            const bool check_deleted,
                                            T &result,
                                            TABLE_SCHEMA *&table_schema)
@@ -703,7 +674,7 @@ int ObSchemaRetrieveUtils::retrieve_schema(const uint64_t tenant_id,
     while (OB_SUCC(ret) && common::OB_SUCCESS == (ret = result.next())) {
       bool is_deleted = false;
       SCHEMA &current = helper.get_and_reset_current();
-      if (OB_FAIL(helper.fill_current(tenant_id, check_deleted, result, current, is_deleted))) {
+      if (OB_FAIL(helper.fill_current(check_deleted, result, current, is_deleted))) {
         SHARE_SCHEMA_LOG(WARN, "fill schema fail", K(ret));
       } else if (table_id != current.get_table_id()) {
         ret = OB_ERR_UNEXPECTED;
@@ -774,13 +745,12 @@ inline int ObSchemaRetrieveUtils::cascaded_generated_column<ObTableSchema>(ObTab
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_part_info(const uint64_t tenant_id,
-                                              const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_part_info(const bool check_deleted,
                                               T &result,
                                               TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL((retrieve_schema<TABLE_SCHEMA, ObPartition, T>(tenant_id,
+  if (OB_FAIL((retrieve_schema<TABLE_SCHEMA, ObPartition, T>(
                                                              check_deleted,
                                                              result,
                                                              table_schema)))) {
@@ -790,16 +760,13 @@ int ObSchemaRetrieveUtils::retrieve_part_info(const uint64_t tenant_id,
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_def_subpart_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_def_subpart_info(const bool check_deleted,
     T &result,
     TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
   bool is_subpart_template = true;
-  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(tenant_id,
-                                                        check_deleted,
+  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                                         is_subpart_template,
                                                         result,
                                                         table_schema)))) {
@@ -809,16 +776,13 @@ int ObSchemaRetrieveUtils::retrieve_def_subpart_info(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_subpart_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_subpart_info(const bool check_deleted,
     T &result,
     TABLE_SCHEMA *&table_schema)
 {
   int ret = OB_SUCCESS;
   bool is_subpart_template = false;
-  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(tenant_id,
-                                                        check_deleted,
+  if (OB_FAIL((retrieve_subpart_schema<TABLE_SCHEMA, T>(check_deleted,
                                                         is_subpart_template,
                                                         result,
                                                         table_schema)))) {
@@ -828,9 +792,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_info(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_subpart_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
     const bool is_subpart_template,
     T &result,
     ObArray<TABLE_SCHEMA *> &table_schema_array)
@@ -843,7 +805,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     bool is_deleted = false;
     ObSubPartition &current = helper.get_and_reset_current();
-    if (OB_FAIL(helper.fill_current(tenant_id, check_deleted,
+    if (OB_FAIL(helper.fill_current(check_deleted,
                                     result, current, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fill schema fail", K(ret));
     } else if (OB_ISNULL(last_schema)
@@ -873,9 +835,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_subpart_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
     const bool is_subpart_template,
     T &result,
     TABLE_SCHEMA *&table_schema)
@@ -892,7 +852,7 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(
     while (OB_SUCC(ret) && OB_SUCC(result.next())) {
       bool is_deleted = false;
       ObSubPartition &current = helper.get_and_reset_current();
-      if (OB_FAIL(helper.fill_current(tenant_id, check_deleted,
+      if (OB_FAIL(helper.fill_current(check_deleted,
                                       result, current, is_deleted))) {
         SHARE_SCHEMA_LOG(WARN, "fill schema fail", K(ret));
       } else if (OB_ISNULL(last_schema)
@@ -923,13 +883,12 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_column_schema(const uint64_t tenant_id,
-                                                  const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_column_schema(const bool check_deleted,
                                                   T &result,
                                                   ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL((retrieve_schema<ObTableSchema, ObColumnSchemaV2>(tenant_id,
+  if (OB_FAIL((retrieve_schema<ObTableSchema, ObColumnSchemaV2>(
                                                                 check_deleted,
                                                                 result,
                                                                 table_schema)))) {
@@ -939,13 +898,12 @@ int ObSchemaRetrieveUtils::retrieve_column_schema(const uint64_t tenant_id,
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_constraint(const uint64_t tenant_id,
-                                               const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_constraint(const bool check_deleted,
                                                T &result,
                                                ObTableSchema *&table_schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL((retrieve_schema<ObTableSchema, ObConstraint>(tenant_id,
+  if (OB_FAIL((retrieve_schema<ObTableSchema, ObConstraint>(
                                                             check_deleted,
                                                             result,
                                                             table_schema)))) {
@@ -955,8 +913,7 @@ int ObSchemaRetrieveUtils::retrieve_constraint(const uint64_t tenant_id,
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_constraint_column_info(const uint64_t tenant_id,
-                                                           T &result,
+int ObSchemaRetrieveUtils::retrieve_constraint_column_info(T &result,
                                                            ObConstraint *&cst)
 {
   int ret = OB_SUCCESS;
@@ -965,7 +922,7 @@ int ObSchemaRetrieveUtils::retrieve_constraint_column_info(const uint64_t tenant
   uint64_t column_id = OB_INVALID_ID;
   common::ObSEArray<uint64_t, common::SEARRAY_INIT_NUM> column_ids;
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
-    if (OB_FAIL(fill_constraint_column_info(tenant_id, result, column_id, is_deleted))) {
+    if (OB_FAIL(fill_constraint_column_info(result, column_id, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill constraint column info", K(ret));
     } else if (prev_column_id == column_id) {
       // skip
@@ -990,11 +947,9 @@ int ObSchemaRetrieveUtils::retrieve_constraint_column_info(const uint64_t tenant
   return ret;
 }
 
-// when tenant_id is sys, recycle_objs's tenant_id is invalid, can not use it
+// when tenant is sys, recycle_objs's tenant is invalid, can not use it
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_recycle_object(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_recycle_object(T &result,
     ObIArray<ObRecycleObject> &recycle_objs)
 {
   int ret = common::OB_SUCCESS;
@@ -1003,7 +958,7 @@ int ObSchemaRetrieveUtils::retrieve_recycle_object(
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
     recycle_obj.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_recycle_object(tenant_id, result, recycle_obj))) {
+    if (OB_FAIL(fill_recycle_object(result, recycle_obj))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill recycle object. ", K(ret));
     } else if (OB_FAIL(recycle_objs.push_back(recycle_obj))) {
       SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
@@ -1018,9 +973,7 @@ int ObSchemaRetrieveUtils::retrieve_recycle_object(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_column_group_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_column_group_schema(const bool check_deleted,
     T &result,
     ObTableSchema *&table_schema)
 {
@@ -1030,16 +983,14 @@ int ObSchemaRetrieveUtils::retrieve_column_group_schema(
     LOG_WARN("fail to reserve", KR(ret));
   } else if (OB_FAIL(table_schema_array.push_back(table_schema))) {
     LOG_WARN("fail to push back", KR(ret), KP(table_schema));
-  } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_group_schema(tenant_id, check_deleted, result, table_schema_array))) {
-    LOG_WARN("fail to retrieve column_group schema", KR(ret), K(tenant_id), K(check_deleted), KP(table_schema));
+  } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_group_schema(check_deleted, result, table_schema_array))) {
+    LOG_WARN("fail to retrieve column_group schema", KR(ret), K(check_deleted), KP(table_schema));
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_column_group_mapping(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::retrieve_column_group_mapping(const bool check_deleted,
     T &result,
     ObTableSchema *&table_schema)
 {
@@ -1127,10 +1078,9 @@ int ObSchemaRetrieveUtils::retrieve_column_group_mapping(
  */
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_temp_table_schema(const uint64_t tenant_id, T &result, ObTableSchema &table_schema)
+int ObSchemaRetrieveUtils::fill_temp_table_schema(T &result, ObTableSchema &table_schema)
 {
   int ret = common::OB_SUCCESS;
-  UNUSED(tenant_id);
   ObString create_host;
   ObString default_create_host("");
   EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "create_host", create_host,
@@ -1152,9 +1102,7 @@ int ObSchemaRetrieveUtils::fill_temp_table_schema(const uint64_t tenant_id, T &r
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_table_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     T &result,
     ObTableSchema &table_schema,
     bool &is_deleted)
@@ -1166,14 +1114,14 @@ int ObSchemaRetrieveUtils::fill_table_schema(
   ObString expire_expr_hex;
   ObString part_func_expr;
   ObString sub_part_func_expr;
-  table_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, table_id, table_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_id, table_schema, int64_t);
   if (check_deleted) {
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   }
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, tablegroup_id, table_schema, tenant_id);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, table_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tablegroup_id, table_schema, int64_t);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_type, table_schema, ObTableType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_type, table_schema, ObIndexType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_using_type, table_schema, ObIndexUsingType);
@@ -1203,7 +1151,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, is_use_bloomfilter, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, collation_type, table_schema, common::ObCollationType);
     table_schema.set_charset_type(ObCharset::charset_type_by_coll(table_schema.get_collation_type()));
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, data_table_id, table_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, data_table_id, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, index_status, table_schema, ObIndexStatus);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_status, table_schema, ObPartitionStatus, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, partition_schema_version, table_schema, int64_t, true, ObSchemaService::g_ignore_column_retrieve_error_, 0);
@@ -1324,10 +1272,10 @@ int ObSchemaRetrieveUtils::fill_table_schema(
     EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part, partition_option, true, ignore_column_error, false);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part_size, partition_option, int64_t, true, ignore_column_error, -1);
 
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID_AND_DEFAULT_VALUE(result, association_table_id,
-    table_schema, tenant_id, true, ignore_column_error, common::OB_INVALID_ID);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID_AND_DEFAULT_VALUE(result, define_user_id,
-    table_schema, tenant_id, true, ignore_column_error, common::OB_INVALID_ID);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, association_table_id,
+    table_schema, true, ignore_column_error, common::OB_INVALID_ID);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, define_user_id,
+    table_schema, true, ignore_column_error, common::OB_INVALID_ID);
 
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, max_dependency_version,
     table_schema, int64_t, true, ignore_column_error, common::OB_INVALID_VERSION);
@@ -1429,32 +1377,30 @@ int ObSchemaRetrieveUtils::fill_table_schema(
 template<typename T>
 int fill_column_schema_default_value(T &result,
                                      ObColumnSchemaV2 &column,
-                                     common::ColumnType default_type,
-                                     const uint64_t tenant_id)
+                                     common::ColumnType default_type)
 {
   int ret = common::OB_SUCCESS;
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, orig_default_value, default_type,
-                                    column,false, false, tenant_id);
+                                    column,false, false);
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL_V2(result, default_type,
-                                    column, true, false, tenant_id);
+                                    column, true, false);
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, orig_default_value_v2, default_type,
-                                    column, false, true, tenant_id);
+                                    column, false, true);
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, cur_default_value_v2, default_type,
-                                    column, true, true, tenant_id);
+                                    column, true, true);
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_column_schema(
-    const uint64_t tenant_id, const bool check_deleted, T &result,
+int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &result,
     ObColumnSchemaV2 &column, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   column.reset();
   is_deleted = false;
 
-  column.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, table_id, column, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_id, column, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, column_id, column, uint64_t);
   if (check_deleted) {
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
@@ -1498,7 +1444,7 @@ int ObSchemaRetrieveUtils::fill_column_schema(
     }
 
     if (OB_SUCC(ret)) {
-      ret = fill_column_schema_default_value<T>(result, column, default_type, tenant_id);
+      ret = fill_column_schema_default_value<T>(result, column, default_type);
     }
 
     if (OB_SUCC(ret) && column.is_identity_column()) {
@@ -1546,16 +1492,15 @@ int ObSchemaRetrieveUtils::fill_column_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_constraint(
-    const uint64_t tenant_id, const bool check_deleted, T &result,
+int ObSchemaRetrieveUtils::fill_constraint(const bool check_deleted, T &result,
     ObConstraint &constraint, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   constraint.reset();
   is_deleted = false;
 
-  constraint.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, table_id, constraint, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_id, constraint, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, constraint_id, constraint, uint64_t);
   if (check_deleted) {
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
@@ -1605,10 +1550,8 @@ int ObSchemaRetrieveUtils::fill_column_group_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_constraint_column_info(
-    const uint64_t tenant_id, T &result, uint64_t &column_id, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_constraint_column_info(T &result, uint64_t &column_id, bool &is_deleted)
 {
-  UNUSED(tenant_id);
   int ret = OB_SUCCESS;
   column_id = 0;
   is_deleted = false;
@@ -1618,17 +1561,15 @@ int ObSchemaRetrieveUtils::fill_constraint_column_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_database_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_database_schema(T &result,
     ObDatabaseSchema &db_schema,
     bool &is_deleted)
 {
   db_schema.reset();
   is_deleted = false;
   int ret = common::OB_SUCCESS;
-  db_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, db_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, db_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, database_name, db_schema);
@@ -1636,7 +1577,7 @@ int ObSchemaRetrieveUtils::fill_database_schema(
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, db_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, collation_type, db_schema, common::ObCollationType);
     EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, read_only, db_schema);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, default_tablegroup_id, db_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, default_tablegroup_id, db_schema, int64_t);
     EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, in_recyclebin, db_schema);
     db_schema.set_charset_type(ObCharset::charset_type_by_coll(db_schema.get_collation_type()));
   }
@@ -1644,9 +1585,7 @@ int ObSchemaRetrieveUtils::fill_database_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_tablegroup_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_tablegroup_schema(T &result,
     ObTablegroupSchema &tg_schema,
     bool &is_deleted)
 {
@@ -1654,8 +1593,8 @@ int ObSchemaRetrieveUtils::fill_tablegroup_schema(
   tg_schema.reset();
   is_deleted  = false;
   ObString sharding_default(OB_PARTITION_SHARDING_ADAPTIVE);
-  tg_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, tablegroup_id, tg_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tablegroup_id, tg_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, tablegroup_name, tg_schema);
@@ -1698,17 +1637,15 @@ int ObSchemaRetrieveUtils::fill_tablegroup_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_user_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_user_schema(T &result,
     ObUserInfo &user_info,
     bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   user_info.reset();
   is_deleted = false;
-  user_info.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, user_info, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, user_info, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, user_name, user_info);
@@ -1825,9 +1762,7 @@ int ObSchemaRetrieveUtils::fill_user_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(T &result,
     const bool is_fetch_role,
     ObArray<ObUserInfo> &user_array)
 {
@@ -1844,8 +1779,8 @@ int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(
     bool is_deleted = false;
     uint64_t admin_option = 0;
     uint64_t disable_flag = 0;
-    EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "grantee_id", grantee_id, tenant_id);
-    EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "role_id", role_id, tenant_id);
+    EXTRACT_INT_FIELD_MYSQL(result, "grantee_id", grantee_id, int64_t);
+    EXTRACT_INT_FIELD_MYSQL(result, "role_id", role_id, int64_t);
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
        result, "admin_option", admin_option, uint64_t, true /* skip null error*/,
@@ -1941,15 +1876,14 @@ bool ObSchemaRetrieveUtils::compare_user_id(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_catalog_priv_schema(
-    const uint64_t tenant_id, T &result, ObCatalogPriv &catalog_priv, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_catalog_priv_schema(T &result, ObCatalogPriv &catalog_priv, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   catalog_priv.reset();
   is_deleted = false;
 
-  catalog_priv.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, catalog_priv, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, catalog_priv, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, catalog_name, catalog_priv);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
@@ -1961,15 +1895,14 @@ int ObSchemaRetrieveUtils::fill_catalog_priv_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_db_priv_schema(
-    const uint64_t tenant_id, T &result, ObDBPriv &db_priv, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_db_priv_schema(T &result, ObDBPriv &db_priv, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   db_priv.reset();
   is_deleted = false;
 
-  db_priv.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, db_priv, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, db_priv, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, database_name, db_priv);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
@@ -2005,9 +1938,7 @@ int ObSchemaRetrieveUtils::fill_db_priv_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_sys_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_sys_priv_schema(T &result,
     ObSysPriv &sys_priv,
     bool &is_deleted,
     ObRawPriv &raw_p_id,
@@ -2016,8 +1947,8 @@ int ObSchemaRetrieveUtils::fill_sys_priv_schema(
   int ret = common::OB_SUCCESS;
   sys_priv.reset();
 
-  sys_priv.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, grantee_id, sys_priv, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, grantee_id, sys_priv, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   EXTRACT_INT_FIELD_MYSQL(result, "priv_id", raw_p_id, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "priv_option", option, uint64_t);
@@ -2027,15 +1958,14 @@ int ObSchemaRetrieveUtils::fill_sys_priv_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_table_priv_schema(
-    const uint64_t tenant_id, T &result, ObTablePriv &table_priv, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_table_priv_schema(T &result, ObTablePriv &table_priv, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   table_priv.reset();
   is_deleted = false;
 
-  table_priv.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, table_priv, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, table_priv, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, database_name, table_priv);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, table_name, table_priv);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
@@ -2067,15 +1997,14 @@ int ObSchemaRetrieveUtils::fill_table_priv_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_routine_priv_schema(
-    const uint64_t tenant_id, T &result, ObRoutinePriv &routine_priv, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_routine_priv_schema(T &result, ObRoutinePriv &routine_priv, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   routine_priv.reset();
   is_deleted = false;
 
-  routine_priv.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, routine_priv, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, routine_priv, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, database_name, routine_priv);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, routine_name, routine_priv);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, routine_type, routine_priv, int64_t);
@@ -2093,17 +2022,16 @@ int ObSchemaRetrieveUtils::fill_routine_priv_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_column_priv_schema(
-    const uint64_t tenant_id, T &result, ObColumnPriv &column_priv, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_column_priv_schema(T &result, ObColumnPriv &column_priv, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   column_priv.reset();
   is_deleted = false;
-  column_priv.set_tenant_id(tenant_id);
+  
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, priv_id, column_priv, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, column_priv, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, column_priv, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, database_name, column_priv);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, table_name, column_priv);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, column_name, column_priv);
@@ -2120,9 +2048,7 @@ int ObSchemaRetrieveUtils::fill_column_priv_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_obj_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_obj_priv_schema(T &result,
     ObObjPriv &obj_priv,
     bool &is_deleted,
     ObRawObjPriv &raw_p_id,
@@ -2132,13 +2058,13 @@ int ObSchemaRetrieveUtils::fill_obj_priv_schema(
   obj_priv.reset();
   is_deleted = false;
 
-  obj_priv.set_tenant_id(tenant_id);
+  
 
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, obj_id, obj_priv, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, obj_id, obj_priv, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, objtype, obj_priv, uint64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, col_id, obj_priv, uint64_t);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, grantor_id, obj_priv, tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, grantee_id, obj_priv, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, grantor_id, obj_priv, int64_t);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, grantee_id, obj_priv, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "priv_id", raw_p_id, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "priv_option", option, uint64_t);
@@ -2149,7 +2075,6 @@ int ObSchemaRetrieveUtils::fill_obj_priv_schema(
 
 template<typename T>
 int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema (
-                            const uint64_t tenant_id, 
                             T &result, 
                             ObObjMysqlPriv &obj_mysql_priv, 
                             bool &is_deleted)
@@ -2158,8 +2083,8 @@ int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema (
   obj_mysql_priv.reset();
   is_deleted = false;
 
-  obj_mysql_priv.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, obj_mysql_priv, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, obj_mysql_priv, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, obj_name, obj_mysql_priv);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, obj_type, obj_mysql_priv, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
@@ -2175,21 +2100,19 @@ int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema (
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_outline_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_outline_schema(T &result,
     ObOutlineInfo &outline_info,
     bool &is_deleted)
 {
   outline_info.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  outline_info.set_tenant_id(tenant_id);
+  
   bool ignore_column_error = true;
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, outline_id, outline_info, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, outline_id, outline_info, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, outline_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, outline_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, outline_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, signature, outline_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
@@ -2216,21 +2139,19 @@ int ObSchemaRetrieveUtils::fill_outline_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_udf_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_udf_schema(T &result,
     ObUDF &udf_info,
     bool &is_deleted)
 {
   udf_info.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  udf_info.set_tenant_id(tenant_id);
+  
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, udf_info);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, ret, udf_info, int);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, udf_id, udf_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, udf_id, udf_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, dl, udf_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, udf_info, int);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, udf_info, uint64_t);
@@ -2239,20 +2160,18 @@ int ObSchemaRetrieveUtils::fill_udf_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_udf_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_udf_schema(T &result,
     ObSimpleUDFSchema &udf_schema,
     bool &is_deleted)
 {
   udf_schema.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  udf_schema.set_tenant_id(tenant_id);
+  
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, udf_schema);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, udf_id, udf_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, udf_id, udf_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, ret, udf_schema, int);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, dl, udf_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, udf_schema, int);
@@ -2262,25 +2181,24 @@ int ObSchemaRetrieveUtils::fill_udf_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_routine_schema(
-    const uint64_t tenant_id, T &result, ObRoutineInfo &routine_info, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_routine_schema(T &result, ObRoutineInfo &routine_info, bool &is_deleted)
 {
   routine_info.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  routine_info.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, routine_id, routine_info, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, routine_id, routine_info, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, routine_info, tenant_id);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, package_id, routine_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, routine_info, int64_t);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_id, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, routine_name, routine_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, overload, routine_info, uint64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, subprogram_id, routine_info, uint64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, routine_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, routine_type, routine_info, ObRoutineType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, routine_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, owner_id, routine_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, priv_user, routine_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, routine_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, exec_env, routine_info);
@@ -2288,24 +2206,19 @@ int ObSchemaRetrieveUtils::fill_routine_schema(
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, route_sql, routine_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type_id, routine_info, uint64_t);
-    if (OB_SUCC(ret)
-        && pl::get_tenant_id_by_object_id(routine_info.get_type_id()) != OB_SYS_TENANT_ID) {
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, type_id, routine_info, tenant_id);
-    }
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_routine_param_schema(
-    const uint64_t tenant_id, T &result, ObRoutineParam &schema, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_routine_param_schema(T &result, ObRoutineParam &schema, bool &is_deleted)
 {
   schema.reset();
   is_deleted = false;
   int ret = common::OB_SUCCESS;
   ObString default_val("");
-  schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, routine_id, schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, routine_id, schema, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sequence, schema, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
@@ -2346,22 +2259,21 @@ int ObSchemaRetrieveUtils::fill_routine_param_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_package_schema(
-    const uint64_t tenant_id, T &result, ObPackageInfo &package_info, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_package_schema(T &result, ObPackageInfo &package_info, bool &is_deleted)
 {
   package_info.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  package_info.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, package_id, package_info, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_id, package_info, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, package_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, package_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, package_name, package_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, package_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, package_info, ObPackageType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flag, package_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, owner_id, package_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, package_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, comp_flag, package_info, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, exec_env, package_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, source, package_info);
@@ -2373,8 +2285,7 @@ int ObSchemaRetrieveUtils::fill_package_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_trigger_schema(
-    const uint64_t tenant_id, T &result, ObTriggerInfo &trigger_info, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_trigger_schema(T &result, ObTriggerInfo &trigger_info, bool &is_deleted)
 {
   trigger_info.reset();
   is_deleted  = false;
@@ -2383,14 +2294,14 @@ int ObSchemaRetrieveUtils::fill_trigger_schema(
   int64_t order_type_defualt_value = 0;
   int64_t action_order_default_value = 1;
   uint64_t analyze_flag_default_value = 0;
-  trigger_info.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, trigger_id, trigger_info, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, trigger_id, trigger_info, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, trigger_info, tenant_id);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, owner_id, trigger_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, trigger_info, int64_t);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, owner_id, trigger_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, trigger_info, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, base_object_id, trigger_info, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, base_object_id, trigger_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, base_object_type, trigger_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, trigger_type, trigger_info, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, trigger_events, trigger_info, uint64_t);
@@ -2445,22 +2356,20 @@ int ObSchemaRetrieveUtils::fill_trigger_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_sequence_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_sequence_schema(T &result,
     ObSequenceSchema &sequence_schema,
     bool &is_deleted)
 {
   sequence_schema.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  sequence_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, sequence_id, sequence_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sequence_id, sequence_schema, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, sequence_schema, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, sequence_name, sequence_schema);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, sequence_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, sequence_schema, int64_t);
     EXTRACT_NUMBER_FIELD_TO_CLASS_MYSQL(result, min_value, sequence_schema);
     EXTRACT_NUMBER_FIELD_TO_CLASS_MYSQL(result, max_value, sequence_schema);
     EXTRACT_NUMBER_FIELD_TO_CLASS_MYSQL(result, increment_by, sequence_schema);
@@ -2478,29 +2387,25 @@ int ObSchemaRetrieveUtils::fill_sequence_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_recycle_object(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_recycle_object(T &result,
     ObRecycleObject &recycle_obj)
 {
   int ret = common::OB_SUCCESS;
   recycle_obj.reset();
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, recycle_obj, tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, table_id, recycle_obj, tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, tablegroup_id, recycle_obj, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, recycle_obj, int64_t);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_id, recycle_obj, int64_t);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tablegroup_id, recycle_obj, int64_t);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, object_name, recycle_obj);
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, original_name, recycle_obj);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, recycle_obj, ObRecycleObject::RecycleObjType);
   if (OB_SUCC(ret)) {
-    recycle_obj.set_tenant_id(tenant_id);
+    
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_schema_operation(
-    const uint64_t tenant_id,
-    T &result, ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
+int ObSchemaRetrieveUtils::fill_schema_operation(T &result, ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
     ObSchemaOperation &schema_operation)
 {
   int ret = common::OB_SUCCESS;
@@ -2508,9 +2413,8 @@ int ObSchemaRetrieveUtils::fill_schema_operation(
   ObSchemaOperationType operation_type = OB_INVALID_DDL_OP;
   EXTRACT_INT_FIELD_MYSQL(result, "operation_type", operation_type, ObSchemaOperationType);
   if (is_tenant_operation(operation_type)) {
-    EXTRACT_INT_FIELD_MYSQL(result, "tenant_id", schema_operation.tenant_id_, uint64_t);
   } else {
-    schema_operation.tenant_id_ = tenant_id;
+    
   }
   EXTRACT_INT_FIELD_MYSQL(result, "table_id", schema_operation.table_id_, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "database_id", schema_operation.database_id_, uint64_t);
@@ -2544,13 +2448,10 @@ int ObSchemaRetrieveUtils::fill_schema_operation(
  ***********************************************************************/
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_system_variable_obj(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_system_variable_obj(T &result,
     ObIAllocator &allocator,
     ObObj &out_var_obj)
 {
-  UNUSED(tenant_id);
   int ret = common::OB_SUCCESS;
   int64_t vtype = 0;
   bool is_deleted = false;
@@ -2599,9 +2500,8 @@ int ObSchemaRetrieveUtils::retrieve_system_variable_obj(
   return ret;
 }
 template<typename T, typename SCHEMA>
-int ObSchemaRetrieveUtils::retrieve_system_variable(const uint64_t tenant_id, T &result, SCHEMA &sys_variable_schema)
+int ObSchemaRetrieveUtils::retrieve_system_variable(T &result, SCHEMA &sys_variable_schema)
 {
-  UNUSED(tenant_id);
   int ret = common::OB_SUCCESS;
   ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
@@ -2611,7 +2511,7 @@ int ObSchemaRetrieveUtils::retrieve_system_variable(const uint64_t tenant_id, T 
     bool is_deleted = false;
     sysvar_schema.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_sysvar_schema(tenant_id, result, sysvar_schema, is_deleted))) {
+    if (OB_FAIL(fill_sysvar_schema(result, sysvar_schema, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill sysvar schema", K(ret));
     } else if (ObCharset::case_insensitive_equal(prev_sys_name, sysvar_schema.get_name())) {
       //do nothing
@@ -2640,13 +2540,13 @@ int ObSchemaRetrieveUtils::retrieve_system_variable(const uint64_t tenant_id, T 
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_sysvar_schema(const uint64_t tenant_id, T &result, ObSysVarSchema &schema, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_sysvar_schema(T &result, ObSysVarSchema &schema, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   schema.reset();
   is_deleted = false;
 
-  schema.set_tenant_id(tenant_id);
+  
   EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, schema);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, schema_version, schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "is_deleted", is_deleted, bool);
@@ -2670,7 +2570,6 @@ int ObSchemaRetrieveUtils::fill_sysvar_schema(const uint64_t tenant_id, T &resul
 #define RETRIEVE_SCHEMA_FUNC_DEFINE(SCHEMA)     \
   template<typename T, typename S>                                       \
   int ObSchemaRetrieveUtils::retrieve_##SCHEMA##_schema( \
-      const uint64_t tenant_id, \
       T &result, \
       ObIArray<S> &schema_array)                          \
   {                                                                 \
@@ -2684,7 +2583,7 @@ int ObSchemaRetrieveUtils::fill_sysvar_schema(const uint64_t tenant_id, T &resul
       allocator.reuse();                                                \
       bool is_deleted = false;                                          \
       count++; \
-      if (OB_FAIL(fill_##SCHEMA##_schema(tenant_id, result, schema, is_deleted))) { \
+      if (OB_FAIL(fill_##SCHEMA##_schema(result, schema, is_deleted))) { \
         SHARE_SCHEMA_LOG(WARN, "fail to fill "#SCHEMA" schema ", K(ret));              \
       } else if (schema.get_##SCHEMA##_id() == prev_id) {                \
         SHARE_SCHEMA_LOG(DEBUG, "hualong debug ignore", "id", schema.get_##SCHEMA##_id(), "version", schema.get_schema_version());                     \
@@ -2718,9 +2617,7 @@ RETRIEVE_SCHEMA_FUNC_DEFINE(context);
 RETRIEVE_SCHEMA_FUNC_DEFINE(mock_fk_parent_table);
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_routine_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_routine_schema(T &result,
     ObIArray<S> &routine_infos)
 {
   int ret = common::OB_SUCCESS;
@@ -2731,7 +2628,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_schema(
     bool is_deleted = false;
     routine_info.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_routine_schema(tenant_id, result, routine_info, is_deleted))) {
+    if (OB_FAIL(fill_routine_schema(result, routine_info, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill routine info ", K(ret));
     } else if (routine_info.get_routine_id() == pre_routine_id) {
       // ignore
@@ -2750,15 +2647,13 @@ int ObSchemaRetrieveUtils::retrieve_routine_schema(
     SHARE_SCHEMA_LOG(WARN, "fail to get all routine info. iter quit. ", K(ret));
   } else {
     ret = common::OB_SUCCESS;
-    SHARE_SCHEMA_LOG(INFO, "retrieve routine infos succeed", K(tenant_id));
+    SHARE_SCHEMA_LOG(INFO, "retrieve routine infos succeed");
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_trigger_list(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_trigger_list(T &result,
     ObIArray<uint64_t> &trigger_list)
 {
   int ret = common::OB_SUCCESS;
@@ -2766,7 +2661,7 @@ int ObSchemaRetrieveUtils::retrieve_trigger_list(
   uint64_t trigger_id = common::OB_INVALID_ID;
   bool is_deleted = false;
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
-    if (OB_FAIL(fill_trigger_id(tenant_id, result, trigger_id, is_deleted))) {
+    if (OB_FAIL(fill_trigger_id(result, trigger_id, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fill trigger id failed", K(ret));
     } else if (pre_trigger_id == trigger_id) {
       // ignore
@@ -2787,9 +2682,7 @@ int ObSchemaRetrieveUtils::retrieve_trigger_list(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_routine_param_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_routine_param_schema(T &result,
     ObIArray<ObRoutineInfo> &routine_infos)
 {
   int ret = common::OB_SUCCESS;
@@ -2802,7 +2695,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_param_schema(
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     cur_param.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_routine_param_schema(tenant_id, result, cur_param, is_deleted))) {
+    if (OB_FAIL(fill_routine_param_schema(result, cur_param, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fill routine param schema failed", K(ret));
     } else if (cur_param.get_routine_id() == pre_routine_id
                && cur_param.get_sequence() == pre_sequence) {
@@ -2828,9 +2721,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_param_schema(
 RETRIEVE_SCHEMA_FUNC_DEFINE(synonym);
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_udf_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_udf_schema(T &result,
     ObIArray<S> &schema_array)
 {
     int ret = common::OB_SUCCESS;
@@ -2842,7 +2733,7 @@ int ObSchemaRetrieveUtils::retrieve_udf_schema(
       bool is_deleted = false;
       schema.reset();
       allocator.reuse();
-      if (OB_FAIL(fill_udf_schema(tenant_id, result, schema, is_deleted))) {
+      if (OB_FAIL(fill_udf_schema(result, schema, is_deleted))) {
         SHARE_SCHEMA_LOG(WARN, "fail to fill udf schema", K(ret));
       } else if (schema.get_udf_name_str() == udf_name) {
         SHARE_SCHEMA_LOG(DEBUG, "debug ignore", K(schema.get_udf_name_str()), "version", schema.get_schema_version());
@@ -2862,15 +2753,13 @@ int ObSchemaRetrieveUtils::retrieve_udf_schema(
       SHARE_SCHEMA_LOG(WARN, "fail to get all udf schema. iter quit. ", K(ret));
     } else {
       ret = common::OB_SUCCESS;
-      SHARE_SCHEMA_LOG(INFO, "retrieve udf schemas succeed", K(tenant_id));
+      SHARE_SCHEMA_LOG(INFO, "retrieve udf schemas succeed");
     }
     return ret;
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_catalog_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_catalog_priv_schema(T &result,
     ObIArray<S> &catalog_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -2882,7 +2771,7 @@ int ObSchemaRetrieveUtils::retrieve_catalog_priv_schema(
     bool is_deleted = false;
     catalog_priv.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_catalog_priv_schema(tenant_id, result, catalog_priv, is_deleted))) {
+    if (OB_FAIL(fill_catalog_priv_schema(result, catalog_priv, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "failed to fill catalog privileges", K(ret));
     } else if (catalog_priv.get_sort_key() == pre_catalog_sort_key) {
       // ignore it
@@ -2908,9 +2797,7 @@ int ObSchemaRetrieveUtils::retrieve_catalog_priv_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_db_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_db_priv_schema(T &result,
     ObIArray<S> &db_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -2922,7 +2809,7 @@ int ObSchemaRetrieveUtils::retrieve_db_priv_schema(
     bool is_deleted = false;
     db_priv.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_db_priv_schema(tenant_id, result, db_priv, is_deleted))) {
+    if (OB_FAIL(fill_db_priv_schema(result, db_priv, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "Fail to fill database privileges", K(ret));
     } else if (db_priv.get_original_key() == pre_priv) {
       // ignore it
@@ -2948,9 +2835,7 @@ int ObSchemaRetrieveUtils::retrieve_db_priv_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(T &result,
     ObIArray<S> &obj_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -2964,7 +2849,7 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(
 
   /* gather obj priv by key <obj_id, obj_type, col_id, grantor_id, grantee_id, priv_id> */
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
-    if (OB_FAIL(fill_obj_priv_schema(tenant_id, result, obj_priv, is_deleted, priv_id, option))) {
+    if (OB_FAIL(fill_obj_priv_schema(result, obj_priv, is_deleted, priv_id, option))) {
       SHARE_SCHEMA_LOG(WARN, "Fail to fill obj privileges", K(ret));
     } else if ((prev_priv.get_sort_key() == obj_priv.get_sort_key()
                && prev_priv_id == priv_id)) {
@@ -3004,9 +2889,7 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_sys_priv_schema_inner(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_sys_priv_schema_inner(T &result,
     ObIArray<S> &sys_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3022,7 +2905,7 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema_inner(
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
     sys_priv.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_sys_priv_schema(tenant_id, result, sys_priv, is_deleted, priv_id, option))) {
+    if (OB_FAIL(fill_sys_priv_schema(result, sys_priv, is_deleted, priv_id, option))) {
       SHARE_SCHEMA_LOG(WARN, "Fail to fill system privileges", K(ret));
     } else if ((sys_priv.get_key() == prekey && prev_priv_id == priv_id)) {
       // jump over same priv operation before
@@ -3082,9 +2965,7 @@ int ObSchemaRetrieveUtils::push_prev_array_if_has(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(T &result,
     ObIArray<S> &sys_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3093,7 +2974,7 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(
   S it_priv;
   ObPackedPrivArray packed_grant_privs;
 
-  if (OB_FAIL(retrieve_sys_priv_schema_inner(tenant_id, result, tmp_priv_array))) {
+  if (OB_FAIL(retrieve_sys_priv_schema_inner(result, tmp_priv_array))) {
     SHARE_SCHEMA_LOG(WARN, "retrieve_sys_priv_schema_inner failed", K(ret));
   } else {
     ARRAY_FOREACH(tmp_priv_array, i) {
@@ -3129,9 +3010,7 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_table_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_table_priv_schema(T &result,
     ObIArray<S> &table_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3143,7 +3022,7 @@ int ObSchemaRetrieveUtils::retrieve_table_priv_schema(
     table_priv.reset();
     allocator.reuse();
     bool is_deleted = false;
-    if (OB_FAIL(fill_table_priv_schema(tenant_id, result, table_priv, is_deleted))) {
+    if (OB_FAIL(fill_table_priv_schema(result, table_priv, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "Fail to fill table_priv", K(ret));
     } else if (table_priv.get_sort_key() == pre_table_sort_key) {
       // ignore it
@@ -3169,9 +3048,7 @@ int ObSchemaRetrieveUtils::retrieve_table_priv_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_routine_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_routine_priv_schema(T &result,
     ObIArray<S> &routine_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3183,7 +3060,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_priv_schema(
     routine_priv.reset();
     allocator.reuse();
     bool is_deleted = false;
-    if (OB_FAIL(fill_routine_priv_schema(tenant_id, result, routine_priv, is_deleted))) {
+    if (OB_FAIL(fill_routine_priv_schema(result, routine_priv, is_deleted))) {
       LOG_WARN("Fail to fill routine_priv", K(ret));
     } else if (routine_priv.get_sort_key() == pre_routine_sort_key) {
       // ignore it
@@ -3209,9 +3086,7 @@ int ObSchemaRetrieveUtils::retrieve_routine_priv_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_column_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_column_priv_schema(T &result,
     ObIArray<S> &column_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3222,7 +3097,7 @@ int ObSchemaRetrieveUtils::retrieve_column_priv_schema(
     column_priv.reset();
     allocator.reuse();
     bool is_deleted = false;
-    if (OB_FAIL(fill_column_priv_schema(tenant_id, result, column_priv, is_deleted))) {
+    if (OB_FAIL(fill_column_priv_schema(result, column_priv, is_deleted))) {
       LOG_WARN("Fail to fill column_priv", K(ret));
     } else if (column_priv.get_id_key() == pre_column_id_key) {
       // ignore it
@@ -3245,9 +3120,7 @@ int ObSchemaRetrieveUtils::retrieve_column_priv_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(T &result,
     ObIArray<S> &obj_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3263,14 +3136,14 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(
   //   uint64_t  u_id;
 
   //   while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-  //     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(*result, "tenant_id", t_id, uint64_t);
+  //     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(*result, "sys tenant", t_id, uint64_t);
   //     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(*result, "user_id", u_id, uint64_t);
   //     EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "user_name", user_name);
   //     LOG_WARN("ZLM retrieve result ", K(grantee_id), K(t_id), K(u_id), K(user_name));
   //   }
   // }
 
-  if (OB_FAIL(retrieve_obj_priv_schema_inner(tenant_id, result, tmp_obj_priv_array))) {
+  if (OB_FAIL(retrieve_obj_priv_schema_inner(result, tmp_obj_priv_array))) {
     SHARE_SCHEMA_LOG(WARN, "retrieve_obj_priv_schema_inner failed", K(ret));
   } else {
     ARRAY_FOREACH(tmp_obj_priv_array, i) {
@@ -3319,9 +3192,7 @@ int ObSchemaRetrieveUtils::push_prev_obj_privs_if_has(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(T &result,
     ObIArray<S> &obj_mysql_priv_array)
 {
   int ret = common::OB_SUCCESS;
@@ -3333,7 +3204,7 @@ int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(
     obj_mysql_priv.reset();
     allocator.reuse();
     bool is_deleted = false;
-    if (OB_FAIL(fill_obj_mysql_priv_schema(tenant_id, result, obj_mysql_priv, is_deleted))) {
+    if (OB_FAIL(fill_obj_mysql_priv_schema(result, obj_mysql_priv, is_deleted))) {
       LOG_WARN("Fail to fill obj_mysql_priv", K(ret));
     } else if (obj_mysql_priv.get_sort_key() == pre_obj_mysql_sort_key) {
       // ignore it
@@ -3361,17 +3232,15 @@ int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(
 //for simple schemas
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_user_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_user_schema(T &result,
     ObSimpleUserSchema &user_schema,
     bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   user_schema.reset();
   is_deleted = false;
-  user_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, user_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, user_id, user_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, user_schema, int64_t);
@@ -3386,19 +3255,17 @@ int ObSchemaRetrieveUtils::fill_user_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_trigger_id(const uint64_t tenant_id, T &result,
+int ObSchemaRetrieveUtils::fill_trigger_id(T &result,
                                            uint64_t &trigger_id, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
-  EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "trigger_id", trigger_id, tenant_id);
+  EXTRACT_INT_FIELD_MYSQL(result, "trigger_id", trigger_id, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_table_schema(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     T &result,
     ObSimpleTableSchemaV2 &table_schema,
     bool &is_deleted)
@@ -3408,15 +3275,15 @@ int ObSchemaRetrieveUtils::fill_table_schema(
   bool ignore_column_error = false;
   table_schema.reset();
   is_deleted = false;
-  table_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, table_id, table_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_id, table_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_type, table_schema, ObTableType);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, table_schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, table_schema, tenant_id);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, tablegroup_id, table_schema, tenant_id);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, data_table_id, table_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, table_schema, int64_t);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tablegroup_id, table_schema, int64_t);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, data_table_id, table_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, part_num, table_schema, int64_t);
     int64_t def_sub_part_num = 0;
     EXTRACT_INT_FIELD_MYSQL(result, "sub_part_num", def_sub_part_num, int64_t);
@@ -3483,8 +3350,8 @@ int ObSchemaRetrieveUtils::fill_table_schema(
       }
       EXTRACT_BOOL_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part, partition_option, true, ignore_column_error, false);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, auto_part_size, partition_option, int64_t, true, ignore_column_error, -1);
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID_AND_DEFAULT_VALUE(result, association_table_id,
-      table_schema, tenant_id, true, ignore_column_error, common::OB_INVALID_ID);
+      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_AND_DEFAULT_VALUE(result, association_table_id,
+      table_schema, true, ignore_column_error, common::OB_INVALID_ID);
 
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, max_dependency_version,
       table_schema, int64_t, true, ignore_column_error, common::OB_INVALID_VERSION);
@@ -3529,9 +3396,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_database_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_database_schema(T &result,
     ObSimpleDatabaseSchema &database_schema,
     bool &is_deleted)
 {
@@ -3539,30 +3404,28 @@ int ObSchemaRetrieveUtils::fill_database_schema(
   database_schema.reset();
   is_deleted = false;
 
-  database_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, database_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, database_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, database_schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, default_tablegroup_id, database_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, default_tablegroup_id, database_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, database_name, database_schema);
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_tablegroup_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_tablegroup_schema(T &result,
     ObSimpleTablegroupSchema &tablegroup_schema,
     bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   tablegroup_schema.reset();
   is_deleted = false;
-  tablegroup_schema.set_tenant_id(tenant_id);
+  
   ObString sharding_default(OB_PARTITION_SHARDING_ADAPTIVE);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, tablegroup_id, tablegroup_schema, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tablegroup_id, tablegroup_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, tablegroup_schema, int64_t);
@@ -3575,9 +3438,7 @@ int ObSchemaRetrieveUtils::fill_tablegroup_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_outline_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_outline_schema(T &result,
     ObSimpleOutlineSchema &outline_schema,
     bool &is_deleted)
 {
@@ -3586,12 +3447,12 @@ int ObSchemaRetrieveUtils::fill_outline_schema(
   outline_schema.reset();
   is_deleted = false;
 
-  outline_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, outline_id, outline_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, outline_id, outline_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, outline_schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, outline_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, outline_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, outline_schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, signature, outline_schema);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
@@ -3605,18 +3466,18 @@ int ObSchemaRetrieveUtils::fill_outline_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_routine_schema(const uint64_t tenant_id, T &result,
+int ObSchemaRetrieveUtils::fill_routine_schema(T &result,
     ObSimpleRoutineSchema &routine_schema, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   routine_schema.reset();
   is_deleted = false;
-  routine_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, routine_id, routine_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, routine_id, routine_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, routine_schema, tenant_id);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, package_id, routine_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, routine_schema, int64_t);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_id, routine_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, routine_name, routine_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, overload, routine_schema, uint64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, routine_type, routine_schema, ObRoutineType);
@@ -3629,17 +3490,17 @@ int ObSchemaRetrieveUtils::fill_routine_schema(const uint64_t tenant_id, T &resu
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_package_schema(const uint64_t tenant_id, T &result,
+int ObSchemaRetrieveUtils::fill_package_schema(T &result,
     ObSimplePackageSchema &package_schema, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   package_schema.reset();
   is_deleted = false;
-  package_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, package_id, package_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, package_id, package_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, package_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, package_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, package_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, package_name, package_schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type, package_schema, ObPackageType);
@@ -3649,17 +3510,17 @@ int ObSchemaRetrieveUtils::fill_package_schema(const uint64_t tenant_id, T &resu
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_trigger_schema(const uint64_t tenant_id, T &result,
+int ObSchemaRetrieveUtils::fill_trigger_schema(T &result,
     ObSimpleTriggerSchema &trigger_schema, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   trigger_schema.reset();
   is_deleted = false;
-  trigger_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, trigger_id, trigger_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, trigger_id, trigger_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, trigger_schema, tenant_id);
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, trigger_schema, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, trigger_schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, trigger_name, trigger_schema);
   }
@@ -3720,21 +3581,20 @@ bool ObSchemaRetrieveUtils::compare_table_id(
   if (OB_ISNULL(table_schema)) {
     SHARE_SCHEMA_LOG_RET(WARN, OB_ERR_UNEXPECTED, "table schema is NULL");
   } else {
-    //order by table id desc, used in sort function, the tenant_id is desc too
+    //order by table id desc, used in sort function, the tenant is desc too
     cmp = table_schema->get_table_id() > table_id;
   }
   return cmp;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_part_info(
-    const uint64_t tenant_id, const bool check_deleted, T &result,
+int ObSchemaRetrieveUtils::fill_part_info(const bool check_deleted, T &result,
     ObPartition &partition, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   bool is_subpart_def = false;
   bool is_subpart_template = false;
-  if (OB_FAIL(fill_base_part_info(tenant_id, check_deleted, is_subpart_def,
+  if (OB_FAIL(fill_base_part_info(check_deleted, is_subpart_def,
                                   is_subpart_template, result, partition, is_deleted))) {
     SHARE_SCHEMA_LOG(WARN, "Failed to fill base part info", K(ret));
   } else if (!is_deleted) {
@@ -3756,16 +3616,14 @@ int ObSchemaRetrieveUtils::fill_part_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_def_subpart_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::fill_def_subpart_info(const bool check_deleted,
     T &result,
     ObSubPartition &partition, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   bool is_subpart_def = true;
   bool is_subpart_template = true;
-  if (OB_FAIL(fill_base_part_info(tenant_id, check_deleted, is_subpart_def,
+  if (OB_FAIL(fill_base_part_info(check_deleted, is_subpart_def,
                                   is_subpart_template, result, partition, is_deleted))) {
     SHARE_SCHEMA_LOG(WARN, "Failed to fill base part info", K(ret));
   } else if (!is_deleted) {
@@ -3788,16 +3646,14 @@ int ObSchemaRetrieveUtils::fill_def_subpart_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_subpart_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::fill_subpart_info(const bool check_deleted,
     T &result,
     ObSubPartition &partition, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
   bool is_subpart_def = true;
   bool is_subpart_template = false;
-  if (OB_FAIL(fill_base_part_info(tenant_id, check_deleted, is_subpart_def,
+  if (OB_FAIL(fill_base_part_info(check_deleted, is_subpart_def,
                                   is_subpart_template, result, partition, is_deleted))) {
     SHARE_SCHEMA_LOG(WARN, "Failed to fill base part info", K(ret));
   }
@@ -3825,9 +3681,7 @@ int ObSchemaRetrieveUtils::fill_subpart_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_base_part_info(
-    const uint64_t tenant_id,
-    const bool check_deleted,
+int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
     const bool is_subpart_def,
     const bool is_subpart_template,
     T &result,
@@ -3837,8 +3691,8 @@ int ObSchemaRetrieveUtils::fill_base_part_info(
   int ret = common::OB_SUCCESS;
   is_deleted = false;
 
-  partition.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, table_id, partition, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, table_id, partition, int64_t);
   if (OB_FAIL(ret)) {
   } else if (!is_subpart_def && is_subpart_template) {
     ret = OB_INVALID_ARGUMENT;
@@ -3913,9 +3767,7 @@ int ObSchemaRetrieveUtils::fill_base_part_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_aux_tables(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_aux_tables(T &result,
     ObIArray<ObAuxTableMetaInfo> &aux_tables)
 {
   int ret = common::OB_SUCCESS;
@@ -3934,7 +3786,7 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(
         || AUX_LOB_PIECE == table_type
         || MATERIALIZED_VIEW_LOG == table_type) {
 
-      EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "table_id", table_id, tenant_id);
+      EXTRACT_INT_FIELD_MYSQL(result, "table_id", table_id, int64_t);
       EXTRACT_INT_FIELD_MYSQL(result, "index_type", index_type, ObIndexType);
       EXTRACT_VARCHAR_FIELD_MYSQL(result, "table_name", table_name);
       const bool is_tmp_mlog = ObSimpleTableSchemaV2::is_tmp_mlog_table(table_type, table_name);
@@ -3950,7 +3802,7 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(
   if (ret != common::OB_ITER_END) {
     SHARE_SCHEMA_LOG(WARN, "fail to get aux table. iter quit. ", K(ret));
   } else {
-    SHARE_SCHEMA_LOG(TRACE, "retrieve aux table finish", K(tenant_id), K(aux_tables));
+    SHARE_SCHEMA_LOG(TRACE, "retrieve aux table finish", K(aux_tables));
     ret = common::OB_SUCCESS;
   }
   return ret;
@@ -3986,11 +3838,9 @@ int ObSchemaRetrieveUtils::retrieve_schema_version(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_column_info(const uint64_t tenant_id,
-    T &result, uint64_t &parent_column_id, ObString &parent_column_name, bool &is_deleted)
+int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_column_info(T &result, uint64_t &parent_column_id, ObString &parent_column_name, bool &is_deleted)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   parent_column_id = OB_INVALID_ID;
   parent_column_name.reset();
   is_deleted = false;
@@ -4001,8 +3851,7 @@ int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_column_info(const uint64_t 
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(
-    const uint64_t tenant_id, T &result, ObMockFKParentTableSchema &mock_fk_parent_table)
+int ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(T &result, ObMockFKParentTableSchema &mock_fk_parent_table)
 {
   int ret = OB_SUCCESS;
   bool is_deleted = false;
@@ -4011,8 +3860,7 @@ int ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(
   ObString parent_column_name;
   mock_fk_parent_table.reset_column_array();
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
-    if (OB_FAIL(fill_mock_fk_parent_table_column_info(
-                tenant_id, result, parent_column_id, parent_column_name, is_deleted))) {
+    if (OB_FAIL(fill_mock_fk_parent_table_column_info(result, parent_column_id, parent_column_name, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill mock_fk_parent_table_column_info", K(ret));
     } else if (prev_parent_column_id == parent_column_id) {
       // skip
@@ -4034,9 +3882,7 @@ int ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(
 }
 
 template<typename TABLE_SCHEMA, typename T>
-int ObSchemaRetrieveUtils::retrieve_foreign_key_info(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_foreign_key_info(T &result,
     TABLE_SCHEMA &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -4047,7 +3893,7 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_info(
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     foreign_key_info.reset();
     allocator.reuse();
-    if (OB_FAIL(fill_foreign_key_info(tenant_id, table_schema.get_table_id(), result, foreign_key_info, is_deleted))) {
+    if (OB_FAIL(fill_foreign_key_info(table_schema.get_table_id(), result, foreign_key_info, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill foreign key info", K(ret));
     } else if (foreign_key_info.foreign_key_id_ == prev_foreign_key_id) {
       ret = common::OB_SUCCESS;
@@ -4070,9 +3916,7 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(T &result,
     ObForeignKeyInfo &foreign_key_info)
 {
   int ret = OB_SUCCESS;
@@ -4084,7 +3928,7 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(
   foreign_key_info.child_column_ids_.reset();
   foreign_key_info.parent_column_ids_.reset();
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
-    if (OB_FAIL(fill_foreign_key_column_info(tenant_id, result, child_column_id, parent_column_id, is_deleted))) {
+    if (OB_FAIL(fill_foreign_key_column_info(result, child_column_id, parent_column_id, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill foreign key info", K(ret));
     } else if (prev_child_column_id == child_column_id && prev_parent_column_id == parent_column_id) {
       // skip
@@ -4108,9 +3952,7 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_foreign_key_info(
-    const uint64_t tenant_id,
-    uint64_t table_id,
+int ObSchemaRetrieveUtils::fill_foreign_key_info(uint64_t table_id,
     T &result,
     ObForeignKeyInfo &foreign_key_info,
     bool &is_deleted)
@@ -4119,7 +3961,7 @@ int ObSchemaRetrieveUtils::fill_foreign_key_info(
   foreign_key_info.table_id_ = table_id;
   is_deleted = false;
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, foreign_key_id, foreign_key_info, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, foreign_key_id, foreign_key_info, int64_t);
   if (OB_SUCC(ret)) {
     if (is_deleted) {
       // do nothing since fk is deleted
@@ -4128,8 +3970,8 @@ int ObSchemaRetrieveUtils::fill_foreign_key_info(
       const bool default_enable_flag = true;
       const bool default_is_parent_table_mock = false;
       const ObCstFkValidateFlag default_validate_flag = CST_FK_VALIDATED;
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, child_table_id, foreign_key_info, tenant_id);
-      EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, parent_table_id, foreign_key_info, tenant_id);
+      EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, child_table_id, foreign_key_info, int64_t);
+      EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, parent_table_id, foreign_key_info, int64_t);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, update_action, foreign_key_info, ObReferenceAction);
       EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, delete_action, foreign_key_info, ObReferenceAction);
       EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, foreign_key_name, foreign_key_info);
@@ -4146,14 +3988,11 @@ int ObSchemaRetrieveUtils::fill_foreign_key_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_foreign_key_column_info(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_foreign_key_column_info(T &result,
     int64_t &child_column_id,
     int64_t &parent_column_id,
     bool &is_deleted)
 {
-  UNUSED(tenant_id);
   int ret = OB_SUCCESS;
   child_column_id = 0;
   parent_column_id = 0;
@@ -4170,9 +4009,7 @@ int ObSchemaRetrieveUtils::fill_foreign_key_column_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(T &result,
     ObArray<ObSimpleTableSchemaV2 *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
@@ -4188,7 +4025,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(
     table_schema_ptr = nullptr;
     fk_id = common::OB_INVALID_ID;
     fk_name.reset();
-    if (OB_FAIL(get_foreign_key_id_and_name(tenant_id, result, is_deleted, fk_id, fk_name, table_id))) {
+    if (OB_FAIL(get_foreign_key_id_and_name(result, is_deleted, fk_id, fk_name, table_id))) {
       SHARE_SCHEMA_LOG(WARN, "fail to get foreign key id and name", K(ret));
     } else if (fk_id == prev_foreign_key_id) {
       ret = OB_SUCCESS;
@@ -4196,9 +4033,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(
       SHARE_SCHEMA_LOG(INFO,"foreign key is deleted", K(table_id), K(fk_id));
     } else if (table_id == common::OB_INVALID_ID || OB_ISNULL(table_schema_ptr = ObSchemaRetrieveUtils::find_table_schema(table_id, table_schema_array))) {
       SHARE_SCHEMA_LOG(WARN,"fail to find table schema by table id", K(ret), K(table_id));
-    } else if (OB_FAIL(table_schema_ptr->add_simple_foreign_key_info(
-                                          table_schema_ptr->get_tenant_id(),
-                                          table_schema_ptr->get_database_id(),
+    } else if (OB_FAIL(table_schema_ptr->add_simple_foreign_key_info(table_schema_ptr->get_database_id(),
                                           table_schema_ptr->get_table_id(),
                                           fk_id, fk_name))) {
       SHARE_SCHEMA_LOG(WARN, "fail to add simple foreign key info", K(ret), K(fk_id), K(fk_name));
@@ -4208,7 +4043,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(
   if (ret != OB_ITER_END) {
     SHARE_SCHEMA_LOG(WARN, "fail to get simple foreign key info. iter quit. ", K(ret));
   } else {
-    SHARE_SCHEMA_LOG(INFO, "retrieve simple foreign key info", K(tenant_id));
+    SHARE_SCHEMA_LOG(INFO, "retrieve simple foreign key info");
     ret = OB_SUCCESS;
   }
 
@@ -4216,8 +4051,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::get_foreign_key_id_and_name(const uint64_t tenant_id,
-                                                       T &result,
+int ObSchemaRetrieveUtils::get_foreign_key_id_and_name(T &result,
                                                        bool &is_deleted,
                                                        uint64_t &fk_id,
                                                        ObString &fk_name,
@@ -4230,7 +4064,7 @@ int ObSchemaRetrieveUtils::get_foreign_key_id_and_name(const uint64_t tenant_id,
   if (OB_FAIL(ret)) {
     SHARE_SCHEMA_LOG(WARN, "fail to extract is_deleted", K(ret));
   } else {
-    EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "foreign_key_id", fk_id, tenant_id);
+    EXTRACT_INT_FIELD_MYSQL(result, "foreign_key_id", fk_id, int64_t);
     if (OB_FAIL(ret)) {
       SHARE_SCHEMA_LOG(WARN, "fail to extract foreign key id for simple foreign key info", K(ret));
     } else {
@@ -4238,7 +4072,7 @@ int ObSchemaRetrieveUtils::get_foreign_key_id_and_name(const uint64_t tenant_id,
       if (OB_FAIL(ret)) {
         SHARE_SCHEMA_LOG(WARN, "fail to extract foreign key name for simple foreign key info", K(ret));
       } else {
-        EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "child_table_id", table_id, tenant_id);
+        EXTRACT_INT_FIELD_MYSQL(result, "child_table_id", table_id, int64_t);
         if (OB_FAIL(ret)) {
           SHARE_SCHEMA_LOG(WARN, "fail to extract child table id for simple foreign key info", K(ret));
         }
@@ -4250,7 +4084,7 @@ int ObSchemaRetrieveUtils::get_foreign_key_id_and_name(const uint64_t tenant_id,
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(const uint64_t tenant_id, T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array)
+int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
   bool is_deleted = false;
@@ -4268,7 +4102,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(const uint64_t tenant
     cst_id = common::OB_INVALID_ID;
     cst_name.reset();
     cst_type = CONSTRAINT_TYPE_INVALID;
-    if (OB_FAIL(get_constraint_id_and_name(tenant_id, result, is_deleted, cst_id, cst_name, table_id, cst_type))) {
+    if (OB_FAIL(get_constraint_id_and_name(result, is_deleted, cst_id, cst_name, table_id, cst_type))) {
       SHARE_SCHEMA_LOG(WARN, "fail to get constraint id and name", K(ret));
     } else if (table_id == prev_table_id && cst_id == prev_constraint_id) {
       ret = OB_SUCCESS;
@@ -4276,12 +4110,12 @@ int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(const uint64_t tenant
       SHARE_SCHEMA_LOG(INFO,"constraint is deleted", K(table_id), K(cst_id));
     } else if (table_id == common::OB_INVALID_ID || OB_ISNULL(table_schema_ptr = ObSchemaRetrieveUtils::find_table_schema(table_id, table_schema_array))) {
       SHARE_SCHEMA_LOG(WARN,"fail to find table schema by table id", K(ret), K(table_id));
-    } else if (OB_FAIL(table_schema_ptr->add_simple_constraint_info(table_schema_ptr->get_tenant_id(),
+    } else if (OB_FAIL(table_schema_ptr->add_simple_constraint_info(
                                                                     table_schema_ptr->get_database_id(),
                                                                     table_schema_ptr->get_table_id(),
                                                                     cst_id,
                                                                     cst_name))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to add simple constraint info", K(ret), K(table_schema_ptr->get_tenant_id()),
+      SHARE_SCHEMA_LOG(WARN, "fail to add simple constraint info", K(ret),
                                                                    K(table_schema_ptr->get_database_id()),
                                                                    K(table_schema_ptr->get_table_id()),
                                                                    K(cst_id),
@@ -4293,7 +4127,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(const uint64_t tenant
   if (ret != OB_ITER_END) {
     SHARE_SCHEMA_LOG(WARN, "fail to get simple constraint info. iter quit. ", K(ret));
   } else {
-    SHARE_SCHEMA_LOG(INFO, "retrieve simple constraint info", K(tenant_id));
+    SHARE_SCHEMA_LOG(INFO, "retrieve simple constraint info");
     ret = OB_SUCCESS;
   }
 
@@ -4302,8 +4136,7 @@ int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(const uint64_t tenant
 
 
 template<typename T>
-int ObSchemaRetrieveUtils::get_constraint_id_and_name(const uint64_t tenant_id,
-                                                      T &result,
+int ObSchemaRetrieveUtils::get_constraint_id_and_name(T &result,
                                                       bool &is_deleted,
                                                       uint64_t &cst_id,
                                                       ObString &cst_name,
@@ -4315,7 +4148,7 @@ int ObSchemaRetrieveUtils::get_constraint_id_and_name(const uint64_t tenant_id,
 
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   EXTRACT_INT_FIELD_MYSQL(result, "constraint_id", cst_id, uint64_t);
-  EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(result, "table_id", table_id, tenant_id);
+  EXTRACT_INT_FIELD_MYSQL(result, "table_id", table_id, int64_t);
   if (!is_deleted) {
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "constraint_name", cst_name);
     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "constraint_type", cst_type, ObConstraintType);
@@ -4325,9 +4158,7 @@ int ObSchemaRetrieveUtils::get_constraint_id_and_name(const uint64_t tenant_id,
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_directory_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_directory_schema(T &result,
     ObIArray<S> &schema_array)
 {
   int ret = common::OB_SUCCESS;
@@ -4338,7 +4169,7 @@ int ObSchemaRetrieveUtils::retrieve_directory_schema(
     schema.reset();
     allocator.reuse();
     bool is_deleted = false;
-    if (OB_FAIL(fill_directory_schema(tenant_id, result, schema, is_deleted))) {
+    if (OB_FAIL(fill_directory_schema(result, schema, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill directory schema ", K(ret));
     } else if (schema.get_directory_id() == prev_id) {
       SHARE_SCHEMA_LOG(DEBUG, "hualong debug ignore", "id", schema.get_directory_id(), "version", schema.get_schema_version());
@@ -4356,23 +4187,21 @@ int ObSchemaRetrieveUtils::retrieve_directory_schema(
     SHARE_SCHEMA_LOG(WARN, "fail to get all directory schema. iter quit. ", K(ret));
   } else {
     ret = common::OB_SUCCESS;
-    SHARE_SCHEMA_LOG(INFO, "retrieve directory schemas succeed", K(tenant_id));
+    SHARE_SCHEMA_LOG(INFO, "retrieve directory schemas succeed");
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_directory_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_directory_schema(T &result,
     ObDirectorySchema &directory_schema,
     bool &is_deleted)
 {
   directory_schema.reset();
   is_deleted = false;
   int ret = common::OB_SUCCESS;
-  directory_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, directory_id, directory_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, directory_id, directory_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, directory_schema, int64_t);
@@ -4383,9 +4212,7 @@ int ObSchemaRetrieveUtils::fill_directory_schema(
 }
 
 template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_location_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_location_schema(T &result,
     ObIArray<S> &schema_array)
 {
   int ret = common::OB_SUCCESS;
@@ -4396,7 +4223,7 @@ int ObSchemaRetrieveUtils::retrieve_location_schema(
     schema.reset();
     allocator.reuse();
     bool is_deleted = false;
-    if (OB_FAIL(fill_location_schema(tenant_id, result, schema, is_deleted))) {
+    if (OB_FAIL(fill_location_schema(result, schema, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fail to fill location schema ", K(ret));
     } else if (schema.get_location_id() == prev_id) {
       SHARE_SCHEMA_LOG(DEBUG, "hualong debug ignore", "id", schema.get_location_id(), "version", schema.get_schema_version());
@@ -4414,23 +4241,21 @@ int ObSchemaRetrieveUtils::retrieve_location_schema(
     SHARE_SCHEMA_LOG(WARN, "fail to get all location schema. iter quit. ", K(ret));
   } else {
     ret = common::OB_SUCCESS;
-    SHARE_SCHEMA_LOG(INFO, "retrieve location schemas succeed", K(tenant_id));
+    SHARE_SCHEMA_LOG(INFO, "retrieve location schemas succeed");
   }
   return ret;
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_location_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_location_schema(T &result,
     ObLocationSchema &location_schema,
     bool &is_deleted)
 {
   location_schema.reset();
   is_deleted = false;
   int ret = common::OB_SUCCESS;
-  location_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, location_id, location_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, location_id, location_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, location_schema, int64_t);
@@ -4443,17 +4268,15 @@ int ObSchemaRetrieveUtils::fill_location_schema(
 
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_context_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_context_schema(T &result,
     ObContextSchema &context_schema,
     bool &is_deleted)
 {
   context_schema.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  context_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, context_id, context_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, context_id, context_schema, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, context_schema, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
@@ -4468,18 +4291,16 @@ int ObSchemaRetrieveUtils::fill_context_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_schema(T &result,
     ObSimpleMockFKParentTableSchema &mock_fk_parent_table_schema,
     bool &is_deleted)
 {
   mock_fk_parent_table_schema.reset();
   is_deleted  = false;
   int ret = common::OB_SUCCESS;
-  mock_fk_parent_table_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, database_id, mock_fk_parent_table_schema, tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, mock_fk_parent_table_id, mock_fk_parent_table_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, database_id, mock_fk_parent_table_schema, int64_t);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, mock_fk_parent_table_id, mock_fk_parent_table_schema, int64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, mock_fk_parent_table_schema, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
@@ -4511,16 +4332,14 @@ int ObSchemaRetrieveUtils::fill_sys_table_lob_tid(ObTableSchema &table)
 RETRIEVE_SCHEMA_FUNC_DEFINE(catalog);
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_catalog_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_catalog_schema(T &result,
     ObCatalogSchema &catalog_schema,
     bool &is_deleted)
 {
   catalog_schema.reset();
   is_deleted = false;
   int ret = common::OB_SUCCESS;
-  catalog_schema.set_tenant_id(tenant_id);
+  
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, catalog_id, catalog_schema, uint64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
@@ -4533,9 +4352,7 @@ int ObSchemaRetrieveUtils::fill_catalog_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::retrieve_object_list(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::retrieve_object_list(T &result,
     ObIArray<uint64_t> &object_list)
 {
   int ret = common::OB_SUCCESS;
@@ -4543,7 +4360,7 @@ int ObSchemaRetrieveUtils::retrieve_object_list(
   uint64_t object_id = common::OB_INVALID_ID;
   bool is_deleted = false;
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
-    if (OB_FAIL(fill_object_id(tenant_id, result, object_id, is_deleted))) {
+    if (OB_FAIL(fill_object_id(result, object_id, is_deleted))) {
       SHARE_SCHEMA_LOG(WARN, "fill object id failed", K(ret));
     } else if (pre_object_id == object_id) {
       // ignore
@@ -4566,9 +4383,7 @@ int ObSchemaRetrieveUtils::retrieve_object_list(
 RETRIEVE_SCHEMA_FUNC_DEFINE(ccl_rule);
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_ccl_rule_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_ccl_rule_schema(T &result,
     ObSimpleCCLRuleSchema &simple_ccl_rule_schema,
     bool &is_deleted)
 {
@@ -4576,8 +4391,8 @@ int ObSchemaRetrieveUtils::fill_ccl_rule_schema(
   simple_ccl_rule_schema.reset();
   is_deleted = false;
 
-  simple_ccl_rule_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, ccl_rule_id, simple_ccl_rule_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, ccl_rule_id, simple_ccl_rule_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, simple_ccl_rule_schema, int64_t);
@@ -4590,9 +4405,7 @@ int ObSchemaRetrieveUtils::fill_ccl_rule_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_ccl_rule_schema(
-    const uint64_t tenant_id,
-    T &result,
+int ObSchemaRetrieveUtils::fill_ccl_rule_schema(T &result,
     ObCCLRuleSchema &ccl_rule_schema,
     bool &is_deleted)
 {
@@ -4600,8 +4413,8 @@ int ObSchemaRetrieveUtils::fill_ccl_rule_schema(
   ccl_rule_schema.reset();
   is_deleted = false;
 
-  ccl_rule_schema.set_tenant_id(tenant_id);
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, ccl_rule_id, ccl_rule_schema, tenant_id);
+  
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, ccl_rule_id, ccl_rule_schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, ccl_rule_schema, int64_t);
@@ -4621,7 +4434,7 @@ int ObSchemaRetrieveUtils::fill_ccl_rule_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_object_id(const uint64_t tenant_id, T &result,
+int ObSchemaRetrieveUtils::fill_object_id(T &result,
                                           uint64_t &object_id, bool &is_deleted)
 {
   int ret = common::OB_SUCCESS;
@@ -4664,8 +4477,7 @@ int ObSchemaRetrieveUtils::retrieve_table_latest_schema_versions(
 
 RETRIEVE_SCHEMA_FUNC_DEFINE(ai_model);
 template<typename T>
-int ObSchemaRetrieveUtils::fill_ai_model_schema(const uint64_t tenant_id,
-                                                T &result,
+int ObSchemaRetrieveUtils::fill_ai_model_schema(T &result,
                                                 ObAiModelSchema &schema,
                                                 bool &is_deleted)
 {
@@ -4673,10 +4485,10 @@ int ObSchemaRetrieveUtils::fill_ai_model_schema(const uint64_t tenant_id,
 
   schema.reset();
 
-  schema.set_tenant_id(tenant_id);
+  
   int64_t type = 0;
 
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, model_id, schema, tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, model_id, schema, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
 
   if (OB_SUCC(ret) && !is_deleted) {

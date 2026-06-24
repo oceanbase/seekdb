@@ -369,7 +369,7 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
       } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(ctx.exec_ctx_.get_my_session(),
                                                              enable_decimalint))) {
         LOG_WARN("fail to check_enable_decimalint_type",
-            K(ret), K(ctx.exec_ctx_.get_my_session()->get_effective_tenant_id()));
+            K(ret));
       } else if (enable_decimalint) {
         dest_type = ObDecimalIntType;
       }

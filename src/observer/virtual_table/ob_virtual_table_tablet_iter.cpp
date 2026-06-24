@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "observer/virtual_table/ob_virtual_table_tablet_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase;
@@ -99,10 +100,10 @@ void ObVirtualTableTabletIter::release_last_tenant()
   tablet_allocator_.reset();
 }
 
-bool ObVirtualTableTabletIter::is_need_process(uint64_t tenant_id)
+bool ObVirtualTableTabletIter::is_need_process()
 {
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)){
+  if (!false &&
+      (true || true)){
     return true;
   }
   return false;
@@ -115,8 +116,8 @@ int ObVirtualTableTabletIter::get_next_tablet()
   tablet_handle_.reset();
   tablet_allocator_.reuse();
   if (nullptr == tablet_iter_) {
-    tablet_allocator_.set_tenant_id(MTL_ID());
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+    
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     if (OB_ISNULL(tablet_iter_ = new (iter_buf_) ObTenantTabletIterator(*t3m, tablet_allocator_, nullptr/*no op*/))) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));

@@ -127,7 +127,7 @@ public:
 public:
   ObSharedNothingTmpFile();
   virtual ~ObSharedNothingTmpFile();
-  int init(const uint64_t tenant_id, const int64_t fd, const int64_t dir_id,
+  int init(const int64_t fd, const int64_t dir_id,
            ObTmpFileBlockManager *block_manager,
            ObIAllocator *callback_allocator,
            ObIAllocator *wbp_index_cache_allocator,

@@ -24,9 +24,8 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask (const uint64_t tenant_id)
-  : tenant_id_(tenant_id),
-    gctx_(GCTX),
+ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask ()
+  : gctx_(GCTX),
     view_schema_(&alloc_),
     reset_view_column_infos_(false)
 {
@@ -47,7 +46,6 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
   case share::schema::ObObjectType::VIEW: {
     const share::schema::ObSimpleTableSchemaV2 *table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_simple_table_schema(
-                tenant_id_,
                 dep_obj_key.dep_obj_id_, table_schema))) {
       LOG_WARN("failed to get table schema", K(ret), K(dep_obj_key));
     } else if (OB_ISNULL(table_schema)) {
@@ -122,7 +120,7 @@ share::ObAsyncTask *ObMaintainObjDepInfoTask::deep_copy(char *buf, const int64_t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("buffer size is not enough", K(ret), K(buf_size), K(need_size));
   } else {
-    task = new (buf) ObMaintainObjDepInfoTask(tenant_id_);
+    task = new (buf) ObMaintainObjDepInfoTask{};
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_insert_dep_objs().assign(insert_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_update_dep_objs().assign(update_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_delete_dep_objs().assign(delete_dep_objs_));
@@ -138,11 +136,11 @@ int ObMaintainObjDepInfoTask::process()
   int64_t last_version = 0;
   share::schema::ObSchemaGetterGuard schema_guard;
   SMART_VAR(obcall::ObDependencyObjDDLArg, dep_obj_info_arg) {
-    dep_obj_info_arg.tenant_id_ = tenant_id_;
-    dep_obj_info_arg.exec_tenant_id_ = tenant_id_;
+    
+    
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
-    OZ (gctx_.schema_service_->async_refresh_schema(tenant_id_, last_version));
-    OZ (gctx_.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard));
+    OZ (gctx_.schema_service_->async_refresh_schema(last_version));
+    OZ (gctx_.schema_service_->get_tenant_schema_guard(schema_guard));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
     insert_dep_objs_, share::schema::ObReferenceObjTable::INSERT_OP));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,

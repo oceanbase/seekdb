@@ -28,7 +28,7 @@ namespace share
 ObTenantErrsimEventMgr::ObTenantErrsimEventMgr()
     : is_inited_(false),
       lock_(),
-      event_array_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("TErrsimEvent", MTL_ID()))
+      event_array_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("TErrsimEvent"))
 {
 }
 

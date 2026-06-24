@@ -41,7 +41,7 @@ public:
   {
   }
   virtual ~ObDagInfoIterator() { reset(); }
-  int open(const int64_t tenant_id);
+  int open();
   int get_next_info(T &info);
   void reset();
 

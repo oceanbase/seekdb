@@ -57,7 +57,6 @@ class ObMonitorNode
   typedef common::ObCurTraceId::TraceId TraceId;
 public:
   ObMonitorNode() :
-      tenant_id_(0),
       op_id_(0),
       plan_depth_(0),
       output_batches_(0),
@@ -118,13 +117,13 @@ public:
   void set_op(ObOperator *op) { op_ = op; }
   void set_operator_type(ObPhyOperatorType type) { op_type_ = type; }
   void set_operator_id(int64_t op_id) { op_id_ = op_id; }
-  void set_tenant_id(int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   void set_plan_depth(int64_t plan_depth) { plan_depth_ = plan_depth; }
   void set_rt_node_id(int64_t id) { rt_node_id_ = id; }
   const char *get_operator_name() const { return get_phy_op_name(op_type_, enable_rich_format_); }
   ObPhyOperatorType get_operator_type() const { return op_type_; }
   int64_t get_op_id() const { return op_id_; }
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   const TraceId& get_trace_id() const { return trace_id_; }
   int64_t get_thread_id() { return thread_id_; }
   int64_t get_rt_node_id() { return rt_node_id_;}
@@ -135,9 +134,9 @@ public:
   void covert_to_static_node();
   int set_sql_id(const ObString &sql_id);
   void set_plan_hash_value(uint64_t plan_hash_value) { plan_hash_value_ = plan_hash_value; }
-  TO_STRING_KV(K_(tenant_id), K_(op_id), "op_name", get_operator_name(), K_(thread_id));
+  TO_STRING_KV(K_(op_id), "op_name", get_operator_name(), K_(thread_id));
 public:
-  int64_t tenant_id_;
+  
   int64_t op_id_;
   int64_t plan_depth_;
   int64_t output_batches_; // for batch
@@ -299,7 +298,7 @@ public:
   int revert_monitor_node(ObMonitorNode &node);
   int convert_node_map_2_array(common::ObIArray<ObMonitorNode> &array);
 private:
-  int init(uint64_t tenant_id);
+  int init();
   void destroy();
   int release_record(int64_t release_cnt, bool is_destroyed = false);
 private:
@@ -312,7 +311,7 @@ private:
   uint64_t request_id_;
   int64_t recycle_threshold_; // begin to recycle node when reach threshold
   int64_t batch_release_; // release node in batch
-  uint64_t tenant_id_;
+  
   int tg_id_;
   int64_t rt_node_id_;
 private:

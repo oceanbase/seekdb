@@ -36,11 +36,10 @@ public:
   ObVectorIndexHistoryTask()
   : sql_proxy_(nullptr),
     is_inited_(false),
-    tenant_id_(OB_INVALID_TENANT_ID),
     is_paused_(false)
   {}
   ~ObVectorIndexHistoryTask() {}
-  int init(const uint64_t tenant_id, common::ObMySQLProxy &sql_proxy);
+  int init(common::ObMySQLProxy &sql_proxy);
   virtual void runTimerTask() override;
   void destroy() {}
   void pause();
@@ -58,7 +57,6 @@ private:
 private:
   common::ObMySQLProxy *sql_proxy_;
   bool is_inited_;
-  uint64_t tenant_id_;
   bool is_paused_;
 };
 
@@ -69,13 +67,12 @@ public:
   static const int64_t VEC_INDEX_CLEAR_TASK_PERIOD = 10 * 1000L * 1000L; // 60s
   explicit ObTenantVecAsyncTaskScheduler() 
     : is_inited_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
       tg_id_(-1),
       vec_history_task_()
   {}
 
   virtual ~ObTenantVecAsyncTaskScheduler() {}
-  int init(const uint64_t tenant_id, ObMySQLProxy &sql_proxy);
+  int init(ObMySQLProxy &sql_proxy);
   int start();
   void wait();
   void stop();
@@ -84,7 +81,7 @@ public:
   void pause();
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
+  
   int tg_id_;
   ObVectorIndexHistoryTask vec_history_task_;
 };

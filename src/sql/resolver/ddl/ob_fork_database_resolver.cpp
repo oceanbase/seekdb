@@ -58,7 +58,8 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
   } else {
     stmt_ = fork_database_stmt;
     obcall::ObForkDatabaseArg &fork_database_arg = fork_database_stmt->get_fork_database_arg();
-    fork_database_arg.tenant_id_ = session_info_->get_effective_tenant_id();
+    
+    
     fork_database_arg.if_not_exist_ = false;
   }
 

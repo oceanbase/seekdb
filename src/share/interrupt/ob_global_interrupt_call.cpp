@@ -249,7 +249,7 @@ int ObGlobalInterruptManager::create_checker_node(ObInterruptChecker *checker,
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
-  ObMemAttr attr(GET_TENANT_ID(), ObModIds::OB_INTERRUPT_CHECKER_NODE, common::ObCtxIds::DEFAULT_CTX_ID);
+  ObMemAttr attr(ObModIds::OB_INTERRUPT_CHECKER_NODE, common::ObCtxIds::DEFAULT_CTX_ID);
   if (OB_ISNULL(checker)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(ERROR, "invaild checker pointer", K(ret));

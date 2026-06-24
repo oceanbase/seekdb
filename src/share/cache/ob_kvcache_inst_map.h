@@ -42,13 +42,12 @@ struct ObTenantMBList
   ObTenantMBList() { reset(); }
   ~ObTenantMBList() { reset(); }
 
-  int init(const uint64_t tenant_id);
+  int init();
   void reset() {
     head_.reset();
     head_.prev_ = &head_;
     head_.next_ = &head_;
     resource_mgr_.reset();
-    tenant_id_ = common::OB_INVALID_ID;
     ref_cnt_ = 0;
     inited_ = false;
   }
@@ -59,7 +58,6 @@ struct ObTenantMBList
 
   ObKVMemBlockHandle head_;
   lib::ObTenantResourceMgrHandle resource_mgr_;
-  uint64_t tenant_id_;
   int64_t ref_cnt_;
   bool inited_;
 };
@@ -124,8 +122,8 @@ public:
   int get_cache_inst(
       const ObKVCacheInstKey &inst_key,
       ObKVCacheInstHandle &inst_handle);
-  int mark_tenant_delete(const uint64_t tenant_id);
-  int erase_tenant(const uint64_t tenant_id);
+  int mark_tenant_delete();
+  int erase_tenant();
   int refresh_score();
   int get_cache_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
   void print_all_cache_info();

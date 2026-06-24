@@ -48,11 +48,10 @@ ObBaseLogWriter::~ObBaseLogWriter()
 
 int ObBaseLogWriter::init(
     const ObBaseLogWriterCfg &log_cfg,
-    const char *thread_name,
-    const uint64_t tenant_id)
+    const char *thread_name)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id, "BaseLogWriter");
+  ObMemAttr attr("BaseLogWriter");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_STDERR("The ObBaseLogWriter has been inited.\n");

@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SHARE
 #include "share/storage/ob_i_pre_warmer.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
 #include "src/observer/omt/ob_tenant_config_mgr.h"
 namespace oceanbase
@@ -29,7 +30,7 @@ int ObPreWarmerParam::init(const share::ObLSID &ls_id, const common::ObTabletID 
   ObPreWarmerType tmp_type = PRE_WARM_TYPE_NONE;
   if (tablet_id.is_user_tablet()) {
     if (use_fixed_percentage) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         fixed_percentage_ = tenant_config->_compaction_prewarm_percentage;
       }
@@ -40,7 +41,7 @@ int ObPreWarmerParam::init(const share::ObLSID &ls_id, const common::ObTabletID 
     }
     if (PRE_WARM_TYPE_NONE == tmp_type) {
       storage::ObTabletStatAnalyzer tablet_analyzer;
-      if (OB_TMP_FAIL(MTL(storage::ObTenantTabletStatMgr *)
+      if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()
                   ->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
         if (OB_HASH_NOT_EXIST != tmp_ret) {
           LOG_WARN_RET(tmp_ret, "Failed to get tablet stat analyzer", K(ls_id), K(tablet_id));

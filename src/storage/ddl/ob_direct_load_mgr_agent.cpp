@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_direct_load_mgr_agent.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/direct_load/ob_direct_load_insert_table_row_iterator.h"
@@ -83,7 +84,7 @@ int ObDirectLoadMgrAgent::init(
     const ObDirectLoadType &type)
 {
   int ret = OB_SUCCESS;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
@@ -120,11 +121,11 @@ int ObDirectLoadMgrAgent::init_for_sn(
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   ObStorageSchema *storage_schema = nullptr;
-  ObArenaAllocator tmp_arena("ddl_load_schema", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_arena("ddl_load_schema", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ls_id), K(tablet_id));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle,
       tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
@@ -165,7 +166,7 @@ int ObDirectLoadMgrAgent::open_sstable_slice(
     ObDirectLoadSliceInfo &slice_info)
 {
   int ret = OB_SUCCESS;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -615,7 +616,7 @@ int ObDirectLoadMgrAgent::close(const int64_t context_id, const bool need_commit
   } else if (!mgr_handle_.is_valid()) {
     LOG_WARN("mgr handle is invalid", K(ret));
   } else if (!is_idem_type(direct_load_type_)) {
-    ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+    ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
     if (OB_FAIL(tenant_direct_load_mgr->close_tablet_direct_load(context_id, direct_load_type_, mgr_handle_.get_base_obj()->get_ls_id(), mgr_handle_.get_base_obj()->get_tablet_id(), need_commit, true/*emergent_finish*/,
     mgr_handle_.get_base_obj()->get_ddl_task_id(), mgr_handle_.get_base_obj()->get_build_param().runtime_only_param_.table_id_, execution_id))) {
         LOG_WARN("close tablet direct load failed", K(ret), KPC(mgr_handle_.get_base_obj()));
@@ -748,7 +749,7 @@ int ObDirectLoadMgrAgent::get_tablet_cache_interval(const int64_t context_id,
       LOG_WARN("failed to get tablet cache interval", K(ret));
     }
   } else {
-    ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+    ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
     if (OB_ISNULL(tenant_direct_load_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant direct load mgr should not be null", K(ret));
@@ -779,8 +780,7 @@ int ObDirectLoadMgrAgent::get_lob_mgr_handle(ObTabletDirectLoadMgrHandle &lob_mg
   return ret;
 }
 
-int ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(int64_t tenant_id,
-                                                        const int64_t execution_id,
+int ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(const int64_t execution_id,
                                                         const int64_t context_id,
                                                         const ObTabletDirectLoadInsertParam &build_param,
                                                         ObIAllocator &allocator,
@@ -788,7 +788,7 @@ int ObDirectLoadMgrAgent::create_tablet_direct_load_mgr(int64_t tenant_id,
                                                         ObTabletDirectLoadMgrHandle &data_mgr_handle,
                                                         ObTabletDirectLoadMgrHandle &lob_mgr_handle)
 {
-  return ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(tenant_id, execution_id, context_id, build_param, allocator, is_major_exist, data_mgr_handle, lob_mgr_handle);
+  return ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(execution_id, context_id, build_param, allocator, is_major_exist, data_mgr_handle, lob_mgr_handle);
 }
 
 ObDirectLoadType ObDirectLoadMgrAgent::load_data_get_direct_load_type(const bool is_incremental,

@@ -34,11 +34,11 @@ int ObHTableDDLHandler::gen_task_id_and_schema_versions_(const uint64_t schema_v
                                                          int64_t &task_id)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
   ObDDLTransController &controller = schema_service_.get_ddl_trans_controller();
-  if (OB_FAIL(ObDDLHelperUtils::gen_task_id_and_schema_versions(&controller, tenant_id, 
+  if (OB_FAIL(ObDDLHelperUtils::gen_task_id_and_schema_versions(&controller, 
         schema_version_cnt, task_id))) {
-    LOG_WARN("fail to gen task_id and schema_version", KR(ret), K(tenant_id));
+    LOG_WARN("fail to gen task_id and schema_version", KR(ret));
   }
   return ret;
 }
@@ -48,9 +48,9 @@ int ObHTableDDLHandler::wait_and_end_ddl_trans_(const int return_ret,
                                                 bool &need_clean_failed)
 {
   int ret = return_ret;
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
   ObDDLTransController &controller = schema_service_.get_ddl_trans_controller();
-  if (OB_FAIL(ObDDLHelperUtils::wait_and_end_ddl_trans(ret, &schema_service_, &controller, tenant_id, 
+  if (OB_FAIL(ObDDLHelperUtils::wait_and_end_ddl_trans(ret, &schema_service_, &controller, 
         task_id, trans, need_clean_failed))) {
     LOG_WARN("fail to wait and end ddl trans", KR(ret));
   }
@@ -115,7 +115,7 @@ int ObCreateHTableHandler::gen_create_helpers_(ObCreateTablegroupHelper *&create
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   int64_t count = 0;
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
 
   if (OB_ISNULL(param_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -133,7 +133,7 @@ int ObCreateHTableHandler::gen_create_helpers_(ObCreateTablegroupHelper *&create
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObCreateTableGroupRes", KR(ret), K(sizeof(ObCreateTableGroupRes)));
   } else if (OB_ISNULL(create_tablegroup_helper = OB_NEWx(ObCreateTablegroupHelper, &allocator_,
-      &schema_service_, tenant_id, param_->table_group_arg_, *create_tablegroup_result, &trans))) {
+      &schema_service_, param_->table_group_arg_, *create_tablegroup_result, &trans))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObCreateTableGroupRes", KR(ret), K(sizeof(ObCreateTableGroupRes)));
   } else if (OB_FAIL(create_tablegroup_helper->init(ddl_service_))) {
@@ -148,7 +148,7 @@ int ObCreateHTableHandler::gen_create_helpers_(ObCreateTablegroupHelper *&create
       ObCreateTableArg &create_table_arg = param_->cf_arg_list_.at(i);
       ObCreateTableRes &create_table_res = *create_table_results.at(i);
       create_table_helpers.at(i) = new (buf + sizeof(ObCreateTableHelper) * i)
-          ObCreateTableHelper(&schema_service_, tenant_id, create_table_arg, create_table_res, &trans, true /*enable_ddl_parallel*/);
+          ObCreateTableHelper(&schema_service_, create_table_arg, create_table_res, &trans, true /*enable_ddl_parallel*/);
       if (OB_FAIL(create_table_helpers.at(i)->init(ddl_service_))) {
         LOG_WARN("fail to init create table helper", KR(ret));
       }
@@ -189,26 +189,26 @@ int ObCreateHTableHandler::handle()
   int ret = OB_SUCCESS;
   ObDDLSQLTransaction trans(&schema_service_, false/*need_end_signal*/, false/*enable_query_stash*/, true/*enable_ddl_parallel*/);
   ObMySQLProxy *sql_proxy = &(ddl_service_.get_sql_proxy());
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
   bool with_snapshot = false;
   int64_t fake_schema_version = 1000;
   ObCreateTablegroupHelper *create_tablegroup_helper = nullptr;
   ObCreateTableGroupRes *create_tablegroup_result = nullptr;
   ObSEArray<ObCreateTableHelper*, 4> create_table_helpers;
   ObSEArray<ObCreateTableRes*, 4> create_table_results;
-  create_table_helpers.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "TmpTbHelps"));
-  create_table_results.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "TmpTbRes"));
-  ObHTableLockHelper lock_helper(&schema_service_, tenant_id, &trans);
+  create_table_helpers.set_attr(ObMemAttr("TmpTbHelps"));
+  create_table_results.set_attr(ObMemAttr("TmpTbRes"));
+  ObHTableLockHelper lock_helper(&schema_service_, &trans);
 
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
-  } else if (OB_FAIL(trans.start(sql_proxy, tenant_id, fake_schema_version, with_snapshot))) {
-    LOG_WARN("fail to start trans", KR(ret), K(tenant_id), K(fake_schema_version), K(with_snapshot));
+  } else if (OB_FAIL(trans.start(sql_proxy, fake_schema_version, with_snapshot))) {
+    LOG_WARN("fail to start trans", KR(ret), K(fake_schema_version), K(with_snapshot));
   } else if (OB_FAIL(lock_helper.init(ddl_service_))) { // lock tablegroup and tables in advance
-    LOG_WARN("fail to init lock helper", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init lock helper", KR(ret));
   } else if (OB_FAIL(lock_helper.lock_objects(tablegroup_name_, database_name_, table_names_, false /* need_lock_id*/))) {
-    LOG_WARN("fail to lock objects", KR(ret), K(tenant_id), K_(tablegroup_name), K_(database_name), K_(table_names));
+    LOG_WARN("fail to lock objects", KR(ret), K_(tablegroup_name), K_(database_name), K_(table_names));
   } else if (OB_FAIL(gen_task_id_and_schema_versions_(schema_version_cnt_, task_id_))) {
     LOG_WARN("fail to gen task id and schema versions", KR(ret), K_(schema_version_cnt));
   } else if (OB_FAIL(gen_create_helpers_(create_tablegroup_helper, create_tablegroup_result,
@@ -223,7 +223,7 @@ int ObCreateHTableHandler::handle()
   } else {
     // create tablegroup
     if (OB_FAIL(create_tablegroup_helper->execute())) {
-      LOG_WARN("fail to execute create tablegroup", KR(ret), K(tenant_id));
+      LOG_WARN("fail to execute create tablegroup", KR(ret));
     }
     #ifdef ERRSIM
     if (OB_SUCC(ret)) {
@@ -276,7 +276,7 @@ int ObCreateHTableHandler::handle()
 int ObDropHTableHandler::init_drop_table_args_(ObIArray<ObDropTableArg*> &drop_table_args)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
 
   if (table_names_.empty() || table_ids_.empty() || drop_table_args.empty()) {
     ret = OB_ERR_UNEXPECTED;
@@ -290,7 +290,7 @@ int ObDropHTableHandler::init_drop_table_args_(ObIArray<ObDropTableArg*> &drop_t
     LOG_WARN("table_ids not equal to drop_table_args count", KR(ret), K(table_ids_.count()),
         K(drop_table_args.count()));
   } else {
-    ObLatestSchemaGuard latest_schema_guard(&schema_service_, arg_.exec_tenant_id_);
+    ObLatestSchemaGuard latest_schema_guard(&schema_service_);
     for (int i = 0; i < drop_table_args.count() && OB_SUCC(ret); i++) {
       ObDropTableArg *arg = drop_table_args.at(i);
       const ObTableSchema *schema = nullptr;
@@ -303,8 +303,9 @@ int ObDropHTableHandler::init_drop_table_args_(ObIArray<ObDropTableArg*> &drop_t
         arg->if_exist_ = true;
         arg->to_recyclebin_ = false;
         arg->table_type_ = ObTableType::USER_TABLE;
-        arg->tenant_id_ = tenant_id;
-        arg->exec_tenant_id_ = tenant_id;
+        
+        
+        
         arg->task_id_ = task_id_;
         ObTableItem item;
         item.table_id_ = schema->get_table_id();
@@ -332,7 +333,7 @@ int ObDropHTableHandler::gen_drop_helpers_(ObDropTablegroupHelper *&drop_tablegr
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   int64_t count = table_names_.count();
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
 
   if (OB_ISNULL(param_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -357,7 +358,7 @@ int ObDropHTableHandler::gen_drop_helpers_(ObDropTablegroupHelper *&drop_tablegr
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObParallelDDLRes", KR(ret), K(sizeof(ObParallelDDLRes)));
   } else if (OB_ISNULL(drop_tablegroup_helper = OB_NEWx(ObDropTablegroupHelper, &allocator_,
-      &schema_service_, tenant_id, param_->table_group_arg_, *drop_tablegroup_result, &trans))) {
+      &schema_service_, param_->table_group_arg_, *drop_tablegroup_result, &trans))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObParallelDDLRes", KR(ret), K(sizeof(ObParallelDDLRes)));
   } else if (OB_FAIL(drop_tablegroup_helper->init(ddl_service_))) {
@@ -374,7 +375,7 @@ int ObDropHTableHandler::gen_drop_helpers_(ObDropTablegroupHelper *&drop_tablegr
       ObDropTableArg &drop_table_arg = *drop_table_args.at(i);
       ObDropTableRes &drop_table_res = *drop_table_results.at(i);
       drop_table_helpers.at(i) = new (buf + sizeof(ObDropTableHelper) * i)
-          ObDropTableHelper(&schema_service_, tenant_id, drop_table_arg, drop_table_res, &trans);
+          ObDropTableHelper(&schema_service_, drop_table_arg, drop_table_res, &trans);
       if (OB_FAIL(drop_table_helpers.at(i)->init(ddl_service_))) {
         LOG_WARN("fail to init create table helper", KR(ret));
       }
@@ -419,26 +420,26 @@ int ObDropHTableHandler::init()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("param_ is null", KR(ret));
     } else {
-      ObLatestSchemaGuard latest_schema_guard(&schema_service_, arg_.exec_tenant_id_);      
-      const uint64_t tenant_id = arg_.exec_tenant_id_;
+      ObLatestSchemaGuard latest_schema_guard(&schema_service_);      
+      
       const ObString tablegroup_name = param_->table_group_arg_.tablegroup_name_;
       uint64_t tablegroup_id = OB_INVALID_ID;
       const ObDatabaseSchema *database_schema = nullptr;
       ObSEArray<const ObTableSchema*, 4> drop_schemas;
       if (OB_FAIL(latest_schema_guard.get_tablegroup_id(tablegroup_name, tablegroup_id))) {
-        LOG_WARN("failed to get table group id", KR(ret), K(tenant_id), K(tablegroup_name));
+        LOG_WARN("failed to get table group id", KR(ret), K(tablegroup_name));
       } else if (tablegroup_id == OB_INVALID_ID) {
         ret = OB_KV_HBASE_TABLE_NOT_FOUND;
         LOG_WARN("the table group for hbase table not found", KR(ret), K(tablegroup_name));
         LOG_USER_ERROR(OB_KV_HBASE_TABLE_NOT_FOUND, tablegroup_name.length(), tablegroup_name.ptr());
       } else if (OB_FAIL(latest_schema_guard.get_table_schemas_in_tablegroup(tablegroup_id, drop_schemas))) {
-        LOG_WARN("failed to get table schemas in tablegroup", KR(ret), K(tenant_id), K(tablegroup_id));
+        LOG_WARN("failed to get table schemas in tablegroup", KR(ret), K(tablegroup_id));
       } else if (drop_schemas.empty() || OB_ISNULL(drop_schemas.at(0))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("empty schema or null schema", KR(ret), K(drop_schemas.empty()));
       } else if (OB_FAIL(latest_schema_guard.get_database_schema(drop_schemas.at(0)->get_database_id(),
           database_schema))) {
-        LOG_WARN("failed to get database schema", KR(ret), K(tenant_id), KPC_(param));
+        LOG_WARN("failed to get database schema", KR(ret), KPC_(param));
       } else if (OB_FAIL(ob_write_string(allocator_, database_schema->get_database_name(), database_name_))) {
         LOG_WARN("failed to copy database name", KR(ret), K(database_schema->get_database_name()));
       } else if (OB_FAIL(ob_write_string(allocator_, tablegroup_name, tablegroup_name_))) {
@@ -485,7 +486,7 @@ int ObDropHTableHandler::handle()
   int ret = OB_SUCCESS;
   ObDDLSQLTransaction trans(&schema_service_, false/*need_end_signal*/, false/*enable_query_stash*/, true/*enable_ddl_parallel*/);
   ObMySQLProxy *sql_proxy = &(ddl_service_.get_sql_proxy());
-  const uint64_t tenant_id = arg_.exec_tenant_id_;
+  
   bool with_snapshot = false;
   int64_t fake_schema_version = 1000;
   ObDropTablegroupHelper *drop_tablegroup_helper = nullptr;
@@ -493,20 +494,20 @@ int ObDropHTableHandler::handle()
   ObSEArray<ObDropTableHelper*, 4> drop_table_helpers;
   ObSEArray<ObDropTableArg*, 4> drop_table_args;
   ObSEArray<ObDropTableRes*, 4> drop_table_results;
-  drop_table_helpers.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "DrpTmpTbHelps"));
-  drop_table_args.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "DrpTmpTbArg"));
-  drop_table_results.set_attr(ObMemAttr(OB_SERVER_TENANT_ID, "DrpTmpTbRes"));
-  ObHTableLockHelper lock_helper(&schema_service_, tenant_id, &trans);
+  drop_table_helpers.set_attr(ObMemAttr("DrpTmpTbHelps"));
+  drop_table_args.set_attr(ObMemAttr("DrpTmpTbArg"));
+  drop_table_results.set_attr(ObMemAttr("DrpTmpTbRes"));
+  ObHTableLockHelper lock_helper(&schema_service_, &trans);
 
   if (OB_ISNULL(sql_proxy) || OB_ISNULL(param_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy or param_ is null", KR(ret), KP_(param), KP(sql_proxy));
-  } else if (OB_FAIL(trans.start(sql_proxy, tenant_id, fake_schema_version, with_snapshot))) {
-    LOG_WARN("fail to start trans", KR(ret), K(tenant_id), K(fake_schema_version), K(with_snapshot));
+  } else if (OB_FAIL(trans.start(sql_proxy, fake_schema_version, with_snapshot))) {
+    LOG_WARN("fail to start trans", KR(ret), K(fake_schema_version), K(with_snapshot));
   } else if (OB_FAIL(lock_helper.init(ddl_service_))) { // lock tablegroup and tables in advance
-    LOG_WARN("fail to init lock helper", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init lock helper", KR(ret));
   } else if (OB_FAIL(lock_helper.lock_objects(tablegroup_name_, database_name_, table_names_, true /* need_lock_id */))) {
-    LOG_WARN("fail to lock objects", KR(ret), K(tenant_id), K_(tablegroup_name), K_(database_name), K_(table_names));
+    LOG_WARN("fail to lock objects", KR(ret), K_(tablegroup_name), K_(database_name), K_(table_names));
   } else if (OB_FAIL(gen_task_id_and_schema_versions_(schema_version_cnt_, task_id_))) {
     LOG_WARN("fail to gen task id and schema versions", KR(ret), K_(schema_version_cnt));
   } else if (OB_FAIL(gen_drop_helpers_(drop_tablegroup_helper, drop_tablegroup_result,
@@ -548,7 +549,7 @@ int ObDropHTableHandler::handle()
 
     // drop tablegroup
     if (FAILEDx(drop_tablegroup_helper->execute())) {
-      LOG_WARN("fail to execute drop tablegroup", KR(ret), K(tenant_id));
+      LOG_WARN("fail to execute drop tablegroup", KR(ret));
     }
   }
 
@@ -635,10 +636,9 @@ int ObHTableDDLHandlerGuard::get_handler(ObDDLService &ddl_service,
   return ret;
 }
 
-ObHTableLockHelper::ObHTableLockHelper(share::schema::ObMultiVersionSchemaService *schema_service,
-                                       const uint64_t tenant_id, 
+ObHTableLockHelper::ObHTableLockHelper(share::schema::ObMultiVersionSchemaService *schema_service, 
                                        ObDDLSQLTransaction *external_trans)
-  : ObDDLHelper(schema_service, tenant_id, "[htable lock helper]", external_trans),
+  : ObDDLHelper(schema_service, "[htable lock helper]", external_trans),
     tablegroup_id_(OB_INVALID_ID),
     database_id_(OB_INVALID_ID),
     table_ids_()
@@ -765,7 +765,7 @@ int ObHTableLockHelper::lock_database_by_name_(const ObString &database_name)
   if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
     LOG_WARN("fail to add lock object by database name", KR(ret), K(database_name));
   } else if (OB_FAIL(lock_databases_by_name_())) {
-    LOG_WARN("fail to lock databases by name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to lock databases by name", KR(ret));
   }
   return ret;
 }
@@ -777,7 +777,7 @@ int ObHTableLockHelper::lock_tablegroup_and_tables_by_name_(const ObString &tabl
   int ret = OB_SUCCESS;
   DEBUG_SYNC(BEFORE_PARALLEL_DDL_LOCK);
   if (OB_FAIL(add_lock_object_by_tablegroup_name_(tablegroup_name, transaction::tablelock::EXCLUSIVE))) { // lock tablegroup name
-    LOG_WARN("fail to add tablegroup lock by obj name", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to add tablegroup lock by obj name", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < table_names.count(); i++) {
     const ObString &table_name = table_names.at(i);
@@ -807,7 +807,7 @@ int ObHTableLockHelper::lock_htable_objects_by_id_()
   for (int64_t i = 0; i < table_ids_.count() && OB_SUCC(ret); i++) {
     uint64_t table_id = table_ids_.at(i);
     if (OB_FAIL(add_lock_object_by_id_(table_id, share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-      LOG_WARN("fail to add lock table id", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to add lock table id", KR(ret));
     } 
   }
   

@@ -73,7 +73,6 @@ int ObExprSysPrivilegeCheck::calc_result_typeN(
 int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
                                              ObExecContext &exec_ctx,
                                              const common::ObString &level_str,
-                                             const uint64_t tenant_id,
                                              const common::ObString &db_name,
                                              const common::ObString &obj_name,
                                              const int64_t routine_type /* 0 */)
@@ -88,13 +87,13 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
   }
   allow_show = true;
   if (OB_SUCC(ret)) {
-    //tenant_id in table is static casted to int64_t,
+    //tenant in table is static casted to int64_t,
     //and use statis_cast<uint64_t> for retrieving(same with schema_service)
-    // After schema split, the tenant_id of the normal tenant schema table is 0, at this time, authorization takes session_priv.tenant_id_
+    // After schema split, the tenant of the normal tenant schema table is 0, at this time, authorization takes session_priv.tenant_
     if (OB_FAIL(exec_ctx.get_my_session()->get_session_priv_info(session_priv))) {
       LOG_WARN("fail to get session priv info", K(ret));
-    } else if (session_priv.tenant_id_ != static_cast<uint64_t>(tenant_id)
-        && OB_INVALID_TENANT_ID != tenant_id) {
+    } else if (false
+        && true) {
       //not current tenant's row
     } else if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_db_show(
@@ -145,7 +144,6 @@ int ObExprSysPrivilegeCheck::eval_sys_privilege_check(
     LOG_WARN("tenant is null", K(ret));
   } else if (OB_FAIL(check_show_priv(allow_show, ctx.exec_ctx_,
                                      level->is_null() ? ObString() : level->get_string(),
-                                     tenant->get_int(),
                                      (NULL == db || db->is_null()) ? ObString() : db->get_string(),
                                      (NULL == obj || obj->is_null()) ? ObString() : obj->get_string(),
                                      (NULL == routine_type || routine_type->is_null()) ? 0 : routine_type->get_int()))) {

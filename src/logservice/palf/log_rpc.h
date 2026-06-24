@@ -48,8 +48,7 @@ public:
   LogRpc();
   ~LogRpc();
   int init(const common::ObAddr &self,
-           const int64_t cluster_id,
-           const int64_t tenant_id);
+           const int64_t cluster_id);
   void destroy();
   int update_transport_compress_options(const PalfTransportCompressOptions &compress_opt);
   const PalfTransportCompressOptions& get_compress_opts() const;
@@ -59,7 +58,7 @@ private:
   ObAddr self_;
   mutable ObSpinLock opt_lock_;
   PalfTransportCompressOptions options_;
-  int64_t tenant_id_;
+  
   int64_t cluster_id_;
   bool is_inited_;
 };

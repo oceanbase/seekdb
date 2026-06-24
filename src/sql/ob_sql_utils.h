@@ -545,10 +545,10 @@ public:
                                                   common::ObString &view_definition);
   static void record_execute_time(const ObPhyPlanType type,
                                   const int64_t time_cost);
-  static int64_t get_query_record_size_limit(uint64_t tenant_id)
+  static int64_t get_query_record_size_limit()
   {
     int64_t thredhold = OB_MAX_SQL_LENGTH;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       thredhold = tenant_config->_query_record_size_limit;
     }
@@ -630,9 +630,6 @@ public:
   ------------------------*/
   static void adjust_time_by_ntp_offset(int64_t &dst_timeout_ts);
 
-  static int split_remote_object_storage_url(common::ObString &url, common::ObObjectStorageInfo *storage_info);
-  static bool is_external_files_on_local_disk(const common::ObString &url);
-  static int check_location_access_priv(const common::ObString &location, ObSQLSessionInfo *session);
   static int check_sql_map_expected_resource_group(const ObSqlCtx &context,
                                             const ObResultSet &result,
                                             const ObResolverParams *resolve_ctx, 
@@ -686,25 +683,6 @@ public:
   static int64_t combine_server_id(int64_t ts, uint64_t server_id) {
     return (ts & ((1LL << 43) - 1LL)) | ((server_id & 0xFFFF) << 48);
   }
-  static int get_external_table_type(const uint64_t tenant_id,
-                                     const uint64_t table_id, 
-                                     ObExternalFileFormat::FormatType &type);
-  static int get_external_table_type(const ObTableSchema *table_schema, 
-                                     ObExternalFileFormat::FormatType &type);
-  static int get_external_table_type(const ObString &table_format_or_properties, 
-                                     ObExternalFileFormat::FormatType &type);
-  static int get_odps_api_mode(const ObString &table_format_or_properties,
-                                    bool &is_odps_external_table,
-                                    ObODPSGeneralFormat::ApiMode& mode);
-  static int is_odps_external_table(const uint64_t tenant_id,
-                                    const uint64_t table_id, 
-                                    bool &is_odps_external_table);
-  static int is_odps_external_table(const ObTableSchema *table_schema, 
-                                    bool &is_odps_external_table);
-  static int is_odps_external_table(const ObString &table_format_or_properties, 
-                                    bool &is_odps_external_table);
-  static int check_location_constraint(const ObTableSchema &table_schema);
-  static int extract_odps_part_spec(const ObString &all_part_spec, ObIArray<ObString> &part_spec_list);
   static int check_ident_name(const common::ObCollationType cs_type, common::ObString &name,
                               const bool check_for_path_char, const int64_t max_ident_len);
 
@@ -758,7 +736,7 @@ private:
 class ObSqlGeoUtils
 {
 public:
-  static int check_srid_by_srs(uint64_t tenant_id, uint64_t srid);
+  static int check_srid_by_srs(uint64_t srid);
   static int check_srid(uint32_t column_srid, uint32_t input_srid);
 };
 
@@ -1064,9 +1042,8 @@ public:
   ObVirtualTableResultConverter()
     : key_alloc_(nullptr), key_cast_ctx_(), output_row_types_(nullptr), key_types_(nullptr),
       output_row_alloc_(), init_alloc_(nullptr), inited_row_(false), convert_row_(), output_row_cast_ctx_(),
-      base_table_id_(UINT64_MAX), cur_tenant_id_(UINT64_MAX), table_schema_(nullptr), output_column_ids_(nullptr),
-      cols_schema_(), tenant_id_col_id_(UINT64_MAX), max_col_cnt_(INT64_MAX),
-      has_tenant_id_col_(false), tenant_id_col_idx_(-1)
+      base_table_id_(UINT64_MAX), table_schema_(nullptr), output_column_ids_(nullptr),
+      cols_schema_(), max_col_cnt_(INT64_MAX)
   {}
   ~ObVirtualTableResultConverter() { destroy(); }
 
@@ -1091,15 +1068,12 @@ public:
   common::ObNewRow convert_row_;
   ObCastCtx output_row_cast_ctx_;
   uint64_t base_table_id_;
-  uint64_t cur_tenant_id_;
+  
   const share::schema::ObTableSchema *table_schema_;
   const common::ObIArray<uint64_t> *output_column_ids_;
   common::ObArray<const share::schema::ObColumnSchemaV2 *> cols_schema_;
-  uint64_t tenant_id_col_id_;
   int64_t max_col_cnt_;
   common::ObTimeZoneInfoWrap tz_info_wrap_;
-  bool has_tenant_id_col_;
-  int64_t tenant_id_col_idx_;
 };
 
 class ObSqlFatalErrExtraInfoGuard : public common::ObFatalErrExtraInfoGuard
@@ -1108,18 +1082,16 @@ public:
   ObSqlFatalErrExtraInfoGuard() { reset(); }
   ~ObSqlFatalErrExtraInfoGuard() {};
   void reset() {
-    tenant_id_ = OB_INVALID_TENANT_ID;
     cur_sql_.reset();
     plan_ = nullptr;
     exec_ctx_ = nullptr;
   }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id;}
+  
   void set_cur_sql(const common::ObString &cur_sql) { cur_sql_ = cur_sql; }
   void set_cur_plan(const ObPhysicalPlan *plan) { plan_ = plan; }
   void set_exec_context(ObExecContext *exec_ctx) { exec_ctx_ = exec_ctx; }
   DECLARE_TO_STRING;
 private:
-  uint64_t tenant_id_;
   common::ObString cur_sql_;
   const ObPhysicalPlan *plan_;
   ObExecContext *exec_ctx_;

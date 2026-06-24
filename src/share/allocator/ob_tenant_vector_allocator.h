@@ -84,7 +84,7 @@ public:
       mem_context_ = nullptr;
     }
   }
-  int init(lib::MemoryContext &parent_mem_context, uint64_t *all_vsag_use_mem, uint64_t tenant_id);
+  int init(lib::MemoryContext &parent_mem_context, uint64_t *all_vsag_use_mem);
   bool is_inited() { return OB_NOT_NULL(mem_context_); }
 
   std::string Name() override {
@@ -131,7 +131,7 @@ public:
       mem_context_ = nullptr;
     }
   }
-  int init(lib::MemoryContext &parent_mem_context, uint64_t *all_vsag_use_mem, uint64_t tenant_id, const char *label = IVF_CACHE_LABEL);
+  int init(lib::MemoryContext &parent_mem_context, uint64_t *all_vsag_use_mem, const char *label = IVF_CACHE_LABEL);
   bool is_inited() { return OB_NOT_NULL(mem_context_); }
   void* Allocate(size_t size);
   void Deallocate(void* p);

@@ -60,7 +60,6 @@ private:
 
 void TestTextAnalyzer::SetUp()
 {
-  share::ObTenantEnv::get_tenant_local()->id_ = 500;
   analysis_ctx_.cs_ = ObCharset::get_charset(CS_TYPE_UTF8MB4_GENERAL_CI);
   sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI);
   token_cmp_func_ = basic_funcs->null_first_cmp_;

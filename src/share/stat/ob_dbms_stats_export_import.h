@@ -89,7 +89,7 @@ public:
   static int import_column_stats(ObExecContext &ctx, const ObTableStatParam &param);
 
 private:
-  static int do_execute_sql(ObExecContext &ctx, uint64_t tenant_id, const ObSqlString &raw_sql);
+  static int do_execute_sql(ObExecContext &ctx, const ObSqlString &raw_sql);
 
   static int do_import_stats(ObExecContext &ctx,
                              const ObTableStatParam &param,
@@ -148,7 +148,6 @@ private:
                                        ObSqlString &partition_list);
 
   static int do_execute_sql(ObExecContext &ctx,
-                            uint64_t tenant_id,
                             const ObSqlString &delete_sql,
                             const ObSqlString &insert_sql);
 

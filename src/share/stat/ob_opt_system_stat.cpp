@@ -69,7 +69,7 @@ OptSystemIoBenchmark& OptSystemIoBenchmark::get_instance()
   return benchmark;
 }
 
-int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t tenant_id)
+int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   int64_t load_size = 16 * 1024; //16k
@@ -78,7 +78,7 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t 
   int64_t data_size = 0;
   char *read_buf = NULL;
   ObIOInfo io_info;
-  io_info.tenant_id_ = tenant_id;
+  
   io_info.size_ = load_size;
   io_info.buf_ = nullptr;
   io_info.flag_.set_mode(ObIOMode::READ);
@@ -100,9 +100,9 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t 
   int64_t ss_first_id = ObIOFd::NORMAL_FILE_ID;  // first_id is not used in shared storage mode;
   int64_t ss_second_id = OB_INVALID_FD;
 
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || is_virtual_tenant_id(tenant_id))) {
+  if (OB_UNLIKELY(!true || false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id invalid", KR(ret), K(tenant_id));
+    LOG_WARN("tenant id invalid", KR(ret));
   }
 
   if (OB_FAIL(ret)) {

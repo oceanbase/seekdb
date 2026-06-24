@@ -176,8 +176,8 @@ struct BlockNumStat
     sstable_row_cnt_(0),
     memtable_row_cnt_(0)
   {
-    cg_macro_cnt_arr_.set_attr(ObMemAttr(MTL_ID(), "BlockNumStat"));
-    cg_micro_cnt_arr_.set_attr(ObMemAttr(MTL_ID(), "BlockNumStat"));
+    cg_macro_cnt_arr_.set_attr(ObMemAttr("BlockNumStat"));
+    cg_micro_cnt_arr_.set_attr(ObMemAttr("BlockNumStat"));
   }
   int64_t tab_macro_cnt_;
   int64_t tab_micro_cnt_;
@@ -197,8 +197,8 @@ struct SkipRateStat
 {
   SkipRateStat() : cg_skip_rate_arr_(), skip_sample_cnt_arr_()
   {
-    cg_skip_rate_arr_.set_attr(ObMemAttr(MTL_ID(), "SkipRateStat"));
-    skip_sample_cnt_arr_.set_attr(ObMemAttr(MTL_ID(), "SkipRateStat"));
+    cg_skip_rate_arr_.set_attr(ObMemAttr("SkipRateStat"));
+    skip_sample_cnt_arr_.set_attr(ObMemAttr("SkipRateStat"));
   }
   ObSEArray<double, 32, common::ModulePageAllocator, true> cg_skip_rate_arr_;
   ObSEArray<uint64_t, 32, common::ModulePageAllocator, true> skip_sample_cnt_arr_;
@@ -280,8 +280,8 @@ struct StatTable
     async_partition_ids_(),
     consecutive_failed_count_(0)
   {
-    partition_stat_infos_.set_attr(lib::ObMemAttr(MTL_ID(), "StatTable"));
-    async_partition_ids_.set_attr(lib::ObMemAttr(MTL_ID(), "StatTable"));
+    partition_stat_infos_.set_attr(lib::ObMemAttr("StatTable"));
+    async_partition_ids_.set_attr(lib::ObMemAttr("StatTable"));
   }
   StatTable(uint64_t database_id, uint64_t table_id, bool is_async_gather = false) :
     database_id_(database_id),
@@ -292,8 +292,8 @@ struct StatTable
     async_partition_ids_(),
     consecutive_failed_count_(0)
   {
-    partition_stat_infos_.set_attr(lib::ObMemAttr(MTL_ID(), "StatTable"));
-    async_partition_ids_.set_attr(lib::ObMemAttr(MTL_ID(), "StatTable"));
+    partition_stat_infos_.set_attr(lib::ObMemAttr("StatTable"));
+    async_partition_ids_.set_attr(lib::ObMemAttr("StatTable"));
   }
   int assign(const StatTable &other);
   TO_STRING_KV(K_(database_id),
@@ -575,8 +575,7 @@ struct ObTableStatParam {
   static const int64_t INVALID_GLOBAL_PART_ID = -2;
   static const int64_t DEFAULT_DATA_PART_ID = -1;
 
-  ObTableStatParam() : tenant_id_(0),
-    db_name_(),
+  ObTableStatParam() : db_name_(),
     db_id_(OB_INVALID_ID),
     tab_name_(),
     table_id_(OB_INVALID_ID),
@@ -661,7 +660,6 @@ struct ObTableStatParam {
 
   bool is_specify_sample() const { return sample_info_.is_specify_sample(); }
 
-  uint64_t tenant_id_;
 
   ObString db_name_;
   uint64_t db_id_;
@@ -732,8 +730,7 @@ struct ObTableStatParam {
   int64_t max_iops_;
   int64_t weight_iops_;
   int64_t skip_rate_sample_cnt_;
-  TO_STRING_KV(K(tenant_id_),
-               K(db_name_),
+  TO_STRING_KV(K(db_name_),
                K(db_id_),
                K(tab_name_),
                K(table_id_),
@@ -793,7 +790,6 @@ struct ObTableStatParam {
 
 struct ObOptStatGatherParam {
   ObOptStatGatherParam () :
-    tenant_id_(0),
     db_name_(),
     tab_name_(),
     table_id_(OB_INVALID_ID),
@@ -831,7 +827,6 @@ struct ObOptStatGatherParam {
     all_column_params_()
   {}
   int assign(const ObOptStatGatherParam &other);
-  uint64_t tenant_id_;
   ObString db_name_;
   ObString tab_name_;
   uint64_t table_id_;
@@ -868,8 +863,7 @@ struct ObOptStatGatherParam {
   const PartitionIdSkipRateMap *partition_id_skip_rate_map_;
   ObSEArray<ObColumnStatParam, 4> all_column_params_;
 
-  TO_STRING_KV(K(tenant_id_),
-               K(db_name_),
+  TO_STRING_KV(K(db_name_),
                K(tab_name_),
                K(table_id_),
                K(stat_level_),
@@ -905,7 +899,7 @@ struct ObOptStatGatherParam {
 struct ObOptStat
 {
   ObOptStat() : table_stat_(NULL), column_stats_() {
-    column_stats_.set_attr(lib::ObMemAttr(MTL_ID(), "ObOptStat"));
+    column_stats_.set_attr(lib::ObMemAttr("ObOptStat"));
   }
   virtual ~ObOptStat();
   ObOptTableStat *table_stat_;
@@ -1042,16 +1036,15 @@ struct ObSetColumnStatParam
 struct ObSetSystemStatParam
 {
   ObSetSystemStatParam()
-  :tenant_id_(OB_INVALID_ID),
-  name_(),
+  :name_(),
   value_(0)
   { }
 
-  int64_t tenant_id_;
+  
   ObString name_;
   int64_t value_;
 
-  TO_STRING_KV(K(tenant_id_),
+  TO_STRING_KV(K(1UL),
                K(name_),
                K(value_)
     );
@@ -1068,20 +1061,19 @@ struct ObOptDmlStat
   OB_UNIS_VERSION(1);
 public:
   ObOptDmlStat ():
-    tenant_id_(0),
     table_id_(common::OB_INVALID_ID),
     tablet_id_(0),
     insert_row_count_(0),
     update_row_count_(0),
     delete_row_count_(0)
   {}
-  uint64_t tenant_id_;
+  
   uint64_t table_id_;
   int64_t tablet_id_;
   int64_t insert_row_count_;
   int64_t update_row_count_;
   int64_t delete_row_count_;
-  TO_STRING_KV(K(tenant_id_),
+  TO_STRING_KV(K(1UL),
                K(table_id_),
                K(tablet_id_),
                K(insert_row_count_),

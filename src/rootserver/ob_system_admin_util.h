@@ -226,28 +226,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminSetConfig);
 };
 
-class ObAdminUpgradeCmd : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminUpgradeCmd(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminUpgradeCmd() {}
-
-  int execute(const obcall::Bool &upgrade);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminUpgradeCmd);
-};
-
-class ObAdminRollingUpgradeCmd : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminRollingUpgradeCmd(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminRollingUpgradeCmd() {}
-
-  int execute(const obcall::ObAdminRollingUpgradeArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRollingUpgradeCmd);
-};
-
 #define OB_INNER_JOB_DEF(JOB)                                \
     JOB(INVALID_INNER_JOB, = 0)                              \
     JOB(ROOT_INSPECTION,)                                    \
@@ -281,7 +259,7 @@ public:
   {}
 
   int get_all_servers(common::ObIArray<ObAddr> &servers);
-  int get_tenant_servers(const uint64_t tenant_id, common::ObIArray<ObAddr> &servers);
+  int get_tenant_servers(common::ObIArray<ObAddr> &servers);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantServerAdminUtil);

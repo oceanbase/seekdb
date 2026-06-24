@@ -109,7 +109,7 @@ int ObSSTableWrapper::get_merge_row_cnt(const ObTableIterParam &iter_param, int6
   } else if (!sstable_->is_ddl_merge_sstable()) {
     row_cnt = sstable_->get_row_count();
   } else {
-    ObArenaAllocator allocator("DDL_row_cnt", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator allocator("DDL_row_cnt", OB_MALLOC_NORMAL_BLOCK_SIZE);
     if (OB_UNLIKELY(!iter_param.is_valid()) || OB_ISNULL(iter_param.tablet_handle_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid iter param", K(ret), K(iter_param), K(iter_param.tablet_handle_));
@@ -232,7 +232,7 @@ ObCOSSTableV2::ObCOSSTableV2()
     base_type_(ObCOSSTableBaseType::INVALID_TYPE),
     is_cgs_empty_co_(false),
     valid_for_cs_reading_(false),
-    tmp_allocator_("CGAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    tmp_allocator_("CGAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 

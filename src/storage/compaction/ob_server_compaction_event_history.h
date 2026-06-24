@@ -17,6 +17,7 @@
 #ifndef OB_STORAGE_COMPACTION_SERVER_COMPACTION_EVENT_HISTORY_H_
 #define OB_STORAGE_COMPACTION_SERVER_COMPACTION_EVENT_HISTORY_H_
 #include "ob_compaction_suggestion.h" // for ObInfoRingArray
+#include "share/rc/ob_module_provider.h"
 #include "ob_compaction_diagnose.h" // for ADD_KV
 
 namespace oceanbase
@@ -54,8 +55,7 @@ public:
   static const char *get_comp_role_str(enum ObCompactionRole role);
 public:
   ObServerCompactionEvent()
-   : tenant_id_(OB_INVALID_TENANT_ID),
-     merge_type_(INVALID_MERGE_TYPE),
+   : merge_type_(INVALID_MERGE_TYPE),
      compaction_scn_(0),
      event_(COMPACTION_EVENT_MAX),
      timestamp_(0),
@@ -65,7 +65,7 @@ public:
   ~ObServerCompactionEvent() { reset(); }
   OB_INLINE void reset()
   {
-    tenant_id_ = OB_INVALID_TENANT_ID;
+    
     merge_type_ = INVALID_MERGE_TYPE;
     compaction_scn_ = 0;
     event_ = COMPACTION_EVENT_MAX;
@@ -73,17 +73,17 @@ public:
   }
   OB_INLINE bool is_valid() const
   {
-    return OB_INVALID_TENANT_ID != tenant_id_
+    return true
         && compaction_scn_ > 0
         && COMPACTION_EVENT_MAX != event_
         && timestamp_ > 0;
   }
   int generate_event_str(char *buf, const int64_t buf_len) const;
-  TO_STRING_KV(K_(tenant_id), "merge_type", merge_type_to_str(merge_type_), K_(compaction_scn),
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(compaction_scn),
       "event", get_comp_event_str(event_), "role", get_comp_role_str(role_),
       K_(timestamp), K_(comment));
 
-  int64_t tenant_id_;
+  
   ObMergeType merge_type_;
   int64_t compaction_scn_;
   ObCompactionEvent event_;
@@ -127,7 +127,7 @@ public:
   {
   }
   virtual ~ObServerCompactionEventIterator() { reset(); }
-  int open(const int64_t tenant_id);
+  int open();
   int get_next_info(ObServerCompactionEvent &info);
   void reset();
 
@@ -138,19 +138,19 @@ private:
 };
 
 #define ADD_COMPACTION_EVENT(compaction_scn, event, timestamp, ...) \
-PUSH_COMPACTION_EVENT(MTL_ID(), MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::STORAGE, timestamp, __VA_ARGS__)
+PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::STORAGE, timestamp, __VA_ARGS__)
 
 #define ADD_RS_COMPACTION_EVENT(compaction_scn, event, timestamp, ...) \
-PUSH_COMPACTION_EVENT(MTL_ID(), MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::TENANT_RS, timestamp, __VA_ARGS__)
+PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, ObServerCompactionEvent::TENANT_RS, timestamp, __VA_ARGS__)
 
 #define ADD_ROLE_COMPACTION_EVENT(role, compaction_scn, event, timestamp, ...) \
-PUSH_COMPACTION_EVENT(MTL_ID(), MAJOR_MERGE, compaction_scn, event, role, timestamp, __VA_ARGS__)
+PUSH_COMPACTION_EVENT(MAJOR_MERGE, compaction_scn, event, role, timestamp, __VA_ARGS__)
 
 
 #define DEFINE_COMPACTION_EVENT_PRINT_KV(n)                                    \
   template <LOG_TYPENAME_TN##n>                                                \
   int PUSH_COMPACTION_EVENT(                                                   \
-      const int64_t tenant_id, const compaction::ObMergeType merge_type,       \
+      const compaction::ObMergeType merge_type,                                \
       const int64_t compaction_scn,                                            \
       const ObServerCompactionEvent::ObCompactionEvent event,                  \
       const ObServerCompactionEvent::ObCompactionRole role,                    \
@@ -158,7 +158,6 @@ PUSH_COMPACTION_EVENT(MTL_ID(), MAJOR_MERGE, compaction_scn, event, role, timest
     int64_t __pos = 0;                                                         \
     int ret = OB_SUCCESS;                                                      \
     compaction::ObServerCompactionEvent event_item;                            \
-    event_item.tenant_id_ = tenant_id;                                         \
     event_item.merge_type_ = merge_type;                                       \
     event_item.compaction_scn_ = compaction_scn;                               \
     event_item.event_ = event;                                                 \
@@ -166,7 +165,7 @@ PUSH_COMPACTION_EVENT(MTL_ID(), MAJOR_MERGE, compaction_scn, event, role, timest
     event_item.timestamp_ = timestamp;                                         \
     char *buf = event_item.comment_;                                           \
     const int64_t buf_size = ::oceanbase::common::OB_DIAGNOSE_INFO_LENGTH;     \
-    SIMPLE_TO_STRING_##n if (OB_FAIL(MTL(ObServerCompactionEventHistory *)     \
+    SIMPLE_TO_STRING_##n if (OB_FAIL(share::g_mp->server_compaction_event_history()     \
                                          ->add_event(event_item))) {           \
       STORAGE_LOG(WARN, "failed to add event", K(ret), K(event_item));         \
     }                                                                          \

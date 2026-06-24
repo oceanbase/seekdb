@@ -61,7 +61,7 @@ int ObDropContextResolver::resolve(const ParseNode &parse_tree)
     stmt_ = stmt;
     ObContextDDLArg &drop_arg = stmt->get_arg();
     ObContextSchema &ctx_schema = drop_arg.ctx_schema_;
-    ctx_schema.set_tenant_id(session_info_->get_effective_tenant_id());
+    
     //ctx_schema.set_database_id(session_info_->get_database_id());
     // check namesapce && package_name
     if (OB_FAIL(resolve_context_namespace(*parse_tree.children_[CONTEXT_NAMESPACE],

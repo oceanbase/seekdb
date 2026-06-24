@@ -45,12 +45,12 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
   } else {
     ObRoutineInfo routine_info = arg.routine_info_;
     const ObRoutineInfo* old_routine_info = NULL;
-    uint64_t tenant_id = routine_info.get_tenant_id();
+    
     ObString database_name = arg.db_name_;
     bool is_or_replace = arg.is_need_alter_;
     bool is_inner = arg.is_or_replace_;
     const ObDatabaseSchema *db_schema = NULL;
-    if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_name, db_schema))) {
+    if (OB_FAIL(schema_guard.get_database_schema(database_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
       ret = OB_ERR_BAD_DATABASE;
@@ -60,14 +60,13 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
       LOG_WARN("Can't not create routine of db in recyclebin", K(ret), K(arg), K(*db_schema));
     } else if (OB_INVALID_ID == db_schema->get_database_id()) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(tenant_id), K(*db_schema), K(ret));
+      LOG_WARN("database id is invalid", K(*db_schema), K(ret));
     } else {
       routine_info.set_database_id(db_schema->get_database_id());
     }
     if (OB_SUCC(ret)) {
       ObArray<ObSchemaType> conflict_schema_types;
-      if (OB_FAIL(schema_guard.check_oracle_object_exist(tenant_id,
-          db_schema->get_database_id(), routine_info.get_routine_name(), ROUTINE_SCHEMA,
+      if (OB_FAIL(schema_guard.check_oracle_object_exist(db_schema->get_database_id(), routine_info.get_routine_name(), ROUTINE_SCHEMA,
           routine_info.get_routine_type(), is_or_replace, conflict_schema_types))) {
         LOG_WARN("fail to check oracle_object exist", K(ret), K(routine_info.get_routine_name()));
       } else if (conflict_schema_types.count() > 0) {
@@ -81,7 +80,7 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
     bool exist = false;
     if (OB_SUCC(ret)) {
       if (routine_info.get_routine_type() == ROUTINE_PROCEDURE_TYPE) {
-        if (OB_FAIL(schema_guard.check_standalone_procedure_exist(tenant_id, db_schema->get_database_id(),
+        if (OB_FAIL(schema_guard.check_standalone_procedure_exist(db_schema->get_database_id(),
                                                                   routine_info.get_routine_name(), exist))) {
           LOG_WARN("failed to check procedure info exist", K(routine_info), K(ret));
         } else if (exist && !is_or_replace) {
@@ -89,7 +88,7 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
           LOG_USER_ERROR(OB_ERR_SP_ALREADY_EXISTS, "PROCEDURE",
                           routine_info.get_routine_name().length(), routine_info.get_routine_name().ptr());
         } else if (exist && is_or_replace) {
-          if (OB_FAIL(schema_guard.get_standalone_procedure_info(tenant_id, db_schema->get_database_id(),
+          if (OB_FAIL(schema_guard.get_standalone_procedure_info(db_schema->get_database_id(),
                                                                   routine_info.get_routine_name(), old_routine_info))) {
             LOG_WARN("failed to get standalone procedure info", K(routine_info), K(ret));
           } else if (OB_ISNULL(old_routine_info)) {
@@ -98,7 +97,7 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
           }
         }
       } else {
-        if (OB_FAIL(schema_guard.check_standalone_function_exist(tenant_id, db_schema->get_database_id(),
+        if (OB_FAIL(schema_guard.check_standalone_function_exist(db_schema->get_database_id(),
                                                                   routine_info.get_routine_name(), exist))) {
           LOG_WARN("failed to check function info exist", K(routine_info), K(ret));
         } else if (exist && !is_or_replace) {
@@ -106,7 +105,7 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
           LOG_USER_ERROR(OB_ERR_SP_ALREADY_EXISTS, "FUNCTION",
                           routine_info.get_routine_name().length(), routine_info.get_routine_name().ptr());
         } else if (exist && is_or_replace) {
-          if (OB_FAIL(schema_guard.get_standalone_function_info(tenant_id, db_schema->get_database_id(),
+          if (OB_FAIL(schema_guard.get_standalone_function_info(db_schema->get_database_id(),
                                                                 routine_info.get_routine_name(), old_routine_info))) {
             LOG_WARN("failed to get standalone function info", K(routine_info), K(ret));
           } else if (OB_ISNULL(old_routine_info)) {
@@ -150,15 +149,15 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
   CK((replace && OB_NOT_NULL(old_routine_info)) || (!replace && OB_ISNULL(old_routine_info)));
   CK (OB_NOT_NULL(ddl_service.schema_service_) && OB_NOT_NULL(ddl_service.sql_proxy_));
   if (OB_SUCC(ret)) {
-    const uint64_t tenant_id = routine_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
 
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     }
     if (OB_SUCC(ret)) {
       if (replace) {
@@ -187,7 +186,7 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
       const ObSysVarSchema *sys_var = NULL;
       ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
       ObObj val;
-      if (OB_FAIL(schema_guard.get_tenant_system_variable(tenant_id, SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
+      if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
         LOG_WARN("fail to get tenant var schema", K(ret));
       } else if (OB_ISNULL(sys_var)) {
         ret = OB_ERR_UNEXPECTED;
@@ -199,13 +198,13 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
         if (grant_priv) {
           int64_t db_id = routine_info.get_database_id();
           const ObDatabaseSchema* database_schema = NULL;
-          if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_id, database_schema))) {
+          if (OB_FAIL(schema_guard.get_database_schema( db_id, database_schema))) {
             LOG_WARN("get database schema failed", K(ret));
           } else if (OB_ISNULL(database_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("database schema should not be null", K(ret));
           } else {
-            ObRoutinePrivSortKey routine_key(tenant_id, routine_info.get_owner_id(), 
+            ObRoutinePrivSortKey routine_key(routine_info.get_owner_id(), 
                                               database_schema->get_database_name_str(), 
                                               routine_info.get_routine_name(), routine_info.is_procedure() ? 
                                               ObRoutineType::ROUTINE_PROCEDURE_TYPE : ObRoutineType::ROUTINE_FUNCTION_TYPE);
@@ -213,8 +212,7 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
             int64_t option = 0;
             const bool gen_ddl_stmt = false;
             const ObUserInfo *user_info = NULL;
-            if (OB_FAIL(schema_guard.get_user_info(tenant_id,
-                                                   routine_info.get_owner_id(),
+            if (OB_FAIL(schema_guard.get_user_info(routine_info.get_owner_id(),
                                                    user_info))) {
               LOG_WARN("failed to get user info", K(ret));
             } else if (OB_ISNULL(user_info)) {
@@ -241,7 +239,7 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -260,9 +258,9 @@ int ObPLDDLService::alter_routine(const obcall::ObCreateRoutineArg &arg,
   } else {
     ObErrorInfo error_info = arg.error_info_;
     const ObRoutineInfo *routine_info = NULL;
-    const uint64_t tenant_id = arg.routine_info_.get_tenant_id();
-    if (OB_FAIL(schema_guard.get_routine_info(tenant_id, arg.routine_info_.get_routine_id(), routine_info))) {
-      LOG_WARN("failed to get routine info", K(ret), K(tenant_id));
+    
+    if (OB_FAIL(schema_guard.get_routine_info( arg.routine_info_.get_routine_id(), routine_info))) {
+      LOG_WARN("failed to get routine info", K(ret));
     } else if (OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
       LOG_WARN("routine info is not exist!", K(ret), K(arg.routine_info_));
@@ -294,16 +292,15 @@ int ObPLDDLService::alter_routine(const ObRoutineInfo &routine_info,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = routine_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed!", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed!", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
-                                                                tenant_id,
                                                                 routine_info.get_routine_id(),
                                                                 pl_operator,
                                                                 *ddl_service.schema_service_))) {
@@ -319,8 +316,8 @@ int ObPLDDLService::alter_routine(const ObRoutineInfo &routine_info,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
-        LOG_WARN("publish schema failed!", K(ret), K(tenant_id));
+      if (OB_FAIL(ddl_service.publish_schema())) {
+        LOG_WARN("publish schema failed!", K(ret));
       }
     }
   }
@@ -335,7 +332,7 @@ int ObPLDDLService::drop_routine(const ObDropRoutineArg &arg,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
   } else {
-    uint64_t tenant_id = arg.tenant_id_;
+    
     const ObString &db_name = arg.db_name_;
     const ObString &routine_name = arg.routine_name_;
     ObRoutineType routine_type = arg.routine_type_;
@@ -354,11 +351,11 @@ int ObPLDDLService::drop_routine(const ObDropRoutineArg &arg,
     if (db_name.empty()) {
       ret = OB_ERR_NO_DB_SELECTED;
       LOG_WARN("no database selected", K(ret), K(db_name));
-    } else if (OB_FAIL(ddl_service.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(ddl_service.get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", K(ret));
     } else if (OB_FAIL(ddl_service.check_parallel_ddl_conflict(schema_guard, arg))) {
       LOG_WARN("check parallel ddl conflict failed", K(ret));
-    } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
+    } else if (OB_FAIL(schema_guard.get_database_schema( db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
       ret = OB_ERR_BAD_DATABASE;
@@ -368,18 +365,18 @@ int ObPLDDLService::drop_routine(const ObDropRoutineArg &arg,
       LOG_WARN("Can't not create procedure of db in recyclebin", K(ret), K(arg), K(*db_schema));
     } else if (OB_INVALID_ID == db_schema->get_database_id()) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(tenant_id), K(*db_schema), K(ret));
+      LOG_WARN("database id is invalid", K(*db_schema), K(ret));
     }
 
     if (OB_SUCC(ret)) {
       bool exist = false;
       const ObRoutineInfo *routine_info = NULL;
       if (ROUTINE_PROCEDURE_TYPE == routine_type) {
-        if (OB_FAIL(schema_guard.check_standalone_procedure_exist(tenant_id, db_schema->get_database_id(),
+        if (OB_FAIL(schema_guard.check_standalone_procedure_exist(db_schema->get_database_id(),
                                                                   routine_name, exist))) {
           LOG_WARN("failed to check standalone procedure info exist", K(routine_name), K(ret));
         } else if (exist) {
-          if (OB_FAIL(schema_guard.get_standalone_procedure_info(tenant_id, db_schema->get_database_id(),
+          if (OB_FAIL(schema_guard.get_standalone_procedure_info(db_schema->get_database_id(),
                                                                  routine_name, routine_info))) {
             LOG_WARN("get procedure info failed", K(ret));
           }
@@ -389,11 +386,11 @@ int ObPLDDLService::drop_routine(const ObDropRoutineArg &arg,
                          routine_name.length(), routine_name.ptr());
         }
       } else {
-        if (OB_FAIL(schema_guard.check_standalone_function_exist(tenant_id, db_schema->get_database_id(),
+        if (OB_FAIL(schema_guard.check_standalone_function_exist(db_schema->get_database_id(),
                                                                  routine_name, exist))) {
           LOG_WARN("failed to check standalone function info exist", K(routine_name), K(ret));
         } else if (exist) {
-          if (OB_FAIL(schema_guard.get_standalone_function_info(tenant_id, db_schema->get_database_id(),
+          if (OB_FAIL(schema_guard.get_standalone_function_info(db_schema->get_database_id(),
                                                                 routine_name, routine_info))) {
             LOG_WARN("get function info failed", K(ret));
           }
@@ -444,16 +441,15 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = routine_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
-                                                               tenant_id,
                                                                routine_info.get_routine_id(),
                                                                pl_operator,
                                                                *ddl_service.schema_service_))) {
@@ -466,7 +462,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
         const ObSysVarSchema *sys_var = NULL;
         ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
         ObObj val;
-        if (OB_FAIL(schema_guard.get_tenant_system_variable(tenant_id, SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
+        if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
           LOG_WARN("fail to get tenant var schema", K(ret));
         } else if (OB_ISNULL(sys_var)) {
           ret = OB_ERR_UNEXPECTED;
@@ -477,12 +473,12 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
           int64_t db_id = routine_info.get_database_id();
           const ObDatabaseSchema* database_schema = NULL;
           ObSEArray<const ObUserInfo*, 10> user_infos;
-          if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_id, database_schema))) {
+          if (OB_FAIL(schema_guard.get_database_schema( db_id, database_schema))) {
             LOG_WARN("get database schema failed", K(ret));
           } else if (OB_ISNULL(database_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("database schema is null", K(ret));
-          } else if (OB_FAIL(schema_guard.get_user_infos_with_tenant_id(tenant_id, user_infos))) {
+          } else if (OB_FAIL(schema_guard.get_user_infos_by_id(user_infos))) {
             LOG_WARN("fail to get all user in tenant", K(ret));
           }
           for (int64_t i = 0; OB_SUCC(ret) && i < user_infos.count(); ++i) {
@@ -491,7 +487,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected null", K(ret));
             } else {
-              ObRoutinePrivSortKey routine_key(tenant_id, user_info->get_user_id(), 
+              ObRoutinePrivSortKey routine_key(user_info->get_user_id(), 
                                             database_schema->get_database_name_str(), 
                                             routine_info.get_routine_name(), routine_info.is_procedure() ? 
                                             ObRoutineType::ROUTINE_PROCEDURE_TYPE : ObRoutineType::ROUTINE_FUNCTION_TYPE);
@@ -514,7 +510,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -534,12 +530,12 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
   } else {
     ObPackageInfo new_package_info;
     const ObPackageInfo *old_package_info = NULL;
-    uint64_t tenant_id = arg.package_info_.get_tenant_id();
+    
     ObString database_name = arg.db_name_;
     const ObDatabaseSchema *db_schema = NULL;
     if (OB_FAIL(new_package_info.assign(arg.package_info_))) {
       LOG_WARN("fail to assign package info", K(ret));
-    } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_name, db_schema))) {
+    } else if (OB_FAIL(schema_guard.get_database_schema( database_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
       ret = OB_ERR_BAD_DATABASE;
@@ -549,7 +545,7 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
       LOG_WARN("Can't not create package of db in recyclebin", K(ret), K(arg), K(*db_schema));
     } else if (OB_INVALID_ID == db_schema->get_database_id()) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(tenant_id), K(*db_schema), K(ret));
+      LOG_WARN("database id is invalid", K(*db_schema), K(ret));
     } else {
       new_package_info.set_database_id(db_schema->get_database_id());
     }
@@ -557,8 +553,7 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
       ObArray<ObSchemaType> conflict_schema_types;
       // package body duplicate check only compares for duplicate package bodies, package duplicate check needs to compare objects other than package body
       if (ObPackageType::PACKAGE_TYPE == new_package_info.get_type()
-          && OB_FAIL(schema_guard.check_oracle_object_exist(tenant_id,
-             db_schema->get_database_id(), new_package_info.get_package_name(), PACKAGE_SCHEMA,
+          && OB_FAIL(schema_guard.check_oracle_object_exist(db_schema->get_database_id(), new_package_info.get_package_name(), PACKAGE_SCHEMA,
              INVALID_ROUTINE_TYPE, arg.is_replace_, conflict_schema_types))) {
         LOG_WARN("fail to check object exist", K(ret), K(new_package_info.get_package_name()));
       } else if (conflict_schema_types.count() > 0) {
@@ -570,14 +565,14 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(schema_guard.get_package_info(tenant_id, db_schema->get_database_id(), new_package_info.get_package_name(),
+      if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), new_package_info.get_package_name(),
                                                 new_package_info.get_type(), new_package_info.get_compatibility_mode(),
                                                 old_package_info))) {
         LOG_WARN("failed to check package info exist", K(new_package_info), K(ret));
       } else if (OB_ISNULL(old_package_info) || arg.is_replace_) {
         bool need_create = true;
         // For system packages, to avoid multiple rebuilds, compare the new system package with the existing system package to see if they are the same
-        if (OB_NOT_NULL(old_package_info) && OB_SYS_TENANT_ID == tenant_id) {
+        if (OB_NOT_NULL(old_package_info) && true) {
           if (old_package_info->get_source().length() == new_package_info.get_source().length()
               && (0 == MEMCMP(old_package_info->get_source().ptr(),
                               new_package_info.get_source().ptr(),
@@ -640,14 +635,14 @@ int ObPLDDLService::create_package(ObSchemaGetterGuard &schema_guard,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = new_package_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(pl_operator.create_package(old_package_info,
                                                    new_package_info,
                                                    trans,
@@ -667,7 +662,7 @@ int ObPLDDLService::create_package(ObSchemaGetterGuard &schema_guard,
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -684,17 +679,17 @@ int ObPLDDLService::alter_package(const obcall::ObAlterPackageArg &arg,
   if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
     LOG_WARN("check env failed", K(arg), K(ret));
   } else {
-    uint64_t tenant_id = arg.tenant_id_;
+    
     const ObString &db_name = arg.db_name_;
     const ObString &package_name = arg.package_name_;
     ObPackageType package_type = arg.package_type_;
     int64_t compatible_mode =  arg.compatible_mode_;
     const ObDatabaseSchema *db_schema = NULL;
-    if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
+    if (OB_FAIL(schema_guard.get_database_schema( db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(tenant_id), K(db_name), K(ret));
+      LOG_WARN("database id is invalid", K(db_name), K(ret));
     } else if (db_schema->is_in_recyclebin()) {
       ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
       LOG_WARN("Can't not create package of db in recyclebin", K(ret), K(arg), K(*db_schema));
@@ -702,12 +697,12 @@ int ObPLDDLService::alter_package(const obcall::ObAlterPackageArg &arg,
     if (OB_SUCC(ret)) {
       bool exist = false;
       ObSArray<ObRoutineInfo> &public_routine_infos = const_cast<ObSArray<ObRoutineInfo> &>(arg.public_routine_infos_);
-      if (OB_FAIL(schema_guard.check_package_exist(tenant_id, db_schema->get_database_id(),
+      if (OB_FAIL(schema_guard.check_package_exist(db_schema->get_database_id(),
                                                    package_name, package_type, compatible_mode, exist))) {
         LOG_WARN("failed to check package info exist", K(package_name), K(ret));
       } else if (exist) {
         const ObPackageInfo *package_info = NULL;
-        if (OB_FAIL(schema_guard.get_package_info(tenant_id, db_schema->get_database_id(), package_name, package_type,
+        if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), package_name, package_type,
                                                   compatible_mode, package_info))) {
           LOG_WARN("get package info failed", K(ret));
         } else if (OB_ISNULL(package_info)) {
@@ -774,14 +769,14 @@ int ObPLDDLService::alter_package(ObSchemaGetterGuard &schema_guard,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = package_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(pl_operator.alter_package(package_info, schema_guard, trans, public_routine_infos,
                                                   error_info, ddl_stmt_str))) {
       LOG_WARN("alter package failed", K(package_info), K(ret));
@@ -795,7 +790,7 @@ int ObPLDDLService::alter_package(ObSchemaGetterGuard &schema_guard,
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -811,13 +806,13 @@ int ObPLDDLService::drop_package(const obcall::ObDropPackageArg &arg,
   if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
     LOG_WARN("check env failed", K(arg), K(ret));
   } else {
-    uint64_t tenant_id = arg.tenant_id_;
+    
     const ObString &db_name = arg.db_name_;
     const ObString &package_name = arg.package_name_;
     ObPackageType package_type = arg.package_type_;
     int64_t compatible_mode = arg.compatible_mode_;
     const ObDatabaseSchema *db_schema = NULL;
-    if (OB_FAIL(schema_guard.get_database_schema(tenant_id, db_name, db_schema))) {
+    if (OB_FAIL(schema_guard.get_database_schema( db_name, db_schema))) {
       LOG_WARN("get database schema failed", K(ret));
     } else if (NULL == db_schema) {
       ret = OB_ERR_BAD_DATABASE;
@@ -827,17 +822,17 @@ int ObPLDDLService::drop_package(const obcall::ObDropPackageArg &arg,
       LOG_WARN("Can't not create package of db in recyclebin", K(ret), K(arg), K(*db_schema));
     } else if (OB_INVALID_ID == db_schema->get_database_id()) {
       ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(tenant_id), K(*db_schema), K(ret));
+      LOG_WARN("database id is invalid", K(*db_schema), K(ret));
     }
     if (OB_SUCC(ret)) {
       bool exist = false;
-      if (OB_FAIL(schema_guard.check_package_exist(tenant_id, db_schema->get_database_id(),
+      if (OB_FAIL(schema_guard.check_package_exist(db_schema->get_database_id(),
           package_name, package_type, compatible_mode, exist))) {
         LOG_WARN("failed to check package info exist", K(package_name), K(ret));
       } else if (exist) {
         const ObPackageInfo *package_info = NULL;
         ObErrorInfo error_info = arg.error_info_;
-        if (OB_FAIL(schema_guard.get_package_info(tenant_id, db_schema->get_database_id(), package_name, package_type, compatible_mode, package_info))) {
+        if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), package_name, package_type, compatible_mode, package_info))) {
           LOG_WARN("get package info failed", K(ret));
         } else if (OB_FAIL(drop_package(schema_guard,
                                         *package_info,
@@ -869,14 +864,14 @@ int ObPLDDLService::drop_package(share::schema::ObSchemaGetterGuard &schema_guar
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = package_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(pl_operator.drop_package(package_info,
                                                  trans,
                                                  schema_guard,
@@ -893,7 +888,7 @@ int ObPLDDLService::drop_package(share::schema::ObSchemaGetterGuard &schema_guar
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -923,29 +918,28 @@ int ObPLDDLService::alter_trigger(const obcall::ObAlterTriggerArg &arg,
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   bool is_enable = false;
   int64_t refreshed_schema_version = 0;
   OZ (check_env_before_ddl(schema_guard, arg, ddl_service));
   OX (is_enable = arg.trigger_infos_.at(0).is_enable());
-  OX (tenant_id = arg.exec_tenant_id_);
-  OZ (schema_guard.get_schema_version(tenant_id, refreshed_schema_version));
+  OZ (schema_guard.get_schema_version(refreshed_schema_version));
   if (OB_SUCC(ret)) {
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
-    OZ (trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version), refreshed_schema_version);
+    OZ (trans.start(ddl_service.sql_proxy_, refreshed_schema_version), refreshed_schema_version);
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.trigger_infos_.count(); ++i) {
       const ObTriggerInfo *old_tg_info = NULL;
       ObTriggerInfo new_tg_info;
       OZ (new_tg_info.assign(arg.trigger_infos_.at(i)));
-      OZ (schema_guard.get_trigger_info(tenant_id, new_tg_info.get_trigger_id(), old_tg_info));
+      OZ (schema_guard.get_trigger_info( new_tg_info.get_trigger_id(), old_tg_info));
       CK (OB_NOT_NULL(old_tg_info), OB_ERR_TRIGGER_NOT_EXIST);
       if (OB_SUCC(ret)) {
         if (!arg.is_set_status_) {
           const ObTriggerInfo *other_trg_info = NULL;
           ObString new_trg_name = new_tg_info.get_trigger_name();
           ObString new_trg_body = new_tg_info.get_trigger_body();
-          OZ (schema_guard.get_trigger_info(new_tg_info.get_tenant_id(),
+          OZ (schema_guard.get_trigger_info(
                                             new_tg_info.get_database_id(),
                                             new_trg_name,
                                             other_trg_info));
@@ -972,7 +966,7 @@ int ObPLDDLService::alter_trigger(const obcall::ObAlterTriggerArg &arg,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -985,7 +979,7 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  uint64_t tenant_id = arg.tenant_id_;
+  
   uint64_t trigger_database_id = OB_INVALID_ID;
   const ObString &trigger_database = arg.trigger_database_;
   const ObString &trigger_name = arg.trigger_name_;
@@ -993,9 +987,9 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
   bool is_ora_mode = false;
   if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
     LOG_WARN("check env failed", K(ret));
-  } else if (OB_FAIL(ddl_service.get_database_id(schema_guard, tenant_id, trigger_database, trigger_database_id))) {
+  } else if (OB_FAIL(ddl_service.get_database_id(schema_guard, trigger_database, trigger_database_id))) {
     LOG_WARN("get database id failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_trigger_info(tenant_id, trigger_database_id, trigger_name, trigger_info))) {
+  } else if (OB_FAIL(schema_guard.get_trigger_info( trigger_database_id, trigger_name, trigger_info))) {
     LOG_WARN("get trigger info failed", K(ret), K(trigger_database), K(trigger_name));
   } else if (OB_ISNULL(trigger_info)) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
@@ -1032,7 +1026,7 @@ int ObPLDDLService::create_trigger(const obcall::ObCreateTriggerArg &arg,
   //in_second_stage_ is false, Indicates that the trigger is created normally
   //true Indicates that the error message is inserted into the system table after the trigger is created
   //So the following steps can be skipped
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   uint64_t trigger_database_id = OB_INVALID_ID;
   uint64_t base_object_id = OB_INVALID_ID;
   ObSchemaType base_object_type = static_cast<ObSchemaType>(arg.trigger_info_.get_base_object_type());
@@ -1041,13 +1035,11 @@ int ObPLDDLService::create_trigger(const obcall::ObCreateTriggerArg &arg,
   const ObString &base_object_name = arg.base_object_name_;
   if (OB_FAIL(new_trigger_info.assign(arg.trigger_info_))) {
     LOG_WARN("assign trigger_info failed", K(ret));
-  } else if (FALSE_IT(tenant_id = new_trigger_info.get_tenant_id())) {
   } else {
     const ObTriggerInfo *old_trigger_info = NULL;
-    if (OB_FAIL(ddl_service.get_database_id(schema_guard, tenant_id, trigger_database, trigger_database_id))) {
+    if (OB_FAIL(ddl_service.get_database_id(schema_guard, trigger_database, trigger_database_id))) {
       LOG_WARN("get database id failed", K(ret));
     } else if (OB_FAIL(get_object_info(schema_guard,
-                                       tenant_id,
                                        base_object_database,
                                        base_object_name,
                                        base_object_type,
@@ -1101,14 +1093,14 @@ int ObPLDDLService::create_trigger_in_trans(share::schema::ObTriggerInfo &trigge
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = trigger_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     }
     if (OB_SUCC(ret) && !in_second_stage) {
         OZ (adjust_trigger_action_order(schema_guard, trans, pl_operator, trigger_info, true));
@@ -1122,7 +1114,7 @@ int ObPLDDLService::create_trigger_in_trans(share::schema::ObTriggerInfo &trigge
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -1140,14 +1132,14 @@ int ObPLDDLService::drop_trigger_in_trans(const share::schema::ObTriggerInfo &tr
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = trigger_info.get_tenant_id();
+    
     ObDDLSQLTransaction trans(ddl_service.schema_service_);
     ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
     int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, tenant_id, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
+      LOG_WARN("failed to get tenant schema version", KR(ret));
+    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
+      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
     }
     OZ (adjust_trigger_action_order(schema_guard, trans, pl_operator, const_cast<ObTriggerInfo &>(trigger_info), false));
     OZ (pl_operator.drop_trigger(trigger_info, trans, ddl_stmt_str));
@@ -1159,7 +1151,7 @@ int ObPLDDLService::drop_trigger_in_trans(const share::schema::ObTriggerInfo &tr
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema(tenant_id))) {
+      if (OB_FAIL(ddl_service.publish_schema())) {
         LOG_WARN("publish schema failed", K(ret));
       }
     }
@@ -1174,7 +1166,7 @@ int ObPLDDLService::try_get_exist_trigger(share::schema::ObSchemaGetterGuard &sc
 {
   int ret = OB_SUCCESS;
   const ObString &trigger_name = new_trigger_info.get_trigger_name();
-  if (OB_FAIL(schema_guard.get_trigger_info(new_trigger_info.get_tenant_id(),
+  if (OB_FAIL(schema_guard.get_trigger_info(
                                             new_trigger_info.get_database_id(),
                                             trigger_name, old_trigger_info))) {
     LOG_WARN("failed to get old trigger info", K(ret));
@@ -1199,13 +1191,12 @@ int ObPLDDLService::rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard
   const ObDatabaseSchema *database_schema = NULL;
   const ObString *database_name = NULL;
   const ObString &table_name = table_schema.get_table_name_str();
-  const uint64_t tenant_id = table_schema.get_tenant_id();
-  OZ (schema_guard.get_database_schema(tenant_id, table_schema.get_database_id(), database_schema),
+  
+  OZ (schema_guard.get_database_schema( table_schema.get_database_id(), database_schema),
       table_schema.get_database_id());
   OV (OB_NOT_NULL(database_schema), OB_ERR_UNEXPECTED, table_schema.get_database_id());
   OX (database_name = &database_schema->get_database_name_str());
   OZ (rebuild_trigger_on_rename(schema_guard,
-                                tenant_id,
                                 table_schema.get_trigger_list(),
                                 *database_name,
                                 table_name,
@@ -1215,7 +1206,6 @@ int ObPLDDLService::rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard
 }
 
 int ObPLDDLService::rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
-                                              const uint64_t tenant_id,
                                               const common::ObIArray<uint64_t> &trigger_list,
                                               const common::ObString &database_name,
                                               const common::ObString &table_name,
@@ -1226,7 +1216,7 @@ int ObPLDDLService::rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard
   const ObTriggerInfo *trigger_info = NULL;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
-    OZ (schema_guard.get_trigger_info(tenant_id, trigger_list.at(i), trigger_info), trigger_list.at(i));
+    OZ (schema_guard.get_trigger_info( trigger_list.at(i), trigger_info), trigger_list.at(i));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list.at(i));
     OZ (pl_operator.rebuild_trigger_on_rename(*trigger_info, database_name, table_name, trans));
   }
@@ -1249,22 +1239,21 @@ int ObPLDDLService::create_trigger_for_truncate_table(share::schema::ObSchemaGet
   new_table_schema.get_trigger_list().reset();
   bool is_update_table_schema_version = false;
   const ObDatabaseSchema *db_schema = NULL;
-  const uint64_t tenant_id = new_table_schema.get_tenant_id();
+  
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
-  OZ (schema_guard.get_database_schema(tenant_id,
+  OZ (schema_guard.get_database_schema(
                                        new_table_schema.get_database_id(),
                                        db_schema));
   CK (db_schema != NULL);
   for (int64_t i = 0; OB_SUCC(ret) && i < origin_trigger_list.count(); i++) {
     is_update_table_schema_version = i == origin_trigger_list.count() - 1 ? true : false;
     uint64_t new_trigger_id = OB_INVALID_ID;
-    OZ (schema_guard.get_trigger_info(tenant_id, origin_trigger_list.at(i), origin_trigger_info),
+    OZ (schema_guard.get_trigger_info( origin_trigger_list.at(i), origin_trigger_info),
                                       origin_trigger_list.at(i));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(new_trigger_info.deep_copy(*origin_trigger_info))) {
         LOG_WARN("failed to create trigger for truncate table", K(ret));
-      } else if (OB_FAIL(pl_operator.get_multi_schema_service().get_schema_service()->fetch_new_trigger_id(
-          origin_trigger_info->get_tenant_id(), new_trigger_id))) {
+      } else if (OB_FAIL(pl_operator.get_multi_schema_service().get_schema_service()->fetch_new_trigger_id(new_trigger_id))) {
         LOG_WARN("failed to fetch_new_trigger_id", K(ret));
       } else {
         new_trigger_info.set_trigger_id(new_trigger_id);
@@ -1303,17 +1292,16 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
   OX (copy_trg_info.set_action_order(new_action_order)); \
   OZ (pl_operator.alter_trigger(copy_trg_info, trans, NULL, false/*is_update_table_schema_version*/));
 
-  const uint64_t tenant_id = trigger_info.get_tenant_id();
   common::ObSArray<uint64_t> trg_list;
   if (OB_SUCC(ret)) {
     if (trigger_info.is_dml_type()) {
       const ObTableSchema *table_schema = NULL;
-      OZ (schema_guard.get_table_schema(tenant_id, trigger_info.get_base_object_id(), table_schema));
+      OZ (schema_guard.get_table_schema( trigger_info.get_base_object_id(), table_schema));
       OV (OB_NOT_NULL(table_schema));
       OZ (trg_list.assign(table_schema->get_trigger_list()));
     } else if (trigger_info.is_system_type()) {
       const ObUserInfo *user_info = NULL;
-      OZ (schema_guard.get_user_info(tenant_id, trigger_info.get_base_object_id(), user_info));
+      OZ (schema_guard.get_user_info(trigger_info.get_base_object_id(), user_info));
       OV (OB_NOT_NULL(user_info));
       OZ (trg_list.assign(user_info->get_trigger_list()));
     }
@@ -1326,7 +1314,7 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
       const ObTriggerInfo *ref_trg_info = NULL;
       if (OB_SUCC(ret)) {
         if (!trigger_info.get_ref_trg_name().empty()) {
-          OZ (schema_guard.get_trigger_info(tenant_id, trigger_info.get_database_id(),
+          OZ (schema_guard.get_trigger_info( trigger_info.get_database_id(),
                                             trigger_info.get_ref_trg_name(), ref_trg_info));
           OV (OB_NOT_NULL(ref_trg_info));
         }
@@ -1334,7 +1322,7 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
         } else {
           if (NULL == ref_trg_info) {
             for (int64_t i = 0; OB_SUCC(ret) && i < trg_list.count(); i++) {
-              OZ (schema_guard.get_trigger_info(tenant_id, trg_list.at(i), old_trg_info));
+              OZ (schema_guard.get_trigger_info( trg_list.at(i), old_trg_info));
               OV (OB_NOT_NULL(old_trg_info));
               if (OB_SUCC(ret) && ObTriggerInfo::is_same_timing_event(trigger_info, *old_trg_info)) {
                 action_order++;
@@ -1345,7 +1333,7 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
             action_order = is_follows ? ref_trg_info->get_action_order() + 1 : ref_trg_info->get_action_order();
             // ref_trg_info need to modify
             for (int64_t i = 0; OB_SUCC(ret) && i < trg_list.count(); i++) {
-              OZ (schema_guard.get_trigger_info(tenant_id, trg_list.at(i), old_trg_info));
+              OZ (schema_guard.get_trigger_info( trg_list.at(i), old_trg_info));
               OV (OB_NOT_NULL(old_trg_info));
               if (OB_SUCC(ret) && ObTriggerInfo::is_same_timing_event(trigger_info, *old_trg_info)
                   && trigger_info.get_trigger_id() != old_trg_info->get_trigger_id()
@@ -1368,7 +1356,7 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
     } else {
       if (OB_SUCC(ret)) {
         for (int64_t i = 0; OB_SUCC(ret) && i < trg_list.count(); i++) {
-          OZ (schema_guard.get_trigger_info(tenant_id, trg_list.at(i), old_trg_info));
+          OZ (schema_guard.get_trigger_info( trg_list.at(i), old_trg_info));
           OV (OB_NOT_NULL(old_trg_info));
           if (OB_SUCC(ret) && ObTriggerInfo::is_same_timing_event(trigger_info, *old_trg_info)
               && trigger_info.get_trigger_id() != old_trg_info->get_trigger_id()
@@ -1393,11 +1381,11 @@ int ObPLDDLService::recursive_alter_ref_trigger(share::schema::ObSchemaGetterGua
                                                 int64_t action_order)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = ref_trigger_info.get_tenant_id();
+  
   const ObTriggerInfo *trg_info = NULL;
   int64_t new_action_order = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
-    OZ (schema_guard.get_trigger_info(tenant_id, trigger_list.at(i), trg_info));
+    OZ (schema_guard.get_trigger_info( trigger_list.at(i), trg_info));
     OV (OB_NOT_NULL(trg_info));
     if (0 != trg_info->get_trigger_name().case_compare(trigger_name)) {
       if (OB_SUCC(ret) && 0 == trg_info->get_ref_trg_name().case_compare(ref_trigger_info.get_trigger_name())) {
@@ -1426,10 +1414,10 @@ int ObPLDDLService::recursive_check_trigger_ref_cyclic(share::schema::ObSchemaGe
                                                         const ObString &generate_cyclic_name)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = ref_trigger_info.get_tenant_id();
+  
   const ObTriggerInfo *trg_info = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
-    OZ (schema_guard.get_trigger_info(tenant_id, trigger_list.at(i), trg_info));
+    OZ (schema_guard.get_trigger_info( trigger_list.at(i), trg_info));
     OV (OB_NOT_NULL(trg_info));
     if (OB_SUCC(ret)) {
       if (0 != trg_info->get_trigger_name().case_compare(create_trigger_name)) {
@@ -1459,12 +1447,12 @@ int ObPLDDLService::drop_trigger_in_drop_table(ObMySQLTransaction &trans,
   int ret = OB_SUCCESS;
   uint64_t trigger_id = OB_INVALID_ID;
   const ObTriggerInfo *trigger_info = NULL;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const ObIArray<uint64_t> &trigger_id_list = table_schema.get_trigger_list();
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   for (int64_t i = 0; OB_SUCC(ret) && i < trigger_id_list.count(); i++) {
     OX (trigger_id = trigger_id_list.at(i));
-    OZ (schema_guard.get_trigger_info(tenant_id, trigger_id, trigger_info), trigger_id);
+    OZ (schema_guard.get_trigger_info( trigger_id, trigger_info), trigger_id);
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_id);
     OV (!trigger_info->is_in_recyclebin(), OB_ERR_UNEXPECTED, trigger_id);
     if (to_recyclebin && !table_schema.is_view_table()) {
@@ -1489,13 +1477,13 @@ int ObPLDDLService::flashback_trigger(const share::schema::ObTableSchema &table_
                                       ObDDLOperator &ddl_operator)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const ObIArray<uint64_t> &trigger_id_list = table_schema.get_trigger_list();
   const ObTriggerInfo *trigger_info = NULL;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   for (int i = 0; OB_SUCC(ret) && i < trigger_id_list.count(); i++) {
     uint64_t trigger_id = trigger_id_list.at(i);
-    OZ (schema_guard.get_trigger_info(tenant_id, trigger_id, trigger_info), trigger_id);
+    OZ (schema_guard.get_trigger_info( trigger_id, trigger_info), trigger_id);
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_id);
     OZ (pl_operator.flashback_trigger(*trigger_info, new_database_id, new_table_name, schema_guard, trans));
   }
@@ -1503,7 +1491,6 @@ int ObPLDDLService::flashback_trigger(const share::schema::ObTableSchema &table_
 }
 
 int ObPLDDLService::get_object_info(ObSchemaGetterGuard &schema_guard,
-                                    const uint64_t tenant_id,
                                     const ObString &object_database,
                                     const ObString &object_name,
                                     ObSchemaType &object_type,
@@ -1515,11 +1502,11 @@ int ObPLDDLService::get_object_info(ObSchemaGetterGuard &schema_guard,
   const ObTableSchema *table_schema = NULL;
   if (TABLE_SCHEMA == object_type || VIEW_SCHEMA == object_type) {
     const ObTableSchema *table_schema = NULL;
-    if (OB_FAIL(ddl_service.get_database_id(schema_guard, tenant_id, object_database, database_id))) {
+    if (OB_FAIL(ddl_service.get_database_id(schema_guard, object_database, database_id))) {
       LOG_WARN("failed to get database id", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, database_id,
+    } else if (OB_FAIL(schema_guard.get_table_schema( database_id,
                                                     object_name, false, table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret), K(tenant_id));
+      LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_BAD_TABLE;
       LOG_WARN("table schema is invalid", K(ret), K(object_name), K(object_name));
@@ -1537,11 +1524,11 @@ int ObPLDDLService::get_object_info(ObSchemaGetterGuard &schema_guard,
   } else if (USER_SCHEMA == object_type || DATABASE_SCHEMA == object_type) {
     const ObUserInfo *user_info = NULL;
     ObString host_name("%");
-    if (OB_FAIL(schema_guard.get_user_info(tenant_id, object_name, host_name, user_info))) {
-      LOG_WARN("get user info failed", K(ret), K(object_name), K(tenant_id));
+    if (OB_FAIL(schema_guard.get_user_info(object_name, host_name, user_info))) {
+      LOG_WARN("get user info failed", K(ret), K(object_name));
     } else if (OB_ISNULL(user_info)) {
       ret = OB_ERR_BAD_TABLE;
-      LOG_WARN("user_info is NULL", K(ret), K(object_name), K(tenant_id));
+      LOG_WARN("user_info is NULL", K(ret), K(object_name));
     } else {
       object_id = user_info->get_user_id();
     }
@@ -1562,9 +1549,9 @@ int ObPLDDLService::rebuild_triggers_on_hidden_table(
                   ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const uint64_t src_tenant_id = orig_table_schema.get_tenant_id();
-  const uint64_t dst_tenant_id = hidden_table_schema.get_tenant_id();
-  const bool is_recover_restore_table = src_tenant_id != dst_tenant_id;
+  
+  
+  const bool is_recover_restore_table = false;
   const ObIArray<uint64_t> &trigger_list = orig_table_schema.get_trigger_list();
   const ObTriggerInfo *trigger_info = NULL;
   ObTriggerInfo new_trigger_info;
@@ -1572,12 +1559,11 @@ int ObPLDDLService::rebuild_triggers_on_hidden_table(
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
   for (int i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
     bool need_rebuild = true;
-    OZ (src_tenant_schema_guard.get_trigger_info(src_tenant_id, trigger_list.at(i), trigger_info));
+    OZ (src_tenant_schema_guard.get_trigger_info( trigger_list.at(i), trigger_info));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list.at(i));
     OZ (new_trigger_info.assign(*trigger_info));
     OX (new_trigger_info.set_base_object_id(hidden_table_schema.get_table_id()));
     OX (new_trigger_info.set_trigger_id(OB_INVALID_ID));
-    OX (new_trigger_info.set_tenant_id(dst_tenant_id));
     // ATTENTION!
     // Oracle supports one table has multiple triggers based on different users/databases.
     OX (new_trigger_info.set_database_id(trigger_info->get_database_id()));
@@ -1608,7 +1594,6 @@ int ObPLDDLService::rebuild_triggers_on_hidden_table(
 int ObPLDDLService::drop_trigger_in_drop_user(ObMySQLTransaction &trans,
                                             rootserver::ObDDLOperator &ddl_operator,
                                             ObSchemaGetterGuard &schema_guard,
-                                            const uint64_t tenant_id,
                                             const uint64_t user_id)
 {
   int ret = OB_SUCCESS;
@@ -1616,13 +1601,13 @@ int ObPLDDLService::drop_trigger_in_drop_user(ObMySQLTransaction &trans,
   const ObTriggerInfo *trigger_info = NULL;
   const ObUserInfo *user_info = NULL;
   ObPLDDLOperator pl_operator(ddl_operator.get_multi_schema_service(), ddl_operator.get_sql_proxy());
-  OZ (schema_guard.get_user_info(tenant_id, user_id, user_info));
+  OZ (schema_guard.get_user_info(user_id, user_info));
   OV (OB_NOT_NULL(user_info));
   if (OB_SUCC(ret)) {
     const ObIArray<uint64_t> &trigger_id_list = user_info->get_trigger_list();
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_id_list.count(); i++) {
       OX (trigger_id = trigger_id_list.at(i));
-      OZ (schema_guard.get_trigger_info(tenant_id, trigger_id, trigger_info), trigger_id);
+      OZ (schema_guard.get_trigger_info( trigger_id, trigger_info), trigger_id);
       OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_id);
       OV (!trigger_info->is_in_recyclebin(), OB_ERR_UNEXPECTED, trigger_id);
       OZ (pl_operator.drop_trigger(*trigger_info, trans, NULL));
@@ -1652,27 +1637,27 @@ int ObPLDDLService::check_and_construct_restore_trigger_info(
   need_rebuild = true;
   const ObDatabaseSchema *src_db_schema = nullptr;
   const ObDatabaseSchema *dst_db_schema = nullptr;
-  const uint64_t src_tenant_id = orig_table_schema.get_tenant_id();
-  const uint64_t dst_tenant_id = hidden_table_schema.get_tenant_id();
-  if (OB_UNLIKELY(src_tenant_id == dst_tenant_id)) {
+  
+  
+  if (OB_UNLIKELY(true)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is same", K(ret), K(src_tenant_id), K(dst_tenant_id));
-  } else if (OB_FAIL(src_tenant_schema_guard.get_database_schema(src_tenant_id,
+    LOG_WARN("tenant is same", K(ret));
+  } else if (OB_FAIL(src_tenant_schema_guard.get_database_schema(
       orig_table_schema.get_database_id(), src_db_schema))) {
-    LOG_WARN("get db schema failed", K(ret), K(src_tenant_id), "db_id", orig_table_schema.get_database_id());
+    LOG_WARN("get db schema failed", K(ret), "db_id", orig_table_schema.get_database_id());
   } else if (OB_ISNULL(src_db_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null db", K(ret), K(src_tenant_id), "db_id", orig_table_schema.get_database_id());
-  } else if (OB_FAIL(dst_tenant_schema_guard.get_database_schema(dst_tenant_id,
+    LOG_WARN("unexpected null db", K(ret), "db_id", orig_table_schema.get_database_id());
+  } else if (OB_FAIL(dst_tenant_schema_guard.get_database_schema(
       hidden_table_schema.get_database_id(), dst_db_schema))) {
-    LOG_WARN("get db schema failed", K(ret), K(dst_tenant_id), "db_id", hidden_table_schema.get_database_id());
+    LOG_WARN("get db schema failed", K(ret), "db_id", hidden_table_schema.get_database_id());
   } else if (OB_ISNULL(dst_db_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null db", K(ret), K(dst_tenant_id), "db_id", hidden_table_schema.get_database_id());
+    LOG_WARN("unexpected null db", K(ret), "db_id", hidden_table_schema.get_database_id());
   } else {
     // To check if the database name, base_table name changed.
     const ObString &target_table_name = alter_table_arg.alter_table_schema_.get_table_name_str();
-    ObCompareNameWithTenantID name_cmp(dst_tenant_id);
+    ObCompareNameWithTenantID name_cmp;
     if (0 != name_cmp.compare(src_db_schema->get_database_name_str(), dst_db_schema->get_database_name_str())) {
       need_rebuild = false;
       FLOG_INFO("ignore to rebuild the trigger whose db name has changed", 
@@ -1694,21 +1679,21 @@ int ObPLDDLService::check_and_construct_restore_trigger_info(
       // Base table and trigger have the different database.
       // To find the target database by the database name.
       const ObDatabaseSchema *src_trigger_db_schema = nullptr;
-      if (OB_FAIL(src_tenant_schema_guard.get_database_schema(src_tenant_id, 
+      if (OB_FAIL(src_tenant_schema_guard.get_database_schema( 
           src_trigger_info.get_database_id(), src_trigger_db_schema))) {
-        LOG_WARN("get db schema failed", K(ret), K(src_tenant_id), "db_id", src_trigger_info.get_database_id());
+        LOG_WARN("get db schema failed", K(ret), "db_id", src_trigger_info.get_database_id());
       } else if (OB_ISNULL(src_trigger_db_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null db", K(ret), K(src_tenant_id), "db_id", src_trigger_info.get_database_id());
+        LOG_WARN("unexpected null db", K(ret), "db_id", src_trigger_info.get_database_id());
       } else {
         const ObDatabaseSchema *dst_trigger_db_schema = nullptr;
         const ObString &src_trigger_db_name = src_trigger_db_schema->get_database_name_str();
         // 2. check if the trigger's db existed in the dst tenant space.
-        if (OB_FAIL(dst_tenant_schema_guard.get_database_schema(dst_tenant_id, src_trigger_db_name, dst_trigger_db_schema))) {
-          LOG_WARN("get db schema failed", K(ret), K(dst_tenant_id), K(src_trigger_db_name));
+        if (OB_FAIL(dst_tenant_schema_guard.get_database_schema( src_trigger_db_name, dst_trigger_db_schema))) {
+          LOG_WARN("get db schema failed", K(ret), K(src_trigger_db_name));
         } else if (nullptr == dst_trigger_db_schema) {
           need_rebuild = false;
-          FLOG_INFO("ignore to rebuild the trigger whose db does not exist", K(dst_tenant_id), K(src_trigger_db_name), K(src_trigger_info));
+          FLOG_INFO("ignore to rebuild the trigger whose db does not exist", K(src_trigger_db_name), K(src_trigger_info));
         } else {
           new_trigger_info.set_database_id(dst_trigger_db_schema->get_database_id());
         }
@@ -1718,12 +1703,12 @@ int ObPLDDLService::check_and_construct_restore_trigger_info(
 
   if (OB_SUCC(ret) && need_rebuild) {
     const ObTriggerInfo *check_dup_trigger_info = nullptr;
-    if (OB_FAIL(dst_tenant_schema_guard.get_trigger_info(dst_tenant_id, new_trigger_info.get_database_id(),
+    if (OB_FAIL(dst_tenant_schema_guard.get_trigger_info( new_trigger_info.get_database_id(),
         new_trigger_info.get_trigger_name(), check_dup_trigger_info))) {
-      LOG_WARN("check duplicated trigger failed", K(ret), K(dst_tenant_id), K(new_trigger_info));
+      LOG_WARN("check duplicated trigger failed", K(ret), K(new_trigger_info));
     } else if (OB_UNLIKELY(nullptr != check_dup_trigger_info)) {
       need_rebuild = false;
-      FLOG_INFO("ignore to rebuild the trigger that has already exist", K(dst_tenant_id), K(src_trigger_info), K(new_trigger_info));
+      FLOG_INFO("ignore to rebuild the trigger that has already exist", K(src_trigger_info), K(new_trigger_info));
     }
   }
   return ret;
@@ -1741,8 +1726,7 @@ int ObPLDDLService::check_env_before_ddl(share::schema::ObSchemaGetterGuard &sch
     LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service.check_inner_stat())) {
     LOG_WARN("variable is not init", KR(ret));
-  } else if (OB_FAIL(ddl_service.get_tenant_schema_guard_with_version_in_inner_table(arg.exec_tenant_id_,
-                                                                                     schema_guard))) {
+  } else if (OB_FAIL(ddl_service.get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
     LOG_WARN("get schema guard with version in inner table failed", K(ret));
   } else if (OB_FAIL(ddl_service.check_parallel_ddl_conflict(schema_guard, arg))) {
     LOG_WARN("check parallel ddl conflict failed", K(ret));

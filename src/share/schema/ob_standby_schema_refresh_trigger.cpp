@@ -131,13 +131,12 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
     if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_status_proxy is null", KR(ret));
-    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(OB_SYS_TENANT_ID, schema_status))) {
+    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
       LOG_WARN("failed to get tenant refresh schema status", KR(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_schema_version_in_inner_table(*GCTX.sql_proxy_,
           schema_status, schema_version))) {
       LOG_WARN("fail to get latest schema version in inner table", K(ret));
-    } else if (OB_FAIL(GCTX.ob_service_->submit_async_refresh_schema_task(
-                         OB_SYS_TENANT_ID, schema_version))) {
+    } else if (OB_FAIL(GCTX.ob_service_->submit_async_refresh_schema_task(schema_version))) {
       LOG_WARN("fail to submit async refresh schema task",
                KR(ret), K(schema_version));
     }

@@ -70,8 +70,8 @@ ObDirectLoadConflictCheck::ObDirectLoadConflictCheck()
     origin_iter_is_end_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  range_allocator_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObDirectLoadConflictCheck::~ObDirectLoadConflictCheck()

@@ -15,6 +15,7 @@
  */
 
 #include "ob_trans_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_trans_service.h"
 #include "observer/ob_ex_rpc.h"
 
@@ -46,7 +47,7 @@ bool need_refresh_location_cache_(const int ret)
 
 int refresh_location_cache(const share::ObLSID ls)
 {
-  return MTL(ObTransService *)->refresh_location_cache(ls);
+  return share::g_mp->trans_service()->refresh_location_cache(ls);
 }
 
 int handle_trans_msg_callback(const share::ObLSID &sender_ls_id,
@@ -58,7 +59,7 @@ int handle_trans_msg_callback(const share::ObLSID &sender_ls_id,
                               const int64_t request_id,
                               const SCN &private_data)
 {
-  return MTL(ObTransService *)->handle_trans_msg_callback(sender_ls_id,
+  return share::g_mp->trans_service()->handle_trans_msg_callback(sender_ls_id,
                                                   receiver_ls_id,
                                                   tx_id,
                                                   msg_type,
@@ -79,7 +80,7 @@ int handle_sp_rollback_resp(const share::ObLSID &receiver_ls_id,
   if (result.ignore_) {
     return OB_SUCCESS;
   }
-  return MTL(ObTransService *)->handle_sp_rollback_resp(receiver_ls_id,
+  return share::g_mp->trans_service()->handle_sp_rollback_resp(receiver_ls_id,
                                                         epoch,
                                                         tx_id,
                                                         status,
@@ -116,16 +117,16 @@ namespace
 // what ObTxRPCCB::process used when rcode == OB_SUCCESS). Single-replica: the
 // receiver LS leader is always local, so dst == the resolved local server.
 template <typename MsgType, typename Handler>
-void dispatch_tx_msg_async_(const common::ObAddr &dst, const uint64_t tenant_id,
+void dispatch_tx_msg_async_(const common::ObAddr &dst,
                             const MsgType &msg, Handler handler)
 {
-  (void)ex_rpc::async_call<void>(msg, [dst, tenant_id, handler](MsgType &m) {
+  (void)ex_rpc::async_call<void>(msg, [dst, handler](MsgType &m) {
     int ret = OB_SUCCESS;
-    MTL_SWITCH(tenant_id) {
-      transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+    MOD_SCOPE {
+      transaction::ObTransService *txs = share::g_mp->trans_service();
       obcall::ObTransRpcResult result;
       if (OB_ISNULL(txs)) {
-        ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret), K(tenant_id));
+        ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret));
       } else {
         if (!m.is_valid()) {
           ret = OB_INVALID_ARGUMENT; TRANS_LOG(ERROR, "msg is invalid", K(ret), K(m));
@@ -143,15 +144,15 @@ void dispatch_tx_msg_async_(const common::ObAddr &dst, const uint64_t tenant_id,
 // rollback-savepoint request has its own result type and completion path
 // (handle_sp_rollback_resp, which no-ops when result.ignore_ is set for the
 // async-resp protocol). Otherwise identical to dispatch_tx_msg_async_.
-void dispatch_rollback_sp_async_(const uint64_t tenant_id, const transaction::ObTxRollbackSPMsg &msg)
+void dispatch_rollback_sp_async_(const transaction::ObTxRollbackSPMsg &msg)
 {
-  (void)ex_rpc::async_call<void>(msg, [tenant_id](transaction::ObTxRollbackSPMsg &m) {
+  (void)ex_rpc::async_call<void>(msg, [](transaction::ObTxRollbackSPMsg &m) {
     int ret = OB_SUCCESS;
-    MTL_SWITCH(tenant_id) {
-      transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+    MOD_SCOPE {
+      transaction::ObTransService *txs = share::g_mp->trans_service();
       obcall::ObTxRpcRollbackSPResult result;
       if (OB_ISNULL(txs)) {
-        ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret), K(tenant_id));
+        ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret));
       } else {
         if (!m.is_valid()) {
           ret = OB_INVALID_ARGUMENT; TRANS_LOG(ERROR, "msg is invalid", K(ret), K(m));
@@ -171,7 +172,7 @@ void dispatch_rollback_sp_async_(const uint64_t tenant_id, const transaction::Ob
 // concrete msg (exactly as ObIFill::fill_buffer did) and dispatch it in-process
 // + async into the same sink (ObTransService::handle_tx_batch_req), preserving
 // the original async, fire-and-forget delivery semantics.
-void dispatch_tx_2pc_async_(const uint64_t tenant_id, const transaction::ObTxMsg &msg)
+void dispatch_tx_2pc_async_(const transaction::ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
   const int16_t msg_type = msg.get_msg_type();
@@ -189,12 +190,12 @@ void dispatch_tx_2pc_async_(const uint64_t tenant_id, const transaction::ObTxMsg
     buf = NULL;
   } else {
     const int32_t data_size = static_cast<int32_t>(filled);
-    (void)ex_rpc::async_call([tenant_id, msg_type, buf, data_size]() {
+    (void)ex_rpc::async_call([msg_type, buf, data_size]() {
       int ret = OB_SUCCESS;
-      MTL_SWITCH(tenant_id) {
-        transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+      MOD_SCOPE {
+        transaction::ObTransService *txs = share::g_mp->trans_service();
         if (OB_ISNULL(txs)) {
-          ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret), K(tenant_id));
+          ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret));
         } else if (OB_FAIL(txs->handle_tx_batch_req(msg_type, buf, data_size))) {
           TRANS_LOG(WARN, "handle 2pc msg fail", K(ret), K(msg_type));
         }
@@ -219,7 +220,7 @@ int ObTransRpc::init(ObTransService *trans_service,
     TRANS_LOG(WARN, "invalid argument", KP(trans_service), K(self));
     ret = OB_INVALID_ARGUMENT;
   } else {
-    tenant_id_ = MTL_ID();
+    
     trans_service_ = trans_service;
     last_stat_ts_ = ObTimeUtility::current_time();
     is_inited_ = true;
@@ -285,30 +286,30 @@ int ObTransRpc::post_commit_msg_(const ObAddr &server, ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
   const int64_t msg_type = msg.get_msg_type();
-  const uint64_t tenant_id = msg.tenant_id_;
+  
   switch (msg_type)
   {
     case TX_COMMIT:
     {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxCommitMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxCommitMsg&>(msg),
                              &ObTransService::handle_trans_commit_request);
       break;
     }
     case TX_COMMIT_RESP:
     {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxCommitRespMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxCommitRespMsg&>(msg),
                              &ObTransService::handle_trans_commit_response);
       break;
     }
     case TX_ABORT:
     {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxAbortMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxAbortMsg&>(msg),
                              &ObTransService::handle_trans_abort_request);
       break;
     }
     default:
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(tenant_id), K(server), K(msg));
+      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
   }
   return ret;
@@ -318,29 +319,29 @@ int ObTransRpc::post_(const ObAddr &server, ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
   const int64_t msg_type = msg.get_msg_type();
-  const uint64_t tenant_id = msg.tenant_id_;
+  
   switch (msg_type)
   {
     case ROLLBACK_SAVEPOINT:
     {
-      dispatch_rollback_sp_async_(tenant_id, static_cast<ObTxRollbackSPMsg &>(msg));
+      dispatch_rollback_sp_async_(static_cast<ObTxRollbackSPMsg &>(msg));
       break;
     }
     case ROLLBACK_SAVEPOINT_RESP:
     {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxRollbackSPRespMsg &>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxRollbackSPRespMsg &>(msg),
                              &ObTransService::handle_sp_rollback_response);
       break;
     }
     case KEEPALIVE:
     {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxKeepaliveMsg &>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxKeepaliveMsg &>(msg),
                              &ObTransService::handle_trans_keepalive);
       break;
     }
     case KEEPALIVE_RESP:
     {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxKeepaliveRespMsg &>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxKeepaliveRespMsg &>(msg),
                              &ObTransService::handle_trans_keepalive_response);
       break;
     }
@@ -377,7 +378,7 @@ int ObTransRpc::post_(const ObAddr &server, ObTxMsg &msg)
     }
     default:
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(tenant_id), K(server), K(msg));
+      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
   }
   return ret;
@@ -386,7 +387,7 @@ int ObTransRpc::post_(const ObAddr &server, ObTxMsg &msg)
 int ObTransRpc::post_msg(const ObAddr &server, ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = msg.get_tenant_id();
+  
 
   if (OB_UNLIKELY(!is_inited_)) {
     TRANS_LOG(WARN, "ObTransRpc not inited");
@@ -394,12 +395,12 @@ int ObTransRpc::post_msg(const ObAddr &server, ObTxMsg &msg)
   } else if (OB_UNLIKELY(!is_running_)) {
     TRANS_LOG(WARN, "ObTransRpc is not running");
     ret = OB_NOT_RUNNING;
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) ||
+  } else if (OB_UNLIKELY(!true) ||
       OB_UNLIKELY(!server.is_valid()) || OB_UNLIKELY(!msg.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(tenant_id), K(server), K(msg));
+    TRANS_LOG(WARN, "invalid argument", K(server), K(msg));
     ret = OB_INVALID_ARGUMENT;
   } else if (ObTxMsgTypeChecker::is_2pc_msg_type(msg.get_msg_type())) {
-    dispatch_tx_2pc_async_(msg.tenant_id_, msg);
+    dispatch_tx_2pc_async_(msg);
   } else if (OB_FAIL(post_(server, msg))) {
     TRANS_LOG(WARN, "post msg error", K(ret), K(server), K(msg));
   } else {
@@ -422,16 +423,16 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
   const int64_t random = ObRandom::rand(1, 100);
   if (0 == random % 20) {
     //mock package drop: 5%
-    TRANS_LOG(INFO, "post trans msg failed for random error (discard msg)", K(tenant_id), K(server), K(msg));
+    TRANS_LOG(INFO, "post trans msg failed for random error (discard msg)", K(server), K(msg));
     return ret;
   } else if (0 == random % 50) {
-    TRANS_LOG(INFO, "post trans msg failed for random error (delayed msg)", K(tenant_id), K(server), K(msg));
+    TRANS_LOG(INFO, "post trans msg failed for random error (delayed msg)", K(server), K(msg));
   } else {
     // do nothing
   }
 #endif
 
-  uint64_t tenant_id = msg.tenant_id_;
+  
   int64_t cluster_id = GCONF.cluster_id;
   ObAddr server;
 
@@ -441,10 +442,10 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
   } else if (OB_UNLIKELY(!is_running_)) {
     TRANS_LOG(WARN, "ObTransRpc is not running");
     ret = OB_NOT_RUNNING;
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(!msg.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(tenant_id), K(msg));
+  } else if (OB_UNLIKELY(!true) || OB_UNLIKELY(!msg.is_valid())) {
+    TRANS_LOG(WARN, "invalid argument", K(msg));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(trans_service_->get_location_adapter()->nonblock_get_leader(cluster_id, tenant_id, ls_id, server))) {
+  } else if (OB_FAIL(trans_service_->get_location_adapter()->nonblock_get_leader(cluster_id, ls_id, server))) {
     TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(cluster_id), K(ls_id));
     if (ObTxMsgTypeChecker::is_2pc_msg_type(msg.get_msg_type())) {
       if (OB_LS_IS_DELETED == ret) {
@@ -456,7 +457,7 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
     }
   } else if (ObTxMsgTypeChecker::is_2pc_msg_type(msg.get_msg_type())) {
     // 2pc msg: in-process async dispatch (single-replica leader is local)
-    dispatch_tx_2pc_async_(msg.tenant_id_, msg);
+    dispatch_tx_2pc_async_(msg);
   } else if (OB_FAIL(post_(server, msg))) {
     TRANS_LOG(WARN, "post msg error", K(ret), K(server), K(msg));
   } else {
@@ -476,26 +477,26 @@ int ObTransRpc::post_sub_request_msg_(const ObAddr &server, ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
   const int64_t msg_type = msg.get_msg_type();
-  const uint64_t tenant_id = msg.tenant_id_;
+  
   switch (msg_type) {
     case SUBPREPARE: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxSubPrepareMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxSubPrepareMsg&>(msg),
                              &ObTransService::handle_sub_prepare_request);
       break;
     }
     case SUBCOMMIT: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxSubCommitMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxSubCommitMsg&>(msg),
                              &ObTransService::handle_sub_commit_request);
       break;
     }
     case SUBROLLBACK: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxSubRollbackMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxSubRollbackMsg&>(msg),
                              &ObTransService::handle_sub_rollback_request);
       break;
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(tenant_id), K(server), K(msg));
+      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
     }
   }
@@ -506,26 +507,26 @@ int ObTransRpc::post_sub_response_msg_(const ObAddr &server, ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
   const int64_t msg_type = msg.get_msg_type();
-  const uint64_t tenant_id = msg.tenant_id_;
+  
   switch (msg_type) {
     case SUBPREPARE_RESP: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxSubPrepareRespMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxSubPrepareRespMsg&>(msg),
                              &ObTransService::handle_sub_prepare_response);
       break;
     }
     case SUBCOMMIT_RESP: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxSubCommitRespMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxSubCommitRespMsg&>(msg),
                              &ObTransService::handle_sub_commit_response);
       break;
     }
     case SUBROLLBACK_RESP: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObTxSubRollbackRespMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObTxSubRollbackRespMsg&>(msg),
                              &ObTransService::handle_sub_rollback_response);
       break;
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(tenant_id), K(server), K(msg));
+      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
     }
   }
@@ -537,7 +538,7 @@ int ObTransRpc::ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
 {
   int ret = OB_SUCCESS;
 
-  uint64_t tenant_id = trans_service_->get_tenant_id();
+  
   int64_t cluster_id = GCONF.cluster_id;
   ObAddr server;
 
@@ -547,15 +548,14 @@ int ObTransRpc::ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
   } else if (OB_UNLIKELY(!is_running_)) {
     TRANS_LOG(WARN, "ObTransRpc is not running");
     ret = OB_NOT_RUNNING;
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))
+  } else if (OB_UNLIKELY(!true)
              || OB_UNLIKELY(!msg.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(tenant_id), K(msg));
+    TRANS_LOG(WARN, "invalid argument", K(msg));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(trans_service_->get_location_adapter()->nonblock_get_leader(cluster_id,
-                                                                                 tenant_id,
                                                                                  msg.ls_id_,
                                                                                  server))) {
-    TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(cluster_id), K(tenant_id));
+    TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(cluster_id));
   } else {
     // single-replica: the target LS leader is local, dispatch in-process
     // (mirrors ObAskTxStateFor4377P::process: the handler status is carried back
@@ -580,31 +580,31 @@ int ObTransRpc::post_standby_msg_(const ObAddr &server, ObTxMsg &msg)
 {
   int ret = OB_SUCCESS;
   const int64_t msg_type = msg.get_msg_type();
-  const uint64_t tenant_id = msg.tenant_id_;
+  
   switch (msg_type) {
     case ASK_STATE: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObAskStateMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObAskStateMsg&>(msg),
                              &ObTransService::handle_trans_ask_state);
       break;
     }
     case ASK_STATE_RESP: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObAskStateRespMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObAskStateRespMsg&>(msg),
                              &ObTransService::handle_trans_ask_state_response);
       break;
     }
     case COLLECT_STATE: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObCollectStateMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObCollectStateMsg&>(msg),
                              &ObTransService::handle_trans_collect_state);
       break;
     }
     case COLLECT_STATE_RESP: {
-      dispatch_tx_msg_async_(server, tenant_id, static_cast<ObCollectStateRespMsg&>(msg),
+      dispatch_tx_msg_async_(server, static_cast<ObCollectStateRespMsg&>(msg),
                              &ObTransService::handle_trans_collect_state_response);
       break;
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(tenant_id), K(server), K(msg));
+      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
     }
   }

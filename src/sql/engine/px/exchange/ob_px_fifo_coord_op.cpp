@@ -134,7 +134,7 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
       LOG_WARN("initial dfos NOT dispatched successfully", K(ret));
     }
-    msg_loop_.set_tenant_id(ctx_.get_my_session()->get_effective_tenant_id());
+    
     first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
   }
 

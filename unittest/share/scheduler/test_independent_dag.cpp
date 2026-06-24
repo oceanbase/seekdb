@@ -53,47 +53,46 @@ public:
 public:
   TestIndependentDag() 
     : tenant_id_(1001),
-      tenant_base_(1001),
       addr_(1683068975, 9999),
       allocator_("IndependentDag"),
       scheduler_(nullptr),
+      old_mp_(nullptr),
       is_inited_(false) {}
   virtual ~TestIndependentDag() {}
   void SetUp() override
   {
     if (!is_inited_) {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
       is_inited_ = true;
     }
     scheduler_ = OB_NEW(ObTenantDagScheduler, ObModIds::TEST);
-    tenant_base_.set(scheduler_);
-
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+    provider_.dag_scheduler_ = scheduler_;
+    old_mp_ = share::g_mp;
+    share::g_mp = &provider_;
 
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(tenant_id_, 1LL << 30));
+    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
 
     ASSERT_EQ(OB_SUCCESS, ObSysTaskStatMgr::get_instance().set_self_addr(addr_));
-    ASSERT_EQ(OB_SUCCESS, scheduler_->init(MTL_ID(), 1000 /*check_period*/));
+    ASSERT_EQ(OB_SUCCESS, scheduler_->init( 1000 /*check_period*/));
     COMMON_LOG(INFO, "SetUp TestIndependentDag success");
   }
   void TearDown() override
   {
     scheduler_->destroy();
     scheduler_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
+    share::g_mp = old_mp_;
   }
 public:
   void check_task_list_priority(ObIDag::TaskList &task_list);
   void alloc_and_add_priority_task(ObIDag *dag, const ObITask::ObITaskPriority priority);
 private:
   const uint64_t tenant_id_;
-  ObTenantBase tenant_base_;
   ObAddr addr_;
   ObArenaAllocator allocator_;
   ObTenantDagScheduler *scheduler_;
+  TestDagModuleProvider provider_;
+  share::ObIModuleProvider *old_mp_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(TestIndependentDag);
 };

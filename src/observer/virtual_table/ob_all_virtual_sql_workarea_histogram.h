@@ -35,15 +35,14 @@ public:
 public:
   void destroy();
   void reset();
-  int init(const uint64_t effective_tenant_id);
-  int get_next_wa_histogram(sql::ObWorkareaHistogram *&wa_histogram, uint64_t &tenant_id);
+  int init();
+  int get_next_wa_histogram(sql::ObWorkareaHistogram *&wa_histogram);
 private:
   int get_next_batch_wa_histograms();
 private:
   common::ObSEArray<sql::ObWorkareaHistogram, 32> wa_histograms_;
-  common::ObSEArray<uint64_t, 16> tenant_ids_;
   int64_t cur_nth_wa_hist_;
-  int64_t cur_nth_tenant_;
+  bool done_;
 };
 
 class ObSqlWorkareaHistogram : public common::ObVirtualTableScannerIterator
@@ -68,7 +67,6 @@ private:
     TOTAL_EXECUTIONS,
   };
   int fill_row(
-    uint64_t tenant_id,
     sql::ObWorkareaHistogram &wa_histogram,
     common::ObNewRow *&row);
   int get_server_ip_and_port();

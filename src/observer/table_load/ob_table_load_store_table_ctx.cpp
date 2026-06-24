@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/ob_table_load_store_table_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/table_load/dag/ob_table_load_dag.h"
 #include "observer/table_load/ob_table_load_data_table_builder.h"
 #include "observer/table_load/ob_table_load_index_table_builder.h"
@@ -46,7 +47,7 @@ ObTableLoadStoreTableCtx::ObTableLoadStoreTableCtx(ObTableLoadStoreCtx *store_ct
     allocator_("TLD_STCtx"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadStoreTableCtx::~ObTableLoadStoreTableCtx()
@@ -71,7 +72,7 @@ int ObTableLoadStoreTableCtx::inner_init(const uint64_t table_id)
   if (OB_ISNULL(schema_ = OB_NEWx(ObTableLoadSchema, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadSchema", KR(ret));
-  } else if (OB_FAIL(schema_->init(store_ctx_->ctx_->param_.tenant_id_, table_id_, store_ctx_->ctx_->ddl_param_.schema_version_))) {
+  } else if (OB_FAIL(schema_->init(table_id_, store_ctx_->ctx_->ddl_param_.schema_version_))) {
     LOG_WARN("fail to init schema", KR(ret));
   }
   return ret;
@@ -139,7 +140,7 @@ int ObTableLoadStoreTableCtx::get_table_data_desc(
       ret = OB_ERR_UNEXPECTED;                                                                   \
       LOG_WARN("unexpected " #name " hashmap created", KR(ret));                                 \
     } else if (OB_FAIL(                                                                          \
-                 name##_table_builder_map_.create(1024, "TLD_TBMap", "TLD_TBMap", MTL_ID()))) {  \
+                 name##_table_builder_map_.create(1024, "TLD_TBMap", "TLD_TBMap"))) {  \
       LOG_WARN("fail to create hashmap", KR(ret));                                               \
     }                                                                                            \
     return ret;                                                                                  \
@@ -253,8 +254,8 @@ ObTableLoadStoreDataTableCtx::ObTableLoadStoreDataTableCtx(ObTableLoadStoreCtx *
     lob_table_ctx_(nullptr),
     project_(nullptr)
 {
-  delete_table_builder_allocator_.set_tenant_id(MTL_ID());
-  ack_table_builder_allocator_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObTableLoadStoreDataTableCtx::~ObTableLoadStoreDataTableCtx()
@@ -323,10 +324,10 @@ int ObTableLoadStoreDataTableCtx::init_data_project()
   const share::schema::ObTableSchema *data_table_schema = nullptr;
   const share::schema::ObTableSchema *index_table_schema = nullptr;
   if (OB_FAIL(
-        ObTableLoadSchema::get_schema_guard(store_ctx_->ctx_->param_.tenant_id_, schema_guard))) {
+        ObTableLoadSchema::get_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(
-               schema_guard, store_ctx_->ctx_->param_.tenant_id_,
+               schema_guard,
                store_ctx_->ctx_->ddl_param_.dest_table_id_, data_table_schema))) {
     LOG_WARN("fail to get table shema of main table", KR(ret));
   } else {
@@ -336,7 +337,7 @@ int ObTableLoadStoreDataTableCtx::init_data_project()
       const ObAuxTableMetaInfo &index_table_info = simple_index_infos.at(i);
       const share::schema::ObTableSchema *index_table_schema = nullptr;
       if (OB_FAIL(ObTableLoadSchema::get_table_schema(
-            schema_guard, MTL_ID(), index_table_info.table_id_, index_table_schema))) {
+            schema_guard, index_table_info.table_id_, index_table_schema))) {
         LOG_WARN("fail to get table shema of index table", KR(ret), K(index_table_info.table_id_));
       } else if (index_table_schema->is_unique_index()) {
         if (OB_ISNULL(project_ = OB_NEWx(ObTableLoadUniqueIndexToMainRowkeyProjector, (&allocator_)))) {
@@ -387,7 +388,7 @@ int ObTableLoadStoreDataTableCtx::check_tablet(const ObLSID &ls_id,
   ObLSService *ls_service = nullptr;
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
-  if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service is nullptr", KR(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
@@ -627,7 +628,7 @@ ObTableLoadStoreLobTableCtx::ObTableLoadStoreLobTableCtx(
     delete_table_builder_safe_allocator_(delete_table_builder_allocator_),
     data_table_ctx_(data_table_ctx)
 {
-  delete_table_builder_allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadStoreLobTableCtx::~ObTableLoadStoreLobTableCtx()
@@ -654,7 +655,7 @@ int ObTableLoadStoreLobTableCtx::init(
     LOG_WARN("fail to inner init", KR(ret));
   } else if (OB_FAIL(delete_table_store_.init())) {
     LOG_WARN("fail to init delete table store", KR(ret));
-  } else if (OB_FAIL(tablet_id_map_.create(1024, ObMemAttr(MTL_ID(), "TLD_TbltIDMap")))) {
+  } else if (OB_FAIL(tablet_id_map_.create(1024, ObMemAttr("TLD_TbltIDMap")))) {
     LOG_WARN("fail to create hashmap", KR(ret));
   } else if (OB_FAIL(init_ls_partition_ids(partition_id_array, target_partition_id_array))) {
     LOG_WARN("fail to init ls partition ids", KR(ret));
@@ -674,9 +675,9 @@ int ObTableLoadStoreLobTableCtx::init_ls_partition_ids(
   ObTabletHandle tablet_handle;
   ObTabletBindingMdsUserData ddl_data;
   ObTableLoadLSIdAndPartitionId lob_ls_partition_id;
-  if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected err", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
     const ObTableLoadLSIdAndPartitionId &ls_partition_id = ls_partition_ids[i];
@@ -953,8 +954,8 @@ ObTableLoadStoreIndexTableCtx::ObTableLoadStoreIndexTableCtx(ObTableLoadStoreCtx
     delete_table_builder_safe_allocator_(delete_table_builder_allocator_),
     project_(nullptr)
 {
-  insert_table_builder_allocator_.set_tenant_id(MTL_ID());
-  delete_table_builder_allocator_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObTableLoadStoreIndexTableCtx::~ObTableLoadStoreIndexTableCtx()
@@ -1002,16 +1003,16 @@ int ObTableLoadStoreIndexTableCtx::init(
 int ObTableLoadStoreIndexTableCtx::init_index_projector()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = store_ctx_->ctx_->param_.tenant_id_;
+  
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *data_table_schema = nullptr;
   const ObTableSchema *index_table_schema = nullptr;
-  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(tenant_id, schema_guard))) {
+  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(
-               schema_guard, tenant_id, store_ctx_->ctx_->param_.table_id_, data_table_schema))) {
+               schema_guard, store_ctx_->ctx_->param_.table_id_, data_table_schema))) {
     LOG_WARN("fail to get table shema of main table", KR(ret));
-  } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, tenant_id, table_id_,
+  } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, table_id_,
                                                          index_table_schema))) {
     LOG_WARN("fail to get table shema of index table", KR(ret));
   } else {

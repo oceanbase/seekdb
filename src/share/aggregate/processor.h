@@ -32,12 +32,12 @@ class Processor
 {
 public:
   Processor(sql::ObEvalCtx &eval_ctx, ObIArray<ObAggrInfo> &aggr_infos, const lib::ObLabel &label,
-            sql::ObMonitorNode &monitor_info, const int64_t tenant_id) :
+            sql::ObMonitorNode &monitor_info) :
     inited_(false),
     support_fast_single_row_agg_(false), has_distinct_(false), has_order_by_(false), dir_id_(-1),
     op_eval_infos_(nullptr),
-    allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id, ObCtxIds::WORK_AREA),
-    agg_ctx_(eval_ctx, tenant_id, aggr_infos, label),
+    allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::WORK_AREA),
+    agg_ctx_(eval_ctx, aggr_infos, label),
     aggregates_(allocator_, aggr_infos.count()),
     fast_single_row_aggregates_(allocator_, aggr_infos.count()), extra_rt_info_buf_(nullptr),
     cur_extra_rt_info_idx_(0), add_one_row_fns_(allocator_, aggr_infos.count()),

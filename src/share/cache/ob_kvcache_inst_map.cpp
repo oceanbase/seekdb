@@ -23,20 +23,19 @@ namespace oceanbase
 using namespace lib;
 namespace common
 {
-int ObTenantMBList::init(const uint64_t tenant_id)
+int ObTenantMBList::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
-      tenant_id, resource_mgr_))) {
-    COMMON_LOG(WARN, "get_tenant_resource_mgr failed", K(ret), K(tenant_id));
+      resource_mgr_))) {
+    COMMON_LOG(WARN, "get_tenant_resource_mgr failed", K(ret));
   } else {
     head_.reset();
     head_.prev_ = &head_;
     head_.next_ = &head_;
-    tenant_id_ = tenant_id;
     ref_cnt_ = 0;
     inited_ = true;
   }
@@ -199,7 +198,7 @@ int ObKVCacheInstMap::get_cache_inst(
         //double check, success to get inst, add ref to return outside
         add_inst_ref(inst);
       } else if (OB_HASH_NOT_EXIST == ret) {
-        inst = OB_NEW(ObKVCacheInst, ObMemAttr(OB_SYS_TENANT_ID, "CACHE_INST"));
+        inst = OB_NEW(ObKVCacheInst, ObMemAttr("CACHE_INST"));
         if (OB_ISNULL(inst)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           COMMON_LOG(WARN, "Fail to alloc cache inst, ", K(ret));
@@ -242,16 +241,13 @@ int ObKVCacheInstMap::get_cache_inst(
   return ret;
 }
 
-int ObKVCacheInstMap::mark_tenant_delete(const uint64_t tenant_id)
+int ObKVCacheInstMap::mark_tenant_delete()
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheInstMap has not been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_SYS_TENANT_ID != tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument", K(ret), K(tenant_id));
   } else {
     ObKVCacheInst *inst = nullptr;
     DRWLock::WRLockGuard wr_guard(lock_);
@@ -263,22 +259,19 @@ int ObKVCacheInstMap::mark_tenant_delete(const uint64_t tenant_id)
         iter->second->try_mark_delete();
       }
     }
-    COMMON_LOG(INFO, "mark delete details", K(ret), K(tenant_id));
+    COMMON_LOG(INFO, "mark delete details", K(ret));
   }
 
   return ret;
 }
 
-int ObKVCacheInstMap::erase_tenant(const uint64_t tenant_id)
+int ObKVCacheInstMap::erase_tenant()
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "The ObKVCacheInstMap has not been inited", K(ret));
-  } else if (OB_UNLIKELY(OB_SYS_TENANT_ID != tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument", K(ret), K(tenant_id));
   } else {
     ObSEArray<ObKVCacheInstKey, MAX_CACHE_NUM> erase_key_list;
     ObSEArray<ObKVCacheInst *, MAX_CACHE_NUM> erase_inst_list;
@@ -310,7 +303,7 @@ int ObKVCacheInstMap::erase_tenant(const uint64_t tenant_id)
       }
     }
   }
-  COMMON_LOG(INFO, "erase tenant cache inst details", K(ret), K(tenant_id));
+  COMMON_LOG(INFO, "erase tenant cache inst details", K(ret));
 
   return ret;
 }
@@ -370,7 +363,7 @@ void ObKVCacheInstMap::print_all_cache_info()
 
   if (OB_LIKELY(is_inited_)) {
     ContextParam param;
-    param.set_mem_attr(common::OB_SERVER_TENANT_ID, ObModIds::OB_TEMP_VARIABLES);
+    param.set_mem_attr(ObModIds::OB_TEMP_VARIABLES);
     CREATE_WITH_TEMP_CONTEXT(param) {
       static const int64_t BUFLEN = 1 << 17;
       char *buf = (char *)ctxalp(BUFLEN);

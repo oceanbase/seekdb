@@ -6,21 +6,6 @@ table_name	column_name
 test_table_1	c1
 test_table_1	c2
 test_table_1	c3
-select table_name, column_name from CDB_TAB_COLS_V$ where table_name like '%TEST_TABLE%' order by table_name, column_name;
-table_name	column_name
-test_table_1	c1
-test_table_1	c2
-test_table_1	c3
-select table_name, column_name from CDB_TAB_COLS where table_name like '%TEST_TABLE%' order by table_name, column_name;
-table_name	column_name
-test_table_1	c1
-test_table_1	c2
-test_table_1	c3
-select table_name, column_name from CDB_TAB_COL_STATISTICS where table_name like '%TEST_TABLE%' order by table_name, column_name;
-table_name	column_name
-test_table_1	c1
-test_table_1	c2
-test_table_1	c3
 drop index test_table_1_idx1 on test_table_1;
 drop index test_table_1_idx2 on test_table_1;
 drop table test_table_1;

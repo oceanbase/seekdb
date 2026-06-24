@@ -1884,8 +1884,7 @@ int ObArrayExprUtils::calc_collection_hash_val(const ObObjMeta &meta, const void
 {
   int ret = OB_SUCCESS;
   ObString bin_str;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                     MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_FAIL(get_collection_raw_data(allocator, meta, data, len, bin_str))) {
     LOG_WARN("get collection raw data failed", K(ret));
   } else {
@@ -1905,8 +1904,7 @@ int ObArrayExprUtils::collection_compare(const ObObjMeta &l_meta, const ObObjMet
   int ret = OB_SUCCESS;
   ObString l_data;
   ObString r_data;
-  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                     MTL_ID());
+  common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_FAIL(get_collection_raw_data(allocator, l_meta, l_v, l_len, l_data))) {
     LOG_WARN("get collection raw data failed", K(ret));
   } else if (OB_FAIL(get_collection_raw_data(allocator, r_meta, r_v, r_len, r_data))) {

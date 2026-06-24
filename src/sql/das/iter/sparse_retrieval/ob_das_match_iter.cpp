@@ -27,7 +27,7 @@ namespace sql
 ObDASMatchIter::ObDASMatchIter()
   : ObDASIter(ObDASIterType::DAS_ITER_ES_MATCH),
     mem_context_(nullptr),
-    myself_allocator_(lib::ObMemAttr(MTL_ID(), "MatchIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    myself_allocator_(lib::ObMemAttr("MatchIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
     ir_match_part_score_ctdef_(nullptr),
     ir_match_part_score_rtdef_(nullptr),
     eval_ctx_(nullptr),
@@ -63,7 +63,7 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     // do nothing
   } else {
     lib::ContextParam mem_param;
-    mem_param.set_mem_attr(MTL_ID(), "DasMatchIter", ObCtxIds::DEFAULT_CTX_ID);
+    mem_param.set_mem_attr("DasMatchIter", ObCtxIds::DEFAULT_CTX_ID);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
       LOG_WARN("failed to create das match iterator memory context", K(ret));
     }

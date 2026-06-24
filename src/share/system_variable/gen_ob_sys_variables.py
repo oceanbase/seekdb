@@ -499,7 +499,7 @@ def write_sys_var_fac_class(wfile, sorted_list):
 class ObSysVarFactory
 {
 public:
-  ObSysVarFactory(const int64_t tenant_id = OB_SERVER_TENANT_ID);
+  ObSysVarFactory();
   virtual ~ObSysVarFactory();
   void destroy();
   int create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx = -1);
@@ -852,8 +852,8 @@ const ObString ObSysVarFactory::get_sys_var_name_by_id(ObSysVarClassType sys_var
   return sys_var_name;
 }
 
-ObSysVarFactory::ObSysVarFactory(const int64_t tenant_id)
-  : allocator_(ObMemAttr(tenant_id, ObModIds::OB_COMMON_SYS_VAR_FAC)),
+ObSysVarFactory::ObSysVarFactory()
+  : allocator_(ObMemAttr(ObModIds::OB_COMMON_SYS_VAR_FAC)),
     store_(nullptr), store_buf_(nullptr), all_sys_vars_created_(false)
 {
 }
@@ -1088,12 +1088,6 @@ def gen_sys_vars_dict_script_for_upgrade(filename, list_sorted_by_id):
   os.chmod(filename, stat.S_IRUSR + stat.S_IRGRP + stat.S_IROTH)
   print("Generate " + str(filename) + " successfully!\n")
 
-def gen_upgrade_script():
-  print('\n=========run gen_upgrade_scripts.py, begin=========\n')
-  info = os.popen('cd ../../../tools/upgrade/; ./gen_upgrade_scripts.py;')
-  print(info.read())
-  print('\n=========run gen_upgrade_scripts.py, end=========\n')
-
 def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
   """
   Generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp which is used for inner session initialization,
@@ -1219,4 +1213,3 @@ make_sys_var_cpp(pdir, sys_var_fac_cpp_file_name, list_sorted_by_name, list_sort
 generate_essential_sys_vars_in_init_cpp(cpp_file_name, list_sorted_by_id)
 
 #gen_sys_vars_dict_script_for_upgrade(sys_vars_dict_script_file_name, list_sorted_by_id)
-#gen_upgrade_script()

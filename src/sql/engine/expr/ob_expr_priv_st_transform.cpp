@@ -84,8 +84,8 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_TRANSFORM);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_TRANSFORM);
   int64_t param_num = expr.arg_cnt_;
   ObString src_proj4_param;
   ObString dest_proj4_param;
@@ -114,7 +114,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
       LOG_WARN("get srid from wkb failed", K(wkb), K(ret));
     } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-      LOG_WARN("get tenant srs guard failed", K(session->get_effective_tenant_id()), K(src_srid), K(ret));
+      LOG_WARN("get tenant srs guard failed", K(src_srid), K(ret));
     } else if (src_srid != 0 && OB_FAIL(srs_guard.get_srs_item(src_srid, src_srs_item))) {
       LOG_WARN("failed to get srs item", K(ret), K(src_srid));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo, src_srs_item, N_PRIV_ST_TRANSFORM, 
@@ -212,7 +212,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
       }
       
       // eval by bg
-      ObGeoBoostAllocGuard guard(tenant_id);
+      ObGeoBoostAllocGuard guard{};
       lib::MemoryContext *mem_ctx = nullptr;
       if (OB_FAIL(ret) || !need_eval) {
       } else if (OB_FAIL(guard.init())) {

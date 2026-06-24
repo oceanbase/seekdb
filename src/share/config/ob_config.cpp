@@ -1280,7 +1280,6 @@ ObConfigVersionItem &ObConfigVersionItem::operator = (int64_t value)
 
 void ObConfigPairs::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   config_array_.reset();
   allocator_.clear();
 }
@@ -1294,7 +1293,6 @@ int ObConfigPairs::assign(const ObConfigPairs &other)
     if (OB_FAIL(config_array_.reserve(array_cnt))) {
       OB_LOG(WARN, "fail to reserve array", KR(ret), K(array_cnt));
     } else {
-      tenant_id_ = other.tenant_id_;
     }
     ObConfigPair pair;
     bool c_like_str = true;

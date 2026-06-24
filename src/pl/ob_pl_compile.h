@@ -101,7 +101,6 @@ public:
   int check_package_body_legal(const ObPLBlockNS *parent_ns,
                                       const ObPLPackageAST &package_ast);
   static int update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_tbl,
-                                           uint64_t tenant_id,
                                            uint64_t owner_id,
                                            uint64_t dep_obj_id, 
                                            uint64_t schema_version,
@@ -128,7 +127,6 @@ private:
                                 ObPLPackage &package);
   static int compile_types(const ObIArray<const ObUserDefinedType*> &types, ObPLCompileUnit &unit);
   static int format_object_name(share::schema::ObSchemaGetterGuard &schema_guard,
-                                const uint64_t tenant_id,
                                 const uint64_t db_id,
                                 const uint64_t package_id,
                                 ObString &database_name,

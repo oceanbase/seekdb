@@ -1,16 +1,8 @@
-tenant_ids = {}
 print_to_client(usage())
 
 print_to_client("now:", now())
 
-tenant_ids = get_tenant_id_list()
 
-print_to_client("tenant_cnt:", #tenant_ids)
-print_to_client("tenant_id memory_limit")
-for i=1,#tenant_ids do
-    limit = get_tenant_mem_limit(tenant_ids[i])
-    print_to_client(tenant_ids[i], limit)
-end
 
 print_to_client("rpc packet in bytes", get_tenant_sysstat_by_name(1, "rpc packet in bytes"), get_tenant_sysstat_by_id(1001, 10001))
 
@@ -40,7 +32,6 @@ para["select"] = {
     "state",
     "info",
     "sql_port",
-    "proxy_sessid",
     "master_sessid",
     "user_client_ip",
     "user_host",
@@ -63,7 +54,6 @@ para = {}
 para["limit"] = {10}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "statistic",
     "value",
     "value_type",
@@ -78,7 +68,7 @@ select_sysstat(para)
 para = {}
 para["limit"] = {10}
 para["dump"] = true
-para["select"] = {"tenant_id", "ctx_name", "label", "hold"}
+para["select"] = {"ctx_name", "label", "hold"}
 print_to_client("select_memory_info")
 select_memory_info(para)
 
@@ -86,7 +76,6 @@ para = {}
 para["limit"] = {10}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "ctx_id",
     "ctx_name",
     "hold",
@@ -100,7 +89,6 @@ para = {}
 para["limit"] = {10}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "tx_type",
     "tx_id",
     "session_id",
@@ -147,7 +135,6 @@ para["select"] = {
     "max_mem_used",
     "number_passes",
     "tempseg_size",
-    "tenant_id",
     "policy"
 }
 print_to_client("select_sql_workarea_active")
@@ -160,7 +147,6 @@ para["select"] = {
     "start_time",
     "task_type",
     "task_id",
-    "tenant_id",
     "comment",
     "is_cancel"
 }
@@ -171,7 +157,6 @@ para = {}
 para["limit"] = {}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "compat_mode",
     "unit_min_cpu",
     "unit_max_cpu",
@@ -222,7 +207,6 @@ para = {}
 para["limit"] = {}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "hold",
     "limit"
 }
@@ -249,7 +233,6 @@ para = {}
 para["limit"] = {}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "merge_type",
     "ls_id",
     "tablet_id",
@@ -264,7 +247,6 @@ para = {}
 para["limit"] = {}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "task_id",
     "module",
     "type",
@@ -282,7 +264,6 @@ para = {}
 para["limit"] = {}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "refreshed_schema_version",
     "received_schema_version",
     "schema_count",
@@ -296,7 +277,6 @@ para = {}
 para["limit"] = {10}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "slot_id",
     "schema_version",
     "schema_count",
@@ -327,7 +307,6 @@ para = {}
 para["limit"] = {0, 3}
 para["dump"] = true
 para["select"] = {
-    "tenant_id",
     "ctx_id",
     "mod_name",
     "back_trace",

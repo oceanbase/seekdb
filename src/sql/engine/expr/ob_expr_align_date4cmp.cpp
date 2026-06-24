@@ -382,7 +382,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
   if (date_datum->is_null()) {
     date_arg_type = NULL_DATE;
   } else if (ob_is_string_type(date_arg_obj_type)) {
-    ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString str = date_datum->get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(&lob_allocator, date_arg_obj_type,
                               CS_TYPE_BINARY, expr.args_[0]->obj_meta_.has_lob_header(), str))) {

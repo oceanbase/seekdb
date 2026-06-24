@@ -152,8 +152,7 @@ public:
 public:
   ObTxLSLogWriter();
   ~ObTxLSLogWriter();
-  int init(const int64_t tenant_id,
-           const share::ObLSID &ls_id,
+  int init(const share::ObLSID &ls_id,
            ObITxLogAdapter *adapter,
            ObLSTxCtxMgr *ctx_mgr);
   int stop();
@@ -165,7 +164,7 @@ public:
 public:
   int submit_start_working_log(const int64_t &leader_epoch, share::SCN &log_ts);
 
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
 public:
   int on_success(ObTxLSLogCb *cb);
   int on_failure(ObTxLSLogCb *cb);
@@ -196,7 +195,7 @@ private:
   common::ObDList<ObTxLSLogCb> keep_alive_cbs_;
   common::ObDList<ObTxLSLogCb> start_working_cbs_;
 
-  int64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   ObLSTxCtxMgr *ctx_mgr_;
   ObITxLogAdapter *tx_log_adapter_;

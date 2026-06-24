@@ -98,7 +98,7 @@ private:
       if (ta_.ref_allocator() != nullptr) {
         ta_->get_block_mgr().free_block(block);
       } else {
-        OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "tenant ctx allocator is null", K(tenant_id_), K(ctx_id_));
+        OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "tenant ctx allocator is null", K(ctx_id_));
       }
     }
     virtual int64_t sync_wash(int64_t wash_size) override
@@ -109,11 +109,11 @@ private:
       }
       return washed_size;
     }
-    void set_tenant_ctx(const int64_t tenant_id, const int64_t ctx_id)
+    void set_tenant_ctx(const int64_t ctx_id)
     {
-      tenant_id_ = tenant_id;
+      
       ctx_id_ = ctx_id;
-      ta_ = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id_, ctx_id_);
+      ta_ = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(ctx_id_);
     }
   private:
     lib::ObTenantCtxAllocatorGuard ta_;
@@ -135,7 +135,7 @@ inline ObAllocator::ObAllocator(__MemoryContext__ *mem_context, const ObMemAttr 
     os_(mem_context_, ablock_size),
     is_inited_(false)
 {
-  attr_.tenant_id_ = OB_SYS_TENANT_ID;
+  
 }
 
 inline int ObAllocator::init()
@@ -153,12 +153,12 @@ inline int ObAllocator::init()
     blk_mgr = pm;
     pm_ = pm;
   } else {
-    blk_mgr_.set_tenant_ctx(attr_.tenant_id_, attr_.ctx_id_);
+    blk_mgr_.set_tenant_ctx(attr_.ctx_id_);
     blk_mgr = &blk_mgr_;
   }
 
   if (OB_SUCC(ret)) {
-    nblk_mgr_.set_tenant_ctx(attr_.tenant_id_, attr_.ctx_id_);
+    nblk_mgr_.set_tenant_ctx(attr_.ctx_id_);
     nblk_mgr = &nblk_mgr_;
     os_.set_block_mgr(blk_mgr);
     os_.set_locker(locker_);

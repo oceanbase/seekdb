@@ -95,7 +95,7 @@ int ObSPIVDaaTIter::set_valid_docid_set(const common::hash::ObHashSet<ObDocIdExt
   valid_docid_set_.clear();
   int64_t expected_size = valid_docid_set.size();
   if (valid_docid_set.empty()){
-  } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr(MTL_ID(), "ValidDocidSet")))) {
+  } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr("ValidDocidSet")))) {
     LOG_WARN("failed to create valid docid set", K(ret), K(expected_size));
   } else {
     for (common::hash::ObHashSet<ObDocIdExt>::const_iterator iter = valid_docid_set.begin(); OB_SUCC(ret) && iter != valid_docid_set.end(); ++iter) {
@@ -312,7 +312,7 @@ int ObSPIVBMWIter::set_valid_docid_set(const common::hash::ObHashSet<ObDocIdExt>
   valid_docid_set_.clear();
   int64_t expected_size = valid_docid_set.size();
   if (valid_docid_set.empty()){
-  } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr(MTL_ID(), "ValidDocidSet")))) {
+  } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr("ValidDocidSet")))) {
     LOG_WARN("failed to create valid docid set", K(ret), K(expected_size));
   } else {
     for (common::hash::ObHashSet<ObDocIdExt>::const_iterator iter = valid_docid_set.begin(); OB_SUCC(ret) && iter != valid_docid_set.end(); ++iter) {

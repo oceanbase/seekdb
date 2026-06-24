@@ -110,7 +110,7 @@ int ObDbmsStatsExportImport::create_oracle_stat_table(ObExecContext &ctx,
              OB_FAIL(raw_sql.append_fmt(" tablegroup = '%.*s';",
                                         param.tab_group_.length(), param.tab_group_.ptr()))) {
     LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(do_execute_sql(ctx, param.tenant_id_, raw_sql))) {
+  } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
     LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
@@ -133,7 +133,7 @@ int ObDbmsStatsExportImport::create_mysql_stat_table(ObExecContext &ctx,
              OB_FAIL(raw_sql.append_fmt(" tablegroup = '%.*s';",
                                         param.tab_group_.length(), param.tab_group_.ptr()))) {
     LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(do_execute_sql(ctx, param.tenant_id_, raw_sql))) {
+  } else if (OB_FAIL(do_execute_sql(ctx, raw_sql))) {
     LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
@@ -152,7 +152,7 @@ int ObDbmsStatsExportImport::drop_stat_table(ObExecContext &ctx, const ObTableSt
                                                param.db_name_.length(), param.db_name_.ptr(),
                                                param.tab_name_.length(), param.tab_name_.ptr()))) {
     LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(do_execute_sql(ctx, param.tenant_id_, select_raw_sql))) {
+  } else if (OB_FAIL(do_execute_sql(ctx, select_raw_sql))) {
     if (ret == OB_ERR_BAD_FIELD_ERROR) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Unable to drop table: does not appear to be a statistics table", K(ret));
@@ -164,7 +164,7 @@ int ObDbmsStatsExportImport::drop_stat_table(ObExecContext &ctx, const ObTableSt
                                              param.db_name_.length(), param.db_name_.ptr(),
                                              param.tab_name_.length(), param.tab_name_.ptr()))) {
     LOG_WARN("failed to append format", K(ret));
-  } else if (OB_FAIL(do_execute_sql(ctx, param.tenant_id_, drop_raw_sql))) {
+  } else if (OB_FAIL(do_execute_sql(ctx, drop_raw_sql))) {
     LOG_WARN("failed to do execute sql", K(ret));
   } else {/*do nothing*/}
   return ret;
@@ -180,9 +180,7 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
   ObSqlString part_str;
   ObSqlString subpart_str;
   ObSqlString table_name_str;
-  const uint64_t tenant_id = param.tenant_id_;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_);
+  uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(param.table_id_);
   const char *from_table_name = "oceanbase.__all_table_stat";
   const char *null_str = "NULL";
   int32_t null_str_len = static_cast<int32_t>(strlen(null_str));
@@ -261,7 +259,7 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
     LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
   } else {/*do nothing*/}
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(do_execute_sql(ctx, param.tenant_id_, delete_stat_sql, raw_sql))) {
+  } else if (OB_FAIL(do_execute_sql(ctx, delete_stat_sql, raw_sql))) {
     LOG_WARN("fail to do execute sql.", K(raw_sql), K(ret));
   } else if (param.cascade_ && OB_FAIL(export_column_stats(ctx, param))) {
     LOG_WARN("failed to export column stats", K(ret));
@@ -280,9 +278,7 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
   ObSqlString subpart_str;
   ObSqlString col_str;
   ObSqlString table_name_str;
-  const uint64_t tenant_id = param.tenant_id_;
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_);
+  uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(param.table_id_);
   const char *col_stat_table = "oceanbase.__all_column_stat";
   const char *hist_stat_table = "oceanbase.__all_histogram_stat";
   if (!param.part_name_.empty()) {//specify part name
@@ -373,7 +369,7 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
       LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
     } else if (OB_FAIL(delete_stat_sql.append(" and type = 'C';"))) {
       LOG_WARN("fail to append SQL stmt string.", K(raw_sql), K(ret));
-    } else if (OB_FAIL(do_execute_sql(ctx, param.tenant_id_, delete_stat_sql, raw_sql))) {
+    } else if (OB_FAIL(do_execute_sql(ctx, delete_stat_sql, raw_sql))) {
       LOG_WARN("fail to do execute sql.", K(raw_sql), K(ret));
     } else {/*do nothing*/}
   }
@@ -462,14 +458,13 @@ int ObDbmsStatsExportImport::import_column_stats(ObExecContext &ctx, const ObTab
 }
 
 int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
-                                            uint64_t tenant_id,
                                             const ObSqlString &raw_sql)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(sql_proxy->write(tenant_id, raw_sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(sql_proxy->write(raw_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
   } else {
     LOG_TRACE("Succeed to do execute sql", K(raw_sql));
@@ -478,7 +473,6 @@ int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
 }
 
 int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
-                                            uint64_t tenant_id,
                                             const ObSqlString &delete_stat_sql,
                                             const ObSqlString &fetch_stat_sql)
 {
@@ -487,11 +481,11 @@ int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
   ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
   int64_t affected_rows = 0;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(trans.start(sql_proxy, tenant_id))) {
+    if (OB_FAIL(trans.start(sql_proxy))) {
       LOG_WARN("fail to start transaction", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id, delete_stat_sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(delete_stat_sql.ptr(), affected_rows))) {
       LOG_WARN("fail to exec sql", K(delete_stat_sql), K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id, fetch_stat_sql.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(fetch_stat_sql.ptr(), affected_rows))) {
       LOG_WARN("fail to exec sql", K(fetch_stat_sql), K(ret));
     } else {/*do nothing*/}
     if (OB_SUCC(ret)) {
@@ -523,8 +517,7 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
       if (OB_UNLIKELY(raw_sql.empty()) || OB_ISNULL(param.allocator_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret), K(raw_sql), K(param));
-      } else if (OB_FAIL(sql_client_retry_weak.read(proxy_result,
-                                                    param.tenant_id_, raw_sql.ptr()))) {
+      } else if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -559,7 +552,7 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
           //before import, we need record history stats.
           ObMySQLTransaction trans;
           //begin trans
-          if (OB_FAIL(trans.start(ctx.get_sql_proxy(), param.tenant_id_))) {
+          if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
             LOG_WARN("fail to start transaction", K(ret));
           } else if (!is_index_stat && !all_tstats.empty() && !param.is_temp_table_ &&
                      OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {

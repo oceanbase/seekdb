@@ -34,7 +34,6 @@ namespace rootserver {
 class ObDropTableHelper : public ObDDLHelper {
 public:
   ObDropTableHelper(share::schema::ObMultiVersionSchemaService *schema_service,
-                    const uint64_t tenant_id,
                     const obcall::ObDropTableArg &arg,
                     obcall::ObDropTableRes &res,
                     ObDDLSQLTransaction *external_trans = nullptr);

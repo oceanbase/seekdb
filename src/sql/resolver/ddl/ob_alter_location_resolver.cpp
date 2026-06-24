@@ -20,12 +20,34 @@
 #include "sql/resolver/ddl/ob_create_location_stmt.h"
 #include "lib/restore/ob_storage_info.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
-#include "share/external_table/ob_external_table_utils.h"
  
 namespace oceanbase
 {
 namespace sql
 {
+namespace {
+// map credential option id to its field name in storage info string
+int get_alter_credential_field_name(ObSqlString &str, int64_t opt)
+{
+  int ret = OB_SUCCESS;
+  if (opt == 1) {
+    OZ (str.append(common::ACCESS_ID));
+  } else if (opt == 2) {
+    OZ (str.append(common::ACCESS_KEY));
+  } else if (opt == 3) {
+    OZ (str.append(common::HOST));
+  } else if (opt == 4) {
+    OZ (str.append(common::APPID));
+  } else if (opt == 5) {
+    OZ (str.append(common::REGION));
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid opt", K(ret), K(opt));
+  }
+  return ret;
+}
+} // namespace
+
 ObAlterLocationResolver::ObAlterLocationResolver(ObResolverParams &params)
   : ObDDLResolver(params)
 {
@@ -56,7 +78,7 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
     LOG_ERROR("failed to get create location stmt", K(ret));
   } else {
     stmt_ = create_location_stmt;
-    create_location_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     create_location_stmt->set_user_id(session_info_->get_user_id());   
     create_location_stmt->set_or_replace(true);
   }
@@ -93,15 +115,15 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
   const ObLocationSchema *location_schema = NULL;
   if (OB_SUCC(ret)) {
     ObSchemaGetterGuard *schema_guard = NULL;
-    uint64_t tenant_id = session_info_->get_effective_tenant_id();
+    
     if (NULL == (schema_guard = schema_checker_->get_schema_guard())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_location_schema_by_name(tenant_id, location_name, location_schema))) {
-      LOG_WARN("failed to get schema by location name", K(ret), K(tenant_id), K(location_name));
+    } else if (OB_FAIL(schema_guard->get_location_schema_by_name(location_name, location_schema))) {
+      LOG_WARN("failed to get schema by location name", K(ret), K(location_name));
     } else if (OB_ISNULL(location_schema)) {
       ret = OB_LOCATION_OBJ_NOT_EXIST;
-      LOG_WARN("location object does't exist", K(ret), K(tenant_id), K(location_name));
+      LOG_WARN("location object does't exist", K(ret), K(location_name));
     }
   }
 
@@ -155,8 +177,7 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
         if (OB_ISNULL(option_node)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid argument.", K(ret));
-        } else if (OB_FAIL(ObExternalTableUtils::get_credential_field_name(
-                            credential_params, option_node->value_))) {
+        } else if (OB_FAIL(get_alter_credential_field_name(credential_params, option_node->value_))) {
           LOG_WARN("failed to get field name", K(ret), K(option_node->value_));
         } else {
           ObString tmp;

@@ -98,13 +98,11 @@ public:
   ObSetVar(const common::ObString &var_name,
            ObSetVar::SetScopeType set_scope,
            bool is_set_default,
-           uint64_t actual_tenant_id,
            common::ObIAllocator &calc_buf,
            common::ObMySQLProxy &sql_proxy)
     : var_name_(var_name),
       set_scope_(set_scope),
       is_set_default_(is_set_default),
-      actual_tenant_id_(actual_tenant_id),
       calc_buf_(calc_buf),
       sql_proxy_(sql_proxy)
   {}
@@ -113,11 +111,11 @@ public:
   common::ObString var_name_;
   ObSetVar::SetScopeType set_scope_;
   bool is_set_default_;
-  uint64_t actual_tenant_id_;
+  
   common::ObIAllocator &calc_buf_;
   common::ObMySQLProxy &sql_proxy_;
 
-  TO_STRING_KV(K_(var_name), K_(set_scope), K_(is_set_default), K_(actual_tenant_id));
+  TO_STRING_KV(K_(var_name), K_(set_scope), K_(is_set_default));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSetVar);
 };
@@ -957,7 +955,6 @@ public:
   static int check_and_convert_version(sql::ObExecContext &ctx,
                                        const ObBasicSysVar &sys_var,
                                        const common::ObObj &in_val,
-                                       const uint64_t tenant_id,
                                        uint64_t &version);
   static int check_and_convert_block_encryption_mode(sql::ObExecContext &ctx,
                                                      const ObSetVar &set_var,

@@ -54,15 +54,6 @@ connection sys_conn;
 --replace_regex /_[0-9]+/_*/
 SELECT * FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = 'fts_index_view_test' order by INDEX_NAME, COLUMN_NAME;
 
---replace_regex /_[0-9]+/_*/
-SELECT * FROM oceanbase.CDB_INDEXES WHERE OWNER = 'fts_index_view_test' order by INDEX_NAME;
-
-SELECT * FROM oceanbase.CDB_PART_KEY_COLUMNS WHERE OWNER = 'fts_index_view_test' order by OBJECT_TYPE, COLUMN_NAME;
-
-SELECT * FROM oceanbase.CDB_SUBPART_KEY_COLUMNS WHERE OWNER = 'fts_index_view_test' order by OBJECT_TYPE, COLUMN_NAME;
-
-SELECT * FROM oceanbase.CDB_PART_INDEXES WHERE OWNER = 'fts_index_view_test' order by INDEX_NAME;
-
 SELECT * FROM oceanbase.DBA_PART_KEY_COLUMNS WHERE OWNER = 'fts_index_view_test' order by NAME;
 
 SELECT * FROM oceanbase.DBA_SUBPART_KEY_COLUMNS WHERE OWNER = 'fts_index_view_test' order by OBJECT_TYPE, COLUMN_NAME;

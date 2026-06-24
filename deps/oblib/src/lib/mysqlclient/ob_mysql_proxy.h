@@ -196,21 +196,18 @@ public:
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
   // execute query and return data result
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql) override { return this->read(res, tenant_id, sql, 0/*group_id*/); }
-  int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const ObSessionParam *session_param, int64_t user_set_timeout = 0);
-  int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const common::ObAddr *sql_exec_addr);
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const int32_t group_id) override;
+  int read(ReadResult &res, const char *sql, const ObSessionParam *session_param, int64_t user_set_timeout = 0);
+  int read(ReadResult &res, const char *sql, const common::ObAddr *sql_exec_addr);
+  virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
   //only for across cluster
   //cluster_id can not GCONF.cluster_id
   virtual int read(ReadResult &res,
                    const int64_t cluster_id,
-                   const uint64_t tenant_id,
                    const char *sql) override;
   using ObISQLClient::read;
   // execute update sql
-  virtual int write(const uint64_t tenant_id, const char *sql, int64_t &affected_rows) override { return this->write(tenant_id, sql, 0/**/, affected_rows); }
-  virtual int write(const uint64_t tenant_id, const char *sql, const int32_t group_id, int64_t &affected_rows) override;
-  int write(const uint64_t tenant_id, const ObString sql, int64_t &affected_rows, int64_t compatibility_mode,
+  virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
+  int write(const ObString sql, int64_t &affected_rows, int64_t compatibility_mode,
         const ObSessionParam *session_param = nullptr,
         const common::ObAddr *sql_exec_addr = nullptr);
   using ObISQLClient::write;
@@ -227,10 +224,9 @@ public:
 
 
 protected:
-  int acquire(sqlclient::ObISQLConnection *&conn) { return this->acquire(OB_INVALID_TENANT_ID, conn, 0); }
-  int acquire(const uint64_t tenant_id, sqlclient::ObISQLConnection *&conn, const int32_t group_id);
-  int read(sqlclient::ObISQLConnection *conn, ReadResult &result,
-           const uint64_t tenant_id, const char *sql, const common::ObAddr *sql_exec_addr = nullptr);
+  int acquire(sqlclient::ObISQLConnection *&conn) { return this->acquire(conn, 0); }
+  int acquire(sqlclient::ObISQLConnection *&conn, const int32_t group_id);
+  int read(sqlclient::ObISQLConnection *conn, ReadResult &result, const char *sql, const common::ObAddr *sql_exec_addr = nullptr);
 
   sqlclient::ObISQLConnectionPool *pool_;
 
@@ -329,10 +325,6 @@ class ObMySQLProxy : public ObCommonSqlProxy
 
 #define SQL_APPEND_UINT_VALUE(sql, values, obj, member) \
     SQL_COL_APPEND_VALUE(sql, values, static_cast<uint64_t>((obj).member##_), #member, "%lu")
-
-#define SQL_APPEND_UINT_VALUE_WITH_TENANT_ID(sql, values, obj, member) \
-    SQL_COL_APPEND_VALUE(sql, values, static_cast<uint64_t>(ObSchemaUtils::get_extract_schema_id(\
-        exec_tenant_id, (obj).member##_)), #member, "%lu")
 
 #define SQL_APPEND_CSTR_VALUE(sql, values, obj, member) \
     SQL_COL_APPEND_CSTR_VALUE(sql, values, (obj).member##_, #member)

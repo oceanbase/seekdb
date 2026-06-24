@@ -103,9 +103,9 @@ public:
   void reset_for_scan();
   ~WinFuncColExpr() { destroy(); }
   // init agg_ctx_ & alloc aggr_rows_
-  int init_aggregate_ctx(const int64_t tenant_id);
+  int init_aggregate_ctx();
   int init_non_aggregate_ctx();
-  int init_res_rows(const int64_t tenant_id);
+  int init_res_rows();
   int32_t non_aggr_reserved_row_size() const;
   // need reset agg_ctx.allocator_
   int reset_for_partition(const int64_t batch_size, const ObBitVector &skip);
@@ -247,7 +247,7 @@ public:
       global_mem_limit_version_(0),
       amm_periodic_cnt_(0),
       store_it_age_(),
-      hp_infras_mgr_(MTL_ID())
+      hp_infras_mgr_{}
   {}
 
   virtual ~ObWindowFunctionVecOp() { destroy(); }
@@ -283,13 +283,13 @@ private:
   };
   int init();
 
-  int create_stores(const int64_t tenant_id);
+  int create_stores();
 
   void reset_stores();
 
   void destroy_stores();
 
-  int reset_for_scan(const int64_t tenant_id);
+  int reset_for_scan();
 
   int build_pby_hash_values_for_transmit();
 

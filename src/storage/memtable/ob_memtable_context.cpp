@@ -64,19 +64,19 @@ ObMemtableCtx::~ObMemtableCtx()
   ObMemtableCtx::reset();
 }
 
-int ObMemtableCtx::init(const uint64_t tenant_id)
+int ObMemtableCtx::init()
 {
   int ret = OB_SUCCESS;
 
   if (IS_INIT) { // use is_inited_ to prevent memtable ctx from being inited repeatedly
     ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
+    TRANS_LOG(WARN, "invalid argument", K(ret));
   } else {
-    if (OB_FAIL(query_allocator_.init(tenant_id))) {
+    if (OB_FAIL(query_allocator_.init())) {
       TRANS_LOG(ERROR, "query_allocator init error", K(ret));
-    } else if (OB_FAIL(ctx_cb_allocator_.init(tenant_id))) {
+    } else if (OB_FAIL(ctx_cb_allocator_.init())) {
       TRANS_LOG(ERROR, "ctx_allocator_ init error", K(ret));
     } else if (OB_FAIL(reset_log_generator_())) {
       TRANS_LOG(ERROR, "fail to reset log generator", K(ret));
@@ -810,14 +810,7 @@ int ObMemtableCtx::get_memtable_key_arr(transaction::ObMemtableKeyArray &memtabl
   return ret;
 }
 
-uint64_t ObMemtableCtx::get_tenant_id() const
-{
-  uint64_t tenant_id = OB_SYS_TENANT_ID;
-  if (NULL != ATOMIC_LOAD(&ctx_)) {
-    tenant_id = ctx_->get_tenant_id();
-  }
-  return tenant_id;
-}
+
 
 int ObMemtableCtx::rollback(const transaction::ObTxSEQ to_seq_no,
                             const transaction::ObTxSEQ from_seq_no,

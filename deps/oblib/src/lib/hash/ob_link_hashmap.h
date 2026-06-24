@@ -208,15 +208,14 @@ public:
   {
     destroy();
   }
-  int init(const lib::ObLabel &label = "LinkHashMap",
-      const uint64_t tenant_id = OB_SERVER_TENANT_ID)
+  int init(const lib::ObLabel &label = "LinkHashMap")
   {
-    return init(lib::ObMemAttr(tenant_id, label));
+    return init(lib::ObMemAttr(label));
   }
   int init(const lib::ObMemAttr &attr)
   {
     int ret = OB_SUCCESS;
-    if (OB_UNLIKELY(!is_valid_tenant_id(attr.tenant_id_))) {
+    if (OB_UNLIKELY(!true)) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid argument", K(ret), K(attr));
     } else if (OB_FAIL(array_alloc_.init(attr))) {
@@ -596,10 +595,10 @@ template<typename Key, typename Value, typename AllocHandle, typename RefHandle=
 class ObTenantLinkHashMap : public ObLinkHashMap<Key, Value, AllocHandle, RefHandle>
 {
 public:
-  int create(uint64_t tenant_id, const Key &key, Value *&value)
+  int create(const Key &key, Value *&value)
   {
     int ret = OB_SUCCESS;
-    if (NULL == (value = this->alloc_handle_.alloc_value(tenant_id))) {
+    if (NULL == (value = this->alloc_handle_.alloc_value())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_SUCCESS != (ret = this->insert_and_get(key, value))) {
       this->alloc_handle_.free_value(value);
@@ -607,9 +606,9 @@ public:
     }
     return ret;
   }
-  int clean_tenant(uint64_t tenant_id)
+  int clean_tenant()
   {
-    return this->alloc_handle_.clean_tenant(tenant_id);
+    return this->alloc_handle_.clean_tenant();
   }
 };
 

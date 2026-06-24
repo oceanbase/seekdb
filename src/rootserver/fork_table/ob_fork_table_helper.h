@@ -41,11 +41,10 @@ public:
   ObForkTableHelper(
       share::schema::ObMultiVersionSchemaService &schema_service,
       common::ObMySQLProxy &sql_proxy, common::ObMySQLTransaction &trans,
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id, const share::ObForkTableInfo &fork_table_info,
+      share::schema::ObSchemaGetterGuard &schema_guard, const share::ObForkTableInfo &fork_table_info,
       const share::schema::ObTableSchema *dst_table_schema = nullptr)
       : schema_service_(schema_service), sql_proxy_(sql_proxy), trans_(trans),
-        schema_guard_(schema_guard), tenant_id_(tenant_id),
+        schema_guard_(schema_guard),
         fork_table_info_(fork_table_info), dst_table_schema_(dst_table_schema),
         src_table_schema_(nullptr), src_tablet_ids_(), dst_tablet_ids_(),
         inited_(false) {}
@@ -68,7 +67,6 @@ private:
   common::ObMySQLProxy &sql_proxy_;
   common::ObMySQLTransaction &trans_;
   share::schema::ObSchemaGetterGuard &schema_guard_;
-  const uint64_t tenant_id_;
   const share::ObForkTableInfo &fork_table_info_;
   const share::schema::ObTableSchema *dst_table_schema_;
   const share::schema::ObTableSchema *src_table_schema_;

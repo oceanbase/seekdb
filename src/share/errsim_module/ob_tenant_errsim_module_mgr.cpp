@@ -27,7 +27,6 @@ namespace share
 
 ObTenantErrsimModuleMgr::ObTenantErrsimModuleMgr()
     : is_inited_(false),
-      tenant_id_(OB_INVALID_ID),
       lock_(),
       config_version_(0),
       is_whole_module_(false),
@@ -43,8 +42,7 @@ ObTenantErrsimModuleMgr::~ObTenantErrsimModuleMgr()
 int ObTenantErrsimModuleMgr::mtl_init(ObTenantErrsimModuleMgr *&errsim_module_mgr)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  if (OB_FAIL(errsim_module_mgr->init(tenant_id))) {
+  if (OB_FAIL(errsim_module_mgr->init())) {
     LOG_WARN("failed to init errsim module mgr", K(ret), KP(errsim_module_mgr));
   }
   return ret;
@@ -55,21 +53,17 @@ void ObTenantErrsimModuleMgr::destroy()
   module_set_.destroy();
 }
 
-int ObTenantErrsimModuleMgr::init(const uint64_t tenant_id)
+int ObTenantErrsimModuleMgr::init()
 {
   int ret = OB_SUCCESS;
-  const ObMemAttr bucket_attr(tenant_id, "ErrsimModuleSet");
+  const ObMemAttr bucket_attr("ErrsimModuleSet");
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("tenant errsim module mgr init twice", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init tenant errsim module mgr get invalid argument", K(ret), K(tenant_id));
   } else if (OB_FAIL(module_set_.create(MAX_BUCKET_NUM, bucket_attr))) {
-    LOG_WARN("failed to create module set", K(ret), K(tenant_id));
+    LOG_WARN("failed to create module set", K(ret));
   } else {
-    tenant_id_ = tenant_id;
     is_whole_module_ = false;
     is_inited_ = true;
   }
@@ -111,9 +105,7 @@ bool ObTenantErrsimModuleMgr::is_errsim_module(
   return b_ret;
 }
 
-int ObTenantErrsimModuleMgr::build_tenant_moulde(
-    const uint64_t tenant_id,
-    const int64_t config_version,
+int ObTenantErrsimModuleMgr::build_tenant_moulde(const int64_t config_version,
     const ModuleArray &module_array,
     const int64_t percentage)
 {
@@ -124,9 +116,9 @@ int ObTenantErrsimModuleMgr::build_tenant_moulde(
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("tenant errsim module mgr do not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id || config_version < 0) {
+  } else if (config_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("build tenant module get invalid argument", K(ret), K(tenant_id), K(config_version));
+    LOG_WARN("build tenant module get invalid argument", K(ret), K(config_version));
   } else {
     common::SpinWLockGuard guard(lock_);
     if (config_version <= config_version_) {
@@ -147,7 +139,7 @@ int ObTenantErrsimModuleMgr::build_tenant_moulde(
         } else if (OB_FAIL(module_set_.set_refactored(module_type, flag))) {
           LOG_WARN("failed to set module set", K(ret), K(module_type));
         } else {
-          LOG_INFO("succeed set module", K(module_type), K(tenant_id));
+          LOG_INFO("succeed set module", K(module_type));
         }
       }
 

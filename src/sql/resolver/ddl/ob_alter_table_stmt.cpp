@@ -28,15 +28,13 @@ namespace sql
 ObAlterTableStmt::ObAlterTableStmt(common::ObIAllocator *name_pool)
     : ObTableStmt(name_pool, stmt::T_ALTER_TABLE), is_comment_table_(false), 
       is_alter_system_(false), fts_arg_allocator_(nullptr), is_alter_triggers_(false), 
-      interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0), 
-      alter_external_table_type_(0)
+      interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0)
 {
 }
 
 ObAlterTableStmt::ObAlterTableStmt()
     : ObTableStmt(stmt::T_ALTER_TABLE), is_comment_table_(false), is_alter_system_(false),
-      fts_arg_allocator_(nullptr), is_alter_triggers_(false), interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0),
-      alter_external_table_type_(0)
+      fts_arg_allocator_(nullptr), is_alter_triggers_(false), interval_expr_(NULL), transition_expr_(NULL), alter_table_action_count_(0)
 {
 }
 
@@ -153,12 +151,11 @@ int ObAlterTableStmt::set_exchange_partition_arg(const obcall::ObExchangePartiti
 int ObAlterTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = session->get_effective_tenant_id();
-  const int64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret), K(tenant_id));
+    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
   } else if (tenant_config->enable_lock_priority) {
     if (!ObLockExecutor::proxy_is_support(session)) {
       ret = OB_NOT_SUPPORTED;

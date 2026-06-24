@@ -108,7 +108,7 @@ public:
   struct MergeCtx 
   {
   public:
-    MergeCtx() : ddl_kv_handles_(), mutex_(), fifo_(MTL_ID()), arena_(ObMemAttr(MTL_ID(), "ddl_tblt_prm")), slice_cg_sstables_(), merge_helper_(nullptr), is_inited_(false)  {}
+    MergeCtx() : ddl_kv_handles_(), mutex_(), fifo_{}, arena_(ObMemAttr("ddl_tblt_prm")), slice_cg_sstables_(), merge_helper_(nullptr), is_inited_(false)  {}
     ~MergeCtx();
     int init(const ObDirectLoadType direct_load_type);
   public:

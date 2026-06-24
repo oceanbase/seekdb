@@ -46,17 +46,14 @@ public:
   friend class ObMallocAllocator;
   using VisitFunc = std::function<int(ObLabel &label, common::LabelItem *l_item)>;
   using InvokeFunc = std::function<int (const ObTenantMemoryMgr*)>;
-  ObTenantCtxAllocatorV2(uint64_t tenant_id, uint64_t ctx_id,
+  ObTenantCtxAllocatorV2(uint64_t ctx_id,
       ObTenantCtxAllocator *allocator);
   ~ObTenantCtxAllocatorV2();
   ObTenantCtxAllocatorV2 *&get_next()
   {
     return reinterpret_cast<ObTenantCtxAllocatorV2*&>(next_);
   }
-  uint64_t get_tenant_id()
-  {
-    return tenant_id_;
-  }
+  
   uint64_t get_ctx_id()
   {
     return ctx_id_;
@@ -69,7 +66,7 @@ public:
   {
     AChunk *chunk = NULL;
     if (!resource_handle_.is_valid()) {
-      LIB_LOG_RET(ERROR, OB_INVALID_ERROR, "resource_handle is invalid", K_(tenant_id), K_(ctx_id));
+      LIB_LOG_RET(ERROR, OB_INVALID_ERROR, "resource_handle is invalid", K_(ctx_id));
     } else {
       chunk = resource_handle_.get_memory_mgr()->alloc_chunk(size, attr);
     }
@@ -78,7 +75,7 @@ public:
   void free_chunk(AChunk *chunk, const ObMemAttr &attr)
   {
     if (!resource_handle_.is_valid()) {
-      LIB_LOG_RET(ERROR, OB_INVALID_ERROR, "resource_handle is invalid", K_(tenant_id), K_(ctx_id));
+      LIB_LOG_RET(ERROR, OB_INVALID_ERROR, "resource_handle is invalid", K_(ctx_id));
     } else {
       resource_handle_.get_memory_mgr()->free_chunk(chunk, attr);
     }
@@ -91,10 +88,10 @@ public:
     int ret = common::OB_SUCCESS;
     if (resource_handle_.is_valid()) {
       ret = common::OB_INIT_TWICE;
-      LIB_LOG(WARN, "resource_handle is already valid", K(ret), K_(tenant_id), K_(ctx_id));
+      LIB_LOG(WARN, "resource_handle is already valid", K(ret), K_(ctx_id));
     } else if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
-        tenant_id_, resource_handle_))) {
-      LIB_LOG(ERROR, "get_tenant_resource_mgr failed", K(ret), K_(tenant_id));
+        resource_handle_))) {
+      LIB_LOG(ERROR, "get_tenant_resource_mgr failed", K(ret));
     }
     return ret;
   }
@@ -104,7 +101,7 @@ public:
     int ret = common::OB_SUCCESS;
     if (!resource_handle_.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(tenant_id), K_(ctx_id));
+      LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(ctx_id));
     } else if (OB_FAIL(resource_handle_.get_memory_mgr()->set_ctx_hard_limit(ctx_id_, bytes))) {
       LIB_LOG(WARN, "memory manager set_ctx_limit failed", K(ret), K(ctx_id_), K(bytes));
     }
@@ -116,7 +113,7 @@ public:
     int ret = common::OB_SUCCESS;
     if (!resource_handle_.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(tenant_id), K_(ctx_id));
+      LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(ctx_id));
     } else if (OB_FAIL(resource_handle_.get_memory_mgr()->set_ctx_limit(ctx_id_, bytes))) {
       LIB_LOG(WARN, "memory manager set_ctx_limit failed", K(ret), K(ctx_id_), K(bytes));
     }
@@ -175,7 +172,7 @@ private:
     int ret = common::OB_SUCCESS;
     if (!resource_handle_.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "resource_handle is invalid", K_(tenant_id));
+      LIB_LOG(ERROR, "resource_handle is invalid");
     } else {
       ret = func(resource_handle_.get_memory_mgr());
     }
@@ -192,7 +189,7 @@ private:
 private:
   ObTenantResourceMgrHandle resource_handle_;
   int64_t ref_cnt_;
-  uint64_t tenant_id_;
+  
   uint64_t ctx_id_;
   ObTenantCtxAllocator *allocator_;
   int64_t wash_related_chunks_;
@@ -268,7 +265,7 @@ public:
       AChunk *chunk = ATOMIC_TAS(&chunks_[i], NULL);
       if (chunk != NULL) {
         ta_.free_chunk(chunk,
-                       ObMemAttr(ta_.get_tenant_id(), "unused", ta_.get_ctx_id()));
+                       ObMemAttr("unused", ta_.get_ctx_id()));
       }
     }
   }
@@ -353,9 +350,8 @@ private:
 };
 
 public:
-  explicit ObTenantCtxAllocator(ObTenantCtxAllocatorV2 &ctx_allocator, uint64_t tenant_id, uint64_t ctx_id)
-    : ctx_allocator_(ctx_allocator),
-      tenant_id_(tenant_id), ctx_id_(ctx_id), deleted_(false),
+  explicit ObTenantCtxAllocator(ObTenantCtxAllocatorV2 &ctx_allocator, uint64_t ctx_id)
+    : ctx_allocator_(ctx_allocator), ctx_id_(ctx_id), deleted_(false),
       obj_mgr_(*this,
                CTX_ATTR(ctx_id).enable_no_log_,
                INTACT_NORMAL_AOBJECT_SIZE,
@@ -368,7 +364,7 @@ public:
   {
     MEMSET(&head_chunk_, 0, sizeof(AChunk));
     ObMemAttr attr;
-    attr.tenant_id_  = tenant_id;
+    
     attr.ctx_id_ = ctx_id;
     chunk_freelist_mutex_.enable_record_stat(false);
   }
@@ -378,10 +374,7 @@ public:
   {
     return &ctx_allocator_;
   }
-  uint64_t get_tenant_id()
-  {
-    return tenant_id_;
-  }
+  
   uint64_t get_ctx_id()
   {
     return ctx_id_;
@@ -511,7 +504,7 @@ public:
       }
     }
     if (NULL == nptr) {
-      print_alloc_failed_msg(ta.get_tenant_id(), ta.get_ctx_id(),
+      print_alloc_failed_msg(ta.get_ctx_id(),
                              ta.get_hold(), ta.get_limit(),
                              ta.get_tenant_hold(), ta.get_tenant_limit());
     }
@@ -524,7 +517,7 @@ private:
 
 private:
   ObTenantCtxAllocatorV2 &ctx_allocator_;
-  uint64_t tenant_id_;
+  
   uint64_t ctx_id_;
   bool deleted_;
   ObjectMgr obj_mgr_;

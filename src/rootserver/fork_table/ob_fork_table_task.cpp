@@ -74,7 +74,6 @@ ObForkTableTask::~ObForkTableTask()
 }
 
 int ObForkTableTask::init(
-    const uint64_t tenant_id,
     const int64_t task_id,
     const share::ObDDLType &ddl_type,
     const share::schema::ObTableSchema *src_table_schema,
@@ -86,28 +85,27 @@ int ObForkTableTask::init(
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_data_version = 0;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id
-                  || task_id <= 0
+  if (OB_UNLIKELY(task_id <= 0
                   || schema_version <= 0
                   || snapshot_version <= 0
                   || nullptr == src_table_schema
                   || nullptr == dst_table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id), K(schema_version),
+    LOG_WARN("invalid argument", K(ret), K(task_id), K(schema_version),
              K(snapshot_version),
              KP(src_table_schema), KP(dst_table_schema));
   } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("root_service is null", K(ret), KP(root_service_));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
-    LOG_WARN("get min data version failed", K(ret), K(tenant_id));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+    LOG_WARN("get min data version failed", K(ret));
   } else if (OB_UNLIKELY(tenant_data_version <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tenant_data_version", K(ret), K(tenant_id), K(tenant_data_version));
+    LOG_WARN("unexpected tenant_data_version", K(ret), K(tenant_data_version));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     task_type_ = ddl_type;
-    tenant_id_ = tenant_id;
+    
     object_id_ = src_table_schema->get_table_id();
     schema_version_ = schema_version;
     task_id_ = task_id;
@@ -116,7 +114,7 @@ int ObForkTableTask::init(
     task_version_ = 1;
     execution_id_ = -1;
     task_status_ = ObDDLTaskStatus::PREPARE;
-    dst_tenant_id_ = tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     snapshot_version_ = snapshot_version;
     data_format_version_ = tenant_data_version;
@@ -145,14 +143,13 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
   } else if (!task_record.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_FAIL(deserialize_params_from_message(task_record.tenant_id_,
-                                                     task_record.message_.ptr(),
+  } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
                                                      task_record.message_.length(),
                                                      pos))) {
     LOG_WARN("deserialize params from message failed", K(ret), K(task_record.message_));
   } else {
     task_type_ = task_record.ddl_type_;
-    tenant_id_ = task_record.tenant_id_;
+    
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -164,7 +161,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
     execution_id_ = task_record.execution_id_;
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
-    dst_tenant_id_ = task_record.tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     compat_mode_ = lib::Worker::CompatMode::MYSQL;
 
@@ -188,7 +185,7 @@ int ObForkTableTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("fork table task not inited", K(ret));
   } else {
-    LOG_DEBUG("fork table task process tick", K(task_id_), K(task_status_), "tenant_id", tenant_id_,
+    LOG_DEBUG("fork table task process tick", K(task_id_), K(task_status_), 
         "src_table_id", object_id_, "dst_table_id", target_object_id_);
     switch (task_status_) {
       case ObDDLTaskStatus::PREPARE: {
@@ -201,7 +198,6 @@ int ObForkTableTask::process()
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
               "to", ddl_task_status_to_str(to_status),
-              "tenant_id", tenant_id_,
               "src_table_id", object_id_,
               "dst_table_id", target_object_id_,
               "snapshot_version", snapshot_version_);
@@ -217,7 +213,6 @@ int ObForkTableTask::process()
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
               "to", ddl_task_status_to_str(task_status_),
-              "tenant_id", tenant_id_,
               "src_table_id", object_id_,
               "dst_table_id", target_object_id_,
               "snapshot_version", snapshot_version_);
@@ -233,7 +228,6 @@ int ObForkTableTask::process()
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
               "to", ddl_task_status_to_str(task_status_),
-              "tenant_id", tenant_id_,
               "src_table_id", object_id_,
               "dst_table_id", target_object_id_,
               "snapshot_version", snapshot_version_);
@@ -251,7 +245,6 @@ int ObForkTableTask::process()
           LOG_INFO("fork table stage enter", K(task_id_),
               "from", ddl_task_status_to_str(from_status),
               "to", ddl_task_status_to_str(task_status_),
-              "tenant_id", tenant_id_,
               "src_table_id", object_id_,
               "dst_table_id", target_object_id_,
               "snapshot_version", snapshot_version_);
@@ -302,21 +295,19 @@ int ObForkTableTask::serialize_params_to_message(char *buf, const int64_t buf_si
   return ret;
 }
 
-int ObForkTableTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos)
+int ObForkTableTask::deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   SMART_VAR(obcall::ObForkTableArg, tmp_arg) {
-    if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
+    if (OB_UNLIKELY(!true || nullptr == buf || buf_size <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(buf_size));
-    } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(tenant_id, buf, buf_size, pos))) {
+      LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
+    } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
       LOG_WARN("deserialize ddl task failed", K(ret));
     } else if (OB_FAIL(serialization::decode_bool(buf, buf_size, pos, &is_data_complement_))) {
       LOG_WARN("deserialize is_data_complement failed", K(ret));
     } else if (OB_FAIL(tmp_arg.deserialize(buf, buf_size, pos))) {
       LOG_WARN("deserialize fork_table_arg failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::replace_user_tenant_id(tenant_id, tmp_arg))) {
-      LOG_WARN("replace user tenant id failed", K(ret), K(tenant_id), K(tmp_arg));
     } else if (OB_FAIL(deep_copy_fork_table_arg(tmp_arg))) {
       LOG_WARN("deep copy fork_table_arg failed", K(ret));
     }
@@ -335,7 +326,7 @@ int64_t ObForkTableTask::get_serialize_param_size() const
 int ObForkTableTask::deep_copy_fork_table_arg(const obcall::ObForkTableArg &arg)
 {
   int ret = OB_SUCCESS;
-  fork_table_arg_.tenant_id_ = arg.tenant_id_;
+  
   if (OB_FAIL(ob_write_string(allocator_, arg.src_database_name_, fork_table_arg_.src_database_name_))) {
     LOG_WARN("deep copy src database name failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, arg.src_table_name_, fork_table_arg_.src_table_name_))) {
@@ -360,7 +351,7 @@ int ObForkTableTask::wait_freeze_end(const ObDDLTaskStatus next_task_status)
   
   if (OB_FAIL(get_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id_, object_id_, src_tablet_ids))) {
+  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
     LOG_WARN("fail to get src tablet ids", K(ret));
   } else if (OB_FAIL(storage::ObTabletForkUtil::freeze_tablets(SYS_LS, src_tablet_ids))) {
     LOG_WARN("fail to freeze tablets", K(ret), K(SYS_LS), K(src_tablet_ids));
@@ -408,9 +399,9 @@ int ObForkTableTask::build_data(const ObDDLTaskStatus next_task_status)
 
   if (OB_FAIL(get_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id_, object_id_, src_tablet_ids))) {
+  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
     LOG_WARN("fail to get src tablet ids", K(ret));
-  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id_, target_object_id_, dst_tablet_ids))) {
+  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, target_object_id_, dst_tablet_ids))) {
     LOG_WARN("fail to get dst tablet ids", K(ret));
   } else if (src_tablet_ids.count() != dst_tablet_ids.count()) {
     ret = OB_ERR_UNEXPECTED;
@@ -455,12 +446,12 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (is_data_complement_) {
     LOG_DEBUG("data complement already completed, skip waiting", K(task_id_), K(target_object_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, target_object_id_, dst_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, dst_table_schema))) {
     LOG_WARN("fail to get destination table schema", K(ret));
   } else if (OB_ISNULL(dst_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("destination table not exist", K(ret), K_(target_object_id));
-  } else if (OB_FAIL(share::ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id_, *dst_table_schema, dst_tablet_ids))) {
+  } else if (OB_FAIL(share::ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, *dst_table_schema, dst_tablet_ids))) {
     LOG_WARN("fail to collect dst tablet ids", K(ret));
   } else if (dst_tablet_ids.empty()) {
     is_data_complement_ = true;
@@ -499,7 +490,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
 
   if (OB_SUCC(ret) && is_data_complement_) {
     ObSEArray<ObTabletID, 4> src_tablet_ids;
-    if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id_, object_id_, src_tablet_ids))) {
+    if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, object_id_, src_tablet_ids))) {
       LOG_WARN("fail to get src tablet ids", K(ret));
     } else if (OB_UNLIKELY(src_tablet_ids.count() != dst_tablet_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
@@ -582,7 +573,7 @@ int ObForkTableTask::finish()
     ObSEArray<uint64_t, 1> table_ids;
     if (OB_FAIL(table_ids.push_back(object_id_))) {
       LOG_WARN("fail to push back object id", K(ret), K(object_id_));
-    } else if (OB_FAIL(ObForkTableUtil::release_snapshot(this, schema_guard, tenant_id_, table_ids, snapshot_version_))) {
+    } else if (OB_FAIL(ObForkTableUtil::release_snapshot(this, schema_guard, table_ids, snapshot_version_))) {
       LOG_WARN("fail to release snapshot", K(ret), K(object_id_), K(snapshot_version_));
     }
   }
@@ -613,19 +604,19 @@ int ObForkTableTask::cleanup_impl()
       ObMySQLTransaction trans;
       ObTimeoutCtx ctx;
       
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-        LOG_WARN("get tenant schema guard failed", K(ret), K(tenant_id_));
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, object_id_, src_table_schema))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("get tenant schema guard failed", K(ret));
+      } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, src_table_schema))) {
         LOG_WARN("fail to get table schema", K(ret), K(object_id_));
       } else if (OB_ISNULL(src_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("source table not exist", K(ret), K(object_id_));
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, target_object_id_, dst_table_schema))) {
+      } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, dst_table_schema))) {
         LOG_WARN("fail to get destination table schema", K(ret));
       } else if (OB_ISNULL(dst_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("destination table not exist", K(ret), K_(target_object_id));
-      } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_))) {
+      } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
         LOG_WARN("start transaction failed", K(ret));
       } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
         LOG_WARN("fail to set timeout ctx", KR(ret));
@@ -635,13 +626,13 @@ int ObForkTableTask::cleanup_impl()
       } else {
         ObLockObjRequest lock_arg;
         lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_TENANT;
-        lock_arg.obj_id_ = tenant_id_;
+        lock_arg.obj_id_ = 1;
         lock_arg.owner_id_.set_default();
         lock_arg.lock_mode_ = EXCLUSIVE;  // Use EXCLUSIVE lock for cleanup operation
         lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
         lock_arg.timeout_us_ = ctx.get_timeout();
-        if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(tenant_id_, lock_arg, conn))) {
-          LOG_WARN("lock tenant failed", KR(ret), K(tenant_id_));
+        if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+          LOG_WARN("lock tenant failed", KR(ret));
         }
       }
 
@@ -656,11 +647,11 @@ int ObForkTableTask::cleanup_impl()
         if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%ld",
             share::OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
           LOG_WARN("assign sql string failed", K(ret), K(task_id_));
-        } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, TASK_STATUS_OPERATOR_SLOW))) {
-          LOG_WARN("ddl sim failure: slow inner sql", K(ret), K(tenant_id_), K(task_id_));
-        } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DELETE_TASK_RECORD_FAILED))) {
-          LOG_WARN("ddl sim failure: delete task record failed", K(ret), K(tenant_id_), K(task_id_));
-        } else if (OB_FAIL(trans.write(tenant_id_, sql_string.ptr(), affected_rows))) {
+        } else if (OB_FAIL(DDL_SIM(task_id_, TASK_STATUS_OPERATOR_SLOW))) {
+          LOG_WARN("ddl sim failure: slow inner sql", K(ret), K(task_id_));
+        } else if (OB_FAIL(DDL_SIM(task_id_, DELETE_TASK_RECORD_FAILED))) {
+          LOG_WARN("ddl sim failure: delete task record failed", K(ret), K(task_id_));
+        } else if (OB_FAIL(trans.write(sql_string.ptr(), affected_rows))) {
           LOG_WARN("delete ddl task record failed", K(ret), K(sql_string));
         } else if (OB_UNLIKELY(affected_rows < 0)) {
           ret = OB_ERR_UNEXPECTED;
@@ -682,7 +673,7 @@ int ObForkTableTask::cleanup_impl()
   }
 
   if (OB_SUCC(ret) && parent_task_id_ > 0) {
-    const ObDDLTaskID parent_task_id(tenant_id_, parent_task_id_);
+    const ObDDLTaskID parent_task_id(parent_task_id_);
     ObSysDDLSchedulerUtil::on_ddl_task_finish(parent_task_id, get_task_key(), ret_code_, trace_id_);
   }
   LOG_INFO("clean fork table task finished", K(ret), KPC(this));
@@ -696,7 +687,7 @@ int ObForkTableTask::get_schema_guard(share::schema::ObSchemaGetterGuard &schema
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("root service is null", K(ret));
   } else if (OB_FAIL(root_service_->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(
-      tenant_id_, schema_guard))) {
+      schema_guard))) {
     LOG_WARN("fail to get tenant schema guard", K(ret));
   }
   return ret;
@@ -713,7 +704,6 @@ int ObForkTableTask::build_fork_info(
     LOG_WARN("src and dst tablet count mismatch", K(ret), K(src_tablet_ids.count()), K(dst_tablet_ids.count()));
   } else {
     fork_info = storage::ObTableForkInfo(
-        tenant_id_,
         SYS_LS,
         object_id_,
         schema_version_,

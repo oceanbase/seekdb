@@ -33,7 +33,7 @@ public:
   ObZoneMergeManagerBase();
   virtual ~ObZoneMergeManagerBase() {}
 
-  int init(const uint64_t tenant_id, common::ObMySQLProxy &proxy);
+  int init(common::ObMySQLProxy &proxy);
   virtual int reload();
   virtual int try_reload();
   void reset_merge_info();
@@ -85,7 +85,6 @@ protected:
 private:
   bool is_inited_;
   bool is_loaded_;
-  uint64_t tenant_id_;
   int64_t zone_count_;
   share::ObZoneMergeInfo zone_merge_infos_[common::MAX_ZONE_NUM];
   share::ObGlobalMergeInfo global_merge_info_;
@@ -118,7 +117,7 @@ public:
   ObZoneMergeManager();
   virtual ~ObZoneMergeManager();
 
-  int init(const uint64_t tenant_id, common::ObMySQLProxy &proxy);
+  int init(common::ObMySQLProxy &proxy);
   ZONE_MERGE_MANAGER_FUNC(reload);
   ZONE_MERGE_MANAGER_FUNC(try_reload);
   ZONE_MERGE_MANAGER_FUNC(start_zone_merge);

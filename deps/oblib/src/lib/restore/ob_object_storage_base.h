@@ -158,16 +158,13 @@ FuncRetType<FuncType, Args...> execute_until_timeout(
 class ObObjectStorageTenantGuard
 {
 public:
-  ObObjectStorageTenantGuard(const uint64_t tenant_id, const int64_t timeout_us);
+  ObObjectStorageTenantGuard(const int64_t timeout_us);
   virtual ~ObObjectStorageTenantGuard();
 
-  static uint64_t get_tenant_id();
+  
   static int64_t get_timeout_us();
 
 private:
-  static thread_local uint64_t tl_tenant_id_;
-  uint64_t old_tenant_id_;
-  
   static thread_local int64_t tl_timeout_us_;
   int64_t old_timeout_us_;
 };

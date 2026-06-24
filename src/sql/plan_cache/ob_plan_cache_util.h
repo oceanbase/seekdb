@@ -1097,12 +1097,11 @@ public:
     enable_px_task_rebalance_(false),
     min_const_integer_precision_(1),
     cluster_config_version_(-1),
-    tenant_config_version_(-1),
-    tenant_id_(0)
+    tenant_config_version_(-1)
   {
   }
-  // init tenant_id_
-  void init(int t_id) {tenant_id_ = t_id;}
+  // init tenant_
+  void init() {}
   // load configs which will influence execution plan
   int load_influence_plan_config();
   // generate config string
@@ -1159,7 +1158,7 @@ private:
   int64_t cluster_config_version_;
   // current tenant config version_
   int64_t tenant_config_version_;
-  int64_t tenant_id_;
+  
 };
 
 extern const char* plan_cache_gc_confs[3];

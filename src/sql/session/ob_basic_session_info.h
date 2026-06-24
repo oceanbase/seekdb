@@ -39,7 +39,6 @@
 #include "share/system_variable/ob_system_variable_factory.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "share/system_variable/ob_system_variable_init.h"
-#include "share/client_feedback/ob_client_feedback_manager.h"
 #include "sql/session/ob_session_val_map.h"
 #include "sql/ob_sql_mode_manager.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -155,7 +154,6 @@ class ObBasicSessionInfo
 public:
   // 256KB ~= 4 * OB_COMMON_MEM_BLOCK_SIZE
   static const int64_t APPROX_MEM_USAGE_PER_SESSION = 256 * 1024L;
-  static const uint64_t VALID_PROXY_SESSID = 0;
   static const uint32_t INVALID_SESSID = common::INVALID_SESSID;
   // Reference to auto-generated essential system variables array
   static const share::ObSysVarClassType* const ESSENTIAL_SYS_VARS;
@@ -407,13 +405,13 @@ public:
   };
 
 public:
-  ObBasicSessionInfo(const uint64_t tenant_id);
+  ObBasicSessionInfo();
   virtual ~ObBasicSessionInfo();
 
-  virtual int init(uint32_t sessid, uint64_t proxy_sessid,
+  virtual int init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator, const ObTZInfoMap *tz_info);
   //for test
-  virtual int test_init(uint32_t sessid, uint64_t proxy_sessid,
+  virtual int test_init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator);
   virtual void destroy();
   //called before put session to freelist: unlock/set invalid
@@ -427,10 +425,10 @@ public:
   virtual void clean_status();
   //setters
   int reset_timezone();
-  int init_tenant(const common::ObString &tenant_name, const uint64_t tenant_id);
-  int set_tenant(const common::ObString &tenant_name, const uint64_t tenant_id);
-  int switch_tenant(uint64_t effective_tenant_id);
-  int switch_tenant_with_name(uint64_t effective_tenant_id, const common::ObString &tenant_name);
+  int init_tenant(const common::ObString &tenant_name);
+  int set_tenant(const common::ObString &tenant_name);
+  int switch_tenant();
+  int switch_tenant_with_name(const common::ObString &tenant_name);
   int set_default_catalog_db(uint64_t catalog_id,
                              uint64_t db_id,
                              const common::ObString &database_name,
@@ -536,19 +534,15 @@ public:
   }
   //getters
   const common::ObString get_tenant_name() const;
-  uint64_t get_priv_tenant_id() const { return tenant_id_; }
-  const common::ObString get_effective_tenant_name() const;
-  // About the usage of various tenant_id, refer to
-  uint64_t get_effective_tenant_id() const { return effective_tenant_id_; }
-  // RPC framework use rpc_tenant_id() to deliver remote/distribute tasks.
-  void set_rpc_tenant_id(uint64_t tenant_id) { rpc_tenant_id_ = tenant_id; }
-  uint64_t get_rpc_tenant_id() const
-  {
-    return rpc_tenant_id_ != 0 ? rpc_tenant_id_ : effective_tenant_id_;
-  }
-  uint64_t get_login_tenant_id() const { return tenant_id_; }
-  void set_login_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  bool is_tenant_changed() const { return tenant_id_ != effective_tenant_id_; }
+  
+  // About the usage of various tenant, refer to
+  
+  // RPC framework use rpc_tenant() to deliver remote/distribute tasks.
+  
+  
+  
+  
+  bool is_tenant_changed() const { return 1UL != 1UL; }
   int set_autocommit(bool autocommit);
   int get_autocommit(bool &autocommit) const
   {
@@ -581,7 +575,7 @@ public:
   bool is_restore_user() const { return  0 == thread_data_.user_name_.case_compare(common::OB_RESTORE_USER_NAME); };
   bool is_proxy_sys_user() const
   {
-    return OB_SYS_TENANT_ID == tenant_id_;
+    return true;
   };
   const common::ObString get_database_name() const;
   inline int get_database_id(uint64_t &db_id) const { db_id = database_id_; return common::OB_SUCCESS; }
@@ -758,8 +752,7 @@ public:
     client_create_time_ = client_create_time;
   }
   static int get_client_sid(uint32_t server_sid, uint32_t& client_sid); // get client sid by server sid
-  uint64_t get_proxy_sessid() const { return proxy_sessid_; }
-  uint64_t get_sessid_for_table() const { return is_obproxy_mode()? get_proxy_sessid() : (is_master_session() ? get_sid() : get_master_sessid()); } // used for temporary table, query create table when session id acquisition
+  uint64_t get_sessid_for_table() const { return is_master_session() ? get_sid() : get_master_sessid(); } // used for temporary table, query create table when session id acquisition
   uint32_t get_master_sessid() const { return master_sessid_; }
   inline const common::ObString get_sess_bt() const { return ObString::make_string(sess_bt_buff_); }
   inline int32_t get_sess_ref_cnt() const { return sess_ref_cnt_; }
@@ -812,12 +805,6 @@ public:
   const common::ObAddr &get_peer_addr() const {return thread_data_.peer_addr_;}
   const common::ObAddr &get_client_addr() const {return thread_data_.client_addr_;}
   const common::ObAddr &get_user_client_addr() const {return thread_data_.user_client_addr_;}
-  common::ObAddr get_proxy_addr() const
-  {
-    const int32_t ip = static_cast<int32_t>((proxy_sessid_ >> 32) & 0xFFFFFFFF);
-    const int32_t port = static_cast<int32_t>((proxy_sessid_ >> 16) & 0xFFFF);
-    return ObAddr(ip, port);
-  }
   void set_query_start_time(int64_t time)
   {
     LockGuard lock_guard(thread_data_mutex_);
@@ -937,13 +924,11 @@ public:
                                      common::ObIAllocator &calc_buf,
                                      const common::ObString &var_name,
                                      common::ObObj &val);
-  static int get_global_sys_variable(uint64_t actual_tenant_id,
-                                     common::ObIAllocator &calc_buf,
+  static int get_global_sys_variable(common::ObIAllocator &calc_buf,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const common::ObString &var_name,
                                      common::ObObj &val);
-  static int get_global_sys_variable(uint64_t actual_tenant_id,
-                                     common::ObIAllocator &calc_buf,
+  static int get_global_sys_variable(common::ObIAllocator &calc_buf,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const share::ObSysVarClassType var_id,
                                      common::ObObj &val);
@@ -1156,7 +1141,7 @@ public:
   void set_client_mode(const common::ObClientMode mode) { client_mode_ = mode; }
   common::ObClientMode get_client_mode() const { return client_mode_; }
   bool is_java_client_mode() const { return common::OB_JAVA_CLIENT_MODE == client_mode_; }
-  bool is_obproxy_mode() const { return common::OB_PROXY_CLIENT_MODE == client_mode_; }
+  bool is_obproxy_mode() const { return false; } // obproxy support removed: direct client connections only
 
   int64_t to_string(char *buffer, const int64_t length) const;
 
@@ -1210,8 +1195,7 @@ public:
   inline bool is_sys_var_changed() const { return !changed_sys_vars_.empty(); }
   inline bool is_user_var_changed() const { return !changed_user_vars_.empty(); }
   inline bool is_database_changed() const { return is_database_changed_; }
-  inline bool exist_client_feedback() const { return !feedback_manager_.is_empty(); }
-  inline bool is_session_var_changed() const { return (is_sys_var_changed() || is_user_var_changed() || exist_client_feedback()); }
+  inline bool is_session_var_changed() const { return (is_sys_var_changed() || is_user_var_changed()); }
   inline bool is_session_info_changed() const { return (is_session_var_changed() || is_database_changed()); }
   const inline common::ObIArray<ChangedVar> &get_changed_sys_var() const { return changed_sys_vars_; }
   const inline common::ObIArray<common::ObString> &get_changed_user_var() const { return changed_user_vars_; }
@@ -1274,17 +1258,9 @@ public:
     proxy_capability_ = proxy_capability;
   }
   obmysql::ObProxyCapabilityFlags get_proxy_cap_flags() const { return proxy_capability_; }
-  inline bool is_abundant_feedback_support() const
-  {
-    return is_track_session_info() && proxy_capability_.is_abundant_feedback_support();
-  }
-
   //TODO::@yuming, as enable_transmission_checksum is global variables,
   //here we no need get_session for is_enable_transmission_checksum()
   inline bool is_enable_transmission_checksum() const { return true; }
-
-  inline share::ObFeedbackManager &get_feedback_manager () { return feedback_manager_; }
-  inline int set_follower_first_feedback(const share::ObFollowerFirstFeedbackType type);
 
   inline common::ObIAllocator &get_allocator() { return changed_var_pool_; }
   // TODO: piece cache use this allocator for now, not property, need remove later.
@@ -1402,7 +1378,6 @@ public:
   // update trace_id in sys variables and  will bing to client
   int update_last_trace_id(const ObCurTraceId::TraceId &trace_id);
 
-  int set_partition_location_feedback(const share::ObFBPartitionParam &param);
   int get_auto_increment_cache_size(int64_t &auto_increment_cache_size);
   void set_curr_trans_last_stmt_end_time(int64_t t) { curr_trans_last_stmt_end_time_ = t; }
   int64_t get_curr_trans_last_stmt_end_time() const { return curr_trans_last_stmt_end_time_; }
@@ -1494,8 +1469,6 @@ public:
   inline void set_client_sessid_support(bool is_client_sessid_support)
               { is_client_sessid_support_ = is_client_sessid_support; }
   inline bool is_client_sessid_support() { return is_client_sessid_support_; }
-  inline void set_feedback_proxy_info_support(const bool is_feedback_proxy_info_support) { is_feedback_proxy_info_support_ = is_feedback_proxy_info_support; }
-  inline bool is_feedback_proxy_info_support() { return is_feedback_proxy_info_support_; }
   int set_enable_role_ids(const ObIArray<uint64_t>& role_ids);
   int load_default_sys_variable(common::ObIAllocator &allocator, int64_t var_idx);
 
@@ -2292,7 +2265,7 @@ private:
     };
   };
 protected:
-  const uint64_t orig_tenant_id_;     // which tenant new me
+       // which tenant new me
 private:
   static const int64_t CACHED_SYS_VAR_VERSION = 721;// a magic num
   static const int MAX_SESS_BT_BUFF_SIZE = 1024;
@@ -2305,10 +2278,9 @@ private:
   bool is_deserialized_; // whether the session is obtained through deserialization, currently only used for data cleanup when releasing temporary table sessions
   // session properties:
   char tenant_[common::OB_MAX_TENANT_NAME_LENGTH + 1];         // current tenant
-  uint64_t tenant_id_;            // current tenant ID, used for privilege check and resource audit
-  char effective_tenant_[common::OB_MAX_TENANT_NAME_LENGTH + 1];
-  uint64_t effective_tenant_id_;            // current effective tenant ID, used for schema check
-  uint64_t rpc_tenant_id_;
+              // current tenant ID, used for privilege check and resource audit
+              // current effective tenant ID, used for schema check
+  
   bool is_changed_to_temp_tenant_;              // if tenant is changed to temp tenant for show statement
   uint64_t user_id_;              // current user id
   common::ObString client_version_;  // current client version
@@ -2317,7 +2289,6 @@ private:
   uint32_t master_sessid_;
   uint32_t client_sessid_;
   uint64_t client_create_time_;
-  uint64_t proxy_sessid_;
   int64_t global_vars_version_; // used for obproxy synchronize variables
   int64_t sys_var_base_version_;
   /*******************************************
@@ -2423,7 +2394,6 @@ private:
   common::ObArenaAllocator changed_var_pool_;  // reuse for each statement
   common::ObReserveArenaAllocator<256> extra_info_allocator_; // use for extra_info in 20 protocol
   bool is_database_changed_;  // is schema changed
-  share::ObFeedbackManager feedback_manager_; // feedback T-L-V
   // add by gujian, cached the flag whether transaction is sepcified
   ObTransSpecfiedStatus trans_spec_status_;
   //========================================================================
@@ -2524,7 +2494,6 @@ private:
   int64_t process_query_time_;
   int64_t last_update_tz_time_; //timestamp of last attempt to update timezone info
   bool is_client_sessid_support_; //client session id support flag
-  bool is_feedback_proxy_info_support_; // to confirm whether obproxy supports feedback_proxy_info
   bool use_rich_vector_format_;
   int64_t last_refresh_schema_version_;
   // rich format specified hint, e.g. `select /*+opt_param('enable_rich_vector_format', 'true')*/ * from t`
@@ -2692,27 +2661,6 @@ inline int ObBasicSessionInfo::get_local_nls_format(const ObObjType type, ObStri
   return ret;
 }
 
-inline int ObBasicSessionInfo::set_follower_first_feedback(const share::ObFollowerFirstFeedbackType type)
-{
-  INIT_SUCC(ret);
-  if (is_abundant_feedback_support()) {
-    if (OB_FAIL(feedback_manager_.add_follower_first_fb_info(type))) {
-      SQL_SESSION_LOG(WARN, "fail to add follower first fb info", K(type), K(ret));
-    }
-  }
-  return ret;
-}
-
-inline int ObBasicSessionInfo::set_partition_location_feedback(const share::ObFBPartitionParam &param)
-{
-   INIT_SUCC(ret);
-  if (is_abundant_feedback_support()) {
-    if (OB_FAIL(feedback_manager_.add_partition_fb_info(param))) {
-      SQL_SESSION_LOG(WARN, "fail to add partition fb info", K(param), K(ret));
-    }
-  }
-  return ret;
-}
 // Object (currently only used for PL, subsequent expr will be handled similarly) execution environment
 class ObExecEnv
 {

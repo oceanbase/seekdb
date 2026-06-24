@@ -93,9 +93,6 @@ public:
 class ObTenantUtils
 {
 public:
-  static int get_tenant_ids(
-      share::schema::ObMultiVersionSchemaService *schema_service,
-      common::ObIArray<uint64_t> &tenant_ids);
 private:
 
 };

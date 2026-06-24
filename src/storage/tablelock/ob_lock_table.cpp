@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_lock_table.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "storage/ls/ob_ls.h"                  // ObLS
 #include "storage/tablelock/ob_table_lock_iterator.h"
@@ -168,7 +169,6 @@ int ObLockTable::recover_(const blocksstable::ObDatumRow &row)
 }
 
 int ObLockTable::get_table_schema_(
-    const uint64_t tenant_id,
     ObTableSchema &schema)
 {
   int ret = OB_SUCCESS;
@@ -185,7 +185,7 @@ int ObLockTable::get_table_schema_(
   DATA_TYPE.set_binary();
 
   ObColumnSchemaV2 id_column;
-  id_column.set_tenant_id(tenant_id);
+  
   id_column.set_table_id(table_id);
   id_column.set_column_id(OB_APP_MIN_COLUMN_ID);
   id_column.set_schema_version(SCHEMA_VERSION);
@@ -194,14 +194,14 @@ int ObLockTable::get_table_schema_(
   id_column.set_meta_type(INC_ID_TYPE); // int64_t
 
   ObColumnSchemaV2 value_column;
-  value_column.set_tenant_id(tenant_id);
+  
   value_column.set_table_id(table_id);
   value_column.set_column_id(OB_APP_MIN_COLUMN_ID + 1);
   value_column.set_schema_version(SCHEMA_VERSION);
   value_column.set_data_length(MAX_LOCK_INFO_LENGTH);
   value_column.set_meta_type(DATA_TYPE);
 
-  schema.set_tenant_id(tenant_id);
+  
   schema.set_database_id(OB_SYS_DATABASE_ID);
   schema.set_table_id(table_id);
   schema.set_schema_version(SCHEMA_VERSION);
@@ -337,7 +337,7 @@ int ObLockTable::online()
 int ObLockTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SCN &create_scn)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = parent_->get_tenant_id();
+  
   const share::ObLSID &ls_id = parent_->get_ls_id();
   share::schema::ObTableSchema table_schema;
   ObIMemtableMgr *memtable_mgr = nullptr;
@@ -347,7 +347,7 @@ int ObLockTable::create_tablet(const lib::Worker::CompatMode compat_mode, const 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObLockTable not inited", K(ret));
-  } else if (OB_FAIL(get_table_schema_(tenant_id, table_schema))) {
+  } else if (OB_FAIL(get_table_schema_(table_schema))) {
     LOG_WARN("get lock table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
@@ -940,7 +940,7 @@ int ObLockTable::flush(share::SCN &scn)
     TABLELOCK_LOG(WARN, "get lock memtable failed", K(ret));
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
     TABLELOCK_LOG(ERROR, "get lock memtable from lock handle failed", K(ret));
-  } else if (OB_FAIL(storage::acquire_checkpoint_batch_trace_id(ls_id, trace_id))) {
+  } else if (OB_FAIL(share::g_mp->checkpoint_diagnose_mgr()->acquire_trace_id(ls_id, trace_id))) {
     TABLELOCK_LOG(WARN, "acquire trace_id failed", K(ret), K(ls_id));
   } else if (OB_FAIL(memtable->flush(scn, trace_id))) {
     TABLELOCK_LOG(WARN, "ObLockTable::flush failed", K(ret), K(scn));                                    

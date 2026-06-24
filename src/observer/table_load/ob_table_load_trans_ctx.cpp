@@ -36,7 +36,7 @@ ObTableLoadTransCtx::ObTableLoadTransCtx(ObTableLoadTableCtx *ctx,
     trans_status_(ObTableLoadTransStatusType::NONE),
     error_code_(OB_SUCCESS)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 int ObTableLoadTransCtx::advance_trans_status(ObTableLoadTransStatusType trans_status)

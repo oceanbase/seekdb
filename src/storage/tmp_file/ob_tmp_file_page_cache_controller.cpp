@@ -32,7 +32,7 @@ int ObTmpFilePageCacheController::init()
     STORAGE_LOG(WARN, "ObTmpFilePageCacheController init twice");
   } else if (OB_FAIL(task_allocator_.init(lib::ObMallocAllocator::get_instance(),
                                           OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                          ObMemAttr(MTL_ID(), "TmpFileCtl", ObCtxIds::DEFAULT_CTX_ID)))) {
+                                          ObMemAttr("TmpFileCtl", ObCtxIds::DEFAULT_CTX_ID)))) {
     STORAGE_LOG(WARN, "fail to init task allocator", KR(ret));
   } else if (OB_FAIL(flush_mgr_.init())) {
     STORAGE_LOG(WARN, "fail to init flush task mgr", KR(ret));
@@ -139,7 +139,7 @@ void ObTmpFilePageCacheController::refresh_disk_usage_limit()
     ret = OB_NOT_INIT;
     LOG_WARN("tmp file page cache controller is not inited", KR(ret));
   } else {
-    omt::ObTenantConfigGuard config(TENANT_CONF_TIL(MTL_ID()));
+    omt::ObTenantConfigGuard config(TENANT_CONF_TIL());
     if (!config.is_valid()) {
       // do nothing
     } else {

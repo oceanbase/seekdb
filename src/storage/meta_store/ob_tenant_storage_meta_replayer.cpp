@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_storage_meta_replayer.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/slog_ckpt/ob_tenant_checkpoint_slog_handler.h"
@@ -66,6 +67,7 @@ void ObTenantStorageMetaReplayer::destroy()
   ckpt_slog_handler_ = nullptr;
   is_inited_ = false;
 }
+
 
 } // namespace storage
 } // namespace oceanbase

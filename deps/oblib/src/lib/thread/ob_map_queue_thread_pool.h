@@ -76,7 +76,7 @@ protected:
   /// Execute cond timedwait on a specific thread's queue
 
 public:
-  int init(const uint64_t tenant_id, const int64_t thread_num, const char *label);
+  int init(const int64_t thread_num, const char *label);
   void destroy();
   int start();
   void stop();

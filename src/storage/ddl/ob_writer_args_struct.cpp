@@ -155,7 +155,7 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
 
           if (OB_FAIL(ret)) {
           } else {
-            if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr(MTL_ID(), "DDL_MBSS")))) {
+            if (OB_ISNULL(ddl_redo_callback_ = OB_NEW(ObDDLRedoLogWriterCallback, ObMemAttr("DDL_MBSS")))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("failed to alloc memory", K(ret));
             } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {

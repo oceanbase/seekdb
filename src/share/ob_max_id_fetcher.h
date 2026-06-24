@@ -72,7 +72,6 @@ enum ObMaxIdType
   OB_MAX_USED_TRIGGER_ID_TYPE,
   OB_MAX_USED_PROFILE_ID_TYPE,
   OB_MAX_USED_AUDIT_ID_TYPE,
-  OB_MAX_USED_DBLINK_ID_TYPE,
   OB_MAX_USED_DIRECTORY_ID_TYPE,
   OB_MAX_USED_CONTEXT_ID_TYPE,
   OB_MAX_USED_PARTITION_ID_TYPE,
@@ -100,35 +99,35 @@ public:
   virtual ~ObMaxIdFetcher();
 
   // For generate new object_ids
-  int fetch_new_max_id(const uint64_t tenant_id, ObMaxIdType id_type,
+  int fetch_new_max_id(ObMaxIdType id_type,
                        uint64_t &max_id, const uint64_t initial = UINT64_MAX,
                        const int64_t size = 1);
   int update_server_max_id(const uint64_t max_server_id, const uint64_t next_max_server_id);
   // For generate new tablet_ids
-  int fetch_new_max_ids(const uint64_t tenant_id, ObMaxIdType id_type,
+  int fetch_new_max_ids(ObMaxIdType id_type,
                         uint64_t &id, uint64_t size);
   // For generate new tablet_ids and object_ids
   // id range (max_id - size, max_id]
-  int batch_fetch_new_max_id_from_inner_table(const uint64_t tenant_id, ObMaxIdType id_type,
+  int batch_fetch_new_max_id_from_inner_table(ObMaxIdType id_type,
       uint64_t &max_id, const uint64_t size);
-  int update_max_id(common::ObISQLClient &sql_client, const uint64_t tenant_id,
+  int update_max_id(common::ObISQLClient &sql_client,
                     ObMaxIdType max_id_type, const uint64_t max_id);
   // return OB_ENTRY_NOT_EXIST for %id_type not exist in __all_sys_table
-  static int fetch_max_id(common::ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int fetch_max_id(common::ObISQLClient &sql_client,
                    ObMaxIdType id_type, uint64_t &max_id);
   static const char *get_max_id_name(const ObMaxIdType max_id_type);
   static const char *get_max_id_info(const ObMaxIdType max_id_type);
   static int str_to_uint(const common::ObString &str, uint64_t &value);
 private:
   // (max_id - size, max_id] is valid
-  static int fetch_max_id_from_cache_(const uint64_t tenant_id, ObMaxIdType id_type,
+  static int fetch_max_id_from_cache_(ObMaxIdType id_type,
       uint64_t &max_id, const uint64_t size);
-  int fetch_new_max_id_from_inner_table_(const uint64_t tenant_id, const ObMaxIdType max_id_type,
+  int fetch_new_max_id_from_inner_table_(const ObMaxIdType max_id_type,
       uint64_t &max_id, const uint64_t initial, const uint64_t size);
   static bool valid_max_id_type(const ObMaxIdType max_id_type)
   { return max_id_type >= 0 && max_id_type < OB_MAX_ID_TYPE; }
   // insert ignore into __all_sys_stat table
-  int insert_initial_value(common::ObISQLClient &sql_client, uint64_t tenant_id,
+  int insert_initial_value(common::ObISQLClient &sql_client,
       ObMaxIdType max_id_type, const uint64_t initial_value);
 
   static int check_id_valid(const ObMaxIdType &max_id_type, const uint64_t &id);

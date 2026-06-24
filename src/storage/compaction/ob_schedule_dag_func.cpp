@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_schedule_dag_func.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/column_store/ob_co_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
@@ -32,7 +33,7 @@ namespace compaction
 {
 
 #define CREATE_DAG(T)                                                          \
-  if (OB_FAIL(MTL(ObTenantDagScheduler *)                                      \
+  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()                                      \
                   ->create_and_add_dag<T>(&param, is_emergency))) {            \
     if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {                         \
       LOG_WARN("failed to create merge dag", K(ret), K(param));                \
@@ -45,7 +46,7 @@ namespace compaction
 
 #define CREATE_AND_GET_DAG(T, dag) \
   { \
-    if (OB_FAIL(MTL(ObTenantDagScheduler*)->create_dag<T>(&param, dag))) { \
+    if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->create_dag<T>(&param, dag))) { \
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) { \
         LOG_WARN("failed to create merge dag", K(ret), K(param)); \
       } \
@@ -66,7 +67,7 @@ int ObScheduleDagFunc::schedule_tablet_co_merge_dag_net(
     ObCOMergeDagParam &param)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(MTL(ObTenantDagScheduler*)->create_and_add_dag_net<ObCOMergeDagNet>(&param))) {
+  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->create_and_add_dag_net<ObCOMergeDagNet>(&param))) {
     if (OB_TASK_EXIST != ret) {
       LOG_WARN("failed to create dag_net", K(ret), K(param));
     } else {

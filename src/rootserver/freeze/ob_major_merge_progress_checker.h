@@ -82,7 +82,6 @@ class ObMajorMergeProgressChecker : public ObBasicMergeProgressChecker
 {
 public:
   ObMajorMergeProgressChecker(
-    const uint64_t tenant_id,
     volatile bool &stop);
   virtual ~ObMajorMergeProgressChecker() {}
 
@@ -179,7 +178,6 @@ private:
   volatile bool &stop_;
   uint8_t loop_cnt_;
   int last_errno_;
-  uint64_t tenant_id_;
   share::ObFreezeInfo freeze_info_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;

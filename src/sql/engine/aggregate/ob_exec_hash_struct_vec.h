@@ -563,19 +563,17 @@ public:
                                              ObSEArray<GroupRowBucket *, 64, common::ModulePageAllocator, false>,
                                              true>;
 
-  ObExtendHashTableVec(int64_t tenant_id)
+  ObExtendHashTableVec()
     : is_inited_vec_(false),
       hash_expr_cnt_(0),
       initial_bucket_num_(0),
       size_(0),
       buckets_(NULL),
-      allocator_("ExtendHTBucket", tenant_id, ObCtxIds::WORK_AREA),
+      allocator_("ExtendHTBucket", ObCtxIds::WORK_AREA),
       item_alloc_("SqlGbyItem",
                   common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                  tenant_id,
                   ObCtxIds::WORK_AREA),
       group_store_(),
-      tenant_id_(tenant_id),
       gby_exprs_(nullptr),
       eval_ctx_(nullptr),
       vector_ptrs_(),
@@ -872,7 +870,7 @@ public:
     group_store_.set_callback(callback);
     group_store_.set_allocator(alloc);
     group_store_.set_io_event_observer(observer);
-    ObMemAttr attr(tenant_id_, ObModIds::OB_HASH_NODE_GROUP_ROWS, ObCtxIds::WORK_AREA);
+    ObMemAttr attr(ObModIds::OB_HASH_NODE_GROUP_ROWS, ObCtxIds::WORK_AREA);
     int64_t extra_size = calc_extra_size(agg_row_size);
     return group_store_.init(*gby_exprs_, max_batch_size, attr, 0/*mem_limit*/,
                              false/* enable_dump*/, extra_size, NONE_COMPRESSOR);
@@ -1093,7 +1091,7 @@ protected:
   common::ModulePageAllocator allocator_;
   ObArenaAllocator item_alloc_;
   ObTempRowStore group_store_;
-  int64_t tenant_id_;
+  
   const common::ObIArray<ObExpr *> *gby_exprs_;
   ObEvalCtx *eval_ctx_;
   static const int64_t HASH_BUCKET_PREFETCH_MAGIC_NUM = 4 * 1024;
@@ -1139,7 +1137,7 @@ int ObExtendHashTableVec<GroupRowBucket>::resize(ObIAllocator *allocator, int64_
       } else {
         is_inited_vec_ = false;
         buckets_ = new(buckets_buf)BucketArray(allocator_);
-        buckets_->set_tenant_id(tenant_id_);
+        
         initial_bucket_num_ = common::next_pow2(bucket_num * SIZE_BUCKET_SCALE);
         SQL_ENG_LOG(DEBUG, "debug bucket num", K(ret), K(buckets_->count()), K(initial_bucket_num_));
         size_ = 0;
@@ -1195,7 +1193,7 @@ int ObExtendHashTableVec<GroupRowBucket>::extend(const int64_t new_bucket_num)
       allocator_.free(buckets_);
 
       buckets_ = new_buckets;
-      buckets_->set_tenant_id(tenant_id_);
+      
     }
     if (OB_FAIL(ret)) {
       if (buckets_ == new_buckets) {
@@ -2194,7 +2192,7 @@ int ObExtendHashTableVec<GroupRowBucket>::init(ObIAllocator *allocator,
         MEMSET(&col_has_null_.at(0), 0, col_has_null_.count());
       }
       buckets_ = new(buckets_buf)BucketArray(allocator_);
-      buckets_->set_tenant_id(tenant_id_);
+      
       initial_bucket_num_ = common::next_pow2(initial_size * SIZE_BUCKET_SCALE);
       SQL_ENG_LOG(DEBUG, "debug bucket num", K(ret), K(buckets_->count()), K(initial_bucket_num_));
       size_ = 0;

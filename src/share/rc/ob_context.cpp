@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/rc/ob_context.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::common;
@@ -43,7 +44,7 @@ int ObTenantSpace::guard_init_cb(const ObTenantSpace &tenant_space, char *buf, b
   } else {
     lib::Worker::CompatMode mode = THIS_WORKER.get_compatibility_mode();
     *reinterpret_cast<lib::Worker::CompatMode*>(buf) = mode;
-    mode = tenant_space.get_tenant()->get<lib::Worker::CompatMode>();
+    mode = ::oceanbase::share::g_mp->compat_mode();
     THIS_WORKER.set_compatibility_mode(mode);
     is_inited = true;
   }
@@ -89,19 +90,19 @@ ObResourceOwner &ObResourceOwner::root()
   return *root;
 }
 
-ObTenantSpaceFetcher::ObTenantSpaceFetcher(const uint64_t tenant_id)
+ObTenantSpaceFetcher::ObTenantSpaceFetcher()
   : ret_(OB_SUCCESS),
     entity_(nullptr)
 {
   int ret = common::OB_SUCCESS;
   ObTenantSpace *tmp = nullptr;
-  if (OB_FAIL(get_tenant_ctx_with_tenant_lock(tenant_id, tmp))) {
+  if (OB_FAIL(get_tenant_ctx_with_tenant_lock(tmp))) {
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      SHARE_LOG(WARN, "get tenant ctx failed", K(ret), K(tenant_id));
+      SHARE_LOG(WARN, "get tenant ctx failed", K(ret));
     }
   } else if (OB_ISNULL(tmp)) {
     ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "null ptr", K(ret), K(tenant_id));
+    SHARE_LOG(WARN, "null ptr", K(ret));
   } else {
     entity_ = tmp;
   }

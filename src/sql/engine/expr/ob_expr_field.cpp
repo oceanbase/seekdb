@@ -97,7 +97,7 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
         bool enable_decimalint = false;
         if (OB_FAIL(ObSQLUtils::check_enable_decimalint(type_ctx.get_session(), enable_decimalint))) {
           LOG_WARN("fail to check_enable_decimalint_type",
-              K(ret), K(type_ctx.get_session()->get_effective_tenant_id()));
+              K(ret));
         } else if (enable_decimalint && is_all_integer_or_decimal_int) {
           type.set_calc_type(ObDecimalIntType); // field is an expr in mysql mode
         } else {

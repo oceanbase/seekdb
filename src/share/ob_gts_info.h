@@ -53,10 +53,9 @@ public:
   void reset();
 public:
   uint64_t gts_id_;
-  uint64_t tenant_id_;
   common::ObMemberList member_list_;
 
-  TO_STRING_KV(K(gts_id_), K(tenant_id_), K(member_list_));
+  TO_STRING_KV(K(gts_id_), K(member_list_));
 };
 } // namespace common
 } // namespace oceanbase

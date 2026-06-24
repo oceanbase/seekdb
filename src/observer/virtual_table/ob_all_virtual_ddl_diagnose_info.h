@@ -34,15 +34,14 @@ struct ObDDLDiagnoseValue final
 {
 public:
   ObDDLDiagnoseValue()
-    :tenant_id_(0), object_id_(0), ddl_task_id_(0), execution_id_(-1), start_time_(0), finish_time_(0) 
+    :object_id_(0), ddl_task_id_(0), execution_id_(-1), start_time_(0), finish_time_(0) 
   {
     op_name_[0] = '\0'; 
   }
   ~ObDDLDiagnoseValue() = default;
-  TO_STRING_KV(K_(tenant_id), K_(object_id), K_(ddl_task_id), K_(start_time), K_(finish_time), K_(op_name));
+  TO_STRING_KV(K_(object_id), K_(ddl_task_id), K_(start_time), K_(finish_time), K_(op_name));
   void reset() 
   {
-    tenant_id_ = 0;
     object_id_ = 0;
     ddl_task_id_ = 0;
     execution_id_ = -1;
@@ -52,11 +51,10 @@ public:
   }
   bool inline is_valid() 
   {
-    return op_name_ != nullptr && ddl_task_id_ > 0 && tenant_id_ != OB_INVALID_ID;
+    return op_name_ != nullptr && ddl_task_id_ > 0 && true;
   }
 
 public:
-  uint64_t tenant_id_;
   uint64_t object_id_;
   share::ObDDLType ddl_type_;
   char op_name_[common::MAX_LONG_OPS_NAME_LENGTH];

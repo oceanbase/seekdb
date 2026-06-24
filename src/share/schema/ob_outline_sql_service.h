@@ -48,8 +48,7 @@ public:
   virtual int alter_outline(const ObOutlineInfo &outline_info,
                              common::ObISQLClient &sql_client,
                              const common::ObString *ddl_stmt_str = NULL);
-  virtual int delete_outline(const uint64_t tenant_id,
-                             const uint64_t database_id,
+  virtual int delete_outline(const uint64_t database_id,
                              const uint64_t outline_id,
                              const int64_t new_schema_version,
                              common::ObISQLClient &sql_client,

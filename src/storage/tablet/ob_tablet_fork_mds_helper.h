@@ -57,10 +57,10 @@ public:
   int set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg);
   int set_truncate_arg(const rootserver::ObTruncateTabletArg &arg);
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(autoinc_seq_arg), K_(truncate_arg));
+  TO_STRING_KV(K_(ls_id), K_(autoinc_seq_arg), K_(truncate_arg));
 
 public:
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   obcall::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
   rootserver::ObTruncateTabletArg truncate_arg_;

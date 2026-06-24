@@ -15,6 +15,7 @@
  */
 
 #include "ob_deadlock_detector_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_ex_rpc.h"
 
 namespace oceanbase
@@ -74,11 +75,11 @@ int ObDeadLockDetectorRpc::post_lcl_message(const ObAddr &dest_addr,
     // restoring the original async post() decoupling (handler runs on a worker thread,
     // keeping cycle propagation off the sender stack). msg is serialized; tenant
     // context is restored on the worker via MTL_SWITCH.
-    const uint64_t tenant_id = MTL_ID();
+    
     (void)ex_rpc::async_call<void>(msg, [dest_addr](const ObLCLMessage &m) {
       int ret = OB_SUCCESS;
-      MTL_SWITCH(tenant_id) {
-        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+      MOD_SCOPE {
+        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
         if (OB_ISNULL(p_deadlock_detector_mgr)) {
           ret = OB_ERR_UNEXPECTED; DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KR(ret), KP(p_deadlock_detector_mgr));
         } else if (OB_FAIL(p_deadlock_detector_mgr->process_lcl_message(m))) {
@@ -110,11 +111,11 @@ int ObDeadLockDetectorRpc::post_collect_info_message(const ObAddr &dest_addr,
     // restoring the original async post() decoupling (handler runs on a worker thread,
     // keeping cycle propagation off the sender stack). msg is serialized; tenant
     // context is restored on the worker via MTL_SWITCH.
-    const uint64_t tenant_id = MTL_ID();
+    
     (void)ex_rpc::async_call<void>(msg, [dest_addr](const ObDeadLockCollectInfoMessage &m) {
       int ret = OB_SUCCESS;
-      MTL_SWITCH(tenant_id) {
-        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+      MOD_SCOPE {
+        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
         if (OB_ISNULL(p_deadlock_detector_mgr)) {
           ret = OB_ERR_UNEXPECTED; DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KR(ret), KP(p_deadlock_detector_mgr));
         } else if (OB_FAIL(p_deadlock_detector_mgr->process_collect_info_message(m))) {
@@ -146,11 +147,11 @@ int ObDeadLockDetectorRpc::post_notify_parent_message(const ObAddr &dest_addr,
     // restoring the original async post() decoupling (handler runs on a worker thread,
     // keeping cycle propagation off the sender stack). msg is serialized; tenant
     // context is restored on the worker via MTL_SWITCH.
-    const uint64_t tenant_id = MTL_ID();
+    
     (void)ex_rpc::async_call<void>(msg, [dest_addr](const ObDeadLockNotifyParentMessage &m) {
       int ret = OB_SUCCESS;
-      MTL_SWITCH(tenant_id) {
-        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+      MOD_SCOPE {
+        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
         if (OB_ISNULL(p_deadlock_detector_mgr)) {
           ret = OB_ERR_UNEXPECTED; DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KR(ret), KP(p_deadlock_detector_mgr));
         } else if (OB_FAIL(p_deadlock_detector_mgr->process_notify_parent_message(m))) {

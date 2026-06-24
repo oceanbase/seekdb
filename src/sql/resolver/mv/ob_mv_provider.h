@@ -32,8 +32,8 @@ namespace sql
 class ObMVProvider
 {
 public:
-  explicit ObMVProvider(int64_t tenant_id, uint64_t mview_id)
-    : inner_alloc_("MVProvider", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id, ObCtxIds::DEFAULT_CTX_ID),
+  explicit ObMVProvider(uint64_t mview_id)
+    : inner_alloc_("MVProvider", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID),
       mview_id_(mview_id),
       inited_(false),
       refreshable_type_(OB_MV_REFRESH_INVALID),
@@ -42,14 +42,12 @@ public:
       fast_refreshable_note_()
     {}
   ~ObMVProvider() {}
-  static int check_mv_refreshable(const uint64_t tenant_id,
-                                  const uint64_t mview_id,
+  static int check_mv_refreshable(const uint64_t mview_id,
                                   ObSQLSessionInfo *session_info,
                                   ObSchemaGetterGuard *schema_guard,
                                   bool &can_fast_refresh,
                                   FastRefreshableNotes &note);
-  static int get_real_time_mv_expand_view(const uint64_t tenant_id,
-                                          const uint64_t mview_id,
+  static int get_real_time_mv_expand_view(const uint64_t mview_id,
                                           ObSQLSessionInfo *session_info,
                                           ObSchemaGetterGuard *schema_guard,
                                           ObIAllocator &alloc,

@@ -52,21 +52,15 @@ struct ObRoutePolicyCtx
   ObRoutePolicyCtx()
     :policy_type_(POLICY_TYPE_MAX),
      consistency_level_(common::INVALID_CONSISTENCY),
-     is_proxy_priority_hit_support_(false),
-     tenant_id_(OB_INVALID_TENANT_ID),
      max_read_stale_time_(0)
    {}
 
   TO_STRING_KV(K(policy_type_),
                K(consistency_level_),
-               K(is_proxy_priority_hit_support_),
-               K(tenant_id_),
                K(max_read_stale_time_));
 
   ObRoutePolicyType policy_type_;
   common::ObConsistencyLevel consistency_level_;
-  bool is_proxy_priority_hit_support_;
-  uint64_t tenant_id_;
   int64_t max_read_stale_time_;
 };
 

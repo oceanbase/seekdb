@@ -133,7 +133,7 @@ TEST_F(TestStorageLogRW, test_basic)
 
   // test read single-param normal-size log
   buf = ob_malloc(disk_addr.size_, "ReadBuf");
-  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos, OB_SERVER_TENANT_ID);
+  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   cmp = MEMCMP(simple_slog1.buf_, (char *)buf + pos, 62);
   ASSERT_EQ(0, cmp);
@@ -160,7 +160,7 @@ TEST_F(TestStorageLogRW, test_basic)
 
   // test read single-param large-size log
   buf = ob_malloc(disk_addr.size_, "ReadBuf");
-  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos, OB_SERVER_TENANT_ID);
+  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   cmp = MEMCMP(simple_slog2.buf_, (char *)buf + pos, single_large_size);
   ASSERT_EQ(0, cmp);
@@ -206,7 +206,7 @@ TEST_F(TestStorageLogRW, test_basic)
   for (int i = 0; i < 10; i++) {
     disk_addr = param_arr.at(i).disk_addr_;
     buf = ob_malloc(disk_addr.size_, ObNewModIds::TEST);
-    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos, OB_SERVER_TENANT_ID);
+    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos);
     ASSERT_EQ(OB_SUCCESS, ret);
     cmp = MEMCMP(slog_arr1[i].buf_, (char *)buf + pos, data_len[i]);
     ASSERT_EQ(0, cmp);
@@ -254,7 +254,7 @@ TEST_F(TestStorageLogRW, test_basic)
   for (int i = 0; i < 10; i++) {
     disk_addr = param_arr2.at(i).disk_addr_;
     buf = ob_malloc(disk_addr.size_, ObNewModIds::TEST);
-    ret = ObStorageLogReader::read_log(slogger2->get_dir(), disk_addr, disk_addr.size_, buf, pos, OB_SERVER_TENANT_ID);
+    ret = ObStorageLogReader::read_log(slogger2->get_dir(), disk_addr, disk_addr.size_, buf, pos);
     ASSERT_EQ(OB_SUCCESS, ret);
     cmp = MEMCMP(slog_arr2[i].buf_, (char *)buf + pos, data_len[i]);
     ASSERT_EQ(0, cmp);
@@ -275,7 +275,7 @@ TEST_F(TestStorageLogRW, test_iter_read)
 
   // read empty file
   ObStorageLogReader empty_reader;
-  ASSERT_EQ(OB_SUCCESS, empty_reader.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), read_cursor, log_file_spec_, OB_SERVER_TENANT_ID));
+  ASSERT_EQ(OB_SUCCESS, empty_reader.init(OB_FILE_SYSTEM_ROUTER.get_slog_dir(), read_cursor, log_file_spec_));
   ASSERT_EQ(OB_READ_NOTHING, empty_reader.read_log(entry, read_buf, disk_addr));
 
 
@@ -302,7 +302,7 @@ TEST_F(TestStorageLogRW, test_iter_read)
   int ret = OB_SUCCESS;
   int64_t log_id = 1;
   ObStorageLogReader reader;
-  ASSERT_EQ(OB_SUCCESS, reader.init(slogger_->get_dir(), read_cursor, log_file_spec_, OB_SERVER_TENANT_ID));
+  ASSERT_EQ(OB_SUCCESS, reader.init(slogger_->get_dir(), read_cursor, log_file_spec_));
   ObRedoLogMainType main_type;
   ObRedoLogSubType sub_type;
   while (OB_READ_NOTHING != ret)
@@ -348,7 +348,7 @@ TEST_F(TestStorageLogRW, test_nop)
   ASSERT_EQ((516<<10) + dummy_header_.get_serialize_size(), disk_addr.offset_);
   ASSERT_EQ((512<<10) - total_header_len + dummy_entry_.get_serialize_size(), disk_addr.size_);
 
-  ASSERT_EQ(OB_SUCCESS, reader.init(slogger_->get_dir(), read_cursor, log_file_spec_, OB_SERVER_TENANT_ID));
+  ASSERT_EQ(OB_SUCCESS, reader.init(slogger_->get_dir(), read_cursor, log_file_spec_));
   for (int i = 0; i < 2; i++) {
     ASSERT_EQ(OB_SUCCESS, reader.read_log(entry, read_buf, read_disk_addr));
   }
@@ -428,7 +428,7 @@ TEST_F(TestStorageLogRW, test_switch_file)
   for (int i = 0; i < 100; i++) {
     disk_addr = param_arr.at(i).disk_addr_;
     buf = ob_malloc(disk_addr.size_, "ReadBuf");
-    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos, OB_SERVER_TENANT_ID);
+    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, disk_addr.size_, buf, pos);
     ASSERT_EQ(OB_SUCCESS, ret);
     cmp = MEMCMP(slog_arr[i].buf_, (char *)buf + pos, data_len[i]);
 
@@ -471,7 +471,7 @@ TEST_F(TestStorageLogRW, test_iter_read_switch_file)
   char *read_buf = nullptr;
   ObStorageLogEntry entry;
   ObMetaDiskAddr disk_addr;
-  reader.init(slogger_->get_dir(), read_cursor, log_file_spec_, OB_SERVER_TENANT_ID);
+  reader.init(slogger_->get_dir(), read_cursor, log_file_spec_);
   // iter read six huge single-slogs
   int index = 0;
   while (index < 6) {
@@ -537,7 +537,7 @@ TEST_F(TestStorageLogRW, large_num_slogs)
   char *read_buf = nullptr;
   ObStorageLogEntry entry;
   ObMetaDiskAddr disk_addr;
-  reader.init(slogger_->get_dir(), read_cursor, log_file_spec_, OB_SERVER_TENANT_ID);
+  reader.init(slogger_->get_dir(), read_cursor, log_file_spec_);
 
   // write large number of normal batch-slogs
   int64_t batch_data_len[20];
@@ -686,20 +686,20 @@ TEST_F(TestStorageLogRW, test_multiple_threads)
   int64_t pos = 0;
 
   disk_addr = log_param1.disk_addr_;
-  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos, OB_SERVER_TENANT_ID);
+  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   cmp = MEMCMP(simple_slog1.buf_, (char *)buf + pos, 512<<10);
   ASSERT_EQ(0, cmp);
 
   disk_addr = log_param2.disk_addr_;
-  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos, OB_SERVER_TENANT_ID);
+  ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos);
   ASSERT_EQ(OB_SUCCESS, ret);
   cmp = MEMCMP(simple_slog2.buf_, (char *)buf + pos, 1);
   ASSERT_EQ(0, cmp);
 
   for (int i = 0; i < 20; i++) {
     disk_addr = param_arr1.at(i).disk_addr_;
-    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos, OB_SERVER_TENANT_ID);
+    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos);
     ASSERT_EQ(OB_SUCCESS, ret);
     cmp = MEMCMP(slog_arr1[i].buf_, (char *)buf + pos, data_len1[i]);
     ASSERT_EQ(0, cmp);
@@ -707,7 +707,7 @@ TEST_F(TestStorageLogRW, test_multiple_threads)
 
   for (int i = 0; i < 100; i++) {
     disk_addr = param_arr2.at(i).disk_addr_;
-    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos, OB_SERVER_TENANT_ID);
+    ret = ObStorageLogReader::read_log(slogger_->get_dir(), disk_addr, 516<<10, buf, pos);
     ASSERT_EQ(OB_SUCCESS, ret);
     cmp = MEMCMP(slog_arr2[i].buf_, (char *)buf + pos, data_len2[i]);
     ASSERT_EQ(0, cmp);

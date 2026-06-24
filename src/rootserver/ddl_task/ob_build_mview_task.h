@@ -29,8 +29,7 @@ public:
   ObBuildMViewTask();
   virtual ~ObBuildMViewTask();
   int init(const ObDDLTaskRecord &task_record);
-  int init(const uint64_t tenant_id,
-           const int64_t task_id,
+  int init(const int64_t task_id,
            const share::schema::ObTableSchema *mview_schema,
            const int64_t schema_version,
            const int64_t parallel,
@@ -44,8 +43,7 @@ public:
   virtual int serialize_params_to_message(char *buf,
                                           const int64_t buf_size,
                                           int64_t &pos) const override;
-  virtual int deserialize_params_from_message(const uint64_t tenant_id,
-                                              const char *buf,
+  virtual int deserialize_params_from_message(const char *buf,
                                               const int64_t buf_size,
                                               int64_t &pos) override;
   virtual int64_t get_serialize_param_size() const override;

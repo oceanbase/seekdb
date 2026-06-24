@@ -33,8 +33,8 @@ int ObRecursiveInnerDataOp::init()
   } else if (OB_FAIL(ctx_.get_my_session()->get_sys_variable(share::SYS_VAR_CTE_MAX_RECURSION_DEPTH, max_recursion_depth_))) {
     LOG_WARN("Get sys variable error", K(ret));
   } else {
-    int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    stored_row_buf_.set_tenant_id(tenant_id);
+    
+    
     stored_row_buf_.set_ctx_id(ObCtxIds::WORK_AREA);
   }
   return ret;

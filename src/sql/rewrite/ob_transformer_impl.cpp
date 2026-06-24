@@ -137,8 +137,8 @@ int ObTransformerImpl::set_transformation_parameters(ObQueryCtx *query_ctx)
     ctx_->cbqt_policy_ = static_cast<TransPolicy>(opt_param_val);
   }
   if (OB_SUCC(ret)) {
-    uint64_t tenant_id = session_info->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       ctx_->complex_cbqt_table_num_ = tenant_config->_complex_cbqt_table_num;
       ctx_->force_subquery_unnest_ = tenant_config->_force_subquery_unnest;
@@ -680,38 +680,13 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     if (func.update_global_index_) {
       ObTransformRule::add_trans_type(disable_list, WIN_MAGIC);
     }
-    if (func.contain_link_table_) {
-      // some rules might generate filter which contains constant values which has implicit types,
-      // which can not be printed in the link sql.
-      // example：
-      // create table t (c1 varchar(10), c2 char(10))
-      // select * from t where c1 = 'a' and c2 = c1;
-      // => select * from t where c1 = 'a' and c2 = implicit cast('a' as varchar);
-      uint64_t dblink_enable_list = 0;
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_DISTINCT);
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_ORDERBY);
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_LIMIT);
-      ObTransformRule::add_trans_type(dblink_enable_list, PROJECTION_PRUNING);
-      ObTransformRule::add_trans_type(dblink_enable_list, VIEW_MERGE);
-      ObTransformRule::add_trans_type(dblink_enable_list, COUNT_TO_EXISTS);
-      ObTransformRule::add_trans_type(dblink_enable_list, WHERE_SQ_PULL_UP);
-      ObTransformRule::add_trans_type(dblink_enable_list, SIMPLIFY_SUBQUERY);
-      ObTransformRule::add_trans_type(dblink_enable_list, QUERY_PUSH_DOWN);
-      ObTransformRule::add_trans_type(dblink_enable_list, ELIMINATE_OJ);
-      ObTransformRule::add_trans_type(dblink_enable_list, JOIN_ELIMINATION);
-      ObTransformRule::add_trans_type(dblink_enable_list, JOIN_LIMIT_PUSHDOWN);
-      ObTransformRule::add_trans_type(dblink_enable_list, LEFT_JOIN_TO_ANTI);
-      ObTransformRule::add_trans_type(dblink_enable_list, AGGR_SUBQUERY);
-      ObTransformRule::add_trans_type(dblink_enable_list, FASTMINMAX);
-      disable_list |= (~dblink_enable_list);
-    }
     if (func.contain_json_table_) {
       // json table ban group by pushdown && join limit pushdown && left join pushdown
       ObTransformRule::add_trans_type(disable_list, GROUPBY_PUSHDOWN);
       ObTransformRule::add_trans_type(disable_list, JOIN_LIMIT_PUSHDOWN);
       ObTransformRule::add_trans_type(disable_list, LEFT_JOIN_TO_ANTI);
     }
-    //dblink trace point
+    // reconstruct-sql trace point
     if ((OB_E(EventTable::EN_GENERATE_PLAN_WITH_RECONSTRUCT_SQL) OB_SUCCESS) != OB_SUCCESS) {
       ObTransformRule::add_trans_type(disable_list, SELECT_EXPR_PULLUP);
     }
@@ -765,16 +740,6 @@ int ObTransformerImpl::check_stmt_functions(const ObDMLStmt *stmt, StmtFunc &fun
     } else {
       func.contain_enum_set_values_ |= ob_is_enumset_tc(col.get_expr()->get_data_type());
       func.contain_geometry_values_ |= ob_is_geometry_tc(col.get_expr()->get_data_type());
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !func.contain_link_table_ && 
-                      i < stmt->get_table_items().count(); ++i) {
-    const TableItem *table = stmt->get_table_item(i);
-    if (OB_ISNULL(table)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null table item", K(ret));
-    } else if (table->is_link_table()) {
-      func.contain_link_table_ = true;
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && !func.contain_json_table_ && 
@@ -1020,8 +985,6 @@ int ObTransformerImpl::add_all_rowkey_columns_to_stmt(const ObTableSchema &table
       if (OB_FAIL(column_items.push_back(*exists_col_item))) {
         LOG_WARN("failed to push back column item", K(ret));
       }
-    } else if (OB_MOCK_LINK_TABLE_PK_COLUMN_ID == column_id && table_item.is_link_table()) {		
-      continue;
     } else if (OB_ISNULL(column_schema = (table_schema.get_column_schema(column_id)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get column schema", K(column_id), K(ret));

@@ -160,7 +160,7 @@ public:
   inline void reset_total_wait() { total_wait_ = NULL; }
   inline ObWaitEventDesc *get_max_wait() { return max_wait_; }
   inline ObWaitEventStat *get_total_wait() { return total_wait_; }
-  inline bool is_valid() const { return tenant_id_ < UINT32_MAX; }
+  inline bool is_valid() const { return true; }
   const ObWaitEventDesc &get_curr_wait() const
   {
     return curr_wait_;
@@ -169,8 +169,7 @@ public:
   {
     curr_wait_ = wait;
   };
-  int set_tenant_id(uint64_t tenant_id);
-  inline uint64_t get_tenant_id() { return tenant_id_; }
+  
   TO_STRING_EMPTY();
 private:
   ObWaitEventDesc curr_wait_;
@@ -179,7 +178,7 @@ private:
   ObWaitEventHistory event_history_;
   ObWaitEventStatArray event_stats_;
   ObStatEventAddStatArray stat_add_stats_;
-  uint64_t tenant_id_;
+  
   DIRWLock lock_;
 };
 

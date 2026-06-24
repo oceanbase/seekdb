@@ -152,9 +152,9 @@ public:
 
   static int cancel_gather_stats(ObExecContext &ctx, ObString &task_id);
 
-  static int gather_system_stats(ObExecContext &ctx, int64_t tenant_id);
+  static int gather_system_stats(ObExecContext &ctx);
 
-  static int delete_system_stats(ObExecContext &ctx, int64_t tenant_id);
+  static int delete_system_stats(ObExecContext &ctx);
 
   static int set_system_stats(ObExecContext &ctx, const ObSetSystemStatParam &param);
 
@@ -222,12 +222,10 @@ private:
                                           ObIArray<ObOptTableStat *> &cur_all_tstats);
 
   static int fetch_gather_table_snapshot_read(common::sqlclient::ObISQLConnection *conn,
-                                              uint64_t tenant_id,
                                               uint64_t &current_scn);
 
  static int fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
                                     ObIAllocator &allcoator,
-                                    uint64_t tenant_id,
                                     const ObString &task_id,
                                     char *&svr_ip,
                                     int32_t &svr_port);
@@ -286,7 +284,6 @@ private:
   static int collect_last_parts(const ObTableStatParam &param, GatherHelper &gather_helper);
 
   static int get_stats_collect_batch_size(ObMySQLProxy *mysql_proxy,
-                                          const uint64_t tenant_id,
                                           const uint64_t table_id,
                                           int64_t &batch_part_size);
 };

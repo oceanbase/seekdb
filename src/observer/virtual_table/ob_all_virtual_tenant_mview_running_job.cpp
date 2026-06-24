@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tenant_mview_running_job.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::common;
@@ -48,36 +49,20 @@ int ObAllVirtualTenantMviewRunningJob::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
 
   if (!start_to_read_) {
-    common::ObSEArray<uint64_t, 16> tenant_ids;
-    if (is_sys_tenant(effective_tenant_id_)) {
-      if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_ids))) {
-        SERVER_LOG(WARN, "failed to add tenant id", K(ret));
-      }
+    if (OB_FAIL(fill_scanner_.init(&scanner_, &cur_row_, output_column_ids_))) {
+      SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
     } else {
-      if (OB_FAIL(tenant_ids.push_back(effective_tenant_id_))) {
-        SERVER_LOG(WARN, "failed to push back tenant id", KR(ret), K(effective_tenant_id_),
-                   K(tenant_ids));
+      MOD_SCOPE
+      {
+        ObMViewMaintenanceService::MViewMdsOpMap &mview_mds_map =
+            share::g_mp->m_view_maintenance_service()->get_mview_mds_op();
+        if (OB_FAIL(mview_mds_map.foreach_refactored(fill_scanner_))) {
+          SERVER_LOG(WARN, "fill scanner fail", K(ret));
+        }
       }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(fill_scanner_.init(effective_tenant_id_, &scanner_, &cur_row_, output_column_ids_))) {
-        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
-      } else {
-        for (int i = 0; OB_SUCC(ret) && i < tenant_ids.count(); i++) {
-          uint64_t cur_tenant_id = tenant_ids.at(i);
-          MTL_SWITCH(cur_tenant_id)
-          {
-            ObMViewMaintenanceService::MViewMdsOpMap &mview_mds_map =
-                MTL(ObMViewMaintenanceService *)->get_mview_mds_op();
-            if (OB_FAIL(mview_mds_map.foreach_refactored(fill_scanner_))) {
-              SERVER_LOG(WARN, "fill scanner fail", K(ret));
-            }
-          }
-        }
-        if (OB_SUCC(ret)) {
-          scanner_it_ = scanner_.begin();
-          start_to_read_ = true;
-        }
+      if (OB_SUCC(ret)) {
+        scanner_it_ = scanner_.begin();
+        start_to_read_ = true;
       }
     }
   }
@@ -102,12 +87,12 @@ int ObAllVirtualTenantMviewRunningJob::FillScanner::operator()(
   ObMViewOpArg &mview_op = entry.second;
 
   if (OB_UNLIKELY(0 == port_ || 
-                  OB_INVALID_TENANT_ID == effective_tenant_id_ || 
+                  false || 
                   NULL == scanner_ || 
                   NULL == cur_row_ ||
                   NULL == cur_row_->cells_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "parameter or data member is NULL", K(ret), K(port_), K(effective_tenant_id_),
+    SERVER_LOG(WARN, "parameter or data member is NULL", K(ret), K(port_),
                K(scanner_), K(cur_row_));
   } else if (OB_UNLIKELY(cur_row_->count_ < output_column_ids_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -168,14 +153,13 @@ void ObAllVirtualTenantMviewRunningJob::FillScanner::reset()
 {
   ip_buf_[0] = '\0';
   port_ = 0;
-  effective_tenant_id_ = OB_INVALID_TENANT_ID;
+  
   scanner_ = NULL;
   cur_row_ = NULL;
   output_column_ids_.reset();
 }
 
-int ObAllVirtualTenantMviewRunningJob::FillScanner::init(uint64_t effective_tenant_id,
-                                                         common::ObScanner *scanner,
+int ObAllVirtualTenantMviewRunningJob::FillScanner::init(common::ObScanner *scanner,
                                                          common::ObNewRow *cur_row,
                                                          const ObIArray<uint64_t> &column_ids)
 {
@@ -191,7 +175,7 @@ int ObAllVirtualTenantMviewRunningJob::FillScanner::init(uint64_t effective_tena
     SERVER_LOG(WARN, "ip_to_string failed", K(ret));
   } else {
     port_ = ObServer::get_instance().get_self().get_port();
-    effective_tenant_id_ = effective_tenant_id;
+    
     scanner_ = scanner;
     cur_row_ = cur_row;
   }

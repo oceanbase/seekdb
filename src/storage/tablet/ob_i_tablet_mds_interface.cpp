@@ -16,6 +16,7 @@
 
 
 #include "storage/tablet/ob_i_tablet_mds_interface.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -31,7 +32,7 @@ int ObITabletMdsInterface::get_src_tablet_handle_and_base_ptr_(
   int ret = OB_SUCCESS;
   const share::ObLSID &ls_id = ObLSID(SYS_LS);
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   ObTablet *tablet = nullptr;
@@ -373,7 +374,7 @@ int ObITabletMdsInterface::get_tablet_handle_from_this(
   const ObTablet *tablet = static_cast<const ObTablet*>(this);
   const share::ObLSID &ls_id = get_tablet_meta_().ls_id_;
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(t3m->build_tablet_handle_for_mds_scan(const_cast<ObTablet*>(tablet), tablet_handle))) {
     MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(ls_id), K(tablet_id));
   } 

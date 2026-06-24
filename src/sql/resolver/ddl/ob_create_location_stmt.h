@@ -36,7 +36,7 @@
  
    obcall::ObCreateLocationArg &get_create_location_arg() { return arg_; }
  
-   void set_tenant_id(const uint64_t tenant_id) { arg_.schema_.set_tenant_id(tenant_id); }
+   
    void set_user_id(const uint64_t user_id) { arg_.user_id_ = user_id; }
    void set_or_replace(bool or_replace) { arg_.or_replace_ = or_replace; }
    int set_location_name(const common::ObString &name) { return arg_.schema_.set_location_name(name); }

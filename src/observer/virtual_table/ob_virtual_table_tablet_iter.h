@@ -46,7 +46,7 @@ public:
   virtual void reset();
 protected:
   int get_next_tablet();
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   virtual int process_curr_tenant(common::ObNewRow *&row) = 0;
   virtual void release_last_tenant() override;
 protected:

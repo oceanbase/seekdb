@@ -127,7 +127,6 @@ public:
                                      bool is_ps_protocol,
                                      const ColumnsFieldIArray *fields = NULL,
                                      share::schema::ObSchemaGetterGuard *schema_guard = NULL);
-  static uint64_t get_tenant_id(ObSQLSessionInfo *session);
   static int cast_to_res(ObIAllocator &allocator, ObString &xml_content, const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   static int cast_to_res(ObIAllocator &allocator, ObObj &src_obj, const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool xt_need_acc_check = false);
 

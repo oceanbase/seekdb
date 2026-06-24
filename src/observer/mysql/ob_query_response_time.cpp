@@ -175,10 +175,11 @@ int ObRespTimeInfoCollector::collect(const sql::stmt::StmtType sql_type, const b
 }
 
 
+
 int ObRespTimeInfoCollector::flush(int64_t base /*=OB_INVALID_ID*/)
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
   } else {
     if (OB_FAIL(setup(base == OB_INVALID_ID ? tenant_config->query_response_time_range_base : base))) {
@@ -260,14 +261,14 @@ int ObTenantQueryRespTimeCollector::init()
     LOG_WARN("ObTenantQueryRespTimeCollector has been inited", K(ret));
   } else {
     flush_config_version_ = 0;
-    multi_collector_.set_tenant_id(MTL_ID());
-    multi_collector_.set_attr(ObMemAttr(MTL_ID(), "RespTimeColl"));
+    
+    multi_collector_.set_attr(ObMemAttr("RespTimeColl"));
     multi_collector_.prepare_allocate(multi_ways_count_); // Memory is allocated in advance and objects are constructed in advance.
   }
 
   if (OB_SUCC(ret)) {
     is_inited_ = true;
-    LOG_INFO("succ to init ObTenantQueryRespTimeCollector", K(MTL_ID()));
+    LOG_INFO("succ to init ObTenantQueryRespTimeCollector");
   }
   return ret;
 }
@@ -277,7 +278,7 @@ void ObTenantQueryRespTimeCollector::destroy()
   multi_collector_.destroy();
   flush_config_version_ = 0;
   is_inited_ = false;
-  LOG_INFO("succ to destroy ObTenantQueryRespTimeCollector", K(MTL_ID()));
+  LOG_INFO("succ to destroy ObTenantQueryRespTimeCollector");
 }
 
 int ObTenantQueryRespTimeCollector::mtl_init(ObTenantQueryRespTimeCollector *&t_resp_time_collector)
@@ -315,12 +316,13 @@ int ObTenantQueryRespTimeCollector::collect(const sql::stmt::StmtType sql_type, 
   return ret;
 }
 
+
 int ObTenantQueryRespTimeCollector::get_sum_value(ObRespTimeInfoCollector &total_collector)
 {
   int ret = OB_SUCCESS;
   RLockGuard rlock_guard(rwlock_);
   if (OB_FAIL(total_collector.flush(multi_collector_.at(0).utility().base()))) {
-    LOG_WARN("failed to flush total collector", K(ret), K(MTL_ID()));
+    LOG_WARN("failed to flush total collector", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < multi_ways_count_; i++) {
       for (int64_t j = 0; OB_SUCC(ret) && j < total_collector.utility().bound_count(); j++) {

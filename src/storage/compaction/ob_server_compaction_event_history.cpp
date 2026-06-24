@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/compaction/ob_server_compaction_event_history.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -128,31 +129,25 @@ int ObServerCompactionEventHistory::get_last_event(ObServerCompactionEvent &even
  * ObServerCompactionEventIterator implement
  * */
 
-int ObServerCompactionEventIterator::open(const int64_t tenant_id)
+int ObServerCompactionEventIterator::open()
 {
   int ret = OB_SUCCESS;
-  omt::TenantIdList all_tenants;
-  all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("The ObServerCompactionEventIterator has been opened", K(ret));
-  } else if (!::is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (OB_SYS_TENANT_ID == tenant_id) { // sys tenant can get all tenants' info
-    GCTX.omt_->get_tenant_ids(all_tenants);
-  } else if (OB_FAIL(all_tenants.push_back(tenant_id))) {
-    LOG_WARN("failed to push back tenant_id", K(ret), K(tenant_id));
+    STORAGE_LOG(WARN, "invalid argument", K(ret));
   }
-  for (int i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-    if (!is_virtual_tenant_id(all_tenants[i])) { // skip virtual tenant
-      MTL_SWITCH(all_tenants[i]) {
-        if (OB_FAIL(MTL(ObServerCompactionEventHistory *)->get_list(event_array_))) {
+  if (OB_SUCC(ret)) {
+    { // skip virtual tenant
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->server_compaction_event_history()->get_list(event_array_))) {
           LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
-          STORAGE_LOG(WARN, "switch tenant failed", K(ret), K(all_tenants[i]));
+          STORAGE_LOG(WARN, "switch tenant failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           continue;

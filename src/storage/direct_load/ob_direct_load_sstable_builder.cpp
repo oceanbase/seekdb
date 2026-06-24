@@ -56,7 +56,7 @@ int ObDirectLoadSSTableBuilder::init(const ObDirectLoadSSTableBuildParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(param));
   } else {
-    const uint64_t tenant_id = MTL_ID();
+    
     param_ = param;
     start_key_.set_min_rowkey();
     end_key_.set_min_rowkey();
@@ -70,13 +70,11 @@ int ObDirectLoadSSTableBuilder::init(const ObDirectLoadSSTableBuildParam &param)
       LOG_WARN("fail to alloc datafragment", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, index_file_handle_))) {
       LOG_WARN("fail to alloc index fragment", KR(ret));
-    } else if (OB_FAIL(index_block_writer_.init(tenant_id,
-                                                param_.table_data_desc_.sstable_index_block_size_,
+    } else if (OB_FAIL(index_block_writer_.init(param_.table_data_desc_.sstable_index_block_size_,
                                                 index_file_handle_))) {
       LOG_WARN("fail to init index block writer", KR(ret),
                K(param_.table_data_desc_.sstable_index_block_size_), K(index_file_handle_));
-    } else if (OB_FAIL(data_block_writer_.init(tenant_id,
-                                               param_.table_data_desc_.sstable_data_block_size_,
+    } else if (OB_FAIL(data_block_writer_.init(param_.table_data_desc_.sstable_data_block_size_,
                                                data_file_handle_, &index_block_writer_))) {
       LOG_WARN("fail to init data block writer", KR(ret),
                K(param_.table_data_desc_.sstable_data_block_size_), K(data_file_handle_));
@@ -225,8 +223,7 @@ int ObDirectLoadSSTableBuilder::check_rowkey_order(const ObDatumRowkey &rowkey)
  */
 
 ObDirectLoadDataBlockWriter2::ObDirectLoadDataBlockWriter2()
-  : tenant_id_(OB_INVALID_ID),
-    header_length_(0),
+  : header_length_(0),
     buf_pos_(0),
     buf_size_(0),
     total_row_count_(0),
@@ -237,7 +234,7 @@ ObDirectLoadDataBlockWriter2::ObDirectLoadDataBlockWriter2()
     is_inited_(false),
     is_closed_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadDataBlockWriter2::~ObDirectLoadDataBlockWriter2() { reset(); }
@@ -259,7 +256,7 @@ void ObDirectLoadDataBlockWriter2::assign(const int64_t buf_pos, const int64_t b
   buf_ = buf;
 }
 
-int ObDirectLoadDataBlockWriter2::init(uint64_t tenant_id, int64_t buf_size,
+int ObDirectLoadDataBlockWriter2::init(int64_t buf_size,
                                       const ObDirectLoadTmpFileHandle &file_handle,
                                       ObDirectLoadIndexBlockWriter *index_block_writer)
 {
@@ -268,7 +265,7 @@ int ObDirectLoadDataBlockWriter2::init(uint64_t tenant_id, int64_t buf_size,
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadDataBlockWriter2 init twice", KR(ret), KP(this));
   } else if (buf_size < DIRECT_LOAD_DEFAULT_SSTABLE_INDEX_BLOCK_SIZE ||
-             buf_size % DIO_ALIGN_SIZE != 0 || OB_INVALID_ID == tenant_id) {
+             buf_size % DIO_ALIGN_SIZE != 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(buf_size));
   } else if (OB_FAIL(file_io_handle_.open(file_handle))) {
@@ -281,7 +278,6 @@ int ObDirectLoadDataBlockWriter2::init(uint64_t tenant_id, int64_t buf_size,
       header_length_ = header_.get_serialize_size();
       assign(header_length_, buf_size, buf_);
       index_block_writer_ = index_block_writer;
-      tenant_id_ = tenant_id;
       is_inited_ = true;
     }
   }
@@ -311,7 +307,7 @@ int ObDirectLoadDataBlockWriter2::write_large_item(const ObDirectLoadExternalRow
   int ret = OB_SUCCESS;
   char *new_buf;
   const int64_t align_buf_size = upper_align(new_buf_size, DIO_ALIGN_SIZE);
-  ObMemAttr attr(MTL_ID(), "TLD_LargeBuf");
+  ObMemAttr attr("TLD_LargeBuf");
   if (OB_ISNULL(new_buf = static_cast<char *>(ob_malloc(align_buf_size, attr)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate buffer", KR(ret), K(align_buf_size));
@@ -419,8 +415,7 @@ int ObDirectLoadDataBlockWriter2::flush_buffer(int64_t buf_size, char *buf)
  */
 
 ObDirectLoadIndexBlockWriter::ObDirectLoadIndexBlockWriter()
-  : tenant_id_(OB_INVALID_ID),
-    header_length_(0),
+  : header_length_(0),
     buf_pos_(0),
     buf_size_(0),
     item_size_(0),
@@ -432,7 +427,7 @@ ObDirectLoadIndexBlockWriter::ObDirectLoadIndexBlockWriter()
     is_inited_(false),
     is_closed_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadIndexBlockWriter::~ObDirectLoadIndexBlockWriter() { reset(); }
@@ -454,7 +449,7 @@ void ObDirectLoadIndexBlockWriter::assign(const int64_t buf_pos, const int64_t b
   buf_ = buf;
 }
 
-int ObDirectLoadIndexBlockWriter::init(uint64_t tenant_id, int64_t buf_size,
+int ObDirectLoadIndexBlockWriter::init(int64_t buf_size,
                                        const ObDirectLoadTmpFileHandle &file_handle)
 {
   int ret = OB_SUCCESS;
@@ -462,7 +457,7 @@ int ObDirectLoadIndexBlockWriter::init(uint64_t tenant_id, int64_t buf_size,
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadIndexBlockWriter init twice", KR(ret), KP(this));
   } else if (buf_size < DIRECT_LOAD_DEFAULT_SSTABLE_INDEX_BLOCK_SIZE ||
-             buf_size % DIO_ALIGN_SIZE != 0 || OB_INVALID_ID == tenant_id) {
+             buf_size % DIO_ALIGN_SIZE != 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(buf_size));
   } else if (OB_FAIL(file_io_handle_.open(file_handle))) {
@@ -474,7 +469,6 @@ int ObDirectLoadIndexBlockWriter::init(uint64_t tenant_id, int64_t buf_size,
     } else {
       header_length_ = header_.get_serialize_size();
       assign(header_length_, buf_size, buf_);
-      tenant_id_ = tenant_id;
       is_inited_ = true;
     }
   }
@@ -567,8 +561,7 @@ int ObDirectLoadIndexBlockWriter::close()
  */
 
 ObDirectLoadIndexBlockReader::ObDirectLoadIndexBlockReader()
-  : tenant_id_(OB_INVALID_ID),
-    buf_(nullptr),
+  : buf_(nullptr),
     buf_size_(0),
     header_length_(0),
     item_size_(0),
@@ -577,17 +570,17 @@ ObDirectLoadIndexBlockReader::ObDirectLoadIndexBlockReader()
     allocator_("TLD_IBReader"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
-int ObDirectLoadIndexBlockReader::init(uint64_t tenant_id, int64_t buf_size,
+int ObDirectLoadIndexBlockReader::init(int64_t buf_size,
                                        const ObDirectLoadTmpFileHandle &file_handle)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadIndexBlockReader init twice", KR(ret), KP(this));
-  } else if (buf_size < 0 || buf_size % DIO_ALIGN_SIZE != 0 || OB_INVALID_ID == tenant_id) {
+  } else if (buf_size < 0 || buf_size % DIO_ALIGN_SIZE != 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(buf_size));
   } else if (OB_FAIL(file_io_handle_.open(file_handle))) {
@@ -606,7 +599,6 @@ int ObDirectLoadIndexBlockReader::init(uint64_t tenant_id, int64_t buf_size,
       } else {
         index_item_num_per_block_ = ObDirectLoadIndexBlock::get_item_num_per_block(buf_size);
         assign(buf_size, buf_);
-        tenant_id_ = tenant_id;
         io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
         is_inited_ = true;
       }

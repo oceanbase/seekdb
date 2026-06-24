@@ -47,18 +47,16 @@ public:
 public:
   void destroy();
   void reset();
-  int init(ObIAllocator *allocator, const uint64_t effective_tenant_id);
-  int get_next_sql_stat(sql::ObExecutedSqlStatRecord &sql_stat_value, 
-                        uint64_t &tenant_id);
+  int init(ObIAllocator *allocator);
+  int get_next_sql_stat(sql::ObExecutedSqlStatRecord &sql_stat_value);
   bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
 
 private:
   int get_next_batch_sql_stat();
 private:
   ObIAllocator *allocator_;
-  common::ObSEArray<uint64_t, 16> tenant_ids_;
-  int64_t cur_nth_tenant_;
-  uint64_t cur_tenant_id_;
+  bool done_;
+  
   TmpSqlStatMap tmp_sql_stat_map_;
   common::ObSEArray<uint64_t, 1024> sql_stat_cache_id_array_;
   int64_t sql_stat_cache_id_array_idx_;
@@ -137,8 +135,7 @@ private:
     PLAN_CACHE_HIT_TOTAL,
     PLAN_CACHE_HIT_DELTA
   };
-  int fill_row(const uint64_t tenant_id,
-               const sql::ObExecutedSqlStatRecord *sql_stat_record,
+  int fill_row(const sql::ObExecutedSqlStatRecord *sql_stat_record,
                common::ObNewRow *&row);
   int get_server_ip_and_port();
 private:

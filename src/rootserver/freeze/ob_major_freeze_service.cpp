@@ -24,14 +24,13 @@ namespace rootserver
 {
 using namespace share;
 
-int ObMajorFreezeService::init(const uint64_t tenant_id)
+int ObMajorFreezeService::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), K(tenant_id));
+    LOG_WARN("init twice", KR(ret));
   } else {
-    tenant_id_ = tenant_id;
     is_inited_ = true;
   }
   return ret;
@@ -49,12 +48,12 @@ int ObMajorFreezeService::switch_to_leader()
   int64_t start_time_us = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else {
     if (OB_ISNULL(tenant_major_freeze_)) {
       SpinWLockGuard w_guard(rw_lock_);
       if (OB_FAIL(alloc_tenant_major_freeze())) {
-        LOG_WARN("fail to alloc tenant_major_freeze", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to alloc tenant_major_freeze", KR(ret));
       }
     } else {
       SpinRLockGuard r_guard(rw_lock_);
@@ -62,7 +61,7 @@ int ObMajorFreezeService::switch_to_leader()
     }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("major_freeze: switch_to_leader", KR(ret), K_(tenant_id), K(cost_us), KP_(tenant_major_freeze));
+  FLOG_INFO("major_freeze: switch_to_leader", KR(ret), K(cost_us), KP_(tenant_major_freeze));
 
   return ret;
 }
@@ -70,7 +69,7 @@ int ObMajorFreezeService::switch_to_leader()
 int ObMajorFreezeService::switch_to_follower_gracefully()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("switch_to_follower_gracefully", K_(tenant_id));
+  LOG_INFO("switch_to_follower_gracefully");
   if (OB_FAIL(inner_switch_to_follower())) {
     LOG_WARN("fail to switch to follower", KR(ret));
   }
@@ -80,7 +79,7 @@ int ObMajorFreezeService::switch_to_follower_gracefully()
 void ObMajorFreezeService::switch_to_follower_forcedly()
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("switch_to_follower_forcedly", K_(tenant_id));
+  LOG_INFO("switch_to_follower_forcedly");
   if (OB_FAIL(inner_switch_to_follower())) {
     LOG_WARN("fail to switch to follower", KR(ret));
   }
@@ -96,7 +95,7 @@ int ObMajorFreezeService::inner_switch_to_follower()
     tenant_major_freeze_->pause();
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
-  FLOG_INFO("major_freeze: switch_to_follower", KR(ret), K_(tenant_id), K(cost_us), KP_(tenant_major_freeze));
+  FLOG_INFO("major_freeze: switch_to_follower", KR(ret), K(cost_us), KP_(tenant_major_freeze));
   return ret;
 }
 
@@ -110,7 +109,7 @@ int ObMajorFreezeService::alloc_tenant_major_freeze()
   if ((service_type <= ObMajorFreezeServiceType::SERVICE_TYPE_INVALID)
       || (service_type >= ObMajorFreezeServiceType::SERVICE_TYPE_MAX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected major freeze service type", KR(ret), K(service_type), K_(tenant_id));
+    LOG_WARN("Unexpected major freeze service type", KR(ret), K(service_type));
   } else {
     is_primary_service = (ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == service_type) ? true : false;
   }
@@ -119,26 +118,26 @@ int ObMajorFreezeService::alloc_tenant_major_freeze()
     LOG_WARN("fail to check_inner_stat", KR(ret));
   } else if (OB_NOT_NULL(tenant_major_freeze_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant_major_freeze is not null", K_(tenant_id), KR(ret), KP_(tenant_major_freeze));
-  } else if (nullptr == (buf = common::ob_malloc(len, ObMemAttr(tenant_id_, "tenant_mf_mgr")))) {
+    LOG_WARN("tenant_major_freeze is not null", KR(ret), KP_(tenant_major_freeze));
+  } else if (nullptr == (buf = common::ob_malloc(len, ObMemAttr("tenant_mf_mgr")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", KR(ret), K_(tenant_id), K(len));
-  } else if (FALSE_IT(tenant_major_freeze_ = new(buf) ObTenantMajorFreeze(tenant_id_))) {
+    LOG_WARN("fail to alloc memory", KR(ret), K(len));
+  } else if (FALSE_IT(tenant_major_freeze_ = new(buf) ObTenantMajorFreeze{})) {
     // impossible
   } else if (OB_FAIL(tenant_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
              *GCTX.config_, *GCTX.schema_service_))) {
-    LOG_WARN("fail to init tenant_major_freeze", K_(tenant_id), KR(ret), K(is_primary_service));
+    LOG_WARN("fail to init tenant_major_freeze", KR(ret), K(is_primary_service));
   } else if (OB_FAIL(tenant_major_freeze_->start())) {
-    LOG_WARN("fail to start tenant_major_freeze", K_(tenant_id), KR(ret), K(is_primary_service));
+    LOG_WARN("fail to start tenant_major_freeze", KR(ret), K(is_primary_service));
   }
 
   if (OB_SUCC(ret)) {
-    LOG_INFO("succ to alloc tenant_major_freeze", K_(tenant_id), KP_(tenant_major_freeze),
+    LOG_INFO("succ to alloc tenant_major_freeze", KP_(tenant_major_freeze),
              K(is_primary_service));
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(delete_tenant_major_freeze())) {
-      LOG_WARN("fail to delete tenant major freeze", KR(tmp_ret), K_(tenant_id), K(is_primary_service));
+      LOG_WARN("fail to delete tenant major freeze", KR(tmp_ret), K(is_primary_service));
     }
     buf = nullptr;
   }
@@ -150,16 +149,16 @@ int ObMajorFreezeService::delete_tenant_major_freeze()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else if (OB_ISNULL(tenant_major_freeze_)) {
     // no need to delete
   } else if (FALSE_IT(tenant_major_freeze_->stop())) {
   } else if (OB_FAIL(tenant_major_freeze_->wait())) {
-    LOG_WARN("fail to wait", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to wait", KR(ret));
   } else if (OB_FAIL(tenant_major_freeze_->destroy())) {
-    LOG_WARN("fail to destroy", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to destroy", KR(ret));
   } else {
-    LOG_INFO("succ to delete tenant_major_freeze", K_(tenant_id));
+    LOG_INFO("succ to delete tenant_major_freeze");
   }
 
   // ignore ret
@@ -168,7 +167,7 @@ int ObMajorFreezeService::delete_tenant_major_freeze()
     tenant_major_freeze_ = nullptr;
   }
 
-  LOG_INFO("finish to delete tenant_major_freeze", KR(ret), K_(tenant_id));
+  LOG_INFO("finish to delete tenant_major_freeze", KR(ret));
 
   return ret;
 }
@@ -187,11 +186,11 @@ int ObMajorFreezeService::launch_major_freeze(const ObMajorFreezeReason freeze_r
     SpinRLockGuard r_guard(rw_lock_);
     if (OB_ISNULL(tenant_major_freeze_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant_major_freeze is null", KR(ret), K_(tenant_id), KP_(tenant_major_freeze));
+      LOG_WARN("tenant_major_freeze is null", KR(ret), KP_(tenant_major_freeze));
     } else if (OB_FAIL(tenant_major_freeze_->launch_major_freeze(freeze_reason))) {
       // 'async operation' of launch_major_freeze not finish
       if ((OB_MAJOR_FREEZE_NOT_FINISHED != ret) && (OB_FROZEN_INFO_ALREADY_EXIST != ret)) {
-        LOG_WARN("fail to launch_major_freeze", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to launch_major_freeze", KR(ret));
       }
     }
     ATOMIC_STORE(&is_launched_, false); // set is as false no matter its previous value.
@@ -247,51 +246,51 @@ int ObMajorFreezeService::check_inner_stat()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(tenant_id));
+    LOG_WARN("not init", KR(ret));
   }
   return ret;
 }
 
 void ObMajorFreezeService::stop()
 {
-  LOG_INFO("major_freeze_service start to stop", K_(tenant_id));
+  LOG_INFO("major_freeze_service start to stop");
   ObRecursiveMutexGuard guard(lock_);
   SpinRLockGuard r_guard(rw_lock_);
   if (OB_NOT_NULL(tenant_major_freeze_)) {
-    LOG_INFO("tenant_major_freeze_ start to stop", K_(tenant_id));
+    LOG_INFO("tenant_major_freeze_ start to stop");
     tenant_major_freeze_->stop();
   }
-  LOG_INFO("major_freeze_service finish to stop", K_(tenant_id));
+  LOG_INFO("major_freeze_service finish to stop");
 }
 
 void ObMajorFreezeService::wait()
 {
-  LOG_INFO("major_freeze_service start to wait", K_(tenant_id));
+  LOG_INFO("major_freeze_service start to wait");
   ObRecursiveMutexGuard guard(lock_);
   SpinRLockGuard r_guard(rw_lock_);
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(tenant_major_freeze_)) {
-    LOG_INFO("tenant_major_freeze_ start to wait", K_(tenant_id));
+    LOG_INFO("tenant_major_freeze_ start to wait");
     if (OB_FAIL(tenant_major_freeze_->wait())) {
-      LOG_WARN("fail to wait", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to wait", KR(ret));
     }
   }
-  LOG_INFO("major_freeze_service finish to wait", K_(tenant_id));
+  LOG_INFO("major_freeze_service finish to wait");
 }
 
 void ObMajorFreezeService::destroy()
 {
-  LOG_INFO("major_freeze_service start to destroy", K_(tenant_id));
+  LOG_INFO("major_freeze_service start to destroy");
   ObRecursiveMutexGuard guard(lock_);
   SpinRLockGuard r_guard(rw_lock_);
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(tenant_major_freeze_)) {
-    LOG_INFO("tenant_major_freeze_ start to destroy", K_(tenant_id));
+    LOG_INFO("tenant_major_freeze_ start to destroy");
     if (OB_FAIL(tenant_major_freeze_->destroy())) {
-      LOG_WARN("fail to destroy", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to destroy", KR(ret));
     }
   }
-  LOG_INFO("major_freeze_service finish to destroy", K_(tenant_id));
+  LOG_INFO("major_freeze_service finish to destroy");
 }
 
 bool ObMajorFreezeService::is_paused() const
@@ -311,13 +310,13 @@ int ObMajorFreezeService::get_uncompacted_tablets(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(tenant_id));
+    LOG_WARN("not init", KR(ret));
   } else {
     if (OB_ISNULL(tenant_major_freeze_)) {
       ret = OB_LEADER_NOT_EXIST;
-      LOG_WARN("tenant_major_freeze is null", KR(ret), K_(tenant_id));
+      LOG_WARN("tenant_major_freeze is null", KR(ret));
     } else if (OB_FAIL(tenant_major_freeze_->get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
-      LOG_WARN("fail to get uncompacted tablets", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to get uncompacted tablets", KR(ret));
     }
   }
   return ret;
@@ -333,7 +332,7 @@ ObPrimaryMajorFreezeService::~ObPrimaryMajorFreezeService()
 int ObPrimaryMajorFreezeService::mtl_init(ObPrimaryMajorFreezeService *&service)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(service->init(MTL_ID()))) {
+  if (OB_FAIL(service->init())) {
     LOG_WARN("fail to init primary major freeze service", KR(ret));
   }
   return ret;
@@ -354,7 +353,7 @@ ObRestoreMajorFreezeService::~ObRestoreMajorFreezeService()
 int ObRestoreMajorFreezeService::mtl_init(ObRestoreMajorFreezeService *&service)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(service->init(MTL_ID()))) {
+  if (OB_FAIL(service->init())) {
     LOG_WARN("fail to init restore major freeze service", KR(ret));
   }
   return ret;

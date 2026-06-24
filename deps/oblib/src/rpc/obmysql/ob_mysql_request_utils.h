@@ -79,7 +79,7 @@ public:
   {
     reset_parameter();
     payload_buf_ = NULL;
-    tenant_id_ = OB_SERVER_TENANT_ID;
+    
   }
 
   ~ObMysqlPktContext()
@@ -134,13 +134,10 @@ public:
   ObMySQLRawPacket raw_pkt_;
   bool is_multi_pkt_;
   bool is_auth_switch_;
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-  }
+  
 
 private:
-  uint64_t tenant_id_;
+  
   DISALLOW_COPY_AND_ASSIGN(ObMysqlPktContext);
 };
 
@@ -206,13 +203,9 @@ public:
   common::ObArenaAllocator arena_;
   bool is_comp_packet_;
 
-  void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-    arena_.set_tenant_id(tenant_id_);
-  }
+  
 private:
-  uint64_t tenant_id_;
+  
   DISALLOW_COPY_AND_ASSIGN(ObProto20PktContext);
 };
 

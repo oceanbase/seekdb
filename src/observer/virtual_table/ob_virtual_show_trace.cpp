@@ -30,10 +30,8 @@ ObVirtualShowTrace::ObVirtualShowTrace() :
     ref_(),
     ipstr_(),
     port_(0),
-    tenant_id_(common::OB_INVALID_ID),
     is_first_get_(true),
     is_use_index_(false),
-    tenant_id_array_(),
     show_trace_rec_idx_(-1),
     tag_buf_(NULL),
     is_row_format_(true),
@@ -50,8 +48,6 @@ void ObVirtualShowTrace::reset()
   ObVirtualTableScannerIterator::reset();
   is_first_get_ = true;
   is_use_index_ = false;
-  tenant_id_ = common::OB_INVALID_ID;
-  tenant_id_array_.reset();
   port_ = 0;
   ipstr_.reset();
   alloc_.reset();
@@ -62,8 +58,6 @@ int ObVirtualShowTrace::inner_open()
   int ret = OB_SUCCESS;
 
   // retrive span info from virtual span
-  SERVER_LOG(DEBUG, "tenant ids", K(effective_tenant_id_), K(tenant_id_array_));
-
   return ret;
 }
 
@@ -83,7 +77,7 @@ int ObVirtualShowTrace::retrive_all_span_info()
     int sql_len = 0;
     is_row_format_ = session_->is_row_traceformat();
     SMART_VAR(char[OB_MAX_SQL_LENGTH], sql) {
-      const uint64_t exec_tenant_id = OB_SYS_TENANT_ID;
+      
       const char *table_name = OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TNAME;
       trace_id = session_->get_last_flt_trace_id();
       sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
@@ -92,10 +86,10 @@ int ObVirtualShowTrace::retrive_all_span_info()
                            "FROM %s WHERE trace_id = '%s'",
                            table_name,
                            trace_id.ptr());
-      LOG_TRACE("send inner sql to retrive records", KP(session_), K(session_->get_proxy_sessid()),
+      LOG_TRACE("send inner sql to retrive records", KP(session_),
                                                      K(session_->get_server_sid()), K(table_name),
-                                                     K(tenant_id_), K(trace_id_), K(trace_id),
-                                                     K(effective_tenant_id_), K(ObString(sql_len, sql)));
+                                                     K(trace_id_), K(trace_id),
+                                                     K(ObString(sql_len, sql)));
       if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
         ret = OB_SIZE_OVERFLOW;
         SERVER_LOG(WARN, "failed to format sql. size not enough");
@@ -107,10 +101,10 @@ int ObVirtualShowTrace::retrive_all_span_info()
             ObISQLClient *sql_client = mysql_proxy;
             uint64_t table_id = OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TID;
             ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                     exec_tenant_id,
+                                                     false,
                                                      table_id);
             // retrive data from client
-            if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql))) {
+            if (OB_FAIL(sql_client_retry_weak.read(res, sql))) {
               SERVER_LOG(WARN, "failed to read data", K(ret));
             } else if (NULL == (result = res.get_result())) {
               ret = OB_ERR_UNEXPECTED;
@@ -172,8 +166,8 @@ int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult
     EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "parent_span_id", parent_id_buf, OB_MAX_SPAN_LENGTH, parent_id_len);
     // span_name
     EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "span_name", span_name_buf, OB_MAX_SPAN_LENGTH, span_name_len);
-    // tenant_id
-    rec.data_.tenant_id_ = OB_SYS_TENANT_ID;
+    // tenant
+    
     // request_id
     EXTRACT_INT_FIELD_MYSQL(mysql_result, "request_id", rec.data_.req_id_, int64_t);
     // start_ts
@@ -702,7 +696,7 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
       sql::ObFLTShowTraceRec rec = *show_trace_arr_.at(show_trace_rec_idx_);
       ++show_trace_rec_idx_;
       if (OB_FAIL(fill_cells(rec))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(rec), K(effective_tenant_id_));
+        SERVER_LOG(WARN, "fail to fill cells", K(rec));
       } else {
         row = &cur_row_;
       }

@@ -56,7 +56,6 @@ ObGtsTenantInfo::ObGtsTenantInfo()
 void ObGtsTenantInfo::reset()
 {
   gts_id_ = OB_INVALID_ID;
-  tenant_id_ = OB_INVALID_ID;
   member_list_.reset();
 }
 

@@ -109,7 +109,7 @@ int ObTxDataMemtable::init_tx_data_map_(const int64_t buckets_cnt)
 void ObTxDataMemtable::init_arena_allocator_()
 {
   ObMemAttr attr;
-  attr.tenant_id_ = MTL_ID();
+  
   attr.label_ = "MEMTABLE_ARENA";
   attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(attr);
@@ -1115,8 +1115,8 @@ int ObTxDataMemtable::dump2text(const char *fname)
     STORAGE_LOG(WARN, "open file fail:", K(fname));
   } else {
     int64_t ls_id = freezer_->get_ls_id().id();
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld ls_id=%ld\n", tenant_id, ls_id);
+    
+    fprintf(fd, "ls_id=%ld\n", ls_id);
     ObCStringHelper helper;
     const char *key_ptr = NULL;
     const char *min_tx_scn_ptr = NULL;
@@ -1223,8 +1223,7 @@ void ObTxDataMemtable::DEBUG_print_start_scn_list_(const char* fname)
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld \n", tenant_id);
+    
     ObTxData *cur_node = get_sorted_list_head()->next_;
     while (OB_NOT_NULL(cur_node)) {
       ObTxData *tx_data = cur_node;
@@ -1264,8 +1263,7 @@ void ObTxDataMemtable::DEBUG_print_merged_commit_versions_(ObCommitVersionsArray
     ret = OB_IO_ERROR;
     STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
-    int64_t tenant_id = MTL_ID();
-    fprintf(fd, "tenant_id=%ld \n", tenant_id);
+    
     for (int i = 0; i < array.count(); i++) {
       ObCStringHelper helper;
       fprintf(fd,

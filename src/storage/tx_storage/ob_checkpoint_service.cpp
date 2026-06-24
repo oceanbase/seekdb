@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_checkpoint_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_global_stat_proxy.h"
 #include "observer/ob_server_struct.h"
@@ -39,16 +40,16 @@ int64_t ObCheckPointService::TRY_ADVANCE_CKPT_INTERVAL = 60LL * 1000LL * 1000LL;
 
 int ObCheckPointService::mtl_init(ObCheckPointService* &m)
 {
-  return m->init(MTL_ID());
+  return m->init();
 }
 
-int ObCheckPointService::init(const int64_t tenant_id)
+int ObCheckPointService::init()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObCheckPointService init twice.", K(ret));
-  } else if (OB_FAIL(freeze_thread_.init(tenant_id, lib::TGDefIDs::LSFreeze))) {
+  } else if (OB_FAIL(freeze_thread_.init(lib::TGDefIDs::LSFreeze))) {
     LOG_WARN("fail to initialize freeze thread", K(ret));
   } else {
     is_inited_ = true;
@@ -62,25 +63,25 @@ int ObCheckPointService::start()
   int ret = OB_SUCCESS;
   if (OB_FAIL(checkpoint_timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
     STORAGE_LOG(ERROR, "fail to set checkpoint_timer's run wrapper", K(ret));
-  } else if (OB_FAIL(checkpoint_timer_.init("TxCkpt", ObMemAttr(MTL_ID(), "CheckPointTimer")))) {
+  } else if (OB_FAIL(checkpoint_timer_.init("TxCkpt", ObMemAttr("CheckPointTimer")))) {
     STORAGE_LOG(ERROR, "fail to init checkpoint_timer", K(ret));
   } else if (OB_FAIL(checkpoint_timer_.schedule(checkpoint_task_, CHECKPOINT_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule checkpoint task", K(ret));
   } else if (OB_FAIL(traversal_flush_timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
     STORAGE_LOG(ERROR, "fail to set traversal_timer's run wrapper", K(ret));
-  } else if (OB_FAIL(traversal_flush_timer_.init("Flush", ObMemAttr(MTL_ID(), "FlushTimer")))) {
+  } else if (OB_FAIL(traversal_flush_timer_.init("Flush", ObMemAttr("FlushTimer")))) {
     STORAGE_LOG(ERROR, "fail to init traversal_timer", K(ret));
   } else if (OB_FAIL(traversal_flush_timer_.schedule(traversal_flush_task_, TRAVERSAL_FLUSH_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule traversal_flush task", K(ret));
   } else if (OB_FAIL(check_clog_disk_usage_timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
     STORAGE_LOG(ERROR, "fail to set check_clog_disk_usage_timer's run wrapper", K(ret));
-  } else if (OB_FAIL(check_clog_disk_usage_timer_.init("CKClogDisk", ObMemAttr(MTL_ID(), "DiskUsageTimer")))) {
+  } else if (OB_FAIL(check_clog_disk_usage_timer_.init("CKClogDisk", ObMemAttr("DiskUsageTimer")))) {
     STORAGE_LOG(ERROR, "fail to init check_clog_disk_usage_timer", K(ret));
   } else if (OB_FAIL(check_clog_disk_usage_timer_.schedule(check_clog_disk_usage_task_, CHECK_CLOG_USAGE_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule check_clog_disk_usage task", K(ret));
   } else if (OB_FAIL(advance_ckpt_timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
     STORAGE_LOG(ERROR, "fail to set check_clog_disk_usage_timer's run wrapper", K(ret));
-  } else if (OB_FAIL(advance_ckpt_timer_.init("AdvanceCKPT", ObMemAttr(MTL_ID(), "AdvanceTimer")))) {
+  } else if (OB_FAIL(advance_ckpt_timer_.init("AdvanceCKPT", ObMemAttr("AdvanceTimer")))) {
     STORAGE_LOG(ERROR, "fail to init check_clog_disk_usage_timer", K(ret));
   } else if (OB_FAIL(advance_ckpt_timer_.schedule(advance_ckpt_task_, TRY_ADVANCE_CKPT_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule check_clog_disk_usage task", K(ret));
@@ -138,7 +139,7 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
   int ret = OB_SUCCESS;
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   int64_t cs_min_dep_lsn_val = 0;
 
   if (OB_ISNULL(ls_svr)) {
@@ -174,7 +175,7 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
       } else if (OB_FAIL(checkpoint_executor->update_clog_checkpoint())) {
         STORAGE_LOG(WARN, "update_clog_checkpoint failed", K(ret), K(ls->get_ls_id()));
       } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-              *GCTX.sql_proxy_, MTL_ID(), false/*for_update*/, cs_min_dep_lsn_val))) {
+              *GCTX.sql_proxy_, false/*for_update*/, cs_min_dep_lsn_val))) {
         STORAGE_LOG(WARN, "get_change_stream_min_dep_lsn failed, skip constraint", KR(ret));
       } else {
         checkpoint_lsn = ls->get_clog_base_lsn();
@@ -211,7 +212,7 @@ int ObCheckPointService::flush_to_recycle_clog_()
 
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   if (OB_ISNULL(ls_svr)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "mtl ObLSService should not be null", K(ret));
@@ -257,7 +258,7 @@ void ObCheckPointService::ObTraversalFlushTask::runTimerTask()
   int ret = OB_SUCCESS;
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   ObCurTraceId::init(GCONF.self_addr_);
   if (OB_ISNULL(ls_svr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -302,7 +303,7 @@ void ObCheckPointService::ObCheckClogDiskUsageTask::runTimerTask()
   STORAGE_LOG(INFO, "====== check clog disk timer task ======");
   int ret = OB_SUCCESS;
   bool need_flush = false;
-  logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
+  logservice::ObLogService *log_service = share::g_mp->log_service();
   if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected error, ObLogService is nullptr", KP(log_service));
@@ -334,7 +335,7 @@ void ObCheckPointService::ObAdvanceCkptTask::runTimerTask()
 
   // set 10 minutes as default value
   int64_t advance_checkpoint_interval = 10LL * 60LL * 1000LL * 1000LL;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     // use config value if config is valid
     advance_checkpoint_interval = tenant_config->_advance_checkpoint_interval;
@@ -343,13 +344,13 @@ void ObCheckPointService::ObAdvanceCkptTask::runTimerTask()
   if (0 != advance_checkpoint_interval) {
     STORAGE_LOG(INFO, "====== Advance Checkpoint Task ======");
     const int64_t current_ts = ObClockGenerator::getClock();
-    const int64_t prev_advance_ckpt_task_ts = MTL(ObCheckPointService *)->prev_advance_ckpt_task_ts();
+    const int64_t prev_advance_ckpt_task_ts = share::g_mp->check_point_service()->prev_advance_ckpt_task_ts();
     if (current_ts - prev_advance_ckpt_task_ts > advance_checkpoint_interval) {
       AdvanceCkptFunctorForLS advance_ckpt_func_for_ls;
-      if (OB_FAIL(MTL(ObLSService *)->foreach_ls(advance_ckpt_func_for_ls))) {
+      if (OB_FAIL(share::g_mp->ls_service()->foreach_ls(advance_ckpt_func_for_ls))) {
         STORAGE_LOG(WARN, "for each ls functor failed", KR(ret));
       } else {
-        MTL(ObCheckPointService *)->set_prev_advance_ckpt_task_ts(current_ts);
+        share::g_mp->check_point_service()->set_prev_advance_ckpt_task_ts(current_ts);
       }
     } else {
       STORAGE_LOG(INFO,

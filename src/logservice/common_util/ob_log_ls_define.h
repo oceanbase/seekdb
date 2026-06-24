@@ -27,25 +27,26 @@ class TenantLSID
 {
 public:
   TenantLSID() { reset(); }
-  TenantLSID(const uint64_t tenant_id, const share::ObLSID &ls_id)
-    : tenant_id_(tenant_id), ls_id_(ls_id)
+  TenantLSID(const share::ObLSID &ls_id)
+    : ls_id_(ls_id)
   {}
   ~TenantLSID() { reset(); }
 
   void reset()
   {
-    tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
     ls_id_.reset();
   }
 
   bool is_valid() const {
-    return ls_id_.is_valid_with_tenant(tenant_id_);
+    return ls_id_.is_valid_with_tenant();
   }
 
   uint64_t hash() const
   {
     uint64_t hash_val = 0;
-    hash_val = common::murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
+    const uint64_t hash_seed = 1;
+    hash_val = common::murmurhash(&hash_seed, sizeof(hash_seed), hash_val);
     hash_val = common::murmurhash(&ls_id_, sizeof(ls_id_), hash_val);
 
     return hash_val;
@@ -62,20 +63,19 @@ public:
   int compare(const TenantLSID &other) const;
   bool operator==(const TenantLSID &other) const
   {
-    return (tenant_id_ == other.tenant_id_) &&(ls_id_ == other.ls_id_);
+    return (true) &&(ls_id_ == other.ls_id_);
   }
   bool operator!=(const TenantLSID &other) const { return !operator==(other); }
   bool operator<(const TenantLSID &other) const { return -1 == compare(other); }
   TenantLSID &operator=(const TenantLSID &other);
 
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   const share::ObLSID &get_ls_id() const { return ls_id_; }
 
-  TO_STRING_KV(K_(tenant_id),
-      K_(ls_id));
+  TO_STRING_KV(K_(ls_id));
 
 private:
-  uint64_t tenant_id_;
+  
   share::ObLSID ls_id_;
 };
 

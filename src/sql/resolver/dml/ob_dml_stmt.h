@@ -152,8 +152,6 @@ struct TableItem
     flashback_query_expr_ = nullptr;
     flashback_query_type_ = FlashBackQueryType::NOT_USING;
     function_table_expr_ = nullptr;
-    is_reverse_link_ = false;
-    dblink_id_ = OB_INVALID_ID;
     ddl_schema_version_ = 0;
     ddl_table_id_ = common::OB_INVALID_ID;
     json_table_def_ = nullptr;
@@ -162,7 +160,6 @@ struct TableItem
     sample_info_ = nullptr;
     // assign default value for compatibility
     catalog_name_ = OB_INTERNAL_CATALOG_NAME;
-    external_location_id_ = common::OB_INVALID_ID;
   }
 
   virtual TO_STRING_KV(N_TID, table_id_,
@@ -180,13 +177,12 @@ struct TableItem
                K_(skip_locked),
                "view_base_item",
                (NULL == view_base_item_ ? OB_INVALID_ID : view_base_item_->table_id_),
-               K_(dblink_id), K_(dblink_name), K_(link_database_name), K_(is_reverse_link),
                K_(ddl_schema_version), K_(ddl_table_id),
                K_(is_view_table), K_(part_ids), K_(part_names), K_(cte_type),
                KPC_(function_table_expr),
                K_(flashback_query_type), KPC_(flashback_query_expr), K_(table_type),
                K_(exec_params), KPC_(sample_info), K_(mview_id), K_(need_expand_rt_mv),
-               K_(external_table_partition), K_(catalog_name), K_(external_location_id));
+               K_(catalog_name));
 
   enum TableType
   {
@@ -198,7 +194,6 @@ struct TableItem
     FUNCTION_TABLE,
     TRANSPOSE_TABLE,
     TEMP_TABLE,
-    LINK_TABLE,
     JSON_TABLE,
     VALUES_TABLE,
     LATERAL_TABLE,
@@ -235,8 +230,6 @@ struct TableItem
   bool is_has_sample_info() const { return sample_info_ != nullptr; }
   bool is_joined_table() const { return JOINED_TABLE == type_; }
   bool is_function_table() const { return FUNCTION_TABLE == type_; }
-  bool is_link_table() const { return OB_INVALID_ID != dblink_id_; } // why not use type_, cause type_ will be changed in dblink transform rule, but dblink id don't change
-  bool is_link_type() const { return LINK_TABLE == type_; } // after dblink transformer, LINK_TABLE will be BASE_TABLE, BASE_TABLE will be LINK_TABLE
   bool is_json_table() const { return JSON_TABLE == type_; }  // json_table_def_->table_type_ == MulModeTableType::OB_ORA_JSON_TABLE_TYPE
   bool is_values_table() const { return VALUES_TABLE == type_; }//used to mark values statement: values row(1,2), row(3,4);
 
@@ -314,11 +307,6 @@ struct TableItem
   ObRawExpr *flashback_query_expr_;
   FlashBackQueryType flashback_query_type_;
   ObRawExpr *function_table_expr_;
-  // dblink
-  bool is_reverse_link_;
-  int64_t dblink_id_;
-  common::ObString dblink_name_;
-  common::ObString link_database_name_;
   int64_t ddl_schema_version_;
   int64_t ddl_table_id_;
   // table partition
@@ -329,13 +317,9 @@ struct TableItem
   ObJsonTableDef *json_table_def_;
   // values table
   ObValuesTableDef *values_table_def_;
-  // external table
   common::ObString catalog_name_;
-  common::ObString external_table_partition_;
   // sample scan infos
   SampleInfo *sample_info_;
-  // external location
-  uint64_t external_location_id_;
 };
 
 struct ColumnItem
@@ -968,7 +952,6 @@ public:
   common::ObIArray<ObQueryRefRawExpr*> &get_subquery_exprs() { return subquery_exprs_; }
   const common::ObIArray<ObQueryRefRawExpr*> &get_subquery_exprs() const { return subquery_exprs_; }
   bool is_set_stmt() const;
-  virtual bool has_link_table() const;
   // This function is used to obtain the root nodes of all expression related to semantics in this stmt
   // Use get_relation_exprs() interface instead of the previous get_all_expr() interface,
   // The method's purpose is to obtain the root node of all expr trees specified by the query in this stmt,
@@ -1035,8 +1018,6 @@ public:
                N_STMT_HINT, stmt_hint_,
                N_SUBQUERY_EXPRS, subquery_exprs_,
                N_USER_VARS, user_var_exprs_,
-               K_(dblink_id),
-               K_(is_reverse_link),
                K_(has_vec_approx),
                K_(vector_index_query_param));
 
@@ -1099,7 +1080,6 @@ public:
 
   int check_has_subquery_in_function_table(bool &has_subquery_in_function_table) const;
 
-  int disable_writing_external_table(bool basic_stmt_is_dml = false);
   int disable_writing_materialized_view() const;
   int formalize_query_ref_exprs();
 
@@ -1219,11 +1199,6 @@ protected:
     Needn't maintain it after resolver.
   */
   common::ObSEArray<TableItem*, 2, common::ModulePageAllocator, true> cte_definitions_;
-  /*
-   * If the current needs to be executed at the remote end, dblink_id indicates the remote definition
-   */
-  int64_t dblink_id_;
-  bool is_reverse_link_;
   bool has_vec_approx_;
   // fulltext search exprs
   common::ObSEArray<ObMatchFunRawExpr*, 2, common::ModulePageAllocator, true> match_exprs_;

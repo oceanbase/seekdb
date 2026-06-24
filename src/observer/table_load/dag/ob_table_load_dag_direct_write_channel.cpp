@@ -98,9 +98,9 @@ ObTableLoadDagDirectChunkWriter::ObTableLoadDagDirectChunkWriter()
     is_single_part_(false),
     is_closed_(false)
 {
-  batch_writer_allocator_.set_tenant_id(MTL_ID());
-  batch_writers_.set_attr(ObMemAttr(MTL_ID(), "TLD_BatchWriter"));
-  allocator_.set_tenant_id(MTL_ID());
+  
+  batch_writers_.set_attr(ObMemAttr("TLD_BatchWriter"));
+  
 }
 
 ObTableLoadDagDirectChunkWriter::~ObTableLoadDagDirectChunkWriter()
@@ -141,7 +141,7 @@ int ObTableLoadDagDirectChunkWriter::init(ObTableLoadDagWriteChannel *write_chan
       single_tablet_id_ = write_channel_->op_->op_ctx_->store_table_ctx_->ls_partition_ids_[0]
                             .part_tablet_id_.tablet_id_;
     }
-    if (OB_FAIL(batch_writer_map_.create(64, "TLD_BW_Map", "TLD_BW_Map", MTL_ID()))) {
+    if (OB_FAIL(batch_writer_map_.create(64, "TLD_BW_Map", "TLD_BW_Map"))) {
       LOG_WARN("fail to create hashmap", KR(ret));
     } else if (OB_ISNULL(selector_ = static_cast<uint16_t *>(
                            allocator_.alloc(sizeof(uint16_t) * max_batch_size_)))) {

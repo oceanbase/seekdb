@@ -46,8 +46,8 @@ int ObTenantSSTableMergeInfoMgr::mtl_init(ObTenantSSTableMergeInfoMgr *&sstable_
 
 int64_t ObTenantSSTableMergeInfoMgr::cal_max()
 {
-  const uint64_t tenant_id = MTL_ID();
-  int64_t max_size = std::min(lib::get_tenant_memory_limit(tenant_id) * MEMORY_PERCENTAGE / 100, 
+  
+  int64_t max_size = std::min(lib::get_tenant_memory_limit() * MEMORY_PERCENTAGE / 100, 
                           static_cast<int64_t>(POOL_MAX_SIZE));
   return max_size;
 }
@@ -79,14 +79,12 @@ int ObTenantSSTableMergeInfoMgr::init(const int64_t page_size)
     STORAGE_LOG(WARN, "ObTenantSSTableMergeInfoMgr has already been initiated", K(ret));
   } else {
     int64_t max_size = cal_max();
-    if (OB_FAIL(major_info_pool_.init(false,
-                                      MTL_ID(), 
+    if (OB_FAIL(major_info_pool_.init(false, 
                                       "MajorMerge",
                                       page_size,
                                       max_size * (100 - MINOR_MEMORY_PERCENTAGE) / 100))) {
       STORAGE_LOG(WARN, "failed to init major info pool", K(ret));
-    } else if (OB_FAIL(minor_info_pool_.init(false,
-                                      MTL_ID(), 
+    } else if (OB_FAIL(minor_info_pool_.init(false, 
                                       "MinorMerge",
                                       page_size,
                                       max_size * MINOR_MEMORY_PERCENTAGE / 100))) {

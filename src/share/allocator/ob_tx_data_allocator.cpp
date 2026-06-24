@@ -18,6 +18,7 @@
 
 
 #include "ob_tx_data_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -37,10 +38,10 @@ void ObTenantTxDataAllocator::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &trigger_percentage,
                                                    int64_t &max_duration)
 {
-  int64_t total_memory = lib::get_tenant_memory_limit(MTL_ID());
+  int64_t total_memory = lib::get_tenant_memory_limit();
 
   // Use tenant config to init throttle config
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     resource_limit = total_memory * tenant_config->_tx_data_memory_limit_percentage / 100LL;
     trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
@@ -52,8 +53,7 @@ void ObTenantTxDataAllocator::init_throttle_config(int64_t &resource_limit,
     max_duration = TX_DATA_THROTTLE_MAX_DURATION;
   }
 }
-void ObTenantTxDataAllocator::adaptive_update_limit(const int64_t tenant_id,
-                                                    const int64_t holding_size,
+void ObTenantTxDataAllocator::adaptive_update_limit(const int64_t holding_size,
                                                     const int64_t config_specify_resource_limit,
                                                     int64_t &resource_limit,
                                                     int64_t &last_update_limit_ts,
@@ -67,9 +67,9 @@ OB_WEAK_SYMBOL int ObTenantTxDataAllocator::init(const char *label)
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
   mem_attr.label_ = label;
-  mem_attr.tenant_id_ = MTL_ID();
+  
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = MTL(ObSharedMemAllocMgr *);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   if (IS_INIT){
     ret = OB_INIT_TWICE;
@@ -116,7 +116,7 @@ ObTxDataThrottleGuard::ObTxDataThrottleGuard(const ObLSID ls_id,
                                              const int64_t abs_expire_time)
     : ls_id_(ls_id), for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
-  throttle_tool_ = &(MTL(ObSharedMemAllocMgr *)->share_resource_throttle_tool());
+  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {
     abs_expire_time_ =
         ObClockGenerator::getClock() + ObThrottleUnit<ObTenantTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME;
@@ -134,7 +134,7 @@ ObTxDataThrottleGuard::~ObTxDataThrottleGuard()
   if (OB_ISNULL(throttle_tool_)) {
     MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
   } else if (throttle_tool_->is_throttling<ObTenantTxDataAllocator>(share_ti_guard, module_ti_guard)) {
-    if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       STORAGE_LOG(WARN, "get ls handle failed", KR(ret), K(ls_id_));
     } else if (OB_ISNULL(ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
@@ -169,10 +169,10 @@ int ObTenantTxDataOpAllocator::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = MTL_ID();
+  
   mem_attr.ctx_id_ = ObCtxIds::MDS_DATA_ID;
   mem_attr.label_ = "TX_OP";
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = MTL(ObSharedMemAllocMgr *);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   if (IS_INIT){
     ret = OB_INIT_TWICE;

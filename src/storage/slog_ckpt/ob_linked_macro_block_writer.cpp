@@ -91,7 +91,7 @@ int ObLinkedMacroBlockWriter::write_block(
     } else {
       opt.set_private_meta_macro_object_opt(tablet_id_, tablet_transfer_seq_);
     }
-    const uint64_t tenant_id = MTL_ID();
+    
     ObStorageObjectWriteInfo write_info;
     write_info.size_ = buf_len;
     write_info.buffer_ = buf;
@@ -99,7 +99,7 @@ int ObLinkedMacroBlockWriter::write_block(
     write_info.io_desc_.set_sys_module_id(ObIOModule::LINKED_MACRO_BLOCK_IO);
     write_info.io_desc_.set_sealed();
     write_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-    write_info.mtl_tenant_id_ = is_valid_tenant_id(tenant_id) ? tenant_id : OB_SERVER_TENANT_ID;
+    
     write_info.offset_ = 0;
 
     MacroBlockId previous_block_id(0, MacroBlockId::EMPTY_ENTRY_BLOCK_INDEX, 0);
@@ -257,8 +257,8 @@ int ObLinkedMacroBlockItemWriter::init_for_object(
 {
   int ret = OB_SUCCESS;
   const int64_t macro_block_size = OB_STORAGE_OBJECT_MGR.get_macro_block_size();
-  const uint64_t tenant_id = MTL_ID();
-  const ObMemAttr mem_attr(is_valid_tenant_id(tenant_id) ? tenant_id : OB_SERVER_TENANT_ID, "ObjLinkWriter");
+  
+  const ObMemAttr mem_attr("ObjLinkWriter");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLinkedMacroBlockItemWriter has already been inited", K(ret));

@@ -16,6 +16,7 @@
 
 
 #include "ob_share_throttle_define.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/throttle/ob_throttle_info.h"
 #include "share/allocator/ob_tenant_vector_allocator.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
@@ -42,12 +43,12 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
 
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     int64_t share_mem_limit = tenant_config->_tx_share_memory_limit_percentage;
     // if _tx_share_memory_limit_percentage equals 0, use (MAX(memstore_limit_percentage, vector_mem_limit_percentage + 5) + 10) as default value
     if (0 == share_mem_limit) {
-      int64_t memstore_limit = MTL(ObTenantFreezer*)->get_memstore_limit_percentage();
+      int64_t memstore_limit = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
       int64_t vector_limit = ObTenantVectorAllocator::get_vector_mem_limit_percentage(tenant_config);
       share_mem_limit = MAX(memstore_limit, vector_limit + 5) + 10;
     }
@@ -71,8 +72,7 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
  * @param[out] last_update_limit_ts last update ts (for performance optimization)
  * @param[out] is_updated to decide if update_decay_factor() is needed
  */
-void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t tenant_id,
-                                                    const int64_t holding_size,
+void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t holding_size,
                                                     const int64_t config_specify_resource_limit,
                                                     int64_t &resource_limit,
                                                     int64_t &last_update_limit_ts,
@@ -107,7 +107,6 @@ void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t tenant_id,
     if (is_updated && REACH_TIME_INTERVAL(10LL * 1000LL * 1000LL)) {
       SHARE_LOG(INFO,
                 "adaptive update",
-                "Tenant ID", tenant_id,
                 "Config Specify Resource Limit(MB)", config_specify_resource_limit / 1024 / 1024,
                 "TxShare Current Memory Limit(MB)", resource_limit / 1024 / 1024,
                 "Holding Memory(MB)", holding_size / 1024 / 1024,

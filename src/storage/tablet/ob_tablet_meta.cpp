@@ -1185,7 +1185,7 @@ ObMigrationTabletParam::ObMigrationTabletParam()
     is_storage_schema_cs_replica_(false),
     split_info_(),
     has_truncate_info_(false),
-    allocator_("MigTblParam", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), ObCtxIds::DEFAULT_CTX_ID)
+    allocator_("MigTblParam", OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::DEFAULT_CTX_ID)
 {
 }
 
@@ -1733,7 +1733,7 @@ int ObMigrationTabletParam::assign(const ObMigrationTabletParam &param)
     LOG_WARN("migration tablet param is invalid", K(ret), K(param));
   } else {
     // allocator
-    allocator_.set_attr(ObMemAttr(MTL_ID(), "MigTabletParam", ObCtxIds::DEFAULT_CTX_ID));
+    allocator_.set_attr(ObMemAttr("MigTabletParam", ObCtxIds::DEFAULT_CTX_ID));
     version_ = param.version_;
     is_empty_shell_ = param.is_empty_shell_;
     ls_id_ = param.ls_id_;

@@ -136,15 +136,6 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(replace_func_is_serving_tenant(stmt, is_happened))) {
-        LOG_WARN("failed to replace function is_serving_tenant", K(ret));
-      } else {
-        trans_happened |= is_happened;
-        OPT_TRACE("replace is_serving_tenant function:", is_happened);
-        LOG_TRACE("succeed to replace function", K(is_happened));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_FAIL(transform_special_expr(stmt, is_happened))) {
         LOG_WARN("failed to transform_special_expr", K(ret));
       } else {
@@ -346,10 +337,9 @@ int ObTransformPreProcess::add_all_rowkey_columns_to_stmt(ObDMLStmt *stmt, bool 
         LOG_WARN("unexpect null", K(ret), K(table_item));
       } else if (!table_item->is_basic_table()) {
         /* do nothing */
-      } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema(ctx_->session_info_->get_effective_tenant_id(),
+      } else if (OB_FAIL(ctx_->schema_checker_->get_table_schema(
                                                                  table_item->ref_id_,
-                                                                 table_schema,
-                                                                 table_item->is_link_table()))) {
+                                                                 table_schema))) {
         LOG_WARN("table schema not found", K(table_schema));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -405,8 +395,6 @@ int ObTransformPreProcess::add_all_rowkey_columns_to_stmt(const ObTableSchema &t
       if (OB_FAIL(column_items.push_back(*exists_col_item))) {
         LOG_WARN("failed to push back column item", K(ret));
       }
-    } else if (OB_MOCK_LINK_TABLE_PK_COLUMN_ID == column_id && table_item.is_link_table()) {
-      continue;
     } else if (OB_ISNULL(column_schema = (table_schema.get_column_schema(column_id)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get column schema", K(column_id), K(ret));
@@ -804,259 +792,6 @@ int ObTransformPreProcess::eliminate_having(ObDMLStmt *stmt, bool &trans_happene
         trans_happened = true;
       }
     }
-  }
-  return ret;
-}
-
-int ObTransformPreProcess::replace_func_is_serving_tenant(ObDMLStmt *&stmt, bool &trans_happened)
-{
-  int ret = OB_SUCCESS;
-  trans_happened = false;
-  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameter or data member", K(ret), K(stmt), K(ctx_));
-  } else if (OB_ISNULL(ctx_->session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is NULL", K(ret));
-  } else {
-    common::ObIArray<ObRawExpr*> &cond_exprs = stmt->get_condition_exprs();
-    for (int64_t i = 0; OB_SUCC(ret) && i < cond_exprs.count(); ++i) {
-      bool is_happended = false;
-      if (OB_ISNULL(cond_exprs.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cond expr is NULL", K(ret), K(i), K(cond_exprs));
-      } else if (OB_FAIL(recursive_replace_func_is_serving_tenant(*stmt, cond_exprs.at(i), is_happended))) { // Here must directly pass cond_exprs.at(i), because its value may need to be modified
-        LOG_WARN("fail to recursive replace functino is_serving_tenant",
-                        K(ret), K(i), K(*cond_exprs.at(i)));
-      } else if (!is_happended) {
-        //do nothing
-      } else if (OB_ISNULL(cond_exprs.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null pointer", K(ret));
-      } else if (OB_FAIL(cond_exprs.at(i)->formalize(ctx_->session_info_))) {
-        LOG_WARN("failed to formalize expr", K(ret), K(i), K(*cond_exprs.at(i)));
-      } else if (OB_FAIL(cond_exprs.at(i)->pull_relation_id())) {
-        LOG_WARN("failed to pull relation id", K(ret), K(i), K(*cond_exprs.at(i)));
-      } else {
-        trans_happened = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTransformPreProcess::recursive_replace_func_is_serving_tenant(ObDMLStmt &stmt,
-                                                                    ObRawExpr *&cond_expr,
-                                                                    bool &trans_happened)
-{
-  int ret = OB_SUCCESS;
-  bool is_stack_overflow = false;
-  if (OB_ISNULL(cond_expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("cond_expr is NULL", K(cond_expr), K_(ctx));
-  } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
-  } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < cond_expr->get_param_count(); ++i) {
-      // Here you must directly pass cond_expr->get_param_expr(i), because its value may need to be modified
-      if (OB_FAIL(SMART_CALL(recursive_replace_func_is_serving_tenant(stmt,
-                                                                      cond_expr->get_param_expr(i),
-                                                                      trans_happened)))) {
-        LOG_WARN("fail to recursive replace_func_is_serving_tenant", K(ret));
-      }
-    }
-    // If is_serving_tenant and tenant_id is a constant expression, then rewrite as (svr_ip, svr_port) in ((ip1,
-    // port1), (ip2, port2), ...)  format
-    // If the current tenant is the system tenant, directly return true
-    if (OB_SUCC(ret) && T_FUN_IS_SERVING_TENANT == cond_expr->get_expr_type()) {
-      int64_t tenant_id_int64 = -1;
-      if (OB_UNLIKELY(3 != cond_expr->get_param_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("T_FUN_IS_SERVING_TENANT must has 3 params",
-                        K(ret), K(cond_expr->get_param_count()), K(*cond_expr));
-      } else if (OB_ISNULL(cond_expr->get_param_expr(0))
-                 || OB_ISNULL(cond_expr->get_param_expr(1))
-                 || OB_ISNULL(cond_expr->get_param_expr(2))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("T_FUN_IS_SERVING_TENANT has a null param",
-                        K(ret), K(cond_expr->get_param_expr(0)),
-                        K(cond_expr->get_param_expr(1)),
-                        K(cond_expr->get_param_expr(2)), K(*cond_expr));
-      } else if (!cond_expr->get_param_expr(2)->is_static_scalar_const_expr()) {
-      } else if (OB_ISNULL(ctx_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ctx_ is NULL", K(ret));
-      } else if (OB_ISNULL(ctx_->exec_ctx_) || OB_ISNULL(ctx_->session_info_) || OB_ISNULL(ctx_->allocator_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid argument",
-                        K(ret), K(ctx_->exec_ctx_), K(ctx_->session_info_), K(ctx_->allocator_));
-      } else if (OB_FAIL(calc_const_raw_expr_and_get_int(stmt,
-                                                         cond_expr->get_param_expr(2),
-                                                         *ctx_->exec_ctx_,
-                                                         ctx_->session_info_,
-                                                         *ctx_->allocator_,
-                                                         tenant_id_int64))) {
-        LOG_WARN("fail to calc tenant id", K(ret), K(*cond_expr->get_param_expr(2)));
-      } else if (OB_UNLIKELY(tenant_id_int64 <= 0)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("tenant id is <= 0", K(ret), K(tenant_id_int64));
-      } else {
-        uint64_t tenant_id = static_cast<uint64_t>(tenant_id_int64);
-        // if current tenant is sys, return true directly
-        if (OB_SYS_TENANT_ID == tenant_id) {
-          ObConstRawExpr *true_expr = NULL;
-          if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_VARCHAR, true_expr))) {
-            LOG_WARN("create const expr failed", K(ret));
-          } else if (OB_ISNULL(true_expr)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("true expr is NULL", K(ret));
-          } else {
-            ObObj true_obj;
-            true_obj.set_bool(true);
-            true_expr->set_value(true_obj);
-            cond_expr = true_expr;
-            trans_happened = true;
-          }
-        } else {
-          ObUnitInfoGetter ui_getter;
-          ObArray<ObAddr> servers;
-          if (OB_ISNULL(ctx_->exec_ctx_->get_sql_proxy())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sql proxy from exec_ctx_ is NULL", K(ret));
-          } else if (OB_FAIL(ui_getter.init(*ctx_->exec_ctx_->get_sql_proxy(), &GCONF))) {
-            LOG_WARN("fail to init ObUnitInfoGetter", K(ret));
-          } else if (OB_FAIL(ui_getter.get_tenant_servers(tenant_id, servers))) {
-            LOG_WARN("fail to get servers of a tenant", K(ret));
-          } else if (0 == servers.count()) {
-            // Did not find the observer corresponding to this tenant_id, it may be that the tenant_id is illegal, in order to pass the query
-            // range, will this be changed to where false form, so although the optimizer will return all partitions, but
-            // ObPhyOperator will handle the false condition properly, and will not perform unnecessary queries
-            ObConstRawExpr *false_expr = NULL;
-            if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_VARCHAR, false_expr))) {
-              LOG_WARN("create varchar expr failed", K(ret));
-            } else if (OB_ISNULL(false_expr)){
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("false expr is NULL", K(ret));
-            } else {
-              ObObj false_obj;
-              false_obj.set_bool(false);
-              false_expr->set_value(false_obj);
-              cond_expr = false_expr;
-              trans_happened = true;
-            }
-          } else {
-            ObOpRawExpr *in_op = NULL;
-            ObOpRawExpr *left_row_op = NULL;
-            ObOpRawExpr *right_row_op = NULL;
-            if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_IN, in_op))) {
-              LOG_WARN("create in operator expr", K(ret));
-            } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, left_row_op))) {
-              LOG_WARN("create left row operator failed", K(ret));
-            } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, right_row_op))) {
-              LOG_WARN("create right row op failed", K(ret));
-            } else if (OB_ISNULL(in_op) || OB_ISNULL(left_row_op) || OB_ISNULL(right_row_op)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("operator is null", K(in_op), K(left_row_op), K(right_row_op));
-            } else if (OB_FAIL(right_row_op->init_param_exprs(servers.count()))) {
-              LOG_WARN("failed to init param exprs", K(ret));
-            } else {/*do nothing*/}
-
-            for (int64_t i = 0; OB_SUCC(ret) && i < servers.count(); ++i) {
-              ObAddr server = servers.at(i);
-              ObOpRawExpr *row_op = NULL;
-              ObConstRawExpr *ip_expr = NULL;
-              ObConstRawExpr *port_expr = NULL;
-              char *ip_buf = NULL;
-              ObObj ip_obj;
-              ObObj port_obj;
-              if (OB_UNLIKELY(NULL == (ip_buf = static_cast<char*>(ctx_->allocator_->alloc(OB_MAX_SERVER_ADDR_SIZE))))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_ERROR("fail to alloc ip str buffer", K(ret), LITERAL_K(OB_MAX_SERVER_ADDR_SIZE));
-              } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, row_op))) {
-                LOG_WARN("create row operator expr failed", K(ret));
-              } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_VARCHAR, ip_expr))) {
-                LOG_WARN("create ip operator expr failed", K(ret));
-              } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_INT, port_expr))) {
-                LOG_WARN("create port expr failed", K(ret));
-              } else if (OB_UNLIKELY(!server.ip_to_string(ip_buf, OB_MAX_SERVER_ADDR_SIZE))) {
-                ret = OB_INVALID_ARGUMENT;
-                LOG_WARN("convert server addr to ip failed", K(ret), K(i), K(server));
-              } else if (OB_ISNULL(row_op) || OB_ISNULL(ip_expr) || OB_ISNULL(port_expr)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("expr is null", K(row_op), K(ip_expr), K(port_expr));
-              } else {
-                ip_obj.set_varchar(ObString(ip_buf));
-                ip_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-                ip_obj.set_collation_level(CS_LEVEL_SYSCONST);
-                port_obj.set_int(server.get_port());
-                ip_expr->set_value(ip_obj);
-                port_expr->set_value(port_obj);
-                if (OB_FAIL(row_op->set_param_exprs(ip_expr, port_expr))) {
-                  LOG_WARN("fail to set param expr", K(ret));
-                } else if (OB_FAIL(right_row_op->add_param_expr(row_op))) {
-                  LOG_WARN("fail to add param expr", K(ret));
-                } else {/*do nothing*/}
-              }
-            }
-            if (OB_SUCC(ret)) {
-              if (OB_FAIL(left_row_op->set_param_exprs(cond_expr->get_param_expr(0), cond_expr->get_param_expr(1)))) {
-                LOG_WARN("fail to set param expr", K(ret));
-              } else if (OB_FAIL(in_op->set_param_exprs(left_row_op, right_row_op))) {
-                LOG_WARN("fail to set param expr", K(ret));
-              } else if (OB_FAIL(in_op->formalize(ctx_->session_info_))) {
-                LOG_WARN("fail to formalize expr", K(ret));
-              } else {
-                cond_expr = in_op;
-                trans_happened = true;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTransformPreProcess::calc_const_raw_expr_and_get_int(const ObStmt &stmt,
-                                                           ObRawExpr *const_expr,
-                                                           ObExecContext &exec_ctx,
-                                                           ObSQLSessionInfo *session,
-                                                           ObIAllocator &allocator,
-                                                           int64_t &result)
-{
-  int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = NULL;
-  ObPhysicalPlanCtx *plan_ctx = NULL;
-  ObObj result_int_obj;
-  bool got_result = false;
-  if (OB_ISNULL(const_expr) || OB_ISNULL(session)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr or session is NULL", KP(session), KP(const_expr), K(ret));
-  } else if (OB_UNLIKELY(!const_expr->is_static_scalar_const_expr())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr is not const expr", K(ret), K(*const_expr));
-  } else if (OB_ISNULL(sql_proxy = exec_ctx.get_sql_proxy())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is NULL", K(ret));
-  } else if (OB_ISNULL(plan_ctx = exec_ctx.get_physical_plan_ctx())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan ctx is NULL", K(ret));
-  } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
-                                                               const_expr,
-                                                               result_int_obj,
-                                                               got_result,
-                                                               exec_ctx.get_allocator(),
-                                                               false))) {
-    LOG_WARN("failed to calc const or calculable expr", K(ret));
-  } else if (OB_UNLIKELY(false == ob_is_integer_type(result_int_obj.get_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id result must integer", K(ret), K(result_int_obj));
-  } else {
-    result = result_int_obj.get_int();
   }
   return ret;
 }
@@ -2668,11 +2403,11 @@ int ObTransformPreProcess::add_semantic_vector_dis_params_to_new_expr(ObDMLStmt 
 
     TableItem *table_item = NULL;
     const share::schema::ObTableSchema *data_table_schema = nullptr;
-    uint64_t tenant_id = ctx_->session_info_->get_effective_tenant_id();
+    
     if (OB_ISNULL(table_item = stmt->get_table_item_by_id(raw_chunk_col_ref->get_table_id()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table_item is NULL", K(ret), K(raw_chunk_col_ref->get_table_id()));
-    } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id, table_item->ref_id_, data_table_schema))) {
+    } else if (OB_FAIL(schema_guard->get_table_schema( table_item->ref_id_, data_table_schema))) {
       LOG_WARN("failed to get table schema", K(ret), K(table_item->ref_id_));
     } else if (OB_FAIL(create_embedded_table_vector_col_ref(stmt, table_item, data_table_schema, raw_chunk_col_ref, vector_col_ref))) {
       LOG_WARN("failed to create embedded table vector col ref", K(ret));

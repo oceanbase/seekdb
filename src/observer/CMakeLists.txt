@@ -85,8 +85,6 @@ ob_set_subtarget(ob_server mysql
   mysql/obsm_row.cpp
   mysql/obsm_utils.cpp
   mysql/obmp_set_option.cpp
-  mysql/ob_feedback_proxy_utils.cpp
-  mysql/ob_feedback_proxy_utils.cpp
 )
 
 ob_set_subtarget(ob_server net
@@ -101,8 +99,6 @@ ob_set_subtarget(ob_server omt
   omt/ob_tenant.cpp
   omt/ob_tenant_config_mgr.cpp
   omt/ob_tenant_meta.cpp
-  omt/ob_tenant_node_balancer.cpp
-  omt/ob_tenant_timezone.cpp
   omt/ob_tenant_timezone_mgr.cpp
   omt/ob_th_worker.cpp
   omt/ob_worker_processor.cpp
@@ -222,8 +218,6 @@ ob_set_subtarget(ob_server table_load
 )
 
 ob_set_subtarget(ob_server virtual_table
-  virtual_table/ob_agent_table_base.cpp
-  virtual_table/ob_agent_virtual_table.cpp
   virtual_table/ob_all_concurrency_object_pool.cpp
   virtual_table/ob_all_data_type_class_table.cpp
   virtual_table/ob_all_data_type_table.cpp
@@ -237,7 +231,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_virtual_table_tablet_iter.cpp
   virtual_table/ob_all_virtual_dag.cpp
   virtual_table/ob_all_virtual_dag_warning_history.cpp
-  virtual_table/ob_all_virtual_dblink_info.cpp
   virtual_table/ob_all_virtual_diag_index_scan.cpp
   virtual_table/ob_all_virtual_dtl_channel.cpp
   virtual_table/ob_all_virtual_dtl_first_cached_buffer.cpp
@@ -271,12 +264,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tablet_pointer_status.cpp
   virtual_table/ob_all_virtual_tablet_sstable_macro_info.cpp
   virtual_table/ob_all_virtual_tablet_store_stat.cpp
-  virtual_table/ob_all_virtual_proxy_base.cpp
-  virtual_table/ob_all_virtual_proxy_partition.cpp
-  virtual_table/ob_all_virtual_proxy_partition_info.cpp
-  virtual_table/ob_all_virtual_proxy_routine.cpp
-  virtual_table/ob_all_virtual_proxy_schema.cpp
-  virtual_table/ob_all_virtual_proxy_sub_partition.cpp
   virtual_table/ob_all_virtual_ps_item_info.cpp
   virtual_table/ob_all_virtual_ps_stat.cpp
   virtual_table/ob_all_virtual_px_target_monitor.cpp
@@ -284,7 +271,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_px_p2p_datahub.cpp
   virtual_table/ob_all_virtual_dtl_interm_result_monitor.cpp
   virtual_table/ob_all_virtual_raid_stat.cpp
-  virtual_table/ob_all_virtual_ls_archive_stat.cpp
   virtual_table/ob_all_virtual_server_compaction_progress.cpp
   virtual_table/ob_all_virtual_tablet_stat.cpp
   virtual_table/ob_all_virtual_server_object_pool.cpp
@@ -318,7 +304,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tx_ctx_mgr_stat.cpp
   virtual_table/ob_all_virtual_tx_data_table.cpp
   virtual_table/ob_all_virtual_tx_data.cpp
-  virtual_table/ob_all_virtual_weak_read_stat.cpp
   virtual_table/ob_all_virtual_log_stat.cpp
   virtual_table/ob_all_virtual_apply_stat.cpp
   virtual_table/ob_all_virtual_replay_stat.cpp
@@ -326,7 +311,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_global_variables.cpp
   virtual_table/ob_gv_sql.cpp
   virtual_table/ob_all_virtual_tenant_memstore_info.cpp
-  virtual_table/ob_all_virtual_external_location_list_file.cpp
   virtual_table/ob_information_check_constraints_table.cpp
   virtual_table/ob_information_columns_table.cpp
   virtual_table/ob_information_global_status_table.cpp
@@ -344,8 +328,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_information_user_privileges_table.cpp
   virtual_table/ob_information_query_response_time.cpp
   virtual_table/ob_information_schema_enable_roles_table.cpp
-  virtual_table/ob_iterate_private_virtual_table.cpp
-  virtual_table/ob_iterate_virtual_table.cpp
   virtual_table/ob_mem_leak_checker_info.cpp
   virtual_table/ob_mysql_db_table.cpp
   virtual_table/ob_mysql_proc_table.cpp
@@ -377,15 +359,12 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
-  virtual_table/ob_virtual_proxy_sys_variable.cpp
   virtual_table/ob_virtual_sql_monitor.cpp
   virtual_table/ob_virtual_sql_monitor_statname.cpp
   virtual_table/ob_virtual_sql_plan_monitor.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp
   virtual_table/ob_all_virtual_dml_stats.cpp
-  virtual_table/ob_all_virtual_archive_dest_status.cpp
-  virtual_table/ob_all_virtual_ls_log_restore_status.cpp
   virtual_table/ob_virtual_span_info.cpp
   virtual_table/ob_virtual_show_trace.cpp
   virtual_table/ob_all_virtual_sql_plan.cpp

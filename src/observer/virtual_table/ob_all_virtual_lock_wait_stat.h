@@ -37,7 +37,7 @@ public:
   int inner_get_next_row(common::ObNewRow *&row) override;
   void reset() override;
 private:
-  bool is_need_process(uint64_t tenant_id) override;
+  bool is_need_process() override;
   int process_curr_tenant(common::ObNewRow *&row) override;
   void release_last_tenant() override;
 

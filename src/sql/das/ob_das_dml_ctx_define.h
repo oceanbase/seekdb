@@ -402,7 +402,6 @@ public:
 
   int init(common::ObIAllocator &das_alloc,
            uint32_t row_extend_size = 0,
-           uint64_t tenant_id = common::OB_SERVER_TENANT_ID,
            const char *label = "DasWriteBuffer",
            int64_t mem_ctx_id = common::ObCtxIds::DEFAULT_CTX_ID);
   OB_INLINE bool is_inited() const { return das_alloc_ != nullptr; }
@@ -418,7 +417,7 @@ public:
   {
     return buffer_list_.header_.next_ != nullptr ? buffer_list_.header_.next_->cnt_ : 0;
   }
-  inline uint64_t get_tenant_id() const { return mem_attr_.tenant_id_; } 
+   
   int add_row(const common::ObIArray<ObExpr*> &exprs,
               ObEvalCtx *ctx,
               DmlRow *&stored_row,

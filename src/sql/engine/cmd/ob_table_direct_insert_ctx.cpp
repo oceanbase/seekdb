@@ -48,7 +48,7 @@ int ObTableDirectInsertCtx::init(
     const double online_sample_percent)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObSQLSessionInfo *session_info = nullptr;
   ObSchemaGetterGuard *schema_guard = nullptr;
   if (IS_INIT) {
@@ -98,7 +98,7 @@ int ObTableDirectInsertCtx::init(
       }
       ObDirectLoadMode::Type load_mode = is_insert_overwrite ? ObDirectLoadMode::INSERT_OVERWRITE : ObDirectLoadMode::INSERT_INTO;
       ObArray<ObTabletID> tablet_ids;
-      if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard, tenant_id, table_id, table_schema))) {
+      if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard, table_id, table_schema))) {
         LOG_WARN("fail to get table schema", KR(ret));
       } else if (OB_FAIL(ObDDLUtil::get_temp_store_compress_type(table_schema,
                                                                  parallel,
@@ -110,7 +110,7 @@ int ObTableDirectInsertCtx::init(
         LOG_WARN("failed to get partition level tablet ids", KR(ret), K(phy_plan), KPC(table_schema));
       } else {
         ObTableLoadParam param;
-        param.tenant_id_ = MTL_ID();
+        
         param.table_id_ = table_id;
         param.parallel_ = parallel;
         param.session_count_ = parallel;

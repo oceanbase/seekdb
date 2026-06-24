@@ -28,6 +28,8 @@
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "storage/multi_data_source/runtime_utility/list_helper.h"
 #include "storage/multi_data_source/runtime_utility/mds_tlocal_info.h"
+#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+
 namespace oceanbase
 {
 namespace share
@@ -215,8 +217,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "CONSTRUCTED";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -228,8 +229,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "DESTRUCTED";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -251,8 +251,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
@@ -272,8 +271,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
 
@@ -294,8 +292,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
@@ -315,8 +312,7 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = "RECYCLE";
-    observer::MdsEventKey key(MTL_ID(),
-                              ls_id_,
+    observer::MdsEventKey key(ls_id_,
                               tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }

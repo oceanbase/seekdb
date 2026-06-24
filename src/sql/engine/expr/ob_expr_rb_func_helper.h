@@ -40,7 +40,6 @@ public:
   static int get_input_roaringbitmap(ObEvalCtx &ctx, ObIAllocator &allocator, ObExpr *rb_arg, ObRoaringBitmap *&rb, bool &is_rb_null);
   static int get_input_roaringbitmap(ObEvalCtx &ctx, ObIAllocator &allocator, ObExpr *rb_arg, ObIVector *&rb_vec, ObRoaringBitmap *&rb, bool &is_rb_null, int64_t idx);
   static int pack_rb_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const ObString &str);
-  static uint64_t get_tenant_id(ObSQLSessionInfo *session);
 
 private:
   // const static uint32_t RESERVE_MIN_BUFF_SIZE = 32;

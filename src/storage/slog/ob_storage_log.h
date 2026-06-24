@@ -50,52 +50,40 @@ private:
 struct ObCreateTenantCommitLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObCreateTenantCommitLog(uint64_t &tenant_id);
+  explicit ObCreateTenantCommitLog();
   virtual ~ObCreateTenantCommitLog() {}
   virtual bool is_valid() const override;
-  TO_STRING_KV(K_(tenant_id));
+  TO_STRING_KV("type", "ObCreateTenantCommitLog");
   OB_UNIS_VERSION_V(1);
-
-private:
-  uint64_t &tenant_id_;
 };
 
 struct ObCreateTenantAbortLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObCreateTenantAbortLog(uint64_t &tenant_id);
+  explicit ObCreateTenantAbortLog();
   virtual ~ObCreateTenantAbortLog() {}
   virtual bool is_valid() const override;
-  TO_STRING_KV(K_(tenant_id));
+  TO_STRING_KV("type", "ObCreateTenantAbortLog");
   OB_UNIS_VERSION_V(1);
-
-private:
-  uint64_t &tenant_id_;
 };
 
 struct ObDeleteTenantPrepareLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObDeleteTenantPrepareLog(uint64_t &tenant_id);
+  explicit ObDeleteTenantPrepareLog();
   virtual ~ObDeleteTenantPrepareLog() {}
   virtual bool is_valid() const override;
-  TO_STRING_KV(K_(tenant_id));
+  TO_STRING_KV("type", "ObDeleteTenantPrepareLog");
   OB_UNIS_VERSION_V(1);
-
-private:
-  uint64_t &tenant_id_;
 };
 struct ObDeleteTenantCommitLog : public ObIBaseStorageLogEntry
 {
 public:
-  explicit ObDeleteTenantCommitLog(uint64_t &tenant_id);
+  explicit ObDeleteTenantCommitLog();
   virtual ~ObDeleteTenantCommitLog() {}
   virtual bool is_valid() const override;
-  TO_STRING_KV(K_(tenant_id));
+  TO_STRING_KV("type", "ObDeleteTenantCommitLog");
   OB_UNIS_VERSION_V(1);
-
-private:
-  uint64_t &tenant_id_;
 };
 
 struct ObUpdateTenantUnitLog : public ObIBaseStorageLogEntry

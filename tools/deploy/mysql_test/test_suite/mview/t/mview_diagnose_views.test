@@ -32,7 +32,7 @@ select data_sync_scn from oceanbase.__all_mview;
 select data_sync_scn, data_sync_delay from oceanbase.DBA_MVIEWS;
 --enable_result_log
 
-# 2. check __all_virtual_mview_running_job, DBA_MVIEW_RUNNING_JOBS, CDB_MVIEW_RUNNING_JOBS
+# 2. check __all_virtual_mview_running_job, DBA_MVIEW_RUNNING_JOBS, DBA_MVIEW_RUNNING_JOBS
 connection sys;
 set ob_global_debug_sync = 'BEFORE_MV_FINISH_RUNNING_JOB wait_for signalxxx execute 10000';
 sleep 10;
@@ -45,17 +45,17 @@ select TABLE_ID, JOB_TYPE from oceanbase.__all_virtual_mview_running_job;
 select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
 connection sys;
 select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
-select TABLE_NAME, JOB_TYPE from oceanbase.CDB_MVIEW_RUNNING_JOBS;
+select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
 set ob_global_debug_sync = 'now signal signalxxx';
 set ob_global_debug_sync = 'reset';
 sleep 10;
 
-# 3. check DBA_MVIEW_LOGS, CDB_MVIEW_LOGS
+# 3. check DBA_MVIEW_LOGS, DBA_MVIEW_LOGS
 connection default;
 --disable_result_log
 select PURGE_DOP, LAST_PURGE_TIME from oceanbase.DBA_MVIEW_LOGS;
 connection sys;
-select PURGE_DOP, LAST_PURGE_TIME from oceanbase.CDB_MVIEW_LOGS;
+select PURGE_DOP, LAST_PURGE_TIME from oceanbase.DBA_MVIEW_LOGS;
 --enable_result_log
 
 # 4. check DBA_MVIEW_DEPS

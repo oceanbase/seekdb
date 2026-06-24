@@ -826,7 +826,7 @@ int ObIndexBlockLoader::prefetch()
       read_info.size_ = common::OB_DEFAULT_MACRO_BLOCK_SIZE;
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.buf_ = io_buf_[io_index];
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
       if (OB_FAIL(blocksstable::ObObjectManager::async_read_object(read_info, macro_io_handle))) {
         STORAGE_LOG(WARN, "Fail to read macro block", K(ret), K(read_info));
       }

@@ -121,11 +121,9 @@ int ObPxRepartTransmitOp::do_transmit()
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                ctx_.get_my_session()->get_effective_tenant_id(),
                 schema_guard))) {
       LOG_WARN("faile to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema(
-               ctx_.get_my_session()->get_effective_tenant_id(),
                MY_SPEC.repartition_ref_table_id_, table_schema))) {
       LOG_WARN("faile to get table schema", K(ret), K(MY_SPEC.repartition_ref_table_id_));
     } else if (OB_ISNULL(table_schema)) {
@@ -233,7 +231,7 @@ int ObPxRepartTransmitOp::do_repart_transmit(ObRepartSliceIdxCalc &repart_slice_
 {
   int ret = OB_SUCCESS;
   // init the ObRepartSliceIdxCalc cache map
-  if (OB_FAIL(repart_slice_calc.init(ctx_.get_my_session()->get_effective_tenant_id()))) {
+  if (OB_FAIL(repart_slice_calc.init())) {
     LOG_WARN("failed to init repart slice calc", K(ret));
   } else if (OB_FAIL(send_rows<CALC_TYPE>(repart_slice_calc))) {
     LOG_WARN("failed to send rows", K(ret));

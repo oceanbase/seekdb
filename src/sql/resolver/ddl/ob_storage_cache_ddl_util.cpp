@@ -46,7 +46,7 @@ int ObDDLResolver::get_storage_cache_tbl_schema(const ObTableSchema *&tbl_schema
     if (OB_ISNULL(alter_table_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("alter table stmt is null", KR(ret));
-    } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                         alter_table_stmt->get_org_database_name(),
                                                         alter_table_stmt->get_org_table_name(),
                                                         false,
@@ -114,7 +114,7 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
   }
   if (OB_SUCC(ret) && use_default_storage_cache_policy) {
     ObString default_storage_cache_policy;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (OB_UNLIKELY(!tenant_config.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "tenant config is invalid", K(ret));
@@ -164,9 +164,9 @@ int ObDDLResolver::resolve_storage_cache_attribute(const ParseNode *node, ObReso
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "storage cache policy can only be specified once");
   } else if (OB_FAIL(get_storage_cache_tbl_schema(tbl_schema))) {
     LOG_WARN("failed to get storage cache table schema", K(ret));
-  } else if (!tbl_schema->is_user_table() || tbl_schema->is_external_table()) {
+  } else if (!tbl_schema->is_user_table()) {
     ret = OB_NOT_SUPPORTED;
-    SQL_RESV_LOG(WARN, "only allow to alter storage cache policy for user table or external table", K(ret));
+    SQL_RESV_LOG(WARN, "only allow to alter storage cache policy for user table", K(ret));
   }
   if (OB_SUCC(ret)) {
     ObStorageCachePolicy cache_policy;
@@ -433,7 +433,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
                                                                       alter_index_arg->index_name_,
                                                                       index_table_name))) {
                 LOG_WARN("build_index_table_name failed", K(ret), K(ori_table_schema->get_table_id()), K(alter_index_arg->index_name_));
-              } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+              } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                                   alter_table_stmt->get_org_database_name(),
                                                                   index_table_name,
                                                                   true /* index table */,
@@ -450,7 +450,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
           // Check alter table storage_cache_policy
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(tbl_schema)) {
-            if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+            if (OB_FAIL(schema_checker_->get_table_schema(
                                                           alter_table_stmt->get_org_database_name(),
                                                           alter_table_stmt->get_org_table_name(),
                                                           false,
@@ -794,7 +794,7 @@ int ObAlterTableResolver::resolve_alter_index_storage_cache_policy(const ParseNo
         LOG_WARN("fail to resolve storage cache policy attribute", K(ret));
       } else {
         alter_index_arg = new (tmp_ptr) ObAlterIndexArg();
-        alter_index_arg->tenant_id_ = session_info_->get_effective_tenant_id();
+        
         alter_index_arg->index_name_ = alter_index_name;
         alter_index_arg->storage_cache_policy_ = storage_cache_policy_;
       }

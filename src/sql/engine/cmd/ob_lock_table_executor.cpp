@@ -52,7 +52,7 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   // only execute normally after enable lock_priority configuration, otherwise
   // it will directly throw OB_SUCCESS, which is an empty implementation
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     // if tenant config is invalid, this config will be set as false

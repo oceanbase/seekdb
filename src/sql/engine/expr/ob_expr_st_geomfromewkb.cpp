@@ -68,8 +68,8 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_GEOMFROMEWKB);
+  
+  MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_GEOMFROMEWKB);
   ObDatum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
@@ -103,7 +103,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
       ret = OB_ERR_GIS_DATA_WRONG_ENDIANESS;
       LOG_USER_ERROR(OB_ERR_GIS_DATA_WRONG_ENDIANESS);
       LOG_WARN("invalid byte order", K(ret), K(header.bo_));
-    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(session->get_effective_tenant_id(), srs_guard, header.srid_, srs))) {
+    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(srs_guard, header.srid_, srs))) {
       LOG_WARN("fail to get srs item", K(ret), K(header.srid_));
     } else if (OB_FAIL(create_geo_by_ewkb(tmp_allocator, ewkb, header, srs, geo))) {
       LOG_WARN("fail to create geometry object with raw ewkb", K(ret));

@@ -31,7 +31,6 @@ namespace observer
 
 ObInfoSchemaColumnsTable::ObInfoSchemaColumnsTable() :
     ObVirtualTableScannerIterator(),
-    tenant_id_(OB_INVALID_ID),
     last_schema_idx_(-1),
     last_table_idx_(-1),
     last_column_idx_(-1),
@@ -57,7 +56,6 @@ ObInfoSchemaColumnsTable::~ObInfoSchemaColumnsTable()
 void ObInfoSchemaColumnsTable::reset()
 {
   ObVirtualTableScannerIterator::reset();
-  tenant_id_ = OB_INVALID_ID;
   if (OB_LIKELY(NULL != mem_context_)) {
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
@@ -72,9 +70,6 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
   if (OB_ISNULL(allocator_) || OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or schema_guard_ is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant id is invalid_id", K(ret), K(tenant_id_));
   } else if (OB_FAIL(init_mem_context())) {
     SERVER_LOG(WARN, "failed to init mem context", K(ret));
   } else {
@@ -86,9 +81,8 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "fail to check database and table filter", K(ret));
       // When db_name is specified, there is no need to directly iterate over the tenant's entire database_schema_array
       } else if (!is_filter_db_ && OB_FAIL(schema_guard_->get_database_schemas_in_tenant(
-          tenant_id_, database_schema_array_))) {
-        SERVER_LOG(WARN, "fail to get database schemas in tenant", K(ret),
-                   K(tenant_id_));
+          database_schema_array_))) {
+        SERVER_LOG(WARN, "fail to get database schemas in tenant", K(ret));
       } else if (OB_UNLIKELY(NULL == (tmp_ptr = static_cast<char *>(allocator_->alloc(
                              OB_MAX_SYS_PARAM_NAME_LENGTH))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -101,7 +95,7 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
       } else {
         column_type_str_ = static_cast<char *>(tmp_ptr);
         column_type_str_len_ = OB_MAX_SYS_PARAM_NAME_LENGTH;
-        view_resolve_alloc_.set_tenant_id(tenant_id_);
+        
       }
       //
       // Traverse in two parts:
@@ -186,9 +180,9 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
     const uint64_t database_id = database_schema->get_database_id();
     //get all tables
     if (OB_FAIL(schema_guard_->get_table_schemas_in_database(
-        tenant_id_, database_id, table_schema_array))) {
+        database_id, table_schema_array))) {
       SERVER_LOG(WARN, "fail to get table schemas in database", K(ret),
-          K(tenant_id_), K(database_id));
+          K(database_id));
     } else {
       table_schema_array_size = table_schema_array.count();
     }
@@ -220,7 +214,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
          || table_schema->is_in_recyclebin()
          || is_ora_sys_view_table(table_schema->get_table_id())) {
         continue;
-      } else if (is_filter_table_schema && OB_FAIL(schema_guard_->get_database_schema(tenant_id_,
+      } else if (is_filter_table_schema && OB_FAIL(schema_guard_->get_database_schema(
           table_schema->get_database_id(), database_schema))) {
             SERVER_LOG(WARN, "fail to get database schema", K(ret));
       } else if (OB_ISNULL(database_schema)) {
@@ -235,8 +229,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
                                   && table_schema->get_schema_version() <= GCTX.start_time_
                                   && (nullptr == GCTX.sql_engine_
                                       || OB_HASH_NOT_EXIST == GCTX.sql_engine_->get_dep_info_queue()
-                                      .read_consistent_sys_view_from_set(table_schema->get_tenant_id(),
-                                                                  table_schema->get_table_id()))));
+                                      .read_consistent_sys_view_from_set(table_schema->get_table_id()))));
       if (OB_FAIL(ret)) {
       } else if (is_normal_view && view_is_invalid) {
         mem_context_->reset_remain_one_page();
@@ -401,9 +394,9 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
                                                    : start_key_obj_ptr[0].get_varchar().trim_end_space_only();
       const ObDatabaseSchema *filter_database_schema = NULL;
       if (database_name.empty()) {
-      } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_,
+      } else if (OB_FAIL(schema_guard_->get_database_schema(
             database_name, filter_database_schema))) {
-        SERVER_LOG(WARN, "fail to get database schema", K(ret), K(tenant_id_), K(database_name));
+        SERVER_LOG(WARN, "fail to get database schema", K(ret), K(database_name));
       } else if (NULL == filter_database_schema) {
       } else if (start_key_obj_ptr[1].is_varchar_or_char()
            && end_key_obj_ptr[1].is_varchar_or_char()
@@ -414,12 +407,12 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
                                                 ? start_key_obj_ptr[1].get_varchar()
                                                   : start_key_obj_ptr[1].get_varchar().trim_end_space_only();
         if (table_name.empty()) {
-        } else if (OB_FAIL(schema_guard_->get_table_schema(tenant_id_,
+        } else if (OB_FAIL(schema_guard_->get_table_schema(
             filter_database_schema->get_database_id(),
             table_name,
             false/*is_index*/,
             filter_table_schema))) {
-          SERVER_LOG(WARN, "fail to get table", K(ret), K(tenant_id_), K(database_name), K(table_name));
+          SERVER_LOG(WARN, "fail to get table", K(ret), K(database_name), K(table_name));
         } else if (NULL == filter_table_schema) {
         } else if (OB_FAIL(filter_table_schema_array_.push_back(filter_table_schema))) {
           SERVER_LOG(WARN, "push_back failed", K(filter_table_schema->get_table_name()));
@@ -888,7 +881,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               SERVER_LOG(WARN, "fail to get session priv info", K(ret));
             } else if (OB_UNLIKELY(!session_priv.is_valid())) {
               ret = OB_INVALID_ARGUMENT;
-              SERVER_LOG(WARN, "session priv is invalid", "tenant_id", session_priv.tenant_id_,
+              SERVER_LOG(WARN, "session priv is invalid", 
                          "user_id", session_priv.user_id_, K(ret));
             } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1323,7 +1316,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               SERVER_LOG(WARN, "fail to get session priv info", K(ret));
             } else if (OB_UNLIKELY(!session_priv.is_valid())) {
               ret = OB_INVALID_ARGUMENT;
-              SERVER_LOG(WARN, "session priv is invalid", "tenant_id", session_priv.tenant_id_,
+              SERVER_LOG(WARN, "session priv is invalid", 
                          "user_id", session_priv.user_id_, K(ret));
             } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1386,7 +1379,7 @@ inline int ObInfoSchemaColumnsTable::init_mem_context()
   if (OB_LIKELY(NULL == mem_context_)) {
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_mem_attr(tenant_id_, "InfoColCtx", ObCtxIds::DEFAULT_CTX_ID);
+      .set_mem_attr("InfoColCtx", ObCtxIds::DEFAULT_CTX_ID);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {

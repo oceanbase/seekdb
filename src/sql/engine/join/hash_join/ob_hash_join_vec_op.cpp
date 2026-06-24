@@ -136,7 +136,6 @@ ObHashJoinVecOp::ObHashJoinVecOp(ObExecContext &ctx_, const ObOpSpec &spec, ObOp
   hj_processor_(NONE),
   force_hash_join_spill_(false),
   hash_join_processor_(7),
-  tenant_id_(-1),
   profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
   sql_mem_processor_(profile_, op_monitor_info_),
   state_(JS_PROCESS_LEFT),
@@ -199,15 +198,15 @@ int ObHashJoinVecOp::inner_open()
   } else if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get my session", K(ret));
-  } else if (OB_FAIL(init_mem_context(session->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(init_mem_context())) {
     LOG_WARN("fail to init base join ctx", K(ret));
   } else if (OB_FAIL(init_join_table_ctx())) {
     LOG_WARN("fail to init join table ctx", K(ret));
   } else if (OB_FAIL(join_table_.init(jt_ctx_, *alloc_))) {
     LOG_WARN("fail to init hash table", K(ret));
   } else {
-    tenant_id_ = session->get_effective_tenant_id();
-    ObTenantConfigGuard tenant_config(TENANT_CONF(session->get_effective_tenant_id()));
+    
+    ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       force_hash_join_spill_ = tenant_config->_force_hash_join_spill;
       hash_join_processor_ = tenant_config->_enable_hash_join_processor;
@@ -232,7 +231,7 @@ int ObHashJoinVecOp::inner_open()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc mem");
     } else {
-      part_mgr_ = new (buf) ObHJPartitionMgr(*alloc_, tenant_id_);
+      part_mgr_ = new (buf) ObHJPartitionMgr(*alloc_);
     }
   }
   if (OB_SUCC(ret)) {
@@ -962,17 +961,17 @@ int ObHashJoinVecOp::get_max_memory_size(int64_t input_size)
 {
   int ret = OB_SUCCESS;
   int64_t hash_area_size = 0;
-  const int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   // default data memory size: 80%
   int64_t extra_memory_size = get_extra_memory_size();
   int64_t memory_size = (extra_memory_size + input_size) < 0 ? input_size : (extra_memory_size + input_size);
   if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
-      ObSqlWorkAreaType::HASH_WORK_AREA, tenant_id, &ctx_, hash_area_size))) {
-    LOG_WARN("failed to get workarea size", K(ret), K(tenant_id));
+      ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, hash_area_size))) {
+    LOG_WARN("failed to get workarea size", K(ret));
   } else if (FALSE_IT(remain_data_memory_size_ = hash_area_size * 80 / 100)) {
     // default data memory size: 80%
   } else if (OB_FAIL(sql_mem_processor_.init(
-      alloc_, tenant_id, memory_size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
+      alloc_, memory_size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
     LOG_WARN("failed to init sql mem mgr", K(ret));
   } else if (sql_mem_processor_.is_auto_mgr()) {
     remain_data_memory_size_ = calc_max_data_size(extra_memory_size);
@@ -1226,8 +1225,7 @@ int ObHashJoinVecOp::get_processor_type()
       // force remain more memory
       int64_t hash_area_size = 0;
       if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
-          ObSqlWorkAreaType::HASH_WORK_AREA,
-          ctx_.get_my_session()->get_effective_tenant_id(), &ctx_, hash_area_size))) {
+          ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, hash_area_size))) {
         LOG_WARN("failed to get workarea size", K(ret));
       }
       remain_data_memory_size_ = hash_area_size * 10;
@@ -2985,13 +2983,13 @@ int ObHashJoinVecOp::check_join_key_for_naaj_batch_output(const int64_t batch_si
   return ret;
 }
 
-int ObHashJoinVecOp::init_mem_context(uint64_t tenant_id)
+int ObHashJoinVecOp::init_mem_context()
 {
   int ret = common::OB_SUCCESS;
   if (OB_LIKELY(NULL == mem_context_)) {
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_mem_attr(tenant_id, common::ObModIds::OB_ARENA_HASH_JOIN,
+      .set_mem_attr(common::ObModIds::OB_ARENA_HASH_JOIN,
                      common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       SQL_ENG_LOG(WARN, "create entity failed", K(ret));

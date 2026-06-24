@@ -433,7 +433,7 @@ public:
     MAX 
   };
   ObAggrHashTableWapper() : hash_table_ptr_(), real_ptr_(nullptr), outline_ptr_(nullptr), inline_ptr_(nullptr), type_(Type::INVALID), inited_(false) {}
-  int prepare_hash_table(const int64_t item_size, const uint64_t tenant_id, common::ObIAllocator &alloc);
+  int prepare_hash_table(const int64_t item_size, common::ObIAllocator &alloc);
   void destroy();
   int64_t size() const
   {

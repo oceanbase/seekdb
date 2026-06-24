@@ -18,13 +18,13 @@
 
 
 #include "ob_table_scan_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "sql/executor/ob_task_spliter.h"
 #include "lib/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
 #include "observer/omt/ob_tenant_srs.h"
-#include "share/external_table/ob_external_table_utils.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
 #include "share/index_usage/ob_index_usage_info_mgr.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
@@ -485,8 +485,7 @@ OB_INLINE int ObTableScanOp::reuse_table_rescan_allocator()
   if (OB_ISNULL(table_rescan_allocator_)) {
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
     lib::ContextParam param;
-    ObMemAttr attr(my_session->get_effective_tenant_id(),
-                       "TableRescanCtx", ObCtxIds::DEFAULT_CTX_ID);
+    ObMemAttr attr("TableRescanCtx", ObCtxIds::DEFAULT_CTX_ID);
     param.set_mem_attr(attr)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
@@ -535,7 +534,7 @@ ObTableScanSpec::ObTableScanSpec(ObIAllocator &alloc, const ObPhyOperatorType ty
     tsc_ctdef_(alloc),
     pdml_partition_id_(NULL),
     flags_(0),
-    tenant_id_col_idx_(0),
+    id_col_idx_(0),
     partition_id_calc_type_(0),
     parser_name_(),
     parser_properties_(),
@@ -564,7 +563,7 @@ OB_SERIALIZE_MEMBER((ObTableScanSpec, ObOpSpec),
                     tsc_ctdef_,
                     pdml_partition_id_,
                     ddl_output_cids_,
-                    tenant_id_col_idx_,
+                    id_col_idx_,
                     partition_id_calc_type_,
                     parser_name_,
                     parser_properties_,
@@ -593,7 +592,7 @@ DEF_TO_STRING(ObTableScanSpec)
        K(tsc_ctdef_),
        K(report_col_checksum_),
        K_(ddl_output_cids),
-       K_(tenant_id_col_idx),
+       K_(id_col_idx),
        K_(parser_name),
        K_(parser_properties),
        K_(lob_inrow_threshold));
@@ -1455,34 +1454,6 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
               key_ranges,
               ObBasicSessionInfo::create_dtc_params(ctx_.get_my_session())))) {
     LOG_WARN("failed to extract pre query ranges", K(ret));
-  } else if (MY_CTDEF.scan_ctdef_.is_external_table_) {
-    uint64_t table_loc_id = MY_SPEC.get_table_loc_id();
-    ObDASTableLoc *tab_loc = DAS_CTX(ctx_).get_table_loc_by_id(table_loc_id, MY_CTDEF.scan_ctdef_.ref_table_id_);
-    const ObString &table_format_or_properties =  MY_CTDEF.scan_ctdef_.external_file_format_str_.str_;
-    ObArray<int64_t> partition_ids;
-    if (OB_ISNULL(tab_loc)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table lock is null", K(ret));
-    } else {
-      for (DASTabletLocListIter iter = tab_loc->tablet_locs_begin(); OB_SUCC(ret)
-             && iter != tab_loc->tablet_locs_end(); ++iter) {
-        ret = partition_ids.push_back((*iter)->partition_id_);
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObExternalTableUtils::prepare_single_scan_range(
-                                                ctx_.get_my_session()->get_effective_tenant_id(),
-                                                MY_CTDEF.scan_ctdef_,
-                                                &tsc_rtdef_.scan_rtdef_,
-                                                ctx_,
-                                                partition_ids,
-                                                key_ranges,
-                                                range_allocator,
-                                                key_ranges,
-                                                tab_loc->loc_meta_->is_external_files_on_disk_,
-                                                ctx_))) {
-      LOG_WARN("failed to prepare single scan range for external table", K(ret));
-    }
   } else if (OB_FAIL(MY_CTDEF.get_query_range_provider().get_ss_tablet_ranges(range_allocator,
                                 ctx_,
                                 ss_key_ranges,
@@ -1791,11 +1762,11 @@ int ObTableScanOp::inner_close()
   if (OB_SUCC(ret) && MY_SPEC.should_scan_index()) {
     ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
     if (OB_NOT_NULL(session)) {
-      uint64_t tenant_id = session->get_effective_tenant_id();
+      
       uint64_t index_id = MY_CTDEF.scan_ctdef_.ref_table_id_;
-      oceanbase::share::ObIndexUsageInfoMgr* mgr = MTL(oceanbase::share::ObIndexUsageInfoMgr*);
+      oceanbase::share::ObIndexUsageInfoMgr* mgr = share::g_mp->index_usage_info_mgr();
       if (OB_NOT_NULL(mgr)) {
-        mgr->update(tenant_id, index_id);
+        mgr->update(index_id);
       }
     }
   }
@@ -3273,7 +3244,7 @@ int ObTableScanOp::report_ddl_column_checksum()
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.ddl_output_cids_.count(); ++i) {
       ObDDLChecksumItem item;
       item.execution_id_ = MY_SPEC.plan_->get_ddl_execution_id();
-      item.tenant_id_ = MTL_ID();
+      
       item.table_id_ = table_id;
       item.tablet_id_ = tablet_id.id();
       item.ddl_task_id_ = MY_SPEC.plan_->get_ddl_task_id();
@@ -3299,7 +3270,7 @@ int ObTableScanOp::report_ddl_column_checksum()
       uint64_t data_format_version = 0;
       int64_t snapshot_version = 0;
       share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
-      if (OB_FAIL(ObDDLUtil::get_data_information(MTL_ID(), MY_SPEC.plan_->get_ddl_task_id(), data_format_version, snapshot_version, unused_task_status))) {
+      if (OB_FAIL(ObDDLUtil::get_data_information(MY_SPEC.plan_->get_ddl_task_id(), data_format_version, snapshot_version, unused_task_status))) {
         LOG_WARN("get ddl cluster version failed", K(ret));
       } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, checksum_items, *GCTX.sql_proxy_))) {
         LOG_WARN("fail to update checksum", K(ret));
@@ -3404,9 +3375,9 @@ int ObTableScanOp::init_multivalue_index_rows()
     }
 
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
+    
 
-    new (&domain_index_.alloc_) ObArenaAllocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+    new (&domain_index_.alloc_) ObArenaAllocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   }
 
   return ret;
@@ -3692,9 +3663,9 @@ int ObTableScanOp::init_spiv_index_rows()
     domain_index_.column_count_ = column_count;
 
     ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
+    
 
-    new (&domain_index_.alloc_) ObArenaAllocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+    new (&domain_index_.alloc_) ObArenaAllocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   }
 
   return ret;
@@ -3916,11 +3887,11 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
           const ObSrsItem *srs_item = NULL;
           const ObSrsBoundsItem *srs_bound = NULL;
           ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-          uint64_t tenant_id = my_session->get_effective_tenant_id();
+          
           ObS2Cellids cellids;
           ObString mbr_val(0, static_cast<char *>(domain_index_.mbr_buffer_));
 
-          ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+          ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *in_datum,
                       expr->datum_meta_, expr->obj_meta_.has_lob_header(), geo_wkb))) {
             LOG_WARN("failed to get real geo data.", K(ret));
@@ -3928,10 +3899,10 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
             LOG_WARN("failed to get srid", K(ret), K(geo_wkb));
           } else if (srid != 0 &&
               OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-            LOG_WARN("failed to get srs guard", K(ret), K(tenant_id), K(srid));
+            LOG_WARN("failed to get srs guard", K(ret), K(srid));
           } else if (srid != 0 &&
               OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-            LOG_WARN("failed to get srs item", K(ret), K(tenant_id), K(srid));
+            LOG_WARN("failed to get srs item", K(ret), K(srid));
           } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
                       OB_FAIL(OTSRS_MGR->get_srs_bounds(srid, srs_item, srs_bound))) {
             LOG_WARN("failed to get srs bound", K(ret), K(srid));
@@ -4095,7 +4066,7 @@ int ObTableScanOp::fetch_next_fts_index_rows()
       LOG_WARN("unexpeted error, ft or doc id datum is nullptr", K(ret), KP(ft_datum), KP(doc_id_datum));
     } else {
       ObString ft = ft_datum->get_string();
-      ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
                                                             *ft_datum,
                                                             ft_expr->datum_meta_,

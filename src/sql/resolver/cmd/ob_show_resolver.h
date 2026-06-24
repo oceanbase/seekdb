@@ -61,7 +61,7 @@ private:
   int get_database_info(const uint64_t session_catalog_id,
                         const ParseNode *database_node,
                         const common::ObString &session_database_name,
-                        uint64_t real_tenant_id,
+                        uint64_t real_id,
                         ObShowResolverContext &show_resv_ctx,
                         uint64_t &show_db_id);
 
@@ -69,7 +69,7 @@ private:
                               const ParseNode *from_database_clause_node,
                               bool is_database_unselected,
                               ObItemType node_type,
-                              uint64_t real_tenant_id,
+                              uint64_t real_id,
                               uint64_t &show_catalog_id,
                               common::ObString &show_database_name,
                               uint64_t &show_database_id,
@@ -77,14 +77,14 @@ private:
                               uint64_t &show_table_id,
                               bool &is_view);
   int resolve_show_from_database(const ParseNode &from_db_node,
-                                 const uint64_t real_tenant_id,
+                                 const uint64_t real_id,
                                  const uint64_t catalog_id,
                                  uint64_t &show_database_id,
                                  common::ObString &show_database_name);
   int resolve_show_from_routine(const ParseNode *from_routine_node,
                                 bool is_database_unselected,
                                 ObItemType node_type,
-                                uint64_t real_tenant_id,
+                                uint64_t real_id,
                                 ObString &show_database_name,
                                 uint64_t &show_database_id,
                                 ObString &show_routine_name,
@@ -92,7 +92,7 @@ private:
                                 int64_t &proc_type);
   int resolve_show_from_trigger(const ParseNode *from_tg_node,
                                 bool is_database_unselected,
-                                uint64_t real_tenant_id,
+                                uint64_t real_id,
                                 ObString &show_database_name,
                                 uint64_t &show_database_id,
                                 ObString &show_tg_name,
@@ -189,9 +189,6 @@ struct ObShowResolver::ObShowSqlSet
   DECLARE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_SEED);
   DECLARE_SHOW_CLAUSE_SET(SHOW_SESSION_STATUS);
   DECLARE_SHOW_CLAUSE_SET(SHOW_GLOBAL_STATUS);
-  DECLARE_SHOW_CLAUSE_SET(SHOW_TENANT);
-  DECLARE_SHOW_CLAUSE_SET(SHOW_TENANT_STATUS);
-  DECLARE_SHOW_CLAUSE_SET(SHOW_CREATE_TENANT);
   DECLARE_SHOW_CLAUSE_SET(SHOW_DATABASES);
   DECLARE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES);
   DECLARE_SHOW_CLAUSE_SET(SHOW_DATABASES_LIKE);
@@ -222,7 +219,6 @@ struct ObShowResolver::ObShowSqlSet
   DECLARE_SHOW_CLAUSE_SET(SHOW_CREATE_CATALOG);
   DECLARE_SHOW_CLAUSE_SET(SHOW_LOCATIONS);
   DECLARE_SHOW_CLAUSE_SET(SHOW_CREATE_LOCATION);
-  DECLARE_SHOW_CLAUSE_SET(LOCATION_UTILS_LIST);
 };// ObShowSqlSet
 
 class ObShowResolver::ObSqlStrGenerator
@@ -248,8 +244,7 @@ class ObShowResolver::ObShowResolverContext
 {
 public:
   ObShowResolverContext()
-    : cur_tenant_id_(common::OB_INVALID_ID),
-      actual_tenant_id_(common::OB_INVALID_ID),
+    : 
       database_name_(),
       ref_table_id_(common::OB_INVALID_ID),
       show_database_name_(),
@@ -268,8 +263,8 @@ public:
   {
   }
   ~ObShowResolverContext() {}
-  uint64_t cur_tenant_id_;
-  uint64_t actual_tenant_id_;
+  
+  
   common::ObString database_name_;
   uint64_t ref_table_id_;
   common::ObString show_database_name_;
@@ -285,8 +280,8 @@ public:
   ParseNode *condition_node_;
   common::ObString column_name_; // used for show tables
   common::ObString like_column_; // used for the show stmt who has like clause
-  TO_STRING_KV(K_(cur_tenant_id),
-               K_(actual_tenant_id),
+  TO_STRING_KV(
+               
                K_(database_name),
                K_(ref_table_id),
                K_(show_database_name),

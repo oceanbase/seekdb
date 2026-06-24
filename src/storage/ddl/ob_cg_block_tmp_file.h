@@ -67,7 +67,7 @@ public:
     macro_block_buffer_(nullptr),
     cg_block_offset_(0),
     micro_block_idx_(0),
-    allocator_(ObMemAttr(MTL_ID(), "cg_block")) { }
+    allocator_(ObMemAttr("cg_block")) { }
   ~ObCGBlock() = default;
   // for write tmp file to initialize
   int init(const char *macro_block_buffer,

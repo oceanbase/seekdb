@@ -44,15 +44,13 @@ public:
   ~ObTenantTabletToLSMap() {}
 
   int init(const int64_t bucket_num = 4096,
-      const lib::ObLabel label = lib::ObLabel("TenantTabletToLSMap"),
-      const uint64_t tenant_id = OB_SERVER_TENANT_ID)
+      const lib::ObLabel label = lib::ObLabel("TenantTabletToLSMap"))
   {
-    return map_.create(bucket_num, label, ObModIds::OB_HASH_NODE, tenant_id);
+    return map_.create(bucket_num, label, ObModIds::OB_HASH_NODE);
   }
   void destroy() { map_.destroy(); }
 
-  int build(const uint64_t tenant_id,
-      common::ObMySQLProxy &sql_proxy);
+  int build(common::ObMySQLProxy &sql_proxy);
 
   int clear() { return map_.clear(); }
 

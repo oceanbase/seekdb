@@ -216,8 +216,7 @@ int ObConflictChecker::create_rowkey_check_hashset(int64_t replace_row_cnt)
           MAX_ROWKEY_CHECKER_DISTINCT_BUCKET_NUM : real_row_buckets;
       if (OB_FAIL(conflict_range_dist_ctx->create(max_bucket_num,
                                           "DmlConflictDisBu",
-                                          "DmlConflictDisNo",
-                                          MTL_ID()))) {
+                                          "DmlConflictDisNo"))) {
         LOG_WARN("create rowkey distinct context failed", K(ret), "rows", replace_row_cnt, K(max_bucket_num));
       } else {
         conflict_range_dist_ctx_ = conflict_range_dist_ctx;
@@ -253,7 +252,7 @@ int ObConflictChecker::init_conflict_checker(const ObExprFrameInfo *expr_frame_i
   OZ(conflict_map_array_.allocate_array(allocator_, constraint_cnt), constraint_cnt);
   if (OB_SUCC(ret)) {
     ObMemAttr mem_attr;
-    mem_attr.tenant_id_ = session->get_effective_tenant_id();
+    
     mem_attr.label_ = "SqlConflictCkr";
     das_ref_.set_expr_frame_info(expr_frame_info);
     // Here attention is needed
@@ -271,7 +270,7 @@ int ObConflictChecker::get_tmp_string_buffer(ObIAllocator *&allocator)
   allocator = nullptr;
   if (OB_ISNULL(tmp_mem_ctx_)) {
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), "ConflictRowkey", ObCtxIds::DEFAULT_CTX_ID)
+    param.set_mem_attr("ConflictRowkey", ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(tmp_mem_ctx_, param))) {
       LOG_WARN("create conflict rowkey checker context entity failed", K(ret));

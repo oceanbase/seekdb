@@ -1675,7 +1675,77 @@ int ObIJsonBase::find_string_method(ObIAllocator* allocator, ObSeekParentInfo &p
                                   bool is_lax, ObJsonSortedResult &dup, ObJsonSeekResult &res) const
 {
   INIT_SUCC(ret);
-  ret = OB_NOT_IMPLEMENT; // not support oracle mode.
+  ObIJsonBase *jb_ptr = NULL;
+  bool str_only = (path_node->get_node_type() == JPN_STR_ONLY);
+  bool return_null = false;
+  bool trans_fail = false;
+
+  if (is_json_string(json_type()) || (!str_only && json_type() == ObJsonNodeType::J_NULL)) {
+    if ((OB_FAIL(find_child(allocator, parent_info, cur_node + 1, 
+                            last_node, is_auto_wrap,
+                            only_need_one, is_lax, dup, res)))) {
+      LOG_WARN("fail to seek recursively", K(ret));
+    }
+  } else if (!is_json_scalar(json_type())) {
+    if (parent_info.is_subpath_) {
+      return_null = true;
+      trans_fail = false;
+    } else {
+      trans_fail = true;
+      return_null = false;
+    }
+  } else if (!str_only) {
+    ObJsonBuffer j_buf(allocator);
+    if (OB_FAIL(print(j_buf, true, 0, false, 0))) {
+      trans_fail = true;
+    } else {
+      ObJsonString* tmp_ans = static_cast<ObJsonString*> (allocator->alloc(sizeof(ObJsonString)));
+      if (OB_ISNULL(tmp_ans)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate row buffer failed at ObJsonDecimal", K(ret));
+      } else {
+        tmp_ans = new (tmp_ans) ObJsonString(j_buf.ptr(), j_buf.length());
+        jb_ptr = tmp_ans;
+        if ((OB_FAIL(jb_ptr->find_child(allocator, parent_info, cur_node + 1, 
+                                        last_node, is_auto_wrap,
+                                        only_need_one, is_lax, dup, res)))) {
+          int old_ret = ret;
+          allocator->free(tmp_ans);
+          ret = old_ret;
+          LOG_WARN("fail to seek recursively", K(ret));
+        }
+      }
+    }
+  } else {
+    return_null = true;
+  }
+
+  if (trans_fail || return_null) {
+    if (parent_info.is_subpath_ || return_null) {
+      ObJsonNull* tmp_ans = static_cast<ObJsonNull*> (allocator->alloc(sizeof(ObJsonNull)));
+      if (OB_ISNULL(tmp_ans)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate row buffer failed at ObJsonDecimal", K(ret));
+      } else {
+        tmp_ans = new (tmp_ans) ObJsonNull(true);
+        jb_ptr = tmp_ans;
+        if ((OB_FAIL(jb_ptr->find_child(allocator, parent_info, cur_node + 1, 
+                                        last_node, is_auto_wrap,
+                                        only_need_one, is_lax, dup, res)))) {
+          int old_ret = ret;
+          allocator->free(tmp_ans);
+          ret = old_ret;
+          LOG_WARN("fail to seek recursively", K(ret));
+        } 
+      }
+    } else if (trans_fail && OB_SUCC(ret)) {
+      if ((OB_FAIL(find_child(allocator, parent_info, cur_node + 1, 
+                            last_node, is_auto_wrap,
+                            only_need_one, is_lax, dup, res)))) {
+        LOG_WARN("fail to seek recursively", K(ret));
+      }
+    }
+  }
   return ret;
 }
 

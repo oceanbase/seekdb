@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_freezer.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
@@ -426,7 +427,7 @@ int ObFreezer::init(ObLS *ls)
   if (OB_ISNULL(ls)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "[Freezer] invalid argument", K(ret));
-  } else if (OB_FAIL(async_freeze_tablets_.create(1024, "AsyncFreezeTabletID", "AsyncFreezeTabletID", MTL_ID()))) {
+  } else if (OB_FAIL(async_freeze_tablets_.create(1024, "AsyncFreezeTabletID", "AsyncFreezeTabletID"))) {
     LOG_WARN("[Freezer] fail to create hash set for ls freezer", KR(ret));
   } else {
     freeze_flag_ = 0;
@@ -519,6 +520,7 @@ int ObFreezer::logstream_freeze(int64_t trace_id)
 
     set_need_resubmit_log(false);
     stat_.reset();
+    share::g_mp->checkpoint_diagnose_mgr()->update_freeze_clock(ls_id, trace_id, get_freeze_clock());
 
     (void)stat_.begin_set_freeze_stat(get_freeze_clock(),
                                       start_time,
@@ -652,7 +654,7 @@ struct AsyncFreezeFunctor {
     int ret = OB_SUCCESS;
     common::ObDIActionGuard ag1("OccamThreadPool", "AsyncFreezer", "detect task");
     ObLSHandle ls_handle;
-    if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       STORAGE_LOG(WARN, "get ls handle failed. stop async freeze task", KR(ret), K(ls_id_));
     } else {
       // freezer_ cannot be nullptr because AsyncFreezeFunctor is constructed by ObFreezer::this pointer
@@ -692,7 +694,7 @@ void ObFreezer::submit_an_async_freeze_task(const int64_t trace_id, const bool i
   if (OB_UNLIKELY(!enable_) || OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_RUNNING;
     LOG_WARN("freezer is offline, can not freeze now", K(ret), K(ls_id));
-  } else if (OB_ISNULL(tenant_freezer = MTL(storage::ObTenantFreezer *))) {
+  } else if (OB_ISNULL(tenant_freezer = share::g_mp->tenant_freezer())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "ObTenantFreezer is null", K(ret), K(ls_id));
   } else if (async_freeze_task_already_exists_(is_ls_freeze)) {
@@ -701,7 +703,7 @@ void ObFreezer::submit_an_async_freeze_task(const int64_t trace_id, const bool i
     ObSpinLockGuard freeze_thread_pool(tenant_freezer->freeze_thread_pool_lock_);
 
     ObLSHandle ls_handle;
-    if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       STORAGE_LOG(WARN, "get ls handle failed. stop async freeze task", KR(ret), K(ls_id));
     } else if (acquired_exec_async_task_permission_(is_ls_freeze)) {
       AsyncFreezeFunctor async_freeze_functor(trace_id, is_ls_freeze, this, ls_handle);
@@ -1144,7 +1146,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     bool is_exist = false;
     if (OB_FAIL(tmp_mini_dag.init_by_param(&param))) {
       LOG_WARN("failed to init mini dag", K(ret), K(param));
-    } else if (OB_FAIL(MTL(ObTenantDagScheduler *)->check_dag_exist(&tmp_mini_dag, is_exist))) {
+    } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->check_dag_exist(&tmp_mini_dag, is_exist))) {
       LOG_WARN("failed to check dag exists", K(ret), K(ls_id), K(tablet_id));
     } else if (is_exist) {
       // we need to wait the current mini compaction dag to complete
@@ -1951,10 +1953,10 @@ void ObFreezer::PendTenantReplayHelper::check_pend_condition_once()
 }
 
 bool ObFreezer::PendTenantReplayHelper::remain_memory_is_exhausting_() {
-  TxShareThrottleTool &throttle_tool = (MTL(ObSharedMemAllocMgr *)->share_resource_throttle_tool());
+  TxShareThrottleTool &throttle_tool = (share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
   const bool has_triggered_throttle = throttle_tool.has_triggered_throttle<ObMemstoreAllocator>();
   const bool remain_memory_is_exhausting =
-      has_triggered_throttle || MTL(ObTenantFreezer *)->memstore_remain_memory_is_exhausting();
+      has_triggered_throttle || share::g_mp->tenant_freezer()->memstore_remain_memory_is_exhausting();
   STORAGE_LOG(INFO, "finish check remain memory", K(has_triggered_throttle), K(remain_memory_is_exhausting));
 
   return remain_memory_is_exhausting;
@@ -1963,7 +1965,7 @@ bool ObFreezer::PendTenantReplayHelper::remain_memory_is_exhausting_() {
 void ObFreezer::PendTenantReplayHelper::pend_tenant_replay_()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_srv = MTL(ObLSService *);
+  ObLSService *ls_srv = share::g_mp->ls_service();
   common::ObSharedGuard<ObLSIterator> iter;
   if (OB_FAIL(ls_srv->get_ls_iter(iter, ObLSGetMod::STORAGE_MOD))) {
     STORAGE_LOG(WARN, "[ObFreezer] fail to get ls iterator", KR(ret));

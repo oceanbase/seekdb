@@ -54,7 +54,6 @@ public:
                             ObSQLSessionInfo &session_info);                  
 
   static int delete_dll_from_disk(common::ObISQLClient &trans,
-                                  uint64_t tenant_id,
                                   uint64_t key_id,
                                   uint64_t database_id);
 };

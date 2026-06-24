@@ -36,7 +36,7 @@ ObTableLoadPlan::ObTableLoadPlan(ObTableLoadStoreCtx *store_ctx)
     first_table_op_(nullptr),
     finish_op_(nullptr)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   ops_.set_block_allocator(ModulePageAllocator(allocator_));
   table_ops_.set_block_allocator(ModulePageAllocator(allocator_));
   channels_.set_block_allocator(ModulePageAllocator(allocator_));

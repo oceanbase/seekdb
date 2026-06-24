@@ -35,17 +35,13 @@ class ObFreeSessionCtx
 public:
   ObFreeSessionCtx() :
     has_inc_active_num_(false),
-    tenant_id_(common::OB_INVALID_ID),
-    sessid_(0),
-    proxy_sessid_(0)
+    sessid_(0)
   {
   }
   ~ObFreeSessionCtx() {}
-  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(tenant_id), K_(sessid), K_(proxy_sessid));
+  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(sessid));
   bool has_inc_active_num_;
-  uint64_t tenant_id_;
   uint32_t sessid_;
-  uint64_t proxy_sessid_;
 };
 
 class ObSQLSessionMgr : public common::ObTimerTask
@@ -82,9 +78,9 @@ public:
    */
   void destroy();
   int create_session(observer::ObSMConnection *conn, ObSQLSessionInfo *&sess_info);
-  // create session by session id and proxy session id.
+  // create session by session id.
   // need call revert_session if return success.
-  int create_session(const uint64_t tenant_id, const uint32_t sessid, const uint64_t proxy_sessid,
+  int create_session(const uint32_t sessid,
     const int64_t create_time, ObSQLSessionInfo *&session_info,
     const uint32_t client_sessid = INVALID_SESSID,
     const int64_t client_create_time = 0);
@@ -131,7 +127,7 @@ public:
   int disconnect_session(ObSQLSessionInfo &session);
 
   // kill all sessions from this tenant.
-  int kill_tenant(const uint64_t tenant_id, bool force_kill);
+  int kill_tenant(bool force_kill);
 
   /**
    * @brief timing clean time out session
@@ -159,8 +155,8 @@ private:
         free_total_count_(0)
     {}
     ~ValueAlloc() {}
-    int clean_tenant(uint64_t tenant_id);
-    ObSQLSessionInfo* alloc_value(uint64_t tenant_id);
+    int clean_tenant();
+    ObSQLSessionInfo* alloc_value();
     void free_value(ObSQLSessionInfo *sess);
     SessionInfoHashNode* alloc_node(ObSQLSessionInfo* value)
     {
@@ -245,8 +241,8 @@ private:
   class KillTenant
   {
   public:
-    KillTenant(ObSQLSessionMgr *mgr, const uint64_t tenant_id, bool force_kill) :
-      ret_(common::OB_SUCCESS), mgr_(mgr), tenant_id_(tenant_id), force_kill_(force_kill)
+    KillTenant(ObSQLSessionMgr *mgr, bool force_kill) :
+      ret_(common::OB_SUCCESS), mgr_(mgr), force_kill_(force_kill)
     {}
     bool operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
     int get_ret_code()
@@ -257,7 +253,6 @@ private:
   private:
     int ret_;
     ObSQLSessionMgr *mgr_;
-    const uint64_t tenant_id_;
     const bool force_kill_;
   };
 
@@ -356,7 +351,7 @@ private:
 class ObTenantSQLSessionMgr
 {
 public:
-  explicit ObTenantSQLSessionMgr(const int64_t tenant_id);
+  explicit ObTenantSQLSessionMgr();
   ~ObTenantSQLSessionMgr();
 
   int init();
@@ -387,9 +382,8 @@ private:
     ObSQLSessionInfo *session_array_[POOL_CAPACIPY];
     common::ObFixedQueue<ObSQLSessionInfo> session_pool_;
   };
-  bool is_valid_tenant_id(uint64_t tenant_id) const;
 private:
-  const int64_t tenant_id_;
+  
   SessionPool session_pool_;
   int64_t count_;
   ObFixedClassAllocator<ObSQLSessionInfo> session_allocator_;

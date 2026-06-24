@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_text_retrieval_token_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_expr_bm25.h"
 #include "sql/das/iter/sparse_retrieval/ob_das_tr_merge_iter.h"
 
@@ -641,7 +642,7 @@ int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
   est_param.tx_id_ = inv_idx_agg_param_->tx_id_;
   est_param.schema_version_ = inv_idx_agg_param_->schema_version_;
   est_param.frozen_version_ = GET_BATCH_ROWS_READ_SNAPSHOT_VERSION;
-  if (OB_ISNULL(access_service = MTL(ObAccessService *))) {
+  if (OB_ISNULL(access_service = share::g_mp->access_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(access_service));
   } else if (OB_FAIL(table_scan_range.init(*inv_idx_agg_param_, batch, allocator))) {

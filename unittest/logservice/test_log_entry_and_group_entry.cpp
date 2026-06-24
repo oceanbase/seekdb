@@ -358,7 +358,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   LogGroupBuffer group_buffer;
   LSN start_lsn(0);
 
-  ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+  ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
   // init MTL
   share::ObTenantBase tbase(1001);
   share::ObTenantEnv::set_tenant(&tbase);
@@ -376,7 +376,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   serialize_buffer = NULL;
 
   group_buffer.destroy();
-  ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+  ObMallocAllocator::get_instance()->recycle_tenant_allocator();
 }
 
 TEST(TestPaddingLogEntry, test_generate_padding_log_entry)

@@ -82,14 +82,13 @@ int ObAlterSequenceResolver::resolve(const ParseNode &parse_tree)
         LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, sequence_name.length(), sequence_name.ptr());
     } else {
       uint64_t sequence_id = 0;
-      (void)(schema_checker_->get_sequence_id(session_info_->get_effective_tenant_id(),
-                                              db_name,
+      (void)(schema_checker_->get_sequence_id(db_name,
                                               sequence_name,
                                               sequence_id));
       mystmt->set_sequence_id(sequence_id);
       mystmt->set_sequence_name(sequence_name);
       mystmt->set_database_name(db_name);
-      mystmt->set_tenant_id(session_info_->get_effective_tenant_id());
+      
     } 
   }
   
@@ -102,7 +101,7 @@ int ObAlterSequenceResolver::resolve(const ParseNode &parse_tree)
                   K(parse_tree.children_[1]->type_), K(ret));
       } else {
         ObSequenceResolver<ObAlterSequenceStmt> resolver;
-        ret = resolver.resolve_sequence_options(session_info_->get_effective_tenant_id(), mystmt,
+        ret = resolver.resolve_sequence_options(mystmt,
                                                 parse_tree.children_[1]);
       }
     } else {

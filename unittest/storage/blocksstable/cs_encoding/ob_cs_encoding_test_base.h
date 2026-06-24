@@ -100,7 +100,6 @@ int ObCSEncodingTestBase::prepare(const ObObjType *col_types, const int64_t rowk
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);

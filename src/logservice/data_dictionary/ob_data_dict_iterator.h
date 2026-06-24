@@ -30,7 +30,7 @@ class ObDataDictIterator
 public:
   ObDataDictIterator();
   ~ObDataDictIterator() { reset(); }
-  int init(const uint64_t tenant_id);
+  int init();
   void reset();
 public:
   int append_log_buf(const char *buf, const int64_t buf_len, const int64_t pos); // without log_base_header
@@ -52,7 +52,6 @@ private:
 private:
   static const int64_t DEFAULT_DICT_BUF_SIZE_FOR_ITERATOR = 4 * _M_;
 private:
-  uint64_t tenant_id_;
   const char *palf_buf_; // buf points to data stored in palf log_entry
   int64_t palf_buf_len_;
   int64_t palf_pos_;

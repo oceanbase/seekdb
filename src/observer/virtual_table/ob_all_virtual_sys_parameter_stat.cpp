@@ -38,7 +38,7 @@ int ObAllVirtualSysParameterStat::inner_open()
 {
   int ret = OB_SUCCESS;
   sys_iter_ = GCONF.get_container().begin();
-  tenant_config_.set_config(TENANT_CONF(OB_SYS_TENANT_ID));
+  tenant_config_.set_config(TENANT_CONF());
   if (tenant_config_.is_valid()) {
     tenant_iter_ = tenant_config_->get_container().begin();
   } else {
@@ -51,7 +51,7 @@ int ObAllVirtualSysParameterStat::inner_open()
 void ObAllVirtualSysParameterStat::reset()
 {
   sys_iter_ = GCONF.get_container().begin();
-  tenant_config_.set_config(TENANT_CONF(OB_SYS_TENANT_ID));
+  tenant_config_.set_config(TENANT_CONF());
   if (tenant_config_.is_valid()) {
     tenant_iter_ = tenant_config_->get_container().begin();
   } else {

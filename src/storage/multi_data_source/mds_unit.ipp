@@ -634,8 +634,7 @@ void MdsUnit<K, V>::report_event_(const char (&event_str)[N],
   } else {
     event.key_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(MTL_ID(),
-                             MdsUnitBase<K, V>::p_mds_table_->ls_id_,
+    observer::MdsEventKey key(MdsUnitBase<K, V>::p_mds_table_->ls_id_,
                              MdsUnitBase<K, V>::p_mds_table_->tablet_id_);
     observer::ObMdsEventBuffer::append(key, event, MdsUnitBase<K, V>::p_mds_table_, file, line, function_name);
   }

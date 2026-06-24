@@ -48,7 +48,7 @@ ObChunk::~ObChunk()
     cg_row_file_arr_ = nullptr;
     type_ = INVALID_TYPE;
   } else if (DIRECT_LOAD_ROW_ARRAY == type_) {
-    OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr(MTL_ID(), "TLD_RowArray"), row_array_);
+    OB_DELETE(ObTableLoadTabletObjRowArray, ObMemAttr("TLD_RowArray"), row_array_);
   }
 }
 

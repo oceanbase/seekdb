@@ -33,7 +33,7 @@ public:
       integer_col_idx_(nullptr),
       integer_col_buf_(nullptr),
       integer_col_cnt_(0),
-      allocator_("CkmHelper"),
+      allocator_("CkmHelper", OB_MALLOC_NORMAL_BLOCK_SIZE),
       micro_block_row_checksum_(0) {}
   ~ObMicroBlockChecksumHelper() { reset(); }
 

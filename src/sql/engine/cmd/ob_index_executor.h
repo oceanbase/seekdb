@@ -61,7 +61,6 @@ public:
 
   int execute(ObExecContext &ctx, ObDropIndexStmt &stmt);
   static int wait_drop_index_finish(
-      const uint64_t tenant_id,
       const int64_t task_id,
       sql::ObSQLSessionInfo &session);
 };

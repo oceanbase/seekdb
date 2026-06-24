@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_scan_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "src/sql/engine/ob_exec_context.h"
 
@@ -35,8 +36,7 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
     tsc_service_ = is_virtual_table(scan_ctdef->ref_table_id_) ? GCTX.vt_par_ser_
-                              : scan_ctdef->is_external_table_ ? GCTX.et_access_service_
-                                                               : MTL(ObAccessService *);
+                                                                : share::g_mp->access_service();
   }
 
   return ret;

@@ -19,6 +19,8 @@
 #include "share/scn.h"
 #include "common/ob_tablet_id.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
+#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+
 namespace oceanbase
 {
 namespace storage

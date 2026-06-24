@@ -21,6 +21,7 @@
 #define protected public
 #define private public
 
+#include "mtlenv/mock_tenant_module_env.h"
 #include "storage/ls/ob_ls.h"
 
 namespace oceanbase
@@ -28,11 +29,6 @@ namespace oceanbase
 using namespace share;
 namespace storage
 {
-
-int64_t ObTenantMetaMemMgr::cal_adaptive_bucket_num()
-{
-  return 1000;
-}
 
 int ObTenantMetaMemMgr::fetch_tenant_config()
 {
@@ -58,51 +54,50 @@ public:
 
   virtual void SetUp() override;
   virtual void TearDown() override;
+  static void SetUpTestCase();
+  static void TearDownTestCase();
   void FakeLs(ObLS &ls);
 
 private:
   static constexpr uint64_t TEST_TENANT_ID = OB_SERVER_TENANT_ID;
   ObTabletPointerMap tablet_map_;
   common::ObArenaAllocator allocator_;
-  ObTenantBase tenant_base_;
 };
 
 TestMetaPointerMap::TestMetaPointerMap()
-  : tablet_map_(),
-    tenant_base_(TEST_TENANT_ID)
+  : tablet_map_()
 {
+}
+
+void TestMetaPointerMap::SetUpTestCase()
+{
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
+  EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
+}
+
+void TestMetaPointerMap::TearDownTestCase()
+{
+  MockTenantModuleEnv::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 void TestMetaPointerMap::SetUp()
 {
-  lib::ObMemAttr attr(OB_SERVER_TENANT_ID, "TabletMap");
+  lib::ObMemAttr attr("TabletMap");
   int ret = tablet_map_.init(1000L, attr, 15LL * 1024 * 1024 * 1024, 8LL * 1024 * 1024,
           common::OB_MALLOC_NORMAL_BLOCK_SIZE);
   ASSERT_EQ(common::OB_SUCCESS, ret);
-
-  ObTenantMetaMemMgr *t3m = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST, TEST_TENANT_ID);
-  ASSERT_EQ(OB_SUCCESS, t3m->init());
-
-  ObTabletMemtableMgrPool *pool = OB_NEW(ObTabletMemtableMgrPool, ObModIds::TEST);
-  tenant_base_.set(t3m);
-  tenant_base_.set(pool);
-  ObTenantEnv::set_tenant(&tenant_base_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
 }
 
 void TestMetaPointerMap::TearDown()
 {
   tablet_map_.destroy();
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-  t3m->stop();
-  t3m->wait();
-  t3m->destroy();
-  tenant_base_.destroy();
 }
 
 void TestMetaPointerMap::FakeLs(ObLS &ls)
 {
-  ls.ls_meta_.tenant_id_ = 1;
   ls.ls_meta_.ls_id_.id_ = 1001;
   ls.ls_meta_.migration_status_ = ObMigrationStatus::OB_MIGRATION_STATUS_NONE;
   ls.ls_meta_.restore_status_ = ObRestoreStatus::Status::NONE;

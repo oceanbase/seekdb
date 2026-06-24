@@ -104,7 +104,7 @@ ObGroupByCellBase::ObGroupByCellBase(const int64_t batch_size, common::ObIAlloca
     group_by_col_expr_(nullptr),
     group_by_col_param_(nullptr),
     distinct_projector_buf_(nullptr),
-    padding_allocator_("GroupByPad", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    padding_allocator_("GroupByPad", OB_MALLOC_NORMAL_BLOCK_SIZE),
     allocator_(allocator),
     group_by_col_offset_(-1),
     need_extract_distinct_(false),
@@ -174,13 +174,13 @@ ObPushdownAggContext::ObPushdownAggContext(
   common::ObIAllocator &allocator)
   : agg_infos_(allocator),
     cols_offset_map_(allocator),
-    agg_ctx_(eval_ctx, MTL_ID(), agg_infos_, pd_agg_label),
+    agg_ctx_(eval_ctx, agg_infos_, pd_agg_label),
     rows_(nullptr),
     row_meta_(&allocator),
     batch_rows_(),
     agg_row_num_(0),
     allocator_(allocator),
-    row_allocator_("PDAggRow", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    row_allocator_("PDAggRow", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   batch_rows_.skip_ = skip_bit;
   batch_rows_.size_ = batch_size;

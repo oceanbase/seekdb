@@ -61,7 +61,7 @@ public:
   ObSimpleTenantSchema(const ObSimpleTenantSchema &src_schema);
   virtual ~ObSimpleTenantSchema();
   ObSimpleTenantSchema &operator =(const ObSimpleTenantSchema &other);
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(schema_version),
                K_(tenant_name),
                K_(name_case_mode),
@@ -72,8 +72,8 @@ public:
   virtual void reset();
   bool is_valid() const;
   inline int64_t get_convert_size() const;
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   inline int64_t get_schema_version() const { return schema_version_; }
   inline int set_tenant_name(const common::ObString &tenant_name)
@@ -99,7 +99,7 @@ public:
   inline ObTenantStatus get_status() const { return status_; }
   inline void set_in_recyclebin(const bool in_recyclebin) { in_recyclebin_ = in_recyclebin; }
 private:
-  uint64_t tenant_id_;
+  
   int64_t schema_version_;
   common::ObString tenant_name_;
   common::ObNameCaseMode name_case_mode_; //deprecated
@@ -117,7 +117,7 @@ public:
   ObSimpleUserSchema(const ObSimpleUserSchema &src_schema);
   virtual ~ObSimpleUserSchema();
   ObSimpleUserSchema &operator =(const ObSimpleUserSchema &other);
-  TO_STRING_KV(K_(tenant_id),
+  TO_STRING_KV(
                K_(user_id),
                K_(schema_version),
                K_(user_name),
@@ -126,8 +126,8 @@ public:
   virtual void reset();
   inline bool is_valid() const;
   inline int64_t get_convert_size() const;
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   inline void set_user_id(const uint64_t user_id) { user_id_ = user_id; }
   inline uint64_t get_user_id() const { return user_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -141,13 +141,13 @@ public:
   inline const common::ObString &get_user_name_str() const { return user_name_; }
   inline const common::ObString &get_host_name_str() const { return host_name_; }
   inline ObTenantUserId get_tenant_user_id() const
-  { return ObTenantUserId(tenant_id_, user_id_); }
+  { return ObTenantUserId(user_id_); }
   inline void set_type(const uint64_t type) { type_ = type; }
   inline uint64_t get_type() const { return type_; }
   inline bool is_role() const { return OB_ROLE == type_; }
 
 private:
-  uint64_t tenant_id_;
+  
   uint64_t user_id_;
   int64_t schema_version_;
   common::ObString user_name_;
@@ -163,16 +163,15 @@ public:
   ObSimpleDatabaseSchema(const ObSimpleDatabaseSchema &src_schema);
   virtual ~ObSimpleDatabaseSchema();
   ObSimpleDatabaseSchema &operator =(const ObSimpleDatabaseSchema &other);
-  TO_STRING_KV(K_(tenant_id),
-               K_(database_id),
+  TO_STRING_KV(K_(database_id),
                K_(schema_version),
                K_(database_name),
                K_(name_case_mode));
   virtual void reset();
   inline bool is_valid() const;
   inline int64_t get_convert_size() const;
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   inline void set_database_id(const uint64_t database_id) { database_id_ = database_id; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -186,9 +185,9 @@ public:
   inline void set_name_case_mode(const common::ObNameCaseMode cmp_mode) { name_case_mode_ = cmp_mode; }
   inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
   inline ObTenantDatabaseId get_tenant_database_id() const
-  { return ObTenantDatabaseId(tenant_id_, database_id_); }
+  { return ObTenantDatabaseId(database_id_); }
 private:
-  uint64_t tenant_id_;
+  
   uint64_t database_id_;
   int64_t schema_version_;
   uint64_t default_tablegroup_id_;
@@ -204,8 +203,7 @@ public:
   ObSimpleTablegroupSchema(const ObSimpleTablegroupSchema &src_schema);
   virtual ~ObSimpleTablegroupSchema();
   ObSimpleTablegroupSchema &operator =(const ObSimpleTablegroupSchema &other);
-  TO_STRING_KV(K_(tenant_id),
-               K_(tablegroup_id),
+  TO_STRING_KV(K_(tablegroup_id),
                K_(schema_version),
                K_(tablegroup_name),
                K_(partition_status),
@@ -214,8 +212,8 @@ public:
   virtual void reset();
   bool is_valid() const;
   inline int64_t get_convert_size() const;
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
+  
   inline void set_tablegroup_id(const uint64_t tablegroup_id) { tablegroup_id_ = tablegroup_id; }
   inline uint64_t get_tablegroup_id() const { return tablegroup_id_; }
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
@@ -228,7 +226,7 @@ public:
   { return deep_copy_str(sharding, sharding_); }
   inline const common::ObString &get_sharding() const { return sharding_; }
   inline ObTenantTablegroupId get_tenant_tablegroup_id() const
-  { return ObTenantTablegroupId(tenant_id_, tablegroup_id_); }
+  { return ObTenantTablegroupId(tablegroup_id_); }
 
   //TODO:remove ObSimpleTablegroupSchema::get_zone_list
 
@@ -246,7 +244,7 @@ public:
   bool is_sharding_partition() const { return sharding_ == OB_PARTITION_SHARDING_PARTITION; }
   bool is_sharding_adaptive() const { return sharding_ == OB_PARTITION_SHARDING_ADAPTIVE; }
 private:
-  uint64_t tenant_id_;
+  
   uint64_t tablegroup_id_;
   int64_t schema_version_;
   common::ObString tablegroup_name_;
@@ -292,7 +290,6 @@ struct GetTableKeyV2<ObDatabaseSchemaHashWrapper, ObSimpleDatabaseSchema *>
   {
     if (!OB_ISNULL(database_schema)) {
       ObDatabaseSchemaHashWrapper database_schema_hash_wrapper(
-          database_schema->get_tenant_id(),
           database_schema->get_name_case_mode(),
           database_schema->get_database_name_str());
       return database_schema_hash_wrapper;
@@ -309,7 +306,6 @@ struct GetTableKeyV2<ObTablegroupSchemaHashWrapper, ObSimpleTablegroupSchema *>
   {
     if (!OB_ISNULL(tablegroup_schema)) {
       ObTablegroupSchemaHashWrapper tablegroup_schema_hash_wrapper(
-          tablegroup_schema->get_tenant_id(),
           tablegroup_schema->get_tablegroup_name_str());
       return tablegroup_schema_hash_wrapper;
     } else {
@@ -325,7 +321,6 @@ struct GetTableKeyV2<ObTableSchemaHashWrapper, ObSimpleTableSchemaV2 *>
   {
     if (!OB_ISNULL(table_schema)) {
       ObTableSchemaHashWrapper table_schema_hash_wrapper(
-          table_schema->get_tenant_id(),
           table_schema->get_database_id(),
           table_schema->get_session_id(),
           table_schema->get_name_case_mode(),
@@ -345,14 +340,12 @@ struct GetTableKeyV2<ObIndexSchemaHashWrapper, ObSimpleTableSchemaV2 *>
     if (!OB_ISNULL(index_schema)) {
       if (index_schema->is_in_recyclebin()) { // index is in recyclebin
         ObIndexSchemaHashWrapper index_schema_hash_wrapper(
-            index_schema->get_tenant_id(),
             index_schema->get_database_id(),
             common::OB_INVALID_ID,
             index_schema->get_table_name_str());
         return index_schema_hash_wrapper;
       } else {
         ObIndexSchemaHashWrapper index_schema_hash_wrapper(
-            index_schema->get_tenant_id(),
             index_schema->get_database_id(),
             index_schema->get_data_table_id(),
             index_schema->get_origin_index_name_str());
@@ -372,7 +365,6 @@ struct GetTableKeyV2<ObAuxVPSchemaHashWrapper, ObSimpleTableSchemaV2 *>
   {
     if (!OB_ISNULL(aux_vp_schema)) {
       ObAuxVPSchemaHashWrapper aux_vp_schema_hash_wrapper(
-          aux_vp_schema->get_tenant_id(),
           aux_vp_schema->get_database_id(),
           aux_vp_schema->get_table_name_str());
       return aux_vp_schema_hash_wrapper;
@@ -389,8 +381,7 @@ struct GetTableKeyV2<ObForeignKeyInfoHashWrapper, ObSimpleForeignKeyInfo *>
   ObForeignKeyInfoHashWrapper operator()(const ObSimpleForeignKeyInfo *simple_foreign_key_info) const
   {
     if (OB_NOT_NULL(simple_foreign_key_info)) {
-      ObForeignKeyInfoHashWrapper fk_info_hash_wrapper(simple_foreign_key_info->tenant_id_,
-                                                       simple_foreign_key_info->database_id_,
+      ObForeignKeyInfoHashWrapper fk_info_hash_wrapper(simple_foreign_key_info->database_id_,
                                                        simple_foreign_key_info->foreign_key_name_);
       return fk_info_hash_wrapper;
     } else {
@@ -406,8 +397,7 @@ struct GetTableKeyV2<ObConstraintInfoHashWrapper, ObSimpleConstraintInfo *>
   ObConstraintInfoHashWrapper operator()(const ObSimpleConstraintInfo *simple_constraint_info) const
   {
     if (OB_NOT_NULL(simple_constraint_info)) {
-      ObConstraintInfoHashWrapper cst_info_hash_wrapper(simple_constraint_info->tenant_id_,
-                                                        simple_constraint_info->database_id_,
+      ObConstraintInfoHashWrapper cst_info_hash_wrapper(simple_constraint_info->database_id_,
                                                         simple_constraint_info->constraint_name_);
       return cst_info_hash_wrapper;
     } else {
@@ -423,14 +413,10 @@ friend class ObServerSchemaService;
 friend class ObSchemaGetterGuard;
 friend class ObSchemaMgrCache;
 friend class MockSchemaService;
-typedef common::ObSortedVector<ObSimpleTenantSchema *> TenantInfos;
 typedef common::ObSortedVector<ObSimpleUserSchema *> UserInfos;
 typedef common::ObSortedVector<ObSimpleDatabaseSchema *> DatabaseInfos;
 typedef common::ObSortedVector<ObSimpleTablegroupSchema *> TablegroupInfos;
 typedef common::ObSortedVector<ObSimpleTableSchemaV2 *> TableInfos;
-typedef common::ObSortedVector<ObDropTenantInfo *> DropTenantInfos;
-typedef TenantInfos::iterator TenantIterator;
-typedef TenantInfos::const_iterator ConstTenantIterator;
 typedef UserInfos::iterator UserIterator;
 typedef UserInfos::const_iterator ConstUserIterator;
 typedef DatabaseInfos::iterator DatabaseIterator;
@@ -439,8 +425,6 @@ typedef TablegroupInfos::iterator TablegroupIterator;
 typedef TablegroupInfos::const_iterator ConstTablegroupIterator;
 typedef TableInfos::iterator TableIterator;
 typedef TableInfos::const_iterator ConstTableIterator;
-typedef DropTenantInfos::iterator DropTenantInfoIterator;
-typedef DropTenantInfos::const_iterator ConstDropTenantInfoIterator;
 typedef common::hash::ObPointerHashMap<ObDatabaseSchemaHashWrapper, ObSimpleDatabaseSchema *, GetTableKeyV2, 128> DatabaseNameMap;
 typedef common::hash::ObPointerHashMap<uint64_t, ObSimpleTableSchemaV2 *, GetTableKeyV2, 1024> TableIdMap;
 typedef common::hash::ObPointerHashMap<uint64_t, ObSimpleDatabaseSchema *, GetTableKeyV2, 128> DatabaseIdMap;
@@ -455,7 +439,7 @@ public:
   ObSchemaMgr();
   explicit ObSchemaMgr(common::ObIAllocator &allocator);
   virtual ~ObSchemaMgr();
-  int init(const uint64_t tenant_id = common::OB_INVALID_TENANT_ID);
+  int init();
   void reset();
   int assign(const ObSchemaMgr &other);
   int deep_copy(const ObSchemaMgr &other);
@@ -467,51 +451,49 @@ public:
   // tenant
   int add_tenants(const common::ObIArray<ObSimpleTenantSchema> &tenant_schemas);
   int add_tenant(const ObSimpleTenantSchema &tenant_schema);
-  int del_tenant(const uint64_t tenant_id);
-  int get_tenant_schema(const uint64_t tenant_id,
+  int get_tenant_schema(
                         const ObSimpleTenantSchema *&tenant_schema) const;
   int get_tenant_schema(const common::ObString &tenant_name,
                         const ObSimpleTenantSchema *&tenant_schema) const;
 
-  int get_tenant_name_case_mode(const uint64_t tenant_id, common::ObNameCaseMode &mode) const;
-  int get_tenant_read_only(const uint64_t tenant_id, bool &read_only) const;
+  int get_tenant_name_case_mode(common::ObNameCaseMode &mode) const;
+  int get_tenant_read_only(bool &read_only) const;
 
   // user
   int add_users(const common::ObIArray<ObSimpleUserSchema> &user_schemas);
   int add_user(const ObSimpleUserSchema &user_schema);
   int del_user(const ObTenantUserId user);
-  int get_user_schema(const uint64_t tenant_id,
+  int get_user_schema(
                       const uint64_t user_id,
                       const ObSimpleUserSchema *&user_schema) const;
-  int get_user_schema(const uint64_t tenant_id,
+  int get_user_schema(
                       const common::ObString &user_name,
                       const common::ObString &host_name,
                       const ObSimpleUserSchema *&user_schema) const;
-  int get_user_schema(const uint64_t tenant_id,
+  int get_user_schema(
                       const common::ObString &user_name,
                       common::ObIArray<const ObSimpleUserSchema *> &users_schema) const;
   // database
   int add_databases(const common::ObIArray<ObSimpleDatabaseSchema> &database_schemas);
   int add_database(const ObSimpleDatabaseSchema &database_schema);
   int del_database(const ObTenantDatabaseId database);
-  int get_database_schema(const uint64_t tenant_id,
+  int get_database_schema(
                           const uint64_t database_id,
                           const ObSimpleDatabaseSchema *&database_schema) const;
-  int get_database_schema(const uint64_t tenant_id,
+  int get_database_schema(
                           const common::ObString &database_name,
                           const ObSimpleDatabaseSchema *&database_schema) const;
   // tablegroup
   int add_tablegroups(const common::ObIArray<ObSimpleTablegroupSchema> &tablegroup_schemas);
   int add_tablegroup(const ObSimpleTablegroupSchema &database_schema);
   int del_tablegroup(const ObTenantTablegroupId tablegroup);
-  int get_tablegroup_schema(const uint64_t tenant_id,
+  int get_tablegroup_schema(
                             const uint64_t tablegroup_id,
                           const ObSimpleTablegroupSchema *&tablegroup_schema) const;
-  int get_tablegroup_schema(const uint64_t tenant_id,
+  int get_tablegroup_schema(
                           const common::ObString &tablegroup_name,
                           const ObSimpleTablegroupSchema *&tablegroup_schema) const;
-  int get_tablegroup_ids_in_tenant(const uint64_t tenant_id,
-                                   common::ObIArray<uint64_t> &tablegroup_id_array);
+  int get_tablegroup_ids_in_tenant(common::ObIArray<uint64_t> &tablegroup_id_array);
   // table
   int add_tables(const common::ObIArray<ObSimpleTableSchemaV2 *> &table_schemas,
                  const bool refresh_full_schema = false);
@@ -519,10 +501,10 @@ public:
                 common::ObArrayWrap<int64_t> *cost_array = NULL);
   int del_table(const ObTenantTableId table);
   int remove_aux_table(const ObSimpleTableSchemaV2 &schema_to_del);
-  int get_table_schema(const uint64_t tenant_id,
+  int get_table_schema(
                        const uint64_t table_id,
                        const ObSimpleTableSchemaV2 *&table_schema) const;
-  int get_table_schema(const uint64_t tenant_id,
+  int get_table_schema(
                        const uint64_t database_id,
                        const uint64_t session_id,
                        const common::ObString &table_name,
@@ -531,85 +513,72 @@ public:
                        const bool with_hidden_flag = false,
                        const bool is_built_in_index = false) const;
   int get_table_schema(
-      const uint64_t tenant_id,
       const uint64_t database_id,
       const uint64_t session_id,
       const common::ObString &table_name,
       const ObSimpleTableSchemaV2 *&table_schema) const;
-  int get_hidden_table_schema(const uint64_t tenant_id,
+  int get_hidden_table_schema(
                               const uint64_t database_id,
                               const common::ObString &table_name,
                               const ObSimpleTableSchemaV2 *&table_schema) const;
   int get_index_schema(
-      const uint64_t tenant_id,
       const uint64_t database_id,
       const common::ObString &table_name,
       const ObSimpleTableSchemaV2 *&table_schema,
       const bool is_built_in = false) const;
-  int get_idx_schema_by_origin_idx_name(const uint64_t tenant_id,
-                                      const uint64_t database_id,
+  int get_idx_schema_by_origin_idx_name(const uint64_t database_id,
                                       const common::ObString &index_name,
                                       const ObSimpleTableSchemaV2 *&table_schema) const;
   // foreign key
-  int get_foreign_key_id(const uint64_t tenant_id,
-                         const uint64_t database_id,
+  int get_foreign_key_id(const uint64_t database_id,
                          const common::ObString &foreign_key_name,
                          uint64_t &foreign_key_id) const;
-  int get_foreign_key_info(const uint64_t tenant_id,
+  int get_foreign_key_info(
                           const uint64_t database_id,
                           const ObString &foreign_key_name,
                           ObSimpleForeignKeyInfo &foreign_key_info) const;
   // constraint
-  int get_constraint_id(const uint64_t tenant_id,
-                        const uint64_t database_id,
+  int get_constraint_id(const uint64_t database_id,
                         const common::ObString &constraint_name,
                         uint64_t &constraint_id) const;
-  int get_constraint_info(const uint64_t tenant_id,
+  int get_constraint_info(
                         const uint64_t database_id,
                         const common::ObString &constraint_name,
                         ObSimpleConstraintInfo &constraint_info) const;
 
-  int get_sequence_schema(const uint64_t tenant_id,
+  int get_sequence_schema(
                           const uint64_t sequence_id,
                           const ObSequenceSchema *&sequence_schema) const;
 
   int get_package_schema(
-      const uint64_t tenant_id,
       const uint64_t package_id,
       const ObSimplePackageSchema *&package_schema) const;
 
   int get_routine_schema(
-      const uint64_t tenant_id,
       const uint64_t routine_id,
       const ObSimpleRoutineSchema *&routine_schema) const;
 
   int get_trigger_schema(
-      const uint64_t tenant_id,
       const uint64_t trigger_id,
       const ObSimpleTriggerSchema *&trigger_schema) const;
 
   int get_udf_schema(
-      const uint64_t tenant_id,
       const uint64_t udf_id,
       const ObSimpleUDFSchema *&udf_schema) const;
 
   int get_directory_schema(
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const ObDirectorySchema *&schema) const;
 
   // ai model
   int get_ai_model_schema(
-      const uint64_t &tenant_id,
       const uint64_t &ai_model_id,
       const ObAiModelSchema *&ai_model_schema) const;
   int get_ai_model_schema(
-      const uint64_t &tenant_id,
       const ObString &ai_model_name,
       const common::ObNameCaseMode &case_mode,
       const ObAiModelSchema *&ai_model_schema) const;
   int get_location_schema(
-      const uint64_t tenant_id,
       const uint64_t schema_id,
       const ObLocationSchema *&schema) const;
   // location 
@@ -620,10 +589,8 @@ public:
 
   // other
   int get_tenant_schemas(common::ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const;
-   int get_tenant_ids(common::ObIArray<uint64_t> &tenant_ids) const;
-  int get_available_tenant_ids(common::ObIArray<uint64_t> &tenant_ids) const;
   #define GET_SCHEMAS_IN_TENANT_FUNC_DECLARE(SCHEMA, SCHEMA_TYPE)     \
-    int get_##SCHEMA##_schemas_in_tenant(const uint64_t tenant_id,    \
+    int get_##SCHEMA##_schemas_in_tenant(    \
         common::ObIArray<const SCHEMA_TYPE *> &schema_array) const;
   GET_SCHEMAS_IN_TENANT_FUNC_DECLARE(user, ObSimpleUserSchema);
   GET_SCHEMAS_IN_TENANT_FUNC_DECLARE(database, ObSimpleDatabaseSchema);
@@ -631,41 +598,27 @@ public:
   #undef GET_SCHEMAS_IN_TENANT_FUNC_DECLARE
   #define GET_TABLE_SCHEMAS_IN_DST_SCHEMA_FUNC_DECLARE(DST_SCHEMA)    \
   int get_table_schemas_in_##DST_SCHEMA(                              \
-      const uint64_t tenant_id,                                       \
       const uint64_t dst_schema_id,                                   \
       common::ObIArray<const ObSimpleTableSchemaV2 *> &schema_array) const;
   GET_TABLE_SCHEMAS_IN_DST_SCHEMA_FUNC_DECLARE(database);
   GET_TABLE_SCHEMAS_IN_DST_SCHEMA_FUNC_DECLARE(tablegroup);
-  int get_table_schemas_in_tenant(
-      const uint64_t tenant_id,
-      common::ObIArray<const ObSimpleTableSchemaV2 *> &schema_array) const;
+  int get_table_schemas_in_tenant(common::ObIArray<const ObSimpleTableSchemaV2 *> &schema_array) const;
   #undef GET_TABLE_SCHEMAS_IN_DST_SCHEMA_FUNC_DECLARE
   int get_vector_index_schemas_in_tenant(
-      const uint64_t tenant_id,
       common::ObIArray<const ObSimpleTableSchemaV2 *> &schema_array) const;
-  int get_primary_table_schema_in_tablegroup(
-      const uint64_t tenant_id,
-      const uint64_t tablegroup_id,
+  int get_primary_table_schema_in_tablegroup(const uint64_t tablegroup_id,
       const ObSimpleTableSchemaV2 *&primary_table_schema) const;
   int check_database_exists_in_tablegroup(
-      const uint64_t tenant_id,
       const uint64_t tablegroup_id,
       bool &not_empty) const;
-  int get_aux_schemas(const uint64_t tenant_id,
+  int get_aux_schemas(
                       const uint64_t data_table_id,
                       common::ObIArray<const ObSimpleTableSchemaV2 *> &aux_vp_schemas,
                       const share::schema::ObTableType table_type) const;
-  int del_schemas_in_tenant(const uint64_t tenant_id);
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
 
-  int add_drop_tenant_info(const ObDropTenantInfo &drop_tenant_info);
-  int add_drop_tenant_infos(const common::ObIArray<ObDropTenantInfo> &drop_tenant_infos);
-  int del_drop_tenant_info(const uint64_t tenant_id);
-  // drop_tenant_info is invalid, indicating that the DDL of the drop tenant has not been read
-  int get_drop_tenant_info(const uint64_t tenant_id, ObDropTenantInfo &drop_tenant_info) const;
-  int get_drop_tenant_ids(common::ObIArray<uint64_t> &drop_tenant_ids) const;
 
   /*schema statistics*/
   int get_schema_size(int64_t &total_size) const;
@@ -673,7 +626,7 @@ public:
   int get_schema_statistics(common::ObIArray<ObSchemaStatisticsInfo> &schema_infos) const;
 
   // get virtual table id or sys view id
-  int get_non_sys_table_ids(const uint64_t tenant_id, ObIArray<uint64_t> &non_sys_table_ids) const;
+  int get_non_sys_table_ids(ObIArray<uint64_t> &non_sys_table_ids) const;
 
   int64_t get_timestamp_in_slot() const { return timestamp_in_slot_; };
   void set_timestamp_in_slot(const int64_t timestamp) { timestamp_in_slot_ = timestamp; }
@@ -700,14 +653,6 @@ private:
   int delete_constraints_in_table(const ObSimpleTableSchemaV2 &table_schema);
   int check_and_delete_given_cst_in_table(const ObSimpleTableSchemaV2 *replaced_table, const ObSimpleTableSchemaV2 *new_table);
 
-  inline static bool compare_tenant(const ObSimpleTenantSchema *lhs,
-                                    const ObSimpleTenantSchema *rhs);
-  inline static bool equal_tenant(const ObSimpleTenantSchema *lhs,
-                                  const ObSimpleTenantSchema *rhs);
-  inline static bool compare_with_tenant_id(const ObSimpleTenantSchema *lhs,
-                                            const uint64_t tenant_id);
-  inline static bool equal_with_tenant_id(const ObSimpleTenantSchema *lhs,
-                                          const uint64_t tenant_id);
   inline static bool compare_user(const ObSimpleUserSchema *lhs,
                                       const ObSimpleUserSchema *rhs);
   inline static bool equal_user(const ObSimpleUserSchema *lhs,
@@ -754,10 +699,6 @@ private:
   // 2. non-hidden table to hidden table, you need to remove it from the normal map
   int deal_with_change_table_state(const ObSimpleTableSchemaV2 &old_table_schema,
                                    const ObSimpleTableSchemaV2 &new_table_schema);
-  static bool compare_drop_tenant_info(const ObDropTenantInfo *lhs,
-                                       const ObDropTenantInfo *rhs);
-  static bool equal_drop_tenant_info(const ObDropTenantInfo *lhs,
-                                     const ObDropTenantInfo *rhs);
 
   // schema meta consistent related
   bool check_schema_meta_consistent();
@@ -798,9 +739,9 @@ private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;
   int64_t schema_version_;
-  uint64_t tenant_id_;
+  
   bool is_consistent_;
-  TenantInfos tenant_infos_;
+  ObSimpleTenantSchema *tenant_info_ = nullptr;
   UserInfos user_infos_;
   DatabaseInfos database_infos_;
   DatabaseNameMap database_name_map_;
@@ -824,7 +765,6 @@ private:
   ForeignKeyNameMap foreign_key_name_map_;
   ConstraintNameMap constraint_name_map_;
   ObSysVariableMgr sys_variable_mgr_;
-  DropTenantInfos drop_tenant_infos_;
   // Map of tables with HIDDEN flag (is_user_hidden_table())
   TableNameMap hidden_table_name_map_;
   // Map of index tables with following attributes:

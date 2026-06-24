@@ -85,7 +85,7 @@ private:
   uint64_t statement_id_;
   bool is_prepare_protocol_;
   ParamStore *params_;//for ps param
-  obcall::ObDDLArg ddl_arg_; // used to return exec_tenant_id_
+  obcall::ObDDLArg ddl_arg_; // used to return exec_tid_
   ObBitSet<> out_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObAnonymousBlockStmt);
 };

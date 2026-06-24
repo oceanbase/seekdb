@@ -15,6 +15,7 @@
  */
 
 #include "ob_gts_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_timestamp_access.h"
 #include "observer/ob_ex_rpc.h"
 
@@ -32,19 +33,18 @@ using namespace share;
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER(ObGtsRpcResult, tenant_id_, status_, srr_.mts_, gts_start_, gts_end_);
+OB_SERIALIZE_MEMBER(ObGtsRpcResult, status_, srr_.mts_, gts_start_, gts_end_);
 
-int ObGtsRpcResult::init(const uint64_t tenant_id, const int status,
+int ObGtsRpcResult::init(const int status,
     const MonotonicTs srr, const int64_t gts_start, const int64_t gts_end)
 {
   int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id) ||
+  if (!true ||
       (OB_SUCCESS == status && (!srr.is_valid() || 0 >= gts_start || 0 >= gts_end))) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id),
+    TRANS_LOG(WARN, "invalid argument", KR(ret),
         K(status), K(srr), K(gts_start), K(gts_end));
   } else {
-    tenant_id_ = tenant_id;
     status_ = status;
     srr_ = srr;
     gts_start_ = gts_start;
@@ -55,7 +55,6 @@ int ObGtsRpcResult::init(const uint64_t tenant_id, const int status,
 
 void ObGtsRpcResult::reset()
 {
-  tenant_id_ = 0;
   status_ = OB_SUCCESS;
   srr_.reset();
   gts_start_ = 0;
@@ -64,7 +63,7 @@ void ObGtsRpcResult::reset()
 
 bool ObGtsRpcResult::is_valid() const
 {
-  return is_valid_tenant_id(tenant_id_) &&
+  return true &&
     (OB_SUCCESS != status_ || (srr_.is_valid() && gts_start_ > 0 && gts_end_ > 0));
 }
 
@@ -156,7 +155,7 @@ void ObGtsRequestRpc::destroy()
   }
 }
 
-int ObGtsRequestRpc::post(const uint64_t tenant_id, const ObAddr &server,
+int ObGtsRequestRpc::post(const ObAddr &server,
     const ObGtsRequest &msg)
 {
   int ret = OB_SUCCESS;
@@ -166,24 +165,24 @@ int ObGtsRequestRpc::post(const uint64_t tenant_id, const ObAddr &server,
   } else if (!is_running_) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "gts request rpc not running", KR(ret));
-  } else if (!is_valid_tenant_id(tenant_id) || !server.is_valid() || !msg.is_valid()) {
+  } else if (!true || !server.is_valid() || !msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(server), K(msg));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server), K(msg));
   } else {
     // single-replica: target is always local; dispatch async in-process (ex-RPC),
     // restoring the original async .post(msg, &gts_request_cb_) decoupling: the handler
     // + response callback run on a worker thread, not the caller. msg is serialized
-    // (deep-copied). The cb is a plain value type now (config + tenant_id; unlike the old
+    // (deep-copied). The cb is a plain value type now (config + tenant; unlike the old
     // AsyncCB it no longer stores the pending result -- that is passed to process() as an
     // argument), so a per-request value copy is the correct "clone": no heap clone(alloc)
     // is needed in the in-process model, and each async task gets its own copy (own
-    // tenant_id) so they never race on the shared gts_request_cb_ member.
+    // tenant) so they never race on the shared gts_request_cb_ member.
     (void)ex_rpc::async_call<void>(msg,
-        [cb = gts_request_cb_, tenant_id, server](const ObGtsRequest &m) mutable {
+        [cb = gts_request_cb_, server](const ObGtsRequest &m) mutable {
       int ret = OB_SUCCESS;
       ObGtsRpcResult gts_rpc_result;
-      MTL_SWITCH(tenant_id) {
-        if (OB_FAIL(MTL(ObTimestampAccess*)->handle_request(m, gts_rpc_result))) {
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->timestamp_access()->handle_request(m, gts_rpc_result))) {
           if (REACH_TIME_INTERVAL(100 * 1000)) {
             TRANS_LOG(WARN, "post local gts request failed", KR(ret), K(server), K(m));
           }
@@ -194,7 +193,7 @@ int ObGtsRequestRpc::post(const uint64_t tenant_id, const ObAddr &server,
         } else {
           rpc::frame::ObResultCode rcode;
           rcode.rcode_ = OB_SUCCESS;
-          cb.set_tenant_id(tenant_id);
+          
           if (OB_FAIL(cb.process(gts_rpc_result, server, rcode))) {
             TRANS_LOG(WARN, "post local gts request failed", KR(ret), K(server), K(m));
           } else {

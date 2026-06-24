@@ -425,7 +425,7 @@ int ObDbmsStatsCopyTableStats::copy_tab_col_stats(sql::ObExecContext &ctx,
   if (OB_SUCC(ret)) {
     ObMySQLTransaction trans;
     //begin trans
-    if (OB_FAIL(trans.start(ctx.get_sql_proxy(), table_stat_param.tenant_id_))) {
+    if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
       LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, table_stat_param, ObTimeUtility::current_time()))) {
       LOG_WARN("failed to backup opt stats", K(ret));
@@ -496,7 +496,7 @@ int ObDbmsStatsCopyTableStats::get_dst_part_infos(const ObTableStatParam &table_
     LOG_WARN("get unexpected null", K(ret));
   } else if (!table_schema->is_partitioned_table()) {
     // do nothing
-  } else if (OB_FAIL(helper.dst_part_map_.create(7, "DstPartBucket", "DstPartNode", helper.tenant_id_))) {
+  } else if (OB_FAIL(helper.dst_part_map_.create(7, "DstPartBucket", "DstPartNode"))) {
     LOG_WARN("failed to create dst part map", K(ret));
   } else if (copy_level == CopyOnePartLevel) {
     const ObPartition *part = NULL;

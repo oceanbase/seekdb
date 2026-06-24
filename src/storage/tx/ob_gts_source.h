@@ -46,7 +46,7 @@ class ObGtsStatistics
 public:
   ObGtsStatistics() { reset(); }
   ~ObGtsStatistics() {}
-  int init(const uint64_t tenant_id);
+  int init();
   void reset();
   void inc_gts_rpc_cnt() { ATOMIC_INC(&gts_rpc_cnt_); }
   void inc_get_gts_cache_cnt() { ATOMIC_INC(&get_gts_cache_cnt_); }
@@ -57,7 +57,6 @@ public:
   void inc_try_wait_gts_elapse_cnt() { ATOMIC_INC(&try_wait_gts_elapse_cnt_); }
   void statistics();
 private:
-  uint64_t tenant_id_;
   int64_t last_stat_ts_;
   int64_t gts_rpc_cnt_;
 
@@ -75,13 +74,13 @@ class ObGtsSource
 public:
   ObGtsSource() : log_interval_(3 * 1000 * 1000), refresh_location_interval_(100 * 1000) { reset(); }
   ~ObGtsSource() { destroy(); }
-  int init(const uint64_t tenant_id, const common::ObAddr &server, ObIGtsRequestRpc *gts_request_rpc,
+  int init(const common::ObAddr &server, ObIGtsRequestRpc *gts_request_rpc,
            ObILocationAdapter *location_adapter);
   void destroy();
   void reset();
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int handle_gts_err_response(const ObGtsErrResponse &msg);
-  int handle_gts_result(const uint64_t tenant_id, const int64_t queue_index);
+  int handle_gts_result(const int64_t queue_index);
   int update_gts(const MonotonicTs srr, const int64_t gts, const MonotonicTs receive_gts_ts, bool &update);
   int64_t get_task_count() const;
   int gts_callback_interrupted(const int errcode, const share::ObLSID ls_id);
@@ -94,7 +93,7 @@ public:
   int refresh_gts(const bool need_refresh);
   bool is_external_consistent() { return true; }
   int refresh_gts_location() { return refresh_gts_location_(); }
-  TO_STRING_KV(K_(tenant_id), K_(gts_local_cache), K_(server), K_(gts_cache_leader));
+  TO_STRING_KV(K_(gts_local_cache), K_(server), K_(gts_cache_leader));
 private:
   int get_gts_leader_(common::ObAddr &leader);
   int refresh_gts_location_();
@@ -113,7 +112,7 @@ public:
   static const int64_t TOTAL_GTS_QUEUE_COUNT = GET_GTS_QUEUE_COUNT + WAIT_GTS_QUEUE_COUNT;
 private:
   bool is_inited_;
-  int64_t tenant_id_;
+  
   ObGTSLocalCache gts_local_cache_;
   ObGTSTaskQueue queue_[TOTAL_GTS_QUEUE_COUNT];
   common::ObAddr server_;

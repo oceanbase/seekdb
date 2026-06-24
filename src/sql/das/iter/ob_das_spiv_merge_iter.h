@@ -101,7 +101,7 @@ public:
     ObDASSPIVMergeIter()
     : ObDASIter(ObDASIterType::DAS_ITER_SPIV_MERGE),
       mem_context_(nullptr),
-      allocator_(lib::ObMemAttr(MTL_ID(), "SPIVMergeIter"), OB_MALLOC_NORMAL_BLOCK_SIZE), 
+      allocator_(lib::ObMemAttr("SPIVMergeIter"), OB_MALLOC_NORMAL_BLOCK_SIZE), 
       ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
@@ -132,8 +132,8 @@ public:
       spiv_iter_(nullptr),
       is_pre_processed_(false)
       {
-        result_docids_.set_attr(ObMemAttr(MTL_ID(), "SPIVResultDocid"));
-        saved_rowkeys_.set_attr(ObMemAttr(MTL_ID(), "VecIdxKeyRanges"));
+        result_docids_.set_attr(ObMemAttr("SPIVResultDocid"));
+        saved_rowkeys_.set_attr(ObMemAttr("VecIdxKeyRanges"));
       }
   
   virtual ~ObDASSPIVMergeIter() {}

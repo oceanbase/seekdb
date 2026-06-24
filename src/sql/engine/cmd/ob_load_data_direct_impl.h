@@ -82,7 +82,7 @@ private:
   public:
     LoadExecuteParam();
     bool is_valid() const;
-    TO_STRING_KV(K_(tenant_id),
+    TO_STRING_KV(
                  K_(database_id),
                  K_(table_id),
                  K_(combined_name),
@@ -104,7 +104,7 @@ private:
                  K_(online_sample_percent),
                  K_(tablet_ids));
   public:
-    uint64_t tenant_id_;
+    
     uint64_t database_id_;
     uint64_t table_id_;
     common::ObString database_name_;

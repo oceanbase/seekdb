@@ -113,8 +113,8 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   ObGeogBox *geo_box2 = NULL;
   uint32_t param_num = expr.arg_cnt_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_BESTSRID);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_BESTSRID);
   omt::ObSrsCacheGuard srs_guard;
   bool is_null_res = false;
   bool is_geo_empty = false;
@@ -127,7 +127,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
     }
   }
 
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   for (uint8_t i = 0; i < param_num && OB_SUCC(ret) && !is_null_res; i++) {
     ObString geo_str;

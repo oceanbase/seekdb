@@ -45,7 +45,7 @@ public:
   }
 private:
   // whether a tenant is need return content.
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   // deal with current tenant's row.
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
   // release last tenant's resource.

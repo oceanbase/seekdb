@@ -108,7 +108,7 @@ int ObDeviceConfigMgr::load_configs()
             tmp_device_config.used_for_, tmp_device_config.path_, tmp_device_config.endpoint_))) {
           LOG_WARN("fail to construct device config key", KR(ret));
         } else {
-          ObMemAttr attr(OB_SERVER_TENANT_ID, "DeviceConfigMgr");
+          ObMemAttr attr("DeviceConfigMgr");
           ObDeviceConfig *new_device_config = nullptr;
           if (OB_ISNULL(new_device_config = static_cast<ObDeviceConfig *>(
                                             ob_malloc(sizeof(ObDeviceConfig), attr)))) {
@@ -500,7 +500,7 @@ int ObDeviceConfigMgr::modify_device_config_(
   } else {
     ObDeviceConfigKey device_config_key(key_chars);
     if (DeviceConfigModifyType::CONFIG_ADD_TYPE == type) {
-      ObMemAttr attr(OB_SERVER_TENANT_ID, "DeviceConfigMgr");
+      ObMemAttr attr("DeviceConfigMgr");
       ObDeviceConfig *new_device_config = nullptr;
       if (OB_ISNULL(new_device_config = static_cast<ObDeviceConfig *>(
                                         ob_malloc(sizeof(ObDeviceConfig), attr)))) {

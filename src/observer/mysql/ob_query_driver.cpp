@@ -145,10 +145,8 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = need_set_ps_out_flag ? 1 : 0;
     // NULL == result indicates it is an old protocol ps cursor execute response, or fetch protocol response, cursor_exit = true
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = NULL == result ? 1 : 0; 
-    if (!session_.is_obproxy_mode()) {
-      // in java client or others, use slow query bit to indicate partition hit or not
-      flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
-    }
+    // in java client or others, use slow query bit to indicate partition hit or not
+    flags.status_flags_.OB_SERVER_QUERY_WAS_SLOW = !session_.partition_hit().get_bool();
     eofp.set_server_status(flags);
 
     if (ps_cursor_execute && sender_.need_send_extra_ok_packet()) {
@@ -282,8 +280,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       ObSMRow sm(protocol_type, *row, dtc_params,
                          session_,  
                          result.get_field_columns(),
-                         ctx_.schema_guard_,
-                         session_.get_effective_tenant_id());
+                         ctx_.schema_guard_);
       sm.set_packed(is_packed);
       OMPKRow rp(sm);
       rp.set_is_packed(is_packed);
@@ -518,7 +515,7 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
     ObLobLocatorV2 loc(value.get_string(), value.has_lob_header());
     if (loc.is_null()) { // maybe v1 empty lob
     } else { // lob locator v2
-      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE, session_info->get_effective_tenant_id());
+      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter instr_iter(value);
       if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, exec_ctx, session_info, allocator, &tmp_alloc))) {
         LOG_WARN("init lob str inter failed", K(ret), K(value));
@@ -612,7 +609,7 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
         // get full data, buffer size is full byte length * ObCharset::CharConvertFactorNum
         ObString data_str = value.get_string();
         int64_t lob_data_byte_len = data_str.length();
-        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE, session->get_effective_tenant_id());
+        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
         if (!value.has_lob_header()) {
         } else {
           ObLobLocatorV2 loc(raw_str, value.has_lob_header());

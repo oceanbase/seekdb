@@ -72,7 +72,6 @@ public:
   }
   void set_parent_view_resolver(ObViewTableResolver *parent_view_resolver)
   { parent_view_resolver_ = parent_view_resolver; }
-  int check_need_use_sys_tenant(bool &use_sys_tenant) const;
   virtual int check_in_sysview(bool &in_sysview) const override;
   void set_is_create_view(bool is_create_view) { is_create_view_ = is_create_view; }
   void set_materialized(bool materialized) { materialized_ = materialized; }

@@ -124,8 +124,7 @@ private:
 class ObKVConfigUtil
 {
 public:
-  static int get_compress_type(const int64_t tenant_id, 
-                               int64_t result_size,
+  static int get_compress_type(int64_t result_size,
                                ObCompressorType &compressor_type);
 };
 

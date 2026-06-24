@@ -37,7 +37,7 @@ class ObMySQLPreparedStatement;
 class ObMySQLConnectionPool;
 class ObMySQLProcStatement;
 
-class ObMySQLConnection : public ObISQLConnection //, ObIDbLinkConnection
+class ObMySQLConnection : public ObISQLConnection
 {
   friend class ObServerConnectionPool;
 public:
@@ -56,12 +56,12 @@ public:
 public:
   ObMySQLConnection();
   ~ObMySQLConnection();
-  int connect(const char *user, const char *pass, const char *db, const bool use_ssl, bool read_write_no_timeout = false, int64_t sql_req_level = 0);
+  int connect(const char *user, const char *pass, const char *db, const bool use_ssl, bool read_write_no_timeout = false);
   void close();
   virtual bool is_closed() const;
   // use user provided the statement
   template<typename T>
-  int create_statement(T &stmt, const uint64_t tenant_id, const ObString &sql, int64_t param_count = 0);
+  int create_statement(T &stmt, const ObString &sql, int64_t param_count = 0);
   int escape(const char *from, const int64_t from_size, char *to,
       const int64_t to_size, int64_t &out_size);
   void init(ObServerConnectionPool *root);
@@ -73,20 +73,19 @@ public:
   void set_last_error(int err_code);
   int get_last_error(void) const;
 
-  virtual int execute_read(const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_read(const ObString &sql,
       ObISQLClient::ReadResult &res, bool is_user_sql = false,
       const common::ObAddr *sql_exec_addr = nullptr) override;
 
-  virtual int execute_read(const int64_t cluster_id, const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_read(const int64_t cluster_id, const ObString &sql,
       ObISQLClient::ReadResult &res, bool is_user_sql = false,
       const common::ObAddr *sql_exec_addr = nullptr) override;
 
-  virtual int execute_write(const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_write(const ObString &sql,
       int64_t &affected_rows, bool is_user_sql = false,
       const common::ObAddr *sql_exec_addr = nullptr) override;
 
-  virtual int execute_proc(const uint64_t tenant_id,
-                        ObIAllocator &allocator,
+  virtual int execute_proc(ObIAllocator &allocator,
                         ParamStore &params,
                         ObString &sql,
                         const share::schema::ObRoutineInfo &routine_info,
@@ -94,7 +93,7 @@ public:
                         const ObTimeZoneInfo *tz_info,
                         ObObj *result,
                         bool is_sql) override;
-  virtual int start_transaction(const uint64_t &tenant_id, bool with_snap_shot = false) override;
+  virtual int start_transaction(bool with_snap_shot = false) override;
   virtual int rollback() override;
   virtual int commit() override;
 
@@ -137,7 +136,7 @@ public:
                              uint32_t *out_valid_array_size);
   int execute_proc();
 private:
-  int switch_tenant(const uint64_t tenant_id);
+  int switch_tenant();
   int reset_read_consistency();
 
 
@@ -157,7 +156,7 @@ private:
   int64_t last_trace_id_;
   Mode mode_;
   const char *db_name_;
-  uint64_t tenant_id_;
+  
   int64_t read_consistency_;
   ObMySQLProcStatement proc_stmt_;
   DISALLOW_COPY_AND_ASSIGN(ObMySQLConnection);
@@ -196,11 +195,11 @@ inline int64_t ObMySQLConnection::connection_version() const
 }
 
 template<typename T>
-int ObMySQLConnection::create_statement(T &stmt, const uint64_t tenant_id, const ObString &sql, int64_t param_count)
+int ObMySQLConnection::create_statement(T &stmt, const ObString &sql, int64_t param_count)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(switch_tenant(tenant_id))) {
-    _OB_LOG(WARN, "switch tenant failed, tenant_id=%ld, ret=%d", tenant_id, ret);
+  if (OB_FAIL(switch_tenant())) {
+    _OB_LOG(WARN, "switch tenant failed, ret=%d", ret);
   } else if (OB_FAIL(reset_read_consistency())) {
     _OB_LOG(WARN, "fail to set read consistency, ret=%d", ret);
   } else if (OB_FAIL(stmt.init(*this, sql, param_count))) {

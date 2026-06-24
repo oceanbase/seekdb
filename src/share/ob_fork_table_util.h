@@ -97,31 +97,26 @@ class ObForkTableUtil final
 public:
   static int collect_tablet_ids_from_table(
       schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const uint64_t table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
   static int collect_tablet_ids_from_table(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
   static int collect_index_tablet_ids(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
   static int collect_lob_aux_tablet_ids(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
   static int collect_table_ids_from_table(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObIArray<uint64_t> &table_ids);
 
@@ -131,7 +126,6 @@ public:
 
   static int collect_complete_domain_index_schemas(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const share::schema::ObTableSchema &table_schema,
       common::hash::ObHashMap<uint64_t, share::schema::ObTableSchema> &complete_index_schema_map);
 
@@ -141,7 +135,6 @@ public:
   static int obtain_snapshot(
       common::ObMySQLTransaction &trans,
       schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const common::ObIArray<const share::schema::ObTableSchema*> &data_table_schemas,
       int64_t &new_fetched_snapshot);
 
@@ -149,7 +142,6 @@ public:
   static int release_snapshot(
       rootserver::ObDDLTask* task,
       schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const common::ObIArray<uint64_t> &table_ids,
       const int64_t snapshot_version);
 };

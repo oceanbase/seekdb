@@ -424,8 +424,8 @@ public:
                              bool zerofill, int32_t zflength);
   static int bit_cell_str(char *buf, const int64_t len, uint64_t val,
                           int32_t bit_len, MYSQL_PROTOCOL_TYPE type, int64_t &pos);
-  static int json_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos);
-  static int sql_utd_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos);
+  static int json_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos);
+  static int sql_utd_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos);
 
   static int decimalint_cell_str(char *buf, const int64_t len,
                                  const ObDecimalInt *decint, const int32_t int_bytes, int16_t scale,

@@ -236,7 +236,6 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
     children_swapped_ = other.children_swapped_;
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
-    has_reverse_link_ = other.has_reverse_link_;
     is_expanded_mview_ = other.is_expanded_mview_;
     is_select_straight_join_ = other.is_select_straight_join_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
@@ -293,7 +292,6 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     is_fetch_with_ties_ = other.is_fetch_with_ties_;
     check_option_ = other.check_option_;
     contain_ab_param_ = other.contain_ab_param_;
-    has_reverse_link_ = other.has_reverse_link_;
     is_expanded_mview_ = other.is_expanded_mview_;
     is_select_straight_join_ = other.is_select_straight_join_;
     is_implicit_distinct_ = false; // it is a property from upper stmt, do not copy
@@ -444,7 +442,6 @@ ObSelectStmt::ObSelectStmt()
   children_swapped_ = false;
   check_option_ = VIEW_CHECK_OPTION_NONE;
   contain_ab_param_ = false;
-  has_reverse_link_ = false;
   is_expanded_mview_ = false;
   is_select_straight_join_ = false;
   is_implicit_distinct_ = false;
@@ -596,8 +593,6 @@ int ObSelectStmt::do_to_string(char *buf, const int64_t buf_len, int64_t &pos) c
            //K_(win_func_exprs),
            K(child_stmts),
            K_(check_option),
-           K_(dblink_id),
-           K_(is_reverse_link),
            K_(is_expanded_mview),
            K_(is_implicit_distinct)
              );
@@ -611,8 +606,6 @@ int ObSelectStmt::do_to_string(char *buf, const int64_t buf_len, int64_t &pos) c
          N_LIMIT, limit_count_expr_,
          N_SELECT, select_items_,
          K(child_stmts),
-         K_(dblink_id),
-         K_(is_reverse_link),
          K_(is_implicit_distinct));
   }
   J_OBJ_END();
@@ -953,18 +946,6 @@ bool ObSelectStmt::has_hidden_rowid() const {
   for (int64_t i = 0; !res && i < get_select_item_size(); i++) {
     if (select_items_.at(i).is_hidden_rowid_) {
       res = true;
-    }
-  }
-  return res;
-}
-
-bool ObSelectStmt::has_external_table() const {
-  bool res = false;
-  for (int i = 0; i < get_table_items().count(); i++) {
-    if (OB_NOT_NULL(get_table_items().at(i))
-        && EXTERNAL_TABLE == get_table_items().at(i)->table_type_) {
-      res = true;
-      break;
     }
   }
   return res;

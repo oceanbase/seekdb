@@ -57,7 +57,6 @@ enum ObEmbeddingTaskStatus {
 };
 
 struct ObEmbeddingTaskInfo {
-  uint64_t tenant_id_;
   int64_t task_id_;
   ObEmbeddingTaskStatus status_;
   int64_t task_start_time_;
@@ -78,7 +77,6 @@ struct ObEmbeddingTaskInfo {
   }
 
   void reset() {
-    tenant_id_ = OB_INVALID_TENANT_ID;
     task_id_ = OB_INVALID_ID;
     status_ = OB_EMBEDDING_TASK_INVALID;
     task_start_time_ = 0;
@@ -94,12 +92,12 @@ struct ObEmbeddingTaskInfo {
   }
 
   bool is_valid() const {
-    return tenant_id_ != OB_INVALID_TENANT_ID && 
+    return true && 
           task_id_ != OB_INVALID_ID && 
           status_ != OB_EMBEDDING_TASK_INVALID;
   }
 
-  TO_STRING_KV(K_(tenant_id), K_(task_id), K_(status), 
+  TO_STRING_KV(K_(task_id), K_(status), 
               K_(task_start_time), K_(task_end_time), K_(model_name), 
               K_(model_url), K_(processed_chunks), K_(total_chunks),
               K_(error_code), K_(error_message), K_(http_error_message), K_(http_error_code),
@@ -324,7 +322,6 @@ private:
 
   // task status and progress
   bool is_inited_;
-  int64_t tenant_id_;
   int64_t task_id_;
   ObEmbeddingTaskPhase phase_;
   int64_t process_start_time_us_;

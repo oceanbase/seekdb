@@ -51,8 +51,6 @@
 #include "sql/engine/expr/ob_expr_concat.h"
 #include "sql/engine/expr/ob_expr_concat_ws.h"
 #include "sql/engine/expr/ob_expr_div.h"
-#include "sql/engine/expr/ob_expr_effective_tenant.h"
-#include "sql/engine/expr/ob_expr_effective_tenant_id.h"
 #include "sql/engine/expr/ob_expr_equal.h"
 #include "sql/engine/expr/ob_expr_from_unix_time.h"
 #include "sql/engine/expr/ob_expr_null_safe_equal.h"
@@ -62,7 +60,6 @@
 #include "sql/engine/expr/ob_expr_greater_than.h"
 #include "sql/engine/expr/ob_expr_greatest.h"
 #include "sql/engine/expr/ob_expr_agg_param_list.h"
-#include "sql/engine/expr/ob_expr_is_serving_tenant.h"
 #include "sql/engine/expr/ob_expr_hex.h"
 #include "sql/engine/expr/ob_expr_password.h"
 #include "sql/engine/expr/ob_expr_int2ip.h"
@@ -605,8 +602,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprYear);
     REG_OP(ObExprDiv);
     REG_OP(ObExprAggDiv);
-    REG_OP(ObExprEffectiveTenant);
-    REG_OP(ObExprEffectiveTenantId);
     REG_OP(ObExprEqual);
     REG_OP(ObExprNullSafeEqual);
     REG_OP(ObExprGetUserVar);
@@ -747,7 +742,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprRowCount);
     REG_OP(ObExprFoundRows);
     REG_OP(ObExprAggParamList);
-    REG_OP(ObExprIsServingTenant);
     REG_OP(ObExprSysPrivilegeCheck);
     REG_OP(ObExprField);
     REG_OP(ObExprElt);

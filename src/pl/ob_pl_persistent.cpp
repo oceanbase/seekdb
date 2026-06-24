@@ -32,7 +32,7 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
 {
   int ret = OB_SUCCESS;
   exist = false;
-  uint64_t tenant_id = MTL_ID();
+  
   ObSchemaChecker schema_checker;
   ObString obj_name;
   uint64_t obj_id;
@@ -46,13 +46,12 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
     if (PACKAGE_SCHEMA == dep_schema_objs.at(i).get_schema_type()
         || UDT_SCHEMA == dep_schema_objs.at(i).get_schema_type()
         || ROUTINE_SCHEMA == dep_schema_objs.at(i).get_schema_type()) {
-      tenant_id = pl::get_tenant_id_by_object_id(dep_schema_objs.at(i).object_id_);
     }
     switch (dep_schema_objs.at(i).get_schema_type()) {
       case SEQUENCE_SCHEMA:
         {
           const ObSequenceSchema *sequence_schema = NULL;
-          if (OB_FAIL(schema_guard.get_sequence_schema(tenant_id, 
+          if (OB_FAIL(schema_guard.get_sequence_schema( 
                                                         obj_id, sequence_schema))) {
             LOG_WARN("failed to get sequence schema", K(ret), K(obj_id));
           } else if (nullptr == sequence_schema) {
@@ -65,7 +64,7 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
       case ROUTINE_SCHEMA:
         {
           const ObRoutineInfo *routine_schema = NULL;
-          if (OB_FAIL(schema_guard.get_routine_info(tenant_id, 
+          if (OB_FAIL(schema_guard.get_routine_info( 
                                                         obj_id, routine_schema))) {
             LOG_WARN("failed to get routine_schema", K(ret), K(obj_id));
           } else if (nullptr == routine_schema) {
@@ -78,7 +77,7 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
       case PACKAGE_SCHEMA:
         {
           const ObPackageInfo *package_info = NULL;
-          if (OB_FAIL(schema_guard.get_package_info(tenant_id, 
+          if (OB_FAIL(schema_guard.get_package_info( 
                                                         obj_id, package_info))) {
             LOG_WARN("failed to get package_info", K(ret), K(obj_id));
           } else if (nullptr == package_info) {
@@ -91,7 +90,7 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
       case TABLE_SCHEMA:
         {
           const ObSimpleTableSchemaV2 *table_schema = nullptr;
-          if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id,
+          if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                           obj_id,
                                                           table_schema))) {
             LOG_WARN("failed to get table schema", K(ret), K(obj_id));
@@ -124,23 +123,20 @@ int ObRoutinePersistentInfo::check_dep_schema(ObSchemaGetterGuard &schema_guard,
                                               bool &match)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   match = true;
   for (int64_t i = 0; OB_SUCC(ret) && match && i < dep_schema_objs.count(); ++i) {
-    tenant_id = MTL_ID();
     if (TABLE_SCHEMA != dep_schema_objs.at(i).get_schema_type()) {
       int64_t new_version = 0;
       if (PACKAGE_SCHEMA == dep_schema_objs.at(i).get_schema_type()
           || UDT_SCHEMA == dep_schema_objs.at(i).get_schema_type()
           || ROUTINE_SCHEMA == dep_schema_objs.at(i).get_schema_type()) {
-        tenant_id = pl::get_tenant_id_by_object_id(dep_schema_objs.at(i).object_id_);
       }
       if (OB_FAIL(schema_guard.get_schema_version(dep_schema_objs.at(i).get_schema_type(),
-                                                  tenant_id,
                                                   dep_schema_objs.at(i).object_id_,
                                                   new_version))) {
         LOG_WARN("failed to get schema version",
-                  K(ret), K(tenant_id), K(dep_schema_objs.at(i)));
+                  K(ret), K(dep_schema_objs.at(i)));
       } else if (new_version <= merge_version) {
         match = true;
       } else {
@@ -148,7 +144,7 @@ int ObRoutinePersistentInfo::check_dep_schema(ObSchemaGetterGuard &schema_guard,
       }
     } else {
       const ObSimpleTableSchemaV2 *table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_simple_table_schema(MTL_ID(),
+      if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                       dep_schema_objs.at(i).object_id_,
                                                       table_schema))) {
         LOG_WARN("failed to get table schema", K(ret), K(dep_schema_objs.at(i)));
@@ -183,7 +179,6 @@ template int ObRoutinePersistentInfo::check_dep_schema<sql::DependenyTableStore>
 
 
 int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
-                                              uint64_t tenant_id,
                                               uint64_t key_id,
                                               uint64_t database_id)
 {
@@ -199,7 +194,7 @@ int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
   } else if (!is_primary_cluster) {
     // do nothing
   } else {
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     ObSqlString sql;
     int64_t affected_rows = 0;
     ObMySQLProxy *sql_proxy = nullptr;
@@ -209,11 +204,11 @@ int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
     } else if (OB_FAIL(sql.assign_fmt("delete FROM %s where database_id = %ld and key_id = %ld", OB_ALL_NCOMP_DLL_V2_TNAME, database_id, key_id))) {
       LOG_WARN("delete from __all_ncomp_dll table failed.", K(ret), K(key_id));
     } else {
-      if (OB_FAIL(trans.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute query failed", K(ret), K(sql));
       } else {
         // do nothing
-        LOG_INFO("succ to delete dll", K(key_id), K(tenant_id), K(affected_rows));
+        LOG_INFO("succ to delete dll", K(key_id), K(affected_rows));
       }
     }
   }

@@ -25,8 +25,7 @@ namespace observer
 {
 
 ObMySQLUserTable::ObMySQLUserTable()
-    : ObVirtualTableScannerIterator(),
-      tenant_id_(OB_INVALID_ID)
+    : ObVirtualTableScannerIterator()
 {
 }
 
@@ -36,7 +35,6 @@ ObMySQLUserTable::~ObMySQLUserTable()
 
 void ObMySQLUserTable::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   ObVirtualTableScannerIterator::reset();
 }
 
@@ -49,9 +47,6 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
   } else if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "tenant_id is invalid", K(ret));
   } else {
     if (!start_to_read_) {
       ObObj *cells = NULL;
@@ -60,7 +55,7 @@ int ObMySQLUserTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
       }  else {
         ObArray<const ObUserInfo *> user_array;
-        if (OB_FAIL(schema_guard_->get_user_infos_with_tenant_id(tenant_id_, user_array))) {
+        if (OB_FAIL(schema_guard_->get_user_infos_by_id(user_array))) {
           SERVER_LOG(WARN, "Get user info with tenant id error", K(ret));
         } else {
           const ObUserInfo *user_info = NULL;

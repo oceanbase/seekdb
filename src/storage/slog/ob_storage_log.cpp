@@ -35,52 +35,48 @@ bool ObCreateTenantPrepareLog::is_valid() const
 
 OB_SERIALIZE_MEMBER(ObCreateTenantPrepareLog, meta_);
 
-ObCreateTenantCommitLog::ObCreateTenantCommitLog(uint64_t &tenant_id)
-  : tenant_id_(tenant_id)
+ObCreateTenantCommitLog::ObCreateTenantCommitLog()
 {
 }
 
 bool ObCreateTenantCommitLog::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_;
+  return true;
 }
 
-OB_SERIALIZE_MEMBER(ObCreateTenantCommitLog, tenant_id_);
-ObCreateTenantAbortLog::ObCreateTenantAbortLog(uint64_t &tenant_id)
-  : tenant_id_(tenant_id)
+OB_SERIALIZE_MEMBER(ObCreateTenantCommitLog);
+ObCreateTenantAbortLog::ObCreateTenantAbortLog()
 {
 }
 
 bool ObCreateTenantAbortLog::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_;
+  return true;
 }
 
-OB_SERIALIZE_MEMBER(ObCreateTenantAbortLog, tenant_id_);
+OB_SERIALIZE_MEMBER(ObCreateTenantAbortLog);
 
-ObDeleteTenantPrepareLog::ObDeleteTenantPrepareLog(uint64_t &tenant_id)
-  : tenant_id_(tenant_id)
+ObDeleteTenantPrepareLog::ObDeleteTenantPrepareLog()
 {
 }
 
 bool ObDeleteTenantPrepareLog::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_;
+  return true;
 }
 
-OB_SERIALIZE_MEMBER(ObDeleteTenantPrepareLog, tenant_id_);
+OB_SERIALIZE_MEMBER(ObDeleteTenantPrepareLog);
 
-ObDeleteTenantCommitLog::ObDeleteTenantCommitLog(uint64_t &tenant_id)
-  : tenant_id_(tenant_id)
+ObDeleteTenantCommitLog::ObDeleteTenantCommitLog()
 {
 }
 
 bool ObDeleteTenantCommitLog::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_;
+  return true;
 }
 
-OB_SERIALIZE_MEMBER(ObDeleteTenantCommitLog, tenant_id_);
+OB_SERIALIZE_MEMBER(ObDeleteTenantCommitLog);
 
 ObUpdateTenantUnitLog::ObUpdateTenantUnitLog(share::ObUnitInfoGetter::ObTenantConfig &unit)
   : unit_(unit)

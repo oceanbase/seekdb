@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_tablet_memtable_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -88,7 +89,7 @@ int ObTabletMemtableMgr::init(const common::ObTabletID &tablet_id,
                               ObTenantMetaMemMgr *t3m)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(storage::ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObMdsTableMgr *mds_table_mgr = nullptr;
 
@@ -106,7 +107,7 @@ int ObTabletMemtableMgr::init(const common::ObTabletID &tablet_id,
   } else if (OB_FAIL(ls_service->get_ls(ls_id,
                                         ls_handle,
                                         ObLSGetMod::TABLET_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(MTL_ID()));
+    LOG_WARN("failed to get ls", K(ret));
   } else if (OB_ISNULL(ls_ = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "ls should not be NULL", K(ret), KP(ls_));
@@ -315,7 +316,7 @@ int ObTabletMemtableMgr::create_memtable_(const CreateMemtableArg &arg,
   } else if (OB_ISNULL(new_tablet_memtable = static_cast<ObITabletMemtable *>(memtable_handle.get_table()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get memtable", K(ret), K(ls_id), K(tablet_id_), K(memtable_handle));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::DATA_MEMTABLE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::DATA_MEMTABLE_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id), K(tablet_id_));
   } else if (OB_UNLIKELY(!ls_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;

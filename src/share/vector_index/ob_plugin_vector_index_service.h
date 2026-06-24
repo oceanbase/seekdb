@@ -125,7 +125,7 @@ typedef common::hash::ObHashMap<common::ObTabletID, ObIvfCacheMgr*> IvfCacheMgrM
 class ObPluginVectorIndexMgr
 {
 public:
-  ObPluginVectorIndexMgr(lib::MemoryContext &memory_context, uint64_t tenant_id) 
+  ObPluginVectorIndexMgr(lib::MemoryContext &memory_context) 
     : is_inited_(false),
       need_check_(false),
       ls_id_(),
@@ -134,20 +134,19 @@ public:
       ivf_index_helper_map_(),
       adapter_map_rwlock_(),
       ls_tablet_task_ctx_(),
-      tenant_id_(tenant_id),
       interval_factor_(0),
       vector_index_service_(nullptr),
-      mem_sync_info_(tenant_id),
+      mem_sync_info_{},
       memory_context_(memory_context),
       all_vsag_use_mem_(nullptr),
-      async_task_opt_(tenant_id),
+      async_task_opt_{},
       ls_leader_(false)
   {}
   virtual ~ObPluginVectorIndexMgr();
 
-  int init(uint64_t tenant_id, ObLSID ls_id, lib::MemoryContext &memory_context, uint64_t *all_vsag_use_mem);
+  int init(ObLSID ls_id, lib::MemoryContext &memory_context, uint64_t *all_vsag_use_mem);
   ObLSID& get_ls_id() { return ls_id_; }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   ObPluginVectorIndexLSTaskCtx& get_ls_task_ctx() { return ls_tablet_task_ctx_; }
   VectorIndexAdaptorMap& get_partial_adapter_map() { return partial_index_adpt_map_; }
   VectorIndexAdaptorMap& get_complete_adapter_map() { return complete_index_adpt_map_; }
@@ -275,7 +274,7 @@ private:
   IvfCacheMgrMap ivf_cache_mgr_map_; // map of ivf cache managers
   TCRWLock adapter_map_rwlock_; // lock for adapter maps
   ObPluginVectorIndexLSTaskCtx ls_tablet_task_ctx_; // task ctx of ls level
-  uint64_t tenant_id_;
+  
   uint32_t interval_factor_; // used to expand real execute interval
   ObPluginVectorIndexService *vector_index_service_;
   int64_t local_schema_version_; // detect schema change
@@ -330,7 +329,6 @@ public:
   ObPluginVectorIndexService() 
   : is_inited_(false),
     has_start_(false),
-    tenant_id_(OB_INVALID_TENANT_ID),
     is_ls_or_tablet_changed_(false),
     schema_service_(NULL),
     ls_service_(NULL),
@@ -343,8 +341,7 @@ public:
     embedding_tg_id_(OB_INVALID_TG_ID)
   {}
   virtual ~ObPluginVectorIndexService();
-  int init(const uint64_t tenant_id,
-           schema::ObMultiVersionSchemaService *schema_service,
+  int init(schema::ObMultiVersionSchemaService *schema_service,
            ObLSService *ls_service);
   bool is_inited() { return is_inited_; }
   // mtl interfaces
@@ -459,7 +456,7 @@ public:
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
   int start_kmeans_tg();
-  TO_STRING_KV(K_(is_inited), K_(has_start), K_(tenant_id),
+  TO_STRING_KV(K_(is_inited), K_(has_start),
                K_(is_ls_or_tablet_changed), KP_(schema_service), KP_(ls_service));
 private:
   // for ivf
@@ -474,7 +471,7 @@ private:
   static const int64_t DEFAULT_LS_HASH_SIZE = 64;
   bool is_inited_;
   bool has_start_;
-  int64_t tenant_id_;
+  
   LSIndexMgrMap index_ls_mgr_map_;
   bool is_ls_or_tablet_changed_;
 
@@ -513,7 +510,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
         "process_ivf_aux_info callback format error");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "ObPluginVectorIndexService is not inited", KR(ret), K_(tenant_id));
+    OB_LOG(WARN, "ObPluginVectorIndexService is not inited", KR(ret));
   } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
     OB_LOG(WARN, "failed to generate sql", K(ret), K(table_id));
   } else {
@@ -525,7 +522,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
     session_param.ddl_info_.set_dest_table_hidden(false);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_proxy_->read(res, tenant_id_, sql_string.ptr(), &session_param))) {
+      if (OB_FAIL(sql_proxy_->read(res, sql_string.ptr(), &session_param))) {
         OB_LOG(WARN, "failed to execute sql", K(ret), K(sql_string));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;

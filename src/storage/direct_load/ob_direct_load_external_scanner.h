@@ -175,8 +175,8 @@ template <typename T, typename Compare>
 ObDirectLoadExternalSortScanner<T, Compare>::ObDirectLoadExternalSortScanner()
   : allocator_("TLD_ESScanner"), is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  iters_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 template <typename T, typename Compare>

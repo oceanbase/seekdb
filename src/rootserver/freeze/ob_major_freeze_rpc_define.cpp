@@ -22,17 +22,17 @@ namespace oceanbase
 namespace obcall
 {
 
-OB_SERIALIZE_MEMBER(ObSimpleFreezeInfo, tenant_id_);
+OB_SERIALIZE_MEMBER(ObSimpleFreezeInfo);
 
 OB_SERIALIZE_MEMBER(ObMajorFreezeRequest, info_, freeze_reason_);
 
 OB_SERIALIZE_MEMBER(ObMajorFreezeResponse, err_code_);
 
-OB_SERIALIZE_MEMBER(ObTenantAdminMergeRequest, tenant_id_, type_);
+OB_SERIALIZE_MEMBER(ObTenantAdminMergeRequest, type_);
 
 OB_SERIALIZE_MEMBER(ObTenantAdminMergeResponse, err_code_);
 
-OB_SERIALIZE_MEMBER(ObTabletMajorFreezeRequest, tenant_id_, ls_id_, tablet_id_, is_rebuild_column_group_);
+OB_SERIALIZE_MEMBER(ObTabletMajorFreezeRequest, ls_id_, tablet_id_, is_rebuild_column_group_);
 
 } // namespace obcall
 } // namespace oceanbase

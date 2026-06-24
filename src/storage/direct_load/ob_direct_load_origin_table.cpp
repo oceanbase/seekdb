@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_origin_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -75,7 +76,7 @@ void ObDirectLoadOriginTableMeta::reset()
 ObDirectLoadOriginTable::ObDirectLoadOriginTable()
   : major_sstable_(nullptr), is_inited_(false)
 {
-  ddl_sstables_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadOriginTable::~ObDirectLoadOriginTable()
@@ -107,9 +108,9 @@ int ObDirectLoadOriginTable::init(const ObDirectLoadOriginTableCreateParam &para
     ObLSService *ls_svr = nullptr;
     ObLSHandle ls_handle;
     ObLS *ls = nullptr;
-    if (OB_ISNULL(ls_svr = MTL(ObLSService *))) {
+    if (OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
       ret = OB_ERR_SYS;
-      LOG_WARN("MTL ObLSService is null", KR(ret), "tenant_id", MTL_ID());
+      LOG_WARN("MTL ObLSService is null", KR(ret));
     } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       LOG_WARN("fail to get ls", KR(ret), K(ls));
     } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
@@ -265,9 +266,9 @@ ObDirectLoadOriginTableAccessor::ObDirectLoadOriginTableAccessor()
     schema_param_(stmt_allocator_), 
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  stmt_allocator_.set_tenant_id(MTL_ID());
-  col_ids_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObDirectLoadOriginTableAccessor::~ObDirectLoadOriginTableAccessor()
@@ -300,21 +301,20 @@ int ObDirectLoadOriginTableAccessor::inner_init(ObDirectLoadOriginTable *origin_
 int ObDirectLoadOriginTableAccessor::init_table_access_param()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   const uint64_t table_id = origin_table_->get_meta().table_id_;
   const ObTabletID &tablet_id = origin_table_->get_meta().tablet_id_;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   ObRelativeTable relative_table;
   int64_t store_column_count = 0;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id,
-                                                                                  schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", KR(ret), K(tenant_id), K(table_id));
+    LOG_WARN("table not exist", KR(ret), K(table_id));
   } else if (OB_FAIL(schema_param_.convert(table_schema))) {
     LOG_WARN("fail to convert schema para", KR(ret));
   } else if (OB_FAIL(relative_table.init(&schema_param_, tablet_id))) {

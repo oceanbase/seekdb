@@ -158,8 +158,8 @@ int ObExprSTAsGeoJson::eval_st_asgeojson(const ObExpr &expr, ObEvalCtx &ctx, ObD
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_ASGEOJSON);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_ASGEOJSON);
   uint32_t max_dec_digits = INT_MAX32;
   uint8_t flag = 0;
   ObGeometry *geo = nullptr;

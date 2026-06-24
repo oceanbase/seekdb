@@ -38,25 +38,23 @@ public:
   ObDTLIntermResultMonitorInfoGetter(common::ObScanner &scanner,
                                      common::ObIAllocator &allocator,
                                      common::ObIArray<uint64_t> &output_column_ids,
-                                     common::ObNewRow &cur_row,
-                                     uint64_t effective_tenant_id)
+                                     common::ObNewRow &cur_row)
     : scanner_(scanner),
       allocator_(allocator),
       output_column_ids_(output_column_ids),
-      cur_row_(cur_row),
-      effective_tenant_id_(effective_tenant_id)
+      cur_row_(cur_row)
   {}
   virtual ~ObDTLIntermResultMonitorInfoGetter() = default;
   int operator() (common::hash::HashMapPair<sql::dtl::ObDTLIntermResultKey, sql::dtl::ObDTLIntermResultInfo *> &entry);
 public:
-  uint64_t get_effective_tenant_id() const { return effective_tenant_id_; }
+  
   DISALLOW_COPY_AND_ASSIGN(ObDTLIntermResultMonitorInfoGetter);
 private:
   common::ObScanner &scanner_;
   common::ObIAllocator &allocator_;
   common::ObIArray<uint64_t> &output_column_ids_;
   common::ObNewRow &cur_row_;
-  uint64_t effective_tenant_id_;
+  
 };
 
 class ObAllDtlIntermResultMonitor : public common::ObVirtualTableScannerIterator

@@ -32,7 +32,7 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
                                           ObResolverParams &resolver_params)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = 0;
+  
 
   if (OB_ISNULL(session_info) || OB_ISNULL(alter_table_stmt) || OB_ISNULL(table_schema) ||
       OB_ISNULL(schema_guard) || OB_ISNULL(allocator)) {
@@ -46,7 +46,6 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
   } else if (OB_UNLIKELY(T_MV_OPTIONS != node.type_ || 1 != node.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid mv options node", KR(ret), K(node.type_), K(node.num_child_));
-  } else if (FALSE_IT(tenant_id = session_info->get_effective_tenant_id())) {
   } else {
     ObAlterMViewArg &alter_mview_arg = alter_table_stmt->get_alter_table_arg().alter_mview_arg_;
     ObString exec_env;
@@ -161,7 +160,7 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
           alter_mview_arg.get_enable_on_query_computation()) {
         FastRefreshableNotes note;
         bool can_fast_refresh = false;
-        if (OB_FAIL(ObMVProvider::check_mv_refreshable(tenant_id,
+        if (OB_FAIL(ObMVProvider::check_mv_refreshable(
                                                        table_schema->get_table_id(),
                                                        session_info,
                                                        schema_guard,

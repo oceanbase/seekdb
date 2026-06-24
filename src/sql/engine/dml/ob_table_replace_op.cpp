@@ -152,7 +152,6 @@ int ObTableReplaceOp::inner_open()
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(replace_row_store_.init(UINT64_MAX,
-                                             my_session->get_effective_tenant_id(),
                                              ObCtxIds::DEFAULT_CTX_ID,
                                              "replace_row_store",
                                              false/*enable_dump*/))) {
@@ -196,7 +195,7 @@ OB_INLINE int ObTableReplaceOp::inner_open_with_das()
     // init update das_ref
     ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
     ObMemAttr mem_attr;
-    mem_attr.tenant_id_ = session->get_effective_tenant_id();
+    
     mem_attr.label_ = "SqlReplaceInto";
     replace_rtctx_.das_ref_.set_expr_frame_info(expr_frame_info);
     replace_rtctx_.das_ref_.set_mem_attr(mem_attr);

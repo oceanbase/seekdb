@@ -72,11 +72,11 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
           && !table_loc->is_fk_check_ ) {
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
-        uint64_t tenant_id = exec_ctx.get_my_session()->get_effective_tenant_id();
-        if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+        
+        if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
           LOG_WARN("get tenant schema guard failed", K(ret));
-        } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, ref_table_id, table_schema))) {
-          LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(ref_table_id));
+        } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
+          LOG_WARN("get table schema failed", K(ret), K(ref_table_id));
         } else if (table_schema != nullptr) {
           LOG_MYSQL_USER_ERROR(OB_ERR_MUTATING_TABLE_OPERATION, table_schema->get_table_name());
         }
@@ -919,7 +919,7 @@ int ObDASUtils::generate_mlog_row(const ObLSID &ls_id,
                                   bool is_old_row)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   uint64_t autoinc_seq = 0;
   ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
   if (OB_ISNULL(dml_param.table_param_)) {
@@ -932,8 +932,8 @@ int ObDASUtils::generate_mlog_row(const ObLSID &ls_id,
   } else if (row.count_ < 4) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("each mlog row should at least contain 4 columns", KR(ret), K(row.count_));
-  } else if (OB_FAIL(auto_inc.get_autoinc_seq_for_mlog(tenant_id, ls_id, tablet_id, autoinc_seq))) {
-    LOG_WARN("get_autoinc_seq fail", K(ret), K(tenant_id), K(ls_id), K(tablet_id));
+  } else if (OB_FAIL(auto_inc.get_autoinc_seq_for_mlog(ls_id, tablet_id, autoinc_seq))) {
+    LOG_WARN("get_autoinc_seq fail", K(ret), K(ls_id), K(tablet_id));
   } else {
     // mlog_row = | base_table_rowkey_cols | partition key cols | sequence_col | ... | dmltype_col | old_new_col |
     int sequence_col = 0;

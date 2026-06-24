@@ -58,7 +58,7 @@ void TestCGBlockTmpFile::SetUpTestCase()
   ASSERT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
 
   CHUNK_MGR.set_limit(TENANT_MEMORY);
-  ObMallocAllocator::get_instance()->set_tenant_limit(MTL_ID(), TENANT_MEMORY);
+  ObMallocAllocator::get_instance()->set_tenant_limit(TENANT_MEMORY);
 }
 
 void TestCGBlockTmpFile::SetUp()
@@ -342,7 +342,7 @@ TEST_F(TestCGBlockTmpFile, test_write_read_cg_block)
   const int64_t count = 10;
   ObArray<ObCGBlock *> read_arr;
   ObArray<ObCGBlock *> write_arr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "TWRCGBlock"));
+  ObArenaAllocator allocator(ObMemAttr("TWRCGBlock"));
   ObCGBlockFile cg_block_file;
   EXPECT_EQ(OB_SUCCESS, cg_block_file.open(ObTabletID(8), 8, 8, 8));
   EXPECT_EQ(OB_SUCCESS, prepare_cg_block_content_array(count, write_arr, allocator));
@@ -360,8 +360,8 @@ TEST_F(TestCGBlockTmpFile, test_cg_block_tmp_file_iterator)
   ObArray<ObCGBlock *> write_arr_0;
   ObArray<ObCGBlock *> write_arr_1;
   ObArray<ObCGBlock *> read_arr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "TCGBFIter"));
-  ObMemAttr attr(MTL_ID(), "cg_blok_file");
+  ObArenaAllocator allocator(ObMemAttr("TCGBFIter"));
+  ObMemAttr attr("cg_blok_file");
   ObCGBlockFile *cg_block_file_0 = nullptr;
   ObCGBlockFile *cg_block_file_1 = nullptr;
   ObArray<ObCGBlockFile *> cg_block_files;
@@ -392,8 +392,8 @@ TEST_F(TestCGBlockTmpFile, test_cg_block_tmp_file_iterator_put_back)
   ObArray<ObCGBlock *> write_arr_0;
   ObArray<ObCGBlock *> write_arr_1;
   ObArray<ObCGBlock *> read_arr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "TCGBFIPB"));
-  ObMemAttr attr(MTL_ID(), "cg_blok_file");
+  ObArenaAllocator allocator(ObMemAttr("TCGBFIPB"));
+  ObMemAttr attr("cg_blok_file");
   ObCGBlockFile *cg_block_file_0 = nullptr;
   ObCGBlockFile *cg_block_file_1 = nullptr;
   cg_block_file_0 = OB_NEW(ObCGBlockFile, attr);
@@ -422,7 +422,7 @@ TEST_F(TestCGBlockTmpFile, test_write_cg_block_using_writer)
   const int64_t count = 10;
   ObArray<ObCGBlock *> read_arr;
   ObArray<ObCGBlock *> write_arr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "TWRCGBlockUW"));
+  ObArenaAllocator allocator(ObMemAttr("TWRCGBlockUW"));
   ObCGBlockFile cg_block_file;
   EXPECT_EQ(OB_SUCCESS, cg_block_file.open(ObTabletID(13), 13, 13, 13));
   EXPECT_EQ(OB_SUCCESS, prepare_cg_block_content_array(count, write_arr, allocator));
@@ -441,8 +441,8 @@ TEST_F(TestCGBlockTmpFile, test_write_cg_block_using_random_content)
   ObArray<ObCGBlock *> write_arr_0;
   ObArray<ObCGBlock *> write_arr_1;
   ObArray<ObCGBlock *> read_arr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "TWCGBlockURC"));
-  ObMemAttr attr(MTL_ID(), "cg_blok_file");
+  ObArenaAllocator allocator(ObMemAttr("TWCGBlockURC"));
+  ObMemAttr attr("cg_blok_file");
   ObCGBlockFile *cg_block_file_0 = nullptr;
   ObCGBlockFile *cg_block_file_1 = nullptr;
   cg_block_file_0 = OB_NEW(ObCGBlockFile, attr);

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
@@ -148,7 +149,7 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
       LOG_WARN("fail to calc location ids", K(ret), K(table_id), K(tablet_id), KP(calc_table_id_expr), KP(calc_part_id_expr));
     } else {
       ObFixedArray<float*, ObIAllocator> meta_vectors(tmp_allocator);
-      share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+      share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
       float *min_vec = nullptr;
       float *step_vec = nullptr;
       uint8_t *res_vec = nullptr;

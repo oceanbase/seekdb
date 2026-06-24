@@ -137,19 +137,19 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
   return ret;
 }
 
-int ObVectorRefreshIdxTransaction::start_transaction(uint64_t tenant_id)
+int ObVectorRefreshIdxTransaction::start_transaction()
 {
   int ret = OB_SUCCESS;
   ObISQLConnection *conn = nullptr;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id));
+    LOG_WARN("invalid args", KR(ret));
   } else if (OB_ISNULL(conn = get_connection())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
-    if (OB_FAIL(conn->start_transaction(tenant_id, false /*with_snapshot*/))) {
-      LOG_WARN("fail to start transaction", KR(ret), K(tenant_id));
+    if (OB_FAIL(conn->start_transaction(false /*with_snapshot*/))) {
+      LOG_WARN("fail to start transaction", KR(ret));
     }
     if (OB_SUCCESS == get_errno()) {
       set_errno(ret);
@@ -199,14 +199,14 @@ int ObVectorRefreshIdxTransaction::start(ObSQLSessionInfo *session_info, ObISQLC
   } else if (OB_FAIL(connect(session_info, sql_client))) {
     LOG_WARN("fail to connect", KR(ret));
   } else {
-    const uint64_t tenant_id = session_info->get_effective_tenant_id();
+    
     start_time_ = ObTimeUtility::current_time();
-    if (OB_FAIL(start_transaction(tenant_id))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(tenant_id));
+    if (OB_FAIL(start_transaction())) {
+      LOG_WARN("failed to start transaction", KR(ret));
     } else {
       session_info_ = session_info;
       in_trans_ = true;
-      LOG_DEBUG("start transaction success", K(tenant_id));
+      LOG_DEBUG("start transaction success");
     }
   }
   if (OB_FAIL(ret)) {

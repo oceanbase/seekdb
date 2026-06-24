@@ -31,7 +31,6 @@ public:
   ObVecIndexBuildTask();
   virtual ~ObVecIndexBuildTask();
   int init(
-      const uint64_t tenant_id,
       const int64_t task_id,
       const ObTableSchema *data_table_schema,
       const ObTableSchema *index_schema,
@@ -54,7 +53,6 @@ public:
       const int64_t buf_size,
       int64_t &pos) const override;
   virtual int deserialize_params_from_message(
-      const uint64_t tenant_id,
       const char *buf,
       const int64_t buf_size,
       int64_t &pos) override;
@@ -147,10 +145,9 @@ private:
   struct ChangeTaskStatusFn final
   {
   public:
-    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, const uint64_t tenant_id, ObRootService *root_service, int64_t &not_finished_cnt) :
+    ChangeTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, ObRootService *root_service, int64_t &not_finished_cnt) :
       dependent_task_result_map_(dependent_task_result_map),
       rt_service_(root_service),
-      dest_tenant_id_(tenant_id),
       not_finished_cnt_(not_finished_cnt)
     {}
   public:
@@ -159,19 +156,18 @@ private:
   public:
     common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map_;
     ObRootService *rt_service_;
-    uint64_t dest_tenant_id_;
+    
     int64_t &not_finished_cnt_;
   };
   struct CheckTaskStatusFn final
   {
   public:
     CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map,
-                      int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished, const uint64_t tenant_id) :
+                      int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished) :
       dependent_task_result_map_(dependent_task_result_map),
       finished_task_cnt_(finished_task_cnt),
       child_task_failed_(child_task_failed),
-      state_finished_(state_finished),
-      dest_tenant_id_(tenant_id)
+      state_finished_(state_finished)
     {}
   public:
     ~CheckTaskStatusFn() = default;
@@ -181,12 +177,11 @@ private:
     int64_t &finished_task_cnt_;
     bool &child_task_failed_;
     bool &state_finished_;
-    uint64_t dest_tenant_id_;
+    
   };
   static const int64_t OB_VEC_INDEX_BUILD_TASK_VERSION = 1;
   static const int64_t OB_VEC_INDEX_BUILD_CHILD_TASK_NUM = 5;
   static const int64_t OB_HYBRID_VEC_INDEX_BUILD_CHILD_TASK_NUM = 6;
-  using ObDDLTask::tenant_id_;
   using ObDDLTask::task_id_;
   using ObDDLTask::schema_version_;
   using ObDDLTask::parallelism_;

@@ -228,7 +228,7 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
       arr_ptr = const_cast<ObArray<Row<T>> *> (map_.get(tmp_row_key));
       CK (OB_NOT_NULL(arr_ptr));
       if (OB_SUCC(ret)) {
-        arr_ptr->set_tenant_id(MTL_ID());
+        
         if (OB_FAIL(arr_ptr->push_back(row))) {
           LOG_WARN("failed to push row", K(ret));
         }
@@ -356,9 +356,9 @@ int ObExprInOrNotIn::ObExprInCtx::init_hashset(VecValueTypeClass vec_tc,
   if (use_colhashset) {
     row_dimension_ = 1;
     if (vec_tc == VEC_TC_STRING) {
-      ret = str_ht_.init(param_num, MTL_ID(), cs_type, cmp_end_space);
+      ret = str_ht_.init(param_num, cs_type, cmp_end_space);
     } else {
-      ret = int_ht_.init(param_num, MTL_ID());
+      ret = int_ht_.init(param_num);
     }
   } else {
     ret = this->init_static_engine_hashset(param_num);

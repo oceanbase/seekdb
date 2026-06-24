@@ -65,12 +65,8 @@ int ObCreateTableStmt::get_first_stmt(ObString &first_stmt)
 {
   int ret = OB_SUCCESS;
 
-  if (EXTERNAL_TABLE == get_table_type()) {
-    first_stmt = get_masked_sql();
-  } else {
-    if (OB_FAIL(ObStmt::get_first_stmt(first_stmt))) {
-      LOG_WARN("fail to get first stmt", K(ret));
-    }
+  if (OB_FAIL(ObStmt::get_first_stmt(first_stmt))) {
+    LOG_WARN("fail to get first stmt", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(get_query_ctx())) {

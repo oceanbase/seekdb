@@ -55,7 +55,7 @@ public:
   virtual void destroy();
 private:
   int prepare_start_to_read_();
-  int fill_tenant_ids_();
+  int fill_ids_();
   int get_next_tx_info_(transaction::ObTxStat &tx_stat);
   bool is_valid_timestamp_(const int64_t timestamp) const;
 private:
@@ -104,7 +104,6 @@ private:
 private:
   bool init_;
   transaction::ObTxStatIterator tx_stat_iter_;
-  common::ObArray<uint64_t> all_tenants_;
   transaction::ObXATransID xid_;
   ObCStringHelper cstring_helper_;
 private:

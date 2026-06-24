@@ -355,7 +355,6 @@ enum ExplainType
   EXPLAIN_BASIC,
   EXPLAIN_PLANREGRESS,
   EXPLAIN_EXTENDED_NOADDR,
-  EXPLAIN_DBLINK_STMT,
   EXPLAIN_HINT_FORMAT,
   EXPLAIN_PLAN_TABLE
 };
@@ -550,7 +549,6 @@ enum PXParallelRule
   AUTO_DOP, // /*+ parallel(auto) */ or alter session set parallel_degree_policy = 'auto';
   // force disable parallel below
   PL_UDF_DAS_FORCE_SERIALIZE, //stmt has_pl_udf will use das, force serialize;
-  DBLINK_FORCE_SERIALIZE, //stmt has dblink will use das, force seialize;
   LICENSE_NOT_ALLOW_OLAP, // current license does not support olap
   MAX_OPTION
 };
@@ -566,7 +564,6 @@ inline const char *ob_px_parallel_rule_str(PXParallelRule px_parallel_ruel)
     "MANUAL_TABLE_DOP",
     "AUTO_DOP",
     "PL_UDF_DAS_FORCE_SERIALIZE",
-    "DBLINK_FORCE_SERIALIZE",
     "LICENSE_NOT_ALLOW_OLAP",
     "MAX_OPTION",
   };
@@ -669,7 +666,7 @@ struct ObWinfuncOptimizationOpt
 // class full name: ob tenant memory array.
 // Used to solve the following problem:
 // the initial memory allocation of ObSEArray is relatively large, leading to memory inflation issues in some scenarios.
-// Default to using the MTL_ID() tenant,
+// Default to using the sys tenant tenant,
 // and the lifecycle of this class cannot cross tenants.
 template<typename T, typename BlockAllocatorT = ModulePageAllocator, bool auto_free = false>
 class ObTMArray final : public ObSEArrayImpl<T, 0, BlockAllocatorT, auto_free>
@@ -685,7 +682,7 @@ ObTMArray<T, BlockAllocatorT, auto_free>::ObTMArray(int64_t block_size,
                                                            const BlockAllocatorT &alloc)
     : ObSEArrayImpl<T, 0, BlockAllocatorT, auto_free>(block_size, alloc)
 {
-  this->set_tenant_id(MTL_ID());
+  
 }
 
 template <typename T, int max_block_size = OB_MALLOC_BIG_BLOCK_SIZE,
@@ -709,7 +706,7 @@ ObTMSegmentArray<T, max_block_size, BlockAllocatorT, auto_free,
     : Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
           BlockPointerArrayT>(alloc)
 {
-  this->set_tenant_id(MTL_ID());
+  
 }
 
 inline const ObString &ob_match_against_mode_str(const ObMatchAgainstMode mode)

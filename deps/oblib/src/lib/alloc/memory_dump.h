@@ -69,7 +69,7 @@ class ObMemoryDumpTask
 {
 public:
   TO_STRING_KV(K(type_), K(dump_all_), KP(p_context_), K(slot_idx_),
-               K(dump_tenant_ctx_), K(tenant_id_), K(ctx_id_), KP(p_chunk_));
+               K(dump_tenant_ctx_), K(ctx_id_), KP(p_chunk_));
   DumpType type_;
   bool dump_all_;
   union
@@ -82,7 +82,7 @@ public:
       bool dump_tenant_ctx_;
       union {
         struct {
-          int64_t tenant_id_;
+          
           int64_t ctx_id_;
         };
         void *p_chunk_;
@@ -148,19 +148,17 @@ static const int PENDING_DUMP = 2;
 static const int PRINT_BUF_LEN = 64L << 10;
 static const int64_t MAX_MEMORY = 128L << 30; // 1T
 static const int MAX_CHUNK_CNT = MAX_MEMORY / (2L << 20);
-static const int MAX_TENANT_CNT = 1;
 static const int MAX_LABEL_ITEM_CNT = 4L << 10;
 static const int64_t STAT_LABEL_INTERVAL = INT64_MAX;
 
 struct TenantCtxRange
 {
   static bool compare(const TenantCtxRange &tcr,
-                      const std::pair<uint64_t, uint64_t> &cmp_val)
+                      const uint64_t cmp_ctx_id)
   {
-    return tcr.tenant_id_ < cmp_val.first ||
-      (tcr.tenant_id_ == cmp_val.first && tcr.ctx_id_ < cmp_val.second);
+    return tcr.ctx_id_ < cmp_ctx_id;
   }
-  uint64_t tenant_id_;
+  
   uint64_t ctx_id_;
   // [start_, end_)
   int start_;
@@ -169,7 +167,7 @@ struct TenantCtxRange
 
 struct Stat {
   LabelItem up2date_items_[MAX_LABEL_ITEM_CNT];
-  TenantCtxRange tcrs_[MAX_TENANT_CNT * ObCtxIds::MAX_CTX_ID];
+  TenantCtxRange tcrs_[ObCtxIds::MAX_CTX_ID];
   lib::ObMallocSampleMap  malloc_sample_map_;
   int tcr_cnt_ = 0;
 };
@@ -178,7 +176,6 @@ struct PreAllocMemory
 {
   char print_buf_[PRINT_BUF_LEN];
   char array_buf_[MAX_CHUNK_CNT * sizeof(void*)];
-  char tenant_ids_buf_[MAX_TENANT_CNT * sizeof(uint64_t)];
   char stats_buf_[sizeof(Stat) * 2];
 };
 
@@ -224,7 +221,6 @@ private:
     void *array_;
     AChunk **chunks_;
   };
-  uint64_t *tenant_ids_;
   lib::MemoryContext dump_context_;
   LabelMap lmap_;
   common::ObLatch iter_lock_;
@@ -234,7 +230,6 @@ private:
   bool is_inited_;
 };
 
-extern void get_tenant_ids(uint64_t *ids, int cap, int &cnt);
 } // namespace common
 } // namespace oceanbase
 

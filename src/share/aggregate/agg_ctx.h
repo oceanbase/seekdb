@@ -223,14 +223,14 @@ struct RollupContext
 
 struct RuntimeContext
 {
-  RuntimeContext(sql::ObEvalCtx &eval_ctx, uint64_t tenant_id, ObIArray<ObAggrInfo> &aggr_infos,
+  RuntimeContext(sql::ObEvalCtx &eval_ctx, ObIArray<ObAggrInfo> &aggr_infos,
                  const lib::ObLabel &label) :
     eval_ctx_(eval_ctx),
     aggr_infos_(aggr_infos),
-    allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id, ObCtxIds::WORK_AREA),
+    allocator_(label, OB_MALLOC_NORMAL_BLOCK_SIZE, ObCtxIds::WORK_AREA),
     op_monitor_info_(nullptr), io_event_observer_(nullptr), agg_row_meta_(),
-    agg_rows_(ModulePageAllocator(label, tenant_id, ObCtxIds::WORK_AREA)),
-    agg_extras_(ModulePageAllocator(label, tenant_id, ObCtxIds::WORK_AREA)), removal_info_(),
+    agg_rows_(ModulePageAllocator(label, ObCtxIds::WORK_AREA)),
+    agg_extras_(ModulePageAllocator(label, ObCtxIds::WORK_AREA)), removal_info_(),
     win_func_agg_(false), hp_infras_mgr_(nullptr), rollup_context_(nullptr), distinct_count_(0),
     flag_(0), rb_allocator_(nullptr)
   {}
@@ -406,7 +406,7 @@ struct RuntimeContext
   ObRbAggAllocator* get_rb_allocator()
   {
     if (OB_ISNULL(rb_allocator_)) {
-      rb_allocator_ = OB_NEWx(ObRbAggAllocator, &allocator_, MTL_ID());
+      rb_allocator_ = OB_NEWx(ObRbAggAllocator, &allocator_);
     }
     return rb_allocator_;
   }

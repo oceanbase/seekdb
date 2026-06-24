@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX COMMON
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
-#include "lib/restore/ob_object_device.h"
 #include "src/storage/ob_file_system_router.h"
 #include "src/observer/ob_server.h"
 using namespace oceanbase::lib;
@@ -457,8 +456,7 @@ int ObIOCallback::alloc_and_copy_data(const char *io_data_buffer, const int64_t 
 
 /******************             SNIOInfo              **********************/
 ObSNIOInfo::ObSNIOInfo()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    fd_(),
+  : fd_(),
     offset_(0),
     size_(0),
     timeout_us_(DEFAULT_IO_WAIT_TIME_US),
@@ -483,7 +481,7 @@ ObSNIOInfo::~ObSNIOInfo()
 
 void ObSNIOInfo::reset()
 {
-  tenant_id_ = 0;
+  
   fd_.reset();
   offset_ = 0;
   size_ = 0;
@@ -497,8 +495,7 @@ void ObSNIOInfo::reset()
 
 bool ObSNIOInfo::is_valid() const
 {
-  return tenant_id_ > 0
-    && fd_.is_valid()
+  return fd_.is_valid()
     && offset_ >= 0
     // in order to address concurrent write issues, archive checkpoint module would write
     // multiple non-content objects (it stores content in object name) whose size = 0
@@ -512,7 +509,7 @@ ObSNIOInfo &ObSNIOInfo::operator=(const ObSNIOInfo &other)
 {
   if (&other != this) {
     reset();
-    tenant_id_ = other.tenant_id_;
+    
     fd_ = other.fd_;
     offset_ = other.offset_;
     size_ = other.size_;
@@ -671,7 +668,7 @@ int ObIOResult::init(const ObIOInfo &info)
   }
   if (OB_SUCC(ret)) {
     //init info and check valid
-    tenant_id_ = info.tenant_id_;
+    
     offset_ = info.offset_;
     size_ = info.size_;
     flag_ = info.flag_;
@@ -983,7 +980,6 @@ ObIORequest::ObIORequest()
     ref_cnt_(0),
     raw_buf_(nullptr),
     control_block_(nullptr),
-    tenant_id_(OB_INVALID_TENANT_ID),
     tenant_io_mgr_(),
     storage_accesser_(),
     fd_(),
@@ -1002,7 +998,6 @@ bool ObIORequest::is_valid() const
 {
   return nullptr != io_result_
       && io_result_->is_valid()
-      && tenant_id_ > 0
       && fd_.is_valid();
 }
 
@@ -1025,7 +1020,7 @@ int ObIORequest::init(const ObIOInfo &info, ObIOResult *result)
     io_result_->inc_ref("request");
     trace_id_ = *ObCurTraceId::get_trace_id();
     //init info and check valid
-    tenant_id_ = info.tenant_id_;
+    
     fd_ = info.fd_;
     part_id_ = info.part_id_;
     char *io_buf = nullptr;
@@ -1092,12 +1087,14 @@ void ObIORequest::reset() //only for test, not dec resut_ref
 {
   int ret = OB_SUCCESS;
   retry_count_ = 0;
+  // only read need destroy here
+  // TODO(yanfeng): works now, need refactor
   if (nullptr != control_block_ && nullptr != fd_.device_handle_) {
     fd_.device_handle_->free_iocb(control_block_);
     control_block_ = nullptr;
   }
   
-  tenant_id_ = 0;
+  
   free_io_buffer();
   ref_cnt_ = 0;
   trace_id_.reset();
@@ -1119,7 +1116,7 @@ void ObIORequest::destroy()
   }
 
   fd_.reset();
-  tenant_id_ = 0;
+  
   free_io_buffer();
   ref_cnt_ = 0;
   trace_id_.reset();
@@ -1382,7 +1379,7 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
     LOG_WARN("device handle is null", K(ret), K(*this));
   } else if (fd_.device_handle_->is_object_device()) {
     // do nothing
-  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb(tenant_id_))) {
+  } else if (OB_ISNULL(control_block_) && OB_ISNULL(control_block_ = fd_.device_handle_->alloc_iocb())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc io control block failed", K(ret), K(*this));
   } else if (FALSE_IT(tg.click("alloc_iocb"))) {
@@ -2100,21 +2097,20 @@ int ObTenantIOConfig::parse_group_config(const char *config_str)
   return ret;
 }
 
-int ObTenantIOConfig::add_single_group_config(const uint64_t tenant_id,
-                                              const ObIOGroupKey &key,
+int ObTenantIOConfig::add_single_group_config(const ObIOGroupKey &key,
                                               const char *group_name,
                                               int64_t min_percent,
                                               int64_t max_percent,
                                               int64_t weight_percent)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_resource_manager_group(key.group_id_)) || !is_valid_tenant_id(tenant_id) ||
+  if (OB_UNLIKELY(!is_resource_manager_group(key.group_id_)) || !true ||
       min_percent < 0 || min_percent > 100 ||
       max_percent < 0 || max_percent > 100 ||
       weight_percent < 0 || weight_percent > 100 || 
       min_percent > max_percent) {
     ret = OB_INVALID_CONFIG;
-    LOG_WARN("invalid group config", K(ret), K(tenant_id), K(key.group_id_), K(min_percent), K(max_percent), K(weight_percent));
+    LOG_WARN("invalid group config", K(ret), K(key.group_id_), K(min_percent), K(max_percent), K(weight_percent));
   } else {
     ObTenantIOConfig::GroupConfig tmp_group_config;
     strncpy(tmp_group_config.group_name_, group_name, common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH);

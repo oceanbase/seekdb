@@ -49,7 +49,6 @@ public:
    * lock inner table in trans with internal_sql_execute_timeout
    *
    * @param[in] trans:           ObMySQLTransaction
-   * @param[in] tenant_id:       tenant_id of the inner table
    * @param[in] inner_table_id:  inner table id which you want to lock
    * @param[in] lock_mode:       table lock mode
    * @param[in] is_from_sql:     is from sql table_lock can retry
@@ -60,7 +59,6 @@ public:
    */
   static int lock_inner_table_in_trans(
       common::ObMySQLTransaction &trans,
-      const uint64_t tenant_id,
       const uint64_t inner_table_id,
       const ObTableLockMode &lock_mode,
       const bool is_from_sql);
@@ -73,7 +71,6 @@ public:
    * lock ls in trans with internal_sql_execute_timeout
    *
    * @param[in] trans:           ObMySQLTransaction
-   * @param[in] tenant_id:       tenant_id of the ls
    * @param[in] ls_id:           target log stream(ls) id
    * @param[in] lock_mode:       obj lock mode
    * @return
@@ -83,7 +80,6 @@ public:
    */
   static int lock_ls_in_trans(
       common::ObMySQLTransaction &trans,
-      const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const ObTableLockMode &lock_mode);
 };

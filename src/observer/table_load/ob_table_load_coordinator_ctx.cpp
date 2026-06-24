@@ -51,9 +51,9 @@ ObTableLoadCoordinatorCtx::ObTableLoadCoordinatorCtx(ObTableLoadTableCtx *ctx)
     enable_heart_beat_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  idx_array_.set_tenant_id(MTL_ID());
-  commited_trans_ctx_array_.set_tenant_id(MTL_ID());
+  
+  
+  
 }
 
 ObTableLoadCoordinatorCtx::~ObTableLoadCoordinatorCtx()
@@ -75,8 +75,8 @@ int ObTableLoadCoordinatorCtx::init(const ObIArray<uint64_t> &column_ids,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(ctx_->param_), K(column_ids), KPC(exec_ctx));
   } else {
-    if (OB_FAIL(target_schema_.init(ctx_->param_.tenant_id_, ctx_->ddl_param_.dest_table_id_, ctx_->ddl_param_.schema_version_))) {
-      LOG_WARN("fail to init table load schema", KR(ret), K(ctx_->param_.tenant_id_),
+    if (OB_FAIL(target_schema_.init(ctx_->ddl_param_.dest_table_id_, ctx_->ddl_param_.schema_version_))) {
+      LOG_WARN("fail to init table load schema", KR(ret),
                K(ctx_->ddl_param_.dest_table_id_), K(ctx_->ddl_param_.schema_version_));
     }
     // init column idxs
@@ -89,21 +89,20 @@ int ObTableLoadCoordinatorCtx::init(const ObIArray<uint64_t> &column_ids,
       LOG_WARN("fail to init partition calc", KR(ret));
     }
     // init trans_allocator_
-    else if (OB_FAIL(trans_allocator_.init("TLD_CTransPool", ctx_->param_.tenant_id_))) {
+    else if (OB_FAIL(trans_allocator_.init("TLD_CTransPool"))) {
       LOG_WARN("fail to init trans allocator", KR(ret));
     }
     // init trans_map_
     else if (OB_FAIL(
-               trans_map_.create(1024, "TLD_TransMap", "TLD_TransMap", ctx_->param_.tenant_id_))) {
+               trans_map_.create(1024, "TLD_TransMap", "TLD_TransMap"))) {
       LOG_WARN("fail to create trans map", KR(ret));
     }
     // init trans_ctx_map_
-    else if (OB_FAIL(trans_ctx_map_.create(1024, "TLD_TCtxMap", "TLD_TCtxMap",
-                                           ctx_->param_.tenant_id_))) {
+    else if (OB_FAIL(trans_ctx_map_.create(1024, "TLD_TCtxMap", "TLD_TCtxMap"))) {
       LOG_WARN("fail to create trans ctx map", KR(ret));
     }
     // init segment_trans_ctx_map_
-    else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap", ctx_->param_.tenant_id_))) {
+    else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap"))) {
       LOG_WARN("fail to init segment ctx map", KR(ret));
     }
     // init error_row_handler_
@@ -371,14 +370,14 @@ int ObTableLoadCoordinatorCtx::generate_autoinc_params(AutoincParam &autoinc_par
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObTableLoadSchema::get_table_schema(ctx_->param_.tenant_id_,
+  if (OB_FAIL(ObTableLoadSchema::get_table_schema(
                                                   ctx_->param_.table_id_,
                                                   schema_guard, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_.tenant_id_),
+    LOG_WARN("fail to get table schema", KR(ret),
                                          K(ctx_->param_.table_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", KR(ret), K(ctx_->param_.tenant_id_), K(ctx_->param_.table_id_));
+    LOG_WARN("table not exist", KR(ret), K(ctx_->param_.table_id_));
   } else {
     //ddl for auto increment synchronizes the auto-increment value last, and the initialization of the autoinc_param parameter should use the table schema of the original table's table id
     ObColumnSchemaV2 *autoinc_column_schema = nullptr;
@@ -402,7 +401,7 @@ int ObTableLoadCoordinatorCtx::generate_autoinc_params(AutoincParam &autoinc_par
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null autoinc column schema", KR(ret), KP(autoinc_column_schema));
       } else {
-        autoinc_param.tenant_id_ = ctx_->param_.tenant_id_;
+        
         autoinc_param.autoinc_table_id_ = ctx_->param_.table_id_;
         autoinc_param.autoinc_first_part_num_ = table_schema->get_first_part_num();
         autoinc_param.autoinc_table_part_num_ = table_schema->get_all_part_num();
@@ -431,16 +430,16 @@ int ObTableLoadCoordinatorCtx::generate_autoinc_params(AutoincParam &autoinc_par
 int ObTableLoadCoordinatorCtx::init_sequence()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = ctx_->param_.tenant_id_;
+  
   const uint64_t table_id = ctx_->ddl_param_.dest_table_id_;
   share::schema::ObSchemaGetterGuard table_schema_guard;
   share::schema::ObSchemaGetterGuard sequence_schema_guard;
   const ObSequenceSchema *sequence_schema = nullptr;
   const ObTableSchema *target_table_schema = nullptr;
   uint64_t sequence_id = OB_INVALID_ID;
-  if (OB_FAIL(ObTableLoadSchema::get_table_schema(tenant_id, table_id, table_schema_guard,
+  if (OB_FAIL(ObTableLoadSchema::get_table_schema( table_id, table_schema_guard,
                                                   target_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else {
     //ddl for identity is to synchronize the auto-increment value when creating a table, for sequence parameter initialization must use the hidden table id's table schema
     for (ObTableSchema::const_column_iterator iter = target_table_schema->column_begin();
@@ -463,11 +462,9 @@ int ObTableLoadCoordinatorCtx::init_sequence()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                     tenant_id,
                      sequence_schema_guard))) {
     LOG_WARN("get schema guard failed", KR(ret));
   } else if (OB_FAIL(sequence_schema_guard.get_sequence_schema(
-                     tenant_id,
                      sequence_id,
                      sequence_schema))) {
     LOG_WARN("fail get sequence schema", K(sequence_id), KR(ret));
@@ -475,7 +472,7 @@ int ObTableLoadCoordinatorCtx::init_sequence()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null unexpected", KR(ret));
   } else if (OB_FAIL(sequence_schema_.assign(*sequence_schema))) {
-    LOG_WARN("cache sequence_schema fail", K(tenant_id), K(sequence_id), KR(ret));
+    LOG_WARN("cache sequence_schema fail", K(sequence_id), KR(ret));
   }
   return ret;
 }
@@ -483,7 +480,6 @@ int ObTableLoadCoordinatorCtx::init_sequence()
 void ObTableLoadCoordinatorCtx::add_to_all_server_event(int ret_code)
 {
   SERVER_EVENT_ADD("direct_load", "switch_status",
-                   "tenant_id", MTL_ID(),
                    "trace_id", *ObCurTraceId::get_trace_id(),
                    "ret", ret_code,
                    "status", ctx_->job_stat_->coordinator_.status_,
@@ -521,22 +517,19 @@ int ObTableLoadCoordinatorCtx::init_partition_ids(const ObIArray<ObTabletID> &ta
   ObArray<ObObjectID> all_origin_part_ids, all_target_part_ids;
   ObTableLoadPartitionId origin_id, target_id;
   ObHashSet<ObTabletID> tablet_ids_set;
-  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(ctx_->param_.tenant_id_, schema_guard))) {
+  if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard,
-                                                         ctx_->param_.tenant_id_,
                                                          ctx_->param_.table_id_,
                                                          origin_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_.tenant_id_), K(ctx_->param_.table_id_));
+    LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_.table_id_));
   } else if (OB_ISNULL(origin_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is nullptr", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard,
-                                                         ctx_->param_.tenant_id_,
                                                          ctx_->ddl_param_.dest_table_id_,
                                                          target_table_schema))) {
     LOG_WARN("fail to get target schema", KR(ret),
-                                          K(ctx_->param_.tenant_id_),
                                           K(ctx_->ddl_param_.dest_table_id_));
   } else if (OB_ISNULL(target_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -560,7 +553,7 @@ int ObTableLoadCoordinatorCtx::init_partition_ids(const ObIArray<ObTabletID> &ta
       }
     }
   } else if (OB_FAIL(tablet_ids_set.create(tablet_ids.count(),
-                                           ObMemAttr(MTL_ID(), "TLD_TABLETID")))) {
+                                           ObMemAttr("TLD_TABLETID")))) {
     LOG_WARN("fail to create tablet ids set", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {

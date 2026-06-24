@@ -62,11 +62,10 @@ public:
     : allocator_("TLD_PL"),
       is_inited_(false) 
   { 
-    allocator_.set_tenant_id(MTL_ID());
-    tablet_ids_.set_tenant_id(MTL_ID()); 
+    
+     
   }
-  int init(uint64_t tenant_id,
-           const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
+  int init(const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
   int get_leader(common::ObTabletID tablet_id, PartitionLocationInfo &info) const;
   int get_all_leader(table::ObTableLoadArray<common::ObAddr> &addr_array) const;
   int get_all_leader_info(table::ObTableLoadArray<LeaderInfo> &info_array) const;
@@ -86,19 +85,18 @@ public:
                                      ObTableLoadPartitionLocation &partition_location,
                                      ObTableLoadPartitionLocation &target_partition_location);
   // Get through tablet_id
-  static int fetch_ls_id(uint64_t tenant_id, const common::ObTabletID &tablet_id,
+  static int fetch_ls_id(const common::ObTabletID &tablet_id,
                          share::ObLSID &ls_id);
-  static int fetch_ls_location(uint64_t tenant_id, const common::ObTabletID &tablet_id,
+  static int fetch_ls_location(const common::ObTabletID &tablet_id,
                                share::ObLSLocation &ls_location, share::ObLSID &ls_id);
-  static int fetch_tablet_handle(uint64_t tenant_id, const share::ObLSID &ls_id,
+  static int fetch_tablet_handle(const share::ObLSID &ls_id,
                                  const common::ObTabletID &tablet_id,
                                  storage::ObTabletHandle &tablet_handle);
 private:
   int init_all_partition_location(
-      uint64_t tenant_id, const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
+      const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
   int init_all_leader_info();
   int fetch_ls_locations(
-    uint64_t tenant_id,
     const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
  private:
   common::ObArenaAllocator allocator_;

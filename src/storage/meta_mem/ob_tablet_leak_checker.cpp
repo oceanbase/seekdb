@@ -78,7 +78,7 @@ int ObTabletHandleIndexMap::init()
     LOG_WARN("ObTabletHandleIndexMap init twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(tb_map_.create(REF_ARRAY_SIZE, "T3MTBMap"))) {
     LOG_WARN("failed to init tb map", K(ret));
-  } else if (OB_FAIL(rw_lock_.init(lib::ObMemAttr(OB_SERVER_TENANT_ID, "T3MQSyncLock")))) {
+  } else if (OB_FAIL(rw_lock_.init(lib::ObMemAttr("T3MQSyncLock")))) {
     LOG_WARN("failed to init rw lock", K(ret));
   } else {
     is_inited_ = true;

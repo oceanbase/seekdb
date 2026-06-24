@@ -35,8 +35,7 @@ class ObSchemaGuardWrapper
 {
 public:
   ObSchemaGuardWrapper() = delete;
-  ObSchemaGuardWrapper(const uint64_t tenant_id,
-                       share::schema::ObMultiVersionSchemaService *schema_service,
+  ObSchemaGuardWrapper(share::schema::ObMultiVersionSchemaService *schema_service,
                        const bool is_local_guard);
   ~ObSchemaGuardWrapper();
   int init(rootserver::ObDDLService *ddl_service);
@@ -71,7 +70,7 @@ public:
                    uint64_t &table_id,
                    ObTableType &table_type,
                    int64_t &schema_version);
-  int get_tenant_schema(const uint64_t tenant_id,
+  int get_tenant_schema(
                         const ObTenantSchema *&tenant_schema);
   int get_tablegroup_id(const common::ObString &tablegroup_name,
                         uint64_t &tablegroup_id);
@@ -116,7 +115,7 @@ int get_trigger_info(const uint64_t trigger_id,
 private:
   int check_inner_stat_() const;
 private:
-  const uint64_t tenant_id_;
+  
   ObMultiVersionSchemaService *schema_service_;
   ObLatestSchemaGuard latest_schema_guard_;
   ObSchemaGetterGuard local_schema_guard_;

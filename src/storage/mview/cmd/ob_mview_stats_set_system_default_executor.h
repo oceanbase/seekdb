@@ -64,7 +64,7 @@ private:
   sql::ObExecContext *ctx_;
   sql::ObSQLSessionInfo *session_info_;
 
-  uint64_t tenant_id_;
+  
   OpType op_type_;
   share::schema::ObMVRefreshStatsCollectionLevel collection_level_;
   int64_t retention_period_;

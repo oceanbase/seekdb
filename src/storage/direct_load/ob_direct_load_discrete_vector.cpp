@@ -35,7 +35,7 @@ ObDirectLoadDiscreteVector::ObDirectLoadDiscreteVector(ObDiscreteBase *discrete_
     ptrs_(vec_ptrs_),
     allocator_("TLD_Discrete")
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 void ObDirectLoadDiscreteVector::reuse(const int64_t batch_size)

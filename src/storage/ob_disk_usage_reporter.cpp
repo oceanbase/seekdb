@@ -15,6 +15,7 @@
  */
 
 #include "storage/ob_disk_usage_reporter.h"
+#include "share/rc/ob_module_provider.h"
 
 
 #include "logservice/ob_log_service.h"
@@ -42,7 +43,7 @@ ObDiskUsageReportTask::ObDiskUsageReportTask()
 int ObDiskUsageReportTask::init(ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  lib::ObMemAttr mem_attr(OB_SERVER_TENANT_ID, "DiskReport");
+  lib::ObMemAttr mem_attr("DiskReport");
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
@@ -66,7 +67,7 @@ void ObDiskUsageReportTask::destroy()
   is_inited_ = false;
 }
 
-int ObDiskUsageReportTask::count_tenant_data(const uint64_t tenant_id)
+int ObDiskUsageReportTask::count_tenant_data()
 {
   int ret = OB_SUCCESS;
   common::ObSArray<blocksstable::MacroBlockId> block_list;
@@ -82,11 +83,11 @@ int ObDiskUsageReportTask::count_tenant_data(const uint64_t tenant_id)
   int64_t tablet_shared_occupy_size = 0;
   int64_t tablet_local_required_size = 0;
 
-  if (OB_FAIL(MTL(ObTenantStorageMetaService*)->get_meta_block_list(block_list))) {
+  if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->get_meta_block_list(block_list))) {
     STORAGE_LOG(WARN, "failed to get tenant's meta block list", K(ret));
   } else {
-    ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
-    ObLSService *ls_service = MTL(ObLSService*);
+    ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
+    ObLSService *ls_service = share::g_mp->ls_service();
     if (OB_ISNULL(ls_service) || OB_ISNULL(t3m) ) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected error!!! ls_service and t3m must not nullptr", K(ret), KP(ls_service), KP(t3m));
@@ -138,15 +139,15 @@ int ObDiskUsageReportTask::count_tenant_data(const uint64_t tenant_id)
   }
 
   if (OB_SUCC(ret)) {
-    meta_key.tenant_id_ = tenant_id;
+    
     meta_key.file_type_ = ObDiskReportFileType::TENANT_META_DATA;
-    data_key.tenant_id_ = tenant_id;
+    
     data_key.file_type_ = ObDiskReportFileType::TENANT_DATA;
-    major_data_key.tenant_id_ = tenant_id;
+    
     major_data_key.file_type_ = ObDiskReportFileType::TENANT_MAJOR_SSTABLE_DATA;
-    local_data_key.tenant_id_ = tenant_id;
+    
     local_data_key.file_type_ = ObDiskReportFileType::TENANT_MAJOR_LOCAL_DATA;
-    quick_restore_remote_key.tenant_id_ = tenant_id;
+    
     quick_restore_remote_key.file_type_ = ObDiskReportFileType::TENANT_BACKUP_DATA;
     if (OB_FAIL(result_map_.set_refactored(meta_key, std::make_pair(meta_size, meta_size), 1 /* whether allowed to override */))) {
       STORAGE_LOG(WARN, "failed to insert meta info result_map_", K(ret), K(meta_key), K(meta_size));
@@ -161,7 +162,7 @@ int ObDiskUsageReportTask::count_tenant_data(const uint64_t tenant_id)
   return ret;
 }
 
-int ObDiskUsageReportTask::get_data_disk_used_size(const uint64_t tenant_id, int64_t &used_size)
+int ObDiskUsageReportTask::get_data_disk_used_size(int64_t &used_size)
 {
   int ret = OB_SUCCESS;
   used_size = 0;
@@ -170,14 +171,14 @@ int ObDiskUsageReportTask::get_data_disk_used_size(const uint64_t tenant_id, int
     STORAGE_LOG(WARN, "ObDiskUsageReportTask not inited", K(ret));
   } else {
     // compute disk usage on demand instead of relying on periodic timer
-    MTL_SWITCH(tenant_id) {
-      if (OB_FAIL(count_tenant_data(tenant_id))) {
-        STORAGE_LOG(WARN, "fail to count tenant data", K(ret), K(tenant_id));
+    MOD_SCOPE {
+      if (OB_FAIL(count_tenant_data())) {
+        STORAGE_LOG(WARN, "fail to count tenant data", K(ret));
       } else {
         ObDiskUsageReportKey tmp_key;
         tmp_key.file_type_ = ObDiskReportFileType::TENANT_TMP_DATA;
-        tmp_key.tenant_id_ = tenant_id;
-        ObTenantTmpFileManager *tmp_file_manager = MTL(ObTenantTmpFileManager*);
+        
+        ObTenantTmpFileManager *tmp_file_manager = share::g_mp->tenant_tmp_file_manager();
         int64_t tmp_occupy_size = 0;
         int64_t tmp_required_size = 0;
         if (OB_NOT_NULL(tmp_file_manager)
@@ -197,7 +198,7 @@ int ObDiskUsageReportTask::get_data_disk_used_size(const uint64_t tenant_id, int
           ObDiskReportFileType::TENANT_TMP_DATA
       };
       ObDiskUsageReportKey key;
-      key.tenant_id_ = tenant_id;
+      
       std::pair<int64_t, int64_t> size = std::make_pair(0, 0);
 
       for (int64_t i = 0; i < need_cnt && OB_SUCC(ret); i++) {
@@ -218,11 +219,11 @@ int ObDiskUsageReportTask::get_data_disk_used_size(const uint64_t tenant_id, int
 }
 
 
-int ObDiskUsageReportTask::delete_tenant_usage_stat(const uint64_t tenant_id)
+int ObDiskUsageReportTask::delete_tenant_usage_stat()
 {
   int ret = OB_SUCCESS;
   ObDiskUsageReportKey key;
-  key.tenant_id_ = tenant_id;
+  
   int64_t file_type_num = static_cast<int64_t>(ObDiskReportFileType::TYPE_MAX);
 
   if (IS_NOT_INIT) {

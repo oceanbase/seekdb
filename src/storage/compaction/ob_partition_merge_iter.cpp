@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_partition_merge_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tablet_merge_ctx.h"
 #include "storage/compaction/ob_mview_compaction_util.h"
 #include "observer/ob_inner_sql_result.h"
@@ -335,7 +336,7 @@ int ObPartitionMergeIter::check_merge_range_cross(ObDatumRange &data_range, bool
 
     if (table_->is_normal_cg_sstable()) {
       const ObITableReadInfo *index_read_info = nullptr;
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
         STORAGE_LOG(WARN, "unexpected null index read info", K(ret));
       } else {
         datum_utils = &index_read_info->get_datum_utils();
@@ -676,7 +677,7 @@ int ObPartitionMacroMergeIter::inner_init(const ObMergeParameter &merge_param)
   ObSSTable *sstable = static_cast<ObSSTable *>(table_);
   const storage::ObITableReadInfo *index_read_info = nullptr;
   if (table_->is_normal_cg_sstable()) {
-    if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
       SERVER_LOG(WARN, "failed to get index read info from ObTenantCGReadInfoMgr", KR(ret));
     }
   } else {
@@ -1099,7 +1100,7 @@ int ObPartitionMicroMergeIter::open_curr_range(const bool for_rewrite, const boo
   } else {
     // init micro block iter for reuse
     if (table_->is_normal_cg_sstable()) {
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(read_info))) {
+      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(read_info))) {
         LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", K(ret));
       }
     } else {
@@ -1312,7 +1313,7 @@ int ObPartitionMicroMergeIter::get_curr_range(ObDatumRange &range) const
  */
 ObPartitionMinorRowMergeIter::ObPartitionMinorRowMergeIter(common::ObIAllocator &allocator)
   : ObPartitionMergeIter(allocator),
-    obj_copy_allocator_("MinorMergeObj", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID(), ObCtxIds::MERGE_NORMAL_CTX_ID),
+    obj_copy_allocator_("MinorMergeObj", OB_MALLOC_MIDDLE_BLOCK_SIZE, ObCtxIds::MERGE_NORMAL_CTX_ID),
     nop_pos_(),
     row_queue_(),
     check_committing_trans_compacted_(true),
@@ -2383,7 +2384,7 @@ int ObPartitionMVRowMergeIter::inner_init(const ObMergeParameter &merge_param)
     LOG_WARN("Failed to create inner session", K(ret), KPC(merge_param.mview_merge_param_));
   } else if (OB_FAIL(ObMviewCompactionHelper::create_inner_connection(mv_sql_resource_.session_, mv_sql_resource_.conn_))) {
     LOG_WARN("Failed to create inner connection", K(ret), K_(sql_idx));
-  } else if (OB_FAIL(mv_sql_resource_.conn_->execute_read(GCONF.cluster_id, MTL_ID(), sql.ptr(), mv_sql_resource_.read_result_))) {
+  } else if (OB_FAIL(mv_sql_resource_.conn_->execute_read(GCONF.cluster_id, sql.ptr(), mv_sql_resource_.read_result_))) {
     LOG_WARN("Failed to execute", K(ret), K_(sql_idx), K(sql));
   } else if (OB_ISNULL(mv_sql_resource_.sql_result_ = static_cast<observer::ObInnerSQLResult *>(mv_sql_resource_.read_result_.get_result()))) {
     ret = OB_ERR_UNEXPECTED;

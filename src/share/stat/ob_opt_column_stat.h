@@ -168,19 +168,17 @@ public:
 
   struct Key : public common::ObIKVCacheKey
   {
-    uint64_t tenant_id_;
+    
     uint64_t table_id_;
     int64_t partition_id_;
     uint64_t column_id_;
-    Key() : tenant_id_(0), table_id_(0), partition_id_(0), column_id_(0)
+    Key() : table_id_(0), partition_id_(0), column_id_(0)
     {
     }
-    Key(const uint64_t tenant_id,
-        const uint64_t table_id,
+    Key(const uint64_t table_id,
         const uint64_t partition_id,
         const uint64_t column_id)
-        : tenant_id_(tenant_id),
-          table_id_(table_id),
+        : table_id_(table_id),
           partition_id_(partition_id),
           column_id_(column_id)
     {
@@ -197,15 +195,12 @@ public:
     bool operator==(const ObIKVCacheKey &other) const
     {
       const Key &other_key = reinterpret_cast<const Key&>(other);
-      return tenant_id_ == other_key.tenant_id_
+      return true
           && table_id_ == other_key.table_id_
           && partition_id_ == other_key.partition_id_
           && column_id_ == other_key.column_id_;
     }
-    uint64_t get_tenant_id() const
-    {
-      return tenant_id_;
-    }
+    
     int64_t size() const
     {
       return sizeof(*this);
@@ -227,10 +222,9 @@ public:
     }
     bool is_valid() const
     {
-      return tenant_id_ > 0 && table_id_ > 0 && column_id_ > 0;
+      return table_id_ > 0 && column_id_ > 0;
     }
-    TO_STRING_KV(K(tenant_id_),
-                 K(table_id_),
+    TO_STRING_KV(K(table_id_),
                  K(partition_id_),
                  K(column_id_));
   };

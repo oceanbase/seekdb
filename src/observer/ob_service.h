@@ -80,7 +80,7 @@ public:
   int destroy();
 
   //fill_tablet_replica: to build a tablet replica locally
-  // @params[in] tenant_id: tablet belongs to which tenant
+  // @params[in] tenant: tablet belongs to which tenant
   // @params[in] ls_id: tablet belongs to which log stream
   // @params[in] tablet_id: the tablet to build
   // @params[out] tablet_replica: infos about this tablet replica
@@ -88,9 +88,7 @@ public:
   // @params[in] need_checksum: whether to fill tablet_checksum
   // ATTENTION: If ls not exist, then OB_LS_NOT_EXIST
   //            If tablet not exist on that ls, then OB_TABLET_NOT_EXIST
-  int fill_tablet_report_info(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
+  int fill_tablet_report_info(const share::ObLSID &ls_id,
       const ObTabletID &tablet_id,
       share::ObTabletReplica &tablet_replica,
       share::ObTabletReplicaChecksumItem &tablet_checksum,
@@ -122,8 +120,6 @@ public:
       const obcall::ObBroadcastConsensusVersionArg &arg,
       obcall::ObBroadcastConsensusVersionRes &result);
   ////////////////////////////////////////////////////////////////
-  int get_ls_sync_scn(const obcall::ObGetLSSyncScnArg &arg,
-                           obcall::ObGetLSSyncScnRes &result);
   int force_set_ls_as_single_replica(const obcall::ObForceSetLSAsSingleReplicaArg &arg);
   int force_set_server_list(const obcall::ObForceSetServerListArg &arg, obcall::ObForceSetServerListResult &result);
   int estimate_partition_rows(const obcall::ObEstPartArg &arg,
@@ -198,20 +194,18 @@ public:
   int get_tenant_refreshed_schema_version(
       const obcall::ObGetTenantSchemaVersionArg &arg,
       obcall::ObGetTenantSchemaVersionResult &result);
-  int submit_async_refresh_schema_task(const uint64_t tenant_id, const int64_t schema_version);
+  int submit_async_refresh_schema_task(const int64_t schema_version);
   int init_tenant_config(
       const obcall::ObInitTenantConfigArg &arg,
       obcall::ObInitTenantConfigRes &result);
   int check_server_empty(bool &server_empty);
+  int change_external_storage_dest(obcall::ObAdminSetConfigArg &arg);
 
 private:
   int bootstrap();
-  int bootstrap_standby();
-  int schedule_standby_restore_task();
   int create_sys_ls();
-  int init_tenant_merge_info_(const uint64_t tenant_id);
+  int init_tenant_merge_info_();
   int inner_fill_tablet_info_(
-      const int64_t tenant_id,
       const ObTabletID &tablet_id,
       storage::ObLS *ls,
       share::ObTabletReplica &tablet_replica,
@@ -219,11 +213,10 @@ private:
       const bool need_checksum);
   int set_server_id_(const int64_t server_id);
 
-  int handle_server_freeze_req_(const obcall::ObMinorFreezeArg &arg);
   int handle_tenant_freeze_req_(const obcall::ObMinorFreezeArg &arg);
   int handle_ls_freeze_req_(const obcall::ObMinorFreezeArg &arg);
-  int tenant_freeze_(const uint64_t tenant_id);
-  int handle_ls_freeze_req_(const uint64_t tenant_id, const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
+  int tenant_freeze_();
+  int handle_ls_freeze_req_(const share::ObLSID &ls_id, const common::ObTabletID &tablet_id);
 private:
   bool inited_;
   volatile bool stopped_;

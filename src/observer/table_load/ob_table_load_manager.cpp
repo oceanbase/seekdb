@@ -33,11 +33,10 @@ using namespace table;
  * ObTableLoadManager
  */
 
-ObTableLoadManager::ObTableLoadManager(const uint64_t tenant_id)
-  : tenant_id_(tenant_id),
-    table_ctx_alloc_(ObMemAttr(tenant_id, "TLD_TblCtxVal")),
-    client_task_alloc_(ObMemAttr(tenant_id, "TLD_CliTaskVal")),
-    client_task_brief_alloc_(ObMemAttr(tenant_id, "TLD_CTBriefVal")),
+ObTableLoadManager::ObTableLoadManager()
+  : table_ctx_alloc_(ObMemAttr("TLD_TblCtxVal")),
+    client_task_alloc_(ObMemAttr("TLD_CliTaskVal")),
+    client_task_brief_alloc_(ObMemAttr("TLD_CTBriefVal")),
     is_inited_(false)
 {
 }
@@ -52,13 +51,11 @@ int ObTableLoadManager::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadManager init twice", KR(ret), KP(this));
   } else {
-    if (OB_FAIL(table_ctx_map_.create(bucket_num, "TLD_TblCtxMap", "TLD_TblCtxMap", tenant_id_))) {
+    if (OB_FAIL(table_ctx_map_.create(bucket_num, "TLD_TblCtxMap", "TLD_TblCtxMap"))) {
       LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
-    } else if (OB_FAIL(client_task_map_.create(bucket_num, "TLD_CliTaskMap", "TLD_CliTaskMap",
-                                               tenant_id_))) {
+    } else if (OB_FAIL(client_task_map_.create(bucket_num, "TLD_CliTaskMap", "TLD_CliTaskMap"))) {
       LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
-    } else if (OB_FAIL(client_task_brief_map_.create(bucket_num, "TLD_CTBriefMap", "TLD_CTBriefMap",
-                                                     tenant_id_))) {
+    } else if (OB_FAIL(client_task_brief_map_.create(bucket_num, "TLD_CTBriefMap", "TLD_CTBriefMap"))) {
       LOG_WARN("fail to init create hashmap", KR(ret));
     } else {
       is_inited_ = true;

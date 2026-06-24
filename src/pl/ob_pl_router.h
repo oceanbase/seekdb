@@ -33,7 +33,7 @@ public:
       session_info_(session_info),
       schema_guard_(schema_guard),
       sql_proxy_(sql_proxy),
-      inner_allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      inner_allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE),
       expr_factory_(inner_allocator_) {}
   virtual ~ObPLRouter() {}
 

@@ -20,9 +20,45 @@
 #define private public
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/rc/ob_module_provider.h"
+
+namespace oceanbase
+{
+// MTL(T*) compatibility shim routed through share::g_mp.
+template <class T> T mtl_get_module();
+template <> inline share::ObTenantDagScheduler *mtl_get_module<share::ObTenantDagScheduler*>()
+{ return ::oceanbase::share::g_mp->tenant_dag_scheduler(); }
+template <> inline share::ObDagWarningHistoryManager *mtl_get_module<share::ObDagWarningHistoryManager*>()
+{ return ::oceanbase::share::g_mp->dag_warning_history_manager(); }
+template <> inline compaction::ObTenantTabletScheduler *mtl_get_module<compaction::ObTenantTabletScheduler*>()
+{ return ::oceanbase::share::g_mp->tenant_tablet_scheduler(); }
+} // namespace oceanbase
+
+#ifndef MTL
+#define MTL(TYPE) (::oceanbase::mtl_get_module<TYPE>())
+#endif
+
+// Single-tenant seekdb: the deleted MTL slot mechanism is replaced by a file-level
+// ObIModuleProvider published through share::g_mp. MTL(T*) resolves to g_mp->getter().
 namespace oceanbase
 {
 namespace unittest{
+
+// Test-local module provider: serves the dag scheduler / warning history / tablet
+// scheduler instances owned by the test fixture.
+class TestDagModuleProvider : public share::ObIModuleProvider
+{
+public:
+  TestDagModuleProvider()
+    : dag_scheduler_(nullptr), dag_history_mgr_(nullptr), tablet_scheduler_(nullptr) {}
+  virtual share::ObTenantDagScheduler *tenant_dag_scheduler() override { return dag_scheduler_; }
+  virtual share::ObDagWarningHistoryManager *dag_warning_history_manager() override { return dag_history_mgr_; }
+  virtual compaction::ObTenantTabletScheduler *tenant_tablet_scheduler() override { return tablet_scheduler_; }
+  share::ObTenantDagScheduler *dag_scheduler_;
+  share::ObDagWarningHistoryManager *dag_history_mgr_;
+  compaction::ObTenantTabletScheduler *tablet_scheduler_;
+};
 
 static const int64_t SLEEP_SLICE = 100;
 
@@ -485,7 +521,7 @@ public:
       tablet_scheduler_(nullptr),
       scheduler_(nullptr),
       dag_history_mgr_(nullptr),
-      tenant_base_(1001),
+      old_mp_(nullptr),
       allocator_("DagScheduler"),
       inited_(false)
   { }
@@ -493,23 +529,21 @@ public:
   void SetUp()
   {
     if (!inited_) {
-      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+      ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
       inited_ = true;
     }
     tablet_scheduler_ = OB_NEW(compaction::ObTenantTabletScheduler, ObModIds::TEST);
-    tenant_base_.set(tablet_scheduler_);
-
     scheduler_ = OB_NEW(ObTenantDagScheduler, ObModIds::TEST);
-    tenant_base_.set(scheduler_);
-
     dag_history_mgr_ = OB_NEW(ObDagWarningHistoryManager, ObModIds::TEST);
-    tenant_base_.set(dag_history_mgr_);
 
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
+    provider_.tablet_scheduler_ = tablet_scheduler_;
+    provider_.dag_scheduler_ = scheduler_;
+    provider_.dag_history_mgr_ = dag_history_mgr_;
+    old_mp_ = share::g_mp;
+    share::g_mp = &provider_;
 
     ObMallocAllocator *ma = ObMallocAllocator::get_instance();
-    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(tenant_id_, 1LL << 30));
+    ASSERT_EQ(OB_SUCCESS, ma->set_tenant_limit(1LL << 30));
   }
   void TearDown()
   {
@@ -519,15 +553,15 @@ public:
     scheduler_ = nullptr;
     dag_history_mgr_->~ObDagWarningHistoryManager();
     dag_history_mgr_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
+    share::g_mp = old_mp_;
   }
 private:
   const uint64_t tenant_id_;
   compaction::ObTenantTabletScheduler *tablet_scheduler_;
   ObTenantDagScheduler *scheduler_;
   ObDagWarningHistoryManager *dag_history_mgr_;
-  ObTenantBase tenant_base_;
+  TestDagModuleProvider provider_;
+  share::ObIModuleProvider *old_mp_;
   ObArenaAllocator allocator_;
   bool inited_;
   DISALLOW_COPY_AND_ASSIGN(TestDagScheduler);

@@ -41,7 +41,7 @@ public:
   }
   virtual ~ObTablegroupStmt() {}
 
-  virtual void set_tenant_id(const uint64_t tenant_id) = 0;
+  
   virtual int set_tablegroup_id(uint64_t tablegroup_id) = 0;
   virtual int set_tablegroup_sharding(const common::ObString &sharding) = 0;
 

@@ -40,8 +40,7 @@ public:
 
 public:
   // some static method using ObDirectLoadMgrUtil to hidden ObDirectLoadMgrUitls Interface
-  static int create_tablet_direct_load_mgr(int64_t tenant_id,
-                                           const int64_t execution_id,
+  static int create_tablet_direct_load_mgr(const int64_t execution_id,
                                            const int64_t context_id,
                                            const ObTabletDirectLoadInsertParam &build_param,
                                            ObIAllocator &allocator,

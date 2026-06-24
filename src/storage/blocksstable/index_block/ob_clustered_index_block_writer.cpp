@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_clustered_index_block_writer.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 
 namespace oceanbase
@@ -299,7 +300,7 @@ int ObClusteredIndexBlockWriter::rewrite_and_append_clustered_index_micro_block(
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_INDEX_BUILDER_IO);
     read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
-    read_info.mtl_tenant_id_ = MTL_ID();
+    
     read_info.buf_ = micro_buf;
     if (OB_FAIL(ObObjectManager::read_object(read_info, object_handle))) {
       LOG_WARN("fail to read index micro block", K(ret), K(read_info));
@@ -558,7 +559,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
   mock_query_flag.multi_version_minor_merge_ = compaction::is_mini_merge(clustered_index_store_desc_.get_merge_type());
   if (clustered_index_store_desc_.is_cg()) {  // Fetch datum utils for index row scanner
     const ObITableReadInfo *index_read_info;
-    if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
       LOG_WARN("fail to get index read info for cg sstable", K(ret), K(clustered_index_store_desc_));
     } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -592,7 +593,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
   // `append_micro_block` or `append_index_micro_block`, because this clustered micro block is transformed in
   // `ObIndexBlockTreeCursor` (dispatch IO + reuse clustered micro block is worse).
   ObMicroIndexInfo index_info;
-  ObArenaAllocator row_key_allocator(common::ObMemAttr(MTL_ID(), "MakeClustRK"));
+  ObArenaAllocator row_key_allocator(common::ObMemAttr("MakeClustRK"));
   while (OB_SUCC(ret)) {
     row_key_allocator.reuse();
     ObIndexBlockRowDesc clustered_row_desc;

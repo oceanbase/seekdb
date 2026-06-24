@@ -272,14 +272,13 @@ void SmallHashSetTest::performance_test()
 
 TEST_F(SmallHashSetTest, test_small_hash_set)
 {
-  int64_t tenant_id = 1;
-  accurate_small_set_.init(build_count, tenant_id);
-  inaccurate_small_set_.init(build_count, tenant_id);
-  open_set_.init(build_count, tenant_id);
+  accurate_small_set_.init(build_count);
+  inaccurate_small_set_.init(build_count);
+  open_set_.init(build_count);
   cout << "the small hash set init size is: " << accurate_small_set_.capacity_ << endl;
   ob_set_.create(build_count * 4);
 
-  bloom_filter_.init(build_count, alloc_, tenant_id, 0.03, 2147483648);
+  bloom_filter_.init(build_count, alloc_, 0.03, 2147483648);
 
   insert_hash(4000);
   test_hash(100000);
@@ -389,13 +388,12 @@ void OpenHashSetforKeyTest::exist_performance(int build_cnt, int probe_count) {
 }
 
 TEST_F(OpenHashSetforKeyTest, test_small_hash_set_exist_performance) {
-    int64_t tenant_id = 1;
-    int max_build_cnt = 1000000;
+      int max_build_cnt = 1000000;
     
     const int build_counts[] = {10000, 100000, 1000000};
     const int probe_counts[] = {10000, 100000, 1000000, 10000000};
-    open_set_.init(max_build_cnt * 2, tenant_id);
-    inaccurate_small_set_.init(max_build_cnt * 2, tenant_id);
+    open_set_.init(max_build_cnt * 2);
+    inaccurate_small_set_.init(max_build_cnt * 2);
     ob_set_.create(max_build_cnt * 4);
     for (const auto &build_cnt : build_counts) {
         for (const auto &probe_cnt : probe_counts) {

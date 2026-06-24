@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_struct.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -219,7 +220,7 @@ void ObDDLKVHandle::reset()
           ddl_kv_->~ObDDLKV();
           allocator_->free(ddl_kv_);
         } else {
-          MTL(ObTenantMetaMemMgr *)->release_ddl_kv(ddl_kv_);
+          share::g_mp->tenant_meta_mem_mgr()->release_ddl_kv(ddl_kv_);
         }
       } else if (OB_UNLIKELY(ref_cnt < 0)) {
         LOG_ERROR_RET(OB_ERR_UNEXPECTED, "table ref cnt may be leaked", K(ref_cnt), KP(ddl_kv_));
@@ -530,7 +531,7 @@ void ObTabletDirectLoadMgrHandle::reset()
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
       } else {
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-        MTL(ObTenantDirectLoadMgr *)->get_allocator().free(tablet_mgr_);
+        share::g_mp->tenant_direct_load_mgr()->get_allocator().free(tablet_mgr_);
       }
     }
     tablet_mgr_ = nullptr;
@@ -578,9 +579,7 @@ bool ObDDLWriteStat::operator!=(const ObDDLWriteStat &other)
 }
 OB_SERIALIZE_MEMBER(ObDDLWriteStat, row_count_);
 
-int ObDDLTableSchema::fill_vector_index_schema_item(
-    const uint64_t tenant_id,
-    ObSchemaGetterGuard &schema_guard,
+int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *table_schema,
     ObArenaAllocator &allocator,
     const ObIArray<ObColDesc> &column_descs,
@@ -605,11 +604,11 @@ int ObDDLTableSchema::fill_vector_index_schema_item(
   }
   const ObTableSchema *with_param_table_schema = nullptr;
   // get data schema
-  if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_schema->get_data_table_id(), data_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_schema->get_data_table_id()));
+  if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(table_schema->get_data_table_id()));
+    LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
     LOG_WARN("fail to get vector index id", K(ret));
   } else if (col_ids.count() != 1) {
@@ -640,11 +639,11 @@ int ObDDLTableSchema::fill_vector_index_schema_item(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, with_param_table_tid, with_param_table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(with_param_table_tid));
+  } else if (OB_FAIL(schema_guard.get_table_schema( with_param_table_tid, with_param_table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(with_param_table_tid));
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(with_param_table_tid));
+    LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
     LOG_WARN("fail to get vector col dim", K(ret));
   } else if (schema_item.vec_dim_ == 0) {
@@ -674,9 +673,7 @@ int ObDDLTableSchema::fill_vector_index_schema_item(
   return ret;
 }
 
-int ObDDLTableSchema::fill_ddl_table_schema(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
     ObArenaAllocator &allocator,
     ObDDLTableSchema &ddl_table_schema)
 {
@@ -685,16 +682,16 @@ int ObDDLTableSchema::fill_ddl_table_schema(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   bool is_vector_data_complement = false;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == table_id)) {
+  if (OB_UNLIKELY(false || OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("get tenant schema failed", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("invalid arguments", K(ret), K(table_id));
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("get tenant schema failed", K(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(table_id));
+    LOG_WARN("table not exist", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_multi_version_column_descs(column_descs))) {
     LOG_WARN("get column desc array failed", K(ret));
   } else if (OB_FAIL(table_schema->get_is_column_store(ddl_table_schema.table_item_.is_column_store_))) {
@@ -715,11 +712,11 @@ int ObDDLTableSchema::fill_ddl_table_schema(
     } else if (OB_INVALID_ID != table_schema->get_aux_lob_meta_tid()) {
       const uint64_t lob_meta_table_id = table_schema->get_aux_lob_meta_tid();
       const ObTableSchema *lob_meta_table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, lob_meta_table_id, lob_meta_table_schema))) {
-        LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(lob_meta_table_id));
+      if (OB_FAIL(schema_guard.get_table_schema( lob_meta_table_id, lob_meta_table_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(lob_meta_table_id));
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table not exist", K(ret), K(tenant_id), K(lob_meta_table_id));
+        LOG_WARN("table not exist", K(ret), K(lob_meta_table_id));
       } else if (OB_FAIL(ObDDLUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
         LOG_WARN("fail to convert to storage schema", KR(ret), KPC(lob_meta_table_schema));
       }
@@ -767,8 +764,7 @@ int ObDDLTableSchema::fill_ddl_table_schema(
     }
     if (OB_SUCC(ret)) {
       if (FALSE_IT(is_vector_data_complement = ObDDLUtil::is_vector_index_complement(table_schema->get_index_type()))) {
-      } else if (is_vector_data_complement && OB_FAIL(fill_vector_index_schema_item(tenant_id,
-          schema_guard,
+      } else if (is_vector_data_complement && OB_FAIL(fill_vector_index_schema_item(schema_guard,
           table_schema,
           allocator,
           column_descs,

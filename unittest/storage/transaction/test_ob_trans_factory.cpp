@@ -108,8 +108,7 @@ TEST_F(TestObTransFactory, init_reset)
   MutatorBuf *mutator_buf = NULL;
 
   // alloc for ObLSTxCtxMgr object
-  uint64_t tenant_id = 1001;
-  ls_tx_ctx_mgr = ObLSTxCtxMgrFactory::alloc(tenant_id);
+  ls_tx_ctx_mgr = ObLSTxCtxMgrFactory::alloc();
   if (NULL == ls_tx_ctx_mgr) {
     TRANS_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "ObLSTxCtxMgr memory alloc error");
   } else {

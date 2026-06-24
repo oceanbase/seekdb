@@ -74,7 +74,6 @@ int ObAnalyzeTableInfo::assign(const ObAnalyzeTableInfo &other)
 
 ObAnalyzeStmt::ObAnalyzeStmt()
   : ObStmt(NULL, stmt::T_ANALYZE),
-    tenant_id_(common::OB_INVALID_ID),
     statistic_type_(InvalidStatistics),
     sample_info_(),
     parallel_degree_(1),
@@ -105,7 +104,7 @@ int ObAnalyzeStmt::fill_table_stat_params(ObExecContext &ctx, ObIArray<common::O
     LOG_WARN("prepare allocate failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tables_.count(); ++i) {
-    params.at(i).tenant_id_ = tenant_id_;
+    
     params.at(i).sample_info_ = sample_info_;
     params.at(i).degree_ = parallel_degree_;
     if (OB_FAIL(tables_.at(i).fill_table_stat_param(ctx, params.at(i)))) {

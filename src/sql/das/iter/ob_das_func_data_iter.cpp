@@ -168,7 +168,7 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
   } else {
     ObDASFuncDataIterParam &merge_param = static_cast<ObDASFuncDataIterParam &>(param);
     lib::ContextParam param;
-    param.set_mem_attr(MTL_ID(), "FTSMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
+    param.set_mem_attr("FTSMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
       LOG_WARN("failed to create merge memctx", K(ret));
     } else if (OB_ISNULL(merge_param.doc_id_expr_)) {
@@ -397,10 +397,10 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     transaction::ObTxReadSnapshot *snapshot)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  param.tenant_id_ = tenant_id;
-  param.key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamKR"));
-  param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "SParamSSKR"));
+  
+  
+  param.key_ranges_.set_attr(ObMemAttr("SParamKR"));
+  param.ss_key_ranges_.set_attr(ObMemAttr("SParamSSKR"));
   if (OB_ISNULL(ctdef) || OB_ISNULL(rtdef)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr ctdef or rtdef", K(ret), KPC(ctdef), KPC(rtdef));
@@ -419,8 +419,6 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
     param.force_refresh_lc_ = rtdef->force_refresh_lc_;
     param.output_exprs_ = &(ctdef->pd_expr_spec_.access_exprs_);
     param.aggregate_exprs_ = &(ctdef->pd_expr_spec_.pd_storage_aggregate_output_);
-    param.ext_file_column_exprs_ = &(ctdef->pd_expr_spec_.ext_file_column_exprs_);
-    param.ext_column_convert_exprs_ = &(ctdef->pd_expr_spec_.ext_column_convert_exprs_);
     param.calc_exprs_ = &(ctdef->pd_expr_spec_.calc_exprs_);
     param.table_param_ = &(ctdef->table_param_);
     param.op_ = rtdef->p_pd_expr_op_;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 #include "ob_block_manager.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
@@ -77,6 +78,14 @@ int ObSuperBlockPreadChecker::do_check(void *read_buf,
 /**
  * ------------------------------------ObMacroBlockWriteInfo-------------------------------------
  */
+
+int ObMacroBlockWriteInfo::fill_io_info_for_backup(const blocksstable::MacroBlockId &macro_id, ObIOInfo &io_info) const
+{
+  // Backup removed, backup-mode macro blocks cannot exist
+  UNUSED(macro_id);
+  UNUSED(io_info);
+  return OB_SUCCESS;
+}
 
 /**
  * ------------------------------------ObMacroBlockRewriteSeqGenerator-------------------------------------
@@ -140,7 +149,7 @@ int ObBlockManager::init(ObIODevice *io_device, const int64_t block_size) {
                                        ObLatchIds::BLOCK_MANAGER_LOCK))) {
     LOG_WARN("fail to init bucket lock", K(ret));
   } else if (OB_FAIL(block_map_.init(SET_USE_UNEXPECTED_500(
-                 ObMemAttr(OB_SERVER_TENANT_ID, "BlockMap"))))) {
+                 ObMemAttr("BlockMap"))))) {
     LOG_WARN("fail to init block map", K(ret));
   } else {
     io_device_ = io_device;
@@ -971,12 +980,11 @@ void ObBlockManager::mark_and_sweep()
   } else if (!is_mark_sweep_enabled()) {
     LOG_INFO("mark and sweep is disabled, do not mark and sweep this round");
   } else {
-    if (OB_FAIL(mark_info.init(ObModIds::OB_STORAGE_FILE_BLOCK_REF, OB_SERVER_TENANT_ID))) {
+    if (OB_FAIL(mark_info.init(ObModIds::OB_STORAGE_FILE_BLOCK_REF))) {
       LOG_WARN("fail to init mark info, ", K(ret));
     } else if (OB_FAIL(macro_id_set.create(MAX(2, MIN(MAX_FREE_BLOCK_COUNT_PER_ROUND, block_map_.get_bkt_cnt())),
                                            "BlkIdSetBkt",
-                                           "BlkIdSetNode",
-                                           OB_SERVER_TENANT_ID))) {
+                                           "BlkIdSetNode"))) {
       LOG_WARN("fail to create macro id set", K(ret));
     } else {
       GetPendingFreeBlockFunctor pending_free_functor(
@@ -1042,7 +1050,6 @@ int ObBlockManager::mark_macro_blocks(
 {
   int ret = OB_SUCCESS;
   omt::ObMultiTenant *omt = GCTX.omt_;
-  common::ObSEArray<uint64_t, 8> mtl_tenant_ids;
 
   if (OB_ISNULL(omt)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1055,19 +1062,17 @@ int ObBlockManager::mark_macro_blocks(
   } else if (OB_FAIL(mark_server_meta_blocks(mark_info, macro_id_set, tmp_status))) {
     LOG_WARN("fail to mark server meta blocks", K(ret));
   } else {
-    omt->get_mtl_tenant_ids(mtl_tenant_ids);
-    for (int64_t i = 0; OB_SUCC(ret) && i < mtl_tenant_ids.count(); i++) {
-      const uint64_t tenant_id = mtl_tenant_ids.at(i);
+    {
       MacroBlockId macro_id;
-      MTL_SWITCH(tenant_id)
+      MOD_SCOPE
       {
         CONSUMER_GROUP_FUNC_GUARD(ObFunctionType::PRIO_GC_MACRO_BLOCK);
         if (OB_FAIL(mark_tenant_blocks(mark_info, macro_id_set, tmp_status))) {
-          LOG_WARN("fail to mark tenant blocks", K(ret), K(tenant_id));
-        } else if (OB_FALSE_IT(MTL(ObSharedMacroBlockMgr *)->get_cur_shared_block(macro_id))) {
+          LOG_WARN("fail to mark tenant blocks", K(ret));
+        } else if (OB_FALSE_IT(share::g_mp->shared_macro_block_mgr()->get_cur_shared_block(macro_id))) {
         } else if (OB_FAIL(mark_held_shared_block(macro_id, mark_info, macro_id_set, tmp_status))) {
           LOG_WARN("fail to mark shared block held by shared_macro_block_manager", K(ret), K(macro_id));
-        } else if (OB_FALSE_IT(MTL(ObTenantStorageMetaService *)
+        } else if (OB_FALSE_IT(share::g_mp->tenant_storage_meta_service()
                                    ->get_shared_object_reader_writer()
                                    .get_cur_shared_block(macro_id))) {
         } else if (OB_FAIL(mark_held_shared_block(macro_id, mark_info, macro_id_set, tmp_status))) {
@@ -1113,8 +1118,8 @@ int ObBlockManager::mark_tenant_blocks(
         &macro_id_set,
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
-  ObTenantStorageMetaService *meta_service = MTL(ObTenantStorageMetaService *);
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr *);
+  ObTenantStorageMetaService *meta_service = share::g_mp->tenant_storage_meta_service();
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_ISNULL(t3m) || OB_ISNULL(meta_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, t3m or meta_service of mtl is nullptr", K(ret),
@@ -1123,8 +1128,7 @@ int ObBlockManager::mark_tenant_blocks(
                                              *meta_service, tmp_status))) {
     LOG_WARN("fail to mark tenant meta blocks", K(ret));
   } else {
-    ObArenaAllocator iter_allocator("MarkIter", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                    MTL_ID());
+    ObArenaAllocator iter_allocator("MarkIter", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTenantTabletIterator tablet_iter(*t3m, iter_allocator, nullptr /*no op*/);
     ObTabletHandle handle;
     while (OB_SUCC(ret)) {
@@ -1165,8 +1169,7 @@ int ObBlockManager::mark_sstable_blocks(
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
   ObTableStoreIterator table_store_iter(false, false);
-  ObArenaAllocator sstable_allocator("LoadSST", OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                     MTL_ID());
+  ObArenaAllocator sstable_allocator("LoadSST", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSafeArenaAllocator safe_allocator(sstable_allocator);
 
   if (OB_UNLIKELY(!handle.is_valid())) {
@@ -1466,15 +1469,11 @@ int ObBlockManager::mark_tmp_file_blocks(
         &macro_id_set,
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  common::ObSEArray<uint64_t, 8> mtl_tenant_ids;
 
-  omt->get_mtl_tenant_ids(mtl_tenant_ids);
-  for (int64_t i = 0; OB_SUCC(ret) && i < mtl_tenant_ids.count(); i++) {
-    const uint64_t tenant_id = mtl_tenant_ids.at(i);
-    MTL_SWITCH(tenant_id) {
+  {
+    MOD_SCOPE {
       ObArray<MacroBlockId> macro_block_list;
-      if (OB_FAIL(MTL(ObTenantTmpFileManager*)->get_sn_file_manager().get_macro_block_list(macro_block_list))) {
+      if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->get_sn_file_manager().get_macro_block_list(macro_block_list))) {
         LOG_WARN("fail to get macro block list", K(ret));
       } else if (OB_FAIL(update_mark_info(macro_block_list, macro_id_set, mark_info))){
         LOG_WARN("fail to update mark info", K(ret), K(macro_block_list.count()));

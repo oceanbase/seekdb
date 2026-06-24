@@ -1,4 +1,5 @@
 #include "observer/ob_ex_rpc.h"
+#include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -24,7 +25,6 @@
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
-using namespace oceanbase::archive;
 using namespace oceanbase::logservice;
 using namespace oceanbase::share;
 using namespace oceanbase::blocksstable;
@@ -170,7 +170,7 @@ int ObDDLIncRedoLogWriter::write_inc_redo_log(
   } else if (OB_UNLIKELY(!redo_info.is_valid() || !macro_block_id.is_valid() || task_id == 0 || OB_ISNULL(tx_desc))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(redo_info), K(macro_block_id), K(task_id), KP(tx_desc));
-  } else if (buffer_ == nullptr && OB_ISNULL(buffer_ = static_cast<char *>(ob_malloc(BUF_SIZE, ObMemAttr(MTL_ID(), "DDL_REDO_LOG"))))) {
+  } else if (buffer_ == nullptr && OB_ISNULL(buffer_ = static_cast<char *>(ob_malloc(BUF_SIZE, ObMemAttr("DDL_REDO_LOG"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K(BUF_SIZE));
   } else if (OB_FAIL(local_write_inc_redo_log(redo_info, macro_block_id, task_id, tx_desc))) {
@@ -342,7 +342,7 @@ int ObDDLIncRedoLogWriter::get_write_store_ctx_guard(
   }
   if (OB_FAIL(ctx_guard.init(ls_id_))) {
     LOG_WARN("ctx_guard init fail", K(ret), K(ls_id_));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ctx_guard.get_ls_handle(), ObLSGetMod::DAS_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ctx_guard.get_ls_handle(), ObLSGetMod::DAS_MOD))) {
     LOG_WARN("get ls failed", K(ret), K(ls_id_));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
@@ -368,20 +368,18 @@ int ObDDLIncRedoLogWriter::get_write_store_ctx_guard(
 int ObDDLIncRedoLogWriter::switch_to_remote_write()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   share::ObLocationService *location_service = nullptr;
   bool is_cache_hit = false;
   if (OB_ISNULL(location_service = GCTX.location_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("location service is null", K(ret), KP(location_service));
-  } else if (OB_FAIL(location_service->get(tenant_id,
-                                           tablet_id_,
+  } else if (OB_FAIL(location_service->get(tablet_id_,
                                            INT64_MAX/*expire_renew_time*/,
                                            is_cache_hit,
                                            leader_ls_id_))) {
     LOG_WARN("fail to get log stream id", K(ret), K_(tablet_id));
   } else if (OB_FAIL(location_service->get_leader(GCONF.cluster_id,
-                                                  tenant_id,
                                                   leader_ls_id_,
                                                   true, /*force_renew*/
                                                   leader_addr_))) {
@@ -430,7 +428,7 @@ int ObDDLIncRedoLogWriter::local_write_inc_start_log(
                                        false, /*need_rewrite_meta*/
                                        ObFreezeSourceFlag::DIRECT_INC_START))) {
     LOG_WARN("sync tablet freeze failed", K(ret), K(lob_meta_tablet_id));
-  } else if (OB_ISNULL(cb = OB_NEW(ObDDLIncStartClogCb, ObMemAttr(MTL_ID(), "DDL_IRLW")))) {
+  } else if (OB_ISNULL(cb = OB_NEW(ObDDLIncStartClogCb, ObMemAttr("DDL_IRLW")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(cb->init(ls_id_, log.get_log_basic()))) {
@@ -493,13 +491,13 @@ int ObDDLIncRedoLogWriter::local_write_inc_redo_log(
     int tmp_ret = OB_SUCCESS;
     int64_t real_sleep_us = 0;
     buffer_size = log.get_serialize_size();
-    if (OB_TMP_FAIL(ObDDLCtrlSpeedHandle::get_instance().limit_and_sleep(MTL_ID(), ls_id_, buffer_size, task_id, checker, real_sleep_us))) {
-      LOG_WARN("fail to limit and sleep", K(tmp_ret), K(MTL_ID()), K(task_id), K(ls_id_), K(buffer_size), K(real_sleep_us));
+    if (OB_TMP_FAIL(ObDDLCtrlSpeedHandle::get_instance().limit_and_sleep(ls_id_, buffer_size, task_id, checker, real_sleep_us))) {
+      LOG_WARN("fail to limit and sleep", K(tmp_ret), K(task_id), K(ls_id_), K(buffer_size), K(real_sleep_us));
     } 
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(cb = OB_NEW(ObDDLIncRedoClogCb, ObMemAttr(MTL_ID(), "DDL_IRLW")))) {
+  } else if (OB_ISNULL(cb = OB_NEW(ObDDLIncRedoClogCb, ObMemAttr("DDL_IRLW")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (FALSE_IT(buffer_size = redo_info.get_serialize_size())) {
@@ -555,12 +553,12 @@ int ObDDLIncRedoLogWriter::local_write_inc_commit_log(
     LOG_WARN("invalid arguments", K(ret), K(log));
   } else if (OB_FAIL(get_write_store_ctx_guard(tx_desc, ctx_guard, ls))) {
     LOG_WARN("fail to get_write_store_ctx_guard", K(ret), K(ls_id_));
-  } else if (OB_ISNULL(cb = OB_NEW(ObDDLIncCommitClogCb, ObMemAttr(MTL_ID(), "DDL_IRLW")))) {
+  } else if (OB_ISNULL(cb = OB_NEW(ObDDLIncCommitClogCb, ObMemAttr("DDL_IRLW")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(cb->init(ls_id_, log.get_log_basic()))) {
     LOG_WARN("failed to init cb", K(ret));
-  } else if (OB_FAIL(OB_TS_MGR.get_ts_sync(MTL_ID(), ObDDLIncLogHandle::DDL_INC_LOG_TIMEOUT, base_scn, is_external_consistent))) {
+  } else if (OB_FAIL(OB_TS_MGR.get_ts_sync(ObDDLIncLogHandle::DDL_INC_LOG_TIMEOUT, base_scn, is_external_consistent))) {
     LOG_WARN("fail to get gts sync", K(ret), K(log));
   } else if (OB_ISNULL(trans_ctx = ctx_guard.get_store_ctx().mvcc_acc_ctx_.tx_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -570,7 +568,7 @@ int ObDDLIncRedoLogWriter::local_write_inc_commit_log(
   } else {
     bool need_retry = true;
     while (need_retry) {
-      if (OB_FAIL(OB_TS_MGR.wait_gts_elapse(MTL_ID(), scn))) {
+      if (OB_FAIL(OB_TS_MGR.wait_gts_elapse(scn))) {
         if (OB_EAGAIN != ret) {
           LOG_WARN("fail to wait gts elapse", K(ret), K(log));
         } else {
@@ -632,28 +630,28 @@ int ObDDLIncRedoLogWriter::remote_write_inc_commit_log(
   int ret = OB_SUCCESS;
   obcall::ObCallRemoteWriteDDLIncCommitLogArg arg;
   obcall::ObCallRemoteWriteDDLIncCommitLogRes res;
-  if (OB_FAIL(arg.init(MTL_ID(), leader_ls_id_, tablet_id_, lob_meta_tablet_id, tx_desc))) {
+  if (OB_FAIL(arg.init(leader_ls_id_, tablet_id_, lob_meta_tablet_id, tx_desc))) {
     LOG_WARN("fail to init ObCallRemoteWriteDDLIncCommitLogArg", K(ret));
   } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
     if (OB_UNLIKELY(!arg.is_valid())) return OB_INVALID_ARGUMENT;
     int r = OB_SUCCESS;
-    MTL_SWITCH(arg.tenant_id_) {
+    MOD_SCOPE {
       ObRole role = INVALID_ROLE;
       ObDDLIncRedoLogWriter sstable_redo_writer;
-      ObLSService *ls_service = MTL(ObLSService*);
-      ObTransService *trans_service = MTL(ObTransService*);
+      ObLSService *ls_service = share::g_mp->ls_service();
+      ObTransService *trans_service = share::g_mp->trans_service();
       ObLSHandle ls_handle;
       ObLS *ls = nullptr;
       if (OB_FAIL(ls_service->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
         LOG_WARN("get ls failed", K(ret), K(arg));
       } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
         r = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("unexpected error", K(ret), K(arg.ls_id_));
       } else if (OB_FAIL(ls->get_ls_role(role))) {
-        LOG_WARN("get role failed", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("get role failed", K(ret), K(arg.ls_id_));
       } else if (ObRole::LEADER != role) {
         r = OB_NOT_MASTER;
-        LOG_INFO("not leader", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_INFO("not leader", K(ret), K(arg.ls_id_));
       } else if (OB_FAIL(sstable_redo_writer.init(arg.ls_id_, arg.tablet_id_))) {
         LOG_WARN("init sstable redo writer", K(ret), K(arg.tablet_id_));
       } else if (OB_FAIL(sstable_redo_writer.write_inc_commit_log_with_retry(
@@ -666,7 +664,7 @@ int ObDDLIncRedoLogWriter::remote_write_inc_commit_log(
     return r;
   }))) {
     LOG_WARN("write inc commit log failed", K(ret), K_(leader_ls_id), K_(leader_addr));
-  } else if (OB_FAIL(MTL(ObTransService*)->add_tx_exec_result(*arg.tx_desc_, res.tx_result_))) {
+  } else if (OB_FAIL(share::g_mp->trans_service()->add_tx_exec_result(*arg.tx_desc_, res.tx_result_))) {
     LOG_WARN("fail to get_tx_exec_result", K(ret), K(*arg.tx_desc_));
   }
   return ret;

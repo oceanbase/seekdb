@@ -72,7 +72,7 @@ ObContextHashWrapper ObGetContextKey<ObContextHashWrapper,ObContextSchema *>
 {
   ObContextHashWrapper hash_wrap;
   if (!OB_ISNULL(context)) {
-    hash_wrap.set_tenant_id(context->get_tenant_id());
+    
     hash_wrap.set_context_namespace(context->get_namespace());
   }
   return hash_wrap;
@@ -187,8 +187,7 @@ int ObContextMgr::add_context(const ObContextSchema &context_schema)
                                              replaced_context))) {
     LOG_WARN("failed to add context schema", K(ret));
   } else {
-    ObContextHashWrapper hash_wrapper(new_context_schema->get_tenant_id(),
-                                       new_context_schema->get_namespace());
+    ObContextHashWrapper hash_wrapper(new_context_schema->get_namespace());
     if (OB_FAIL(context_map_.set_refactored(hash_wrapper, new_context_schema, overwrite))) {
       LOG_WARN("build context hash map failed", K(ret));
     } else {
@@ -225,13 +224,11 @@ int ObContextMgr::rebuild_context_hashmap(const ContextInfos &context_infos,
       LOG_WARN("context schema is NULL", K(context_schema), K(ret));
     } else {
       bool overwrite = false;
-      ObContextHashWrapper hash_wrapper(context_schema->get_tenant_id(),
-                                        context_schema->get_namespace());
+      ObContextHashWrapper hash_wrapper(context_schema->get_namespace());
       int hash_ret = context_map.set_refactored(hash_wrapper, context_schema, overwrite);
       if (OB_SUCCESS != hash_ret) {
         ret = OB_HASH_EXIST == hash_ret ? OB_SUCCESS : hash_ret;
         LOG_ERROR("build context hash map failed", KR(ret), KR(hash_ret),
-                  "exist_tenant_id", context_schema->get_tenant_id(),
                   "exist_context_name", context_schema->get_namespace());
       }
     }
@@ -275,19 +272,16 @@ int ObContextMgr::del_context(const ObContextKey &context)
       LOG_INFO("failed to remove context schema, item may not exist", K(ret));
     } else {
       LOG_WARN("failed to remove context schema, ",
-              K(context.tenant_id_),
               K(context.context_id_),
               K(ret));
     }
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed context schema return NULL, ",
-             K(context.tenant_id_),
              K(context.context_id_),
              K(ret));
   } else {
-    ObContextHashWrapper context_wrapper(schema_to_del->get_tenant_id(),
-                                         schema_to_del->get_namespace());
+    ObContextHashWrapper context_wrapper(schema_to_del->get_namespace());
     hash_ret = context_map_.erase_refactored(context_wrapper);
     if (OB_SUCCESS != hash_ret) {
       if (OB_HASH_NOT_EXIST == hash_ret) {
@@ -297,7 +291,6 @@ int ObContextMgr::del_context(const ObContextKey &context)
         LOG_WARN("failed delete context from context hashmap, ",
                 K(ret),
                 K(hash_ret),
-                K(schema_to_del->get_tenant_id()),
                 K(schema_to_del->get_namespace()));
       }
     }
@@ -316,39 +309,12 @@ int ObContextMgr::del_context(const ObContextKey &context)
   return ret;
 }
 
-int ObContextMgr::del_schemas_in_tenant(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObContextSchema *> schemas;
-    if (OB_FAIL(get_context_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get context schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObContextKey context_key(tenant_id,
-                                (*schema)->get_context_id());
-        if (OB_FAIL(del_context(context_key))) {
-          LOG_WARN("del context failed",
-                   K(context_key.tenant_id_),
-                   K(context_key.context_id_),
-                   K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObContextMgr::get_context_schema(uint64_t tenant_id,
-                                     uint64_t context_id,
+int ObContextMgr::get_context_schema(uint64_t context_id,
                                      const ObContextSchema *&context_schema) const
 {
   int ret = OB_SUCCESS;
   context_schema = NULL;
-  ObContextKey context_key_lower(tenant_id, context_id);
+  ObContextKey context_key_lower(context_id);
   ConstContextIter tenant_context_begin =
       context_infos_.lower_bound(context_key_lower, compare_with_context_key);
   bool is_stop = false;
@@ -358,11 +324,9 @@ int ObContextMgr::get_context_schema(uint64_t tenant_id,
     if (OB_ISNULL(context = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(context));
-    } else if (context->get_tenant_id() > tenant_id
-              || (tenant_id == context->get_tenant_id()
-                  && context->get_context_id() > context_id) ) {
+    } else if ((context->get_context_id() > context_id) ) {
       is_stop = true;
-    } else if (tenant_id == context->get_tenant_id()
+    } else if (true
                && context_id == context->get_context_id()) {
       context_schema = context;
     }
@@ -395,15 +359,13 @@ int ObContextMgr::for_each(Filter &filter, Acation &action, EarlyStopCondition &
 bool ObContextMgr::compare_context(const ObContextSchema *lhs,
                                    const ObContextSchema *rhs)
 {
-  return lhs->get_tenant_id() == rhs->get_tenant_id()
-         ? (lhs->get_context_id() < rhs->get_context_id())
-            : (lhs->get_tenant_id() < rhs->get_tenant_id());
+  return lhs->get_context_id() < rhs->get_context_id();
 }
 
 bool ObContextMgr::equal_context(const ObContextSchema *lhs,
                                    const ObContextSchema *rhs)
 {
-  return lhs->get_tenant_id() == rhs->get_tenant_id()
+  return true
          && lhs->get_context_id() == rhs->get_context_id();
 }
 
@@ -419,13 +381,12 @@ bool ObContextMgr::equal_to_context_key(const ObContextSchema *lhs,
   return NULL != lhs ? (lhs->get_context_key() == context_key) : false;
 }
 
-int ObContextMgr::get_context_schemas_in_tenant(const uint64_t tenant_id,
-    ObIArray<const ObContextSchema *> &context_schemas) const
+int ObContextMgr::get_context_schemas_in_tenant(ObIArray<const ObContextSchema *> &context_schemas) const
 {
   int ret = OB_SUCCESS;
   context_schemas.reset();
 
-  ObContextKey context_key_lower(tenant_id, OB_MIN_ID);
+  ObContextKey context_key_lower(OB_MIN_ID);
   ConstContextIter tenant_context_begin =
       context_infos_.lower_bound(context_key_lower, compare_with_context_key);
   bool is_stop = false;
@@ -435,7 +396,7 @@ int ObContextMgr::get_context_schemas_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(context = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(context));
-    } else if (tenant_id != context->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(context_schemas.push_back(context))) {
       LOG_WARN("push back context failed", K(ret));
@@ -480,8 +441,7 @@ int ObContextMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
   return ret;
 }
 
-int ObContextMgr::get_context_schema_with_name(const uint64_t tenant_id,
-                                               const ObString &ctx_namespace,
+int ObContextMgr::get_context_schema_with_name(const ObString &ctx_namespace,
                                                const ObContextSchema *&context_schema) const
 {
   int ret = OB_SUCCESS;
@@ -489,17 +449,16 @@ int ObContextMgr::get_context_schema_with_name(const uint64_t tenant_id,
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id
-             || 0 == ctx_namespace.length()) {
+  } else if (0 == ctx_namespace.length()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(ctx_namespace));
+    LOG_WARN("invalid argument", K(ret), K(ctx_namespace));
   } else {
     ObContextSchema *tmp_schema = NULL;
-    ObContextHashWrapper hash_wrap(tenant_id, ctx_namespace);
+    ObContextHashWrapper hash_wrap(ctx_namespace);
     if (OB_FAIL(context_map_.get_refactored(hash_wrap, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_INFO("context is not exist", K(tenant_id), K(ctx_namespace),
+        LOG_INFO("context is not exist", K(ctx_namespace),
                  "map_cnt", context_map_.item_count());
       }
     } else {

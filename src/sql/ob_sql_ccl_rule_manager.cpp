@@ -60,17 +60,17 @@ ObSQLCCLRuleManager::ObSQLCCLRuleManager():
     inited_(false)
 {}
 
-int ObSQLCCLRuleManager::init(uint64_t tenant_id)
+int ObSQLCCLRuleManager::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else {
-    tenant_id_ = tenant_id;
-    if (OB_FAIL(rule_level_concurrency_map_wrapper_.init(ObMemAttr(tenant_id, "ObSqlCclRuleMgr", ObCtxIds::DEFAULT_CTX_ID)))) {
+    
+    if (OB_FAIL(rule_level_concurrency_map_wrapper_.init(ObMemAttr("ObSqlCclRuleMgr", ObCtxIds::DEFAULT_CTX_ID)))) {
       LOG_WARN("fail to create hash map", KR(ret));
-    } else if (OB_FAIL(format_sqlid_level_concurrency_map_wrapper_.init(ObMemAttr(tenant_id, "ObSqlCclRuleMgr", ObCtxIds::DEFAULT_CTX_ID)))) {
+    } else if (OB_FAIL(format_sqlid_level_concurrency_map_wrapper_.init(ObMemAttr("ObSqlCclRuleMgr", ObCtxIds::DEFAULT_CTX_ID)))) {
       LOG_WARN("fail to create hash map", KR(ret));
     } else if (OB_FAIL(init_whitelist())) {
       LOG_WARN("failed to init whitelist", K(ret));
@@ -84,7 +84,7 @@ int ObSQLCCLRuleManager::init(uint64_t tenant_id)
 int ObSQLCCLRuleManager::mtl_new(ObSQLCCLRuleManager* &sql_ccl_rule_mgr)
 {
   int ret = OB_SUCCESS;
-  sql_ccl_rule_mgr = OB_NEW(ObSQLCCLRuleManager, ObMemAttr(MTL_ID(), "ObSqlCclRuleMgr"));
+  sql_ccl_rule_mgr = OB_NEW(ObSQLCCLRuleManager, ObMemAttr("ObSqlCclRuleMgr"));
   if (nullptr == sql_ccl_rule_mgr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory for ObSQLCCLRuleManager", K(ret));
@@ -99,13 +99,13 @@ int ObSQLCCLRuleManager::mtl_init(ObSQLCCLRuleManager* &sql_ccl_rule_mgr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObSQLCCLRuleManager not alloc yet", K(ret));
   } else {
-    uint64_t tenant_id = lib::current_resource_owner_id();
-    if (OB_FAIL(sql_ccl_rule_mgr->init(tenant_id))) {
+    
+    if (OB_FAIL(sql_ccl_rule_mgr->init())) {
       LOG_WARN("failed to init request manager", K(ret));
     } else {
       // do nothing
     }
-    LOG_INFO("mtl init finish", K(tenant_id), K(ret));
+    LOG_INFO("mtl init finish", K(ret));
   }
   if (OB_FAIL(ret) && sql_ccl_rule_mgr != nullptr) {
     // cleanup
@@ -376,7 +376,7 @@ int ObSQLCCLRuleManager::match_ccl_rule(
       // rule applay to all database
     } else if (OB_FAIL(sql_relate_databases.exist_refactored(
                    ObCCLDatabaseTableHashWrapper(
-                       ccl_rule.get_tenant_id(), ccl_rule.get_name_case_mode(),
+                       ccl_rule.get_name_case_mode(),
                        ccl_rule.get_affect_database())))) {
       if (ret == OB_HASH_EXIST) {
         ret = OB_SUCCESS;
@@ -395,7 +395,7 @@ int ObSQLCCLRuleManager::match_ccl_rule(
       // rule applay to all table, do nothing
     } else if (OB_FAIL(sql_relate_tables.exist_refactored(
                    ObCCLDatabaseTableHashWrapper(
-                       ccl_rule.get_tenant_id(), ccl_rule.get_name_case_mode(),
+                       ccl_rule.get_name_case_mode(),
                        ccl_rule.get_affect_table())))) {
       if (ret == OB_HASH_EXIST) {
         ret = OB_SUCCESS;
@@ -448,7 +448,7 @@ int ObSQLCCLRuleManager::match_ccl_rule_with_sql(ObIAllocator &alloc,
   } else if (!sql_ctx.schema_guard_->is_inited()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_ctx.shcema_guard_ is not init ", K(ret));
-  } else if (OB_FAIL(sql_ctx.schema_guard_->get_ccl_rule_infos(MTL_ID(), contians_info, candidate_ccl_rules))) {
+  } else if (OB_FAIL(sql_ctx.schema_guard_->get_ccl_rule_infos(contians_info, candidate_ccl_rules))) {
     LOG_WARN("fail to get ccl_rule_infos from sql_ctx.schema_guard_", K(ret));
   } else {
     ObSqlString reconstruct_sql;
@@ -472,7 +472,7 @@ int ObSQLCCLRuleManager::match_ccl_rule_with_sql(ObIAllocator &alloc,
     bool match = false;
     FOREACH_X(ccl_rule_iter, *candidate_ccl_rules, OB_SUCC(ret)) {
       const ObCCLRuleSchema* ccl_rule_schema = nullptr;
-      if (OB_FAIL(sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id(MTL_ID(), (*ccl_rule_iter)->get_ccl_rule_id(), ccl_rule_schema))) {
+      if (OB_FAIL(sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id((*ccl_rule_iter)->get_ccl_rule_id(), ccl_rule_schema))) {
         LOG_WARN("fail to get ccl rule schema", K(ret));
       } else if (OB_FAIL(match_ccl_rule(alloc, user_name, is_ps_mode ? reconstruct_sql.string() : sql, sql_dml_type,
                                  sql_relate_databases, sql_relate_tables, *(const_cast<ObCCLRuleSchema*>(ccl_rule_schema)),

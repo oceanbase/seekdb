@@ -102,7 +102,6 @@ void TestIndexBlockAggregator::init_schema(const int64_t col_count, const int64_
   col_obj_types_ = col_obj_types;
   ObColumnSchemaV2 col;
   schema_.reset();
-  schema_.set_tenant_id(1);
   schema_.set_tablegroup_id(1);
   schema_.set_database_id(1);
   schema_.set_table_id(200001);

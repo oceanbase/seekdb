@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_binding_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_ex_rpc.h"
 #include "storage/tablet/ob_tablet_binding_replay_executor.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
@@ -37,8 +38,7 @@ namespace storage
 {
 
 ObBatchUnbindTabletArg::ObBatchUnbindTabletArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     schema_version_(OB_INVALID_VERSION),
     orig_tablet_ids_(),
     hidden_tablet_ids_(),
@@ -55,7 +55,7 @@ int ObBatchUnbindTabletArg::assign(const ObBatchUnbindTabletArg &other)
   } else if (OB_FAIL(hidden_tablet_ids_.assign(other.hidden_tablet_ids_))) {
     LOG_WARN("failed to assign hidden tablet ids", K(ret));
   } else {
-    tenant_id_ = other.tenant_id_;
+    
     ls_id_ = other.ls_id_;
     schema_version_ = other.schema_version_;
     is_old_mds_ = other.is_old_mds_;
@@ -96,7 +96,6 @@ int ObBatchUnbindTabletArg::is_old_mds(const char *buf,
   is_old_mds = false;
   int64_t version = 0;
   int64_t len = 0;
-  uint64_t tenant_id;
   share::ObLSID id;
   int64_t schema_version;
 
@@ -104,7 +103,7 @@ int ObBatchUnbindTabletArg::is_old_mds(const char *buf,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len));
   } else {
-    LST_DO_CODE(OB_UNIS_DECODE, version, len, tenant_id, id, schema_version);
+    LST_DO_CODE(OB_UNIS_DECODE, version, len, id, schema_version);
     if (OB_FAIL(ret)) {
     }
     // orig tablets array
@@ -125,21 +124,21 @@ int ObBatchUnbindTabletArg::is_old_mds(const char *buf,
 OB_DEF_SERIALIZE(ObBatchUnbindTabletArg)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, tenant_id_, ls_id_, schema_version_, orig_tablet_ids_, hidden_tablet_ids_, is_old_mds_, is_write_defensive_);
+  LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, schema_version_, orig_tablet_ids_, hidden_tablet_ids_, is_old_mds_, is_write_defensive_);
   return ret;
 }
 
 OB_DEF_SERIALIZE_SIZE(ObBatchUnbindTabletArg)
 {
   int len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, ls_id_, schema_version_, orig_tablet_ids_, hidden_tablet_ids_, is_old_mds_, is_write_defensive_);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, schema_version_, orig_tablet_ids_, hidden_tablet_ids_, is_old_mds_, is_write_defensive_);
   return len;
 }
 
 OB_DEF_DESERIALIZE(ObBatchUnbindTabletArg)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE,  tenant_id_, ls_id_, schema_version_, orig_tablet_ids_, hidden_tablet_ids_);
+  LST_DO_CODE(OB_UNIS_DECODE, ls_id_, schema_version_, orig_tablet_ids_, hidden_tablet_ids_);
   if (OB_SUCC(ret)) {
     if (pos == data_len) {
       is_old_mds_ = true;
@@ -152,8 +151,7 @@ OB_DEF_DESERIALIZE(ObBatchUnbindTabletArg)
 }
 
 ObBatchUnbindLobTabletArg::ObBatchUnbindLobTabletArg()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
+  : ls_id_(),
     data_tablet_ids_()
 {
 }
@@ -164,22 +162,22 @@ int ObBatchUnbindLobTabletArg::assign(const ObBatchUnbindLobTabletArg &other)
   if (OB_FAIL(data_tablet_ids_.assign(other.data_tablet_ids_))) {
     LOG_WARN("failed to assign data tablet ids", K(ret));
   } else {
-    tenant_id_ = other.tenant_id_;
+    
     ls_id_ = other.ls_id_;
   }
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObBatchUnbindLobTabletArg, tenant_id_, ls_id_, data_tablet_ids_);
+OB_SERIALIZE_MEMBER(ObBatchUnbindLobTabletArg, ls_id_, data_tablet_ids_);
 
 int ObTabletBindingHelper::get_ls(const ObLSID &ls_id, ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
   ObLSService* ls_srv = nullptr;
   ObLS *ls = nullptr;
-  if (OB_ISNULL(ls_srv = MTL(ObLSService*))) {
+  if (OB_ISNULL(ls_srv = share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("MTL(ObLSService*) fail, MTL not init?", KR(ret));
+    LOG_ERROR("share::g_mp->ls_service() fail, MTL not init?", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
     LOG_ERROR("ls_srv->get_ls() fail", KR(ret));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
@@ -353,15 +351,14 @@ int ObTabletBindingHelper::build_single_table_write_defensive(
     LOG_WARN("argument is invalid", K(ret), K(table_schema), K(schema_version));
   }
   ObArray<ObTabletID> tablet_ids;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   int64_t timeout_us = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
     LOG_WARN("invalid args", KR(ret), K(table_schema), K(tablet_ids));
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_ids.count(), timeout_us))) {
     LOG_WARN("failed to get ddl rpc timeout", K(ret), K(tablet_ids.count()));
-  } else if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(tenant_id,
-                                                                                         tablet_ids,
+  } else if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(tablet_ids,
                                                                                          schema_version,
                                                                                          ObTimeUtility::current_time() + timeout_us,
                                                                                          trans))) {
@@ -580,37 +577,35 @@ int ObTabletUnbindMdsHelper::modify_tablet_binding_for_unbind(const ObBatchUnbin
   return ret;
 }
 
-ObTabletBindingMdsArg::ObTabletBindingMdsArg() : tenant_id_(OB_INVALID_TENANT_ID), ls_id_(), tablet_ids_(), binding_datas_()
+ObTabletBindingMdsArg::ObTabletBindingMdsArg() : ls_id_(), tablet_ids_(), binding_datas_()
 {
   reset();
 }
 
 bool ObTabletBindingMdsArg::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_ && ls_id_.is_valid() && tablet_ids_.count() == binding_datas_.count();
+  return ls_id_.is_valid() && tablet_ids_.count() == binding_datas_.count();
 }
 
 void ObTabletBindingMdsArg::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   ls_id_.reset();
   tablet_ids_.reset();
   binding_datas_.reset();
 }
 
 
-OB_SERIALIZE_MEMBER(ObTabletBindingMdsArg, tenant_id_, ls_id_, tablet_ids_, binding_datas_);
+OB_SERIALIZE_MEMBER(ObTabletBindingMdsArg, ls_id_, tablet_ids_, binding_datas_);
 
-int ObTabletBindingMdsHelper::get_sorted_ls_tablets(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObTabletBindingMdsHelper::get_sorted_ls_tablets(const ObIArray<ObTabletID> &tablet_ids,
     ObArray<std::pair<ObLSID, ObTabletID>> &ls_tablets,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   ls_tablets.reset();
   ObArray<ObLSID> ls_ids;
-  if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, tenant_id, tablet_ids, ls_ids))) {
+  if (OB_FAIL(ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
     LOG_WARN("failed to batch get ls", K(ret));
   } else if (OB_UNLIKELY(tablet_ids.count() != ls_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -633,14 +628,14 @@ int ObTabletBindingMdsHelper::batch_get_tablet_binding(
     ObBatchGetTabletBindingRes &res)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg.tenant_id_;
+  
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    MTL_SWITCH(tenant_id) {
-      ObLSService *ls_service = MTL(ObLSService *);
-      logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
+    MOD_SCOPE {
+      ObLSService *ls_service = share::g_mp->ls_service();
+      logservice::ObLogService *log_service = share::g_mp->log_service();
       ObLSHandle ls_handle;
       ObLS *ls = nullptr;
       ObRole role = INVALID_ROLE;
@@ -653,10 +648,10 @@ int ObTabletBindingMdsHelper::batch_get_tablet_binding(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid ls", K(ret), K(arg.ls_id_));
       } else if (OB_FAIL(ls->get_ls_role(role))) {
-        LOG_WARN("get role failed", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("get role failed", K(ret), K(arg.ls_id_));
       } else if (OB_UNLIKELY(ObRole::LEADER != role)) {
         ret = OB_NOT_MASTER;
-        LOG_WARN("ls not leader", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("ls not leader", K(ret), K(arg.ls_id_));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); i++) {
           const ObTabletID &tablet_id = arg.tablet_ids_.at(i);
@@ -684,7 +679,7 @@ int ObTabletBindingMdsHelper::batch_get_tablet_binding(
               }
             } else if (OB_UNLIKELY(trans_stat != mds::TwoPhaseCommitState::ON_COMMIT)) {
               ret = OB_EAGAIN;
-              LOG_WARN("check committed failed", K(ret), K(tenant_id), K(arg.ls_id_), K(tablet_id), K(tmp_data), K(trans_stat));
+              LOG_WARN("check committed failed", K(ret), K(arg.ls_id_), K(tablet_id), K(tmp_data), K(trans_stat));
             }
           }
         }
@@ -694,9 +689,7 @@ int ObTabletBindingMdsHelper::batch_get_tablet_binding(
   return ret;
 }
 
-int ObTabletBindingMdsHelper::get_tablet_binding_mds_by_rpc(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletBindingMdsHelper::get_tablet_binding_mds_by_rpc(const ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     ObIArray<ObTabletBindingMdsUserData> &datas)
@@ -704,8 +697,8 @@ int ObTabletBindingMdsHelper::get_tablet_binding_mds_by_rpc(
   int ret = OB_SUCCESS;
   obcall::ObBatchGetTabletBindingArg arg;
   obcall::ObBatchGetTabletBindingRes res;
-  if (OB_FAIL(arg.init(tenant_id, ls_id, tablet_ids, true/*check_committed*/))) {
-    LOG_WARN("failed to init arg", K(ret), K(tenant_id), K(ls_id));
+  if (OB_FAIL(arg.init(ls_id, tablet_ids, true/*check_committed*/))) {
+    LOG_WARN("failed to init arg", K(ret), K(ls_id));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
     return batch_get_tablet_binding(abs_timeout_us, arg, res);
   }))) {
@@ -719,9 +712,7 @@ int ObTabletBindingMdsHelper::get_tablet_binding_mds_by_rpc(
   return ret;
 }
 
-int ObTabletBindingMdsHelper::modify_tablet_binding_for_create(
-    const uint64_t tenant_id,
-    const obcall::ObBatchCreateTabletArg &arg,
+int ObTabletBindingMdsHelper::modify_tablet_binding_for_create(const obcall::ObBatchCreateTabletArg &arg,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans)
 {
@@ -744,7 +735,7 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_for_create(
       }
       if (OB_FAIL(ret)) {
       } else if (is_last || batch_tablet_ids.count() >= ObTabletBindingMdsArg::BATCH_TABLET_CNT) {
-        if (OB_FAIL(modify_tablet_binding_(tenant_id, ls_id, batch_tablet_ids, abs_timeout_us,
+        if (OB_FAIL(modify_tablet_binding_(ls_id, batch_tablet_ids, abs_timeout_us,
                 ModifyBindingByOps<ObBindHiddenTabletToOrigTabletOp>(batch_ops), trans))) {
           LOG_WARN("failed to modify tablet binding", K(ret));
         } else {
@@ -778,7 +769,7 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_for_create(
       }
       if (OB_FAIL(ret)) {
       } else if (is_last || batch_tablet_ids.count() >= ObTabletBindingMdsArg::BATCH_TABLET_CNT) {
-        if (OB_FAIL(modify_tablet_binding_(tenant_id, ls_id, batch_tablet_ids, abs_timeout_us,
+        if (OB_FAIL(modify_tablet_binding_(ls_id, batch_tablet_ids, abs_timeout_us,
                 ModifyBindingByOps<ObBindLobTabletToDataTabletOp>(batch_ops), trans))) {
           LOG_WARN("failed to modify tablet binding", K(ret));
         } else {
@@ -797,7 +788,6 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_for_create(
 
 // redefined_schema_version is not OB_INVALID_VERSION iff for ddl succ
 int ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletID> &orig_tablet_ids,
     const ObIArray<ObTabletID> &hidden_tablet_ids,
     const int64_t redefined_schema_version,
@@ -807,23 +797,21 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret)) {
     ObUnbindHiddenTabletFromOrigTabletOp op(redefined_schema_version);
-    if (OB_FAIL(modify_tablet_binding_(tenant_id, orig_tablet_ids, abs_timeout_us, op, trans))) {
+    if (OB_FAIL(modify_tablet_binding_(orig_tablet_ids, abs_timeout_us, op, trans))) {
       LOG_WARN("failed to modify tablet binding", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && OB_INVALID_VERSION != redefined_schema_version) {
     ObSetRwDefensiveOp op(redefined_schema_version);
-    if (OB_FAIL(modify_tablet_binding_(tenant_id, hidden_tablet_ids, abs_timeout_us, op, trans))) {
+    if (OB_FAIL(modify_tablet_binding_(hidden_tablet_ids, abs_timeout_us, op, trans))) {
       LOG_WARN("failed to modify tablet binding", K(ret));
     }
   }
   return ret;
 }
 
-int ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans)
@@ -832,16 +820,14 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(
   ObSetRwDefensiveOp op(schema_version);
   if (OB_UNLIKELY(OB_INVALID_VERSION == schema_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tenant_id), K(schema_version), K(tablet_ids));
-  } else if (OB_FAIL(modify_tablet_binding_(tenant_id, tablet_ids, abs_timeout_us, op, trans))) {
+    LOG_WARN("invalid arg", K(ret), K(schema_version), K(tablet_ids));
+  } else if (OB_FAIL(modify_tablet_binding_(tablet_ids, abs_timeout_us, op, trans))) {
     LOG_WARN("failed to modify tablet binding", K(ret));
   }
   return ret;
 }
 
-int ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans)
@@ -850,17 +836,15 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(
   ObSetWriteDefensiveOp op(schema_version);
   if (OB_UNLIKELY(OB_INVALID_VERSION == schema_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tenant_id), K(schema_version), K(tablet_ids));
-  } else if (OB_FAIL(modify_tablet_binding_(tenant_id, tablet_ids, abs_timeout_us, op, trans))) {
+    LOG_WARN("invalid arg", K(ret), K(schema_version), K(tablet_ids));
+  } else if (OB_FAIL(modify_tablet_binding_(tablet_ids, abs_timeout_us, op, trans))) {
     LOG_WARN("failed to modify tablet binding", K(ret));
   }
   return ret;
 }
 
 template<typename F>
-int ObTabletBindingMdsHelper::modify_tablet_binding_(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+int ObTabletBindingMdsHelper::modify_tablet_binding_(const share::ObLSID &ls_id,
     const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
@@ -869,11 +853,11 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_(
   int ret = OB_SUCCESS;
   if (!tablet_ids.empty()) {
     ObArray<ObTabletBindingMdsUserData> old_datas;
-    if (OB_FAIL(get_tablet_binding_mds_by_rpc(tenant_id, ls_id, tablet_ids, abs_timeout_us, old_datas))) {
+    if (OB_FAIL(get_tablet_binding_mds_by_rpc(ls_id, tablet_ids, abs_timeout_us, old_datas))) {
       LOG_WARN("failed to get tablet binding mds", K(ret));
     } else {
       ObTabletBindingMdsArg arg;
-      arg.tenant_id_ = tenant_id;
+      
       arg.ls_id_ = ls_id;
       if (OB_FAIL(arg.tablet_ids_.assign(tablet_ids))) {
         LOG_WARN("failed to assign", K(ret));
@@ -899,9 +883,7 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_(
 }
 
 template<typename F>
-int ObTabletBindingMdsHelper::modify_tablet_binding_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObTabletBindingMdsHelper::modify_tablet_binding_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans)
@@ -910,7 +892,7 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_(
   if (!tablet_ids.empty()) {
     ObArray<std::pair<ObLSID, ObTabletID>> ls_tablets;
     ObArray<ObTabletID> this_batch_tablet_ids;
-    if (OB_FAIL(get_sorted_ls_tablets(tenant_id, tablet_ids, ls_tablets, trans))) {
+    if (OB_FAIL(get_sorted_ls_tablets(tablet_ids, ls_tablets, trans))) {
       LOG_WARN("failed to get sorted ls tablets", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablets.count(); i++) {
@@ -920,7 +902,7 @@ int ObTabletBindingMdsHelper::modify_tablet_binding_(
       if (OB_FAIL(this_batch_tablet_ids.push_back(tablet_id))) {
         LOG_WARN("failed to push back", K(ret));
       } else if (is_last_or_next_ls_id_changed || this_batch_tablet_ids.count() >= ObTabletBindingMdsArg::BATCH_TABLET_CNT) {
-        if (OB_FAIL(modify_tablet_binding_(tenant_id, ls_id, this_batch_tablet_ids, abs_timeout_us,
+        if (OB_FAIL(modify_tablet_binding_(ls_id, this_batch_tablet_ids, abs_timeout_us,
                 ModifyBindingByOp<F>(op), trans))) {
           LOG_WARN("failed to modify tablet binding", K(ret));
         } else {
@@ -955,8 +937,7 @@ int ObTabletBindingMdsHelper::register_mds_(
       LOG_WARN("failed to allocate", K(ret));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
       LOG_WARN("failed to serialize arg", K(ret));
-    } else if (OB_FAIL(static_cast<observer::ObInnerSQLConnection *>(isql_conn)->register_multi_data_source(
-        arg.tenant_id_, arg.ls_id_, ObTxDataSourceType::TABLET_BINDING, buf, pos))) {
+    } else if (OB_FAIL(static_cast<observer::ObInnerSQLConnection *>(isql_conn)->register_multi_data_source(arg.ls_id_, ObTxDataSourceType::TABLET_BINDING, buf, pos))) {
       LOG_WARN("failed to register mds", K(ret));
     }
   }
@@ -1001,7 +982,7 @@ int ObTabletBindingMdsHelper::modify_(
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("fail to get ls", KR(ret), K(arg));
   } else if (OB_UNLIKELY(nullptr == (ls = ls_handle.get_ls()))) {
     ret = OB_ERR_UNEXPECTED;

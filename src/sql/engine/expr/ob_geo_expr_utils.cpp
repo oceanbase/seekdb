@@ -35,8 +35,7 @@ namespace oceanbase
 {
 namespace sql
 {
-int ObGeoExprUtils::get_srs_item(uint64_t tenant_id,
-                                 omt::ObSrsCacheGuard &srs_guard,
+int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
                                  const uint32_t srid,
                                  const ObSrsItem *&srs)
 {
@@ -45,7 +44,7 @@ int ObGeoExprUtils::get_srs_item(uint64_t tenant_id,
   if (!ObGeoTypeUtil::need_get_srs(srid)) {
     // do nothing
   } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("fail to get srs guard", K(ret), K(tenant_id));
+    LOG_WARN("fail to get srs guard", K(ret));
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
     LOG_WARN("fail to get srs", K(ret), K(srid));
   }
@@ -82,7 +81,7 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get session", K(ret));
-  } else if (OB_FAIL(get_srs_item(session->get_effective_tenant_id(), srs_guard, srid, srs))) {
+  } else if (OB_FAIL(get_srs_item(srs_guard, srid, srs))) {
     LOG_WARN("fail to get srs inner", K(ret), K(srid));
   }
 
@@ -144,7 +143,7 @@ int ObGeoExprUtils::construct_geometry(ObIAllocator &allocator,
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
     }
   } else if (FALSE_IT(srid = static_cast<ObGeoSrid>(ObGeoWkbByteOrderUtil::read<uint32_t>(data, ObGeoWkbByteOrder::LittleEndian)))) {
-  } else if (OB_FAIL(get_srs_item(MTL_ID(), srs_guard, srid, srs))) {
+  } else if (OB_FAIL(get_srs_item(srs_guard, srid, srs))) {
     if (OB_ERR_SRS_NOT_FOUND == ret) {
       LOG_USER_WARN(OB_ERR_SRS_NOT_FOUND, srid); // adapt mysql
       ret = OB_SUCCESS;

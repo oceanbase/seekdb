@@ -31,7 +31,6 @@ class ObBloomFilterBuildTask: public common::IObDedupTask
 {
 public:
   ObBloomFilterBuildTask(
-      const uint64_t tenant_id,
       const uint64_t table_id,
       const blocksstable::MacroBlockId &macro_id,
       const int64_t prefix_len);
@@ -44,7 +43,7 @@ public:
   virtual int process();
 private:
   int build_bloom_filter();
-  uint64_t tenant_id_;
+  
   uint64_t table_id_;
   blocksstable::MacroBlockId macro_id_;
   blocksstable::ObStorageObjectHandle macro_handle_;

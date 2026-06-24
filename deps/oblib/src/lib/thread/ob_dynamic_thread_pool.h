@@ -100,7 +100,7 @@ public:
   static const int64_t MAX_THREAD_NUM = 1024;
   ObSimpleDynamicThreadPool()
     : has_bind_(false), min_thread_cnt_(-1), max_thread_cnt_(-1),
-      name_("unknown"), tenant_id_(OB_SERVER_TENANT_ID), ref_cnt_(0)
+      name_("unknown"), ref_cnt_(0)
   {}
   virtual ~ObSimpleDynamicThreadPool();
   void inc_ref() { ATOMIC_INC(&ref_cnt_); }
@@ -113,13 +113,13 @@ public:
   virtual int64_t worker_count() const = 0;
   virtual void notify_stop() {}
 
-  TO_STRING_KV(KCSTRING_(name), KP(this), K_(min_thread_cnt), K_(max_thread_cnt), K_(tenant_id));
+  TO_STRING_KV(KCSTRING_(name), KP(this), K_(min_thread_cnt), K_(max_thread_cnt));
 
   bool has_bind_;
   int64_t min_thread_cnt_;
   int64_t max_thread_cnt_;
   const char* name_;
-  int64_t tenant_id_;
+  
 private:
   int64_t ref_cnt_;
 };

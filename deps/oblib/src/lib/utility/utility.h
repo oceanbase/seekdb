@@ -1373,8 +1373,6 @@ private:
   int64_t end_;
 };
 
-void get_addr_by_proxy_sessid(const uint64_t session_id, ObAddr &addr);
-
 int ob_atoll(const char *str, int64_t &res);
 int ob_atoull(const char *str, uint64_t &res);
 int ob_strtoll(const char *str, char *&endptr, int64_t &res);

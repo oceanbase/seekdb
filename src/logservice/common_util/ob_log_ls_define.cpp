@@ -24,11 +24,7 @@ int TenantLSID::compare(const TenantLSID &other) const
 {
   int cmp_ret = 0;
 
-  if (tenant_id_ > other.tenant_id_) {
-    cmp_ret = 1;
-  } else if (tenant_id_ < other.tenant_id_) {
-    cmp_ret = -1;
-  } else if (ls_id_ > other.ls_id_) {
+  if (ls_id_ > other.ls_id_) {
     cmp_ret = 1;
   } else if (ls_id_ < other.ls_id_) {
     cmp_ret = -1;
@@ -41,7 +37,7 @@ int TenantLSID::compare(const TenantLSID &other) const
 
 TenantLSID &TenantLSID::operator=(const TenantLSID &other)
 {
-  this->tenant_id_ = other.get_tenant_id();
+  
   this->ls_id_ = other.get_ls_id();
   return *this;
 }

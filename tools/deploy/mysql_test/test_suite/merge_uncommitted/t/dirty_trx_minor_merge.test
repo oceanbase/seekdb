@@ -35,7 +35,7 @@ let $__freeze_table_name__ = 'test_uncommitted_trx_minor_merge';
 insert into test_uncommitted_trx_minor_merge values (1,1);
 
 connection conn0;
-let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 'test_uncommitted_trx_minor_merge', table_id, 1);
+let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_table where table_name= 'test_uncommitted_trx_minor_merge', table_id, 1);
 
 
 connection conn1;
@@ -44,7 +44,7 @@ let $__tablet_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tablet_id
 --source mysql_test/include/minor_freeze_tablet_and_wait_done.inc
 
 #connection conn1;
-#let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and tenant_id = $__tenant_id__ and table_type = 12 group by svr_port, c, 1);
+#let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ table_type = 12 group by svr_port, c, 1);
 #echo $count;
 
 connection conn1;
@@ -99,10 +99,10 @@ commit;
 select * from test_uncommitted_trx_minor_merge;
 
 connection conn0;
-#let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and tenant_id = $__tenant_id__ and table_type = 12 and size > 0 group by svr_port order by c desc limit 1, c, 1);
+#let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ table_type = 12 and size > 0 group by svr_port order by c desc limit 1, c, 1);
 # should be 1
 #echo $count;
-#eval select * from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and tenant_id = $__tenant_id__;
+#eval select * from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__;
 
 --source mysql_test/include/minor_freeze_tablet_and_wait_done.inc
 

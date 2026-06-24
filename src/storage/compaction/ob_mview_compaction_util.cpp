@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_mview_compaction_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_basic_tablet_merge_ctx.h"
 #include "sql/resolver/mv/ob_mv_provider.h"
 #include "observer/ob_inner_sql_connection_pool.h"
@@ -56,11 +57,11 @@ int ObMviewMergeParameter::init(const ObMergeParameter &merge_param)
   ObSchemaGetterGuard schema_guard;
   sql::ObSQLSessionInfo *session = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  const uint64_t tenant_id = MTL_ID();
+  
   sql::ObFreeSessionCtx free_session_ctx;
   if (OB_FAIL(tablet_ids.push_back(container_tablet_id_))) {
     LOG_WARN("Failed to add tablet id", K(ret), K_(container_tablet_id));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tablet_to_table_history(tenant_id, tablet_ids, schema_version_, table_ids))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tablet_to_table_history(tablet_ids, schema_version_, table_ids))) {
     LOG_WARN("Failed to get table id according to tablet id", K(ret), K_(container_tablet_id), K_(schema_version));
   } else if (OB_UNLIKELY(table_ids.empty())) {
     ret = OB_ERR_UNEXPECTED;
@@ -72,14 +73,14 @@ int ObMviewMergeParameter::init(const ObMergeParameter &merge_param)
     container_table_id_ = table_ids.at(0);
   }
   if (FAILEDx(ObMviewCompactionHelper::get_mview_id_from_container_table(container_table_id_, mview_id_))) {
-    LOG_WARN("Failed to get mview id", K(ret), K(tenant_id), K_(container_table_id));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("Failed to get tenant schema guard", K(ret), K(tenant_id), K_(container_tablet_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, container_table_id_, table_schema))) {
-    LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K_(container_table_id), K_(container_tablet_id));
+    LOG_WARN("Failed to get mview id", K(ret), K_(container_table_id));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("Failed to get tenant schema guard", K(ret), K_(container_tablet_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( container_table_id_, table_schema))) {
+    LOG_WARN("fail to get table schema", K(ret), K_(container_table_id), K_(container_tablet_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null table schema", K(ret), K(tenant_id), K_(container_table_id), K_(container_tablet_id));
+    LOG_WARN("Unexpected null table schema", K(ret), K_(container_table_id), K_(container_tablet_id));
   } else {
     database_id_ = table_schema->get_database_id();
   }
@@ -91,10 +92,10 @@ int ObMviewMergeParameter::init(const ObMergeParameter &merge_param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected refresh scn range", K(ret), K_(refresh_scn_range));
   } else if (OB_FAIL(ObMviewCompactionHelper::create_inner_session(database_id_, free_session_ctx, session))) {
-    LOG_WARN("Failed to create inner session", K(ret),K(tenant_id), K_(container_table_id), K_(container_tablet_id), K(database_id_));
+    LOG_WARN("Failed to create inner session", K(ret), K_(container_table_id), K_(container_tablet_id), K(database_id_));
   } else if (OB_FAIL(ObMviewCompactionHelper::generate_mview_refresh_sql(session, schema_guard, table_schema, merge_param.merge_range_,
                                                                          merge_param.static_param_.rowkey_read_info_, *this))) {
-    LOG_WARN("Failed to generate mview refresh sql", K(ret), K(tenant_id), K_(container_table_id), K_(container_tablet_id));
+    LOG_WARN("Failed to generate mview refresh sql", K(ret), K_(container_table_id), K_(container_tablet_id));
   }
   if (OB_SUCC(ret)) {
     FLOG_INFO("[MVIEW COMPACTION]: success to init mview merge param", K(ret), K(*this));
@@ -171,7 +172,7 @@ bool ObMviewCompactionValidation::need_do_validation()
 int ObMviewCompactionHelper::get_mview_id_from_container_table(const uint64_t container_table_id, uint64_t &mview_id)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObSqlString sql;
   if (OB_FAIL(sql.assign_fmt("SELECT table_id FROM %s WHERE data_table_id = %ld AND table_type = %d", 
                               OB_ALL_TABLE_TNAME, container_table_id, MATERIALIZED_VIEW))) {
@@ -179,13 +180,13 @@ int ObMviewCompactionHelper::get_mview_id_from_container_table(const uint64_t co
   } else {
     SMART_VAR(ObISQLClient::ReadResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id, sql.ptr()))) {
-        LOG_WARN("Failed to execute sql", K(ret), K(sql), K(tenant_id));
+      if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
+        LOG_WARN("Failed to execute sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected null result", K(ret), K(sql), K(tenant_id));
+        LOG_WARN("Unexpected null result", K(ret), K(sql));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("Failed to get next result", K(ret), K(sql), K(tenant_id));
+        LOG_WARN("Failed to get next result", K(ret), K(sql));
       } else {
         EXTRACT_INT_FIELD_MYSQL(*result, "table_id", mview_id, uint64_t);
         if (OB_FAIL(ret)) {
@@ -210,17 +211,17 @@ int ObMviewCompactionHelper::generate_mview_refresh_sql(
     ObMviewMergeParameter &mview_param)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   int64_t part_idx = OB_INVALID_INDEX;
   int64_t sub_part_idx = OB_INVALID_INDEX;
-  sql::ObMVProvider mv_provider(tenant_id, mview_param.mview_id_);
+  sql::ObMVProvider mv_provider(mview_param.mview_id_);
   if (table_schema->is_partitioned_table()) {
     if (OB_FAIL(table_schema->get_part_idx_by_tablet(mview_param.container_tablet_id_, part_idx, sub_part_idx))) {
       LOG_WARN("Failed to get part idx by tablet", K(ret), K(mview_param));
     }
   }
   if (OB_SUCC(ret)) {
-    ObArenaAllocator allocator("MVCompaction", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+    ObArenaAllocator allocator("MVCompaction", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObNewRange sql_range;
     sql_range.table_id_ = mview_param.mview_id_;
     ObMviewMergeSQL *refresh_sqls = mview_param.refresh_sqls_;
@@ -238,7 +239,7 @@ int ObMviewCompactionHelper::generate_mview_refresh_sql(
                                                         sub_part_idx,
                                                         sql_range,
                                                         mv_ops))) {
-      LOG_WARN("Failed to get major refresh operators", K(ret), K(tenant_id), K(mview_param));
+      LOG_WARN("Failed to get major refresh operators", K(ret), K(mview_param));
     } else if (OB_ISNULL(mv_ops)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null", K(ret), K(mv_ops));
@@ -272,41 +273,39 @@ int ObMviewCompactionHelper::create_inner_session(
   int ret = OB_SUCCESS;
   session = nullptr;
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
-  uint64_t proxy_sid = 0;
   const schema::ObTenantSchema *tenant_info = nullptr;
   const ObDatabaseSchema *database_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-    LOG_WARN("Failed to create sess id", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("Failed to create sess id", K(ret), K(database_id));
   } else if (OB_FAIL(GCTX.session_mgr_->create_session(
-             tenant_id, sid, proxy_sid, ObTimeUtility::current_time(), session))) {
+             sid, ObTimeUtility::current_time(), session))) {
     session = nullptr;
-    LOG_WARN("Failed to create session", K(ret), K(sid), K(tenant_id), K(database_id));
+    LOG_WARN("Failed to create session", K(ret), K(sid), K(database_id));
   } else {
     free_session_ctx.sessid_ = sid;
-    free_session_ctx.proxy_sessid_ = proxy_sid;
   }
-  if (FAILEDx(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("Failed to get tenant schema guard", K(ret), K(tenant_id), K(database_id));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_info))) {
-    LOG_WARN("Failed to get tenant info", K(ret), K(tenant_id), K(database_id));
+  if (FAILEDx(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("Failed to get tenant schema guard", K(ret), K(database_id));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_info))) {
+    LOG_WARN("Failed to get tenant info", K(ret), K(database_id));
   } else if (OB_ISNULL(tenant_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null tenant schema", K(ret), K(tenant_id), K(database_id));
-  } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_id, database_schema))) {
-    LOG_WARN("Failed to get database schema", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("Unexpected null tenant schema", K(ret), K(database_id));
+  } else if (OB_FAIL(schema_guard.get_database_schema( database_id, database_schema))) {
+    LOG_WARN("Failed to get database schema", K(ret), K(database_id));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null database schema", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("Unexpected null database schema", K(ret), K(database_id));
   } else if (OB_FAIL(session->load_default_sys_variable(false, false))) {
-    LOG_WARN("Failed to load default sys variable", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("Failed to load default sys variable", K(ret), K(database_id));
   } else if (OB_FAIL(session->load_default_configs_in_pc())) {
-    LOG_WARN("Failed to load default configs in pc", K(ret), K(tenant_id), K(database_id));
-  } else if (OB_FAIL(session->init_tenant(tenant_info->get_tenant_name(), tenant_id))) {
-     LOG_WARN("Failed to init tenant in session", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("Failed to load default configs in pc", K(ret), K(database_id));
+  } else if (OB_FAIL(session->init_tenant(tenant_info->get_tenant_name()))) {
+     LOG_WARN("Failed to init tenant in session", K(ret), K(database_id));
   } else if (OB_FAIL(session->set_default_database(database_schema->get_database_name()))) {
-    LOG_WARN("Failed to set default database", K(ret), K(tenant_id), K(database_id));
+    LOG_WARN("Failed to set default database", K(ret), K(database_id));
   } else if (OB_FAIL(set_params_to_session(session))) {
     LOG_WARN("Failed to set params to session", K(ret));
   } else {
@@ -316,7 +315,7 @@ int ObMviewCompactionHelper::create_inner_session(
     session->get_ddl_info().set_refreshing_mview(true);
     session->set_database_id(database_id);
     session->set_query_start_time(ObTimeUtil::current_time());
-    LOG_INFO("[MVIEW COMPACTION]: Succ to create inner session", K(ret), K(tenant_id), K(database_id), KP(session));
+    LOG_INFO("[MVIEW COMPACTION]: Succ to create inner session", K(ret), K(database_id), KP(session));
   }
   if (OB_FAIL(ret)) {
     release_inner_session(free_session_ctx, session);
@@ -404,7 +403,7 @@ int ObMviewCompactionHelper::validate_row_count(const ObMergeParameter &merge_pa
     } else if (OB_FAIL(ObMviewCompactionHelper::create_inner_connection(session, conn))) {
       LOG_WARN("Failed to create inner connection", K(ret));
     } else {
-      if (OB_FAIL(conn->execute_read(GCONF.cluster_id, MTL_ID(), sql.ptr(), read_result))) {
+      if (OB_FAIL(conn->execute_read(GCONF.cluster_id, sql.ptr(), read_result))) {
         LOG_WARN("Failed to execute", K(ret), K(sql));
       } else if (OB_ISNULL(sql_result = static_cast<observer::ObInnerSQLResult *>(read_result.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
@@ -429,7 +428,7 @@ int ObMviewCompactionHelper::validate_row_count(const ObMergeParameter &merge_pa
   if (OB_SUCC(ret) && major_row_count != join_row_count) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("MV major row count is not equal with join row count", K(ret), K(major_row_count), K(join_row_count));
-    MTL(ObTenantTabletScheduler*)->get_mview_validation().set_force_do_validation();
+    share::g_mp->tenant_tablet_scheduler()->get_mview_validation().set_force_do_validation();
   }
   read_result.~ReadResult();
   ObMviewCompactionHelper::release_inner_connection(conn);

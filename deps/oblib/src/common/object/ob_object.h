@@ -1297,7 +1297,6 @@ struct ObObjPrintParams
       uint32_t use_memcpy_:1;
       uint32_t skip_escape_:1;
       uint32_t beginning_space_:1;
-      uint32_t for_dblink_:1;
       uint32_t binary_string_print_hex_:1;
       uint32_t need_print_converter_:1;
       uint32_t print_const_expr_type_:1;
@@ -1306,7 +1305,7 @@ struct ObObjPrintParams
       uint32_t character_hex_safe_represent_:1;
       uint32_t binary_string_print_base64_:1;
       uint32_t not_print_internal_catalog_:1;
-      uint32_t reserved_:19;
+      uint32_t reserved_:20;
     };
   };
 

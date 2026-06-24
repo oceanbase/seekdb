@@ -261,15 +261,14 @@ int ObTableLoadSqlStatistics::get_col_stat_array(ObIArray<ObOptColumnStat *> &co
 int ObTableLoadSqlStatistics::get_table_stats(TabStatIndMap &table_stats) const
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObOptTableStat *table_stat = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < table_stat_array_.count(); ++i) {
     if (OB_ISNULL(table_stat = table_stat_array_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected table stat is null", KR(ret));
     } else {
-      ObOptTableStat::Key key(tenant_id,
-                              table_stat->get_table_id(),
+      ObOptTableStat::Key key(table_stat->get_table_id(),
                               table_stat->get_partition_id());
       if (OB_FAIL(table_stats.set_refactored(key, table_stat))) {
         LOG_WARN("fail to set table stat", KR(ret), K(key), KPC(table_stat));
@@ -285,7 +284,7 @@ int ObTableLoadSqlStatistics::get_table_stats(TabStatIndMap &table_stats) const
 int ObTableLoadSqlStatistics::get_col_stats(ColStatIndMap &col_stats) const
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   ObOptOSGColumnStat *osg_col_stat = nullptr;
   ObOptColumnStat *col_stat = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_stat_array_.count(); ++i) {
@@ -296,8 +295,7 @@ int ObTableLoadSqlStatistics::get_col_stats(ColStatIndMap &col_stats) const
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected col stat is null", KR(ret));
     } else {
-      ObOptColumnStat::Key key(tenant_id,
-                               col_stat->get_table_id(),
+      ObOptColumnStat::Key key(col_stat->get_table_id(),
                                col_stat->get_partition_id(),
                                col_stat->get_column_id());
       if (OB_FAIL(col_stats.set_refactored(key, col_stat))) {

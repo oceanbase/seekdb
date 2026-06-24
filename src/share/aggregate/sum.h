@@ -770,7 +770,7 @@ public:
     ObEvalCtx &eval_ctx = agg_ctx.eval_ctx_;
     VectorFormat fmt = aggr_info.param_exprs_.at(0)->get_format(eval_ctx);
     NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_idx, agg_cell);
-    common::ObArenaAllocator tmp_allocator(ObMemAttr(MTL_ID(), "SumVector", common::ObCtxIds::WORK_AREA));
+    common::ObArenaAllocator tmp_allocator(ObMemAttr("SumVector", common::ObCtxIds::WORK_AREA));
     if (OB_LIKELY(!is_null)) {
       // add single row is full lob no matter what VectorFormat is
       ObString array_data(data_len, data);
@@ -827,7 +827,7 @@ public:
     const char* param_payload = nullptr;
     int32_t param_len = 0;
     columns.get_payload(row_num, param_payload, param_len);
-    common::ObArenaAllocator tmp_allocator(ObMemAttr(MTL_ID(), "SumVector", common::ObCtxIds::WORK_AREA));
+    common::ObArenaAllocator tmp_allocator(ObMemAttr("SumVector", common::ObCtxIds::WORK_AREA));
     ObString array_data(param_len, param_payload);
     if (!ObCollectionExprUtil::is_compact_fmt_cell(param_payload)) {
       ret = OB_ERR_UNEXPECTED;

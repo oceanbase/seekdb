@@ -66,9 +66,9 @@ int ObLCLBatchSenderThread::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(share::ObThreadPool::init())) {
-    DETECT_LOG(WARN, "init thread failed", K(ret), KP(this), K(MTL_ID()));
-  } else if (OB_FAIL(lcl_msg_map_.init("LCLSender", MTL_ID()))) {
-    DETECT_LOG(WARN, "init thread failed", K(ret), KP(this), K(MTL_ID()));
+    DETECT_LOG(WARN, "init thread failed", K(ret), KP(this));
+  } else if (OB_FAIL(lcl_msg_map_.init("LCLSender"))) {
+    DETECT_LOG(WARN, "init thread failed", K(ret), KP(this));
   } else {
     is_inited_ = true;
   }

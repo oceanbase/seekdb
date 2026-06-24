@@ -86,7 +86,7 @@ int ObServerConfig::read_config(const bool enable_static_effect)
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(ERROR, "config item is null", "name", it->first.str(), K(ret));
     } else if (!it->second->reboot_effective() || !enable_static_effect) {
-      temp_ret = system_config_->read_config(get_tenant_id(), key, *(it->second));
+      temp_ret = system_config_->read_config(key, *(it->second));
       if (OB_SUCCESS != temp_ret) {
         OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
@@ -218,10 +218,10 @@ int64_t get_max_rpc_packet_size()
   return GCONF._max_rpc_packet_size;
 }
 
-int64_t get_stream_rpc_max_wait_timeout(int64_t tenant_id)
+int64_t get_stream_rpc_max_wait_timeout()
 {
   int64_t stream_rpc_max_wait_timeout = 30 * 1000 * 1000L;  // was ObCallProcessorBase::DEFAULT_WAIT_NEXT_PACKET_TIMEOUT
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_LIKELY(tenant_config.is_valid())) {
     stream_rpc_max_wait_timeout = tenant_config->_stream_rpc_max_wait_timeout;
   }

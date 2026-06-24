@@ -34,26 +34,22 @@ public:
 
   ~ObCatalogMetaGetter() = default;
 
-  int list_namespace_names(const uint64_t tenant_id, const uint64_t catalog_id, common::ObIArray<common::ObString> &ns_names) override;
-  int list_table_names(const uint64_t tenant_id,
-                       const uint64_t catalog_id,
+  int list_namespace_names(const uint64_t catalog_id, common::ObIArray<common::ObString> &ns_names) override;
+  int list_table_names(const uint64_t catalog_id,
                        const common::ObString &ns_name,
                        const ObNameCaseMode case_mode,
                        common::ObIArray<common::ObString> &tbl_names) override;
-  int fetch_namespace_schema(const uint64_t tenant_id,
-                             const uint64_t catalog_id,
+  int fetch_namespace_schema(const uint64_t catalog_id,
                              const common::ObString &ns_name,
                              const ObNameCaseMode case_mode,
                              share::schema::ObDatabaseSchema &database_schema) override;
-  int fetch_table_schema(const uint64_t tenant_id,
-                         const uint64_t catalog_id,
+  int fetch_table_schema(const uint64_t catalog_id,
                          const common::ObString &ns_name,
                          const common::ObString &tbl_name,
                          const ObNameCaseMode case_mode,
                          share::schema::ObTableSchema &table_schema) override;
 
-  int fetch_basic_table_info(const uint64_t tenant_id,
-                             const uint64_t catalog_id,
+  int fetch_basic_table_info(const uint64_t catalog_id,
                              const common::ObString &ns_name,
                              const common::ObString &tbl_name,
                              const ObNameCaseMode case_mode,
@@ -63,7 +59,7 @@ private:
   ObSchemaGetterGuard &schema_getter_guard_;
   ObIAllocator &allocator_;
 
-  int get_catalog_(const uint64_t tenant_id, const uint64_t catalog_id, ObIExternalCatalog *&catalog);
+  int get_catalog_(const uint64_t catalog_id, ObIExternalCatalog *&catalog);
 };
 
 } // namespace share

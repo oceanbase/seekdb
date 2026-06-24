@@ -55,7 +55,7 @@ int ObHybridHistEstimator::estimate(const ObOptStatGatherParam &param,
   double est_percent = 0.0;
   int64_t max_num_buckets = 0;
   ObSEArray<int64_t, 4> no_sample_idx;
-  ObArenaAllocator allocator("ObHybridHistEst", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+  ObArenaAllocator allocator("ObHybridHistEst", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSqlString raw_sql;
   int64_t duration_time = -1;
   ObSEArray<ObOptStat, 1> tmp_opt_stats;
@@ -589,7 +589,7 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
           if (bucket_rows > bucket_size || 0 == i || extra->get_material_row_count() - 1 == i) {
             bucket_rows = 0;
             ObObj ep_val;
-            common::ObArenaAllocator tmp_alloctor("BulidHybridHist", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+            common::ObArenaAllocator tmp_alloctor("BulidHybridHist", OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObDatum new_datum = row->cells()[0];
             if (obj_meta.is_lob_storage() &&
                 OB_FAIL(build_prefix_str_datum_for_lob(tmp_alloctor,

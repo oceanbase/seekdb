@@ -219,8 +219,7 @@ public:
 
   int get_autoinc_value(const AutoincKey &key, const int64_t &autoinc_version, uint64_t &seq_value, uint64_t &sync_value);
 
-  int get_autoinc_value_in_batch(const uint64_t tenant_id,
-                                 const common::ObIArray<AutoincKey> &keys,
+  int get_autoinc_value_in_batch(const common::ObIArray<AutoincKey> &keys,
                                  common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values);
 
   int sync_autoinc_value(const AutoincKey &key,
@@ -272,7 +271,6 @@ public:
                                  uint64_t &sequence_value) override final;
 
   virtual int get_auto_increment_values(
-      const uint64_t tenant_id,
       const common::ObIArray<AutoincKey> &autoinc_keys,
       const common::ObIArray<int64_t> &autoinc_versions,
       common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values) override final;
@@ -321,7 +319,6 @@ public:
                                  uint64_t &sequence_value) override final;
 
   virtual int get_auto_increment_values(
-      const uint64_t tenant_id,
       const common::ObIArray<AutoincKey> &autoinc_keys,
       const common::ObIArray<int64_t> &autoinc_versions,
       common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values) override final;
@@ -373,53 +370,45 @@ public:
 
   int sync_insert_value_local(AutoincParam &param);
 
-  int sync_auto_increment_all(const uint64_t tenant_id,
-                              const uint64_t table_id,
+  int sync_auto_increment_all(const uint64_t table_id,
                               const uint64_t column_id,
                               const uint64_t sync_value);
   // int sync_table_auto_increment(
-  //     uint64_t tenant_id,
+  //     uint64_t tenant,
   //     AutoincKey &key,
   //     uint64_t auto_increment);
   int refresh_sync_value(const obcall::ObAutoincSyncArg &arg);
 
-  int clear_autoinc_cache_all(const uint64_t tenant_id,
-                              const uint64_t table_id,
+  int clear_autoinc_cache_all(const uint64_t table_id,
                               const uint64_t column_id,
                               const bool autoinc_mode_is_order,
                               const bool ignore_rpc_errors = true);
   int clear_autoinc_cache(const obcall::ObAutoincSyncArg &arg);
 
-  int get_sequence_value(const uint64_t tenant_id,
-                         const uint64_t table_id,
+  int get_sequence_value(const uint64_t table_id,
                          const uint64_t column_id,
                          const bool is_order,
                          const int64_t autoinc_version,
                          uint64_t &seq_value);
 
-  int get_sequence_values(const uint64_t tenant_id,
-                          const common::ObIArray<AutoincKey> &order_autokeys,
+  int get_sequence_values(const common::ObIArray<AutoincKey> &order_autokeys,
                           const common::ObIArray<AutoincKey> &noorder_autokeys,
                           const common::ObIArray<int64_t> &order_autoinc_versions,
                           const common::ObIArray<int64_t> &noorder_autoinc_versions,
                           common::hash::ObHashMap<AutoincKey, uint64_t> &seq_values);
-  int reinit_autoinc_row(const uint64_t &tenant_id,
-                         const uint64_t &table_id,
+  int reinit_autoinc_row(const uint64_t &table_id,
                          const uint64_t &column_id,
                          const int64_t &autoinc_version,
                          common::ObMySQLTransaction &trans);
-  int lock_autoinc_row(const uint64_t &tenant_id,
-                       const uint64_t &table_id,
+  int lock_autoinc_row(const uint64_t &table_id,
                        const uint64_t &column_id,
                        common::ObMySQLTransaction &trans);
-  int reset_autoinc_row(const uint64_t &tenant_id,
-                        const uint64_t &table_id,
+  int reset_autoinc_row(const uint64_t &table_id,
                         const uint64_t &column_id,
                         const int64_t &autoinc_version,
                         common::ObMySQLTransaction &trans);
   // for alter table autoinc to recognize old autoincrement value in inner table
-  int try_lock_autoinc_row(const uint64_t &tenant_id,
-                           const uint64_t &table_id,
+  int try_lock_autoinc_row(const uint64_t &table_id,
                            const uint64_t &column_id,
                            const int64_t &autoinc_version,
                            bool &need_update_inner_table,
@@ -456,13 +445,11 @@ private:
   int fetch_table_node(const AutoincParam &param,
                        TableNode *table_node,
                        const bool fetch_prefetch = false);
-  int fetch_global_sync(const uint64_t tenant_id,
-                        const uint64_t table_id,
+  int fetch_global_sync(const uint64_t table_id,
                         const uint64_t column_id,
                         TableNode &table_node,
                         const bool sync_presync = false);
-  int get_server_set(const uint64_t tenant_id,
-                     const uint64_t table_id,
+  int get_server_set(const uint64_t table_id,
                      common::hash::ObHashSet<common::ObAddr> &server_set,
                      const bool get_follower = false);
   int sync_value_to_other_servers(
@@ -470,7 +457,6 @@ private:
       uint64_t insert_value);
 
   int try_periodic_refresh_global_sync_value(
-      uint64_t tenant_id,
       uint64_t table_id,
       uint64_t column_id,
       TableNode &table_node);

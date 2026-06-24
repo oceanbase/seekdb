@@ -251,7 +251,7 @@ int ObGetObjectDefinition::get_table_definition(ObString &ddl_str, const uint64_
   } else if (OB_UNLIKELY(NULL == table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     SERVER_LOG(WARN, "fail to get table schema", K(ret), K(table_id));
-  } else if (OB_SYS_TENANT_ID != table_schema->get_tenant_id()
+  } else if (false
             && table_schema->is_vir_table()
             && is_restrict_access_virtual_table(table_schema->get_table_id())) {
     ret = OB_TABLE_NOT_EXIST;
@@ -267,15 +267,13 @@ int ObGetObjectDefinition::get_table_definition(ObString &ddl_str, const uint64_
       ObSchemaPrinter schema_printer(*schema_guard_);
       int64_t pos = 0;
       if (table_schema->is_view_table()) {
-        if (OB_FAIL(schema_printer.print_view_definiton(table_id,
-                                                        table_def_buf,
+        if (OB_FAIL(schema_printer.print_view_definiton(table_def_buf,
                                                         OB_MAX_VARCHAR_LENGTH,
                                                         pos))) {
           SERVER_LOG(WARN, "Generate view definition failed");
         }
       } else if (table_schema->is_index_table()) {
-        if (OB_FAIL(schema_printer.print_index_table_definition(table_id,
-                                                        table_def_buf,
+        if (OB_FAIL(schema_printer.print_index_table_definition(table_def_buf,
                                                         OB_MAX_VARCHAR_LENGTH,
                                                         pos,
                                                         TZ_INFO(session_),
@@ -286,8 +284,7 @@ int ObGetObjectDefinition::get_table_definition(ObString &ddl_str, const uint64_
         const ObLengthSemantics default_length_semantics = 
           session_->get_local_nls_length_semantics();
         // get auto_increment from auto_increment service, not from table option
-        if (OB_FAIL(schema_printer.print_table_definition(table_id,
-                                                          table_def_buf,
+        if (OB_FAIL(schema_printer.print_table_definition(table_def_buf,
                                                           OB_MAX_VARCHAR_LENGTH,
                                                           pos,
                                                           TZ_INFO(session_),
@@ -311,7 +308,7 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
                                                     GetDDLObjectType object_type)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   const ObDatabaseSchema *database_schema = NULL;
   const ObTableSchema *table_schema = NULL;
   uint64_t constraint_id = OB_INVALID_ID;
@@ -322,26 +319,26 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, db_name, database_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, constraint_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
-  } else if (OB_FAIL(schema_guard_->get_constraint_info(tenant_id,
+  } else if (OB_FAIL(schema_guard_->get_constraint_info(
                                                         database_id,
                                                         constraint_name,
                                                         constraint_info))) {
-    LOG_WARN("get constraint info failed", K(ret), K(tenant_id),
+    LOG_WARN("get constraint info failed", K(ret),
               K(database_id), K(constraint_name));
   } else if (OB_INVALID_ID == (constraint_id = constraint_info.constraint_id_)) {
     // The unique constraint is mocked by a unique index.
     // If other types of constraint is not exist, we will try to find if the uk exists.
     // bool is_unique_constraint_exist = false;
     if (OB_FAIL(schema_guard_->get_idx_schema_by_origin_idx_name(
-                tenant_id, database_id, constraint_name, unique_index_table_schema))) {
+                database_id, constraint_name, unique_index_table_schema))) {
       LOG_WARN("fail to get idx_schema by origin_idx_name",
-               K(ret), K(tenant_id), K(database_id), K(constraint_name));
+               K(ret), K(database_id), K(constraint_name));
     } else if (OB_NOT_NULL(unique_index_table_schema)
                && unique_index_table_schema->is_unique_index()
                && !unique_index_table_schema->is_partitioned_table()) {
@@ -353,11 +350,9 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (is_unique_cst && OB_FAIL(schema_guard_->get_table_schema(
-             tenant_id, unique_index_table_schema->get_data_table_id(), table_schema))) {
+  } else if (is_unique_cst && OB_FAIL(schema_guard_->get_table_schema( unique_index_table_schema->get_data_table_id(), table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(unique_index_table_schema->get_data_table_id()));
-  } else if (!is_unique_cst && OB_FAIL(schema_guard_->get_table_schema(
-             tenant_id, constraint_info.table_id_, table_schema))) {
+  } else if (!is_unique_cst && OB_FAIL(schema_guard_->get_table_schema( constraint_info.table_id_, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(constraint_info.table_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -396,7 +391,7 @@ int ObGetObjectDefinition::get_foreign_key_definition(ObString &ddl_str,
                                                     GetDDLObjectType object_type)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   const ObDatabaseSchema *database_schema = NULL;
   const ObTableSchema *table_schema = NULL;
   int64_t foreign_key_id = OB_INVALID_ID;
@@ -405,22 +400,22 @@ int ObGetObjectDefinition::get_foreign_key_definition(ObString &ddl_str,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, db_name, database_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, foreign_key_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
-  } else if (OB_FAIL(schema_guard_->get_foreign_key_info(tenant_id,
+  } else if (OB_FAIL(schema_guard_->get_foreign_key_info(
                                                         database_id,
                                                         foreign_key_name,
                                                         foreign_key_info))) {
-    LOG_WARN("get foreign key info failed", K(ret), K(tenant_id),
+    LOG_WARN("get foreign key info failed", K(ret),
               K(database_id), K(foreign_key_name));
   } else if (OB_INVALID_ID == (foreign_key_id = foreign_key_info.foreign_key_id_)) {
     ret = print_error_log(object_type, db_name, foreign_key_name);
     LOG_WARN("foreign key not found", K(ret), K(foreign_key_name));
-  } else if (schema_guard_->get_table_schema(tenant_id, foreign_key_info.table_id_, table_schema)) {
+  } else if (schema_guard_->get_table_schema( foreign_key_info.table_id_, table_schema)) {
     LOG_WARN("get table schema failed", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -448,8 +443,7 @@ int ObGetObjectDefinition::get_foreign_key_definition(ObString &ddl_str,
     } else {
       ObSchemaPrinter schema_printer(*schema_guard_);
       int64_t pos = 0;
-      if (OB_FAIL(schema_printer.print_foreign_key_definition(tenant_id,
-                                                              *forkey_info,
+      if (OB_FAIL(schema_printer.print_foreign_key_definition(*forkey_info,
                                                               forkey_def_buf,
                                                               forkey_def_buf_size,
                                                               pos))) {
@@ -468,22 +462,22 @@ int ObGetObjectDefinition::get_sequence_definition(ObString &ddl_str,
                                                   GetDDLObjectType object_type)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   uint64_t database_id = OB_INVALID_ID;
   const ObSequenceSchema *sequence_schema = NULL;
   const ObDatabaseSchema *database_schema = NULL;
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, db_name, database_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, sequence_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
-  } else if (OB_FAIL(schema_guard_->get_sequence_schema_with_name(tenant_id, database_id,
+  } else if (OB_FAIL(schema_guard_->get_sequence_schema_with_name(database_id,
                                                     sequence_name, sequence_schema))) {
-    LOG_WARN("get sequence schema failed", K(ret), K(tenant_id), K(sequence_name));
+    LOG_WARN("get sequence schema failed", K(ret), K(sequence_name));
   } else if (OB_ISNULL(sequence_schema)) {
     ret = print_error_log(object_type, db_name, sequence_name);
     LOG_WARN("sequence not found", K(ret));
@@ -517,22 +511,22 @@ int ObGetObjectDefinition::get_trigger_definition(ObString &ddl_str,
                                                   GetDDLObjectType object_type)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   uint64_t database_id = OB_INVALID_ID;
   const ObTriggerInfo *trigger_info = NULL;
   const ObDatabaseSchema *database_schema = NULL;
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, db_name, database_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, trigger_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
-  } else if (OB_FAIL(schema_guard_->get_trigger_info(tenant_id, database_id, trigger_name,
+  } else if (OB_FAIL(schema_guard_->get_trigger_info( database_id, trigger_name,
                                                      trigger_info))) {
-    LOG_WARN("get trigger info failed", K(ret), K(tenant_id), K(trigger_name));
+    LOG_WARN("get trigger info failed", K(ret), K(trigger_name));
   } else if (OB_ISNULL(trigger_info)) {
     ret = print_error_log(object_type, db_name, trigger_name);
     LOG_WARN("trigger not found", K(ret));
@@ -565,7 +559,7 @@ int ObGetObjectDefinition::get_routine_definition(ObString &ddl_str,
                                                   GetDDLObjectType object_type)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   uint64_t database_id = OB_INVALID_ID;
   const ObRoutineInfo *routine_info = NULL;
   sql::ObExecEnv exec_env;
@@ -574,19 +568,19 @@ int ObGetObjectDefinition::get_routine_definition(ObString &ddl_str,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(get_database_id(tenant_id, db_name, database_id))) {
+  } else if (OB_FAIL(get_database_id(db_name, database_id))) {
     ret = print_error_log(object_type, db_name, routine_name);
     LOG_WARN("database not found", K(db_name));
   } else if (ROUTINE_FUNCTION_TYPE == routine_type &&
-             OB_FAIL(schema_guard_->get_standalone_function_info(tenant_id, database_id,
+             OB_FAIL(schema_guard_->get_standalone_function_info(database_id,
                                                                  routine_name,
                                                                  routine_info))) {
-    LOG_WARN("get routine info failed", K(ret), K(tenant_id), K(routine_name));
+    LOG_WARN("get routine info failed", K(ret), K(routine_name));
   } else if (ROUTINE_PROCEDURE_TYPE == routine_type &&
-             OB_FAIL(schema_guard_->get_standalone_procedure_info(tenant_id, database_id,
+             OB_FAIL(schema_guard_->get_standalone_procedure_info(database_id,
                                                                   routine_name,
                                                                   routine_info))) {
-    LOG_WARN("get routine info failed", K(ret), K(tenant_id), K(routine_name));
+    LOG_WARN("get routine info failed", K(ret), K(routine_name));
   } else if (OB_ISNULL(routine_info)) {
     ret = print_error_log(object_type, db_name, routine_name);
     LOG_WARN("routine not found", K(ret));
@@ -603,8 +597,7 @@ int ObGetObjectDefinition::get_routine_definition(ObString &ddl_str,
     } else {
       ObSchemaPrinter schema_printer(*schema_guard_);
       int64_t pos = 0;
-      if (OB_FAIL(schema_printer.print_routine_definition(tenant_id,
-                                                          routine_id,
+      if (OB_FAIL(schema_printer.print_routine_definition(routine_id,
                                                           exec_env,
                                                           routine_def_buf,
                                                           routine_def_buf_size,
@@ -626,14 +619,14 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
                                               bool is_role)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   const ObUserInfo *user_info = NULL;
   ObArray<const ObUserInfo *> users_info;
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_user_info(tenant_id, user_name, users_info))) {
-    LOG_WARN("get user info with name failed", K(ret), K(tenant_id), K(user_name));
+  } else if (OB_FAIL(schema_guard_->get_user_info(user_name, users_info))) {
+    LOG_WARN("get user info with name failed", K(ret), K(user_name));
   } else if (users_info.empty()) {
     ret = print_error_log(object_type, db_name, user_name);
     LOG_WARN("user not found", K(ret));
@@ -658,8 +651,7 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
     } else {
       ObSchemaPrinter schema_printer(*schema_guard_);
       int64_t pos = 0;
-      if (OB_FAIL(schema_printer.print_user_definition(tenant_id,
-                                                      *user_info,
+      if (OB_FAIL(schema_printer.print_user_definition(*user_info,
                                                       user_def_buf,
                                                       user_def_buf_size,
                                                       pos,
@@ -673,8 +665,7 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
   return ret;
 }
 
-int ObGetObjectDefinition::get_database_id(uint64_t tenant_id,
-                                           const ObString db_name,
+int ObGetObjectDefinition::get_database_id(const ObString db_name,
                                            uint64_t &database_id)
 {
   int ret = OB_SUCCESS;
@@ -682,7 +673,7 @@ int ObGetObjectDefinition::get_database_id(uint64_t tenant_id,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, db_name, database_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_OBJECT_NOT_FOUND;
@@ -769,7 +760,7 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
                                                     GetDDLObjectType object_type)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema_->get_tenant_id();
+  
   const ObDatabaseSchema *database_schema = NULL;
   uint64_t package_id = OB_INVALID_ID;
   uint64_t database_id = OB_INVALID_ID;
@@ -778,27 +769,27 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id, db_name, database_schema))) {
+  } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
     LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, package_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
-  } else if (OB_FAIL(schema_guard_->get_package_info(tenant_id,
+  } else if (OB_FAIL(schema_guard_->get_package_info(
                                                       database_id,
                                                       package_name,
                                                       package_type,
                                                       compatible_mode,
                                                       package_info))){
-    LOG_WARN("get package info failed", K(ret), K(tenant_id), K(database_id), K(package_name));
+    LOG_WARN("get package info failed", K(ret), K(database_id), K(package_name));
   } else if (OB_ISNULL(package_info) && 0 == db_name.case_compare(OB_ORA_SYS_SCHEMA_NAME) &&
-             OB_FAIL(schema_guard_->get_package_info(OB_SYS_TENANT_ID,
+             OB_FAIL(schema_guard_->get_package_info(
                                                      OB_SYS_DATABASE_ID,
                                                      package_name,
                                                      package_type,
                                                      compatible_mode,
                                                      package_info))) {
-    LOG_WARN("get package info failed in system tenant", K(ret), K(tenant_id), K(database_id), K(package_name));
+    LOG_WARN("get package info failed in system tenant", K(ret), K(database_id), K(package_name));
   } else if (OB_ISNULL(package_info)
              || OB_INVALID_ID == (package_id = package_info->get_package_id())) {
     ret = print_error_log(object_type, db_name, package_name);
@@ -813,8 +804,7 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
     } else {
       ObSchemaPrinter schema_printer(*schema_guard_);
       int64_t pos = 0;
-      if (OB_FAIL(schema_printer.print_package_definition(package_info->get_tenant_id(),
-                                                          package_info->get_package_id(),
+      if (OB_FAIL(schema_printer.print_package_definition(package_info->get_package_id(),
                                                           pkg_def_buf,
                                                           pkg_def_buf_size,
                                                           pos))) {

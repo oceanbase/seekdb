@@ -19,7 +19,7 @@
 #include "lib/utility/serialization.h"
 #include "ob_px_sqc_handler.h"
 #include "sql/executor/ob_executor_rpc_processor.h"
-#include "sql/engine/px/ob_px_target_mgr.h"
+#include "sql/engine/px/ob_px_target_monitor.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 
 using namespace oceanbase::common;
@@ -227,7 +227,6 @@ int ObInitSqcP::after_process(int error_code)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Session can't be null", K(ret));
   } else {
-    sqc_handler->set_tenant_id(sqc_handler->get_exec_ctx().get_my_session()->get_effective_tenant_id());
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     /**
      * Get the local thread according to arg_ parameter and execute task
@@ -296,7 +295,7 @@ int ObFastInitSqcReportQCMessageCall::mock_sqc_finish_msg()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ch is unexpected", K(ret));
     } else {
-      MTL_SWITCH(ch->get_tenant_id()) {
+      MOD_SCOPE {
         ObPxFinishSqcResultMsg finish_msg;
         finish_msg.rc_ = err_;
         finish_msg.dfo_id_ = sqc_->get_dfo_id();
@@ -323,7 +322,7 @@ int ObFastInitSqcReportQCMessageCall::mock_sqc_finish_msg()
             LOG_WARN("serialize RPC channel message fail", K(ret));
           } else if (FALSE_IT(buffer->size() = pos)) {
           } else if (FALSE_IT(pos = 0)) {
-          } else if (FALSE_IT(buffer->tenant_id() = ch->get_tenant_id())) {
+          } else if (false) {
           } else if (OB_FAIL(ch->attach(buffer, inc_recv_buf_cnt))) {
             LOG_WARN("fail to feedup buffer", K(ret));
           } else if (FALSE_IT(ch->free_buffer_count())) {
@@ -405,7 +404,6 @@ int ObInitFastSqcP::process()
     if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
       LOG_WARN("fast sqc failed to SET_INTERRUPTABLE");
     } else {
-      sqc_handler->set_tenant_id(session->get_effective_tenant_id());
       LOG_TRACE("process dfo",
                 K(arg),
                 K(session->get_compatibility_mode()),

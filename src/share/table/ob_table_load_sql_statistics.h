@@ -32,7 +32,7 @@ struct ObTableLoadSqlStatistics
 public:
   ObTableLoadSqlStatistics() : allocator_("TLD_Opstat"), selector_(nullptr), selector_size_(0)
   {
-    allocator_.set_tenant_id(MTL_ID());
+    
     table_stat_array_.set_block_allocator(ModulePageAllocator(allocator_));
     col_stat_array_.set_block_allocator(ModulePageAllocator(allocator_));
   }

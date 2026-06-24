@@ -1721,7 +1721,6 @@ int ObRawExprUtils::resolve_sequence_object(const ObQualifiedName &q_name,
   uint64_t sequence_id = OB_INVALID_ID;
   ObRawExpr *column_expr = NULL;
   ObDMLStmt *stmt = NULL == dml_resolver ? NULL : dml_resolver->get_stmt();
-  uint64_t dblink_id = OB_INVALID_ID;
   if (!q_name.tbl_name_.empty() &&
         ObSequenceNamespaceChecker::is_curr_or_next_val(q_name.col_name_)) {
     LOG_DEBUG("sequence object", K(q_name));
@@ -1923,20 +1922,6 @@ int ObRawExprUtils::build_generated_column_expr(const obcall::ObCreateIndexArg *
                                       real_exprs,
                                       NULL));
       OZ (real_exprs.push_back(expr), q_name);
-    } else if (table_schema.is_external_table()) {
-      const ObColumnSchemaV2 *column_schema = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_schema.get_column_count(); i++) {
-        if (OB_ISNULL(table_schema.get_column_schema_by_idx(i))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error", K(ret));
-        } else if (0 == table_schema.get_column_schema_by_idx(i)->get_cur_default_value().get_string().compare(expr_str)) {
-          column_schema = table_schema.get_column_schema_by_idx(i);
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObResolverUtils::resolve_external_table_column_def(expr_factory, session_info, q_name, real_exprs, expr, column_schema))) {
-        LOG_WARN("fail to resolve external table column def", K(ret));
-      }
     } else {
       if (OB_UNLIKELY(!q_name.database_name_.empty())) {
         ret = OB_ERR_UNEXPECTED;
@@ -2067,26 +2052,6 @@ int ObRawExprUtils::build_check_constraint_expr(ObRawExprFactory &expr_factory,
     }
   }
 
-  return ret;
-}
-
-int ObRawExprUtils::extract_metadata_fileurl_expr(ObRawExpr *expr, ObRawExpr *&file_name_expr)
-{
-  int ret = OB_SUCCESS;
-  if (file_name_expr != NULL) {
-    //do nothing
-  } else if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else if (expr->is_pseudo_column_expr() && expr->get_expr_type() == T_PSEUDO_EXTERNAL_FILE_URL) {
-    file_name_expr = expr;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-      if (OB_FAIL(SMART_CALL(extract_metadata_fileurl_expr(expr->get_param_expr(i), file_name_expr)))) {
-        LOG_WARN("extract metadata filename expr failed", K(ret));
-      }
-    }
-  }
   return ret;
 }
 
@@ -5723,12 +5688,12 @@ int ObRawExprUtils::build_get_package_var(ObRawExprFactory &expr_factory,
   if (OB_NOT_NULL(spec_info)) {
     ObSqlString func_name;
     ObString copy_func_name;
-    if (is_sys_tenant(spec_info->get_tenant_id())) {
+    if (true) {
       OZ (func_name.append_fmt("%.*s.%.*s",
         spec_info->get_package_name().length(), spec_info->get_package_name().ptr(), var_name.length(), var_name.ptr()));
     } else {
       const ObSimpleDatabaseSchema *db_info = NULL;
-      OZ (schema_guard.get_database_schema(spec_info->get_tenant_id(), spec_info->get_database_id(), db_info));
+      OZ (schema_guard.get_database_schema( spec_info->get_database_id(), db_info));
       CK (OB_NOT_NULL(db_info));
       OZ (func_name.append_fmt("%.*s.%.*s.%.*s",
         db_info->get_database_name_str().length(), db_info->get_database_name_str().ptr(),
@@ -6968,26 +6933,6 @@ int ObCollectionAttrCounter::visit(const ObCollectionArrayType &coll_meta)
 {
   int ret = OB_SUCCESS;
   attr_cnt_ += ObNestedType::OB_BASIC_TYPE == coll_meta.element_type_->type_id_ ? 1 : 2;
-  return ret;
-}
-
-int ObRawExprUtils::extract_metadata_filename_expr(ObRawExpr *expr, ObRawExpr *&file_name_expr)
-{
-  int ret = OB_SUCCESS;
-  if (file_name_expr != NULL) {
-    //do nothing
-  } else if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
-  } else if (expr->is_pseudo_column_expr() && expr->get_expr_type() == T_PSEUDO_EXTERNAL_FILE_URL) {
-    file_name_expr = expr;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
-      if (OB_FAIL(SMART_CALL(extract_metadata_filename_expr(expr->get_param_expr(i), file_name_expr)))) {
-        LOG_WARN("extract metadata filename expr failed", K(ret));
-      }
-    }
-  }
   return ret;
 }
 
@@ -8507,7 +8452,6 @@ int ObRawExprUtils::build_bm25_expr(ObRawExprFactory &expr_factory,
   token_weight_res_type.set_type(ObDoubleType);
   token_weight_res_type.set_accuracy(ObAccuracy::MAX_ACCURACY[ObDoubleType]);
   constexpr double mock_approx_avg_cnt = 10;
-  const bool use_new_version = (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_1_2_0_0);
   if (!use_avg_doc_token_cnt_pseudo_column &&
       OB_FAIL(build_const_double_expr(expr_factory, ObDoubleType, mock_approx_avg_cnt, approx_avg_token_cnt))) {
     LOG_WARN("create approx average token count failed", K(ret));
@@ -8516,11 +8460,6 @@ int ObRawExprUtils::build_bm25_expr(ObRawExprFactory &expr_factory,
   } else if (OB_ISNULL(bm25_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null pointer to created bm25 related exprs", K(ret), KP(bm25));
-  } else if (!use_new_version) {
-    OZ(bm25_expr->init_param_exprs(5));
-    OZ(bm25_expr->add_param_expr(related_doc_cnt));
-    OZ(bm25_expr->add_param_expr(total_doc_cnt));
-    OZ(bm25_expr->add_param_expr(doc_token_cnt));
   } else if (OB_FAIL(ObRawExprUtils::build_op_pseudo_column_expr(
       expr_factory,
       T_PSEUDO_COLUMN,

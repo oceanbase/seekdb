@@ -25,14 +25,14 @@ namespace obcall
 
 bool ObMViewCompleteRefreshArg::is_valid() const
 {
-  bool bret = OB_INVALID_TENANT_ID != exec_tenant_id_ &&
+  bool bret = true &&
               !based_schema_object_infos_.empty() &&
-              OB_INVALID_TENANT_ID != tenant_id_ &&
+              true &&
               OB_INVALID_ID != table_id_;
   for (int64_t i = 0; bret && i < based_schema_object_infos_.count(); ++i) {
     const ObBasedSchemaObjectInfo &based_info = based_schema_object_infos_.at(i);
-    bret = (OB_INVALID_TENANT_ID == based_info.schema_tenant_id_ ||
-            tenant_id_ == based_info.schema_tenant_id_) &&
+    bret = (OB_INVALID_TENANT_ID == 1UL ||
+            1UL == 1UL) &&
            OB_INVALID_ID != based_info.schema_id_ &&
            ObSchemaType::TABLE_SCHEMA == based_info.schema_type_ &&
            OB_INVALID_VERSION != based_info.schema_version_;
@@ -42,7 +42,7 @@ bool ObMViewCompleteRefreshArg::is_valid() const
 
 void ObMViewCompleteRefreshArg::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   table_id_ = OB_INVALID_ID;
   session_id_ = OB_INVALID_ID;
   sql_mode_ = 0;
@@ -69,7 +69,6 @@ OB_DEF_SERIALIZE(ObMViewCompleteRefreshArg)
   } else {
     BASE_SER((, ObDDLArg));
     LST_DO_CODE(OB_UNIS_ENCODE,
-                tenant_id_,
                 table_id_,
                 session_id_,
                 sql_mode_,
@@ -94,7 +93,7 @@ OB_DEF_DESERIALIZE(ObMViewCompleteRefreshArg)
   ObString nls_formats[ObNLSFormatEnum::NLS_MAX];
   BASE_DESER((, ObDDLArg));
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
+              
               table_id_,
               session_id_,
               sql_mode_,
@@ -132,7 +131,6 @@ OB_DEF_SERIALIZE_SIZE(ObMViewCompleteRefreshArg)
   } else {
     BASE_ADD_LEN((, ObDDLArg));
     LST_DO_CODE(OB_UNIS_ADD_LEN,
-                tenant_id_,
                 table_id_,
                 session_id_,
                 sql_mode_,
@@ -273,7 +271,7 @@ OB_SERIALIZE_MEMBER(ObCreateMLogArg::PurgeOptions,
 
 bool ObCreateMLogArg::is_valid() const
 {
-  return (OB_INVALID_TENANT_ID != tenant_id_)
+  return (true)
          && !database_name_.empty()
          && !table_name_.empty()
          && purge_options_.is_valid();
@@ -287,7 +285,7 @@ DEF_TO_STRING(ObCreateMLogArg)
   J_KV(K_(database_name),
        K_(table_name),
        K_(mlog_name),
-       K_(tenant_id),
+       
        K_(base_table_id),
        K_(mlog_table_id),
        K_(session_id),
@@ -311,7 +309,7 @@ OB_SERIALIZE_MEMBER((ObCreateMLogArg, ObDDLArg),
                     database_name_,
                     table_name_,
                     mlog_name_,
-                    tenant_id_,
+                    
                     base_table_id_,
                     mlog_table_id_,
                     session_id_,

@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_storage_meta_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
@@ -31,6 +32,7 @@ namespace storage
 ObTenantStorageMetaService::ObTenantStorageMetaService()
   : is_inited_(false),
     is_started_(false),
+    is_shared_storage_(false),
     ckpt_slog_handler_(),
     slogger_(),
     persister_(),
@@ -51,11 +53,13 @@ int ObTenantStorageMetaService::mtl_init(ObTenantStorageMetaService *&meta_servi
 int ObTenantStorageMetaService::init()
 {
   int ret = OB_SUCCESS;
+  const bool is_shared_storage = GCTX.is_shared_storage_mode();
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", K(ret));
-  } else if (OB_FAIL(slogger_.init(SERVER_STORAGE_META_SERVICE.get_slogger_manager(), MTL_ID()))) {
+  } else if (!is_shared_storage &&
+      OB_FAIL(slogger_.init(SERVER_STORAGE_META_SERVICE.get_slogger_manager()))) {
     LOG_WARN("failed to init slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.init(slogger_))) {
     LOG_WARN("fail to init tenant checkpoint slog hander", K(ret));
@@ -68,7 +72,7 @@ int ObTenantStorageMetaService::init()
   } else if (OB_FAIL(shared_object_raw_rwriter_.init())) {
     LOG_WARN("fail to init shared block raw rwriter", K(ret));
   } else {
-    
+    is_shared_storage_ = is_shared_storage;
     is_inited_ = true;
   }
   return ret;

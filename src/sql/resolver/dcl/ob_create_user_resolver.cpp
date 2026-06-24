@@ -59,7 +59,7 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
     ParseNode *resource_options = const_cast<ParseNode*>(parse_tree.children_[3]);
     ParseNode *primary_zone = NULL; 
     ParseNode *ssl_infos = NULL;
-    create_user_stmt->set_tenant_id(params_.session_info_->get_effective_tenant_id());
+    
 		//resolve if_not_exists
     if (OB_SUCC(ret)) {
       if (NULL != if_not_exist) {

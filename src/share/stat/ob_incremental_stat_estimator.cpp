@@ -48,7 +48,7 @@ int ObIncrementalStatEstimator::derive_split_gather_stats(ObExecContext &ctx,
   } else if (OB_FAIL(THIS_WORKER.check_status())) {
     LOG_WARN("check status failed", KR(ret));
   } else {
-    ObArenaAllocator allocator("IncrementStats", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+    ObArenaAllocator allocator("IncrementStats", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObSEArray<ObOptTableStat *, 4> cur_table_stats;
     ObSEArray<ObOptColumnStat *, 4> cur_column_stats;
     ObSEArray<ObOptStat, 4> part_opt_stats;
@@ -273,13 +273,11 @@ int ObIncrementalStatEstimator::get_table_and_column_stats(
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_FAIL(get_part_ids_and_column_ids_info(src_opt_stat, param, part_ids, column_ids))) {
     LOG_WARN("failed to get part ids and column ids info", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.tenant_id_,
-                                                                     table_id,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(table_id,
                                                                      part_ids,
                                                                      table_stats))) {
     LOG_WARN("failed to get table stat", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.tenant_id_,
-                                                                      table_id,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(table_id,
                                                                       part_ids,
                                                                       column_ids,
                                                                       col_handles))) {
@@ -712,9 +710,7 @@ int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<ObHistogram> &a
   return ret;
 }
 
-int ObIncrementalStatEstimator::get_no_regather_partition_stats(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObIncrementalStatEstimator::get_no_regather_partition_stats(const uint64_t table_id,
     const ObIArray<uint64_t> &column_ids,
     const ObIArray<int64_t> &no_regather_partition_ids,
     ObIArray<ObOptTableStat> &no_regather_table_stats,
@@ -724,13 +720,11 @@ int ObIncrementalStatEstimator::get_no_regather_partition_stats(
   int ret = OB_SUCCESS;
   if (no_regather_partition_ids.empty()) {
     /*do nothing*/
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(tenant_id,
-                                                                     table_id,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(table_id,
                                                                      no_regather_partition_ids,
                                                                      no_regather_table_stats))) {
     LOG_WARN("failed to get table stat", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(tenant_id,
-                                                                      table_id,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(table_id,
                                                                       no_regather_partition_ids,
                                                                       column_ids,
                                                                       no_regather_col_handles))) {
@@ -780,8 +774,7 @@ int ObIncrementalStatEstimator::get_no_regather_subpart_stats(
     ObSEArray<uint64_t, 4> column_ids;
     if (OB_FAIL(get_column_ids(param.column_params_, column_ids))) {
       LOG_WARN("failed to get column ids", K(ret));
-    } else if (OB_FAIL(get_no_regather_partition_stats(param.tenant_id_,
-                                                       param.table_id_,
+    } else if (OB_FAIL(get_no_regather_partition_stats(param.table_id_,
                                                        column_ids,
                                                        derive_need_no_regather_subpart_ids,
                                                        no_regather_table_stats,
@@ -808,7 +801,7 @@ int ObIncrementalStatEstimator::gen_opt_stat_param_by_direct_load(ObExecContext 
        OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(schema_guard), K(ctx.get_my_session()));
-  } else if (OB_FAIL(schema_guard->get_table_schema(ctx.get_my_session()->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     table_id,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
@@ -836,7 +829,7 @@ int ObIncrementalStatEstimator::gen_opt_stat_param_by_direct_load(ObExecContext 
         param.column_params_.at(i).set_need_basic_stat();
       }
     }
-    param.tenant_id_ = ctx.get_my_session()->get_effective_tenant_id();
+    
     param.part_level_ = table_schema->get_part_level();
     param.global_stat_param_.set_gather_stat(true);
     param.part_stat_param_.set_gather_stat(table_schema->get_part_level() == share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO);
@@ -873,13 +866,11 @@ int ObIncrementalStatEstimator::get_all_part_opt_stats(
     LOG_WARN("failed to get column ids", K(ret));
   } else if (OB_FAIL(get_column_ids(param.column_params_, column_ids))) {
     LOG_WARN("failed to get column ids", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.tenant_id_,
-                                                                     param.table_id_,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.table_id_,
                                                                      partition_ids,
                                                                      part_tab_stats))) {
     LOG_WARN("failed to get table stat", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.tenant_id_,
-                                                                      param.table_id_,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.table_id_,
                                                                       partition_ids,
                                                                       column_ids,
                                                                       part_col_handles))) {

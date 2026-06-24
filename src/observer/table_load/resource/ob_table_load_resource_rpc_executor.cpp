@@ -30,9 +30,9 @@ int ObDirectLoadResourceApplyExecutor::check_args()
   if (OB_UNLIKELY(!arg_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg_));
-  } else if (OB_UNLIKELY(arg_.tenant_id_ != MTL_ID())) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mtl_id not match", KR(ret), "mtl_id", MTL_ID());
+    LOG_WARN("mtl_id not match", KR(ret));
   }
 
   return ret;
@@ -55,9 +55,9 @@ int ObDirectLoadResourceReleaseExecutor::check_args()
   if (OB_UNLIKELY(!arg_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg_));
-  } else if (OB_UNLIKELY(arg_.tenant_id_ != MTL_ID())) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mtl_id not match", KR(ret), "mtl_id", MTL_ID());
+    LOG_WARN("mtl_id not match", KR(ret));
   }
 
   return ret;
@@ -80,9 +80,9 @@ int ObDirectLoadResourceUpdateExecutor::check_args()
   if (OB_UNLIKELY(!arg_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg_));
-  } else if (OB_UNLIKELY(arg_.tenant_id_ != MTL_ID())) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mtl_id not match", KR(ret), "mtl_id", MTL_ID());
+    LOG_WARN("mtl_id not match", KR(ret));
   }
 
   return ret;
@@ -105,9 +105,9 @@ int ObDirectLoadResourceCheckExecutor::check_args()
   if (OB_UNLIKELY(!arg_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(arg_));
-  } else if (OB_UNLIKELY(arg_.tenant_id_ != MTL_ID())) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mtl_id not match", KR(ret), "mtl_id", MTL_ID());
+    LOG_WARN("mtl_id not match", KR(ret));
   }
 
   return ret;

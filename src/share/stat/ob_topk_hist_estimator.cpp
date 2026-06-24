@@ -156,7 +156,7 @@ int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const ObObj &obj
   } else {
     if (OB_UNLIKELY(!topk_map_.created())) {
       int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
-      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode", MTL_ID()))) {
+      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
         LOG_WARN("failed to create hash map", K(ret));
       } else {
         set_the_obj_memory_use_limit();
@@ -208,7 +208,7 @@ int ObTopKFrequencyHistograms::add_top_k_frequency_item(uint64_t datum_hash, con
   } else if (!datum.is_null()) {
     if (OB_UNLIKELY(!topk_map_.created())) {
       int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
-      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode", MTL_ID()))) {
+      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
         LOG_WARN("failed to create hash map", K(ret));
       } else {
         set_the_obj_memory_use_limit();
@@ -252,7 +252,7 @@ int ObTopKFrequencyHistograms::add_batch_items(const char **payloads, int32_t *l
     LOG_WARN("get unexpected null", K(ret), K(payloads), K(lens), K(hash_val));
   } else if (OB_UNLIKELY(!by_pass_ && !topk_map_.created())) {
     int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
-    if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode", MTL_ID()))) {
+    if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
       LOG_WARN("failed to create hash map", K(ret));
     } else {
       set_the_obj_memory_use_limit();
@@ -301,7 +301,7 @@ int ObTopKFrequencyHistograms::add_top_k_frequency_item(const ObObj &obj, int64_
   } else if (!obj.is_null()) {
     if (OB_UNLIKELY(!topk_map_.created())) {
       int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
-      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode", MTL_ID()))) {
+      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
         LOG_WARN("failed to create hash map", K(ret));
       } else {
         set_the_obj_memory_use_limit();
@@ -543,10 +543,10 @@ double ObTopKFrequencyHistograms::get_current_min_topk_ratio() const
 void ObTopKFrequencyHistograms::set_the_obj_memory_use_limit()
 {
   //default is current tenant limit's 1/1000
-  obj_memory_limit_ = lib::get_tenant_memory_limit(MTL_ID()) / 1000;
+  obj_memory_limit_ = lib::get_tenant_memory_limit() / 1000;
   //then see the sql work arena limit, set the limit's 1/100
   if (lib::ObMallocAllocator::get_instance() != NULL) {
-    auto ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(MTL_ID(), common::ObCtxIds::WORK_AREA);
+    auto ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(common::ObCtxIds::WORK_AREA);
     obj_memory_limit_ = std::min(obj_memory_limit_, ta->get_limit() / 100);
   }
   obj_memory_limit_ = std::max(obj_memory_limit_, MIN_OBJ_MEMORY_LIMIT);
@@ -693,7 +693,7 @@ int ObTopkHistEstimator::estimate(const ObOptStatGatherParam &param,
                                   ObOptStat &opt_stat)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator("ObTopkHistEst", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+  ObArenaAllocator allocator("ObTopkHistEst", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSqlString raw_sql;
   int64_t duration_time = -1;
   ObSEArray<ObOptStat, 1> tmp_opt_stats;

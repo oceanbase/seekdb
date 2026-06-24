@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_gc_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "logservice/ob_log_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -68,7 +69,7 @@ int ObTabletGCService::start()
     STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.set_run_wrapper_with_ret(MTL_CTX()))) {
     STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
-  } else if (OB_FAIL(timer_for_tablet_shell_.init("TabletShell", ObMemAttr(MTL_ID(), "TabletShell")))) {
+  } else if (OB_FAIL(timer_for_tablet_shell_.init("TabletShell", ObMemAttr("TabletShell")))) {
     STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_change_.schedule(tablet_change_task_, GC_CHECK_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule task", KR(ret));
@@ -115,7 +116,7 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
   int ret = OB_SUCCESS;
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   bool skip_gc_task = false;
 
   skip_gc_task = (OB_SUCCESS != (OB_E(EventTable::EN_TABLET_GC_TASK_FAILED) OB_SUCCESS));

@@ -28,8 +28,8 @@ namespace share
 class ObMaxIdCacheItem
 {
 public:
-  ObMaxIdCacheItem(const ObMaxIdType &type, const uint64_t tenant_id);
-  int fetch_max_id(const uint64_t tenant_id, const ObMaxIdType max_id_type, uint64_t &id,
+  ObMaxIdCacheItem(const ObMaxIdType &type);
+  int fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
       const uint64_t size, ObMySQLProxy *sql_proxy);
 private:
   int fetch_ids_from_inner_table_(const uint64_t size, ObMySQLProxy *sql_proxy);
@@ -41,7 +41,6 @@ private:
   // [min_id, min_id + size) is valid
   uint64_t min_id_;
   uint64_t size_;
-  uint64_t tenant_id_;
   ObMaxIdType type_;
   common::ObLatch latch_;
 };
@@ -49,11 +48,10 @@ private:
 class ObMaxIdCache
 {
 public:
-  explicit ObMaxIdCache(const uint64_t tenant_id);
-  int fetch_max_id(const uint64_t tenant_id, const ObMaxIdType max_id_type, uint64_t &id,
+  explicit ObMaxIdCache();
+  int fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
       const uint64_t size, ObMySQLProxy *sql_proxy);
 private:
-  uint64_t tenant_id_;
   ObMaxIdCacheItem object_id_cache_;
   ObMaxIdCacheItem normal_rowid_table_tablet_id_cache_;
   ObMaxIdCacheItem extended_rowid_table_tablet_id_cache_;
@@ -65,17 +63,16 @@ public:
   int init(ObMySQLProxy *sql_proxy);
   void reset();
   // return [id, id + size - 1)
-  int fetch_max_id(const uint64_t tenant_id, const ObMaxIdType max_id_type, uint64_t &id,
+  int fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
       const uint64_t size, bool init_tenant_if_not_exist = true);
   ObMaxIdCacheMgr();
   ~ObMaxIdCacheMgr();
 private:
-  int add_tenant_(const uint64_t tenant_id);
+  int add_tenant_();
   // switch rs will clean redundant tenant
   int remove_cache_(ObMaxIdCache *cache);
 private:
-  using hashmap = hash::ObHashMap<uint64_t, ObMaxIdCache *>;
-  hashmap tenant_caches_; // tenant_id to cache
+  ObMaxIdCache *tenant_cache_ = nullptr; // single-tenant
   ObMemAttr attr_;
   ObArenaAllocator allocator_;
   bool inited_;

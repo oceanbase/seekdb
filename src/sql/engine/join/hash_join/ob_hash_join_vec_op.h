@@ -381,7 +381,7 @@ public:
     return join_table_;
   }
 private:
-  int init_mem_context(uint64_t tenant_id);
+  int init_mem_context();
   int init_join_table_ctx();
   int process_partition();
   int process_left(bool &need_not_read_right);
@@ -594,7 +594,7 @@ private:
   HJProcessor hj_processor_;
   bool force_hash_join_spill_;
   int8_t hash_join_processor_;
-  int64_t tenant_id_;
+  
   ObSqlWorkAreaProfile profile_;
   ObSqlMemMgrProcessor sql_mem_processor_;
 

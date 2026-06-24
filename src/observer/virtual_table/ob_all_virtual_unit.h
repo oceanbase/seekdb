@@ -54,12 +54,13 @@ public:
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
-  int get_clog_disk_used_size_(const uint64_t tenant_id, int64_t &log_used_size);
+  int get_clog_disk_used_size_(int64_t &log_used_size);
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   common::ObAddr addr_;
-  int64_t tenant_idx_;
-  common::ObArray<omt::ObTenantMeta> tenant_meta_arr_;
+  omt::ObTenantMeta tenant_meta_;
+  bool has_row_;
+  bool consumed_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualUnit);

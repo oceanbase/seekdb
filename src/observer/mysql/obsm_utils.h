@@ -59,8 +59,7 @@ public:
       const ObDataTypeCastParams &dtc_params,
       const ObField *field,
       const sql::ObSQLSessionInfo &session,
-      share::schema::ObSchemaGetterGuard *schema_guard = NULL,
-      uint64_t tenant_id = common::OB_INVALID_ID);
+      share::schema::ObSchemaGetterGuard *schema_guard = NULL);
 
   static bool update_from_bitmap(ObObj &param, const char *bitmap, int64_t field_index);
 

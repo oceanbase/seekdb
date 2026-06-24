@@ -252,7 +252,7 @@ int ObIndexBlockRowHeader::fill_micro_des_meta(
 
 ObIndexBlockRowBuilder::ObIndexBlockRowBuilder()
   : allocator_(nullptr),
-    index_data_allocator_(ObModIds::OB_BLOCK_INDEX_INTERMEDIATE, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    index_data_allocator_(ObModIds::OB_BLOCK_INDEX_INTERMEDIATE, OB_MALLOC_NORMAL_BLOCK_SIZE),
     data_desc_(nullptr),
     row_(),
     rowkey_column_count_(0),

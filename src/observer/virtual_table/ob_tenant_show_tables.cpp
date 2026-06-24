@@ -17,7 +17,7 @@
 #include "observer/virtual_table/ob_tenant_show_tables.h"
 
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
-#include "share/external_table/ob_external_object_ctx.h"
+#include "share/catalog/ob_external_object_ctx.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
@@ -30,7 +30,6 @@ namespace observer
 
 ObTenantShowTables::ObTenantShowTables()
     : ObVirtualTableIterator(),
-      tenant_id_(OB_INVALID_ID),
       database_id_(OB_INVALID_ID),
       table_schemas_(),
       table_schema_idx_(0)
@@ -45,10 +44,9 @@ int ObTenantShowTables::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == schema_guard_
-                  || OB_INVALID_ID == tenant_id_
                   || NULL == allocator_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "data member doesn't init", K(ret), K(schema_guard_), K(tenant_id_), K(allocator_));
+    SERVER_LOG(WARN, "data member doesn't init", K(ret), K(schema_guard_), K(allocator_));
   } else {
     //get database_id
     ObRowkey start_key;
@@ -76,20 +74,19 @@ int ObTenantShowTables::inner_open()
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
       } else if (is_external_object_id(database_id_)) {
-        if (OB_FAIL(fetch_catalog_table_schemas_(tenant_id_, database_id_, database_name_, table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get catalog table schemas in database", K(ret), K(tenant_id_), K(database_id_));
+        if (OB_FAIL(fetch_catalog_table_schemas_( database_id_, database_name_, table_schemas_))) {
+          SERVER_LOG(WARN, "fail to get catalog table schemas in database", K(ret), K(database_id_));
         }
       } else {
         const ObDatabaseSchema *db_schema = NULL;
-        if (OB_FAIL(schema_guard_->get_table_schemas_in_database(tenant_id_,
-                                                                 database_id_,
+        if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_id_,
                                                                  table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(tenant_id_), K(database_id_));
-        } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_, database_id_, db_schema))) {
-          SERVER_LOG(WARN, "Failed to get database schema", K(ret), K_(tenant_id), K_(database_id));
+          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(database_id_));
+        } else if (OB_FAIL(schema_guard_->get_database_schema( database_id_, db_schema))) {
+          SERVER_LOG(WARN, "Failed to get database schema", K(ret), K_(database_id));
         } else if (OB_ISNULL(db_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(tenant_id), K_(database_id));
+          SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(database_id));
         } else {
           database_name_ = db_schema->get_database_name_str();
         }
@@ -102,7 +99,6 @@ int ObTenantShowTables::inner_open()
 void ObTenantShowTables::reset()
 {
   session_ = NULL;
-  tenant_id_ = OB_INVALID_ID;
   database_id_ = OB_INVALID_ID;
   table_schemas_.reset();
   table_schema_idx_ = 0;
@@ -132,11 +128,11 @@ int ObTenantShowTables::inner_get_next_row()
                   || NULL == schema_guard_
                   || NULL == session_
                   || NULL == (cells = cur_row_.cells_)
-                  || !is_valid_id(tenant_id_)
+                  || false
                   || !is_valid_id(database_id_))) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "data member dosen't init", K(ret), K(allocator_), K(schema_guard_),
-               K(session_), K(cells), K(tenant_id_), K(database_id_));
+               K(session_), K(cells), K(database_id_));
   } else {
     if (OB_UNLIKELY(database_name_.empty())) {
       ret = OB_INVALID_ARGUMENT;
@@ -155,7 +151,7 @@ int ObTenantShowTables::inner_get_next_row()
         } else {
           if (OB_ISNULL(table_schema = table_schemas_.at(table_schema_idx_))) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "table schema is NULL", K(ret), K(table_schema_idx_), K(tenant_id_), K(database_id_));
+            SERVER_LOG(WARN, "table schema is NULL", K(ret), K(table_schema_idx_), K(database_id_));
           } else {
             uint64_t cell_idx = 0;
             for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
@@ -225,8 +221,7 @@ int ObTenantShowTables::inner_get_next_row()
   return ret;
 }
 
-int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t tenant_id,
-                                                     const uint64_t database_id,
+int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t database_id,
                                                      common::ObString &database_name,
                                                      common::ObIArray<const share::schema::ObSimpleTableSchemaV2 *> &table_schemas)
 {
@@ -235,7 +230,7 @@ int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t tenant_id,
   const share::ObExternalObject *external_object = NULL;
   ObArray<ObString> tbl_names;
   ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !is_external_object_id(database_id) || NULL == get_scan_param()
+  if (OB_UNLIKELY(!true || !is_external_object_id(database_id) || NULL == get_scan_param()
                   || NULL == get_scan_param()->external_object_ctx_ || NULL == schema_guard_ || NULL == session_ || NULL == allocator_)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid argument", K(ret));
@@ -251,8 +246,8 @@ int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t tenant_id,
     uint64_t catalog_id = external_object->catalog_id;
     database_name = external_object->database_name;
     ObCachedCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
-    if (OB_FAIL(ob_catalog_meta_getter.list_table_names(tenant_id, catalog_id, database_name, case_mode, tbl_names))) {
-      SERVER_LOG(WARN, "list_table_names failed", K(ret), K(tenant_id), K(catalog_id), K(database_name));
+    if (OB_FAIL(ob_catalog_meta_getter.list_table_names(catalog_id, database_name, case_mode, tbl_names))) {
+      SERVER_LOG(WARN, "list_table_names failed", K(ret), K(catalog_id), K(database_name));
     }
   }
 

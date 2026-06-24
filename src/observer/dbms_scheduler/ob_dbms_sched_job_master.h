@@ -46,9 +46,8 @@ class ObDBMSSchedJobKey : public common::ObLink
 {
 public:
   ObDBMSSchedJobKey(
-    uint64_t tenant_id, bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name)
-  : tenant_id_(tenant_id),
-    is_oracle_tenant_(is_oracle_tenant),
+    bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name)
+  : is_oracle_tenant_(is_oracle_tenant),
     job_id_(job_id),
     job_name_() {
       job_name_.assign_buffer(job_name_buf_, JOB_NAME_MAX_SIZE);
@@ -58,12 +57,12 @@ public:
   virtual ~ObDBMSSchedJobKey() {}
 
   static constexpr int64_t JOB_NAME_MAX_SIZE = 128;
-  OB_INLINE uint64_t get_job_id_with_tenant() const { return common::combine_two_ids(tenant_id_, job_id_); }
-  OB_INLINE uint64_t get_tenant_id() const { return tenant_id_; }
+  OB_INLINE uint64_t get_job_id_with_tenant() const { return job_id_; }
+  
   OB_INLINE uint64_t get_job_id() const { return job_id_; }
   OB_INLINE common::ObString &get_job_name() { return job_name_; }
   OB_INLINE uint64_t get_execute_at() const { return execute_at_;}
-  OB_INLINE void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   OB_INLINE void set_job_id(uint64_t job_id) { job_id_ = job_id; }
   OB_INLINE void set_execute_at(uint64_t execute_at) { execute_at_ = execute_at; }
   OB_INLINE uint64_t get_adjust_delay() const
@@ -74,20 +73,18 @@ public:
 
   OB_INLINE bool is_valid()
   {
-    return job_id_ != OB_INVALID_ID && tenant_id_ != OB_INVALID_ID;
+    return job_id_ != OB_INVALID_ID && true;
   }
 
   bool is_oracle_tenant() { return is_oracle_tenant_; }
 
   TO_STRING_KV(
-    K_(tenant_id),
     K_(is_oracle_tenant),
     K_(job_id),
     K_(job_name),
     K_(execute_at));
 
 private:
-  uint64_t tenant_id_;
   bool is_oracle_tenant_;
   int64_t job_id_;
   char job_name_buf_[JOB_NAME_MAX_SIZE];
@@ -103,11 +100,10 @@ public:
       stoped_(true),
       is_leader_(false),
       wokeup_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
       rand_(),
       schema_service_(NULL),
       self_addr_(),
-      allocator_(ObMemAttr(MTL_ID(), "DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
+      allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
       wait_vector_(0, NULL, ObModIds::VECTOR) {}
 
@@ -115,8 +111,7 @@ public:
 
   bool is_inited() { return inited_; }
   int init(common::ObMySQLProxy *sql_client,
-           share::schema::ObMultiVersionSchemaService *schema_service,
-           uint64_t tenant_id);
+           share::schema::ObMultiVersionSchemaService *schema_service);
 
   int start();
   int stop();
@@ -127,16 +122,15 @@ public:
   void wakeup();
   bool idle(int64_t deadline_us);
   int alloc_job_key(
-    ObDBMSSchedJobKey *&job_key,
-    uint64_t tenant_id, bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name);
+    ObDBMSSchedJobKey *&job_key, bool is_oracle_tenant, uint64_t job_id, const common::ObString &job_name);
   void free_job_key(ObDBMSSchedJobKey *&job_key);
 
   int get_execute_addr(ObDBMSSchedJobInfo &job_info, common::ObAddr &execute_addr);
   void switch_to_leader();
   void switch_to_follower();
   int check_tenant();
-  int check_new_jobs(uint64_t tenant_id, bool is_oracle_tenant);
-  int register_new_jobs(uint64_t tenant_id, bool is_oracle_tenant, ObIArray<ObDBMSSchedJobInfo> &job_infos);
+  int check_new_jobs(bool is_oracle_tenant);
+  int register_new_jobs(bool is_oracle_tenant, ObIArray<ObDBMSSchedJobInfo> &job_infos);
   int register_job(ObDBMSSchedJobKey *job_key, int64_t next_date);
   int scheduler_job(ObDBMSSchedJobKey *job_key);
   int schedule_due_jobs();
@@ -163,7 +157,6 @@ private:
   bool stoped_;
   bool is_leader_;
   bool wokeup_;
-  uint64_t tenant_id_;
 
   common::ObThreadCond thread_cond_;
 

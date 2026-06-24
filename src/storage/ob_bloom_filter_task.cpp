@@ -35,12 +35,10 @@ using namespace share;
  * */
 
 ObBloomFilterBuildTask::ObBloomFilterBuildTask(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const blocksstable::MacroBlockId &macro_id,
     const int64_t prefix_len)
     : IObDedupTask(T_BLOOMFILTER),
-      tenant_id_(tenant_id),
       table_id_(table_id),
       macro_id_(macro_id),
       macro_handle_(),
@@ -58,7 +56,6 @@ ObBloomFilterBuildTask::~ObBloomFilterBuildTask()
 int64_t ObBloomFilterBuildTask::hash() const
 {
   uint64_t hash_val = macro_id_.hash();
-  hash_val = murmurhash(&tenant_id_, sizeof(uint64_t), hash_val);
   hash_val = murmurhash(&table_id_, sizeof(uint64_t), hash_val);
   hash_val = murmurhash(&prefix_len_, sizeof(int64_t), hash_val);
   return hash_val;
@@ -73,7 +70,7 @@ bool ObBloomFilterBuildTask::operator ==(const IObDedupTask &other) const
     if (get_type() == other.get_type()) {
       // it's safe to do this transformation, we have checked the task's type
       const ObBloomFilterBuildTask &o = static_cast<const ObBloomFilterBuildTask &>(other);
-      is_equal = o.tenant_id_ == tenant_id_ && o.table_id_ == table_id_
+      is_equal = true && o.table_id_ == table_id_
                  && o.macro_id_ == macro_id_ && o.prefix_len_ == prefix_len_;
     }
   }
@@ -90,7 +87,6 @@ IObDedupTask *ObBloomFilterBuildTask::deep_copy(char *buffer, const int64_t buf_
   ObBloomFilterBuildTask *task = NULL;
   if (NULL != buffer && buf_size >= get_deep_copy_size()) {
     task = new (buffer) ObBloomFilterBuildTask(
-        tenant_id_,
         table_id_,
         macro_id_,
         prefix_len_);
@@ -103,16 +99,16 @@ int ObBloomFilterBuildTask::process()
   int ret = OB_SUCCESS;
   ObBloomFilterCacheValue bfcache_value;
 
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id_)
+  if (OB_UNLIKELY(false)
       || OB_UNLIKELY(!macro_id_.is_valid())
       || OB_UNLIKELY(prefix_len_ <= 0)) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("The bloom filter build task is not valid, ", K_(tenant_id),
+    LOG_WARN("The bloom filter build task is not valid, ",
       K_(macro_id), K_(prefix_len), K(ret));
   } else if (OB_FAIL(build_bloom_filter())) {
     LOG_WARN("Fail to build bloom filter, ", K(ret));
   } else {
-    LOG_INFO("Success to build bloom filter, ", K_(tenant_id), K_(table_id), K_(macro_id), K_(prefix_len));
+    LOG_INFO("Success to build bloom filter, ", K_(table_id), K_(macro_id), K_(prefix_len));
   }
 
   return ret;
@@ -122,7 +118,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
 {
   int ret = OB_SUCCESS;
 
-  MTL_SWITCH(tenant_id_) {
+  MOD_SCOPE {
     void *buf = nullptr;
     ObStoreCtx store_ctx;
     bool need_build = false;
@@ -139,7 +135,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(OB_STORE_CACHE.get_bf_cache().check_need_build(ObBloomFilterCacheKey(
-        tenant_id_, macro_id_, prefix_len_), need_build))) {
+        macro_id_, prefix_len_), need_build))) {
       STORAGE_LOG(WARN, "Fail to check need build, ", K(ret));
     } else if (!need_build) {
       //already in cache,do nothing
@@ -156,7 +152,7 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::BLOOM_FILTER_IO);
       read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
-      read_info.mtl_tenant_id_ = MTL_ID();
+      
 
 
       if (OB_ISNULL(io_buf_) && OB_ISNULL(io_buf_ =
@@ -199,9 +195,8 @@ int ObBloomFilterBuildTask::build_bloom_filter()
         }
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("Fail to iterate macro block", K(ret));
-        } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(
-            tenant_id_, macro_id_, bfcache_value, true/* adaptive */))) {
-          LOG_WARN("Fail to put value to bloom filter cache", K(ret), K_(tenant_id), K_(macro_id));
+        } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value, true/* adaptive */))) {
+          LOG_WARN("Fail to put value to bloom filter cache", K(ret), K_(macro_id));
         }
       }
 

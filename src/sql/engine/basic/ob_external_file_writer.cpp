@@ -274,7 +274,7 @@ int ObParquetFileWriter::open_parquet_file_writer(ObArrowMemPool &arrow_alloc,
 {
   int ret = OB_SUCCESS;
   try {
-    ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
+    ObMallocHookAttrGuard guard(ObMemAttr("IntoParquet"));
     parquet::WriterProperties::Builder builder;
     builder.max_row_group_length(row_group_size);
     builder.compression(static_cast<parquet::Compression::type>(compress_type_index));
@@ -546,7 +546,7 @@ int ObParquetFileWriter::write_file()
 int ObParquetFileWriter::close_file()
 {
   int ret = OB_SUCCESS;
-  ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
+  ObMallocHookAttrGuard guard(ObMemAttr("IntoParquet"));
   try {
     if (parquet_file_writer_) {
       parquet_file_writer_->Close();

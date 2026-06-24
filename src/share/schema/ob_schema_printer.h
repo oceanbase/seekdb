@@ -53,7 +53,6 @@ class ObDatabaseSchema;
 class ObTablegroupSchema;
 class ObTableSchema;
 class ObRoutineInfo;
-class ObUDTBase;
 class ObRoutineParam;
 class ObTriggerInfo;
 class ObColumnSchemaV2;
@@ -72,8 +71,7 @@ private:
   ObSchemaPrinter();
   DISALLOW_COPY_AND_ASSIGN(ObSchemaPrinter);
 public:
-  int print_table_definition(const uint64_t tenant_id,
-                             const uint64_t table_id,
+  int print_table_definition(const uint64_t table_id,
                              char* buf,
                              const int64_t& buf_len,
                              int64_t& pos,
@@ -120,15 +118,12 @@ public:
       common::ObIArray<common::ObString> &full_text_columns,
       char* buf, const int64_t buf_len, int64_t& pos, bool &is_first,
       bool is_agent_mode) const;
-  int print_index_table_definition(
-      const uint64_t tenant_id,
-      const uint64_t index_table_id,
+  int print_index_table_definition(const uint64_t index_table_id,
       char* buf, const int64_t buf_len, int64_t& pos,
       const common::ObTimeZoneInfo *tz_info,
       bool is_agent_mode) const;
 
-  int print_view_definiton(const uint64_t tenant_id,
-                           const uint64_t table_id,
+  int print_view_definiton(const uint64_t table_id,
                            char *buf,
                            const int64_t &buf_len,
                            int64_t &pos,
@@ -136,8 +131,7 @@ public:
                            bool agent_mode,
                            ObSQLMode sql_mode) const;
 
-  int print_materialized_view_definition(const uint64_t tenant_id,
-                                         const uint64_t table_id,
+  int print_materialized_view_definition(const uint64_t table_id,
                                          char *buf,
                                          const int64_t &buf_len,
                                          int64_t &pos,
@@ -145,8 +139,7 @@ public:
                                          bool agent_mode,
                                          ObSQLMode sql_mode) const;
                                          
-  int print_database_definiton(const uint64_t tenant_id,
-                               const uint64_t database_id,
+  int print_database_definiton(const uint64_t database_id,
                                bool if_not_exists,
                                char *buf,
                                const int64_t &buf_len,
@@ -331,8 +324,7 @@ public:
                                               const int64_t &buf_len,
                                               int64_t &pos,
                                               const common::ObTimeZoneInfo *tz_info) const;
-  int print_tablegroup_definition(const uint64_t tenant_id,
-                                  const uint64_t tablegroup_id,
+  int print_tablegroup_definition(const uint64_t tablegroup_id,
                                   char* buf,
                                   const int64_t& buf_len,
                                   int64_t& pos,
@@ -344,8 +336,7 @@ public:
       const int64_t& buf_len,
       int64_t& pos,
       bool agent_mode = false) const;
-  int print_tenant_definition(uint64_t tenant_id,
-                              common::ObMySQLProxy *sql_proxy,
+  int print_tenant_definition(common::ObMySQLProxy *sql_proxy,
                               char* buf,
                               const int64_t& buf_len,
                               int64_t& pos,
@@ -359,8 +350,7 @@ public:
                                const int64_t& buf_len,
                                int64_t &pos,
                                const common::ObTimeZoneInfo *tz_info) const;
-  int print_routine_definition(const uint64_t tenant_id,
-                               const uint64_t routine_id,
+  int print_routine_definition(const uint64_t routine_id,
                                const sql::ObExecEnv &exec_env,
                                char* buf,
                                const int64_t& buf_len,
@@ -391,11 +381,9 @@ public:
                                      const int64_t& buf_len,
                                      int64_t& pos,
                                      const common::ObTimeZoneInfo *tz_info) const;
-  int print_foreign_key_definition(const uint64_t tenant_id,
-                                   const share::schema::ObForeignKeyInfo &foreign_key_info,
+  int print_foreign_key_definition(const share::schema::ObForeignKeyInfo &foreign_key_info,
                                    char *buf, int64_t buf_len, int64_t &pos) const;
-  int print_package_definition(const uint64_t tenant_id,
-                               uint64_t package_id,
+  int print_package_definition(uint64_t package_id,
                                char* buf,
                                const int64_t& buf_len,
                                int64_t &pos) const;
@@ -439,15 +427,13 @@ public:
                                   char *buf,
                                   const int64_t &buf_len,
                                   int64_t &pos);
-  int print_user_definition(uint64_t tenant_id,
-                            const ObUserInfo &user_info,
+  int print_user_definition(const ObUserInfo &user_info,
                             char *buf,
                             const int64_t &buf_len,
                             int64_t &pos,
                             bool is_role,
                             bool print_password_secret = false);
-  int add_create_tenant_variables(
-      const uint64_t tenant_id, common::ObMySQLProxy *const sql_proxy,
+  int add_create_tenant_variables(common::ObMySQLProxy *const sql_proxy,
       char *buf, const int64_t buf_len, int64_t &pos) const;
   
   int print_hash_partition_elements(const ObPartitionSchema *&schema,
@@ -457,11 +443,6 @@ public:
                                     bool print_sub_part_element,
                                     bool agent_mode,
                                     const common::ObTimeZoneInfo *tz_info) const;
-  int print_external_table_file_info(const ObTableSchema &table_schema,
-                                     ObIAllocator& allocator,
-                                     char* buf,
-                                     const int64_t& buf_len,
-                                     int64_t& pos) const;
   int print_table_definition_column_group(const ObTableSchema &table_schema,
                                           char* buf,
                                           const int64_t& buf_len,
@@ -497,8 +478,7 @@ public:
                                      const int64_t& buf_len,
                                      int64_t& pos) const;
   void set_sql_schema_guard(sql::ObSqlSchemaGuard *sql_schema_guard);
-  int print_location_definiton(const uint64_t tenant_id,
-                               const uint64_t location_id,
+  int print_location_definiton(const uint64_t location_id,
                                char *buf,
                                const int64_t &buf_len,
                                int64_t &pos) const;
@@ -511,8 +491,8 @@ private:
     ObPartitionFuncType sub_type = sub_part_opt.get_part_func_type();
     return is_hash_like_part(sub_type) && !is_hash_like_part(type);
   }
-  int get_database_schema_(const uint64_t tenant_id, const uint64_t database_id, const ObDatabaseSchema *&database_schema) const;
-  int get_table_schema_(const uint64_t tenant_id, const uint64_t table_id, const ObTableSchema *&table_schema) const;
+  int get_database_schema_(const uint64_t database_id, const ObDatabaseSchema *&database_schema) const;
+  int get_table_schema_(const uint64_t table_id, const ObTableSchema *&table_schema) const;
 
   ObSchemaGetterGuard &schema_guard_;
   sql::ObSqlSchemaGuard *sql_schema_guard_;

@@ -33,7 +33,7 @@ class ObFlyingTabletPointerMap final
   typedef ObTabletPointerHandle* ObInnerTPHandlePtr;
 public:
   ObFlyingTabletPointerMap(const int64_t capacity);
-  int init(const uint64_t tenant_id);
+  int init();
   int set(const ObDieingTabletMapKey &key, ObTabletPointerHandle &handle);
   int check_exist(const ObDieingTabletMapKey &key, bool &is_exist);
   int erase(const ObDieingTabletMapKey &key);

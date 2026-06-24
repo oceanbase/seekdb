@@ -27,18 +27,15 @@ namespace share
 
 int ObScheduledManageDynamicPartition::create_jobs(
   const schema::ObSysVariableSchema &sys_variable,
-  const uint64_t tenant_id,
   ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(create_daily_job_(sys_variable,
-                                tenant_id,
                                 trans))) {
-    LOG_WARN("fail to create scheduled manage dynamic partition daily job", KR(ret), K(tenant_id));
+    LOG_WARN("fail to create scheduled manage dynamic partition daily job", KR(ret));
   } else if (OB_FAIL(create_hourly_job_(sys_variable,
-                                        tenant_id,
                                         trans))) {
-    LOG_WARN("fail to create scheduled manage dynamic partition hourly job", KR(ret), K(tenant_id));
+    LOG_WARN("fail to create scheduled manage dynamic partition hourly job", KR(ret));
   }
 
   return ret;
@@ -47,7 +44,6 @@ int ObScheduledManageDynamicPartition::create_jobs(
 int ObScheduledManageDynamicPartition::create_jobs_for_upgrade(
   common::ObMySQLProxy *sql_proxy,
   const schema::ObSysVariableSchema &sys_variable,
-  const uint64_t tenant_id,
   ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -60,24 +56,20 @@ int ObScheduledManageDynamicPartition::create_jobs_for_upgrade(
     bool hourly_job_exists = false;
     if (OB_FAIL(ObDbmsStatsMaintenanceWindow::check_job_exists(
                 sql_proxy,
-                tenant_id,
                 SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY_JOB_NAME,
                 daily_job_exists))) {
-      LOG_WARN("fail to check daily job exists", KR(ret), K(tenant_id));
+      LOG_WARN("fail to check daily job exists", KR(ret));
     } else if (OB_FAIL(ObDbmsStatsMaintenanceWindow::check_job_exists(
                        sql_proxy,
-                       tenant_id,
                        SCHEDULED_MANAGE_DYNAMIC_PARTITION_HOURLY_JOB_NAME,
                        hourly_job_exists))) {
-      LOG_WARN("fail to check hourly job exists", KR(ret), K(tenant_id));
+      LOG_WARN("fail to check hourly job exists", KR(ret));
     } else if (!daily_job_exists && OB_FAIL(create_daily_job_(sys_variable,
-                                                              tenant_id,
                                                               trans))) {
-      LOG_WARN("fail to create scheduled manage dynamic partition daily job", KR(ret), K(tenant_id));
+      LOG_WARN("fail to create scheduled manage dynamic partition daily job", KR(ret));
     } else if (!hourly_job_exists && OB_FAIL(create_hourly_job_(sys_variable,
-                                                                tenant_id,
                                                                 trans))) {
-      LOG_WARN("fail to create scheduled manage dynamic partition hourly job", KR(ret), K(tenant_id));
+      LOG_WARN("fail to create scheduled manage dynamic partition hourly job", KR(ret));
     }
   }
   return ret;
@@ -92,48 +84,20 @@ int ObScheduledManageDynamicPartition::set_attribute(
   ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   is_scheduled_manage_dynamic_partition_daily_attr = false;
   if (OB_ISNULL(session) || job_name.empty() || attr_name.empty() || attr_val_str.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(session), K(job_name), K(attr_name), K(attr_val_str));
-  } else if (FALSE_IT(tenant_id = session->get_effective_tenant_id())) {
-  } else if (!is_user_tenant(tenant_id)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("not user tenant, can't set attribute for SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY job", KR(ret), K(tenant_id));
-  } else if (!is_daily_job_(job_name)) {
-    is_scheduled_manage_dynamic_partition_daily_attr = false;
-  } else if (0 == attr_name.case_compare("start_date")) {
-    int64_t next_date_ts = 0;
-    if (OB_FAIL(parse_next_date_(session, attr_val_str, next_date_ts))) {
-      LOG_WARN("parse trigger time failed", KR(ret), K(attr_val_str));
-    } else if (ObTimeUtility::current_time() > next_date_ts) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid next_date_ts", KR(ret), K(attr_val_str), K(next_date_ts));
-    } else if (OB_FAIL(dml.add_time_column("next_date", next_date_ts))) {
-      LOG_WARN("failed to add column", KR(ret));
-    } else if (OB_FAIL(dml.add_time_column("start_date", next_date_ts))) {
-      LOG_WARN("failed to add column", KR(ret));
-    } else {
-      is_scheduled_manage_dynamic_partition_daily_attr = true;
-      LOG_INFO("succeed to set next date", K(attr_val_str), K(next_date_ts));
-    }
   } else {
-    ret = OB_INVALID_ARGUMENT;
-    ObSqlString errmsg;
-    (void)errmsg.assign_fmt("%.*s. Not a valid attribute for SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY.",
-        attr_name.length(),
-        attr_name.ptr());
-    LOG_WARN("not a valid SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY attribute", KR(ret), K(errmsg), K(attr_name));
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, errmsg.ptr());
+    ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("not user tenant, can't set attribute for SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY job", KR(ret));
   }
-
   return ret;
 }
 
 int ObScheduledManageDynamicPartition::create_daily_job_(
   const schema::ObSysVariableSchema &sys_variable,
-  const uint64_t tenant_id,
   ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -141,24 +105,22 @@ int ObScheduledManageDynamicPartition::create_daily_job_(
   int32_t offset_sec = 0;
   int64_t current_time = ObTimeUtility::current_time();
   if (OB_FAIL(ObDbmsStatsMaintenanceWindow::get_time_zone_offset(sys_variable,
-                                                                 tenant_id,
                                                                  offset_sec))) {
-    LOG_WARN("fail to get time zone offset", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get time zone offset", KR(ret));
   } else if (OB_FAIL(get_today_zero_hour_timestamp_(offset_sec, timestamp))) {
-    LOG_WARN("failed to get time zone offset", KR(ret), K(tenant_id));
+    LOG_WARN("failed to get time zone offset", KR(ret));
   } else {
     const int64_t start_usec_daily = timestamp + USEC_OF_HOUR * HOURS_PER_DAY; // next day 00:00:00
     ObString job_name_daily(SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY_JOB_NAME);
     ObString repeat_interval_daily("FREQ=DAILY;INTERVAL=1");
     ObString job_action_daily("DBMS_PARTITION.MANAGE_DYNAMIC_PARTITION(null, 'DAY,WEEK,MONTH,YEAR')");
     if (OB_FAIL(create_job_(sys_variable,
-                            tenant_id,
                             start_usec_daily,
                             job_name_daily,
                             repeat_interval_daily,
                             job_action_daily,
                             trans))) {
-      LOG_WARN("fail to create scheduled manage dynamic partition job", KR(ret), K(tenant_id), K(job_name_daily));
+      LOG_WARN("fail to create scheduled manage dynamic partition job", KR(ret), K(job_name_daily));
     }
   }
   return ret;
@@ -166,7 +128,6 @@ int ObScheduledManageDynamicPartition::create_daily_job_(
 
 int ObScheduledManageDynamicPartition::create_hourly_job_(
   const schema::ObSysVariableSchema &sys_variable,
-  const uint64_t tenant_id,
   ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -174,24 +135,22 @@ int ObScheduledManageDynamicPartition::create_hourly_job_(
   int32_t offset_sec = 0;
   int64_t current_time = ObTimeUtility::current_time();
   if (OB_FAIL(ObDbmsStatsMaintenanceWindow::get_time_zone_offset(sys_variable,
-                                                                 tenant_id,
                                                                  offset_sec))) {
-    LOG_WARN("fail to get time zone offset", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get time zone offset", KR(ret));
   } else if (OB_FAIL(get_today_zero_hour_timestamp_(offset_sec, timestamp))) {
-    LOG_WARN("failed to get time zone offset", KR(ret), K(tenant_id));
+    LOG_WARN("failed to get time zone offset", KR(ret));
   } else {
     const int64_t start_usec_hourly = (current_time / USEC_OF_HOUR + 1) * USEC_OF_HOUR; // next hour 00:00
     ObString job_name_hourly(SCHEDULED_MANAGE_DYNAMIC_PARTITION_HOURLY_JOB_NAME);
     ObString repeat_interval_hourly("FREQ=HOURLY;INTERVAL=1");
     ObString job_action_hourly("DBMS_PARTITION.MANAGE_DYNAMIC_PARTITION(null, 'HOUR')");
     if (OB_FAIL(create_job_(sys_variable,
-                            tenant_id,
                             start_usec_hourly,
                             job_name_hourly,
                             repeat_interval_hourly,
                             job_action_hourly,
                             trans))) {
-      LOG_WARN("fail to create scheduled manage dynamic partition job", KR(ret), K(tenant_id), K(job_name_hourly));
+      LOG_WARN("fail to create scheduled manage dynamic partition job", KR(ret), K(job_name_hourly));
     }
   }
   return ret;
@@ -199,7 +158,6 @@ int ObScheduledManageDynamicPartition::create_hourly_job_(
 
 int ObScheduledManageDynamicPartition::create_job_(
   const schema::ObSysVariableSchema &sys_variable,
-  const uint64_t tenant_id,
   const int64_t start_usec,
   const ObString &job_name,
   const ObString &repeat_interval,
@@ -213,8 +171,8 @@ int ObScheduledManageDynamicPartition::create_job_(
 
   if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
     LOG_WARN("failed to gen exec env", KR(ret));
-  } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(tenant_id, job_id))) {
-    LOG_WARN("generate_job_id failed", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id))) {
+    LOG_WARN("generate_job_id failed", KR(ret));
   } else {
     ObString exec_env(pos, buf);
 
@@ -222,7 +180,7 @@ int ObScheduledManageDynamicPartition::create_job_(
     const int64_t end_date = 64060560000000000; // 4000-01-01 00:00:00.000000 (same as maintenance_window)
 
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
-      job_info.tenant_id_ = tenant_id;
+      
       job_info.job_ = job_id;
       job_info.job_name_ = job_name;
       job_info.job_action_ = job_action;
@@ -242,7 +200,7 @@ int ObScheduledManageDynamicPartition::create_job_(
       job_info.comments_ = ObString("used to perform manage dynamic partition periodically");
       job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::DYNAMIC_PARTITION_MANAGE_JOB;
 
-      if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(trans, tenant_id, job_id, job_info))) {
+      if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(trans, job_id, job_info))) {
         if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
           ret = OB_SUCCESS;
           LOG_INFO("finish create manage dynamic partition job, job duplicated", K(job_info));

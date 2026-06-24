@@ -33,8 +33,7 @@ const static char * ObDataChecksumTypeStr[] = {
 
 
 ObTabletReplica::ObTabletReplica()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      tablet_id_(),
+    : tablet_id_(),
       ls_id_(),
       server_(),
       snapshot_version_(0),
@@ -52,7 +51,6 @@ ObTabletReplica::~ObTabletReplica()
 
 void ObTabletReplica::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   tablet_id_.reset();
   ls_id_.reset();
   server_.reset();
@@ -67,7 +65,6 @@ int ObTabletReplica::assign(const ObTabletReplica &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     tablet_id_ = other.tablet_id_;
     ls_id_ = other.ls_id_;
     server_ = other.server_;
@@ -81,7 +78,6 @@ int ObTabletReplica::assign(const ObTabletReplica &other)
 }
 
 int ObTabletReplica::init(
-    const uint64_t tenant_id,
     const common::ObTabletID &tablet_id,
     const share::ObLSID &ls_id,
     const common::ObAddr &server,
@@ -93,8 +89,8 @@ int ObTabletReplica::init(
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(
-      !tablet_id.is_valid_with_tenant(tenant_id)
-      || !ls_id.is_valid_with_tenant(tenant_id)
+      !tablet_id.is_valid_with_tenant()
+      || !ls_id.is_valid_with_tenant()
       || !server.is_valid()
       || snapshot_version < 0
       || data_size < 0
@@ -102,10 +98,9 @@ int ObTabletReplica::init(
       || report_scn < 0
       || !is_status_valid(status))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init with invalid arguments", KR(ret), K(tenant_id), K(tablet_id), K(ls_id),
+    LOG_WARN("init with invalid arguments", KR(ret), K(tablet_id), K(ls_id),
         K(server), K(snapshot_version), K(data_size), K(required_size), K(report_scn), K(status));
   } else {
-    tenant_id_ = tenant_id;
     tablet_id_ = tablet_id;
     ls_id_ = ls_id;
     server_ = server;
@@ -123,7 +118,7 @@ bool ObTabletReplica::is_equal_for_report(const ObTabletReplica &other) const
   bool is_equal = false;
   if (this == &other) {
     is_equal = true;
-  } else if (tenant_id_ == other.tenant_id_
+  } else if (true
       && tablet_id_ == other.tablet_id_
       && ls_id_ == other.ls_id_
       && server_ == other.server_
@@ -135,31 +130,26 @@ bool ObTabletReplica::is_equal_for_report(const ObTabletReplica &other) const
   return is_equal;
 }
 
-void ObTabletReplica::fake_for_diagnose(const uint64_t tenant_id,
-                                       const share::ObLSID &ls_id,
+void ObTabletReplica::fake_for_diagnose(const share::ObLSID &ls_id,
                                        const common::ObTabletID &tablet_id)
 {
   reset();
-  tenant_id_ = tenant_id;
   ls_id_ = ls_id;
   tablet_id_ = tablet_id;
 }
 
 ObTabletInfo::ObTabletInfo()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      tablet_id_(),
+    : tablet_id_(),
       ls_id_(),
       replicas_()
 {
 }
 
 ObTabletInfo::ObTabletInfo(
-    const uint64_t tenant_id,
     const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     const ObArray<ObTabletReplica> &replicas)
-    : tenant_id_(tenant_id),
-      tablet_id_(tablet_id),
+    : tablet_id_(tablet_id),
       ls_id_(ls_id),
       replicas_(replicas)
 {
@@ -172,7 +162,6 @@ ObTabletInfo::~ObTabletInfo()
 
 void ObTabletInfo::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
   tablet_id_.reset();
   ls_id_.reset();
   replicas_.reset();
@@ -182,33 +171,30 @@ int ObTabletInfo::assign(const ObTabletInfo &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     tablet_id_ = other.tablet_id_;
     ls_id_ = other.ls_id_;
     if (OB_FAIL(replicas_.assign(other.replicas_))) {
-      LOG_WARN("fail to assign replicas", KR(ret), K_(tenant_id), K_(tablet_id), K_(replicas));
+      LOG_WARN("fail to assign replicas", KR(ret), K_(tablet_id), K_(replicas));
     }
   }
   return ret;
 }
 
 int ObTabletInfo::init(
-    const uint64_t tenant_id,
     const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     const common::ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant(tenant_id)
-      || !ls_id.is_valid_with_tenant(tenant_id)
+  if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant()
+      || !ls_id.is_valid_with_tenant()
       || replicas.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init with invalid arguments", KR(ret),
-        K(tenant_id), K(tablet_id), K(ls_id), K(replicas));
+        K(tablet_id), K(ls_id), K(replicas));
   } else if (OB_FAIL(replicas_.assign(replicas))) {
     LOG_WARN("fail to assign replicas", KR(ret), K(replicas));
   } else {
-    tenant_id_ = tenant_id;
     tablet_id_ = tablet_id;
     ls_id_ = ls_id;
   }
@@ -226,7 +212,6 @@ int ObTabletInfo::init_by_replica(const ObTabletReplica &replica)
   } else if (OB_FAIL(replicas.push_back(replica))) {
     LOG_WARN("fail to push back replica", KR(ret), K(replica));
   } else if (OB_FAIL(init(
-      replica.get_tenant_id(),
       replica.get_tablet_id(),
       replica.get_ls_id(),
       replicas))) {
@@ -241,12 +226,12 @@ int ObTabletInfo::add_replica(const ObTabletReplica &replica)
   if (OB_UNLIKELY(!is_valid() || !replica.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KPC(this), K(replica));
-  } else if (OB_UNLIKELY(tenant_id_ != replica.get_tenant_id()
+  } else if (OB_UNLIKELY(false
       || tablet_id_ != replica.get_tablet_id())
       || ls_id_ != replica.get_ls_id()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("replica not belong to this tablet",
-        KR(ret), K_(tenant_id), K_(tablet_id), K_(ls_id), K(replica));
+        KR(ret), K_(tablet_id), K_(ls_id), K(replica));
   } else {
     int64_t idx = OB_INVALID_INDEX;
     ret = find_replica_idx_(replica, idx);
@@ -270,7 +255,7 @@ int ObTabletInfo::add_replica(const ObTabletReplica &replica)
 
 bool ObTabletInfo::is_self_replica(const ObTabletReplica &replica) const
 {
-  return replica.get_tenant_id() == tenant_id_
+  return true
       && replica.get_tablet_id() == tablet_id_
       && replica.get_ls_id() == ls_id_;
 }

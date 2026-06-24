@@ -53,25 +53,11 @@ void ObAllVirtualTenantMemoryInfo::reset()
 int ObAllVirtualTenantMemoryInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  int tenant_cnt = 0;
   if (has_start_) {
     // do nothing
   } else {
-    // sys tenant show all tenant memory info
-    if (is_sys_tenant(effective_tenant_id_)) {
-      get_tenant_ids(tenant_ids_, OB_MAX_SERVER_TENANT_CNT, tenant_cnt);
-    } else {
-      // user tenant show self tenant memory info
-      tenant_ids_[0] = effective_tenant_id_;
-      tenant_cnt = 1;
-    }
-
-    for (int i = 0; i < tenant_cnt; ++i) {
-      uint64_t tenant_id = tenant_ids_[i];
-      ret = add_row(tenant_id,
-                    ObMallocAllocator::get_instance()->get_tenant_hold(tenant_id),
-                    ObMallocAllocator::get_instance()->get_tenant_limit(tenant_id));
-    }
+    ret = add_row(ObMallocAllocator::get_instance()->get_tenant_hold(),
+                  ObMallocAllocator::get_instance()->get_tenant_limit());
     if (OB_SUCC(ret)) {
       scanner_it_ = scanner_.begin();
       has_start_ = true;
@@ -90,7 +76,7 @@ int ObAllVirtualTenantMemoryInfo::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualTenantMemoryInfo::add_row(uint64_t tenant_id, int64_t hold, int64_t limit)
+int ObAllVirtualTenantMemoryInfo::add_row(int64_t hold, int64_t limit)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = nullptr;

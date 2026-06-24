@@ -52,16 +52,6 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
   if (session.is_sys_var_changed()) {
     const ObIArray<sql::ObBasicSessionInfo::ChangedVar> &sys_var = session.get_changed_sys_var();
     LOG_DEBUG("sys var changed", K(session.get_tenant_name()), K(sys_var.count()));
-    // if sys_var change, set SESSION_SYNC_SYS_VAR type's encoder->is_changed_ = true
-    // for turn on serialize sys delta vars.
-    if (session.is_session_var_sync()) {
-      ObSessInfoEncoder* encoder = NULL;
-      if (OB_FAIL(session.get_sess_encoder(SESSION_SYNC_SYS_VAR, encoder))) {
-        LOG_WARN("failed to get session encoder", K(ret));
-      } else {
-        encoder->is_changed_ = true;
-      }
-    }
     // record sys var need sync in error scene.
     bool is_exist_error_sync_var = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < sys_var.count(); ++i) {
@@ -103,17 +93,17 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
           } else {
 #ifndef NDEBUG
             LOG_INFO("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
-               K(session.get_server_sid()), K(session.get_proxy_sessid()));
+               K(session.get_server_sid()));
 #else
             // for autocommit change record.
             LOG_TRACE("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
-               K(session.get_server_sid()), K(session.get_proxy_sessid()), K(change_var.id_));
+               K(session.get_server_sid()), K(change_var.id_));
 #endif
           }
         }
       } else {
         LOG_TRACE("sys var not actully changed", K(changed), K(change_var), K(new_val),
-               K(session.get_server_sid()), K(session.get_proxy_sessid()));
+               K(session.get_server_sid()));
       }
     }
   }
@@ -143,11 +133,6 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
     }
   }
 
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(add_client_feedback(ok_pkt, session))) {
-      LOG_WARN("fail to add client feedback", K(ret));
-    }
-  }
   return ret;
 }
 
@@ -193,213 +178,6 @@ int ObMPUtils::sync_session_info(sql::ObSQLSessionInfo &sess, const common::ObSt
         succ_info_types.add_member(info_type);
       }
       LOG_DEBUG("sync-session-info", K(info_type), K(info_len));
-    }
-  }
-
-  return ret;
-}
-
-int ObMPUtils::append_modfied_sess_info(common::ObIAllocator &allocator,
-                                        sql::ObSQLSessionInfo &sess,
-                                        ObIArray<ObObjKV> *extra_info,
-                                        ObIArray<obmysql::Obp20Encoder*> *extra_info_ecds,
-                                        bool is_new_extra_info,
-                                        bool need_sync_sys_var)
-{
-  int ret = OB_SUCCESS;
-  if (!sess.has_sess_info_modified()) {
-    LOG_DEBUG("not modified");
-    // do nothing
-  } else {
-    // assemble ok packet's result
-    ObSessInfoEncoder* encoder = NULL;
-    char *buf = NULL;
-
-    int64_t size = 0;
-    int64_t sess_size[SESSION_SYNC_MAX_TYPE];
-    for (int64_t i=0; OB_SUCC(ret) && i < SESSION_SYNC_MAX_TYPE; i++) {
-      oceanbase::sql::SessionSyncInfoType info_type = (oceanbase::sql::SessionSyncInfoType)(i);
-      sess_size[i] = 0;
-      if (OB_FAIL(sess.get_sess_encoder(info_type, encoder))) {
-        LOG_WARN("failed to get session encoder", K(ret));
-      } else {
-        if (info_type == SESSION_SYNC_SYS_VAR && !need_sync_sys_var) {
-          // do nothing.
-        } else if (encoder->is_changed_) {
-          if (OB_FAIL(encoder->get_serialize_size(sess, sess_size[i]))) {
-            LOG_WARN("fail to get serialize size", K(info_type), K(ret));
-          } else {
-            size += ObProtoTransUtil::get_serialize_size(sess_size[i]);
-            LOG_DEBUG("get seri size", K(sess_size[i]));
-          }
-        } else {
-          // encoder->is_changed_ = false;
-        }
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (size == 0){
-      // do nothing
-    } else if (OB_UNLIKELY(size < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid buffer length", K(ret), K(size));
-    } else if (NULL == (buf = static_cast<char *>(allocator.alloc(size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", K(size), K(ret));
-    } else {
-      // assamble session info as follows:
-      // type(2 byte) | len(4 byte) | session_info_val | ....
-      int64_t pos = 0;
-      for (int64_t i=0; OB_SUCC(ret) && i < SESSION_SYNC_MAX_TYPE; i++) {
-        oceanbase::sql::SessionSyncInfoType encoder_type = (oceanbase::sql::SessionSyncInfoType)(i);
-        if (OB_FAIL(sess.get_sess_encoder(encoder_type, encoder))) {
-          LOG_WARN("failed to get session encoder", K(ret));
-        } else if (encoder_type == SESSION_SYNC_SYS_VAR && !need_sync_sys_var) {
-          // do nothing.
-        } else if (encoder->is_changed_) {
-          int16_t info_type = (int16_t)i;
-          int32_t info_len = sess_size[i];
-          int64_t info_pos = 0;
-          LOG_DEBUG("session-info-encode", K(sess.get_server_sid()), K(info_type), K(info_len));
-          if (info_len < 0) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid session info length", K(info_len), K(info_type), K(ret));
-          } else if (info_len == 0) {
-            // invalid info len do nothing and skip it.
-            encoder->is_changed_ = false;
-          } else if (OB_FAIL(ObProtoTransUtil::store_type_and_len(buf, size, pos, info_type, info_len))) {
-            LOG_WARN("failed to set type and len", K(ret), K(info_type), K(info_len), K(pos));
-          } else if (pos + info_len > size) {
-            ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("buf overflow for info", K(ret), K(buf), K(pos), K(info_type), K(info_len), K(size));
-          } else if (OB_FAIL(encoder->serialize(sess, buf + pos, info_len, info_pos))) {
-            LOG_WARN("failed to serialize", K(sess), K(ret), K(size), K(buf), K(pos), K(info_type), K(info_len), K(info_pos));
-          } else {
-            pos += info_len;
-            // reset to not changed
-            encoder->is_changed_ = false;
-          }
-        } else {
-          // do nothing
-        }
-      }
-
-      // set session info to extra info
-      if (OB_FAIL(ret)) {
-        // do nothing
-      } else if (0 == size) {
-        // do nothing
-      } else if (is_new_extra_info) {
-        Obp20SessInfoEncoder* sess_inf_ecd = NULL;
-        void* ecd_buf = NULL;
-        if (OB_ISNULL(ecd_buf = allocator.alloc(sizeof(Obp20SessInfoEncoder)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory.", K(ret));
-        } else {
-          sess_inf_ecd = new(ecd_buf)Obp20SessInfoEncoder();
-          sess_inf_ecd->sess_info_.assign(buf, size);
-          if (OB_FAIL(extra_info_ecds->push_back(sess_inf_ecd))) {
-            LOG_WARN("failed to add extra info kv", K(sess_inf_ecd), K(ret));
-          } else {
-            LOG_DEBUG("add extra_info", KP(sess_inf_ecd), K(size), KPHEX(buf, size), KP(buf));
-          }
-        }
-      } else {
-        ObObjKV kv;
-        common::ObObj key;
-        common::ObObj value;
-        ObString key_str = "sess_inf";
-        key.set_varchar(key_str);
-        value.set_varchar(ObString(size, buf));
-        kv.key_ = key;
-        kv.value_ = value;
-        if (OB_FAIL(extra_info->push_back(kv))) {
-          LOG_WARN("failed to add extra info kv", K(kv), K(ret));
-        } else {
-          LOG_TRACE("add extra_info", K(kv) , KPHEX(buf, size), KP(buf), KP(kv.value_.get_string().ptr()));
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-      // dump info size array
-      for (int i = 0; i< SESSION_SYNC_MAX_TYPE; i++) {
-        LOG_INFO("dump sess info size", "type", i, "size", sess_size[i]);
-      }
-    }
-  }
-
-  return ret;
-}
-
-// add OB_CLIENT_FEEDBACK, treat as user var
-int ObMPUtils::add_client_feedback(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &session) {
-  INIT_SUCC(ret);
-  const ObFeedbackManager &fb_manager = session.get_feedback_manager();
-  if (!fb_manager.is_empty()) {
-    ObIAllocator &allocator = session.get_allocator();
-    const int64_t SER_BUF_LEN = 1024;
-    const int64_t RETRY_COUNT = 4;
-    const int64_t MULTIPLIER = 8;
-
-    int64_t tmp_len = 0;
-    char *tmp_buff = NULL;
-    int64_t pos = 0;
-    bool need_retry = true;
-    // assume: seri buffer never > 512KB
-    for (int64_t i = 0; need_retry && (i < RETRY_COUNT) && OB_SUCC(ret); i++) {
-      tmp_len = ((0 == i) ? (SER_BUF_LEN) : (SER_BUF_LEN * i * MULTIPLIER));
-      tmp_buff = (char *)allocator.alloc(tmp_len);
-      pos = 0;
-      if (OB_ISNULL(tmp_buff)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory", K(tmp_len), K(ret));
-      } else if (OB_FAIL(fb_manager.serialize(tmp_buff, tmp_len, pos))) {
-        if (OB_SIZE_OVERFLOW == ret || OB_BUF_NOT_ENOUGH == ret) {
-          // buf not enough, retry
-          ret = OB_SUCCESS;
-        }
-      } else if (OB_UNLIKELY(pos <= 0)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid pos", K(pos), K(tmp_len), K(ret));
-      } else {
-        need_retry = false; // break;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ObStringKV str_kv;
-      str_kv.key_.assign_ptr(OB_CLIENT_FEEDBACK, static_cast<int32_t>(strlen(OB_CLIENT_FEEDBACK)));
-      str_kv.value_.assign(tmp_buff, static_cast<int32_t>(pos));
-      if (OB_FAIL(ok_pkt.add_user_var(str_kv))) {
-        LOG_WARN("fail to add user var", K(str_kv), K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMPUtils::add_client_reroute_info(OMPKOK &okp,
-                                       sql::ObSQLSessionInfo &session,
-                                       share::ObFeedbackRerouteInfo &reroute_info)
-{
-  LOG_DEBUG("adding client reroute info", K(reroute_info), K(okp));
-  int ret = OB_SUCCESS;
-  ObIAllocator &allocator = session.get_allocator();
-  char *tmp_buff = NULL;
-  int64_t pos = 0;
-  const int64_t SER_BUF_LEN = 1024;
-  if (OB_ISNULL(tmp_buff = (char *)allocator.alloc(SER_BUF_LEN))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
-  } else if (OB_FAIL(reroute_info.serialize(tmp_buff, SER_BUF_LEN, pos))) {
-    LOG_WARN("failed to serialize reroute info", K(ret));
-  } else {
-    ObStringKV str_kv;
-    str_kv.key_.assign_ptr(OB_CLIENT_REROUTE_INFO, static_cast<int32_t>(strlen(OB_CLIENT_REROUTE_INFO)));
-    str_kv.value_.assign(tmp_buff, static_cast<int32_t>(pos));
-    if (OB_FAIL(okp.add_user_var(str_kv))) {
-      LOG_WARN("failed to add user var", K(ret), K(str_kv));
     }
   }
 
@@ -600,7 +378,7 @@ int ObMPUtils::add_min_cluster_version(OMPKOK &okp, sql::ObSQLSessionInfo &sessi
     LOG_WARN("fail to add user var", K(str_kv), K(ret));
   } else {
     LOG_TRACE("succ to add _min_cluster_version user var on connect", K(ret), K(str_kv),
-              "sessid", session.get_server_sid(), "proxy_sessid", session.get_proxy_sessid());
+              "sessid", session.get_server_sid());
   }
 
   return ret;

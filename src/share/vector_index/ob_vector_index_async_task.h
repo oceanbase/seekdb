@@ -43,9 +43,8 @@ private:
 class ObVecTaskManager
 {
 public:
-  ObVecTaskManager(uint64_t tenant_id, int64_t index_table_id, ObVecIndexAsyncTaskType task_type) 
-      : tenant_id_(tenant_id),
-        index_table_id_(index_table_id),
+  ObVecTaskManager(int64_t index_table_id, ObVecIndexAsyncTaskType task_type) 
+      : index_table_id_(index_table_id),
         task_type_(task_type),
         task_ids_()
   {}
@@ -53,9 +52,9 @@ public:
   int process_task();
   int create_task();
   int check_task_status();
-  TO_STRING_KV(K_(tenant_id), K_(index_table_id), K_(task_type), K_(task_ids));
+  TO_STRING_KV(K_(index_table_id), K_(task_type), K_(task_ids));
 private:
-  uint64_t tenant_id_;
+  
   int64_t index_table_id_;
   ObVecIndexAsyncTaskType task_type_;
   ObSEArray<int64_t, 4> task_ids_;

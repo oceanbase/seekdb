@@ -76,24 +76,22 @@ public:
       direct_load_type_(),
       trans_id_(),
       seq_no_(0),
-      src_tenant_id_(0),
       tx_desc_(nullptr)
   { }
   ObBatchSliceWriteInfo(const common::ObTabletID &tablet_id, const share::ObLSID &ls_id, const int64_t &trans_version,
       const ObDirectLoadType &direct_load_type, const transaction::ObTransID &trans_id, const int64_t &seq_no,
-      const uint64_t src_tenant_id, transaction::ObTxDesc* tx_desc)
+      transaction::ObTxDesc* tx_desc)
     : data_tablet_id_(tablet_id),
       ls_id_(ls_id),
       trans_version_(trans_version),
       direct_load_type_(direct_load_type),
       trans_id_(trans_id),
       seq_no_(seq_no),
-      src_tenant_id_(src_tenant_id),
       tx_desc_(tx_desc)
 
   { }
   ~ObBatchSliceWriteInfo() = default;
-  TO_STRING_KV(K(ls_id_), K(data_tablet_id_), K(trans_version_), K(direct_load_type_), K(src_tenant_id_), KPC(tx_desc_));
+  TO_STRING_KV(K(ls_id_), K(data_tablet_id_), K(trans_version_), K(direct_load_type_), K(1UL), KPC(tx_desc_));
 public:
   common::ObTabletID data_tablet_id_;
   share::ObLSID ls_id_;
@@ -101,7 +99,7 @@ public:
   ObDirectLoadType direct_load_type_;
   transaction::ObTransID trans_id_; 
   int64_t seq_no_; // 
-  uint64_t src_tenant_id_;
+  
   transaction::ObTxDesc* tx_desc_;
 };
 
@@ -164,11 +162,11 @@ struct ObDirectLoadSliceInfo final
 public:
   ObDirectLoadSliceInfo()
     : is_full_direct_load_(false), is_lob_slice_(false), ls_id_(), data_tablet_id_(), slice_id_(-1),
-      context_id_(0), src_tenant_id_(MTL_ID()), is_task_finish_(false), total_slice_cnt_(-1), slice_idx_(0), merge_slice_idx_(0)
+      context_id_(0), is_task_finish_(false), total_slice_cnt_(-1), slice_idx_(0), merge_slice_idx_(0)
     { }
   ~ObDirectLoadSliceInfo() = default;
-  bool is_valid() const { return ls_id_.is_valid() && data_tablet_id_.is_valid() && slice_id_ >= 0 && context_id_ >= 0 && src_tenant_id_ > 0; }
-  TO_STRING_KV(K_(is_full_direct_load), K_(is_lob_slice), K_(ls_id), K_(data_tablet_id), K_(slice_id), K_(context_id), K_(src_tenant_id), K_(is_task_finish), K_(total_slice_cnt), K_(slice_idx), K_(merge_slice_idx));
+  bool is_valid() const { return ls_id_.is_valid() && data_tablet_id_.is_valid() && slice_id_ >= 0 && context_id_ >= 0; }
+  TO_STRING_KV(K_(is_full_direct_load), K_(is_lob_slice), K_(ls_id), K_(data_tablet_id), K_(slice_id), K_(context_id), K_(is_task_finish), K_(total_slice_cnt), K_(slice_idx), K_(merge_slice_idx));
 public:
   bool is_full_direct_load_;
   bool is_lob_slice_;
@@ -176,7 +174,7 @@ public:
   common::ObTabletID data_tablet_id_;
   int64_t slice_id_;
   int64_t context_id_;
-  uint64_t src_tenant_id_;
+  
   bool is_task_finish_;
   int64_t total_slice_cnt_;
   int64_t slice_idx_;
@@ -291,7 +289,6 @@ public:
   ObDDLInsertRowIterator();
   virtual ~ObDDLInsertRowIterator();
   int init(
-      const uint64_t source_tenant_id,
       ObDirectLoadMgrAgent &agent,
       ObIStoreRowIterator *slice_row_iter,
       const share::ObLSID &ls_id,
@@ -321,7 +318,7 @@ private:
 private:
   static const int64_t AUTO_INC_CACHE_SIZE = 5000000; // 500w.
   bool is_inited_;
-  uint64_t source_tenant_id_; // recover table ddl task needs it to scan rows.
+   // recover table ddl task needs it to scan rows.
   ObDirectLoadMgrAgent *ddl_agent_;
   ObIStoreRowIterator *slice_row_iter_;
   share::ObLSID ls_id_;
@@ -409,7 +406,7 @@ public:
       data_format_version_(0),
       snapshot_version_(0),
       table_key_(),
-      arena_(ObMemAttr(MTL_ID(), "DDL_Mrg_Par")),
+      arena_(ObMemAttr("DDL_Mrg_Par")),
       user_data_(),
       trans_id_(),
       seq_no_(),
@@ -583,12 +580,12 @@ class ObVectorIndexSliceStore : public ObVectorIndexBaseSliceStore
 public:
   static const int64_t OB_VEC_IDX_SNAPSHOT_KEY_LENGTH = 256;
   ObVectorIndexSliceStore()
-    : ObVectorIndexBaseSliceStore(), vec_allocator_("VecIdxSS", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-      tmp_allocator_("VecIdxSSAR", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    : ObVectorIndexBaseSliceStore(), vec_allocator_("VecIdxSS", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      tmp_allocator_("VecIdxSSAR", OB_MALLOC_NORMAL_BLOCK_SIZE),
       ctx_(), vector_vid_col_idx_(-1),
       vector_col_idx_(-1)
   {
-    extra_column_idx_types_.set_attr(ObMemAttr(MTL_ID(), "VecIdxExCol"));
+    extra_column_idx_types_.set_attr(ObMemAttr("VecIdxExCol"));
   }
   virtual ~ObVectorIndexSliceStore() { reset(); }
   virtual int init(ObBaseTabletDirectLoadMgr *tablet_direct_load_mgr,
@@ -631,7 +628,7 @@ class ObIvfSliceStore : public ObVectorIndexBaseSliceStore
 public:
   ObIvfSliceStore()
     : ObVectorIndexBaseSliceStore(),
-      tmp_allocator_("IvfSSTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      tmp_allocator_("IvfSSTmp", OB_MALLOC_NORMAL_BLOCK_SIZE),
       helper_guard_(),
       context_id_(-1),
       lob_inrow_threshold_(-1)
@@ -779,8 +776,8 @@ class ObChunkSliceStore : public ObTabletSliceStore
 public:
   ObChunkSliceStore() : is_inited_(false), is_canceled_(false), target_store_idx_(-1), row_cnt_(0), arena_allocator_(nullptr), cg_schemas_(), datum_stores_(), rowkey_column_count_(0)
   {
-    cg_schemas_.set_attr(ObMemAttr(MTL_ID(), "ChunkSlicStoreC"));
-    datum_stores_.set_attr(ObMemAttr(MTL_ID(), "ChunkSlicStoreD"));
+    cg_schemas_.set_attr(ObMemAttr("ChunkSlicStoreC"));
+    datum_stores_.set_attr(ObMemAttr("ChunkSlicStoreD"));
   }
   virtual ~ObChunkSliceStore() { reset(); }
   int init(const int64_t rowkey_column_count, const ObStorageSchema *storage_schema, ObArenaAllocator &allocator,
@@ -798,7 +795,7 @@ public:
   virtual ObDatumRowkey get_compare_key() const override { return endkey_; }
   TO_STRING_KV(K(is_inited_), K(is_canceled_), K(target_store_idx_), K(row_cnt_), KP(arena_allocator_), K(datum_stores_), K(endkey_), K(rowkey_column_count_), K(cg_schemas_));
 private:
-  int prepare_datum_stores(const uint64_t tenant_id, const ObStorageSchema *storage_schema, ObIAllocator &allocator,
+  int prepare_datum_stores(const ObStorageSchema *storage_schema, ObIAllocator &allocator,
                            const ObIArray<ObColumnSchemaItem> &col_array, const int64_t dir_id, const int64_t parallelism);
 public:
   bool is_inited_;
@@ -825,7 +822,7 @@ public:
       is_canceled_(false),
       is_inited_(false)
   {
-    cg_ctxs_.set_attr(ObMemAttr(MTL_ID(), "DL_CK_CG_CTXS"));
+    cg_ctxs_.set_attr(ObMemAttr("DL_CK_CG_CTXS"));
   }
   virtual ~ObChunkBatchSliceStore() { reset(); }
   void reset();
@@ -856,8 +853,7 @@ public:
                K_(is_inited));
 private:
   int init_start_key();
-  int prepare_column_group_ctxs(const uint64_t tenant_id,
-                                const ObStorageSchema *storage_schema,
+  int prepare_column_group_ctxs(const ObStorageSchema *storage_schema,
                                 ObIAllocator &allocator,
                                 const ObIArray<ObColumnSchemaItem> &col_array,
                                 const int64_t dir_id,
@@ -875,7 +871,7 @@ private:
         append_vectors_(),
         brs_()
     {
-      allocator_.set_tenant_id(MTL_ID());
+      
       vectors_.set_block_allocator(ModulePageAllocator(allocator_));
       append_vectors_.set_block_allocator(ModulePageAllocator(allocator_));
     }
@@ -981,7 +977,7 @@ public:
       trans_id_(),
       seq_no_()
   {
-    cg_ctxs_.set_attr(ObMemAttr(MTL_ID(), "DL_CL_CG_CTXS"));
+    cg_ctxs_.set_attr(ObMemAttr("DL_CL_CG_CTXS"));
   }
   virtual ~ObColumnBatchSliceStore() { reset(); }
   void reset();
@@ -1031,8 +1027,7 @@ public:
                K_(trans_id),
                K_(seq_no));
 private:
-  int prepare_column_group_ctxs(const uint64_t tenant_id,
-                                const ObStorageSchema *storage_schema,
+  int prepare_column_group_ctxs(const ObStorageSchema *storage_schema,
                                 ObIAllocator &allocator,
                                 const ObIArray<ObColumnSchemaItem> &col_array,
                                 const blocksstable::ObMacroDataSeq &data_seq,
@@ -1053,7 +1048,7 @@ private:
         data_seq_(0),
         dumped_row_count_(0)
     {
-      allocator_.set_tenant_id(MTL_ID());
+      
       append_vectors_.set_block_allocator(ModulePageAllocator(allocator_));
       datum_rows_.vectors_.set_block_allocator(ModulePageAllocator(allocator_));
     }
@@ -1349,7 +1344,6 @@ private:
       const int64_t seq_no,
       const int64_t timeout_ts,
       const ObLobStorageParam &lob_storage_param,
-      const uint64_t src_tenant_id,
       const ObDirectLoadType direct_load_type,
       transaction::ObTxDesc* tx_desc,
       share::ObTabletCacheInterval &pk_interval,
@@ -1413,7 +1407,7 @@ public:
       macro_meta_store_(nullptr),
       allocator_("COSliceWriter")
   {
-    allocator_.set_tenant_id(MTL_ID());
+    
   }
   ~ObCOSliceWriter()
   {

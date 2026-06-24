@@ -74,7 +74,7 @@ public:
 protected:
   int fill_cells(compaction::ObSSTableMergeHistory *merge_history);
 private:
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
   virtual void release_last_tenant() override
   {

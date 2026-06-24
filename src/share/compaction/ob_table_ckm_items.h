@@ -79,7 +79,7 @@ public:
       array_()
   {}
   ~ObSortColumnIdArray() { reset(); }
-  int build(const uint64_t tenant_id, const share::schema::ObTableSchema &table_schema);
+  int build(const share::schema::ObTableSchema &table_schema);
   bool is_inited() const { return is_inited_; }
   static int get_array_idx_by_column_id(ObSortColumnIdArray& sort_array, const int64_t column_id, int64_t &array_idx)
   {
@@ -89,7 +89,7 @@ public:
   TO_STRING_KV(K_(is_inited), K_(build_map_flag), K_(array), "map_size", map_.size());
 
 private:
-  int build_hash_map(const uint64_t tenant_id, const ObIArray<share::schema::ObColDesc> &column_descs);
+  int build_hash_map(const ObIArray<share::schema::ObColDesc> &column_descs);
   int build_sort_array(const ObIArray<share::schema::ObColDesc> &column_descs);
   static int32_t get_func_from_array(ObSortColumnIdArray &sort_array, const int64_t column_id, int64_t &input_array_idx);
   static int32_t get_func_from_map(ObSortColumnIdArray &sort_array, const int64_t column_id, int64_t &input_array_idx);
@@ -108,7 +108,7 @@ private:
 struct ObTableCkmItems
 {
 public:
-  ObTableCkmItems(const uint64_t tenant_id = MTL_ID());
+  ObTableCkmItems();
   ~ObTableCkmItems();
   bool is_inited() const { return is_inited_; }
   void set_is_fts_index(const bool is_fts_index) { is_fts_index_ = is_fts_index; }
@@ -141,7 +141,7 @@ public:
     ObTableCkmItems &index_ckm);
   static const int64_t FUNC_CNT = 2;
   static VALIDATE_CKM_FUNC validate_ckm_func[FUNC_CNT];
-  TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(table_id), "tablet_cnt", tablet_pairs_.count(),
+  TO_STRING_KV(K_(is_inited), K_(table_id), "tablet_cnt", tablet_pairs_.count(),
     "ckm_item_cnt", ckm_items_.count(), K_(sort_col_id_array),
     "col_ckm_sum_array_size", ckm_sum_array_.count());
 
@@ -181,7 +181,6 @@ private:
   static const int64_t DEFAULT_TABLET_CNT = 16;
   bool is_inited_;
   bool is_fts_index_;
-  uint64_t tenant_id_;
   uint64_t table_id_;
   int64_t row_count_;
   const share::schema::ObTableSchema *table_schema_;

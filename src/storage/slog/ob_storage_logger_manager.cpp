@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_REDO
 #ifndef _WIN32
 #include <sys/statvfs.h>
+#include "share/rc/ob_module_provider.h"
 #endif
 #include "ob_storage_logger_manager.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -68,7 +69,7 @@ int ObStorageLoggerManager::init(
     log_dir_ = log_dir;
     max_log_file_size_ = max_log_file_size;
     log_file_spec_ = log_file_spec;
-    if (OB_FAIL(server_slogger_.init(*this, OB_SERVER_TENANT_ID))) {
+    if (OB_FAIL(server_slogger_.init(*this, true /*is_server*/))) {
       STORAGE_REDO_LOG(WARN, "fail to init server slogger", K(ret));
     } else {
       is_inited_ = true;
@@ -313,23 +314,19 @@ int ObStorageLoggerManager::prepare_log_items(const int64_t count)
 }
 
 int ObStorageLoggerManager::get_tenant_slog_dir(
-    const uint64_t tenant_id,
     char (&tenant_slog_dir)[common::MAX_PATH_SIZE])
 {
   int ret = OB_SUCCESS;
   int pret = 0;
-  if (is_server_tenant(tenant_id)) {
-    pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/server",
-                    log_dir_);
-  } else if (OB_SYS_TENANT_ID == tenant_id) {
+  if (true) {  // seekdb: single tenant -> /sys
     pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/sys", log_dir_);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_REDO_LOG(ERROR, "unexpected tenant id", K(ret), K(tenant_id));
+    STORAGE_REDO_LOG(ERROR, "unexpected tenant id", K(ret));
   }
   if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;
-    STORAGE_REDO_LOG(ERROR, "construct tenant slog path fail", K(ret), K(tenant_id));
+    STORAGE_REDO_LOG(ERROR, "construct tenant slog path fail", K(ret));
   }
   return ret;
 }
@@ -381,16 +378,13 @@ int ObStorageLoggerManager::get_using_disk_space(int64_t &using_space) const
     ret = OB_ERR_UNEXPECTED;
     STORAGE_REDO_LOG(WARN, "unexpected error, omt is nullptr", K(ret), KP(omt));
   } else {
-    common::ObSEArray<uint64_t, 8> mtl_tenant_ids;
-    omt->get_mtl_tenant_ids(mtl_tenant_ids);
-    for (int64_t i = 0; OB_SUCC(ret) && i < mtl_tenant_ids.count(); i++) {
-      const uint64_t tenant_id = mtl_tenant_ids.at(i);
+    {
       MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-      if (OB_FAIL(guard.switch_to(tenant_id, false))) {
-        STORAGE_REDO_LOG(WARN, "fail to switch tenant", K(ret), K(tenant_id));
+      if (OB_FAIL(guard.switch_to(false))) {
+        STORAGE_REDO_LOG(WARN, "fail to switch tenant", K(ret));
       } else {
         int64_t tenant_using_size = 0;
-        if (OB_FAIL(MTL(ObTenantStorageMetaService*)->get_slogger().get_using_disk_space(tenant_using_size))) {
+        if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->get_slogger().get_using_disk_space(tenant_using_size))) {
           STORAGE_REDO_LOG(WARN, "fail to get the disk space that slog used", K(ret));
         } else {
           using_space += tenant_using_size;

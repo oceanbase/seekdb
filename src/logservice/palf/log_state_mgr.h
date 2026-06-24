@@ -25,7 +25,7 @@
 #include "lib/utility/utility.h"
 #include "lsn.h"
 #include "share/ob_ls_id.h"
-#include "election/interface/election.h"
+#include "election_self.h"
 
 namespace oceanbase
 {

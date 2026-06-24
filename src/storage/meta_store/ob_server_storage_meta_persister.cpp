@@ -32,7 +32,7 @@ int ObServerStorageMetaPersister::init(ObStorageLogger *server_slogger)
 {
   int ret = OB_SUCCESS;
   const int64_t MEM_LIMIT = 512UL << 20;
-  lib::ObMemAttr attr(OB_SERVER_TENANT_ID, "SvrMetaPersist");
+  lib::ObMemAttr attr("SvrMetaPersist");
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -70,48 +70,47 @@ int ObServerStorageMetaPersister::prepare_create_tenant(const ObTenantMeta &meta
   return ret;
 }
 
-int ObServerStorageMetaPersister::commit_create_tenant(
-    const uint64_t tenant_id, const int64_t epoch)
+int ObServerStorageMetaPersister::commit_create_tenant(const int64_t epoch)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else  {
-    if (OB_FAIL(write_commit_create_tenant_slog_(tenant_id))) {
-      LOG_WARN("fail to write commit create tenant slog", K(ret), K(tenant_id));
+  } else if (!is_shared_storage_)  {
+    if (OB_FAIL(write_commit_create_tenant_slog_())) {
+      LOG_WARN("fail to write commit create tenant slog", K(ret));
     }
-
+  } else {
   }
   return ret;
 }
 
-int ObServerStorageMetaPersister::abort_create_tenant(const uint64_t tenant_id, const int64_t epoch)
+int ObServerStorageMetaPersister::abort_create_tenant(const int64_t epoch)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else  {
-    if (OB_FAIL(write_abort_create_tenant_slog_(tenant_id))) {
-      LOG_WARN("fail to write abort create tenant slog", K(ret), K(tenant_id));
+  } else if (!is_shared_storage_)  {
+    if (OB_FAIL(write_abort_create_tenant_slog_())) {
+      LOG_WARN("fail to write abort create tenant slog", K(ret));
     }
-
+  } else {
   }
   return ret;
 }
 
-int ObServerStorageMetaPersister::commit_delete_tenant(const uint64_t tenant_id, const int64_t epoch)
+int ObServerStorageMetaPersister::commit_delete_tenant(const int64_t epoch)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else  {
-    if (OB_FAIL(write_commit_delete_tenant_slog_(tenant_id))) {
-      LOG_WARN("fail to write commit delete tenant slog", K(ret), K(tenant_id));
+  } else if (!is_shared_storage_)  {
+    if (OB_FAIL(write_commit_delete_tenant_slog_())) {
+      LOG_WARN("fail to write commit delete tenant slog", K(ret));
     }
-
+  } else {
   }
   return ret;
 }
@@ -151,14 +150,14 @@ int ObServerStorageMetaPersister::update_tenant_unit(
   return ret;
 }
 
-int ObServerStorageMetaPersister::clear_tenant_log_dir(const uint64_t tenant_id)
+int ObServerStorageMetaPersister::clear_tenant_log_dir()
 {
   int ret = OB_SUCCESS;
   char tenant_clog_dir[MAX_PATH_SIZE] = {0};
   char tenant_slog_dir[MAX_PATH_SIZE] = {0};
   bool exist = true;
 
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_tenant_clog_dir(tenant_id, tenant_clog_dir))) {
+  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_tenant_clog_dir(tenant_clog_dir))) {
     LOG_WARN("fail to get tenant clog dir", K(ret));
   } else if (OB_FAIL(FileDirectoryUtils::is_exists(tenant_clog_dir, exist))) {
     LOG_WARN("fail to check exist", K(ret));
@@ -178,8 +177,8 @@ int ObServerStorageMetaPersister::clear_tenant_log_dir(const uint64_t tenant_id)
     }
   }
 
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_slogger_manager().get_tenant_slog_dir(tenant_id, tenant_slog_dir))) {
+  if (OB_SUCC(ret) && !is_shared_storage_) {
+    if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_slogger_manager().get_tenant_slog_dir(tenant_slog_dir))) {
       LOG_WARN("fail to get tenant slog dir", K(ret));
     } else if (OB_FAIL(FileDirectoryUtils::is_exists(tenant_slog_dir, exist))) {
       LOG_WARN("fail to check exist", K(ret));
@@ -208,13 +207,13 @@ int ObServerStorageMetaPersister::write_prepare_create_tenant_slog_(const ObTena
   return ret;
 }
 
-int ObServerStorageMetaPersister::write_commit_create_tenant_slog_(uint64_t tenant_id)
+int ObServerStorageMetaPersister::write_commit_create_tenant_slog_()
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
   int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT,
       ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_COMMIT);
-  ObCreateTenantCommitLog log_entry(tenant_id);
+  ObCreateTenantCommitLog log_entry;
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
@@ -223,13 +222,13 @@ int ObServerStorageMetaPersister::write_commit_create_tenant_slog_(uint64_t tena
 
   return ret;
 }
-int ObServerStorageMetaPersister::write_abort_create_tenant_slog_(uint64_t tenant_id)
+int ObServerStorageMetaPersister::write_abort_create_tenant_slog_()
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
   int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT,
       ObRedoLogSubType::OB_REDO_LOG_CREATE_TENANT_ABORT);
-  ObCreateTenantAbortLog log_entry(tenant_id);
+  ObCreateTenantAbortLog log_entry;
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
@@ -239,13 +238,13 @@ int ObServerStorageMetaPersister::write_abort_create_tenant_slog_(uint64_t tenan
   return ret;
 }
 
-int ObServerStorageMetaPersister::write_prepare_delete_tenant_slog_(uint64_t tenant_id)
+int ObServerStorageMetaPersister::write_prepare_delete_tenant_slog_()
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
   int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT,
       ObRedoLogSubType::OB_REDO_LOG_DELETE_TENANT_PREPARE);
-  ObDeleteTenantPrepareLog log_entry(tenant_id);
+  ObDeleteTenantPrepareLog log_entry;
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
@@ -255,13 +254,13 @@ int ObServerStorageMetaPersister::write_prepare_delete_tenant_slog_(uint64_t ten
   return ret;
 }
 
-int ObServerStorageMetaPersister::write_commit_delete_tenant_slog_(uint64_t tenant_id)
+int ObServerStorageMetaPersister::write_commit_delete_tenant_slog_()
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
   int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT,
       ObRedoLogSubType::OB_REDO_LOG_DELETE_TENANT_COMMIT);
-  ObDeleteTenantCommitLog log_entry(tenant_id);
+  ObDeleteTenantCommitLog log_entry;
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
@@ -309,6 +308,7 @@ int ObServerStorageMetaPersister::write_update_tenant_unit_slog_(const ObUnitInf
 
   return ret;
 }
+
 
 } // namespace storage
 } // namespace oceanbase

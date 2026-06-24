@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_apply_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -40,20 +41,15 @@ int ObAllVirtualApplyStat::inner_get_next_row(common::ObNewRow *&row)
       }
       return ret;
     };
-    auto func_iterate_tenant = [&func_iter_ls]() -> int
-    {
-      int ret = OB_SUCCESS;
-      logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
-      if (NULL == log_service) {
-        SERVER_LOG(INFO, "tenant has no ObLogService", K(MTL_ID()));
-      } else if (OB_FAIL(log_service->iterate_apply(func_iter_ls))) {
-        SERVER_LOG(WARN, "iter ls failed", K(ret));
-      } else {
-        SERVER_LOG(INFO, "iter ls succ", K(ret));
-      }
-      return ret;
-    };
-    if (OB_FAIL(omt_->operate_each_tenant_for_sys_or_self(func_iterate_tenant))) {
+    logservice::ObLogService *log_service = share::g_mp->log_service();
+    if (NULL == log_service) {
+      SERVER_LOG(INFO, "tenant has no ObLogService");
+    } else if (OB_FAIL(log_service->iterate_apply(func_iter_ls))) {
+      SERVER_LOG(WARN, "iter ls failed", K(ret));
+    } else {
+      SERVER_LOG(INFO, "iter ls succ", K(ret));
+    }
+    if (OB_FAIL(ret)) {
       SERVER_LOG(WARN, "iter tenant failed", K(ret));
     } else {
       scanner_it_ = scanner_.begin();

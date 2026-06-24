@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/blocksstable/ob_data_store_desc.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/blocksstable/ob_imicro_block_reader.h"
 #include "storage/blocksstable/ob_micro_block_reader_helper.h"
 #include "storage/blocksstable/ob_macro_block_bloom_filter.h"
@@ -33,7 +34,7 @@ ObMicroBlockBloomFilter::ObMicroBlockBloomFilter()
       datum_utils_(nullptr),
       hash_set_(),
       row_count_(0),
-      macro_reader_(MTL_ID()),
+      macro_reader_{},
       is_inited_(false)
 {
 }
@@ -71,12 +72,12 @@ int ObMicroBlockBloomFilter::init(const ObDataStoreDesc &data_store_desc)
                          data_store_desc.get_row_column_count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to init micro block bloom filter, invalid data store desc", K(ret), K(data_store_desc));
-  } else if (OB_FAIL(hash_set_.create(1024, "MicroBFHashset", "MicroBFHashset", MTL_ID()))) {
+  } else if (OB_FAIL(hash_set_.create(1024, "MicroBFHashset", "MicroBFHashset"))) {
     LOG_WARN("fail to create hash set", K(ret));
   } else {
     if (data_store_desc.is_cg()) { // Fetch datum utils for rowkey murmurhash.
       const ObITableReadInfo *index_read_info;
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
         LOG_WARN("fail to get index read info for cg sstable", K(ret), K(data_store_desc));
       } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
         ret = OB_ERR_UNEXPECTED;
@@ -357,7 +358,7 @@ int ObMacroBlockBloomFilter::alloc_bf(const ObDataStoreDesc &data_store_desc, co
   } else {
     if (data_store_desc.is_cg()) { // Fetch datum utils for rowkey murmurhash.
       const ObITableReadInfo *index_read_info;
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
         LOG_WARN("fail to get index read info for cg sstable", K(ret), K(data_store_desc));
       } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
         ret = OB_ERR_UNEXPECTED;

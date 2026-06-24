@@ -32,8 +32,7 @@ class ObDBMSSchedService : public ObTenantThreadHelper,
 {
 public:
   ObDBMSSchedService()
-      : tenant_id_(OB_INVALID_TENANT_ID),
-        job_master_()
+      : job_master_()
   {}
   virtual ~ObDBMSSchedService()
   {
@@ -78,7 +77,6 @@ public:
   virtual int resume_leader() override;
 
 private:
-  uint64_t tenant_id_;
   dbms_scheduler::ObDBMSSchedJobMaster job_master_;
 };
 }  // namespace rootserver

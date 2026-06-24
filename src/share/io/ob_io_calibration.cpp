@@ -421,7 +421,7 @@ void ObIOBenchRunner::run1()
     LOG_WARN("block not ready", K(ret), K_(block_count));
   } else {
     ObIOInfo io_info;
-    io_info.tenant_id_ = OB_SERVER_TENANT_ID;
+    
     io_info.size_ = load_.size_;
     io_info.buf_ = ObIOMode::READ == load_.mode_ ? nullptr : write_buf_;
     io_info.user_data_buf_ = ObIOMode::READ == load_.mode_ ? read_buf_ : nullptr;

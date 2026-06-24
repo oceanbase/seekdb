@@ -155,7 +155,6 @@ int ObCreateMaterializedViewHelper::create_schemas_for_mv_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mv additional info is NULL", KR(ret));
     } else if (OB_FAIL(ObMViewSchedJobUtils::add_mview_info_and_refresh_job(get_trans_(),
-                                                                     tenant_id_,
                                                                      new_view_schema_->get_table_id(),
                                                                      database_schema_->get_database_name_str(),
                                                                      new_view_schema_->get_table_name_str(),
@@ -163,10 +162,10 @@ int ObCreateMaterializedViewHelper::create_schemas_for_mv_()
                                                                      new_view_schema_->get_schema_version(),
                                                                      mview_info))) {
       LOG_WARN("fail to start mview refresh job", KR(ret));
-    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, tenant_data_version))) {
-      LOG_WARN("fail to get min data version", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get tenant schema guard", KR(ret));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
+      LOG_WARN("fail to get min data version", KR(ret));
     } else if (OB_FAIL(ddl_service_->start_mview_complete_refresh_task(get_trans_(),
                                                                        schema_guard,
                                                                        *new_view_schema_,

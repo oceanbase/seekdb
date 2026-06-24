@@ -194,7 +194,7 @@ public:
     K_(is_switching));
 
 private:
-  int check_leader_(const uint64_t tenant_id, bool &is_leader);
+  int check_leader_(bool &is_leader);
   int fetch_next_node_(const ObGAISNextAutoIncValReq &request, ObAutoIncCacheNode &node);
   int read_value_from_inner_table_(const share::AutoincKey &key,
                                    const int64_t &inner_autoinc_version,

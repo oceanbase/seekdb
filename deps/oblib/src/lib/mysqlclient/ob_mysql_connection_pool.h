@@ -47,44 +47,8 @@ enum MySQLConnectionPoolType
 };
 // Tenant level Server Connection Pool
 // hold pointer list of server_conn_pool and provide ServerPool by round-robin
-struct TenantMapKey
-{
-  uint64_t tenant_id_;
-
-  TenantMapKey() : tenant_id_(oceanbase::common::OB_INVALID_TENANT_ID) {}
-  TenantMapKey(const uint64_t tenant_id) : tenant_id_(tenant_id) {}
-  ~TenantMapKey() { reset(); }
-  inline void reset() { tenant_id_ = oceanbase::common::OB_INVALID_TENANT_ID; }
-
-  inline int64_t hash() const
-  {
-    return static_cast<int64_t>(tenant_id_);
-  }
-  inline int hash(uint64_t &hash_val) const
-  {
-    hash_val = hash();
-    return OB_SUCCESS;
-  }
-
-  inline int compare(const TenantMapKey &other) const {
-    int cmp_ret = 0;
-
-    if (tenant_id_ > other.tenant_id_) {
-      cmp_ret = 1;
-    } else if (tenant_id_ < other.tenant_id_) {
-      cmp_ret = -1;
-    } else {
-      cmp_ret = 0;
-    }
-
-    return cmp_ret;
-  }
-
-  TO_STRING_KV(K_(tenant_id));
-};
-
 typedef common::ObSEArray<ObServerConnectionPool *, 16> TenantServerConnArray;
-class ObTenantServerConnectionPool : public LinkHashValue<TenantMapKey>
+class ObTenantServerConnectionPool
 {
 public:
   ObTenantServerConnectionPool();
@@ -100,7 +64,6 @@ private:
 };
 
 typedef common::ObList<ObServerConnectionPool *, common::ObArenaAllocator> ServerList;
-typedef common::ObLinkHashMap<TenantMapKey, ObTenantServerConnectionPool> TenantServerConnMap;
 class ObMySQLConnectionPool : public common::ObTimerTask, public ObISQLConnectionPool
 {
 public:
@@ -141,7 +104,7 @@ public:
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size);
 
-  virtual int acquire(const uint64_t tenant_id, ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) override;
+  virtual int acquire(ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) override;
   virtual int release(ObISQLConnection *conn, const bool success) override;
 
   virtual int on_client_inactive(ObISQLClient *client_addr) override
@@ -165,40 +128,23 @@ protected:
   virtual void runTimerTask();
   int create_server_connection_pool(const common::ObAddr &server);
 
-  virtual int acquire(const uint64_t tenant_id, ObMySQLConnection *&connection);
-  int do_acquire(const uint64_t tenant_id, ObMySQLConnection *&connection);
+  virtual int acquire(ObMySQLConnection *&connection);
+  int do_acquire(ObMySQLConnection *&connection);
 
 
 protected:
   int try_connect(ObMySQLConnection *connection);
   int release(ObMySQLConnection *connection, const bool succ);
-  int get_pool(const uint64_t tenant_id, ObServerConnectionPool *&pool);
-  int get_tenant_server_pool(const uint64_t tenant_id, ObTenantServerConnectionPool *&tenant_server_pool);
+  int get_pool(ObServerConnectionPool *&pool);
+  int get_tenant_server_pool(ObTenantServerConnectionPool *&tenant_server_pool);
   int purge_connection_pool();
   void mark_all_server_connection_gone();
   int renew_server_connection_pool(common::ObAddr &server);
   int renew_tenant_server_pool_map();
 private:
-  struct TenantServerConnPoolPurger
-  {
-    TenantServerConnPoolPurger(
-        const ObIArray<uint64_t> &tenant_array,
-        oceanbase::common::ObArenaAllocator &allocator)
-      : tenant_array_(tenant_array),  purge_count_(0), allocator_(allocator) {}
-    ~TenantServerConnPoolPurger() { purge_count_ = 0; }
-
-    const ObIArray<uint64_t> &tenant_array_;
-    int64_t purge_count_;
-    oceanbase::common::ObArenaAllocator &allocator_; // use to free ObTenantServerConnectionPool
-
-    bool operator()(const TenantMapKey &tenant_key, const ObTenantServerConnectionPool *tenant_server_pool);
-    // tenant not serve if tenant_arr is not empty and tenant_id not in tenant_array_.
-    bool is_tenant_not_serve_(const uint64_t tenant_id) const;
-  };
 private:
-  int renew_tenant_server_pool_(const uint64_t tenant_id);
+  int renew_tenant_server_pool_();
   int get_server_pool_(const ObAddr &addr, ObServerConnectionPool *&pool);
-  int purge_tenant_server_pool_map_(const ObIArray<uint64_t> &tenant_array);
 protected:
   static const int MAX_SERVER_GONE_INTERVAL = 1000 * 1000 * 1; // 1 sec
 
@@ -221,13 +167,10 @@ protected:
   ObConnPoolConfigParam config_;
   mutable obsys::ObRWLock get_lock_;
   // ObMySQLConnectionPool::do_acquire use obsys::ObRLockGuard lock(get_lock_)
-  // ObMySQLConnectionPool::create_dblink_pool need obsys::ObWLockGuard lock(get_lock_)
-  // do_acquire call create_dblink_pool
   // will leading to dead lock
-  // need one more lock for create_dblink_pool
   common::ObArenaAllocator allocator_;
   ServerList server_list_;
-  TenantServerConnMap tenant_server_pool_map_;
+  ObTenantServerConnectionPool tenant_server_pool_;
   common::ObCachedAllocator<ObServerConnectionPool> server_pool_;
   bool check_read_consistency_;
 };

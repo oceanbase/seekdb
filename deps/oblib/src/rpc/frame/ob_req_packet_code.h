@@ -50,18 +50,6 @@ enum ObReqPacketCode : int32_t
 {
   OB_INVALID_RPC_CODE = 0,
 
-  // diagnostics placeholder (libeasy mem pool labels)
-  OB_TEST2_PCODE = 0x002,
-
-  // DDL parallel queue routing tags (ob_srv_deliver dead-path classifier)
-  OB_TRUNCATE_TABLE_V2          = 0x225,
-  OB_PARALLEL_CREATE_TABLE      = 0x276,
-  OB_PARALLEL_CREATE_INDEX      = 0x278,
-  OB_PARALLEL_DROP_TABLE        = 0x27A,
-  OB_PARALLEL_SET_COMMENT       = 0x277,
-  OB_PARALLEL_UPDATE_INDEX_STATUS = 0x279,
-  OB_PARALLEL_HTABLE_DDL        = 0x27C,
-
   // CDC / logfetcher type-binding tags
   OB_LS_FETCH_MISSING_LOG  = 0x851,
   OB_LS_FETCH_LOG2         = 0x853,

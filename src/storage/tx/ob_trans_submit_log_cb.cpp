@@ -15,6 +15,7 @@
  */
 
 #include "ob_trans_submit_log_cb.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_trans_part_ctx.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
@@ -107,7 +108,7 @@ void ObTxLogCb::reset_tx_op_array()
 void ObTxLogCb::reset_undo_node()
 {
   if (OB_NOT_NULL(undo_node_)) {
-    MTL(share::ObSharedMemAllocMgr*)->tx_data_allocator().free(undo_node_);
+    share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator().free(undo_node_);
     undo_node_ = NULL;
   }
 }

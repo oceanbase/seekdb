@@ -32,8 +32,8 @@ int ObSysVariableSqlService::replace_sys_variable(
     const common::ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = sys_variable_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (!sys_variable_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sys variable schema", K(sys_variable_schema), K(ret));
@@ -61,7 +61,7 @@ int ObSysVariableSqlService::replace_sys_variable(
       ObSqlString sql;
       if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_SYS_VARIABLE_TNAME, sql))) {
         LOG_WARN("splice sql failed", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute sql failed", K(sql), K(ret));
       }
     }
@@ -70,7 +70,7 @@ int ObSysVariableSqlService::replace_sys_variable(
       ObSqlString sql;
       if (OB_FAIL(dml_for_history.splice_batch_insert_sql(OB_ALL_SYS_VARIABLE_HISTORY_TNAME, sql))) {
         LOG_WARN("splice sql failed", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute sql failed", K(sql), K(ret));
       }
     }
@@ -78,7 +78,7 @@ int ObSysVariableSqlService::replace_sys_variable(
     if (OB_SUCC(ret) && OB_DDL_MAX_OP != operation_type) {
       // log operation
       ObSchemaOperation op;
-      op.tenant_id_ = sys_variable_schema.get_tenant_id();
+      
       op.op_type_ = operation_type;
       op.schema_version_ = sys_variable_schema.get_schema_version();
       op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
@@ -96,8 +96,8 @@ int ObSysVariableSqlService::replace_system_variable(
     ObISQLClient &sql_client)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = sysvar_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (!sysvar_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sysvar_schema is invalid", K(sysvar_schema), K(ret));
@@ -106,7 +106,7 @@ int ObSysVariableSqlService::replace_system_variable(
     ObDMLSqlSplicer dml;
     // insert into __all_sys_variable
     if (OB_SUCC(ret)) {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       bool is_history = false;
       if (OB_FAIL(gen_sys_variable_dml(dml, sysvar_schema, is_history))) {
         LOG_WARN("add column failed", K(ret));
@@ -122,7 +122,7 @@ int ObSysVariableSqlService::replace_system_variable(
 
     // insert into __all_sys_variable_history
     if (OB_SUCC(ret)) {
-      ObDMLExecHelper exec(sql_client, exec_tenant_id);
+      ObDMLExecHelper exec(sql_client);
       bool is_history = true;
       dml.reset();
       if (OB_FAIL(gen_sys_variable_dml(dml, sysvar_schema, is_history))) {
@@ -141,8 +141,8 @@ int ObSysVariableSqlService::replace_system_variable(
 int ObSysVariableSqlService::gen_sys_variable_dml(ObDMLSqlSplicer &dml, const ObSysVarSchema &sysvar_schema, bool is_history)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = sysvar_schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
 #define FORMAT_STR(str) (str.empty() ? ObString("") : str)
   if (OB_FAIL(dml.add_pk_column("name", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_name()))))
             || OB_FAIL(dml.add_column("data_type", sysvar_schema.get_data_type()))

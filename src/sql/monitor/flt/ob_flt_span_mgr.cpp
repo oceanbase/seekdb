@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_flt_span_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/rc/ob_rc.h"
 #include "observer/ob_server.h"
 
@@ -27,15 +28,15 @@ using namespace oceanbase::share::schema;
 namespace sql
 {
   ObFLTSpanMgr* get_flt_span_manager() {
-    return MTL(ObFLTSpanMgr*);
+    return share::g_mp->flt_span_mgr();
   }
 
-  int ObFLTSpanMgr::init(uint64_t tenant_id, const int64_t max_mem_size, const int64_t queue_size)
+  int ObFLTSpanMgr::init(const int64_t max_mem_size, const int64_t queue_size)
   {
     int ret = OB_SUCCESS;
     if (inited_) {
       ret = OB_INIT_TWICE;
-    } else if (OB_FAIL(queue_.init("SqlFltSpanRec", queue_size, tenant_id))) {
+    } else if (OB_FAIL(queue_.init("SqlFltSpanRec", queue_size))) {
       SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
     } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReqMemEvict, tg_id_))) {
       SERVER_LOG(WARN, "create failed", K(ret));
@@ -43,12 +44,10 @@ namespace sql
       SERVER_LOG(WARN, "init timer fail", K(ret));
     } else if (OB_FAIL(allocator_.init(FLT_SPAN_PAGE_SIZE,
                                       "SqlFltSpanRec",
-                                       tenant_id,
                                        INT64_MAX))) {
        SERVER_LOG(WARN, "failed to init allocator", K(ret));
     } else {
       mem_limit_ = max_mem_size;
-      tenant_id_ = tenant_id;
       inited_ = true;
       destroyed_ = false;
     }
@@ -73,10 +72,10 @@ namespace sql
   int ObFLTSpanMgr::mtl_init(ObFLTSpanMgr* &span_mgr)
   {
     int ret = OB_SUCCESS;
-    uint64_t tenant_id = lib::current_resource_owner_id();
-    int64_t mem_limit = lib::get_tenant_memory_limit(tenant_id);
+    
+    int64_t mem_limit = lib::get_tenant_memory_limit();
     int64_t queue_size = MAX_QUEUE_SIZE;
-    if (OB_FAIL(span_mgr->init(tenant_id, mem_limit, queue_size))) {
+    if (OB_FAIL(span_mgr->init(mem_limit, queue_size))) {
       LOG_WARN("failed to init request manager", K(ret));
     } else {
       // do nothing

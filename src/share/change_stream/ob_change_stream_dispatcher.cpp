@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/utility/serialization.h"
@@ -103,7 +104,7 @@ int ObCSDispatcher::init_refresh_scn_()
   } else if (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(MTL_ID(), schema_version))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(schema_version))) {
     LOG_WARN("get schema_version failed", KR(ret));
   } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_SCHEMA_EAGAIN;
@@ -111,7 +112,7 @@ int ObCSDispatcher::init_refresh_scn_()
   } else {
     SCN current_refresh_scn;
     if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-            *GCTX.sql_proxy_, MTL_ID(), false /* for_update */, current_refresh_scn))) {
+            *GCTX.sql_proxy_, false /* for_update */, current_refresh_scn))) {
       LOG_WARN("CSDispatcher: failed to load change_stream_refresh_scn", KR(ret));
     } else {
       const int64_t loaded_refresh_scn = static_cast<int64_t>(current_refresh_scn.get_val_for_gts());
@@ -427,7 +428,7 @@ int ObCSDispatcher::do_dispatch_()
     return OB_SUCCESS;
   }
 
-  ObChangeStreamMgr *mgr = MTL(ObChangeStreamMgr *);
+  ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();
   int64_t executor_count = mgr->get_worker().get_executor_count();
   ObCSExecCtx *exec_ctx = nullptr;
   bool batch_in_flight = false;  // true once any subtask is pushed to worker
@@ -436,7 +437,7 @@ int ObCSDispatcher::do_dispatch_()
   if (executor_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("executor_count unexpected", KR(ret), K(executor_count));
-  } else if (OB_ISNULL(exec_ctx = OB_NEW(ObCSExecCtx, common::ObMemAttr(MTL_ID(), "CSExecCtx")))) {
+  } else if (OB_ISNULL(exec_ctx = OB_NEW(ObCSExecCtx, common::ObMemAttr("CSExecCtx")))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc mem failed", KR(ret));
   } else {
@@ -480,7 +481,7 @@ int ObCSDispatcher::do_dispatch_()
         struct AlwaysTrue { bool operator()(int64_t, ObCSTxInfo *) const { return true; } } cond;
         (void)tx_ring_.pop(cond, pop_tx, popped, false);
         if (popped && OB_NOT_NULL(pop_tx)) {
-          MTL(ObChangeStreamMgr *)->get_fetcher().release_committed_tx(pop_tx->tx_id_);
+          share::g_mp->change_stream_mgr()->get_fetcher().release_committed_tx(pop_tx->tx_id_);
         }
         dispatch_sn_++;
         if (exec_ctx->tx_list_.count() == 0) {
@@ -530,10 +531,10 @@ int ObCSDispatcher::do_dispatch_()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
     LOG_WARN("init plugins failed", KR(ret));
-  } else if (OB_ISNULL(schema_service = MTL(ObTenantSchemaService *)->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_, MTL_ID()))) {
+  } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {
     LOG_WARN("trans start failed", KR(ret));
   } else {
     trans_started = true;
@@ -684,7 +685,7 @@ void ObCSDispatcher::release_batch(ObCSExecCtx *ctx)
     LOG_ERROR("ObCSDispatcher: release_batch ctx is null", KR(ret), KP(ctx));
     return;
   }
-  ObCSFetcher &fetcher = MTL(ObChangeStreamMgr *)->get_fetcher();
+  ObCSFetcher &fetcher = share::g_mp->change_stream_mgr()->get_fetcher();
 
   struct AlwaysTrue {
     bool operator()(int64_t /*sn*/, ObCSTxInfo *) const { return true; }

@@ -30,27 +30,26 @@ using namespace obcall;
 namespace observer
 {
 
-int ObTableLoadRedefTable::check_table_consistency(const uint64_t tenant_id,
-                                                   const uint64_t table_id,
+int ObTableLoadRedefTable::check_table_consistency(const uint64_t table_id,
                                                    const uint64_t dest_table_id,
                                                    const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == table_id ||
+  if (OB_UNLIKELY(false || OB_INVALID_ID == table_id ||
                   OB_INVALID_ID == dest_table_id || OB_INVALID_VERSION == schema_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid agrs", KR(ret), K(tenant_id), K(table_id), K(dest_table_id),
+    LOG_WARN("invalid agrs", KR(ret), K(table_id), K(dest_table_id),
              K(schema_version));
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = nullptr;
     const ObTableSchema *dest_table_schema = nullptr;
-    if (OB_FAIL(ObTableLoadSchema::get_schema_guard(tenant_id, schema_guard, schema_version))) {
-      LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id), K(schema_version));
-    } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, tenant_id, table_id, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
-    } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, tenant_id, dest_table_id, dest_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(dest_table_id));
+    if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard, schema_version))) {
+      LOG_WARN("fail to get schema guard", KR(ret), K(schema_version));
+    } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, table_id, table_schema))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
+    } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, dest_table_id, dest_table_schema))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(dest_table_id));
     } else {
       ObArray<ObColDesc> column_descs;
       ObArray<ObColDesc> dest_column_descs;
@@ -100,8 +99,7 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
       res.task_id_ = plan->get_ddl_task_id();
       share::ObDDLTaskStatus status = share::ObDDLTaskStatus::PREPARE;
       bool unused_is_offline_index_rebuild = false;
-      if (OB_FAIL(ObDDLUtil::get_data_information(arg.tenant_id_,
-          res.task_id_,
+      if (OB_FAIL(ObDDLUtil::get_data_information(res.task_id_,
           res.data_format_version_,
           res.snapshot_version_,
           status,
@@ -117,12 +115,12 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
     ObCreateHiddenTableArg create_table_arg;
     ObCreateHiddenTableRes create_table_res;
     DEBUG_SYNC(BEFORE_CREATE_HIDDEN_TABLE_IN_LOAD);
-    uint64_t tenant_id = arg.tenant_id_;
+    
     const bool need_reorder_column_id = false;
     const share::ObDDLType ddl_type = arg.is_load_data_ ? share::DDL_DIRECT_LOAD : share::DDL_DIRECT_LOAD_INSERT;
     int64_t foreign_key_checks = 1;
     session_info.get_foreign_key_checks(foreign_key_checks);
-    if (OB_FAIL(create_table_arg.init(tenant_id, tenant_id, tenant_id, arg.table_id_,
+    if (OB_FAIL(create_table_arg.init(1UL, arg.table_id_,
                                       THIS_WORKER.get_group_id(), session_info.get_sessid_for_table(),
                                       arg.parallelism_, ddl_type, session_info.get_sql_mode(),
                                       session_info.get_tz_info_wrap().get_tz_info_offset(),
@@ -151,14 +149,14 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
     THIS_WORKER.set_timeout_ts(origin_timeout_ts);
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(check_table_consistency(arg.tenant_id_, arg.table_id_, res.dest_table_id_, res.schema_version_))) {
+    if (OB_FAIL(check_table_consistency( arg.table_id_, res.dest_table_id_, res.schema_version_))) {
       LOG_WARN("fail to check table consistenc", KR(ret), K(arg), K(res));
     }
   }
   if (OB_FAIL(ret) && res.task_id_ > 0) {
     int tmp_ret = OB_SUCCESS;
     ObTableLoadRedefTableAbortArg abort_arg;
-    abort_arg.tenant_id_ = arg.tenant_id_;
+    
     abort_arg.task_id_ = res.task_id_;
     if (OB_TMP_FAIL(abort(abort_arg, session_info))) {
       LOG_WARN("fail to abort hidden table", KR(tmp_ret), K(abort_arg));
@@ -182,7 +180,7 @@ int ObTableLoadRedefTable::finish(const ObTableLoadRedefTableFinishArg &arg,
     const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
     ObCopyTableDependentsArg copy_table_dependents_arg;
     copy_table_dependents_arg.task_id_ = arg.task_id_;
-    copy_table_dependents_arg.tenant_id_ = arg.tenant_id_;
+    
     copy_table_dependents_arg.copy_indexes_ = true;
     copy_table_dependents_arg.copy_constraints_ = true;
     copy_table_dependents_arg.copy_triggers_ = false;
@@ -194,13 +192,13 @@ int ObTableLoadRedefTable::finish(const ObTableLoadRedefTableFinishArg &arg,
       LOG_INFO("succeed to copy table dependents", K(copy_table_dependents_arg));
       ObFinishRedefTableArg finish_redef_table_arg;
       finish_redef_table_arg.task_id_ = arg.task_id_;
-      finish_redef_table_arg.tenant_id_ = arg.tenant_id_;
+      
 
       ObAddr rs_addr;
       ObDDLBuildSingleReplicaResponseArg build_single_replica_response_arg;
       build_single_replica_response_arg.task_id_             = arg.task_id_;
-      build_single_replica_response_arg.tenant_id_           = arg.tenant_id_;
-      build_single_replica_response_arg.dest_tenant_id_      = arg.tenant_id_;
+      
+      
       build_single_replica_response_arg.source_table_id_     = arg.table_id_;
       build_single_replica_response_arg.dest_schema_id_      = arg.dest_table_id_;
       build_single_replica_response_arg.schema_version_      = arg.schema_version_;
@@ -240,7 +238,7 @@ int ObTableLoadRedefTable::abort(const ObTableLoadRedefTableAbortArg &arg,
     const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
     ObAbortRedefTableArg abort_redef_table_arg;
     abort_redef_table_arg.task_id_ = arg.task_id_;
-    abort_redef_table_arg.tenant_id_ = arg.tenant_id_;
+    
     if (OB_FAIL(ObDDLServerClient::abort_redef_table(abort_redef_table_arg, &session_info))) {
       LOG_WARN("failed to abort redef table", KR(ret), K(abort_redef_table_arg));
     } else {

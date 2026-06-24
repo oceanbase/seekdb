@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/dtl/ob_dtl_channel_group.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/ob_px_rpc_processor.h"
 #include "ob_px_coord_op.h"
@@ -110,19 +111,16 @@ int ObDfoSchedulerBasic::on_sqc_threads_inited(ObExecContext &ctx, ObDfo &dfo) c
 int ObDfoSchedulerBasic::build_data_mn_xchg_ch(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_ID;
   bool is_slave_mapping = (parent.is_in_slave_mapping() && child.is_out_slave_mapping());
   ObPQDistributeMethod::Type child_dist_method = child.get_dist_method();
-  if (OB_FAIL(get_tenant_id(ctx, tenant_id))) {
-    LOG_WARN("failed to get tenant id");
-  } else if (is_slave_mapping) {
+  if (is_slave_mapping) {
     // build channel for slave mapping scenes
-    if (OB_FAIL(ObSlaveMapUtil::build_slave_mapping_mn_ch_map(ctx, child, parent, tenant_id))) {
+    if (OB_FAIL(ObSlaveMapUtil::build_slave_mapping_mn_ch_map(ctx, child, parent))) {
       LOG_WARN("failed to build slave mapping mn channel map");
     }
   } else if (IS_PKEY_DIST_METHOD(child_dist_method)) {
     // build channel for pkey related scenes, e.g. pdml && pkey
-    if (OB_FAIL(ObSlaveMapUtil::build_pkey_mn_ch_map(ctx, child, parent, tenant_id))) {
+    if (OB_FAIL(ObSlaveMapUtil::build_pkey_mn_ch_map(ctx, child, parent))) {
       LOG_WARN("failed to build partition mn channel map");
     }
   } else {
@@ -131,8 +129,7 @@ int ObDfoSchedulerBasic::build_data_mn_xchg_ch(ObExecContext &ctx, ObDfo &child,
     ObPxChTotalInfos *transmit_mn_ch_info = &child.get_dfo_ch_total_infos();
     if (OB_FAIL(ObDfo::check_dfo_pair(parent, child, child_dfo_idx))) {
       LOG_WARN("failed to check dfo pair", K(ret));
-    } else if (OB_FAIL(ObSlaveMapUtil::build_mn_channel(transmit_mn_ch_info, child, parent,
-                                                        tenant_id))) {
+    } else if (OB_FAIL(ObSlaveMapUtil::build_mn_channel(transmit_mn_ch_info, child, parent))) {
       LOG_WARN("failed to build mn channel");
     }
   }
@@ -203,18 +200,6 @@ int ObDfoSchedulerBasic::set_temp_table_ctx_for_sqc(ObExecContext &ctx,
   return ret;
 }
 
-int ObDfoSchedulerBasic::get_tenant_id(ObExecContext &ctx, uint64_t &tenant_id) const
-{
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = NULL;
-  if (OB_ISNULL(session = ctx.get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
-  } else {
-    tenant_id = session->get_effective_tenant_id();
-  }
-  return ret;
-}
 
 int ObDfoSchedulerBasic::dispatch_transmit_channel_info_via_sqc(ObExecContext &ctx,
                                                                         ObDfo &child,
@@ -530,8 +515,7 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
     ObDtlChannelInfo &sqc_ci = sqc.get_sqc_channel_info();
     const ObAddr &sqc_exec_addr = sqc.get_exec_addr();
     const ObAddr &qc_exec_addr = sqc.get_qc_addr();
-    if (OB_FAIL(ObDtlChannelGroup::make_channel(session->get_effective_tenant_id(),
-                                                sqc_exec_addr, /* producer exec addr */
+    if (OB_FAIL(ObDtlChannelGroup::make_channel(sqc_exec_addr, /* producer exec addr */
                                                 qc_exec_addr, /* consumer exec addr */
                                                 sqc_ci /* producer */,
                                                 qc_ci /* consumer */))) {
@@ -617,7 +601,7 @@ int ObSerialDfoScheduler::clean_dtl_interm_result_local(ObPxCleanDtlIntermResArg
           key.channel_id_ = ch_set.get_ch_info_set().at(ch_idx).chid_;
           for (int64_t batch_id = 0; batch_id < batch_size && OB_SUCC(ret); batch_id++) {
             key.batch_id_= batch_id;
-            if (OB_FAIL(MTL(dtl::ObDTLIntermResultManager*)->erase_interm_result_info(key))) {
+            if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key))) {
               if (OB_HASH_NOT_EXIST == ret) {
                 ret = OB_SUCCESS;
                 break;
@@ -637,18 +621,20 @@ bool ObSerialDfoScheduler::CleanDtlIntermRes::operator()(const ObAddr &attr,
                                                          ObPxCleanDtlIntermResArgs *arg)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = tenant_id_;
-  // serialize-arg overload deep-copies *arg, so *arg can be destructed below.
-  (void)ex_rpc::async_call<void>(*arg,
-      [tenant_id](ObPxCleanDtlIntermResArgs &copied_arg) -> int {
-        int ret = OB_SUCCESS;
-        MTL_SWITCH(tenant_id) {
-          if (OB_FAIL(ObSerialDfoScheduler::clean_dtl_interm_result_local(copied_arg))) {
-            LOG_WARN("clean dtl interm result failed", K(ret), K(copied_arg));
-          }
-        }
-        return ret;
-      });
+
+  // single-replica: target is always self; dispatch in-process synchronously.
+  // arg is owned by the query exec_ctx allocator and is destructed here just
+  // like the old NULL-cb rpc path, so a synchronous local erase avoids any
+  // use-after-free that a deferred async run could cause.
+  ex_rpc::sync_call([&]() {
+    int ret = OB_SUCCESS;
+    MOD_SCOPE {
+      if (OB_FAIL(ObSerialDfoScheduler::clean_dtl_interm_result_local(*arg))) {
+        LOG_WARN("clean dtl interm result failed", K(ret), KPC(arg));
+      }
+    }
+    return ret;
+  });
   LOG_TRACE("clean dtl res map", K(attr), KPC(arg));
   arg->~ObPxCleanDtlIntermResArgs();
   arg = NULL;
@@ -693,7 +679,7 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
           }
           if (OB_LIKELY(msg_idx < sqc.get_serial_receive_channels().count())) {
             ObPxCleanDtlIntermResArgs *arg = NULL;
-            if (!map.is_inited() && OB_FAIL(map.init("CleanDtlRes", OB_SYS_TENANT_ID))) {
+            if (!map.is_inited() && OB_FAIL(map.init("CleanDtlRes"))) {
               LOG_WARN("init map failed", K(ret));
             } else if (OB_FAIL(map.get(sqc.get_exec_addr(), arg))) {
               if (OB_ENTRY_NOT_EXIST == ret) {
@@ -728,8 +714,8 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
     if (OB_UNLIKELY(map.count() != 0)) {
       LOG_TRACE("clean dtl res map", K(map.count()));
       ObSQLSessionInfo *session = exec_ctx.get_my_session();
-      uint64_t tenant_id = OB_NOT_NULL(session) ? session->get_effective_tenant_id() : OB_SYS_TENANT_ID;
-      CleanDtlIntermRes clean_dtl_interm_res(coord_info_, tenant_id);
+      
+      CleanDtlIntermRes clean_dtl_interm_res(coord_info_);
       if (OB_FAIL(map.for_each(clean_dtl_interm_res))) {
         LOG_WARN("map for each clean_dtl_interm_res fail", KR(ret));
       }
@@ -758,8 +744,7 @@ int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo)
     ObDtlChannelInfo &sqc_ci = sqc.get_sqc_channel_info();
     const ObAddr &sqc_exec_addr = sqc.get_exec_addr();
     const ObAddr &qc_exec_addr = sqc.get_qc_addr();
-    if (OB_FAIL(ObDtlChannelGroup::make_channel(session->get_effective_tenant_id(),
-                                                sqc_exec_addr, /* producer exec addr */
+    if (OB_FAIL(ObDtlChannelGroup::make_channel(sqc_exec_addr, /* producer exec addr */
                                                 qc_exec_addr, /* consumer exec addr */
                                                 sqc_ci /* producer */,
                                                 qc_ci /* consumer */))) {
@@ -1452,7 +1437,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
                                                                          parent))) {
           LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
         } else { /*do nohting.*/ }
-      } else if (parent.is_root_dfo() || parent.has_into_odps()) {
+      } else if (parent.is_root_dfo()) {
         // QC/local dfo, directly execute on the local machine and thread, no need to calculate execution location
         if (OB_FAIL(ObPXServerAddrUtil::alloc_by_local_distribution(exec_ctx,
                                                                     parent))) {
@@ -1578,8 +1563,7 @@ int ObPxNodePool::init(ObExecContext &exec_ctx)
           set_px_node_policy(phy_plan->get_px_node_policy());
         } else {
           ObPxNodePolicy tenant_config_px_node_policy = ObPxNodePolicy::INVALID;
-          if (OB_FAIL(get_tenant_config_px_node_policy(MTL_ID(),
-                              tenant_config_px_node_policy))) {
+          if (OB_FAIL(get_tenant_config_px_node_policy(tenant_config_px_node_policy))) {
             LOG_WARN("Failed to get tenant config px_node_policy", K(ret));
           } else {
             set_px_node_policy(tenant_config_px_node_policy);
@@ -1643,11 +1627,10 @@ int ObPxNodePool::init(ObExecContext &exec_ctx)
   return ret;
 }
 
-int ObPxNodePool::get_tenant_config_px_node_policy(int64_t tenant_id,
-                                          ObPxNodePolicy &px_node_policy)
+int ObPxNodePool::get_tenant_config_px_node_policy(ObPxNodePolicy &px_node_policy)
 {
   int ret = OB_SUCCESS;
-  oceanbase::omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  oceanbase::omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant config is invalid", K(ret));

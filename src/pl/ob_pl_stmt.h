@@ -41,14 +41,6 @@ static const int64_t OB_MAX_MYSQL_PL_IDENT_LENGTH = 64;
 static const ObString PL_IMPLICIT_SAVEPOINT = "PL/SQL@IMPLICIT_SAVEPOINT";
 static const ObString PL_INNER_EXPR_SAVEPOINT = "PL/SQL@EXPR_SAVEPOINT";
 
-OB_INLINE uint64_t get_tenant_id_by_object_id(uint64_t object_id)
-{
-  object_id = object_id & ~(OB_MOCK_TRIGGER_PACKAGE_ID_MASK);
-  object_id = object_id & ~(OB_MOCK_OBJECT_PACAKGE_ID_MASK);
-  object_id = object_id & ~(OB_MOCK_PACKAGE_BODY_ID_MASK);
-  object_id = object_id & ~(OB_MOCK_DBLINK_UDT_ID_MASK);
-  return is_inner_pl_object_id(object_id) ? OB_SYS_TENANT_ID : MTL_ID();
-}
 
 enum ObBlockNSScope {
   PL_NS_PACKAGE_SPEC,
@@ -468,7 +460,6 @@ public:
     row_desc_(NULL),
     rowid_table_id_(OB_INVALID_ID),
     ps_sql_(),
-    is_link_table_(false),
     is_skip_locked_(false) {}
   virtual ~ObPLSql() {}
 
@@ -497,8 +488,6 @@ public:
   inline uint64_t get_rowid_table_id() const { return rowid_table_id_; }
   inline void set_rowid_table_id(uint64 table_id) { rowid_table_id_ = table_id; }
 
-  inline void set_link_table(bool is_link_table) { is_link_table_ = is_link_table; }
-  inline bool has_link_table() const { return is_link_table_; }
 
   inline void set_skip_locked(bool is_skip_locked) { is_skip_locked_ = is_skip_locked; }
   inline bool is_skip_locked() const { return is_skip_locked_; }
@@ -517,7 +506,6 @@ protected:
   const ObRecordType *row_desc_;
   uint64_t rowid_table_id_;
   common::ObString ps_sql_;
-  bool is_link_table_;
   bool is_skip_locked_;
 };
 
@@ -838,7 +826,6 @@ class ObPLRoutineInfo : public share::schema::ObIRoutineInfo
 public:
   ObPLRoutineInfo(common::ObIAllocator &allocator)
       : allocator_(allocator),
-        tenant_id_(OB_INVALID_ID),
         db_id_(OB_INVALID_ID),
         pkg_id_(OB_INVALID_ID),
         type_(INVALID_PROC_TYPE),
@@ -883,7 +870,7 @@ public:
   inline bool is_function() const { return type_ == STANDALONE_FUNCTION
                                         || type_ == PACKAGE_FUNCTION
                                         || UDT_FUNCTION == type_; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_db_id() const { return db_id_; }
 
   virtual uint64_t get_database_id() const { return db_id_; }
@@ -912,7 +899,7 @@ public:
   inline void set_parent_id(uint64_t id) { parent_id_ = id; }
   inline void set_id(uint64_t id) { id_ = id; }
   inline void set_md5(uint64_t md5) { md5_ = md5; }
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_db_id(uint64_t db_id) { db_id_ = db_id; }
   inline void set_pkg_id(uint64_t pkg_id) { pkg_id_ = pkg_id; }
   inline void set_type(ObProcType type) { type_ = type; }
@@ -1006,8 +993,7 @@ public:
 
   bool has_generic_type() const;
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(db_id),
+  TO_STRING_KV(K_(db_id),
                K_(pkg_id),
                K_(type),
                K_(parent_id),
@@ -1028,7 +1014,6 @@ public:
                K_(analyze_flag));
 private:
   common::ObIAllocator &allocator_;
-  uint64_t tenant_id_;
   uint64_t db_id_;
   uint64_t pkg_id_;
   ObProcType type_;
@@ -2612,7 +2597,7 @@ public:
   inline void set_is_signal_null() { is_signal_null_ = true; }
   inline bool is_signal_null() const { return is_signal_null_; }
   inline int create_item_to_expr_idx(int64_t capacity) { 
-    return item_to_expr_idx_.create(capacity, "PlStmtHashMap", ObModIds::OB_HASH_NODE, MTL_ID());
+    return item_to_expr_idx_.create(capacity, "PlStmtHashMap", ObModIds::OB_HASH_NODE);
   }
   inline const int64_t *get_expr_idx(const int64_t item) const { return item_to_expr_idx_.get(item); }
   inline const hash::ObHashMap<int64_t, int64_t>& get_item_to_expr_idx() const 

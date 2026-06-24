@@ -451,7 +451,7 @@ public:
   typedef typename SubMap::Iterator iterator;
 
   explicit ObPointerHashMap(const lib::ObLabel &label = ObModIds::OB_HASH_NODE)
-    : ObPointerHashMap(lib::ObMemAttr(OB_SERVER_TENANT_ID, label))
+    : ObPointerHashMap(lib::ObMemAttr(label))
   {
   }
 

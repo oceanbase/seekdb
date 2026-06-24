@@ -47,7 +47,7 @@ class ObMacroBlockRowBareIterator;
 class ObMacroBlockReader
 {
 public:
-  ObMacroBlockReader(const uint64_t tenant_id = MTL_ID());
+  ObMacroBlockReader();
   virtual ~ObMacroBlockReader();
   int decompress_data(
       const common::ObCompressorType compressor_type,

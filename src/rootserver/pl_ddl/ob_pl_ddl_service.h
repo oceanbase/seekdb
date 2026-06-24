@@ -77,7 +77,6 @@ public:
   static int drop_trigger_in_drop_user(ObMySQLTransaction &trans,
                                       rootserver::ObDDLOperator &ddl_operator,
                                       ObSchemaGetterGuard &schema_guard,
-                                      const uint64_t tenant_id,
                                       const uint64_t user_id);
   static int rebuild_triggers_on_hidden_table(const obcall::ObAlterTableArg &alter_table_arg,
                                               const ObTableSchema &orig_table_schema,
@@ -91,7 +90,6 @@ public:
                                        rootserver::ObDDLOperator &ddl_operator,
                                        ObMySQLTransaction &trans);
   static int rebuild_trigger_on_rename(share::schema::ObSchemaGetterGuard &schema_guard,
-                                       const uint64_t tenant_id,
                                        const common::ObIArray<uint64_t> &trigger_list,
                                        const common::ObString &database_name,
                                        const common::ObString &table_name,
@@ -194,7 +192,6 @@ private:
                                                 const ObString &create_trigger_name,
                                                 const ObString &generate_cyclic_name);
   static int get_object_info(ObSchemaGetterGuard &schema_guard,
-                             const uint64_t tenant_id,
                              const ObString &object_database,
                              const ObString &object_name,
                              ObSchemaType &object_type,

@@ -17,6 +17,7 @@
 #ifndef OB_STORAGE_COLUMN_STORE_CO_MERGE_DAG_H_
 #define OB_STORAGE_COLUMN_STORE_CO_MERGE_DAG_H_
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tablet_merge_task.h"
 #include "storage/compaction/ob_partition_merger.h"
 #include "storage/column_store/ob_co_merge_ctx.h"
@@ -388,7 +389,7 @@ int ObCOMergeDagNet::create_dag(
     // start/end cg idx are meaningless for DagNet
     basic_param_.start_cg_idx_ = start_cg_idx;
     basic_param_.end_cg_idx_ = end_cg_idx;
-    if (OB_FAIL(MTL(share::ObTenantDagScheduler*)->alloc_dag(dag))) {
+    if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->alloc_dag(dag))) {
       STORAGE_LOG(WARN, "fail to alloc dag", K(ret));
     } else if (OB_FAIL(dag->init_by_param(&basic_param_))) {
       STORAGE_LOG(WARN, "Fail to init prepare dag", K(ret));
@@ -410,13 +411,13 @@ int ObCOMergeDagNet::create_dag(
         "dag_type", ObIDag::get_dag_type_str(dag->get_type()), K(add_scheduler_flag), K(dag->get_indegree()));
     }
     if (OB_FAIL(ret) || !add_scheduler_flag) {
-    } else if (OB_FAIL(MTL(share::ObTenantDagScheduler*)->add_dag(dag))) {
+    } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(dag))) {
       STORAGE_LOG(WARN, "Fail to add dag into dag_scheduler", K(ret));
     }
   }
   if (OB_FAIL(ret) && nullptr != dag) {
     // will remove from dag_net & free dag in this func
-    (void)MTL(share::ObTenantDagScheduler*)->free_dag(*dag);
+    (void)share::g_mp->tenant_dag_scheduler()->free_dag(*dag);
     dag = nullptr;
   }
   return ret;

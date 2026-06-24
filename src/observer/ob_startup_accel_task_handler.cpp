@@ -40,8 +40,7 @@ ObStartupAccelTaskHandler::~ObStartupAccelTaskHandler()
 int ObStartupAccelTaskHandler::init(ObStartupAccelType accel_type)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr mem_attr = ObMemAttr(SERVER_ACCEL == accel_type ? OB_SERVER_TENANT_ID : MTL_ID(),
-                                 "StartupTask",
+  ObMemAttr mem_attr = ObMemAttr("StartupTask",
                                  ObCtxIds::DEFAULT_CTX_ID);
   if (is_inited_) {
     ret = OB_INIT_TWICE;

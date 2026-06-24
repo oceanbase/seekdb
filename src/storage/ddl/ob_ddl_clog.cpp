@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_clog.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
@@ -260,13 +261,13 @@ int ObDDLMacroBlockClogCb::on_success()
   ObTablet *tablet = nullptr;
 
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   
   /* param for check idempotence */
   ObDDLKvMgrHandle kv_mgr_handle;
   if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected err", K(ret));
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet is nullptr", K(ret));

@@ -52,7 +52,7 @@ class RowHolderMapper {
 public:
   RowHolderMapper() = default;
   ~RowHolderMapper() { map_.destroy(); }
-  int init() { return map_.init("LockWaitMgr", MTL_ID()); }
+  int init() { return map_.init("LockWaitMgr"); }
   void set_hash_holder(const ObTabletID &tablet_id,
                        const memtable::ObMemtableKey &key,
                        const transaction::ObTransID &tx_id);

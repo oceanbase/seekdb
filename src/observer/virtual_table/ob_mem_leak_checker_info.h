@@ -41,7 +41,7 @@ public:
   virtual ~ObMemLeakCheckerInfo();
 
   inline void set_addr(common::ObAddr &addr) {addr_ = &addr;}
-  inline void set_tenant_id(uint64_t tenant_id) {tenant_id_ = tenant_id;}
+  
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
@@ -53,7 +53,6 @@ private:
   common::ObMemLeakChecker::mod_info_map_t::hashmap::const_iterator it_;
   common::ObMemLeakChecker::mod_info_map_t info_map_;
   common::ObAddr *addr_;
-  uint64_t tenant_id_;
   const char *label_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMemLeakCheckerInfo);

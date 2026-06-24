@@ -34,11 +34,9 @@ public:
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql) override { return this->read(res, tenant_id, sql, 0 /*group_id*/); }
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const int32_t group_id) override;
-  virtual int read(ReadResult &res, const int64_t cluster_id, const uint64_t tenant_id, const char *sql) override;
-  virtual int write(const uint64_t tenant_id, const char *sql, int64_t &affected_rows) override { return this->write(tenant_id, sql, 0/*group_id*/, affected_rows); }
-  virtual int write(const uint64_t tenant_id, const char *sql, const int32_t group_id, int64_t &affected_rows) override;
+  virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
+  virtual int read(ReadResult &res, const int64_t cluster_id, const char *sql) override;
+  virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
 
   virtual sqlclient::ObISQLConnectionPool *get_pool() override;
   virtual sqlclient::ObISQLConnection *get_connection() override;
@@ -67,7 +65,6 @@ public:
       :sql_client_(sql_client),
        snapshot_timestamp_(snapshot_timestamp),
        check_sys_variable_(check_sys_variable),
-       tenant_id_(OB_INVALID_TENANT_ID),
        table_id_(OB_INVALID_ID)
   {
     UNUSED(did_use_retry);
@@ -75,12 +72,10 @@ public:
   // not useful, it just use sql_client directly
   ObSQLClientRetryWeak(ObISQLClient *sql_client,
                        bool did_use_retry,
-                       const uint64_t tenant_id,
                        const uint64_t table_id)
       : sql_client_(sql_client),
         snapshot_timestamp_(OB_INVALID_TIMESTAMP),
         check_sys_variable_(true),
-        tenant_id_(tenant_id),
         table_id_(table_id)
   {
     UNUSED(did_use_retry);
@@ -89,11 +84,9 @@ public:
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql) override { return this->read(res, tenant_id, sql, 0 /*group_id*/); }
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const int32_t group_id) override;
-  virtual int read(ReadResult &res, const int64_t cluster_id, const uint64_t tenant_id, const char *sql) override;
-  virtual int write(const uint64_t tenant_id, const char *sql, int64_t &affected_rows) override { return this->write(tenant_id, sql, 0/*group_id*/, affected_rows); }
-  virtual int write(const uint64_t tenant_id, const char *sql, const int32_t group_id, int64_t &affected_rows) override;
+  virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;
+  virtual int read(ReadResult &res, const int64_t cluster_id, const char *sql) override;
+  virtual int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override;
   using ObISQLClient::read;
   using ObISQLClient::write;
 
@@ -107,13 +100,12 @@ private:
   int read_without_check_sys_variable(
       sqlclient::ObISQLConnection *conn,
       ReadResult &res,
-      const uint64_t tenant_id,
       const char *sql);
 private:
   ObISQLClient *sql_client_;
   int64_t snapshot_timestamp_;  // deprecated
   bool check_sys_variable_;
-  uint64_t tenant_id_;          // deprecated
+// deprecated
   uint64_t table_id_;           // deprecated
 };
 

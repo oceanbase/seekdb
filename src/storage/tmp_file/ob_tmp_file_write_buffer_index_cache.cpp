@@ -43,7 +43,7 @@ int ObTmpFileWBPIndexCache::init(const int64_t fd, ObTmpWriteBufferPool* wbp,
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  uint64_t tenant_id = MTL_ID();
+  
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
@@ -56,12 +56,12 @@ int ObTmpFileWBPIndexCache::init(const int64_t fd, ObTmpWriteBufferPool* wbp,
     LOG_WARN("invalid argument", KR(ret), K(fd), KP(wbp), KP(wbp_index_cache_allocator),
                                  KP(wbp_index_cache_bkt_allocator));
   } else if (OB_ISNULL(buf = wbp_index_cache_allocator->alloc(sizeof(ObArray<ObTmpFilePageIndexBucket*>),
-                                                              lib::ObMemAttr(tenant_id, "TmpFileIdxCache")))) {
+                                                              lib::ObMemAttr("TmpFileIdxCache")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory for temporary file page index bucket",
-              KR(ret), K(fd), K(tenant_id), K(sizeof(ObArray<ObTmpFilePageIndexBucket*>)));
+              KR(ret), K(fd), K(sizeof(ObArray<ObTmpFilePageIndexBucket*>)));
   } else if (FALSE_IT(page_buckets_ = new (buf) ObArray<ObTmpFilePageIndexBucket*>())) {
-  } else if (FALSE_IT(page_buckets_->set_attr(lib::ObMemAttr(tenant_id, "TmpFileIdxCache")))) {
+  } else if (FALSE_IT(page_buckets_->set_attr(lib::ObMemAttr("TmpFileIdxCache")))) {
   } else if (OB_FAIL(page_buckets_->prepare_allocate(INIT_BUCKET_ARRAY_CAPACITY, nullptr))) {
     page_buckets_->destroy();
     wbp_index_cache_allocator->free(buf);
@@ -158,14 +158,14 @@ int ObTmpFileWBPIndexCache::push(const uint32_t page_index)
     } else if (is_empty() || (OB_NOT_NULL(page_buckets_->at(right_)) && page_buckets_->at(right_)->is_full())) {
       // alloc a new bucket
       inc_pos_(right_);
-      uint64_t tenant_id = MTL_ID();
+      
       void *buf = nullptr;
       ObTmpFilePageIndexBucket* bucket = nullptr;
       if (OB_ISNULL(buf = bucket_allocator_->alloc(sizeof(ObTmpFilePageIndexBucket),
-                                                   lib::ObMemAttr(tenant_id, "TmpFileIdxBkt")))) {
+                                                   lib::ObMemAttr("TmpFileIdxBkt")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to allocate memory for temporary file page index bucket",
-                 KR(ret), K(tenant_id), K(sizeof(ObTmpFilePageIndexBucket)), KPC(this));
+                 KR(ret), K(sizeof(ObTmpFilePageIndexBucket)), KPC(this));
       } else if (FALSE_IT(bucket = new (buf) ObTmpFilePageIndexBucket())) {
       } else if (OB_FAIL(bucket->init(fd_, wbp_))) {
         LOG_WARN("fail to init temporary file page index bucket", KR(ret), KPC(this));
@@ -413,19 +413,19 @@ void ObTmpFileWBPIndexCache::shrink_()
   } else {
     int64_t new_capacity = capacity_ / 2;
     void *buf = nullptr;
-    uint64_t tenant_id = MTL_ID();
+    
     ObArray<ObTmpFilePageIndexBucket*> *new_buckets = nullptr;
 
     if (OB_UNLIKELY(size_ > new_capacity)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid new_capacity", KR(ret), K(new_capacity), KPC(this));
     } else if (OB_ISNULL(buf = bucket_array_allocator_->alloc(sizeof(ObArray<ObTmpFilePageIndexBucket*>),
-                                                       lib::ObMemAttr(tenant_id, "TmpFileIdxCache")))) {
+                                                       lib::ObMemAttr("TmpFileIdxCache")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory for temporary file page index bucket",
-                KR(ret), K(fd_), K(tenant_id), K(sizeof(ObArray<ObTmpFilePageIndexBucket*>)));
+                KR(ret), K(fd_), K(sizeof(ObArray<ObTmpFilePageIndexBucket*>)));
     } else if (FALSE_IT(new_buckets = new (buf) ObArray<ObTmpFilePageIndexBucket*>())) {
-    } else if (FALSE_IT(new_buckets->set_attr(lib::ObMemAttr(tenant_id, "TmpFileIdxCache")))) {
+    } else if (FALSE_IT(new_buckets->set_attr(lib::ObMemAttr("TmpFileIdxCache")))) {
     } else if (OB_FAIL(new_buckets->prepare_allocate(new_capacity, nullptr))) {
       new_buckets->destroy();
       bucket_array_allocator_->free(buf);
@@ -517,7 +517,7 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::init(int64_t fd, ObTmpWrit
   } else if (OB_UNLIKELY(fd == ObTmpFileGlobal::INVALID_TMP_FILE_FD) || OB_ISNULL(wbp)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd), KP(wbp));
-  } else if (FALSE_IT(page_indexes_.set_attr(ObMemAttr(MTL_ID(), "TmpFileIdxBkt")))) {
+  } else if (FALSE_IT(page_indexes_.set_attr(ObMemAttr("TmpFileIdxBkt")))) {
   } else if (OB_FAIL(page_indexes_.prepare_allocate(BUCKET_CAPACITY, ObTmpFileGlobal::INVALID_PAGE_ID))) {
     LOG_WARN("fail to prepare allocate array", KR(ret));
   } else {

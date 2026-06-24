@@ -53,7 +53,7 @@ public:
   ObScalarAggregateVecOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input) :
     ObGroupByVecOp(exec_ctx, spec, input), started_(false), dir_id_(-1), row_(nullptr),
     row_meta_(&exec_ctx.get_allocator()), profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
-    sql_mem_processor_(profile_, op_monitor_info_), hp_infras_mgr_(MTL_ID()), mem_context_(nullptr)
+    sql_mem_processor_(profile_, op_monitor_info_), hp_infras_mgr_{}, mem_context_(nullptr)
   {}
 
   virtual int inner_open() override;

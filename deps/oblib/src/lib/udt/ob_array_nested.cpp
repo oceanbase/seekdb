@@ -651,7 +651,7 @@ int ObArrayNested::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
     if (OB_ISNULL(arr_obj_ptr)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
       OB_LOG(WARN, "invalid array type", K(ret), K(inner_arr->get_format()));
-    } else if (OB_FAIL(elem_set.create(length_, ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistSet")))) {
+    } else if (OB_FAIL(elem_set.create(length_, ObMemAttr("ArrayDistSet")))) {
       OB_LOG(WARN, "failed to create cellid set", K(ret), K(length_));
     } else if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
       OB_LOG(WARN, "clone empty failed", K(ret));
@@ -736,7 +736,7 @@ int ObArrayNested::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayType 
   } else if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
     OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (OB_FAIL(elem_set.create(arr2_bin_ptr->length_, 
-                                  ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistSet")))) {
+                                  ObMemAttr("ArrayDistSet")))) {
     OB_LOG(WARN, "failed to create cellid set", K(ret), K(arr2_bin_ptr->length_));
   } else {
     for (uint32_t i = 0; i < arr2_bin_ptr->length_ && OB_SUCC(ret); ++i) {
@@ -826,7 +826,7 @@ int ObArrayNested::unionize(ObIAllocator &alloc, ObIArrayType **arr, uint32_t ar
     } else if (arr_bin_ptr->size() == 0) {
       // skip
     } else if (!elem_set.created() && OB_FAIL(elem_set.create(arr_bin_ptr->length_, 
-                                            ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistSet")))) {
+                                            ObMemAttr("ArrayDistSet")))) {
       OB_LOG(WARN, "failed to create cellid set", K(ret));
     } else {
       for (uint32_t j = 0; j < arr_bin_ptr->length_ && OB_SUCC(ret); ++j) {

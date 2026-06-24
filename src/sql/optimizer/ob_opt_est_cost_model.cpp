@@ -1296,12 +1296,6 @@ int ObOptEstCostModel::cost_table(const ObCostTableScanInfo &est_cost_info,
   if (OB_UNLIKELY(parallel < 1 || part_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get unexpected error", K(parallel), K(part_cnt), K(ret));
-  } else if (OB_NOT_NULL(est_cost_info.table_meta_info_)
-             && EXTERNAL_TABLE == est_cost_info.table_meta_info_->table_type_) {
-    //TODO [ExternalTable] need refine
-    double phy_query_range_row_count = est_cost_info.phy_query_range_row_count_;
-    cost = 4.0 * phy_query_range_row_count;
-    OPT_TRACE_COST_MODEL(KV(cost),"=","4.0 * ", KV(phy_query_range_row_count));
   } else if (OB_FAIL(cost_basic_table(est_cost_info,
                                       part_cnt / parallel,
                                       cost))) {

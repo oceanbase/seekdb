@@ -173,20 +173,18 @@ int ObExprMysqlProcInfo::get_routine_info(ObSQLSessionInfo *session,
                                           const ObRoutineInfo *&routine_info)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_ID;
   ObSchemaGetterGuard schema_guard;
 
   CK (OB_NOT_NULL(session));
   CK (OB_NOT_NULL(GCTX.schema_service_));
-  OX (tenant_id = pl::get_tenant_id_by_object_id(routine_id));
-  OZ (GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard));
-  OZ (schema_guard.get_routine_info(tenant_id, routine_id, routine_info));
+  OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+  OZ (schema_guard.get_routine_info( routine_id, routine_info));
   
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(OB_ISNULL(routine_info))) { //refresh schema try again
-    OZ (ObSPIService::force_refresh_schema(tenant_id));
-    OZ (GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard));
-    OZ (schema_guard.get_routine_info(tenant_id, routine_id, routine_info));
+    OZ (ObSPIService::force_refresh_schema());
+    OZ (GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
+    OZ (schema_guard.get_routine_info( routine_id, routine_info));
   }
   CK (OB_NOT_NULL(routine_info));
   return ret;
@@ -656,7 +654,7 @@ int ObExprMysqlProcInfo::get_sys_package_name_info(const ObExpr &expr,
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
   CK (OB_NOT_NULL(schema_guard = ctx.exec_ctx_.get_sql_ctx()->schema_guard_));
   CK (OB_NOT_NULL(session));
-  OZ (schema_guard->get_package_info(OB_SYS_TENANT_ID, package_id, package_info));
+  OZ (schema_guard->get_package_info( package_id, package_info));
 
   if (OB_SUCC(ret)) {
     if (NULL == package_info) {

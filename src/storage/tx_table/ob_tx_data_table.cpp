@@ -16,6 +16,7 @@
 
 
 #include "ob_tx_data_table.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
@@ -47,7 +48,7 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
   if (OB_ISNULL(ls) || OB_ISNULL(tx_ctx_table)) {
     ret = OB_ERR_NULL_VALUE;
     STORAGE_LOG(WARN, "ls tablet service or tx ctx table is nullptr", KR(ret));
-  } else if (OB_ISNULL(tx_data_allocator_ = &MTL(ObSharedMemAllocMgr*)->tx_data_allocator())) {
+  } else if (OB_ISNULL(tx_data_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator())) {
     ret = OB_ERR_UNEXPECTED;;
     STORAGE_LOG(WARN, "unexpected nullptr of mtl object", KR(ret), KP(tx_data_allocator_));
   } else if (FALSE_IT(ls_tablet_svr_ = ls->get_tablet_svr())) {
@@ -59,7 +60,7 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
     STORAGE_LOG(WARN, "init tx data read ctx failed.", KR(ret), K(tablet_id_));
   } else {
     calc_upper_trans_version_cache_.commit_versions_.array_.set_attr(
-      ObMemAttr(ls->get_tenant_id(), "CommitVersions"));
+      ObMemAttr("CommitVersions"));
 
     ls_ = ls;
     ls_id_ = ls->get_ls_id();
@@ -78,7 +79,7 @@ int ObTxDataTable::init_arena_allocator_()
 {
   ObMemAttr mem_attr;
   mem_attr.label_ = "TX_DATA_ARENA";
-  mem_attr.tenant_id_ = MTL_ID();
+  
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(mem_attr);
   return OB_SUCCESS;
@@ -260,7 +261,7 @@ int ObTxDataTable::alloc_tx_data(ObTxDataGuard &tx_data_guard,
   } else {
     ObTxData *tx_data = new (slice_ptr) ObTxData();
     tx_data->tx_data_allocator_ = tx_data_allocator_;
-    tx_data->op_allocator_ = &MTL(share::ObSharedMemAllocMgr*)->tx_data_op_allocator();
+    tx_data->op_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
     tx_data_guard.init(tx_data);
   }
   return ret;
@@ -701,7 +702,7 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
   } else if (OB_FAIL(ls_tablet_svr_->get_ls_min_end_scn(min_end_scn_from_latest_tablets,
                                                         min_end_scn_from_old_tablets))) {
     STORAGE_LOG(WARN, "fail to get ls min end log ts", KR(ret));
-  } else if (OB_FAIL(MTL(share::ObTenantDagScheduler *)->get_min_end_scn_from_major_dag(ls_->get_ls_id(), min_end_scn_from_major_dag))) {
+  } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_min_end_scn_from_major_dag(ls_->get_ls_id(), min_end_scn_from_major_dag))) {
     STORAGE_LOG(WARN, "fail to get ls min end log ts from major dag", KR(ret), "ls_id", ls_->get_ls_id());
   } else if (FALSE_IT(tg.click("iterate tablets finish"))) {
   } else {
@@ -715,8 +716,8 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
       SCN snapshot_version;
       MonotonicTs unused_ts(0);
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(OB_TS_MGR.get_gts(MTL_ID(), MonotonicTs(1), NULL, snapshot_version, unused_ts))) {
-        LOG_WARN("failed to get snapshot version", K(tmp_ret), K(MTL_ID()));
+      if (OB_TMP_FAIL(OB_TS_MGR.get_gts(MonotonicTs(1), NULL, snapshot_version, unused_ts))) {
+        LOG_WARN("failed to get snapshot version", K(tmp_ret));
         // recycle nothing this time
         recycle_scn.set_min();
       } else {
@@ -1155,8 +1156,8 @@ int ObTxDataTable::supplement_tx_op_if_exist(ObTxData *tx_data)
   } else if (OB_ISNULL(tx_data)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "tx data is nullptr", KR(ret), KP(this));
-  } else if (FALSE_IT(tx_data_from_sstable.tx_data_allocator_ = &MTL(share::ObSharedMemAllocMgr*)->tx_data_allocator())) {
-  } else if (FALSE_IT(tx_data_from_sstable.op_allocator_ = &MTL(share::ObSharedMemAllocMgr*)->tx_data_op_allocator())) {
+  } else if (FALSE_IT(tx_data_from_sstable.tx_data_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator())) {
+  } else if (FALSE_IT(tx_data_from_sstable.op_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator())) {
   } else if (OB_FAIL(get_tx_data_in_sstable_(tx_data->tx_id_, tx_data_from_sstable, unused_scn))) {
     if (ret == OB_TRANS_CTX_NOT_EXIST) {
       // This transaction does not have undo actions

@@ -67,7 +67,7 @@ void BlockSet::set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator)
   if (&allocator != tallocator_) {
     reset();
     tallocator_ = &allocator;
-    attr_ = ObMemAttr(allocator.get_tenant_id(), nullptr, allocator.get_ctx_id());
+    attr_ = ObMemAttr(nullptr, allocator.get_ctx_id());
   }
 }
 

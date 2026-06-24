@@ -146,7 +146,7 @@ int ObDirectoryMgr::add_directory(const ObDirectorySchema &schema)
     LOG_WARN("failed to add directory schema", K(ret));
   } else {
     int over_write = 1;
-    ObDirectoryNameHashKey hash_wrapper(new_schema->get_tenant_id(), new_schema->get_directory_name_str());
+    ObDirectoryNameHashKey hash_wrapper(new_schema->get_directory_name_str());
     if (OB_FAIL(directory_name_map_.set_refactored(hash_wrapper, new_schema, over_write))) {
       LOG_WARN("build directory hash map failed", K(ret));
     } else if (OB_FAIL(directory_id_map_.set_refactored(new_schema->get_directory_id(), new_schema, over_write))) {
@@ -207,7 +207,6 @@ int ObDirectoryMgr::del_directory(const ObTenantDirectoryId &id)
     // defense code, should not happed
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed directory schema return NULL, ",
-             "tenant_id", id.tenant_id_,
              "directory_id", id.schema_id_,
              K(ret));
   }
@@ -224,7 +223,7 @@ int ObDirectoryMgr::del_directory(const ObTenantDirectoryId &id)
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(schema)) {
     if (OB_FAIL(directory_name_map_.erase_refactored(
-        ObDirectoryNameHashKey(schema->get_tenant_id(), schema->get_directory_name_str())))) {
+        ObDirectoryNameHashKey(schema->get_directory_name_str())))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         LOG_INFO("item does not exist, will igore it", K(ret),
@@ -278,8 +277,7 @@ int ObDirectoryMgr::get_directory_schema_by_id(const uint64_t directory_id,
   return ret;
 }
 
-int ObDirectoryMgr::get_directory_schema_by_name(const uint64_t tenant_id,
-                                                 const common::ObString &name,
+int ObDirectoryMgr::get_directory_schema_by_name(const common::ObString &name,
                                                  const ObDirectorySchema *&schema) const
 {
   int ret = OB_SUCCESS;
@@ -287,16 +285,16 @@ int ObDirectoryMgr::get_directory_schema_by_name(const uint64_t tenant_id,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id) || OB_UNLIKELY(name.empty())) {
+  } else if (OB_UNLIKELY(name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(name));
+    LOG_WARN("invalid argument", K(ret), K(name));
   } else {
     ObDirectorySchema *tmp_schema = NULL;
-    ObDirectoryNameHashKey hash_wrapper(tenant_id, name);
+    ObDirectoryNameHashKey hash_wrapper(name);
     if (OB_FAIL(directory_name_map_.get_refactored(hash_wrapper, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_INFO("schema is not exist", K(tenant_id), K(name),
+        LOG_INFO("schema is not exist", K(name),
                  "map_cnt", directory_name_map_.item_count());
       }
     } else {
@@ -306,12 +304,11 @@ int ObDirectoryMgr::get_directory_schema_by_name(const uint64_t tenant_id,
   return ret;
 }
 
-int ObDirectoryMgr::get_directory_schemas_in_tenant(const uint64_t tenant_id,
-                                                    common::ObIArray<const ObDirectorySchema *> &schemas) const
+int ObDirectoryMgr::get_directory_schemas_in_tenant(common::ObIArray<const ObDirectorySchema *> &schemas) const
 {
   int ret = OB_SUCCESS;
   schemas.reset();
-  ObTenantDirectoryId id(tenant_id, OB_MIN_ID);
+  ObTenantDirectoryId id(OB_MIN_ID);
   ConstDirectoryIter iter_begin =
       directory_infos_.lower_bound(id, compare_with_tenant_directory_id);
   bool is_stop = false;
@@ -321,37 +318,10 @@ int ObDirectoryMgr::get_directory_schemas_in_tenant(const uint64_t tenant_id,
     if (OB_ISNULL(schema = *iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(schema));
-    } else if (tenant_id != schema->get_tenant_id()) {
+    } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
       LOG_WARN("push back directory failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObDirectoryMgr::del_directory_schemas_in_tenant(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    ObArray<const ObDirectorySchema *> schemas;
-    if (OB_FAIL(get_directory_schemas_in_tenant(tenant_id, schemas))) {
-      LOG_WARN("get directory schemas failed", K(ret), K(tenant_id));
-    } else {
-      FOREACH_CNT_X(schema, schemas, OB_SUCC(ret)) {
-        ObTenantDirectoryId id(tenant_id, (*schema)->get_directory_id());
-        if (OB_FAIL(del_directory(id))) {
-          LOG_WARN("del directory failed",
-                   "tenant_id",
-                   id.tenant_id_,
-                   "directory_id",
-                   id.schema_id_,
-                   K(ret));
-        }
-      }
     }
   }
   return ret;
@@ -411,8 +381,6 @@ int ObDirectoryMgr::rebuild_directory_hashmap()
     if (OB_ISNULL(directory_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("directory_schema is NULL", K(ret), K(directory_schema));
-    } else if (FALSE_IT(hash_wrapper.set_tenant_id(directory_schema->get_tenant_id()))) {
-      // do nothing
     } else if (FALSE_IT(hash_wrapper.set_directory_name(directory_schema->get_directory_name()))) {
       // do nothing
     } else if (OB_FAIL(directory_name_map_.set_refactored(hash_wrapper,

@@ -32,21 +32,19 @@ struct ObMViewRefreshParam
 {
 public:
   ObMViewRefreshParam()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      mview_id_(OB_INVALID_ID),
+    : mview_id_(OB_INVALID_ID),
       refresh_method_(share::schema::ObMVRefreshMethod::MAX),
       parallelism_(0)
   {
   }
   bool is_valid() const
   {
-    return OB_INVALID_TENANT_ID != tenant_id_ && mview_id_ != OB_INVALID_ID &&
+    return true && mview_id_ != OB_INVALID_ID &&
            refresh_method_ != share::schema::ObMVRefreshMethod::NEVER && parallelism_ >= 0;
   }
-  TO_STRING_KV(K_(tenant_id), K_(mview_id), K_(refresh_method), K_(parallelism));
+  TO_STRING_KV(K_(mview_id), K_(refresh_method), K_(parallelism));
 
 public:
-  uint64_t tenant_id_;
   uint64_t mview_id_;
   share::schema::ObMVRefreshMethod refresh_method_; // MAX means use default refresh method
   uint64_t parallelism_;
@@ -77,11 +75,11 @@ private:
                               share::schema::ObSchemaGetterGuard &schema_guard);
   int complete_refresh(); 
   int fast_refresh();
-  int set_session_dml_dop_(const uint64_t tenant_id, const uint64_t data_version,
+  int set_session_dml_dop_(const uint64_t data_version,
                           sql::ObSQLSessionInfo *exec_session_info, ObMViewTransaction &trans,
                           const int64_t parallelism, bool &has_updated_dml_dop,
                           uint64_t &orig_dml_dop);
-  int restore_session_dml_dop_(const uint64_t tenant_id, const uint64_t data_version,
+  int restore_session_dml_dop_(const uint64_t data_version,
                               const bool has_updated_dml_dop, const uint64_t orig_dml_dop,
                               ObMViewTransaction &trans);
   int calc_scn_range(const share::schema::ObMViewInfo &mview_info,

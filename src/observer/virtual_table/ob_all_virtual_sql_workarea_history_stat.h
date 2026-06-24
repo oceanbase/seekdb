@@ -35,15 +35,14 @@ public:
 public:
   void destroy();
   void reset();
-  int init(const uint64_t effective_tenant_id);
-  int get_next_wa_stat(sql::ObSqlWorkAreaStat *&wa_stat, uint64_t &tenant_id);
+  int init();
+  int get_next_wa_stat(sql::ObSqlWorkAreaStat *&wa_stat);
 private:
   int get_next_batch_wa_stats();
 private:
   common::ObSEArray<sql::ObSqlWorkAreaStat, 32> wa_stats_;
-  common::ObSEArray<uint64_t, 16> tenant_ids_;
   int64_t cur_nth_wa_;
-  int64_t cur_nth_tenant_;
+  bool done_;
 };
 
 class ObSqlWorkareaHistoryStat : public common::ObVirtualTableScannerIterator
@@ -80,7 +79,6 @@ private:
     DB_ID,
   };
   int fill_row(
-    uint64_t tenant_id,
     sql::ObSqlWorkAreaStat &wa_stat,
     common::ObNewRow *&row);
   int get_server_ip_and_port();

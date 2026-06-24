@@ -17,14 +17,9 @@
 #ifndef OCEANBASE_TENANT_TIMEZONE_MGR_H_
 #define OCEANBASE_TENANT_TIMEZONE_MGR_H_
 
-#include "lib/hash/ob_hashmap.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/container/ob_array.h"
-#include "lib/lock/ob_drw_lock.h"
 #include "lib/task/ob_timer.h"
 #include "share/ob_lease_struct.h"
 #include "share/rc/ob_context.h"
-#include "ob_tenant_timezone.h"
 #include "share/ob_time_zone_info_manager.h"
 
 
@@ -41,22 +36,6 @@ namespace omt {
 class ObTenantTimezoneMgr
 {
 private:
-  template <class Key, class Value, int num>
-  class __ObTimezoneContainer
-    : public common::hash::ObHashMap<Key, Value *, common::hash::NoPthreadDefendMode>
-  {
-  public:
-    __ObTimezoneContainer()
-    {
-      this->create(num,
-                  oceanbase::common::ObModIds::OB_HASH_BUCKET_TIME_ZONE_INFO_MAP,
-                  "HasNodTzInfM");
-    }
-    virtual ~__ObTimezoneContainer() {}
-
-  private:
-    DISALLOW_COPY_AND_ASSIGN(__ObTimezoneContainer);
-  };
   class UpdateTenantTZTask : public common::ObTimerTask
   {
   public:
@@ -69,25 +48,17 @@ private:
   };
   friend UpdateTenantTZTask;
 public:
-  using TenantTimezoneMap = __ObTimezoneContainer<uint64_t, ObTenantTimezone, common::OB_MAX_SERVER_TENANT_CNT>;
-  typedef int (*tenant_timezone_map_getter)(const uint64_t tenant_id,
-                                            common::ObTZMapWrap &timezone_wrap);
-
   virtual ~ObTenantTimezoneMgr();
   ObTenantTimezoneMgr(const ObTenantTimezoneMgr &timezone) = delete;
   ObTenantTimezoneMgr & operator=(const ObTenantTimezoneMgr &) = delete;
 
   static ObTenantTimezoneMgr &get_instance();
-  int init(common::ObMySQLProxy &sql_proxy, const common::ObAddr &server,
-          share::schema::ObMultiVersionSchemaService &schema_service);
-  // init interface for liboblog only.
-  void init(tenant_timezone_map_getter tz_map_getter);
+  int init();
   int start();
 
   // observer and liboblog get tenant tz map with the following function.
-  int get_tenant_tz(const uint64_t tenant_id,
-                    common::ObTZMapWrap &timezone_wrap);
-  int get_tenant_timezone(const uint64_t /*tenant_id*/, common::ObTZMapWrap &timezone_wrap,
+  int get_tenant_tz(common::ObTZMapWrap &timezone_wrap);
+  int get_tenant_timezone(common::ObTZMapWrap &timezone_wrap,
                           common::ObTimeZoneInfoManager *&tz_info_mgr);
   bool is_inited() { return is_inited_; }
   bool is_usable() { return usable_; }
@@ -101,26 +72,13 @@ public:
   int schedule_retry();
 private:
   int init_timezone();
-  // static function of calling instance().get_tenant_timezone_map(). For init tenant_tz_map_getter_
-  static int get_tenant_timezone_static(const uint64_t tenant_id,
-                                        common::ObTZMapWrap &timezone_wrap);
-
-  static int get_tenant_timezone_default(const uint64_t tenant_id,
-                                        common::ObTZMapWrap &timezone_wrap);
 private:
   ObTenantTimezoneMgr();
-  common::ObArenaAllocator allocator_;
   bool is_inited_;
-  common::ObAddr self_;
-  common::ObMySQLProxy *sql_proxy_;
-  common::DRWLock rwlock_;
   UpdateTenantTZTask update_task_;
-  ObTenantTimezone *timezone_ = nullptr;
+  common::ObTimeZoneInfoManager *tz_info_mgr_ = nullptr;
   bool usable_;
-  share::schema::ObMultiVersionSchemaService *schema_service_;
 public:
-  // tenant timezone getter, observer and liboblog init it during start up.
-  tenant_timezone_map_getter tenant_tz_map_getter_;
   const uint64_t SLEEP_USECONDS = 5000000;
 };
 

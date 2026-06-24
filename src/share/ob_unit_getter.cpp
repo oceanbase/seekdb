@@ -28,7 +28,7 @@ namespace share
 {
 
 OB_SERIALIZE_MEMBER(ObUnitInfoGetter::ObTenantConfig,
-                    tenant_id_,
+                    
                     unit_id_,
                     unit_status_,
                     config_,
@@ -50,8 +50,7 @@ const char* ObUnitInfoGetter::unit_status_strs_[] = {
 };
 
 ObUnitInfoGetter::ObTenantConfig::ObTenantConfig()
-  : tenant_id_(common::OB_INVALID_ID),
-    unit_id_(common::OB_INVALID_ID),
+  : unit_id_(common::OB_INVALID_ID),
     unit_status_(UNIT_ERROR_STAT),
     config_(),
     mode_(lib::Worker::CompatMode::INVALID),
@@ -63,7 +62,6 @@ ObUnitInfoGetter::ObTenantConfig::ObTenantConfig()
 {}
 
 int ObUnitInfoGetter::ObTenantConfig::init(
-    const uint64_t tenant_id,
     const uint64_t unit_id,
     const ObUnitStatus unit_status,
     const ObUnitConfig &config,
@@ -78,7 +76,7 @@ int ObUnitInfoGetter::ObTenantConfig::init(
   if (OB_FAIL(config_.assign(config))) {
     LOG_WARN("fail to assign config", KR(ret), K(config));
   } else {
-    tenant_id_ = tenant_id;
+    
     unit_id_ = unit_id;
     unit_status_ = unit_status;
     mode_ = compat_mode;
@@ -110,7 +108,6 @@ int ObUnitInfoGetter::ObTenantConfig::divide_meta_tenant(ObTenantConfig& meta_te
       meta_resource))) {
     LOG_WARN("init meta config fail", KR(ret), K(config_), K(meta_resource));
   } else if (OB_FAIL(meta_tenant_config.init(
-      gen_meta_tenant_id(tenant_id_),       // meta tenant ID
       unit_id_,
       unit_status_,
       meta_config,
@@ -135,7 +132,7 @@ int ObUnitInfoGetter::ObTenantConfig::divide_meta_tenant(ObTenantConfig& meta_te
 
 void ObUnitInfoGetter::ObTenantConfig::reset()
 {
-  tenant_id_ = common::OB_INVALID_ID;
+  
   unit_id_ = common::OB_INVALID_ID;
   config_.reset();
   mode_ = lib::Worker::CompatMode::INVALID;
@@ -147,7 +144,7 @@ void ObUnitInfoGetter::ObTenantConfig::reset()
 
 bool ObUnitInfoGetter::ObTenantConfig::operator==(const ObTenantConfig &other) const
 {
-  return (tenant_id_ == other.tenant_id_ &&
+  return (true &&
           unit_id_ == other.unit_id_ &&
           unit_status_ == other.unit_status_ &&
           config_ == other.config_ &&
@@ -167,7 +164,7 @@ int ObUnitInfoGetter::ObTenantConfig::assign(const ObUnitInfoGetter::ObTenantCon
   } else if (OB_FAIL(config_.assign(other.config_))) {
     LOG_WARN("fail to assign config", KR(ret), K(other));
   } else {
-    tenant_id_ = other.tenant_id_;
+    
     unit_id_ = other.unit_id_;
     unit_status_ = other.unit_status_;
     mode_ = other.mode_;
@@ -212,8 +209,9 @@ int ObUnitInfoGetter::init(ObMySQLProxy &proxy, common::ObServerConfig *config)
 int ObUnitInfoGetter::get_tenants(common::ObIArray<uint64_t> &tenants)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(tenants.push_back(OB_SYS_TENANT_ID))) {
-    LOG_WARN("fail to push back sys tenant id", K(ret));
+  // single-tenant: one logical tenant slot; value is a non-tenant slot marker (unconsumed)
+  if (OB_FAIL(tenants.push_back(0/*slot marker*/))) {
+    LOG_WARN("fail to push back tenant slot marker", K(ret));
   }
   return ret;
 }
@@ -237,7 +235,7 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
     ObTenantConfig tenant_config;
     ObUnitConfig unit_config;
     lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    const uint64_t tenant_id = OB_SYS_TENANT_ID;
+    
     const uint64_t unit_id = 1;  // Single unit with ID 1
     const int64_t create_timestamp = 0;
     const bool has_memstore = true;
@@ -253,8 +251,7 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
       log_disk_size = GCTX.config_->log_disk_size;
       if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false /*is_hidden_sys*/, log_disk_size))) {
         LOG_WARN("gen_sys_tenant_unit_config failed", KR(ret), K(log_disk_size));
-      } else if (OB_FAIL(tenant_config.init(tenant_id,
-                                             unit_id,
+      } else if (OB_FAIL(tenant_config.init(unit_id,
                                              ObUnitInfoGetter::ObUnitStatus::UNIT_NORMAL,
                                              unit_config,
                                              compat_mode,
@@ -263,7 +260,7 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
                                              false /*is_removed*/,
                                              hidden_sys_data_disk_config_size,
                                              tenant_config.gen_init_actual_data_disk_size(unit_config)))) {
-        LOG_WARN("tenant_config init failed", KR(ret), K(tenant_id), K(unit_config));
+        LOG_WARN("tenant_config init failed", KR(ret), K(unit_config));
       } else if (OB_FAIL(tenant_configs.push_back(tenant_config))) {
         LOG_WARN("push_back failed", KR(ret));
       } else {
@@ -276,8 +273,7 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
   return ret;
 }
 
-int ObUnitInfoGetter::get_tenant_server_configs(const uint64_t tenant_id,
-                                                ObIArray<ObServerConfig> &server_configs)
+int ObUnitInfoGetter::get_tenant_server_configs(ObIArray<ObServerConfig> &server_configs)
 {
   int ret = OB_SUCCESS;
   ObArray<ObUnit> units;
@@ -288,14 +284,11 @@ int ObUnitInfoGetter::get_tenant_server_configs(const uint64_t tenant_id,
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(tenant_id), K(ret));
-  } else if (OB_SYS_TENANT_ID != tenant_id) {
+  } else if (false) {
     // don't need to set ret, just return empty result
-    LOG_DEBUG("tenant doesn't own any pool", K(tenant_id));
-  } else if (OB_FAIL(get_pools_of_tenant(tenant_id, pools))) {
-    LOG_WARN("get_pools_of_tenant failed", K(tenant_id), K(ret));
+    LOG_DEBUG("tenant doesn't own any pool");
+  } else if (OB_FAIL(get_pools_of_tenant(pools))) {
+    LOG_WARN("get_pools_of_tenant failed", K(ret));
   } else if (OB_FAIL(get_units_of_pools(pools, units))) {
     LOG_WARN("get_units_of_pools failed", K(pools), K(ret));
   } else if (OB_FAIL(get_configs_of_pools(pools, configs))) {
@@ -326,8 +319,7 @@ int ObUnitInfoGetter::get_tenant_server_configs(const uint64_t tenant_id,
   return ret;
 }
 
-int ObUnitInfoGetter::get_tenant_servers(const uint64_t tenant_id,
-                                         ObIArray<ObAddr> &servers)
+int ObUnitInfoGetter::get_tenant_servers(ObIArray<ObAddr> &servers)
 {
   int ret = OB_SUCCESS;
   ObArray<ObUnit> units;
@@ -336,14 +328,11 @@ int ObUnitInfoGetter::get_tenant_servers(const uint64_t tenant_id,
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(tenant_id), K(ret));
-  } else if (OB_SYS_TENANT_ID != tenant_id) {
+  } else if (false) {
     // don't need to set ret, just return empty result
-    LOG_WARN("tenant doesn't own any pool", K(tenant_id));
-  } else if (OB_FAIL(get_pools_of_tenant(tenant_id, pools))) {
-    LOG_WARN("get_pools_of_tenant failed", K(tenant_id), K(ret));
+    LOG_WARN("tenant doesn't own any pool");
+  } else if (OB_FAIL(get_pools_of_tenant(pools))) {
+    LOG_WARN("get_pools_of_tenant failed", K(ret));
   } else if (OB_FAIL(get_units_of_pools(pools, units))) {
     LOG_WARN("get_units_of_pools failed", K(pools), K(ret));
   } else {
@@ -369,23 +358,20 @@ int ObUnitInfoGetter::get_tenant_servers(const uint64_t tenant_id,
   return ret;
 }
 
-int ObUnitInfoGetter::check_tenant_small(const uint64_t tenant_id, bool &small_tenant)
+int ObUnitInfoGetter::check_tenant_small(bool &small_tenant)
 {
   int ret = OB_SUCCESS;
   small_tenant = true;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(tenant_id), K(ret));
   } else {
     ObArray<ObResourcePool> pools;
-    if (OB_FAIL(get_pools_of_tenant(tenant_id, pools))) {
-      LOG_WARN("get_pools_of_tenant failed", K(tenant_id), K(ret));
+    if (OB_FAIL(get_pools_of_tenant(pools))) {
+      LOG_WARN("get_pools_of_tenant failed", K(ret));
     } else if (pools.count() <= 0) {
       ret = OB_TENANT_NOT_EXIST;
-      LOG_WARN("pools of tenant not exist", K(tenant_id), K(ret));
+      LOG_WARN("pools of tenant not exist", K(ret));
     } else if (1 == pools.count()) {
       if (pools.at(0).unit_count_ < 1) {
         ret = OB_ERR_UNEXPECTED;
@@ -470,8 +456,7 @@ int ObUnitInfoGetter::get_configs_of_pools(const ObIArray<ObResourcePool> &pools
   return ret;
 }
 
-int ObUnitInfoGetter::get_pools_of_tenant(const uint64_t tenant_id,
-                                          ObIArray<ObResourcePool> &pools)
+int ObUnitInfoGetter::get_pools_of_tenant(ObIArray<ObResourcePool> &pools)
 {
   int ret = OB_SUCCESS;
   pools.reuse();
@@ -479,9 +464,6 @@ int ObUnitInfoGetter::get_pools_of_tenant(const uint64_t tenant_id,
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tenant_id), K(ret));
   } else if (OB_FAIL(ObShareUtil::gen_sys_resource_pool(resource_pool))) {
     LOG_WARN("fail to generate sys resource pool", KR(ret));
   } else if (OB_FAIL(pools.push_back(resource_pool))) {
@@ -541,7 +523,7 @@ int ObUnitInfoGetter::build_unit_infos(const ObIArray<ObUnit> &units,
       } else if (OB_INVALID_INDEX == config_index) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("config_index is invalid", K(config_index), K(ret));
-      } else if (OB_INVALID_ID == pools.at(pool_index).tenant_id_) {
+      } else if (OB_INVALID_ID == 1UL) {
         // ignore unit not grant to any tenant
         continue;
       } else {
@@ -643,8 +625,7 @@ int ObUnitInfoGetter::find_config_idx(const ObIArray<ObUnitConfig> &configs,
   return ret;
 }
 
-int ObUnitInfoGetter::find_tenant_config_idx(const ObIArray<ObTenantConfig> &tenant_configs,
-                                             const uint64_t tenant_id, int64_t &index) const
+int ObUnitInfoGetter::find_tenant_config_idx(const ObIArray<ObTenantConfig> &tenant_configs, int64_t &index) const
 {
   int ret = OB_SUCCESS;
   index = OB_INVALID_INDEX;
@@ -652,13 +633,10 @@ int ObUnitInfoGetter::find_tenant_config_idx(const ObIArray<ObTenantConfig> &ten
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tenant_id), K(ret));
   } else {
     bool found = false;
     for (int64_t i = 0; !found && i < tenant_configs.count(); ++i) {
-      if (tenant_configs.at(i).tenant_id_ == tenant_id) {
+      {
         index = i;
         found = true;
       }
@@ -715,18 +693,11 @@ void ObUnitInfoGetter::build_unit_stat(const ObAddr &server,
   }
 }
 
-int ObUnitInfoGetter::get_compat_mode(const int64_t tenant_id, lib::Worker::CompatMode &compat_mode) const
+int ObUnitInfoGetter::get_compat_mode(lib::Worker::CompatMode &compat_mode) const
 {
   int ret = OB_SUCCESS;
-  if (is_virtual_tenant_id(tenant_id)
-      || is_sys_tenant(tenant_id)
-      || is_meta_tenant(tenant_id)) {
+  {
     compat_mode = lib::Worker::CompatMode::MYSQL;
-  } else {
-    compat_mode = lib::Worker::CompatMode::MYSQL;
-    if (OB_SUCC(ret)) {
-      LOG_INFO("jx_debug: get tenant compatibility mode", K(tenant_id), K(compat_mode));
-    }
   }
   return ret;
 }

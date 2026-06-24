@@ -621,7 +621,7 @@ int PalfHandleImpl::handle_config_change_pre_check(const ObAddr &server,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "PalfHandleImpl has not inited", K(ret), K_(palf_id));
-  } else if (OB_TMP_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), tenant_data_version))) {
+  } else if (OB_TMP_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(tenant_data_version))) {
     // Note: if the DATA_VERSION in the replica is empty, it is not allowed
     //       to be added in the Paxos group. Check PalfHandleImpl only
     resp.is_normal_replica_ = false;
@@ -2698,31 +2698,6 @@ int PalfHandleImpl::ack_mode_meta(const common::ObAddr &server,
   return ret;
 }
 
-int PalfHandleImpl::handle_election_message(const election::ElectionPrepareRequestMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionPrepareResponseMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionAcceptRequestMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionAcceptResponseMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
-int PalfHandleImpl::handle_election_message(const election::ElectionChangeLeaderMsg &msg)
-{
-  return election_.handle_message(msg);
-}
-
 int PalfHandleImpl::do_init_mem_(
     const int64_t palf_id,
     const PalfBaseInfo &palf_base_info,
@@ -3475,7 +3450,7 @@ int PalfHandleImpl::fetch_log_from_storage_(const common::ObAddr &server,
   } else if (FALSE_IT(prev_log_proposal_id_each_round = prev_log_info.log_proposal_id_)) {
   } else if (OB_FAIL(iterator.init(fetch_start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
     PALF_LOG(ERROR, "init iterator failed", K(ret), K_(palf_id));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::FETCHLOG)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::FETCHLOG)))) {
     PALF_LOG(ERROR, "iterator set_io_context failed", K(ret), K_(palf_id));
   } else if (FALSE_IT(iterator.set_need_print_error(false))) {
     // NB: Fetch log will be concurrent with truncate, the content on disk will not integrity, need igore
@@ -4216,7 +4191,7 @@ int PalfHandleImpl::get_prev_log_info_for_fetch_(const LSN &prev_lsn,
   };
   if (OB_FAIL(iterator.init(prev_lsn, get_file_end_lsn, get_mode_version, log_engine_.get_log_storage()))) {
     PALF_LOG(WARN, "LogGroupEntryIterator init failed", K(ret), K(iterator), K(prev_lsn), K(curr_lsn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::FETCHLOG)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::FETCHLOG)))) {
     PALF_LOG(WARN, "LogGroupEntryIterator set_io_context failed", K(ret), K(iterator), K(prev_lsn), K(curr_lsn));
   } else if (FALSE_IT(iterator.set_need_print_error(false))) {
   } else {
@@ -4264,7 +4239,7 @@ int PalfHandleImpl::get_prev_log_info_(const LSN &lsn,
     PALF_LOG(INFO, "lsn is same as base_lsn, and log_snapshot_meta is valid", K(lsn), K(log_snapshot_meta));
   } else if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
     PALF_LOG(WARN, "LogGroupEntryIterator init failed", K(ret), K(start_lsn), K(lsn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::FETCHLOG)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::FETCHLOG)))) {
     PALF_LOG(WARN, "LogGroupEntryIterator set_io_context failed", K(ret), K(start_lsn), K(lsn));
   } else {
     LSN curr_lsn;
@@ -4758,7 +4733,7 @@ int PalfHandleImpl::read_and_append_log_group_entry_before_ts_(
     PALF_LOG(WARN, "allocate memory failed", KPC(this));
   } else if (OB_FAIL(iterator.init(start_lsn, get_file_end_lsn, log_engine_.get_log_storage()))) {
     PALF_LOG(WARN, "iterator init failed", K(ret), KPC(this), K(start_lsn), K(flashback_scn));
-  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(MTL_ID(), palf_id_, LogIOUser::RESTART)))) {
+  } else if (OB_FAIL(iterator.set_io_context(palf::LogIOContext(palf_id_, LogIOUser::RESTART)))) {
     PALF_LOG(WARN, "set_io_context failed", K(ret), KPC(this), K(start_lsn), K(flashback_scn));
   } else {
     const int64_t read_buf_len = read_buf_guard.read_buf_.buf_len_;

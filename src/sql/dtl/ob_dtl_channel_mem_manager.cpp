@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "ob_dtl_channel_mem_manager.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 
 using namespace oceanbase::common;
@@ -25,8 +26,8 @@ using namespace oceanbase::omt;
 using namespace oceanbase::sql;
 using namespace oceanbase::sql::dtl;
 
-ObDtlChannelMemManager::ObDtlChannelMemManager(uint64_t tenant_id, ObDtlTenantMemManager &tenant_mgr) :
-  tenant_id_(tenant_id), size_per_buffer_(GCONF.dtl_buffer_size), seqno_(-1), allocator_(tenant_id), pre_alloc_cnt_(0),
+ObDtlChannelMemManager::ObDtlChannelMemManager(ObDtlTenantMemManager &tenant_mgr) :
+  size_per_buffer_(GCONF.dtl_buffer_size), seqno_(-1), allocator_{}, pre_alloc_cnt_(0),
   max_mem_percent_(0), memstore_limit_percent_(0), alloc_cnt_(0), free_cnt_(0), real_alloc_cnt_(0), real_free_cnt_(0), tenant_mgr_(tenant_mgr),
   mem_used_(0), last_update_memory_time_(-1)
 {}
@@ -34,13 +35,13 @@ ObDtlChannelMemManager::ObDtlChannelMemManager(uint64_t tenant_id, ObDtlTenantMe
 int ObDtlChannelMemManager::init()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id_, "SqlDtlBuf");
+  ObMemAttr attr("SqlDtlBuf");
   if (OB_FAIL(allocator_.init(
                 lib::ObMallocAllocator::get_instance(),
                 OB_MALLOC_NORMAL_BLOCK_SIZE,
                 attr))) {
     LOG_WARN("failed to init fifo allocator", K(ret));
-  } else if (OB_FAIL(free_queue_.init(MAX_CAPACITY, "SqlDtlQueue", tenant_id_))) {
+  } else if (OB_FAIL(free_queue_.init(MAX_CAPACITY, "SqlDtlQueue"))) {
     LOG_WARN("failed to init channel memory manager", K(ret));
   } else {
     allocator_.set_label("SqlDtlBuf");
@@ -54,12 +55,12 @@ int ObDtlChannelMemManager::init()
 int ObDtlChannelMemManager::get_max_mem_percent()
 {
   int ret = OB_SUCCESS;
-  ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     max_mem_percent_ = tenant_config->_px_max_message_pool_pct;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to init tenant config", K(tenant_id_), K(ret));
+    LOG_WARN("failed to init tenant config", K(ret));
   }
   return ret;
 }
@@ -67,8 +68,8 @@ int ObDtlChannelMemManager::get_max_mem_percent()
 int ObDtlChannelMemManager::get_memstore_limit_percentage_()
 {
   int ret = OB_SUCCESS;
-  MTL_SWITCH(tenant_id_) {
-    memstore_limit_percent_ = MTL(ObTenantFreezer*)->get_memstore_limit_percentage();
+  MOD_SCOPE {
+    memstore_limit_percent_ = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
   }
   return ret;
 }

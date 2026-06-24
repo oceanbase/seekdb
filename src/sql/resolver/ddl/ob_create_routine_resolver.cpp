@@ -65,13 +65,13 @@ int ObCreateRoutineResolver::set_routine_info(const ObRoutineType &type,
   int ret = OB_SUCCESS;
   uint64_t user_id;
   CK(OB_NOT_NULL(session_info_));
-  OZ (schema_checker_->get_user_id(session_info_->get_effective_tenant_id(), session_info_->get_user_name(),  session_info_->get_host_name(), user_id));
+  OZ (schema_checker_->get_user_id(session_info_->get_user_name(),  session_info_->get_host_name(), user_id));
   if (OB_SUCC(ret)) {
     if (is_udt_udf) {
       routine_info.set_is_udt_udf();
     }
     routine_info.set_routine_type(type);
-    routine_info.set_tenant_id(session_info_->get_effective_tenant_id());
+    
     routine_info.set_owner_id(user_id);
     routine_info.set_overload(ROUTINE_STANDALONE_OVERLOAD);
     routine_info.set_subprogram_id(ROUTINE_STANDALONE_SUBPROGRAM_ID);
@@ -160,8 +160,7 @@ int ObCreateRoutineResolver::resolve_sp_definer(const ParseNode *parse_node,
         if (OB_SUCC(ret)) {
           // Check if user@host is in the mysql.user table
           const ObUserInfo* user_info = nullptr;
-          if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(session_info_->get_effective_tenant_id(),
-                                                                         user_name,
+          if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(user_name,
                                                                          host_name,
                                                                          user_info))) {
             LOG_WARN("fail to get_user_info", K(ret));
@@ -247,7 +246,6 @@ int ObCreateRoutineResolver::collect_ref_obj_info(int64_t ref_obj_id, int64_t re
     OZ (ob_add_ddl_dependency(ref_obj_id,
                               ObSchemaObjVersion::get_schema_type(dependent_type),
                               ref_timestamp,
-                              pl::get_tenant_id_by_object_id(ref_obj_id),
                               crt_routine_arg));
   }
   return ret;
@@ -275,13 +273,11 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       routine_param.set_type_owner(access_idxs.at(0).var_index_);
       CK (OB_NOT_NULL(params_.schema_checker_));
       OZ (params_.schema_checker_->get_table_schema(
-              params_.session_info_->get_effective_tenant_id(),
               access_idxs.at(1).var_index_, table));
       CK (OB_NOT_NULL(table));
     } else {
       CK (OB_NOT_NULL(params_.schema_checker_));
       OZ (params_.schema_checker_->get_table_schema(
-              params_.session_info_->get_effective_tenant_id(),
               access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
       if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(table->get_table_name_str(), routine_param.get_type_subname())) {
@@ -298,12 +294,12 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
     OX (routine_param.set_type_subname(access_idxs.at(access_idxs.count() - 2).var_name_));
     if (OB_FAIL(ret)) {
     } else if (3 == access_idxs.count()) {
-      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(1).var_index_)) {
+      if (true) {
         OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
       } else {
         OX (routine_param.set_type_owner(access_idxs.at(0).var_index_));
       }
-    } else if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) { // var in system package
+    } else if (true) { // var in system package
       OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
     }
     if (OB_SUCC(ret)) {
@@ -313,7 +309,7 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       CK (OB_NOT_NULL(params_.schema_checker_));
       OX (schema_guard = schema_checker_->get_schema_guard());
       CK (OB_NOT_NULL(schema_guard));
-      OZ (schema_guard->get_package_info(get_tenant_id_by_object_id(package_id),
+      OZ (schema_guard->get_package_info(
                                          package_id, package_info),
           package_id);
       CK (OB_NOT_NULL(package_info));
@@ -331,13 +327,11 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       routine_param.set_type_owner(access_idxs.at(0).var_index_);
       CK (OB_NOT_NULL(params_.schema_checker_));
       OZ (params_.schema_checker_->get_table_schema(
-              params_.session_info_->get_effective_tenant_id(),
               access_idxs.at(1).var_index_, table));
       CK (OB_NOT_NULL(table));
     } else {
       CK (OB_NOT_NULL(params_.schema_checker_));
       OZ (params_.schema_checker_->get_table_schema(
-              params_.session_info_->get_effective_tenant_id(),
               access_idxs.at(0).var_index_, table));
       CK (OB_NOT_NULL(table));
       if (OB_SUCC(ret) && ObCharset::case_compat_mode_equal(table->get_table_name_str(), routine_param.get_type_name())) {
@@ -355,12 +349,12 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
       OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
       if (2 == access_idxs.count()) { // pkg.type
         OX (routine_param.set_type_subname(access_idxs.at(0).var_name_));
-        if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) { // type in system package
+        if (true) { // type in system package
           OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
         }
       } else if (3 == access_idxs.count()) { // db.pkg.type
         OX (routine_param.set_type_subname(access_idxs.at(1).var_name_));
-        if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(1).var_index_)) {
+        if (true) {
           OX (routine_param.set_type_owner(OB_SYS_DATABASE_ID));
         } else {
           OX (routine_param.set_type_owner(access_idxs.at(0).var_index_));
@@ -373,7 +367,7 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
         CK (OB_NOT_NULL(params_.schema_checker_));
         OX (schema_guard = schema_checker_->get_schema_guard());
         CK (OB_NOT_NULL(schema_guard));
-        OZ (schema_guard->get_package_info(get_tenant_id_by_object_id(package_id),
+        OZ (schema_guard->get_package_info(
                                            package_id, package_info), package_id);
         CK (OB_NOT_NULL(package_info));
         OZ (collect_ref_obj_info(package_id, package_info->get_schema_version(),
@@ -387,13 +381,13 @@ int ObCreateRoutineResolver::set_routine_param(const ObIArray<ObObjAccessIdx> &a
     OX (routine_param.set_type_name(access_idxs.at(access_idxs.count()-1).var_name_));
     if (OB_FAIL(ret)) {
     } else if (2 == access_idxs.count()) {
-      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(1).var_index_)) {
+      if (true) {
         // system type, set owner is oceanbase
         routine_param.set_type_owner(OB_SYS_DATABASE_ID);
       } else {
         routine_param.set_type_owner(access_idxs.at(0).var_index_);
       }
-    } else if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) {
+    } else if (true) {
       // system type, set owner is oceanbase
       routine_param.set_type_owner(OB_SYS_DATABASE_ID);
     }
@@ -461,8 +455,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
       } else {
         uint64_t owner_id = OB_INVALID_ID;
         CK (!session_info.get_database_name().empty());
-        OZ (schema_checker_->get_database_id(session_info.get_effective_tenant_id(),
-                                             session_info.get_database_name(),
+        OZ (schema_checker_->get_database_id(session_info.get_database_name(),
                                              owner_id));
         OX (routine_param.set_type_owner(owner_id));
         CK (OB_LIKELY(access_idxs.count() > 0));
@@ -497,8 +490,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
       CK (OB_NOT_NULL(schema_checker_),
           OB_NOT_NULL(schema_checker_->get_schema_guard()));
       CK (OB_NOT_NULL(params_.expr_factory_));
-      OZ (schema_checker_->get_database_id(session_info.get_effective_tenant_id(),
-                                           session_info.get_database_name(),
+      OZ (schema_checker_->get_database_id(session_info.get_database_name(),
                                            current_db_id));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObPLResolver::resolve_obj_access_node(
@@ -532,8 +524,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
             routine_param.set_udt_type();
           } else if (3 == obj_access_idents.count()) { //db.pkg.type
             uint64_t owner_id = OB_INVALID_ID;
-            OZ (schema_checker_->get_database_id(session_info.get_effective_tenant_id(),
-                                                 obj_access_idents.at(0).access_name_,
+            OZ (schema_checker_->get_database_id(obj_access_idents.at(0).access_name_,
                                                  owner_id));
             OX (routine_param.set_type_name(obj_access_idents.at(2).access_name_));
             OX (routine_param.set_type_owner(owner_id));
@@ -542,9 +533,7 @@ int ObCreateRoutineResolver::resolve_param_type(const ParseNode *type_node,
           } else if (2 == obj_access_idents.count()) {//db.type or pkg.type
             bool exist = false;
             uint64_t owner_id = OB_INVALID_ID;
-            OZ (schema_checker_->get_schema_guard()->check_database_exist(
-              session_info.get_effective_tenant_id(),
-              obj_access_idents.at(0).access_name_,
+            OZ (schema_checker_->get_schema_guard()->check_database_exist(obj_access_idents.at(0).access_name_,
               exist,
               &owner_id));
             if (OB_FAIL(ret)) {
@@ -657,7 +646,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
       routine_param.reset();
       data_type.reset();
       if (OB_SUCC(ret)) {
-        routine_param.set_tenant_id(session_info_->get_effective_tenant_id());
+        
         routine_param.set_sequence(routine_info.is_procedure()?i+1:i+2);
         routine_param.set_subprogram_id(routine_info.get_subprogram_id());
         routine_param.set_param_position(i+1);
@@ -805,7 +794,6 @@ int ObCreateRoutineResolver::resolve_ret_type(const ParseNode *ret_type_node,
   CK (OB_NOT_NULL(session_info_));
   CK (OB_NOT_NULL(ret_type_node));
   CHECK_COMPATIBILITY_MODE(session_info_);
-  OX (ret_type_param.set_tenant_id(session_info_->get_effective_tenant_id()));
   OX (ret_type_param.set_sequence(ROUTINE_RET_TYPE_SEQUENCE));
   OX (ret_type_param.set_param_position(ROUTINE_RET_TYPE_POSITION));
   OX (ret_type_param.set_subprogram_id(func_info.get_subprogram_id()));
@@ -842,10 +830,9 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
   if (OB_SUCC(ret)) {
     uint64_t database_id = OB_INVALID_ID;
     const share::schema::ObDatabaseSchema *database_schema = NULL;
-    OZ (schema_checker_->get_schema_guard()->get_database_id(session_info_->get_effective_tenant_id(),
-                                                             crt_routine_arg->db_name_,
+    OZ (schema_checker_->get_schema_guard()->get_database_id(crt_routine_arg->db_name_,
                                                              database_id));
-    OZ (schema_checker_->get_schema_guard()->get_database_schema(session_info_->get_effective_tenant_id(),
+    OZ (schema_checker_->get_schema_guard()->get_database_schema(
                                                                  database_id, database_schema));
     if (OB_FAIL(ret) || OB_ISNULL(database_schema)) {
       ret = OB_ERR_BAD_DATABASE;

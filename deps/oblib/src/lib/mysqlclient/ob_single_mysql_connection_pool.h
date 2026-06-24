@@ -37,8 +37,7 @@ public:
   void init(const ObAddr &server);
   virtual int get_server(const int64_t svr_idx, common::ObAddr &server);
   virtual int64_t get_server_count() const;
-  virtual int get_tenant_ids(ObIArray<uint64_t> &tenant_ids);
-  virtual int get_tenant_servers(const uint64_t tenant_id, ObIArray<ObAddr> &tenant_servers);
+  virtual int get_tenant_servers(ObIArray<ObAddr> &tenant_servers);
   int refresh_server_list(void);
   int prepare_refresh() override;
   int end_refresh() override;

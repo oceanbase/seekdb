@@ -255,7 +255,7 @@ private:
       str = lob->get_inrow_data_ptr();
     } else {
       ObString lob_data;
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter str_iter(ObLongTextType, obj_meta.get_collation_type(),
           ObString(agg_len, reinterpret_cast<const char *>(agg_data)), true);
       if (OB_FAIL(str_iter.init(0, NULL, &allocator))) {
@@ -299,7 +299,7 @@ private:
       } else {
         ObString l_data;
         ObString r_data;
-        common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+        common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
         ObTextStringIter l_instr_iter(ObLongTextType, obj_meta.get_collation_type(),
                                       ObString(l_len, reinterpret_cast<const char *>(l_v)), true);
         ObTextStringIter r_instr_iter(ObLongTextType, obj_meta.get_collation_type(),

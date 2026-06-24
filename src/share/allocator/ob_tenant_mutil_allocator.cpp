@@ -26,8 +26,8 @@ using namespace logservice;
 namespace common
 {
 
-ObTenantMutilAllocator::ObTenantMutilAllocator(uint64_t tenant_id)
-  : tenant_id_(tenant_id), total_limit_(INT64_MAX), pending_replay_mutator_size_(0),
+ObTenantMutilAllocator::ObTenantMutilAllocator()
+  : total_limit_(INT64_MAX), pending_replay_mutator_size_(0),
     LOG_HANDLE_SUBMIT_TASK_SIZE(sizeof(palf::LogHandleSubmitTask)),
     LOG_IO_FLUSH_LOG_TASK_SIZE(sizeof(palf::LogIOFlushLogTask)),
     LOG_IO_TRUNCATE_LOG_TASK_SIZE(sizeof(palf::LogIOTruncateLogTask)),
@@ -40,25 +40,25 @@ ObTenantMutilAllocator::ObTenantMutilAllocator(uint64_t tenant_id)
     clog_blk_alloc_(),
     replay_log_task_blk_alloc_(REPLAY_MEM_LIMIT_THRESHOLD),
     clog_compressing_blk_alloc_(CLOG_COMPRESSION_MEM_LIMIT_THRESHOLD),
-    clog_ge_alloc_(ObMemAttr(tenant_id, ObModIds::OB_CLOG_GE), ObVSliceAlloc::DEFAULT_BLOCK_SIZE, clog_blk_alloc_),
-    log_handle_submit_task_alloc_(LOG_HANDLE_SUBMIT_TASK_SIZE, ObMemAttr(tenant_id, "HandleSubmit"), choose_blk_size(LOG_HANDLE_SUBMIT_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_flush_log_task_alloc_(LOG_IO_FLUSH_LOG_TASK_SIZE, ObMemAttr(tenant_id, "FlushLog"), choose_blk_size(LOG_IO_FLUSH_LOG_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_truncate_log_task_alloc_(LOG_IO_TRUNCATE_LOG_TASK_SIZE, ObMemAttr(tenant_id, "TruncateLog"), choose_blk_size(LOG_IO_TRUNCATE_LOG_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_flush_meta_task_alloc_(LOG_IO_FLUSH_META_TASK_SIZE, ObMemAttr(tenant_id, "FlushMeta"), choose_blk_size(LOG_IO_FLUSH_META_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr(tenant_id, "FlushMeta"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
-    palf_fetch_log_task_alloc_(PALF_FETCH_LOG_TASK_SIZE, ObMemAttr(tenant_id, ObModIds::OB_FETCH_LOG_TASK), choose_blk_size(PALF_FETCH_LOG_TASK_SIZE), clog_blk_alloc_, this),
-    replay_log_task_alloc_(ObMemAttr(tenant_id, ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
-    log_io_flashback_task_alloc_(LOG_IO_FLASHBACK_TASK_SIZE, ObMemAttr(tenant_id, "Flashback"), choose_blk_size(LOG_IO_FLASHBACK_TASK_SIZE), clog_blk_alloc_, this),
-    log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr(tenant_id, "PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this),
-    log_fill_cache_task_alloc_(LOG_FILL_CACHE_TASK_SIZE, ObMemAttr(tenant_id, "FillCache"), choose_blk_size(LOG_FILL_CACHE_TASK_SIZE), clog_blk_alloc_, this),
-    clog_compression_buf_alloc_(ObMemAttr(tenant_id, "LogComBuf"), common::OB_MALLOC_BIG_BLOCK_SIZE, clog_compressing_blk_alloc_)
+    clog_ge_alloc_(ObMemAttr(ObModIds::OB_CLOG_GE), ObVSliceAlloc::DEFAULT_BLOCK_SIZE, clog_blk_alloc_),
+    log_handle_submit_task_alloc_(LOG_HANDLE_SUBMIT_TASK_SIZE, ObMemAttr("HandleSubmit"), choose_blk_size(LOG_HANDLE_SUBMIT_TASK_SIZE), clog_blk_alloc_, this),
+    log_io_flush_log_task_alloc_(LOG_IO_FLUSH_LOG_TASK_SIZE, ObMemAttr("FlushLog"), choose_blk_size(LOG_IO_FLUSH_LOG_TASK_SIZE), clog_blk_alloc_, this),
+    log_io_truncate_log_task_alloc_(LOG_IO_TRUNCATE_LOG_TASK_SIZE, ObMemAttr("TruncateLog"), choose_blk_size(LOG_IO_TRUNCATE_LOG_TASK_SIZE), clog_blk_alloc_, this),
+    log_io_flush_meta_task_alloc_(LOG_IO_FLUSH_META_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_FLUSH_META_TASK_SIZE), clog_blk_alloc_, this),
+    log_io_truncate_prefix_blocks_task_alloc_(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE, ObMemAttr("FlushMeta"), choose_blk_size(LOG_IO_TRUNCATE_PREFIX_BLOCKS_TASK_SIZE), clog_blk_alloc_, this),
+    palf_fetch_log_task_alloc_(PALF_FETCH_LOG_TASK_SIZE, ObMemAttr(ObModIds::OB_FETCH_LOG_TASK), choose_blk_size(PALF_FETCH_LOG_TASK_SIZE), clog_blk_alloc_, this),
+    replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
+    log_io_flashback_task_alloc_(LOG_IO_FLASHBACK_TASK_SIZE, ObMemAttr("Flashback"), choose_blk_size(LOG_IO_FLASHBACK_TASK_SIZE), clog_blk_alloc_, this),
+    log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr("PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this),
+    log_fill_cache_task_alloc_(LOG_FILL_CACHE_TASK_SIZE, ObMemAttr("FillCache"), choose_blk_size(LOG_FILL_CACHE_TASK_SIZE), clog_blk_alloc_, this),
+    clog_compression_buf_alloc_(ObMemAttr("LogComBuf"), common::OB_MALLOC_BIG_BLOCK_SIZE, clog_compressing_blk_alloc_)
 {
   // set_nway according to tenant's max_cpu
   double min_cpu = 0;
   double max_cpu = 0;
   omt::ObMultiTenant *omt = GCTX.omt_;
   if (NULL == omt) {
-  } else if (OB_SUCCESS != omt->get_tenant_cpu(tenant_id, min_cpu, max_cpu)) {
+  } else if (OB_SUCCESS != omt->get_tenant_cpu(min_cpu, max_cpu)) {
   } else {
     const int32_t nway = (int32_t)max_cpu;
     set_nway(nway);
@@ -67,13 +67,13 @@ ObTenantMutilAllocator::ObTenantMutilAllocator(uint64_t tenant_id)
 
 ObTenantMutilAllocator::~ObTenantMutilAllocator()
 {
-  OB_LOG(INFO, "~ObTenantMutilAllocator", K(tenant_id_));
+  OB_LOG(INFO, "~ObTenantMutilAllocator");
   destroy();
 }
 
 void ObTenantMutilAllocator::destroy()
 {
-  OB_LOG(INFO, "ObTenantMutilAllocator destroy", K(tenant_id_));
+  OB_LOG(INFO, "ObTenantMutilAllocator destroy");
   clog_ge_alloc_.destroy();
   log_handle_submit_task_alloc_.destroy();
   log_io_flush_log_task_alloc_.destroy();
@@ -102,22 +102,6 @@ int ObTenantMutilAllocator::choose_blk_size(int obj_size)
   return blk_size;
 }
 
-void ObTenantMutilAllocator::try_purge()
-{
-  clog_ge_alloc_.purge_extra_cached_block(0);
-  log_handle_submit_task_alloc_.purge_extra_cached_block(0);
-  log_io_flush_log_task_alloc_.purge_extra_cached_block(0);
-  log_io_truncate_log_task_alloc_.purge_extra_cached_block(0);
-  log_io_flush_meta_task_alloc_.purge_extra_cached_block(0);
-  log_io_truncate_prefix_blocks_task_alloc_.purge_extra_cached_block(0);
-  log_io_flashback_task_alloc_.purge_extra_cached_block(0);
-  log_io_purge_throttling_task_alloc_.purge_extra_cached_block(0);
-  palf_fetch_log_task_alloc_.purge_extra_cached_block(0);
-  replay_log_task_alloc_.purge_extra_cached_block(0);
-  log_fill_cache_task_alloc_.purge_extra_cached_block(0);
-  clog_compression_buf_alloc_.purge_extra_cached_block(0);
-}
-
 void *ObTenantMutilAllocator::ge_alloc(const int64_t size)
 {
   void *ptr = NULL;
@@ -132,7 +116,7 @@ void ObTenantMutilAllocator::ge_free(void *ptr)
 
 void *ObTenantMutilAllocator::alloc(const int64_t size)
 {
-  return ob_malloc(size, lib::ObMemAttr(tenant_id_, "LogAlloc"));
+  return ob_malloc(size, lib::ObMemAttr("LogAlloc"));
 }
 
 void *ObTenantMutilAllocator::alloc(const int64_t size, const lib::ObMemAttr &attr)
@@ -354,7 +338,7 @@ void ObTenantMutilAllocator::set_nway(const int32_t nway)
 {
   if (nway > 0) {
     clog_ge_alloc_.set_nway(nway);
-    OB_LOG(INFO, "finish set nway", K(tenant_id_), K(nway));
+    OB_LOG(INFO, "finish set nway", K(nway));
   }
 }
 
@@ -368,7 +352,7 @@ void ObTenantMutilAllocator::set_limit(const int64_t total_limit)
     clog_blk_alloc_.set_limit(clog_limit);
     replay_log_task_alloc_.set_limit(replay_limit);
     clog_compressing_blk_alloc_.set_limit(clog_compress_limit);
-    OB_LOG(INFO, "ObTenantMutilAllocator set tenant mem limit finished", K(tenant_id_), K(total_limit), K(clog_limit),
+    OB_LOG(INFO, "ObTenantMutilAllocator set tenant mem limit finished", K(total_limit), K(clog_limit),
         K(replay_limit), K(clog_compress_limit));
   }
 }

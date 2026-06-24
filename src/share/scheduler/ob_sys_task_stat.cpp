@@ -70,7 +70,6 @@ ObSysTaskStat::ObSysTaskStat()
     task_id_(),
     task_type_(MAX_SYS_TASK_TYPE),
     svr_ip_(),
-    tenant_id_(0),
     comment_(),
     is_cancel_(false)
 {

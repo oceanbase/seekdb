@@ -60,32 +60,15 @@ class TestSSTableScnRangeCut : public ::testing::Test
 {
 public:
   TestSSTableScnRangeCut()
-    : tenant_id_(1),
-      t3m_(nullptr),
-      tenant_base_(1)
   { }
   ~TestSSTableScnRangeCut() {}
   void SetUp()
   {
-    t3m_ = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST, 1);
-    t3m_->init();
-    tenant_base_.set(t3m_);
-
-    ObTenantEnv::set_tenant(&tenant_base_);
-    ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
   }
   void TearDown()
   {
-    t3m_->~ObTenantMetaMemMgr();
-    t3m_ = nullptr;
-    tenant_base_.destroy();
-    ObTenantEnv::set_tenant(nullptr);
   }
 private:
-  const uint64_t tenant_id_;
-  ObTenantMetaMemMgr *t3m_;
-  ObTenantBase tenant_base_;
-  ObTabletTableStore tablet_table_store_;
   DISALLOW_COPY_AND_ASSIGN(TestSSTableScnRangeCut);
 };
 

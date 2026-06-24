@@ -675,7 +675,6 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
     sql::ObTaskExecutorCtx &task_ctx = exec_ctx.get_task_exec_ctx();
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
     if (OB_FAIL(gctx.schema_service_->get_tenant_schema_guard(
-                exec_ctx.get_my_session()->get_effective_tenant_id(),
                 schema_guard,
                 task_ctx.get_query_tenant_begin_schema_version(),
                 task_ctx.get_query_sys_begin_schema_version()))) {

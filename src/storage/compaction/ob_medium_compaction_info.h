@@ -218,7 +218,7 @@ public:
   }
   void reset();
   bool is_valid() const;
-  bool from_cur_cluster() const { return cluster_id_ == GCONF.cluster_id && tenant_id_ == MTL_ID(); }
+  bool from_cur_cluster() const { return cluster_id_ == GCONF.cluster_id && true; }
   bool cluster_id_equal() const { return cluster_id_ == GCONF.cluster_id; } // for compat
   bool should_throw_for_standby_cluster() const;
   // serialize & deserialize
@@ -254,7 +254,7 @@ public:
       uint64_t contain_parallel_range_          : SCS_ONE_BIT;
       uint64_t medium_merge_reason_             : 8;
       uint64_t is_schema_changed_               : SCS_ONE_BIT;
-      uint64_t tenant_id_                       : 16; // record tenant_id of ls primary_leader, just for throw medium
+       // record tenant of ls primary_leader, just for throw medium
       uint64_t co_major_merge_type_             : 4;
       uint64_t is_skip_tenant_major_            : SCS_ONE_BIT;
       uint64_t contain_mds_filter_info_         : SCS_ONE_BIT;

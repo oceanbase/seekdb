@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_schema_recorder.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 
@@ -279,11 +280,11 @@ int ObStorageSchemaRecorder::get_schema(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard/schema/allocator is null", K(ret), K_(tablet_id), KP_(schema_guard),
         KP_(storage_schema), KP_(allocator));
-  } else if (OB_FAIL(MTL(ObTenantSchemaService*)->get_schema_service()->get_tenant_schema_guard(MTL_ID(), *schema_guard_))) {
+  } else if (OB_FAIL(share::g_mp->tenant_schema_service()->get_schema_service()->get_tenant_schema_guard(*schema_guard_))) {
     LOG_WARN("failed to get tenant schema guard", K(ret), K(table_id_));
-  } else if (OB_FAIL(schema_guard_->get_schema_version(MTL_ID(), tenant_schema_version))) {
+  } else if (OB_FAIL(schema_guard_->get_schema_version(tenant_schema_version))) {
     LOG_WARN("fail to get schema version", KR(ret), K(tenant_schema_version));
-  } else if (OB_FAIL(schema_guard_->get_table_schema(MTL_ID(), table_id_, t_schema))
+  } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, t_schema))
              || NULL == t_schema
              || table_version > t_schema->get_schema_version()) {
     // The version is checked here, so there is no need to check whether it is full

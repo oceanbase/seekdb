@@ -37,21 +37,21 @@ class ObISQLConnectionPool;
 class ObSqlTransQueryStashDesc
 {
 public:
-  ObSqlTransQueryStashDesc() : tenant_id_(OB_INVALID_TENANT_ID),stash_query_row_cnt_(0) {}
+  ObSqlTransQueryStashDesc() : stash_query_row_cnt_(0) {}
   ~ObSqlTransQueryStashDesc() { reset(); }
   void reset() {
-    tenant_id_ = OB_INVALID_TENANT_ID;
+    
     stash_query_row_cnt_ = 0;
     stash_query_.reuse();
   }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
+  
   void add_row_cnt(int64_t row_cnt) { stash_query_row_cnt_ += row_cnt; }
   int64_t get_row_cnt() { return stash_query_row_cnt_; }
   ObSqlString &get_stash_query() { return stash_query_; }
-  TO_STRING_KV(K_(tenant_id), K_(stash_query_row_cnt), K_(stash_query));
+  TO_STRING_KV(K_(stash_query_row_cnt), K_(stash_query));
 private:
-  uint64_t tenant_id_;
+  
   int64_t stash_query_row_cnt_;
   ObSqlString stash_query_;
 };
@@ -66,11 +66,9 @@ public:
 public:
   // start transaction
   virtual int start(ObISQLClient *proxy,
-                    const uint64_t tenant_id,
                     bool with_snapshot = false,
                     const int32_t group_id = 0);
   virtual int start(ObISQLClient *proxy,
-                    const uint64_t &tenant_id,
                     const int64_t &refreshed_schema_version,
                     bool with_snapshot = false);
   // end the transaction
@@ -78,7 +76,7 @@ public:
   virtual bool is_started() const { return in_trans_; }
 
   // get_stash_query for query batch buf
-  int get_stash_query(uint64_t tenant_id, const char* table_name, ObSqlTransQueryStashDesc *&desc);
+  int get_stash_query(const char* table_name, ObSqlTransQueryStashDesc *&desc);
   bool get_enable_query_stash() {
     return enable_query_stash_;
   }
@@ -91,7 +89,7 @@ public:
   int do_stash_query(int min_batch_cnt = 1);
   int handle_trans_in_the_end(const int err_no);
 protected:
-  int start_transaction(const uint64_t &tenant_id, bool with_snap_shot);
+  int start_transaction(bool with_snap_shot);
   int end_transaction(const bool commit);
 protected:
   int64_t start_time_;

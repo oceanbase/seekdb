@@ -19,12 +19,12 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
 ObRenameUserStmt::ObRenameUserStmt(ObIAllocator *name_pool)
-    : ObDDLStmt(name_pool, stmt::T_RENAME_USER), tenant_id_(OB_INVALID_ID)
+    : ObDDLStmt(name_pool, stmt::T_RENAME_USER)
 {
 }
 
 ObRenameUserStmt::ObRenameUserStmt()
-    : ObDDLStmt(NULL, stmt::T_RENAME_USER), tenant_id_(OB_INVALID_ID)
+    : ObDDLStmt(NULL, stmt::T_RENAME_USER)
 {
 }
 

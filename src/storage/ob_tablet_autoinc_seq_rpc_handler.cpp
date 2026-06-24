@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_autoinc_seq_rpc_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
 #include "storage/multi_data_source/mds_ctx.h"
 
@@ -145,12 +146,12 @@ int ObTabletAutoincSeqRpcHandler::fetch_tablet_autoinc_seq_cache(
     ObFetchTabletSeqRes &res)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg.tenant_id_;
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
   } else {
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       ObLSHandle ls_handle;
       share::ObLSID ls_id = arg.ls_id_;
       ObRole role = common::INVALID_ROLE;
@@ -164,12 +165,12 @@ int ObTabletAutoincSeqRpcHandler::fetch_tablet_autoinc_seq_cache(
       share::SCN trans_version;
       bool is_committed = false;
       ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
-      if (OB_FAIL(MTL(logservice::ObLogService*)->get_palf_role(ls_id, role, proposal_id))) {
+      if (OB_FAIL(share::g_mp->log_service()->get_palf_role(ls_id, role, proposal_id))) {
         LOG_WARN("get palf role failed", K(ret));
       } else if (!is_strong_leader(role)) {
         ret = OB_NOT_MASTER;
         LOG_WARN("follower received FetchTabletsSeq rpc", K(ret), K(ls_id));
-      } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+      } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
         LOG_WARN("get ls failed", K(ret), K(ls_id));
       } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle, THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : OB_DEFAULT_RPC_TIMEOUT))) {
         LOG_WARN("failed to get tablet", KR(ret), K(arg));
@@ -195,7 +196,7 @@ int ObTabletAutoincSeqRpcHandler::batch_get_tablet_autoinc_seq(
     obcall::ObBatchGetTabletAutoincSeqRes &res)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg.tenant_id_;
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
@@ -203,17 +204,17 @@ int ObTabletAutoincSeqRpcHandler::batch_get_tablet_autoinc_seq(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       ObLSHandle ls_handle;
       share::ObLSID ls_id = arg.ls_id_;
       ObRole role = common::INVALID_ROLE;
       int64_t proposal_id = -1;
-      if (OB_FAIL(MTL(logservice::ObLogService*)->get_palf_role(ls_id, role, proposal_id))) {
+      if (OB_FAIL(share::g_mp->log_service()->get_palf_role(ls_id, role, proposal_id))) {
         LOG_WARN("get palf role failed", K(ret));
       } else if (!is_strong_leader(role)) {
         ret = OB_NOT_MASTER;
         LOG_WARN("follower received FetchTabletsSeq rpc", K(ret), K(ls_id));
-      } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+      } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
         LOG_WARN("get ls failed", K(ret), K(ls_id));
       } else if (OB_FAIL(res.autoinc_params_.reserve(arg.src_tablet_ids_.count()))) {
         LOG_WARN("failed to reserve autoinc param", K(ret));
@@ -253,7 +254,7 @@ int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq(
     obcall::ObBatchSetTabletAutoincSeqRes &res)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg.tenant_id_;
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
@@ -263,24 +264,24 @@ int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq(
   } else if (OB_FAIL(res.autoinc_params_.assign(arg.autoinc_params_))) {
     LOG_WARN("failed to assign autoinc params", K(ret), K(arg));
   } else {
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       ObLSHandle ls_handle;
       ObLS *ls = nullptr;
       share::ObLSID ls_id = arg.ls_id_;
       ObRole role = common::INVALID_ROLE;
       int64_t proposal_id = -1;
-      if (OB_FAIL(MTL(logservice::ObLogService*)->get_palf_role(ls_id, role, proposal_id))) {
+      if (OB_FAIL(share::g_mp->log_service()->get_palf_role(ls_id, role, proposal_id))) {
         LOG_WARN("get palf role failed", K(ret));
       } else if (!is_strong_leader(role)) {
         ret = OB_NOT_MASTER;
         LOG_WARN("follower received FetchTabletsSeq rpc", K(ret), K(ls_id));
-      } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+      } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
         LOG_WARN("get ls failed", K(ret), K(ls_id));
       } else if (OB_FAIL(ls_handle.get_ls()->get_ls_role(role))) {
-        LOG_WARN("get role failed", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("get role failed", K(ret), K(arg.ls_id_));
       } else if (OB_UNLIKELY(ObRole::LEADER != role)) {
         ret = OB_NOT_MASTER;
-        LOG_WARN("ls not leader", K(ret), K(MTL_ID()), K(arg.ls_id_));
+        LOG_WARN("ls not leader", K(ret), K(arg.ls_id_));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < res.autoinc_params_.count(); i++) {
           int tmp_ret = OB_SUCCESS;
@@ -344,7 +345,7 @@ int ObTabletAutoincSeqRpcHandler::batch_set_tablet_autoinc_seq_in_trans(
 {
   int ret = OB_SUCCESS;
   const share::ObLSID &ls_id = arg.ls_id_;
-  ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "SetAutoSeq"));
+  ObArenaAllocator allocator(common::ObMemAttr("SetAutoSeq"));
   if (OB_UNLIKELY(ls_id != ls.get_ls_id())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ls", K(ret), K(ls_id), K(ls.get_ls_id()));

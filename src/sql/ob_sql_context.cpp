@@ -18,7 +18,7 @@
 #include "ob_sql_context.h"
 
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
-#include "share/external_table/ob_external_object_ctx.h"
+#include "share/catalog/ob_external_object_ctx.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/ob_sql_mock_schema_utils.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -152,7 +152,6 @@ ObSqlCtx::ObSqlCtx()
     is_ddl_from_primary_(false),
     cur_stmt_(NULL),
     cur_plan_(nullptr),
-    can_reroute_sql_(false),
     is_sensitive_(false),
     is_protocol_weak_read_(false),
     flashback_query_expr_(nullptr),
@@ -165,9 +164,7 @@ ObSqlCtx::ObSqlCtx()
     ins_opt_ctx_(),
     flags_(0),
     ccl_rule_id_(0),
-    ccl_match_time_(0),
-    reroute_info_(nullptr)
-    
+    ccl_match_time_(0)
 {
   sql_id_[0] = '\0';
   sql_id_[common::OB_MAX_SQL_ID_LENGTH] = '\0';
@@ -207,7 +204,6 @@ void ObSqlCtx::reset()
   need_match_all_params_ = false;
   all_local_session_vars_ = nullptr;
   is_ddl_from_primary_ = false;
-  can_reroute_sql_ = false;
   is_sensitive_ = false;
   enable_sql_resource_manage_ = false;
   resource_map_rule_.reset();
@@ -217,11 +213,6 @@ void ObSqlCtx::reset()
   first_equal_param_cons_cnt_ = 0;
   first_const_param_cons_cnt_ = 0;
   first_expr_cons_cnt_ = 0;
-  if (nullptr != reroute_info_) {
-    reroute_info_->reset();
-    op_reclaim_free(reroute_info_);
-    reroute_info_ = nullptr;
-  }
   clear();
   flashback_query_expr_ = nullptr;
   stmt_type_ = stmt::T_NONE;
@@ -264,21 +255,9 @@ void ObSqlSchemaGuard::reset()
   schema_guard_ = NULL;
   allocator_.reset();
   next_link_table_id_ = 1;
-  dblink_scn_.reuse();
   mocked_schema_id_counter_ = OB_MIN_EXTERNAL_OBJECT_ID;
 }
 
-
-bool ObSqlSchemaGuard::is_link_table(const ObDMLStmt *stmt, uint64_t table_id)
-{
-  bool is_link = false;
-  TableItem *table_item = NULL;
-  if (NULL != stmt) {
-    table_item = stmt->get_table_item_by_id(table_id);
-    is_link = (NULL == table_item) ? false : table_item->is_link_table();
-  }
-  return is_link;
-}
 
 int ObSqlSchemaGuard::add_mocked_table_schema(const ObTableSchema &table_schema)
 {
@@ -318,13 +297,13 @@ int ObSqlSchemaGuard::recover_schema_from_external_object(const share::ObExterna
   int ret = OB_SUCCESS;
   switch (external_object.type) {
     case share::ObExternalObjectType::TABLE_SCHEMA: {
-      const uint64_t tenant_id = external_object.tenant_id;
+      
       const uint64_t catalog_id = external_object.catalog_id;
       const uint64_t database_id = external_object.database_id;
       const common::ObString table_name = external_object.table_name;
       const uint64_t table_id = external_object.table_id;
       const ObTableSchema *table_schema = NULL;
-      if (OB_FAIL(get_catalog_table_schema(tenant_id, catalog_id, database_id, table_name, table_schema))) {
+      if (OB_FAIL(get_catalog_table_schema(catalog_id, database_id, table_name, table_schema))) {
         LOG_WARN("get catalog table schema failed", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -337,12 +316,12 @@ int ObSqlSchemaGuard::recover_schema_from_external_object(const share::ObExterna
       break;
     }
     case share::ObExternalObjectType::DATABASE_SCHEMA: {
-      const uint64_t tenant_id = external_object.tenant_id;
+      
       const uint64_t catalog_id = external_object.catalog_id;
       const uint64_t database_id = external_object.database_id;
       const common::ObString database_name = external_object.database_name;
       const ObDatabaseSchema *db_schema = NULL;
-      if (OB_FAIL(get_catalog_database_schema(tenant_id, catalog_id, database_name, db_schema))) {
+      if (OB_FAIL(get_catalog_database_schema( catalog_id, database_name, db_schema))) {
         LOG_WARN("get catalog database schema failed", K(ret));
       } else if (OB_ISNULL(db_schema)) {
         ret = OB_ERR_UNEXPECTED;
@@ -432,14 +411,13 @@ int ObSqlSchemaGuard::get_table_schema(uint64_t table_id,
       LOG_WARN("failed to get mocked table schema", K(table_id), K(ret));
     }
   } else {
-    const uint64_t tenant_id = MTL_ID();
     OV (OB_NOT_NULL(schema_guard_));
-    OZ (schema_guard_->get_table_schema(tenant_id, table_id, table_schema), table_id, is_link);
+    OZ (schema_guard_->get_table_schema( table_id, table_schema), table_id, is_link);
   }
   return ret;
 }
 
-int ObSqlSchemaGuard::get_table_schema(const uint64_t tenant_id,
+int ObSqlSchemaGuard::get_table_schema(
                                       const uint64_t table_id,
                                       const share::schema::ObTableSchema *&table_schema,
                                       bool is_link /* = false*/)
@@ -451,12 +429,12 @@ int ObSqlSchemaGuard::get_table_schema(const uint64_t tenant_id,
     }
   } else {
     OV (OB_NOT_NULL(schema_guard_));
-    OZ (schema_guard_->get_table_schema(tenant_id, table_id, table_schema), table_id, is_link);
+    OZ (schema_guard_->get_table_schema( table_id, table_schema), table_id, is_link);
   }
   return ret;
 }
 
-int ObSqlSchemaGuard::get_database_schema(const uint64_t tenant_id,
+int ObSqlSchemaGuard::get_database_schema(
                                           const uint64_t database_id,
                                           const ObDatabaseSchema *&database_schema)
 {
@@ -482,24 +460,13 @@ int ObSqlSchemaGuard::get_database_schema(const uint64_t tenant_id,
     }
   } else {
     OV(OB_NOT_NULL(schema_guard_));
-    OZ(schema_guard_->get_database_schema(tenant_id, database_id, database_schema), tenant_id, database_id);
+    OZ(schema_guard_->get_database_schema( database_id, database_schema), database_id);
   }
   return ret;
 }
 
-int ObSqlSchemaGuard::get_database_schema(const uint64_t database_id,
-                                          const ObDatabaseSchema *&database_schema)
-{
-  int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  if (OB_FAIL(get_database_schema(tenant_id, database_id, database_schema))) {
-    LOG_WARN("failed to get database schema", K(ret), K(tenant_id), K(database_id));
-  }
-  return ret;
-}
 
-int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t tenant_id,
-                                                  const uint64_t catalog_id,
+int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t catalog_id,
                                                   const ObString &database_name,
                                                   const ObDatabaseSchema *&database_schema)
 {
@@ -509,7 +476,7 @@ int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t tenant_id,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_guard_->get_tenant_name_case_mode(tenant_id, case_mode))) {
+  } else if (OB_FAIL(schema_guard_->get_tenant_name_case_mode(case_mode))) {
     LOG_WARN("failed to get case mode", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < mocked_database_schemas_.count(); i++) {
@@ -518,7 +485,7 @@ int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t tenant_id,
         // Ignore this null, continue loop
         // ignore ret
         LOG_WARN("get unexpected null", K(ret));
-      } else if (tenant_id == tmp_schema->get_tenant_id() && catalog_id == tmp_schema->get_catalog_id()
+      } else if (true && catalog_id == tmp_schema->get_catalog_id()
                  && ObCharset::case_mode_equal(case_mode, database_name, tmp_schema->get_database_name())) {
         database_schema = tmp_schema;
         break;
@@ -532,7 +499,7 @@ int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t tenant_id,
     ObCachedCatalogMetaGetter catalog_meta_getter{*schema_guard_, allocator_};
     // assign database id first
     tmp_schema.set_database_id(get_next_mocked_schema_id());
-    if (OB_FAIL(catalog_meta_getter.fetch_namespace_schema(tenant_id, catalog_id, database_name, case_mode, tmp_schema))) {
+    if (OB_FAIL(catalog_meta_getter.fetch_namespace_schema(catalog_id, database_name, case_mode, tmp_schema))) {
       LOG_WARN("failed to fetch_namespace_schema", K(ret));
     } else if (OB_FAIL(add_mocked_database_schema(tmp_schema))) {
       LOG_WARN("failed to add_mocked_schema", K(ret));
@@ -545,15 +512,14 @@ int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t tenant_id,
   return ret;
 }
 
-int ObSqlSchemaGuard::get_catalog_database_id(const uint64_t tenant_id,
-                                              const uint64_t catalog_id,
+int ObSqlSchemaGuard::get_catalog_database_id(const uint64_t catalog_id,
                                               const ObString &database_name,
                                               uint64_t &database_id)
 {
   int ret = OB_SUCCESS;
   database_id = OB_INVALID_ID;
   const ObDatabaseSchema *schema = NULL;
-  if (OB_FAIL(get_catalog_database_schema(tenant_id, catalog_id, database_name, schema))) {
+  if (OB_FAIL(get_catalog_database_schema( catalog_id, database_name, schema))) {
     LOG_WARN("failed to get_catalog_database_schema", K(ret));
   } else if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -564,8 +530,7 @@ int ObSqlSchemaGuard::get_catalog_database_id(const uint64_t tenant_id,
   return ret;
 }
 
-int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
-                                               const uint64_t catalog_id,
+int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t catalog_id,
                                                const uint64_t database_id,
                                                const ObString &database_name,
                                                const ObString &tbl_name,
@@ -577,7 +542,7 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
   if (OB_ISNULL(schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_guard_->get_tenant_name_case_mode(tenant_id, case_mode))) {
+  } else if (OB_FAIL(schema_guard_->get_tenant_name_case_mode(case_mode))) {
     LOG_WARN("failed to get case mode", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
@@ -586,7 +551,7 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
         // Ignore this null, continue loop
         // ignore ret
         LOG_WARN("get unexpected null", K(ret));
-      } else if (tenant_id == tmp_schema->get_tenant_id() && catalog_id == tmp_schema->get_catalog_id()
+      } else if (true && catalog_id == tmp_schema->get_catalog_id()
                  && database_id == tmp_schema->get_database_id()
                  && ObCharset::case_mode_equal(case_mode, tbl_name, tmp_schema->get_table_name())) {
         table_schema = tmp_schema;
@@ -602,9 +567,9 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
     ObCachedCatalogMetaGetter catalog_meta_getter{*schema_guard_, allocator_};
     tmp_schema.set_database_id(database_id);
     tmp_schema.set_table_id(get_next_mocked_schema_id());
-    if (OB_FAIL(catalog_meta_getter.fetch_table_schema(tenant_id, catalog_id, database_name, tbl_name, case_mode, tmp_schema))) {
+    if (OB_FAIL(catalog_meta_getter.fetch_table_schema(catalog_id, database_name, tbl_name, case_mode, tmp_schema))) {
       LOG_WARN("failed to fetch_table_schema", K(ret));
-    } else if (OB_FAIL(schema_guard_->get_schema_version(tenant_id, schema_version))) {
+    } else if (OB_FAIL(schema_guard_->get_schema_version(schema_version))) {
       LOG_WARN("get schema version failed", K(ret));
     } else if (FALSE_IT(tmp_schema.set_schema_version(schema_version))) {
     } else if (OB_FAIL(add_mocked_table_schema(tmp_schema))) {
@@ -617,8 +582,7 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
   return ret;
 }
 
-int ObSqlSchemaGuard::get_catalog_table_id(const uint64_t tenant_id,
-                                           const uint64_t catalog_id,
+int ObSqlSchemaGuard::get_catalog_table_id(const uint64_t catalog_id,
                                            const uint64_t database_id,
                                            const ObString &tbl_name,
                                            uint64_t &table_id)
@@ -626,7 +590,7 @@ int ObSqlSchemaGuard::get_catalog_table_id(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   table_id = OB_INVALID_ID;
   const ObTableSchema *table_schema = NULL;
-  if (OB_FAIL(get_catalog_table_schema(tenant_id, catalog_id, database_id, tbl_name, table_schema))) {
+  if (OB_FAIL(get_catalog_table_schema(catalog_id, database_id, tbl_name, table_schema))) {
     LOG_WARN("get_catalog_table_schema failed", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -635,8 +599,7 @@ int ObSqlSchemaGuard::get_catalog_table_id(const uint64_t tenant_id,
   return ret;
 }
 
-int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
-                                               const uint64_t catalog_id,
+int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t catalog_id,
                                                const uint64_t database_id,
                                                const ObString &tbl_name,
                                                const ObTableSchema *&table_schema)
@@ -649,8 +612,7 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get database schema failed", K(ret));
-  } else if (OB_FAIL(get_catalog_table_schema(tenant_id,
-                                              catalog_id,
+  } else if (OB_FAIL(get_catalog_table_schema(catalog_id,
                                               database_id,
                                               database_schema->get_database_name(),
                                               tbl_name,
@@ -676,11 +638,10 @@ int ObSqlSchemaGuard::get_column_schema(uint64_t table_id, const ObString &colum
     }
   } else {
     // first get table_schema, than try mock column_schema for part id
-    const uint64_t tenant_id = MTL_ID();
     const ObTableSchema *table_schema = NULL;
     OV (OB_NOT_NULL(schema_guard_));
     OV ((OB_INVALID_ID != table_id && !column_name.empty()));
-    OZ (schema_guard_->get_table_schema(tenant_id, table_id, table_schema));
+    OZ (schema_guard_->get_table_schema( table_id, table_schema));
     if (table_schema == NULL) {
       // do nothing, same as schema_guard_->get_column_schema()
     } else {
@@ -704,11 +665,10 @@ int ObSqlSchemaGuard::get_column_schema(uint64_t table_id, uint64_t column_id,
     }
   } else {
     // first get table_schema, than try mock column_schema for part id
-    const uint64_t tenant_id = MTL_ID();
     const ObTableSchema *table_schema = NULL;
     OV (OB_NOT_NULL(schema_guard_));
     OV ((OB_INVALID_ID != table_id && OB_INVALID_ID != column_id));
-    OZ (schema_guard_->get_table_schema(tenant_id, table_id, table_schema));
+    OZ (schema_guard_->get_table_schema( table_id, table_schema));
     if (table_schema == NULL) {
       // do nothing, same as schema_guard_->get_column_schema()
     } else {
@@ -723,9 +683,9 @@ int ObSqlSchemaGuard::get_table_schema_version(const uint64_t table_id,
                                                int64_t &schema_version) const
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   OV (OB_NOT_NULL(schema_guard_));
-  OZ (schema_guard_->get_schema_version(TABLE_SCHEMA, tenant_id, table_id, schema_version), table_id);
+  OZ (schema_guard_->get_schema_version(TABLE_SCHEMA, table_id, schema_version), table_id);
   return ret;
 }
 
@@ -739,12 +699,12 @@ int ObSqlSchemaGuard::get_can_read_index_array(uint64_t table_id,
                                                  bool with_vector_index)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (is_external_object_id(table_id)) {
     size = 0;
   } else {
     OV (OB_NOT_NULL(schema_guard_));
-    OZ (schema_guard_->get_can_read_index_array(tenant_id, table_id,
+    OZ (schema_guard_->get_can_read_index_array(table_id,
                                                 index_tid_array, size, with_mv,
                                                 with_global_index, with_domain_index,
                                                 with_spatial_index, with_vector_index));
@@ -756,9 +716,8 @@ int ObSqlSchemaGuard::get_table_mlog_schema(const uint64_t table_id,
                                             const ObTableSchema *&mlog_schema)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
   OV (OB_NOT_NULL(schema_guard_));
-  OZ (schema_guard_->get_table_mlog_schema(tenant_id, table_id, mlog_schema));
+  OZ (schema_guard_->get_table_mlog_schema( table_id, mlog_schema));
   return ret;
 }
 

@@ -50,10 +50,10 @@ ObTableLoadParallelCompactTabletCtx::ObTableLoadParallelCompactTabletCtx()
     range_sstable_count_(0),
     range_allocator_("TLD_ParalMerge")
 {
-  allocator_.set_tenant_id(MTL_ID());
-  range_allocator_.set_tenant_id(MTL_ID());
-  ranges_.set_tenant_id(MTL_ID());
-  range_sstables_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObTableLoadParallelCompactTabletCtx::~ObTableLoadParallelCompactTabletCtx()
@@ -504,10 +504,10 @@ ObTableLoadParallelTableCompactor::ObTableLoadParallelTableCompactor()
     is_stop_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  light_task_list_.set_tenant_id(MTL_ID());
-  heavy_task_list_.set_tenant_id(MTL_ID());
-  idle_thread_list_.set_tenant_id(MTL_ID());
+  
+  
+  
+  
 }
 
 ObTableLoadParallelTableCompactor::~ObTableLoadParallelTableCompactor()
@@ -546,7 +546,7 @@ int ObTableLoadParallelTableCompactor::init(ObTableLoadMergeCompactTableOp *op)
     op_ = op;
     thread_count_ = op_->store_ctx_->thread_cnt_;
     table_data_desc_ = op->merge_table_ctx_->table_store_->get_table_data_desc();
-    if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap", MTL_ID()))) {
+    if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap"))) {
       LOG_WARN("fail to create ctx map", KR(ret));
     } else {
       is_inited_ = true;

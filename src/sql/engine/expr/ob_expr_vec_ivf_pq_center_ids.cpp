@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_ivf_pq_center_ids.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
@@ -130,7 +131,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
   } else {
-    common::ObArenaAllocator tmp_allocator("IVFPQExprPqCID", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator tmp_allocator("IVFPQExprPqCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObExpr *calc_vector_expr = expr.args_[0];
     ObExpr *calc_centroid_table_id_expr = expr.args_[1];
     ObExpr *calc_centroid_part_id_expr = expr.args_[2];
@@ -208,7 +209,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       // need get center prefix
       uint64_t center_prefix = 0;
       ObSEArray<float *, 64> pq_centers;
-      share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+      share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
       ObExprVecIvfCenterIdCache *cache = nullptr;
       ObExprVecIvfCenterIdCache *pq_cache = nullptr;
       ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_, cache, pq_cache);
@@ -241,7 +242,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     // 3. calc residul vec
     int64_t center_idx = 0;
     float *residual_vec = nullptr;
-    share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+    share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
     ObVectorNormalizeInfo norm_info;
     ObArray<float *> splited_residual;
     ObExprVecIvfCenterIdCache *cache = nullptr;

@@ -69,7 +69,7 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
         } else {
           truncate_table_stmt->set_table_name(table_name);
           truncate_table_stmt->set_database_name(database_name);
-          truncate_table_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+          
         }
       } else {
         ret = OB_ERR_PARSE_SQL;
@@ -80,7 +80,7 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
 
   if (OB_SUCC(ret)) {
     const ObTableSchema *orig_table_schema = NULL;
-    if (OB_FAIL(schema_checker_->get_table_schema(truncate_table_stmt->get_tenant_id(),
+    if (OB_FAIL(schema_checker_->get_table_schema(
                                                   truncate_table_stmt->get_database_name(),
                                                   truncate_table_stmt->get_table_name(),
                                                   false,
@@ -92,10 +92,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
                        helper.convert(truncate_table_stmt->get_database_name()),
                        helper.convert(truncate_table_stmt->get_table_name()));
       }
-    } else if (orig_table_schema->is_external_table()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_WARN(OB_NOT_SUPPORTED, "truncate external table");
-      LOG_WARN("truncate external table not support", K(ret));
     } else {
       if (orig_table_schema->is_mysql_tmp_table()) {
         is_mysql_tmp_table = true; 

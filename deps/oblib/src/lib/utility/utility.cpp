@@ -1776,13 +1776,6 @@ bool ez2ob_addr(ObAddr &addr, easy_addr_t& ez)
   return ret;
 }
 
-void get_addr_by_proxy_sessid(const uint64_t session_id, ObAddr &addr)
-{
-  const int32_t ip = static_cast<int32_t>((session_id >> 32) & 0xFFFFFFFF);
-  const int32_t port = static_cast<int32_t>((session_id >> 16) & 0xFFFF);
-  IGNORE_RETURN addr.set_ipv4_addr(ip, port);
-}
-
 int ob_strtoll(const char *str, char *&endptr, int64_t &res)
 {
   int ret = OB_SUCCESS;

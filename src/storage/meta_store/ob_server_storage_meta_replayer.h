@@ -42,11 +42,10 @@ public:
   void destroy();
   
 private:
-  typedef common::hash::ObHashMap<uint64_t, omt::ObTenantMeta> TENANT_META_MAP;
-  int apply_replay_result_(const TENANT_META_MAP &tenant_meta_map);
-  int handle_tenant_creating_(const uint64_t tenant_id, const omt::ObTenantMeta &tenant_meta);
+  int apply_replay_result_(const omt::ObTenantMeta &tenant_meta, const bool is_valid);
+  int handle_tenant_creating_(const omt::ObTenantMeta &tenant_meta);
   int handle_tenant_create_commit_(const omt::ObTenantMeta &tenant_meta);
-  int handle_tenant_deleting_(const uint64_t tenant_id, const omt::ObTenantMeta &tenant_meta);
+  int handle_tenant_deleting_(const omt::ObTenantMeta &tenant_meta);
   static int finish_storage_meta_replay_();
   static int online_ls_();
 

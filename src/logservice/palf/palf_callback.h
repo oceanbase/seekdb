@@ -58,7 +58,6 @@ class PalfLocationCacheCb
 public:
   virtual int get_leader(const int64_t id, common::ObAddr &leader) = 0;
   virtual int nonblock_get_leader(const int64_t id, common::ObAddr &leader) = 0;
-  virtual int nonblock_get_leader(const uint64_t tenant_id, int64_t id, common::ObAddr &leader) = 0;
 };
 
 class PalfMonitorCb
@@ -128,11 +127,10 @@ class PalfLiteMonitorCb
 {
 public:
   // @desc: record creating or deleting events
-  // add/remove cluster: valid cluster_id, invalid tenant_id, invalid ls_id,
-  // add/remove tenant: valid cluster_id, valid tenant_id, invalid ls_id,
-  // add/remove ls: valid cluster_id, valid tenant_id, valid ls_id,
+  // add/remove cluster: valid cluster_id, invalid tenant, invalid ls_id,
+  // add/remove tenant: valid cluster_id, valid tenant, invalid ls_id,
+  // add/remove ls: valid cluster_id, valid tenant, valid ls_id,
   virtual int record_create_or_delete_event(const int64_t cluster_id,
-                                            const uint64_t tenant_id,
                                             const int64_t ls_id,
                                             const bool is_create,
                                             const char *extra_info) = 0;

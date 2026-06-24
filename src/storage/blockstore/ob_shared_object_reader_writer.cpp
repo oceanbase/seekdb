@@ -1028,7 +1028,7 @@ int ObSharedObjectReaderWriter::switch_object(ObSharedObjectWriteSession &write_
     write_info.size_ = upper_align(offset_ - align_offset_, write_align_size_);
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sealed();
-    write_info.mtl_tenant_id_ = MTL_ID();
+    
 
     // do not use object_handle_ to write, since it will be reset if failed
     object_handle = object_handle_;
@@ -1160,7 +1160,7 @@ int ObSharedObjectReaderWriter::inner_write_block(
       object_info.buffer_ = write_session.data_.data() + align_offset_;
       object_info.offset_ = align_offset_;
       object_info.size_ = align_store_size;
-      object_info.mtl_tenant_id_ = MTL_ID();
+      
       object_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       object_info.io_desc_.set_unsealed();
       object_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_BLOCK_RW_IO);
@@ -1280,12 +1280,9 @@ int ObSharedObjectReaderWriter::async_read(
   ObStorageObjectReadInfo object_read_info;
   object_read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
   object_read_info.io_timeout_ms_ = read_info.io_timeout_ms_;
-#ifdef OB_BUILD_SHARED_STORAGE
-  object_read_info.ls_epoch_id_ = read_info.ls_epoch_;
-#endif
   object_read_info.io_desc_.set_sys_module_id(ObIOModule::SHARED_BLOCK_RW_IO);
   object_read_info.io_callback_ = read_info.io_callback_;
-  object_read_info.mtl_tenant_id_ = MTL_ID();
+  
   if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid shared block read info", K(ret), K(read_info));

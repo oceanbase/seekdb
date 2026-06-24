@@ -74,7 +74,6 @@ int TestDataSplit::prepare_mock_start_arg(
     obcall::ObDDLBuildSingleReplicaRequestArg &arg)
 {
   int ret = OB_SUCCESS;
-  arg.tenant_id_           = TEST_TENANT_ID;
   arg.ls_id_               = TEST_LS_ID;
   arg.source_tablet_id_    = TEST_TABLET_ID;
   arg.dest_tablet_id_      = TEST_TABLET_ID;
@@ -89,7 +88,6 @@ int TestDataSplit::prepare_mock_start_arg(
   arg.tablet_task_id_      = 1;
   arg.data_format_version_ = 1;
   arg.consumer_group_id_   = 1;
-  arg.dest_tenant_id_      = TEST_TENANT_ID;
   arg.dest_ls_id_          = TEST_LS_ID;
   arg.dest_schema_version_ = 1;
   if (is_split) {

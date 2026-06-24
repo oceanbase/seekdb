@@ -76,7 +76,6 @@ class ObObjectPrivMysqlRecycleSchemaExecutor : public ObIRecycleSchemaExecutor
 public:
   ObObjectPrivMysqlRecycleSchemaExecutor() = delete;
   ObObjectPrivMysqlRecycleSchemaExecutor(
-    const uint64_t tenant_id,
     const int64_t schema_version,
     const char* table_name,
     common::ObMySQLProxy *sql_proxy,

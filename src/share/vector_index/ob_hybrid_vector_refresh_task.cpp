@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_hybrid_vector_refresh_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "src/storage/ls/ob_ls.h"
@@ -38,7 +39,7 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
     LOG_WARN("vector async task not init", KR(ret));
   } else if (!check_operation_allow()) { // skip
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else {
     ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
     ObIAllocator *allocator = task_opt.get_allocator();
@@ -72,17 +73,17 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("async task ctx is null", K(ret));
         } else if (FALSE_IT(task_ctx = new(task_ctx_buf) ObHybridVectorRefreshTaskCtx())) {
-        } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(tenant_id_, new_task_id))) {
-          LOG_WARN("fail to fetch new task id", K(ret), K(tenant_id_));
+        } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(new_task_id))) {
+          LOG_WARN("fail to fetch new task id", K(ret));
         } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_trace_id(++task_trace_base_num, allocator, new_trace_id))) {
           LOG_WARN("fail to fetch new trace id", K(ret), K(tablet_id));
         } else {
-          LOG_DEBUG("start load task", K(ret), K(tablet_id), K(tenant_id_), K(task_trace_base_num), K(ls_->get_ls_id()));
+          LOG_DEBUG("start load task", K(ret), K(tablet_id), K(task_trace_base_num), K(ls_->get_ls_id()));
           // 1. update task_ctx to async task map
-          task_ctx->tenant_id_ = tenant_id_;
+          
           task_ctx->ls_ = ls_;
           task_ctx->task_status_.tablet_id_ = tablet_id.id();
-          task_ctx->task_status_.tenant_id_ = tenant_id_;
+          
           task_ctx->task_status_.table_id_ = index_table_id;
           task_ctx->task_status_.task_id_ = new_task_id;
           task_ctx->task_status_.task_type_ = ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING;
@@ -90,7 +91,7 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
           task_ctx->task_status_.status_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE;
           task_ctx->task_status_.trace_id_ = new_trace_id;
           task_ctx->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time());
-          task_ctx->allocator_.set_tenant_id(tenant_id_);
+          
           if (OB_FAIL(index_ls_mgr->get_async_task_opt().add_task_ctx(tablet_id, task_ctx, inc_new_task))) { // not overwrite
             LOG_WARN("fail to add task ctx", K(ret));
           } else if (inc_new_task && OB_FAIL(task_ctx_array.push_back(task_ctx))) {
@@ -110,7 +111,7 @@ int ObVecEmbeddingAsyncTaskExecutor::load_task(uint64_t &task_trace_base_num)
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(insert_new_task(task_ctx_array))) {
-    LOG_WARN("fail to insert new tasks", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to insert new tasks", K(ret), K(ls_->get_ls_id()));
   }
   // clear on fail
   if (OB_FAIL(ret) && !task_ctx_array.empty()) {
@@ -126,7 +127,7 @@ bool ObVecEmbeddingAsyncTaskExecutor::check_operation_allow()
   int ret = OB_SUCCESS;
   uint64_t tenant_data_version = 0;
   bool bret = true;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id_, tenant_data_version))) {
+  if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(tenant_data_version))) {
     bret = false;
     LOG_WARN("get tenant data version failed", K(ret));
   } else if (tenant_data_version < DATA_VERSION_1_0_0_0) {
@@ -177,7 +178,7 @@ int ObHybridVectorRefreshTask::do_work()
   int ret = OB_SUCCESS;
   int exec_finish = false;
   ObPluginVectorIndexAdapterGuard adpt_guard;
-  ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(task_ctx) || OB_ISNULL(vec_idx_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -290,14 +291,14 @@ int ObHybridVectorRefreshTask::get_index_id_column_ids(ObPluginVectorIndexAdapto
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, adaptor.get_vbitmap_table_id(), table_schema))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_vbitmap_table_id(), table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(adaptor));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get null table schema", KR(ret), K(adaptor));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, table_schema->get_data_table_id(), data_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), KR(table_schema->get_data_table_id()));
   } else if ( OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
@@ -367,14 +368,14 @@ int ObHybridVectorRefreshTask::get_embedded_table_column_ids(ObPluginVectorIndex
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, adaptor.get_embedded_table_id(), table_schema))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_embedded_table_id(), table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(adaptor));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get null table schema", KR(ret), K(adaptor));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, table_schema->get_data_table_id(), data_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), KR(table_schema->get_data_table_id()));
   } else if ( OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
@@ -447,23 +448,23 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
-  ObAccessService *oas = MTL(ObAccessService *);
+  ObAccessService *oas = share::g_mp->access_service();
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
 
   if (OB_ISNULL(task_ctx) || OB_ISNULL(oas) || OB_ISNULL(tx_desc)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(oas), K(tx_desc));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, table_id, table_schema))) {
+  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     LOG_WARN("fail to get schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get null table schema", KR(ret), K(table_id));
   } else if (OB_FAIL(table_param.convert(table_schema, table_schema->get_schema_version(), dml_column_ids))) {
     LOG_WARN("failed to convert table dml param.", K(ret));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, dml_param.tenant_schema_version_))) {
+  } else if (OB_FAIL(schema_guard.get_schema_version(dml_param.tenant_schema_version_))) {
     LOG_WARN("failed to get schema version", K(ret));
   } else {
     dml_param.sql_mode_ = SMO_DEFAULT;
@@ -489,7 +490,7 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
   int ret = OB_SUCCESS;
   bool use_request_model_name = false;
   ObAIFuncExprInfo *ai_func_info = nullptr;
-  omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService *);
+  omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -526,7 +527,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
   int64_t http_timeout_us = 0;
   int64_t http_max_retries = 0;
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     http_timeout_us = tenant_config->model_request_timeout;
     http_max_retries = tenant_config->model_max_retries;
@@ -662,13 +663,13 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
         void *task_buf = task_ctx->allocator_.alloc(sizeof(ObEmbeddingTask));
         if (OB_ISNULL(task_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc memory of ObEmbeddingTask", K(ret), K(tenant_id_));
+          LOG_WARN("fail to alloc memory of ObEmbeddingTask", K(ret));
         } else {
           ObString access_key;
           ObString url;
           const ObAiModelEndpointInfo *endpoint = task_ctx->endpoint_; // endpoint should not be null after init.
           task_ctx->embedding_task_ = new(task_buf)ObEmbeddingTask(task_ctx->allocator_);
-          ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
+          ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
           if (OB_ISNULL(service)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected null ptr", K(ret), KPC(service));
@@ -734,7 +735,7 @@ int ObHybridVectorRefreshTask::do_refresh_only(
     ObDMLBaseParam dml_param;
     share::schema::ObTableDMLParam table_dml_param(allocator_);
     share::schema::ObTableDMLParam index_id_dml_param(allocator_);
-    ObAccessService *oas = MTL(ObAccessService *);
+    ObAccessService *oas = share::g_mp->access_service();
     ObSEArray<uint64_t, 4> delta_delete_column_id;
 
     if (OB_FAIL(ret)) {
@@ -780,7 +781,7 @@ int ObHybridVectorRefreshTask::prepare_index_id_data(storage::ObValueRowIterator
     storage::ObValueRowIterator &delta_iter = task_ctx->delta_delete_iter_;
     index_id_iter.init();
     delta_delete_iter.init();
-    HEAP_VARS_2((blocksstable::ObDatumRow, index_id_row, tenant_id_), (blocksstable::ObDatumRow, delta_row, tenant_id_)) {
+    HEAP_VARS_2((blocksstable::ObDatumRow, index_id_row), (blocksstable::ObDatumRow, delta_row)) {
       if (OB_FAIL(index_id_row.init(task_ctx->index_id_column_ids_.count()))) {
         LOG_WARN("fail to init datum row", K(ret), K(task_ctx->index_id_column_ids_.count()), K(index_id_row));
       } else if (OB_FAIL(delta_row.init(task_ctx->scan_column_ids_.count() - 1))) {
@@ -842,7 +843,7 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
 {
   int ret = OB_SUCCESS;
   int64_t loop_cnt = 0;
-  ObAccessService *tsc_service = MTL(ObAccessService *);
+  ObAccessService *tsc_service = share::g_mp->access_service();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(task_ctx) || OB_ISNULL(tx_desc)) {
     ret = OB_ERR_UNEXPECTED;
@@ -850,12 +851,12 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
   } else if (task_ctx->delete_vids_.empty()) {
   } else {
     storage::ObValueRowIterator delete_iter;
-    ObAccessService *oas = MTL(ObAccessService *);
+    ObAccessService *oas = share::g_mp->access_service();
     ObSEArray<uint64_t, 4> dml_column_ids;
     HEAP_VARS_2((storage::ObTableScanParam, table_scan_param), (schema::ObTableParam, table_param, allocator_)) {
       common::ObNewRowIterator *scan_iter = nullptr;
       ObStorageDatumUtils util;
-      ObArenaAllocator scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      ObArenaAllocator scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE);
       if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
           &adaptor,
           snapshot.version(),
@@ -944,9 +945,9 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
   transaction::ObTxDesc *tx_desc = nullptr;
   oceanbase::transaction::ObTxReadSnapshot snapshot;
   storage::ObStoreCtxGuard store_ctx_guard;
-  ObAccessService *oas = MTL(ObAccessService *);
-  ObAccessService *tsc_service = MTL(ObAccessService *);
-  oceanbase::transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *tsc_service = share::g_mp->access_service();
+  oceanbase::transaction::ObTransService *txs = share::g_mp->trans_service();
   uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -980,8 +981,8 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc mem.", K(ret), K(dim));
   } else {
-    HEAP_VARS_3((blocksstable::ObDatumRow, new_row, tenant_id_), (storage::ObTableScanParam, vid_rowkey_scan_param), (schema::ObTableParam, vid_rowkey_table_param, allocator_)) {
-      ObArenaAllocator scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    HEAP_VARS_3((blocksstable::ObDatumRow, new_row), (storage::ObTableScanParam, vid_rowkey_scan_param), (schema::ObTableParam, vid_rowkey_table_param, allocator_)) {
+      ObArenaAllocator scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE);
       common::ObNewRowIterator *vid_rowkey_iter = nullptr;
       ObTableScanIterator *table_scan_iter = nullptr;
       blocksstable::ObDatumRow *datum_row = nullptr;
@@ -1064,7 +1065,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
           HEAP_VARS_2((storage::ObTableScanParam, embedded_scan_param), (schema::ObTableParam, embedded_table_param, allocator_)) {
             common::ObNewRowIterator *embedded_scan_iter = nullptr;
             ObTableScanIterator *embedded_table_scan_iter = nullptr;
-            ObArenaAllocator embedde_scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+            ObArenaAllocator embedde_scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObRowkey rowkey(obj_ptr, embedded_rowkey_count);
             if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
                 &adaptor,
@@ -1181,7 +1182,7 @@ void ObHybridVectorRefreshTaskCtx::set_task_finish()
   task_status_.all_finished_ = true;
   status_ = ObHybridVectorRefreshTaskStatus::TASK_FINISH;
   delta_delete_iter_.reset();
-  ObAccessService *oas = MTL(ObAccessService *);
+  ObAccessService *oas = share::g_mp->access_service();
   if (OB_NOT_NULL(oas) && OB_NOT_NULL(scan_iter_)) {
     ret = oas->revert_scan_iter(scan_iter_);
     if (ret != OB_SUCCESS) {

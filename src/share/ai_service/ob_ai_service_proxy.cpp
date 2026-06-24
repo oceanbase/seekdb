@@ -28,13 +28,13 @@ using namespace oceanbase::common;
 using namespace oceanbase::sqlclient;
 using namespace oceanbase::transaction;
 
-int ObAiServiceProxy::insert_ai_endpoint(const uint64_t tenant_id, ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint)
+int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
     LOG_WARN("failed to add column", K(ret), K(endpoint));
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
@@ -61,8 +61,8 @@ int ObAiServiceProxy::insert_ai_endpoint(const uint64_t tenant_id, ObMySQLTransa
     LOG_WARN("failed to add column", K(ret), K(endpoint));
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
     LOG_WARN("failed to splice_insert_sql", K(ret));
-  } else if (OB_FAIL(trans.write(tenant_id, buffer.ptr(), affected_rows))) {
-    LOG_WARN("failed to write sql", KR(ret), K(tenant_id), K(buffer));
+  } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
+    LOG_WARN("failed to write sql", KR(ret), K(buffer));
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
@@ -71,19 +71,19 @@ int ObAiServiceProxy::insert_ai_endpoint(const uint64_t tenant_id, ObMySQLTransa
   if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
     ret = OB_ENTRY_EXIST;
     LOG_USER_ERROR(OB_ENTRY_EXIST, "endpoint already exists");
-    LOG_WARN("ai model endpoint already exists", KR(ret), K(tenant_id), K(endpoint));
+    LOG_WARN("ai model endpoint already exists", KR(ret), K(endpoint));
   }
-  LOG_DEBUG("insert ai model endpoint", K(tenant_id), K(new_endpoint_version), K(endpoint), K(buffer), KR(ret));
+  LOG_DEBUG("insert ai model endpoint", K(new_endpoint_version), K(endpoint), K(buffer), KR(ret));
   return ret;
 }
 
-int ObAiServiceProxy::update_ai_endpoint(const uint64_t tenant_id, ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint)
+int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint)
 {
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   int64_t affected_rows = 0;
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
     LOG_WARN("failed to add column", K(ret), K(endpoint));
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
@@ -110,17 +110,17 @@ int ObAiServiceProxy::update_ai_endpoint(const uint64_t tenant_id, ObMySQLTransa
     LOG_WARN("failed to add column", K(ret), K(endpoint));
   } else if (OB_FAIL(sql.splice_update_sql(OB_ALL_AI_MODEL_ENDPOINT_TNAME, buffer))) {
     LOG_WARN("failed to splice_update_sql", K(ret));
-  } else if (OB_FAIL(trans.write(tenant_id, buffer.ptr(), affected_rows))) {
+  } else if (OB_FAIL(trans.write(buffer.ptr(), affected_rows))) {
     LOG_WARN("failed to write sql", KR(ret), K(buffer));
   } else if (1 != affected_rows) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows should be one", KR(ret), K(affected_rows));
   }
-  LOG_DEBUG("update ai model endpoint", K(tenant_id), K(new_endpoint_version), K(endpoint), K(buffer), KR(ret));
+  LOG_DEBUG("update ai model endpoint", K(new_endpoint_version), K(endpoint), K(buffer), KR(ret));
   return ret;
 }
 
-int ObAiServiceProxy::select_ai_endpoint(const uint64_t tenant_id, ObArenaAllocator &allocator, ObISQLClient &sql_proxy,
+int ObAiServiceProxy::select_ai_endpoint(ObArenaAllocator &allocator, ObISQLClient &sql_proxy,
                                          const ObString &name, ObAiModelEndpointInfo &endpoint, bool for_update)
 {
   int ret = OB_SUCCESS;
@@ -128,12 +128,12 @@ int ObAiServiceProxy::select_ai_endpoint(const uint64_t tenant_id, ObArenaAlloca
   ObTimeoutCtx ctx;
   const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
   endpoint.reset();
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
     LOG_WARN("failed to set timeout ctx", KR(ret), K(ctx), K(default_timeout));
   } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE endpoint_name = ",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
-    LOG_WARN("sql assign_fmt failed", KR(ret), K(sql), K(user_tenant_id));
+    LOG_WARN("sql assign_fmt failed", KR(ret), K(sql));
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
     LOG_WARN("failed to append name", KR(ret), K(name));
   } else if (for_update && (OB_FAIL(sql.append_fmt(" FOR UPDATE")))) {
@@ -141,7 +141,7 @@ int ObAiServiceProxy::select_ai_endpoint(const uint64_t tenant_id, ObArenaAlloca
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
+      if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -168,8 +168,7 @@ int ObAiServiceProxy::select_ai_endpoint(const uint64_t tenant_id, ObArenaAlloca
   return ret;
 }
 
-int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(
-  const uint64_t tenant_id, ObArenaAllocator &allocator, ObISQLClient &sql_proxy,
+int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allocator, ObISQLClient &sql_proxy,
   const ObString &ai_model_name, ObNameCaseMode name_case_mode, ObAiModelEndpointInfo &endpoint)
 {
   int ret = OB_SUCCESS;
@@ -177,11 +176,11 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(
   ObTimeoutCtx ctx;
   const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
   endpoint.reset();
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
     LOG_WARN("failed to set timeout ctx", KR(ret), K(ctx), K(default_timeout));
   } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ", OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
-    LOG_WARN("sql assign_fmt failed", KR(ret), K(sql), K(user_tenant_id));
+    LOG_WARN("sql assign_fmt failed", KR(ret), K(sql));
   } else {
     if (OB_ORIGIN_AND_INSENSITIVE == name_case_mode || OB_LOWERCASE_AND_INSENSITIVE == name_case_mode) {
       if (OB_FAIL(sql.append(" WHERE ai_model_name = "))) {
@@ -205,7 +204,7 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
+      if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -290,18 +289,18 @@ int ObAiServiceProxy::build_ai_endpoint_(ObArenaAllocator &allocator, ObMySQLRes
   return ret;
 }
 
-int ObAiServiceProxy::drop_ai_model_endpoint(const uint64_t tenant_id, ObMySQLTransaction &trans, const ObString &name)
+int ObAiServiceProxy::drop_ai_model_endpoint(ObMySQLTransaction &trans, const ObString &name)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   int64_t affected_rows = 0;
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE endpoint_name = ",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(user_tenant_id));
+    LOG_WARN("failed to assign sql", KR(ret));
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
     LOG_WARN("failed to append name", KR(ret), K(name));
-  } else if (OB_FAIL(trans.write(tenant_id, sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
     LOG_WARN("failed to write sql", KR(ret), K(sql));
   } else if (0 == affected_rows) {
     ret = OB_AI_FUNC_ENDPOINT_NOT_FOUND;
@@ -313,19 +312,19 @@ int ObAiServiceProxy::drop_ai_model_endpoint(const uint64_t tenant_id, ObMySQLTr
   return ret;
 }
 
-int ObAiServiceProxy::check_ai_endpoint_exists(const uint64_t tenant_id, ObArenaAllocator &allocator, ObISQLClient &sql_proxy, const ObString &name, bool &is_exists)
+int ObAiServiceProxy::check_ai_endpoint_exists(ObArenaAllocator &allocator, ObISQLClient &sql_proxy, const ObString &name, bool &is_exists)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
   const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
-  uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  
   int64_t count = 0;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
     LOG_WARN("failed to set timeout ctx", KR(ret), K(ctx), K(default_timeout));
   } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) FROM %s WHERE endpoint_name = ",
       OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
-    LOG_WARN("sql assign_fmt failed", KR(ret), K(sql), K(user_tenant_id));
+    LOG_WARN("sql assign_fmt failed", KR(ret), K(sql));
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
     LOG_WARN("failed to append name", KR(ret), K(name));
   } else if (OB_FAIL(sql.append(" FOR UPDATE"))) {
@@ -334,7 +333,7 @@ int ObAiServiceProxy::check_ai_endpoint_exists(const uint64_t tenant_id, ObArena
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       const int64_t idx = 0;
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
+      if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
         LOG_WARN("execute sql failed", K(sql), KR(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;

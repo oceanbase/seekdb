@@ -15,6 +15,7 @@
  */
 
 #include "mds_tenant_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 
@@ -80,7 +81,7 @@ int ObTenantMdsService::mtl_init(ObTenantMdsService *&mds_service)
   if (mds_service->is_inited_) {
     ret = OB_INIT_TWICE;
     MDS_LOG(ERROR, "init mds tenant service twice!", KR(ret), KPC(mds_service));
-  } else if (MDS_FAIL(mds_service->memory_leak_debug_map_.init("MdsDebugMap", MTL_ID()))) {
+  } else if (MDS_FAIL(mds_service->memory_leak_debug_map_.init("MdsDebugMap"))) {
     MDS_LOG(WARN, "init map failed", K(ret));
   } else if (MDS_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantMdsServiceRecyle, mds_service->recyle_timer_id_))) {
     MDS_LOG(WARN, "fail to create TenantMdsServiceRecyle timer", K(ret));
@@ -220,10 +221,10 @@ int ObTenantMdsService::for_each_ls_in_tenant(const ObFunction<int(ObLS &)> &op)
   if (!op.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     MDS_LOG_NONE(WARN, "invalid op");
-  } else if (OB_ISNULL(MTL(ObLSService*))) {
+  } else if (OB_ISNULL(share::g_mp->ls_service())) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG_NONE(WARN, "ls service is null", K(ret));
-  } else if (MDS_FAIL(MTL(ObLSService*)->get_ls_iter(iter, ObLSGetMod::MDS_TABLE_MOD))) {
+  } else if (MDS_FAIL(share::g_mp->ls_service()->get_ls_iter(iter, ObLSGetMod::MDS_TABLE_MOD))) {
     MDS_LOG_NONE(WARN, "fail to get ls iterator");
   } else {
     do {
@@ -357,10 +358,10 @@ int ObTenantMdsService::get_tablet_oldest_scn_(ObTablet &tablet, share::SCN &old
   MDS_TG(5_ms);
   oldest_scn = SCN::min_scn();// means can not recycle any node
   ScanAllVersionTabletsOp::GetMinMdsCkptScnOp op(oldest_scn);
-  if (OB_ISNULL(MTL(ObTenantMetaMemMgr*))) {
+  if (OB_ISNULL(share::g_mp->tenant_meta_mem_mgr())) {
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG_GC(ERROR, "MTL ObTenantMetaMemMgr is NULL");
-  } else if (MDS_FAIL(MTL(ObTenantMetaMemMgr*)->scan_all_version_tablets(ObTabletMapKey(ls_id, tablet_id), op))) {
+  } else if (MDS_FAIL(share::g_mp->tenant_meta_mem_mgr()->scan_all_version_tablets(ObTabletMapKey(ls_id, tablet_id), op))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       MDS_LOG_GC(WARN, "get_min_mds_ckpt_scn meet OB_ENTRY_NOT_EXIST");

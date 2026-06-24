@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_clog_recorder.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -302,7 +303,7 @@ int ObIStorageClogRecorder::get_tablet_handle(
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle))) {
     LOG_WARN("failed to get tablet", K(ret), K(ls_id), K(tablet_id));
@@ -319,7 +320,7 @@ int ObIStorageClogRecorder::replay_get_tablet_handle(
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
   const bool is_update_mds_table = false;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->replay_get_tablet(tablet_id, scn, is_update_mds_table, tablet_handle))) {
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {

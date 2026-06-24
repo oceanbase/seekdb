@@ -39,7 +39,6 @@ class ObUpdateIndexStatusHelper : public ObDDLHelper
 public:
   ObUpdateIndexStatusHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObUpdateIndexStatusArg &arg,
     obcall::ObParallelDDLRes &res);
   virtual ~ObUpdateIndexStatusHelper();

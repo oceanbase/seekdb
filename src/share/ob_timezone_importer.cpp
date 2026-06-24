@@ -61,7 +61,7 @@ int ObTimezoneImporter::import_timezone_info(const ObString &file_path)
   if (OB_ISNULL(sql_proxy = exec_ctx_.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy must not null", K(ret), KP(sql_proxy));
-  } else if (OB_FAIL(trans.start(sql_proxy, tenant_id_))) {
+  } else if (OB_FAIL(trans.start(sql_proxy))) {
     LOG_WARN("fail to start transaction", K(ret));
   } else {
     // 1. truncate tables.
@@ -77,13 +77,13 @@ int ObTimezoneImporter::import_timezone_info(const ObString &file_path)
       LOG_WARN("assign fmt failed", K(ret));
     } else if (OB_FAIL(trunc_sql4.assign_fmt("DELETE FROM %s", OB_ALL_TENANT_TIME_ZONE_TRANSITION_TYPE_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, trunc_sql1.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_sql1.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, trunc_sql2.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_sql2.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, trunc_sql3.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_sql3.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, trunc_sql4.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(trunc_sql4.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
     }
   }
@@ -109,15 +109,15 @@ int ObTimezoneImporter::import_timezone_info(const ObString &file_path)
     } else if (OB_FAIL(load_sql4.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE %s FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'",
                 file_path.length(), file_path.ptr(), timezone_transition_type_file, OB_ALL_TENANT_TIME_ZONE_TRANSITION_TYPE_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, load_sql1.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(load_sql1.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, load_sql2.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(load_sql2.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
     } else if (OB_FAIL(EN_LOAD_TIME_ZONE_INFO_FAILED)) {
       LOG_WARN("load time zone info failed due to trace point", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, load_sql3.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(load_sql3.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
-    } else if (OB_FAIL(trans.write(tenant_id_, load_sql4.ptr(), affected_rows))) {
+    } else if (OB_FAIL(trans.write(load_sql4.ptr(), affected_rows))) {
       LOG_WARN("write failed", K(ret));
     }
   }

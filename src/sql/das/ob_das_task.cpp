@@ -50,7 +50,6 @@ OB_DEF_SERIALIZE_SIZE(ObDASRemoteInfo)
   }
   OB_UNIS_ADD_LEN(snapshot_);
   if (need_calc_expr_ || need_calc_udf_) {
-    OB_UNIS_ADD_LEN(session->get_effective_tenant_id());
     OB_UNIS_ADD_LEN(*session);
   }
   if (has_expr_) {
@@ -185,7 +184,6 @@ int ObIDASTaskOp::init_das_gts_opt_info(transaction::ObTxIsolationLevel isolatio
 }
 
 OB_SERIALIZE_MEMBER(ObIDASTaskOp,
-                    tenant_id_,
                     task_id_,
                     task_flag_,
                     tablet_id_,
@@ -438,27 +436,25 @@ int ObDASTaskResp::add_op_result(ObIDASTaskResult *op_result)
 
 OB_SERIALIZE_MEMBER(ObIDASTaskResult, task_id_);
 
-OB_SERIALIZE_MEMBER(ObDASDataFetchReq, tenant_id_, task_id_);
+OB_SERIALIZE_MEMBER(ObDASDataFetchReq, task_id_);
 
-int ObDASDataFetchReq::init(const uint64_t tenant_id, const int64_t task_id)
+int ObDASDataFetchReq::init(const int64_t task_id)
 {
-  tenant_id_ = tenant_id;
   task_id_ = task_id;
   return OB_SUCCESS;
 }
 
-OB_SERIALIZE_MEMBER(ObDASDataEraseReq, tenant_id_, task_id_);
+OB_SERIALIZE_MEMBER(ObDASDataEraseReq, task_id_);
 
-int ObDASDataEraseReq::init(const uint64_t tenant_id, const int64_t task_id)
+int ObDASDataEraseReq::init(const int64_t task_id)
 {
-  tenant_id_ = tenant_id;
   task_id_ = task_id;
   return OB_SUCCESS;
 }
 
 OB_SERIALIZE_MEMBER(ObDASDataFetchRes,
                     datum_store_,
-                    tenant_id_, task_id_, has_more_,
+                    task_id_, has_more_,
                     enable_rich_format_, vec_row_store_,
                     io_read_bytes_,
                     ssstore_read_bytes_,
@@ -467,7 +463,6 @@ OB_SERIALIZE_MEMBER(ObDASDataFetchRes,
 
 ObDASDataFetchRes::ObDASDataFetchRes()
         : datum_store_("DASDataFetch"),
-          tenant_id_(0),
           task_id_(0),
           has_more_(false),
           enable_rich_format_(false),
@@ -479,10 +474,9 @@ ObDASDataFetchRes::ObDASDataFetchRes()
 {
 }
 
-int ObDASDataFetchRes::init(const uint64_t tenant_id, const int64_t task_id)
+int ObDASDataFetchRes::init(const int64_t task_id)
 {
   int ret = OB_SUCCESS;
-  tenant_id_ = tenant_id;
   task_id_ = task_id;
   return ret;
 }

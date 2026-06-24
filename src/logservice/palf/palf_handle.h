@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_PALF_HANDLE_
 #include "common/ob_member_list.h"
 #include "common/ob_role.h"
-#include "election/interface/election_priority.h"
+#include "election_self.h"
 #include "lsn.h"
 #include "palf_handle_impl.h"
 #include "palf_handle_impl_guard.h"

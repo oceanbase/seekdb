@@ -244,7 +244,6 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed. get NULL ptr", K(ret), K(schema_checker_), K(params_.session_info_));
       } else if (OB_FAIL(schema_checker_->get_user_id(
-                                                  params_.session_info_->get_effective_tenant_id(),
                                                   user_name,
                                                   host_name,
                                                   user_id))) {
@@ -350,8 +349,7 @@ int ObDCLResolver::resolve_user_list_node(ParseNode *user_node,
     }
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to get user name", K(ret), K(user_name));
-    } else if (OB_FAIL(schema_checker_->get_user_info(params_.session_info_->get_effective_tenant_id(),
-                                                      user_name, host_name, user_info))) {
+    } else if (OB_FAIL(schema_checker_->get_user_info(user_name, host_name, user_info))) {
       LOG_WARN("failed to get user info", K(ret), K(user_name));
       if (OB_USER_NOT_EXIST == ret) {
         // Skip, RS handles uniformly, compatible with MySQL behavior

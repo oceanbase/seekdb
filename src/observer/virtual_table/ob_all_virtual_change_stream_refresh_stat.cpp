@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/change_stream/ob_change_stream_fetcher.h"
@@ -59,10 +60,10 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-bool ObAllVirtualChangeStreamRefreshStat::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualChangeStreamRefreshStat::is_need_process()
 {
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
+  if (!false &&
+      (true || true)) {
     return true;
   }
   return false;
@@ -75,7 +76,7 @@ void ObAllVirtualChangeStreamRefreshStat::release_last_tenant()
 
 int ObAllVirtualChangeStreamRefreshStat::process_curr_tenant(ObNewRow *&row)
 {
-  LOG_INFO("select from dba_ob_change_stream_refresh_stat", K(MTL_ID()));
+  LOG_INFO("select from dba_ob_change_stream_refresh_stat");
   int ret = OB_SUCCESS;
   
   if (row_produced_) {
@@ -94,7 +95,7 @@ int ObAllVirtualChangeStreamRefreshStat::process_curr_tenant(ObNewRow *&row)
     int64_t fetch_scn = 0;
 
     // Get refresh_scn from in-memory manager state
-    ObChangeStreamMgr *cs_mgr = MTL(ObChangeStreamMgr*);
+    ObChangeStreamMgr *cs_mgr = share::g_mp->change_stream_mgr();
     if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
       refresh_scn_val = cs_mgr->get_dispatcher().get_refresh_scn();
     }
@@ -102,20 +103,20 @@ int ObAllVirtualChangeStreamRefreshStat::process_curr_tenant(ObNewRow *&row)
     // Get min_dep_lsn from global_stat
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-              *GCTX.sql_proxy_, MTL_ID(), false, min_dep_lsn_val))) {
+              *GCTX.sql_proxy_, false, min_dep_lsn_val))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           // Change stream not initialized yet, use default value
           ret = OB_SUCCESS;
           min_dep_lsn_val = 0;
         } else {
-          SERVER_LOG(WARN, "fail to get change_stream_min_dep_lsn", K(ret), K(MTL_ID()));
+          SERVER_LOG(WARN, "fail to get change_stream_min_dep_lsn", K(ret));
         }
       }
     }
 
     // Get stats from ObCSFetcher
     if (OB_SUCC(ret)) {
-      ObChangeStreamMgr *cs_mgr = MTL(ObChangeStreamMgr*);
+      ObChangeStreamMgr *cs_mgr = share::g_mp->change_stream_mgr();
       if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
         ObCSFetcher &fetcher = cs_mgr->get_fetcher();
         pending_tx_count = fetcher.get_current_processing_tx_count();
@@ -130,10 +131,6 @@ int ObAllVirtualChangeStreamRefreshStat::process_curr_tenant(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
-          case TENANT_ID: {
-            cells[i].set_int(MTL_ID());
-            break;
-          }
           case CHANGE_STREAM_REFRESH_SCN: {
             cells[i].set_int(refresh_scn_val);
             break;

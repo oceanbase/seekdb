@@ -53,7 +53,6 @@ public:
 
   static int check_user_valid(share::schema::ObSchemaGetterGuard& schema_guard, 
                               uint64_t priv_set,
-                              int64_t tenant_id,
                               const common::ObString &user_name,
                               const common::ObString &host_name,
                               const common::ObString &opreation_name);

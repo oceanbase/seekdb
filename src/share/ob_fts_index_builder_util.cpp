@@ -188,7 +188,7 @@ int ObFtsIndexBuilderUtil::check_fts_aux_index_schema_exist(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *rowkey_doc_schema = nullptr;
-  uint64_t tenant_id = data_schema.get_tenant_id();
+  
   obcall::ObCreateIndexArg tmp_arg;
   if (!(share::schema::is_fts_or_multivalue_index(arg.index_type_) || share::schema::is_vec_spiv_index(arg.index_type_))) {
     ret = OB_ERR_UNEXPECTED;
@@ -201,8 +201,7 @@ int ObFtsIndexBuilderUtil::check_fts_aux_index_schema_exist(
   } else if (FALSE_IT(tmp_arg.index_type_ = index_type)) {
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(tmp_arg, &allocator))) {
     LOG_WARN("failed to adjust fts index name", K(ret));
-  } else if (OB_FAIL(ddl_service.check_aux_index_schema_exist(tenant_id,
-                                                              tmp_arg,
+  } else if (OB_FAIL(ddl_service.check_aux_index_schema_exist(tmp_arg,
                                                               schema_guard,
                                                               &data_schema,
                                                               is_exist,
@@ -716,7 +715,6 @@ int ObFtsIndexBuilderUtil::set_fts_rowkey_doc_table_columns(
                        rowkey_col_name.length(),
                        rowkey_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", rowkey_col_name, K(ret));
@@ -750,7 +748,6 @@ int ObFtsIndexBuilderUtil::set_fts_rowkey_doc_table_columns(
       } else if (OB_ISNULL(doc_id_column = data_schema.get_column_schema(doc_id_col_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", doc_id_col_name, K(ret));
@@ -803,7 +800,7 @@ int ObFtsIndexBuilderUtil::set_fts_doc_rowkey_table_columns(
       ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
       LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                      doc_id_col_name.length(), doc_id_col_name.ptr());
-      LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+      LOG_WARN("get_column_schema failed", 
                "database_id", data_schema.get_database_id(),
                "table_name", data_schema.get_table_name(),
                "column name", doc_id_col_name, K(ret));
@@ -903,7 +900,6 @@ int ObFtsIndexBuilderUtil::set_fts_index_table_columns(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                        fts_col_name.length(), fts_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", fts_col_name, K(ret));
@@ -940,7 +936,7 @@ int ObFtsIndexBuilderUtil::set_fts_index_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -1194,7 +1190,7 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
         column_schema.set_rowkey_position(0); //non-primary key column
         column_schema.set_index_position(0); // non-index column
         column_schema.set_tbl_part_key_pos(0); // not partition key
-        column_schema.set_tenant_id(data_schema.get_tenant_id());
+        
         column_schema.set_table_id(data_schema.get_table_id());
         column_schema.set_column_id(col_id);
         column_schema.add_column_flag(GENERATED_DOC_ID_COLUMN_FLAG);
@@ -1358,7 +1354,7 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG);
@@ -1476,7 +1472,7 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_FTS_WORD_COUNT_COLUMN_FLAG);
@@ -1589,7 +1585,7 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
@@ -1864,9 +1860,9 @@ int ObFtsIndexBuilderUtil::get_word_segment_col(
     const ObColumnSchemaV2 *&word_segment_col)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = OB_INVALID_TENANT_ID == MTL_ID() ? common::OB_SERVER_TENANT_ID : MTL_ID();
+  
   ObSEArray<uint64_t, 8> index_cols;
-  index_cols.set_attr(ObMemAttr(tenant_id, "FtsUWSC"));
+  index_cols.set_attr(ObMemAttr("FtsUWSC"));
   word_segment_col = nullptr;
   if (!data_schema.is_valid() ||
       OB_ISNULL(index_arg) ||
@@ -1903,8 +1899,8 @@ int ObFtsIndexBuilderUtil::get_word_cnt_col(
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 8> index_cols;
-  const uint64_t tenant_id = OB_INVALID_TENANT_ID == MTL_ID() ? common::OB_SERVER_TENANT_ID : MTL_ID();
-  index_cols.set_attr(ObMemAttr(tenant_id, "FtsUWCC"));
+  
+  index_cols.set_attr(ObMemAttr("FtsUWCC"));
   word_cnt_col = nullptr;
   if (!data_schema.is_valid() ||
       OB_ISNULL(index_arg) ||
@@ -1941,8 +1937,8 @@ int ObFtsIndexBuilderUtil::get_doc_length_col(
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 8> index_cols;
-  const uint64_t tenant_id = OB_INVALID_TENANT_ID == MTL_ID() ? common::OB_SERVER_TENANT_ID : MTL_ID();
-  index_cols.set_attr(ObMemAttr(tenant_id, "FtsUDLC"));
+  
+  index_cols.set_attr(ObMemAttr("FtsUDLC"));
   doc_len_col = nullptr;
   if (OB_UNLIKELY(!data_schema.is_valid())
       || OB_ISNULL(index_arg)
@@ -2007,7 +2003,6 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(
                       && !share::schema::is_fts_doc_word_aux(type))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(type));
-  } else if (OB_FALSE_IT(arg.tenant_id_ = data_schema.get_tenant_id())) {
   } else if (OB_FAIL(generate_fts_parser_name(arg, *allocator))) {
     LOG_WARN("fail to generate fts parser name", K(ret), K(arg));
   } else if (OB_FAIL(generate_fts_parser_property(data_schema, arg, *allocator))) {
@@ -2052,7 +2047,7 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_name(
     }
     if (OB_SUCC(ret)) {
       bool is_need_load_dic = false; // not using
-      if (OB_FAIL(check_need_to_load_dic(arg.tenant_id_, arg.index_option_.parser_name_, is_need_load_dic))) {
+      if (OB_FAIL(check_need_to_load_dic(arg.index_option_.parser_name_, is_need_load_dic))) {
         LOG_WARN("fail to check need to load dic",
             K(ret), K(arg.index_option_.parser_name_), K(is_need_load_dic));
       }
@@ -2140,18 +2135,16 @@ int ObFtsIndexBuilderUtil::generate_fts_parser_property(
   return ret;
 }
 
-int ObFtsIndexBuilderUtil::check_need_to_load_dic(
-    const uint64_t tenant_id,
-    const ObString &parser_name,
+int ObFtsIndexBuilderUtil::check_need_to_load_dic(const ObString &parser_name,
     bool &need_to_load_dic)
 {
   int ret = OB_SUCCESS;
   ObString real_parser_name = parser_name;
   need_to_load_dic = false;
-  if (!is_valid_tenant_id(tenant_id) || parser_name.empty()) {
+  if (!true || parser_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant id is not valid or parser name is empty",
-        K(ret), K(tenant_id), K(parser_name));
+        K(ret), K(parser_name));
   } else if (nullptr != real_parser_name.find('.')
              && OB_FALSE_IT(real_parser_name = real_parser_name.split_on('.'))) {
   } else if (is_need_dictionary(real_parser_name)) {
@@ -2167,13 +2160,13 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
   int ret = OB_SUCCESS;
   if (index_schema.is_fts_index_aux() || index_schema.is_fts_doc_word_aux()) {
     bool need_to_load_dic = false;
-    uint64_t tenant_id = index_schema.get_tenant_id();
+    
     ObCharsetType charset_type = ObCharsetType::CHARSET_INVALID;
     const ObString &parser_name = index_schema.get_parser_name();
     ObTableSchema::const_column_iterator tmp_begin = index_schema.column_begin();
     ObTableSchema::const_column_iterator tmp_end = index_schema.column_end();
-    if (OB_FAIL(check_need_to_load_dic(tenant_id, parser_name, need_to_load_dic))) {
-      LOG_WARN("fail to check need to load dic", K(ret), K(tenant_id), K(parser_name), K(need_to_load_dic));
+    if (OB_FAIL(check_need_to_load_dic(parser_name, need_to_load_dic))) {
+      LOG_WARN("fail to check need to load dic", K(ret), K(parser_name), K(need_to_load_dic));
     } else if (need_to_load_dic) {
       for (; OB_SUCC(ret) && tmp_begin != tmp_end; tmp_begin++) {
         ObColumnSchemaV2 *col = (*tmp_begin);
@@ -2191,22 +2184,21 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
       }
       if (OB_SUCC(ret)) {
         ObTenantDicLoaderHandle dic_loader_handle;
-        if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(tenant_id,
+        if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
                                                                   parser_name,
                                                                   charset_type,
                                                                   dic_loader_handle))) {
           LOG_WARN("fail to get dic loader",
-              K(ret), K(tenant_id), K(parser_name), K(charset_type));
+              K(ret), K(parser_name), K(charset_type));
         } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the dic loader handle is not valid", K(ret), K(tenant_id), K(dic_loader_handle));
-        } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans(tenant_id))) {
-          LOG_WARN("fail to try load dictionary", K(ret), K(tenant_id), K(dic_loader_handle));
-        } else if (OB_FAIL(storage::ObDicLock::lock_dic_tables_in_trans(tenant_id,
-                                                                        *dic_loader_handle.get_loader(),
+          LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_handle));
+        } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
+          LOG_WARN("fail to try load dictionary", K(ret), K(dic_loader_handle));
+        } else if (OB_FAIL(storage::ObDicLock::lock_dic_tables_in_trans(*dic_loader_handle.get_loader(),
                                                                         transaction::tablelock::SHARE,
                                                                         trans))) {
-          LOG_WARN("fail to lock all dictionaries", K(ret), K(tenant_id), K(dic_loader_handle));
+          LOG_WARN("fail to lock all dictionaries", K(ret), K(1UL), K(dic_loader_handle));
         }
       }
     }
@@ -2218,38 +2210,32 @@ int ObFtsIndexBuilderUtil::try_load_dictionary_for_all_tenants()
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  common::ObArray<uint64_t> all_tenants;
 
   DEBUG_SYNC(BEFORE_LOAD_DICTIONARY_IN_BACKGROUND);
 
   if (OB_ISNULL(GCTX.root_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("root service is null", K(ret));
-  } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_tenant_schema_guard(OB_SYS_TENANT_ID,
-                                                                                      schema_guard))) {
+  } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_available_tenant_ids(all_tenants))) {
-    LOG_WARN("fail to get available tenant ids", K(ret));
   } else {
-    for (int64_t i = 0; i < all_tenants.size(); ++i) { // ignore ret to delete other tenant's dic loader
-      const uint64_t tenant_id = all_tenants.at(i);
-      if (is_valid_tenant_id(tenant_id)
-          && (is_user_tenant(tenant_id) || is_sys_tenant(tenant_id))) {
+    { // ignore ret to delete other tenant's dic loader
+      {
         lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
         // overwrite ret
         if (compat_mode == lib::Worker::CompatMode::MYSQL) {
           ObTenantDicLoaderHandle dic_loader_handle;
-          if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(tenant_id,
+          if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
                                                                     ObFTSLiteral::PARSER_NAME_IK,
                                                                     ObCharsetType::CHARSET_UTF8MB4,
                                                                     dic_loader_handle))) {
-            LOG_WARN("fail to get dic loader", K(ret), K(tenant_id));
+            LOG_WARN("fail to get dic loader", K(ret), K(1UL));
           } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("dic loader handle is not valid", K(ret), K(tenant_id), K(dic_loader_handle));
+            LOG_WARN("dic loader handle is not valid", K(ret), K(1UL), K(dic_loader_handle));
           } else if (OB_FAIL(
-                         dic_loader_handle.get_loader()->try_load_dictionary_in_trans(tenant_id))) {
-            LOG_WARN("fail to try load dictionary", K(ret), K(tenant_id), K(dic_loader_handle));
+                         dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
+            LOG_WARN("fail to try load dictionary", K(ret), K(1UL), K(dic_loader_handle));
           }
         }
       }
@@ -2258,18 +2244,16 @@ int ObFtsIndexBuilderUtil::try_load_dictionary_for_all_tenants()
   return ret;
 }
 
-int ObFtsIndexBuilderUtil::check_supportability_for_loader_key(
-    const uint64_t tenant_id,
-    const ObString &parser_name,
+int ObFtsIndexBuilderUtil::check_supportability_for_loader_key(const ObString &parser_name,
     const ObCharsetType charset_type)
 {
   int ret = OB_SUCCESS;
   ObString real_parser_name = parser_name;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) ||
+  if (OB_UNLIKELY(!true ||
                   parser_name.empty() ||
                   CHARSET_INVALID == charset_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("these arguments are not valid", K(ret), K(tenant_id), K(parser_name), K(charset_type));
+    LOG_WARN("these arguments are not valid", K(ret), K(parser_name), K(charset_type));
   } else {
     if (nullptr != real_parser_name.find('.')) {
       real_parser_name = real_parser_name.split_on('.');
@@ -2524,11 +2508,11 @@ int ObFtsIndexBuilderUtil::get_index_column_ids_for_fts(
   } else if (OB_FAIL(column_schema.get_cur_default_value().get_string(col_def))) {
     LOG_WARN("fail to get current default value", K(ret), K(column_schema));
   } else {
-    const uint64_t tenant_id = OB_INVALID_TENANT_ID == MTL_ID() ? common::OB_SERVER_TENANT_ID : MTL_ID();
-    common::ObArenaAllocator allocator(common::ObMemAttr(tenant_id, "FtsIdxColIds"));
+    
+    common::ObArenaAllocator allocator(common::ObMemAttr("FtsIdxColIds"));
     ObItemType root_expr_type = T_INVALID;
     ObSEArray<ObString, 8> col_names;
-    col_names.set_attr(ObMemAttr(tenant_id, "FtsIdxColNa"));
+    col_names.set_attr(ObMemAttr("FtsIdxColNa"));
     if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator, root_expr_type, col_names))) {
       LOG_WARN("fail to resolve generated column info", K(ret));
     } else {
@@ -2609,11 +2593,10 @@ int ObFtsIndexBuilderUtil::check_supportability_for_building_index(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(check_supportability_for_loader_key(index_arg->tenant_id_,
-                                                      index_arg->index_option_.parser_name_,
+      if (OB_FAIL(check_supportability_for_loader_key(index_arg->index_option_.parser_name_,
                                                       charset_type))) {
         LOG_WARN("fail to check supportability for loader key",
-            K(index_arg->tenant_id_), K(index_arg->index_option_.parser_name_), K(charset_type));
+            K(index_arg->index_option_.parser_name_), K(charset_type));
       }
     }
   }
@@ -2946,7 +2929,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
                  (sql::ObExecContext, exec_ctx, allocator),
                  (sql::ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
       LinkExecCtxGuard link_guard(session, exec_ctx);
-      uint64_t tenant_id = data_schema.get_tenant_id();
+      
       const ObTenantSchema *tenant_schema = nullptr;
       ObSchemaGetterGuard guard;
       ObSchemaChecker schema_checker;
@@ -2957,19 +2940,17 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
       exec_ctx.set_my_session(&session);
       exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
 
-      if (OB_FAIL(session.init(0 /*default session id*/,
-                                0 /*default proxy id*/,
-                                &allocator))) {
+      if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
         LOG_WARN("init session failed", K(ret));
       } else if (OB_FAIL(session.set_default_database(arg.database_name_))) {
         LOG_WARN("failed to set default session default database name", K(ret));
-      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, guard))) {
+      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       } else if (OB_FAIL(schema_checker.init(guard))) {
         LOG_WARN("failed to init schema checker", K(ret));
-      } else if (OB_FAIL(guard.get_tenant_info(tenant_id, tenant_schema))) {
+      } else if (OB_FAIL(guard.get_tenant_info(tenant_schema))) {
         LOG_WARN("get tenant_schema failed", K(ret));
-      } else if (OB_FAIL(session.init_tenant(tenant_schema->get_tenant_name_str(), tenant_id))) {
+      } else if (OB_FAIL(session.init_tenant(tenant_schema->get_tenant_name_str()))) {
         LOG_WARN("init tenant failed", K(ret));
       } else if (OB_FAIL(session.load_all_sys_vars(guard))) {
         LOG_WARN("session load system variable failed", K(ret));
@@ -3097,7 +3078,7 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
         multival_col.set_rowkey_position(0); //non-primary key column
         multival_col.set_index_position(0); //non-index column
         multival_col.set_tbl_part_key_pos(0); //not partition key
-        multival_col.set_tenant_id(data_schema.get_tenant_id());
+        
         multival_col.set_table_id(data_schema.get_table_id());
         multival_col.set_column_id(data_schema.get_max_used_column_id() + 1);
         multival_col.add_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
@@ -3279,7 +3260,7 @@ int ObMulValueIndexBuilderUtil::set_multivalue_index_table_columns(
         ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
             mvi_col_item.column_name_.length(), mvi_col_item.column_name_.ptr());
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
             "database_id", data_schema.get_database_id(),
             "table_name", data_schema.get_table_name(),
             "column name", mvi_col_item.column_name_, K(ret));

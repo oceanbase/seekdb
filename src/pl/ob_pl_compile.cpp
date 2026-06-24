@@ -180,29 +180,26 @@ int ObPLCompiler::check_dep_schema(ObSchemaGetterGuard &schema_guard,
                                    const DependenyTableStore &dep_schema_objs)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   for (int64_t i = 0; OB_SUCC(ret) && i < dep_schema_objs.count(); ++i) {
-    tenant_id = MTL_ID();
     if (TABLE_SCHEMA != dep_schema_objs.at(i).get_schema_type()) {
       int64_t new_version = 0;
       if (PACKAGE_SCHEMA == dep_schema_objs.at(i).get_schema_type()
           || UDT_SCHEMA == dep_schema_objs.at(i).get_schema_type()
           || ROUTINE_SCHEMA == dep_schema_objs.at(i).get_schema_type()) {
-        tenant_id = pl::get_tenant_id_by_object_id(dep_schema_objs.at(i).object_id_);
       }
       if (OB_FAIL(schema_guard.get_schema_version(dep_schema_objs.at(i).get_schema_type(),
-                                                  tenant_id,
                                                   dep_schema_objs.at(i).object_id_,
                                                   new_version))) {
         LOG_WARN("failed to get schema version",
-                  K(ret), K(tenant_id), K(dep_schema_objs.at(i)));
+                  K(ret), K(dep_schema_objs.at(i)));
       } else if (OB_INVALID_VERSION == new_version ||
                  new_version != dep_schema_objs.at(i).version_) {
         LOG_WARN("schema version is invalid", K(ret), K(dep_schema_objs.at(i)), K(new_version));
       }
     } else {
       const ObSimpleTableSchemaV2 *table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_simple_table_schema(MTL_ID(),
+      if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                       dep_schema_objs.at(i).object_id_,
                                                       table_schema))) {
         LOG_WARN("failed to get table schema", K(ret), K(dep_schema_objs.at(i)));
@@ -402,7 +399,7 @@ int ObPLCompiler::compile(
     //Step 3：Code Generator
     if (OB_SUCC(ret)) {
       {
-        lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), GET_PL_MOD_STRING(OB_PL_CODE_GEN)));
+        lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_CODE_GEN)));
         // Interpreter path: prepare expressions + copy metadata + retain AST, no LLVM codegen.
         if (OB_FAIL(ObPL::check_session_alive(session_info_))) {
           LOG_WARN("query or session is killed", K(ret));
@@ -445,12 +442,12 @@ int ObPLCompiler::compile(
         }
         if (OB_SUCC(ret)) {
           //anonymous + ps situation func also needs to enter plan cache, therefore version needs to be set
-          int64_t tenant_id = session_info_.get_effective_tenant_id();
+          
           int64_t tenant_schema_version = OB_INVALID_VERSION;
           int64_t sys_schema_version = OB_INVALID_VERSION;
-          if (OB_FAIL(schema_guard_.get_schema_version(tenant_id, tenant_schema_version))
-              || OB_FAIL(schema_guard_.get_schema_version(OB_SYS_TENANT_ID, sys_schema_version))) {
-            LOG_WARN("fail to get schema version", K(ret), K(tenant_id));
+          if (OB_FAIL(schema_guard_.get_schema_version(tenant_schema_version))
+              || OB_FAIL(schema_guard_.get_schema_version(sys_schema_version))) {
+            LOG_WARN("fail to get schema version", K(ret));
           } else {
             func.get_stat_for_update().pl_cg_mem_hold_ = 0;
             func.set_tenant_schema_version(tenant_schema_version);
@@ -504,7 +501,7 @@ int ObPLCompiler::compile(const uint64_t id, ObPLFunction &func)
     LOG_WARN("failed to allocate func_ast", K(ret));
   } else {
     const share::schema::ObRoutineInfo *routine = NULL;
-    OZ (schema_guard_.get_routine_info(get_tenant_id_by_object_id(id), id, routine));
+    OZ (schema_guard_.get_routine_info( id, routine));
     if (OB_SUCC(ret) && OB_ISNULL(routine)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
       LOG_WARN("routine info is not exist!", K(ret), K(id));
@@ -550,7 +547,7 @@ int ObPLCompiler::compile(
                    || ROUTINE_UDT_TYPE == routine.get_routine_type())) {
       func_ast.set_proc_type(STANDALONE_FUNCTION);
     }
-    OZ (schema_guard_.get_database_schema(routine.get_tenant_id(), routine.get_database_id(), db_schema));
+    OZ (schema_guard_.get_database_schema( routine.get_database_id(), db_schema));
     CK (OB_NOT_NULL(db_schema));
     OX (func_ast.set_db_name(db_schema->get_database_name_str()));
     for (int64_t i = 0; OB_SUCC(ret) && i < routine.get_routine_params().count(); ++i) {
@@ -617,7 +614,7 @@ int ObPLCompiler::compile(
       OZ (func_ast.generate_symbol_debuginfo());
     }
     ObErrorInfo error_info;
-    error_info.set_tenant_id(routine.get_tenant_id());
+    
     if (OB_SUCC(ret)) {
       OZ (error_info.delete_error(&routine));
     } else {
@@ -644,7 +641,7 @@ int ObPLCompiler::compile(
     OX (func.set_ret_type(func_ast.get_ret_type()));
     OX (func.get_stat_for_update().schema_version_ = routine.get_schema_version());
     OX (func.get_stat_for_update().pl_cg_mem_hold_ = 0);
-    OZ (func.set_tenant_sys_schema_version(schema_guard_, session_info_.get_effective_tenant_id()));
+    OZ (func.set_tenant_sys_schema_version(schema_guard_));
     OZ (check_dep_schema(schema_guard_, func.get_dependency_table()));
   } else if (OB_SUCC(ret)) {
 
@@ -653,7 +650,7 @@ int ObPLCompiler::compile(
       // routine's ObSqlExpressions + copy AST metadata onto the func; the tree-walking
       // interpreter executes the retained AST (func.set_ast happens in the caller),
       // and func.get_action() stays 0 (unused, ObPLExecState::execute() interprets).
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), GET_PL_MOD_STRING(OB_PL_CODE_GEN)));
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_CODE_GEN)));
       OZ (pl_prepare_expressions(func_ast, func));
       OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func));
       OZ (func.get_enum_set_ctx().assgin(func_ast.get_enum_set_ctx()));
@@ -667,7 +664,7 @@ int ObPLCompiler::compile(
       OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
       OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
       if (OB_SUCC(ret)) {
-        OZ (func.set_tenant_sys_schema_version(schema_guard_, session_info_.get_effective_tenant_id()));
+        OZ (func.set_tenant_sys_schema_version(schema_guard_));
         OX (func.set_ret_type(func_ast.get_ret_type()));
         OX (func.get_stat_for_update().schema_version_ = routine.get_schema_version());
         OX (func.get_stat_for_update().pl_cg_mem_hold_ = 0);
@@ -686,7 +683,7 @@ int ObPLCompiler::compile(
   OX (session_info_.add_plsql_compile_time(final_end - init_start));
 
   ObErrorInfo error_info;
-  error_info.set_tenant_id(routine.get_tenant_id());
+  
   if (OB_SUCC(ret)) {
     OZ (error_info.delete_error(&routine));
   } else {
@@ -707,7 +704,6 @@ int ObPLCompiler::compile(
 }
 
 int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_tbl,
-                                                uint64_t tenant_id,
                                                 uint64_t owner_id,
                                                 uint64_t dep_obj_id, 
                                                 uint64_t schema_version,
@@ -725,11 +721,10 @@ int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp
   if (!skip) {
     if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(trans.start(sql_proxy, tenant_id))) {
-      LOG_WARN("failed to start trans", K(ret), K(tenant_id));
+    } else if (OB_FAIL(trans.start(sql_proxy))) {
+      LOG_WARN("failed to start trans", K(ret));
     } else {
-      OZ (ObDependencyInfo::delete_schema_object_dependency(trans,
-                                              tenant_id, dep_obj_id,
+      OZ (ObDependencyInfo::delete_schema_object_dependency(trans, dep_obj_id,
                                               schema_version,
                                               dep_obj_type));
       ObSArray<ObDependencyInfo> dep_infos;
@@ -742,7 +737,6 @@ int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp
         LOG_WARN("delete failed", K(ret));
       } else if (OB_INVALID_ID == owner_id
       || OB_INVALID_ID == dep_obj_id
-      || OB_INVALID_ID == tenant_id
       || OB_INVALID_SCHEMA_VERSION == schema_version) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("illegal schema version or owner id", K(ret), K(schema_version),
@@ -750,7 +744,7 @@ int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp
       } else {
         for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos.count(); ++i) {
           ObDependencyInfo & dep = dep_infos.at(i);
-          dep.set_tenant_id(tenant_id);
+          
           dep.set_dep_obj_id(dep_obj_id);
           dep.set_dep_obj_owner_id(owner_id);
           dep.set_schema_version(schema_version);
@@ -849,14 +843,14 @@ int ObPLCompiler::analyze_package(const ObString &source,
     const ObTriggerInfo *trg_info = NULL;
     if (PL_PACKAGE_BODY == package_ast.get_package_type() && is_for_trigger) {
       uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(package_ast.get_id());
-      OZ (schema_guard_.get_trigger_info(session_info_.get_effective_tenant_id(), trg_id, trg_info));
+      OZ (schema_guard_.get_trigger_info( trg_id, trg_info));
       CK (OB_NOT_NULL(trg_info));
     }
     if (OB_SUCC(ret) && is_for_trigger && PL_PACKAGE_SPEC == package_ast.get_package_type()) {
       const uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(package_ast.get_id());
       const ObTriggerInfo *trg_info = NULL;
-      const uint64_t tenant_id = session_info_.get_effective_tenant_id();
-      OZ (schema_guard_.get_trigger_info(tenant_id, trg_id, trg_info));
+      
+      OZ (schema_guard_.get_trigger_info( trg_id, trg_info));
       OV (OB_NOT_NULL(trg_info), OB_ERR_UNEXPECTED, trg_id);
     }
     OZ (parser.parse_package(source, parse_tree, session_info_.get_dtc_params(), 
@@ -940,14 +934,13 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
   const ObTriggerInfo *trigger_info = nullptr;
   if (OB_SUCC(ret) && package_info.is_for_trigger()) {
     uint64_t trigger_id = ObTriggerInfo::get_package_trigger_id(package_info.get_package_id());
-    const uint64_t tenant_id = get_tenant_id_by_object_id(trigger_id);
-    OZ (schema_guard_.get_trigger_info(tenant_id, trigger_id, trigger_info));
+    
+    OZ (schema_guard_.get_trigger_info( trigger_id, trigger_info));
     OX (package_ast.set_priv_user(trigger_info->get_trigger_priv_user()));
   }
   if (OB_SUCC(ret)) {
     if (package_info.is_for_trigger()) {
-      OZ (ObTriggerInfo::gen_package_source(package_info.get_tenant_id(),
-                                            package_info.get_package_id(),
+      OZ (ObTriggerInfo::gen_package_source(package_info.get_package_id(),
                                             source,
                                             schema::PACKAGE_TYPE == package_info.get_type(),
                                             schema_guard_, package.get_allocator()));
@@ -967,7 +960,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
   // mode preserves the historical package compilation path.
   if (OB_SUCC(ret) && should_codegen_package(package_ast)) {
     {
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
       // Interpreter path: prepare the package's expressions only, no LLVM codegen.
       OZ (ObPL::check_session_alive(session_info_));
       OZ (pl_prepare_expressions(package_ast, package));
@@ -986,9 +979,8 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
 
   if (OB_SUCC(ret)) {
     ObMutexGuard guard(package_dep_info_lock_);
-    if (session_info_.get_effective_tenant_id() == package_info.get_tenant_id()) {
+    {
       OZ (update_schema_object_dep_info(package_ast.get_dependency_table(),
-                                        package_info.get_tenant_id(),
                                         package_info.get_owner_id(),
                                         package_info.get_package_id(),
                                         package_info.get_schema_version(),
@@ -997,7 +989,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
   }
 
   ObErrorInfo error_info;
-  error_info.set_tenant_id(package_info.get_tenant_id());
+  
   if (OB_SUCC(ret)) {
     if (package_info.is_for_trigger()) {
       CK (OB_NOT_NULL(trigger_info));
@@ -1009,7 +1001,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
     int tmp_ret = ret;
     ret = OB_SUCCESS;
     const ObDatabaseSchema *db_schema = NULL;
-    OZ (schema_guard_.get_database_schema(package_info.get_tenant_id(), package_info.get_database_id(), db_schema));
+    OZ (schema_guard_.get_database_schema( package_info.get_database_id(), db_schema));
     CK (OB_NOT_NULL(db_schema));
     if (OB_SUCC(ret)) {
       if (package_info.is_for_trigger()) {
@@ -1030,11 +1022,11 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
 
   if (OB_SUCC(ret)) {
     int64_t public_syn_cnt = 0;
-    int64_t tenant_id = session_info_.get_effective_tenant_id();
+    
     int64_t tenant_schema_version = OB_INVALID_VERSION;
     int64_t sys_schema_version = OB_INVALID_VERSION;
-    OZ (schema_guard_.get_schema_version(tenant_id, tenant_schema_version));
-    OZ (schema_guard_.get_schema_version(OB_SYS_TENANT_ID, sys_schema_version));
+    OZ (schema_guard_.get_schema_version(tenant_schema_version));
+    OZ (schema_guard_.get_schema_version(sys_schema_version));
     OX (package.set_tenant_schema_version(tenant_schema_version));
     OX (package.set_sys_schema_version(sys_schema_version));
     OX (package.set_public_syn_count(public_syn_cnt));
@@ -1045,7 +1037,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
   OZ (ObPLCacheCtx::assemble_format_routine_name(format_name, &package));
   OX (package.get_stat_for_update().compile_time_ = compile_end - compile_start);
   OX (session_info_.add_plsql_compile_time(compile_end - compile_start));
-  OZ (package.set_tenant_sys_schema_version(schema_guard_, session_info_.get_effective_tenant_id()));
+  OZ (package.set_tenant_sys_schema_version(schema_guard_));
   if (package_info.is_for_trigger()) {
     CK (OB_NOT_NULL(trigger_info));
     OX (package.get_stat_for_update().schema_version_ = trigger_info->get_schema_version());
@@ -1089,7 +1081,7 @@ int ObPLCompiler::init_function(const share::schema::ObRoutineInfo *routine, ObP
       } else {
         // do nothing...
       }
-      func.set_tenant_id(routine->get_tenant_id());
+      
       func.set_database_id(routine->get_database_id());
       func.set_package_id(routine->get_package_id());
       func.set_routine_id(routine->get_routine_id());
@@ -1125,7 +1117,6 @@ int ObPLCompiler::init_function(const share::schema::ObRoutineInfo *routine, ObP
       }
       ObString database_name, package_name;
       OZ (format_object_name(schema_guard_,
-                             routine->get_tenant_id(),
                              routine->get_database_id(),
                              routine->get_package_id(),
                              database_name,
@@ -1149,7 +1140,7 @@ int ObPLCompiler::init_function(share::schema::ObSchemaGetterGuard &schema_guard
   int64_t param_cnt = param_infos.count();
   routine.set_arg_count(param_cnt);
   routine.set_proc_type(routine_info.get_type());
-  routine.set_tenant_id(routine_info.get_tenant_id());
+  
   routine.set_database_id(routine_info.get_db_id());
   routine.set_package_id(routine_info.get_pkg_id());
   routine.set_routine_id(routine_info.get_id());
@@ -1177,7 +1168,6 @@ int ObPLCompiler::init_function(share::schema::ObSchemaGetterGuard &schema_guard
   }
   ObString database_name, package_name;
   OZ (format_object_name(schema_guard,
-                         routine_info.get_tenant_id(),
                          routine_info.get_db_id(),
                          routine_info.get_pkg_id(),
                          database_name,
@@ -1441,7 +1431,7 @@ int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
             }
           } else {
             {
-              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
+              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
               // Interpreter path: prepare expressions + copy metadata + retain AST, no LLVM codegen.
               OZ (pl_prepare_expressions(*routine_ast, *routine));
               OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine));
@@ -1509,7 +1499,6 @@ int ObPLCompiler::generate_package_routines(
 }
 
 int ObPLCompiler::format_object_name(ObSchemaGetterGuard &schema_guard,
-                                     const uint64_t tenant_id,
                                      const uint64_t db_id,
                                      const uint64_t package_id,
                                      ObString &database_name,
@@ -1519,10 +1508,10 @@ int ObPLCompiler::format_object_name(ObSchemaGetterGuard &schema_guard,
   const ObPackageInfo *pkg_info = NULL;
   const ObDatabaseSchema *database_schema = NULL;
   if (OB_INVALID_ID != db_id) {
-    OZ (schema_guard.get_database_schema(tenant_id, db_id, database_schema));
+    OZ (schema_guard.get_database_schema( db_id, database_schema));
   }
   if (OB_INVALID_ID != package_id) {
-    OZ (schema_guard.get_package_info(tenant_id, package_id, pkg_info));
+    OZ (schema_guard.get_package_info( package_id, pkg_info));
   }
   if (OB_SUCC(ret)) {
     if (OB_NOT_NULL(database_schema)) {
@@ -1587,7 +1576,7 @@ void ObPLCompilerEnvGuard::init(const Info &info,
     if (invoker_set_db) {
       // alway set db in compile phase when version greater or equal than 4.3.5.2
       need_set_db = true;
-    } else if (get_tenant_id_by_object_id(info.get_package_id()) == OB_SYS_TENANT_ID) {
+    } else if (true) {
       // in mysql mode, only system packages with invoker's right do not need set db
       // in oracle mode, set db by if the routine is invoker's right
       need_set_db = !is_invoker_right;
@@ -1604,7 +1593,7 @@ void ObPLCompilerEnvGuard::init(const Info &info,
     const share::schema::ObDatabaseSchema *db_schema = NULL;
     old_db_id_ = session_info_.get_database_id();
     OZ (old_db_name_.append(session_info_.get_database_name()));
-    OZ (schema_guard.get_database_schema(info.get_tenant_id(), info.get_database_id(), db_schema));
+    OZ (schema_guard.get_database_schema( info.get_database_id(), db_schema));
     CK (OB_NOT_NULL(db_schema));
     OZ (session_info_.set_default_database(db_schema->get_database_name_str()));
     OX (session_info_.set_database_id(db_schema->get_database_id()));

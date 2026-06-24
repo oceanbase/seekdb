@@ -34,23 +34,23 @@ public:
   struct P2PDatahubNode {
     common::ObCurTraceId::TraceId trace_id_;
     int64_t p2p_datahub_id_;
-    int64_t tenant_id_;
+    
     int64_t msg_type_;
     int64_t hold_size_;
     int64_t timeout_ts_;
     int64_t start_time_;
-    TO_STRING_KV(K(trace_id_), K(p2p_datahub_id_), K(tenant_id_),
+    TO_STRING_KV(K(trace_id_), K(p2p_datahub_id_),
                  K(msg_type_), K(hold_size_), K(timeout_ts_), K(start_time_));
   };
 public:
   struct P2PMsgTraverseCall
   {
-    P2PMsgTraverseCall(common::ObArray<P2PDatahubNode> &node_array, int64_t tenant_id) :
-        node_array_(node_array), tenant_id_(tenant_id) {};
+    P2PMsgTraverseCall(common::ObArray<P2PDatahubNode> &node_array) :
+        node_array_(node_array) {};
     ~P2PMsgTraverseCall() = default;
     int operator() (common::hash::HashMapPair<sql::ObP2PDhKey, sql::ObP2PDatahubMsgBase *> &entry);
     common::ObArray<P2PDatahubNode> &node_array_;
-    int64_t tenant_id_;
+    
   };
 public:
   ObAllPxP2PDatahubTable();

@@ -178,7 +178,7 @@ ObBatchExecParam<ITEM>::ObBatchExecParam(const ObBatchExecParamType type)
     batch_size_(DEFAULT_BATCH_SIZE),
     tablet_info_array_()
 {
-  tablet_info_array_.set_attr(lib::ObMemAttr(MTL_ID(), "BatchArr", ObCtxIds::MERGE_NORMAL_CTX_ID));
+  tablet_info_array_.set_attr(lib::ObMemAttr("BatchArr", ObCtxIds::MERGE_NORMAL_CTX_ID));
 }
 
 template<typename ITEM>
@@ -193,7 +193,7 @@ ObBatchExecParam<ITEM>::ObBatchExecParam(
     batch_size_(batch_size),
     tablet_info_array_()
 {
-  tablet_info_array_.set_attr(lib::ObMemAttr(MTL_ID(), "BatchArr", ObCtxIds::MERGE_NORMAL_CTX_ID));
+  tablet_info_array_.set_attr(lib::ObMemAttr("BatchArr", ObCtxIds::MERGE_NORMAL_CTX_ID));
 }
 
 template<typename ITEM>

@@ -29,13 +29,12 @@ class ObVecITaskExecutor
 public: 
   ObVecITaskExecutor() 
     : is_inited_(false),
-      tenant_id_(OB_INVALID_TENANT_ID),
       vector_index_service_(nullptr),
       ls_(nullptr),
       async_task_ref_cnt_(0)
   {}
   virtual ~ObVecITaskExecutor() {}
-  virtual int init(const uint64_t tenant_id, storage::ObLS *ls);
+  virtual int init(storage::ObLS *ls);
   int resume_task();
   int load_task_from_inner_table();
   int start_task();
@@ -57,7 +56,6 @@ protected:
   int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array);
 
   bool is_inited_;
-  uint64_t tenant_id_;
   ObPluginVectorIndexService *vector_index_service_;
   storage::ObLS *ls_;
   volatile int64_t async_task_ref_cnt_;

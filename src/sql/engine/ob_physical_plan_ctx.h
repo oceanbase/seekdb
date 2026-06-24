@@ -111,9 +111,9 @@ public:
     subschema_ctx_.destroy();
     all_local_session_vars_.destroy();
   }
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_show_seed(bool show_seed) { is_show_seed_ = show_seed; }
-  inline uint64_t get_tenant_id() { return tenant_id_; }
+  
   inline bool get_show_seed() const { return is_show_seed_; }
   inline void set_tenant_schema_version(const int64_t version) { tenant_schema_version_ = version; }
   inline int64_t get_tenant_schema_version() const { return tenant_schema_version_; }
@@ -486,7 +486,7 @@ public:
   int64_t get_cur_stmt_id() const { return cur_stmt_id_; }
   int switch_implicit_cursor();
   void add_px_dml_row_info(const ObPxDmlRowInfo &dml_row_info);
-  TO_STRING_KV("tenant_id", tenant_id_);
+  TO_STRING_KV(K_(tenant_schema_version));
   void set_field_array(const common::ObIArray<common::ObField> *field_array) { field_array_ = field_array; }
   const common::ObIArray<common::ObField> *get_field_array() { return field_array_;}
   void set_is_ps_protocol(const bool is_ps_protocol) { is_ps_protocol_ = is_ps_protocol; }
@@ -540,14 +540,6 @@ public:
   common::ObFixedArray<uint64_t, common::ObIAllocator> &get_mview_ids() {  return mview_ids_; }
   common::ObFixedArray<uint64_t, common::ObIAllocator> &get_last_refresh_scns() {  return last_refresh_scns_; }
   uint64_t get_last_refresh_scn(uint64_t mview_id) const;
-  void set_tx_id(int64_t tx_id) { tx_id_ = tx_id; }
-  int64_t get_tx_id() const { return tx_id_; }
-  void set_tm_sessid(int64_t tm_sessid) { tm_sessid_ = tm_sessid; }
-  int64_t get_tm_sessid() const { return tm_sessid_; }
-  void set_hint_xa_trans_stop_check_lock(int64_t hint_xa_trans_stop_check_lock) { hint_xa_trans_stop_check_lock_ = hint_xa_trans_stop_check_lock; }
-  int64_t get_hint_xa_trans_stop_check_lock() const { return hint_xa_trans_stop_check_lock_; }
-  void set_main_xa_trans_branch(int64_t main_xa_trans_branch) { main_xa_trans_branch_ = main_xa_trans_branch; }
-  int64_t get_main_xa_trans_branch() const { return main_xa_trans_branch_; }
   inline void set_is_direct_insert_plan(const bool is_direct_insert_plan)
   {
     is_direct_insert_plan_ = is_direct_insert_plan;
@@ -581,7 +573,7 @@ private:
   /**
    * @note these member need serialize
    */
-  int64_t tenant_id_;
+  
   // used for TRANSACTION SET CONSISTENCY check
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time
@@ -701,11 +693,6 @@ private:
   // for last_refresh_scn expr to get last_refresh_scn for rt mview used in query
   common::ObFixedArray<uint64_t, common::ObIAllocator> mview_ids_;
   common::ObFixedArray<uint64_t, common::ObIAllocator> last_refresh_scns_;
-  int64_t tx_id_; //for dblink recover xa tx
-  uint32_t tm_sessid_; //for dblink get connection attached on tm session
-  bool hint_xa_trans_stop_check_lock_; // for dblink to stop check stmt lock in xa trans
-  bool main_xa_trans_branch_; // for dblink to indicate weather this sql is executed in main_xa_trans_branch
-  ObSEArray<uint64_t, 8> dblink_ids_;
   int64_t total_memstore_read_row_count_;
   int64_t total_ssstore_read_row_count_;
   bool is_direct_insert_plan_; // for direct load: insert into/overwrite select

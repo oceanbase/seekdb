@@ -26,69 +26,6 @@ using namespace obcall;
 
 namespace transaction
 {
-ObTsSourceInfo::ObTsSourceInfo() : is_inited_(false),
-                                   tenant_id_(OB_INVALID_TENANT_ID),
-                                   last_access_ts_(0)
-{
-}
-
-int ObTsSourceInfo::init(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (!is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id));
-  } else {
-    tenant_id_ = tenant_id;
-    last_access_ts_ = ObClockGenerator::getClock();
-    is_inited_ = true;
-    TRANS_LOG(INFO, "ts source info init success", K(tenant_id));
-  }
-  return ret;
-}
-
-void ObTsSourceInfo::destroy()
-{
-  if (is_inited_) {
-    const uint64_t tenant_id = tenant_id_;
-    gts_source_.destroy();
-    is_inited_ = false;
-    TRANS_LOG(INFO, "ts source info destroyed", K(tenant_id));
-  }
-}
-
-int ObTsSourceInfo::check_if_tenant_has_been_dropped(const uint64_t tenant_id, bool &has_dropped)
-{
-  int ret = OB_SUCCESS;
-  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-  schema::ObSchemaGetterGuard guard;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "not init", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(tenant_id_ != tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(tenant_id_));
-  } else if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "schema_service is null", KR(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
-    TRANS_LOG(WARN, "fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(guard.check_if_tenant_has_been_dropped(tenant_id, has_dropped))) {
-    TRANS_LOG(WARN, "fail to check if tenant has been dropped", KR(ret), K(tenant_id));
-  }
-  return ret;
-}
-
-int ObTsSourceInfo::gts_callback_interrupted(const int errcode, const share::ObLSID ls_id)
-{
-  int ret = OB_SUCCESS;
-  const int64_t task_count = gts_source_.get_task_count();
-  if (0 != task_count) {
-    ret = gts_source_.gts_callback_interrupted(errcode, ls_id);
-  }
-  return ret;
-}
-
 ////////////////////////ObTsMgr implementation///////////////////////////////////
 
 int ObTsMgr::init(const ObAddr &server,
@@ -113,10 +50,8 @@ int ObTsMgr::init(const ObAddr &server,
   } else if (OB_FAIL(gts_request_rpc_->init(server, this, &ts_worker_))) {
     TRANS_LOG(WARN, "response rpc init failed", KR(ret), K(server));
   } else if (FALSE_IT(location_adapter_ = &location_adapter_def_)) {
-  } else if (OB_FAIL(ts_source_.init(OB_SYS_TENANT_ID, server, gts_request_rpc_, location_adapter_))) {
+  } else if (OB_FAIL(ts_source_.init(server, gts_request_rpc_, location_adapter_))) {
     TRANS_LOG(WARN, "ts source init failed", KR(ret));
-  } else if (OB_FAIL(lock_.init(lib::ObMemAttr(OB_SERVER_TENANT_ID, "TsMgr")))) {
-    TRANS_LOG(WARN, "ObQSyncLock init failed", KR(ret), K(OB_SERVER_TENANT_ID));
   } else {
     server_ = server;
     is_inited_ = true;
@@ -211,11 +146,7 @@ void ObTsMgr::destroy()
     (void)share::ObThreadPool::destroy();
     (void)ts_worker_.destroy();
 
-    ObSEArray<uint64_t, 1> ids;
-    delete_tenant_(OB_SYS_TENANT_ID);
-
     location_adapter_def_.destroy();
-    lock_.destroy();
     server_.reset();
     location_adapter_ = NULL;
     is_running_ = false;
@@ -271,7 +202,7 @@ int ObTsMgr::handle_gts_err_response(const ObGtsErrResponse &msg)
   return ret;
 }
 
-int ObTsMgr::refresh_gts_location(const uint64_t tenant_id)
+int ObTsMgr::refresh_gts_location()
 {
   int ret = OB_SUCCESS;
   ObTimeGuard timeguard("refresh_gts_location", 100000);
@@ -283,7 +214,7 @@ int ObTsMgr::refresh_gts_location(const uint64_t tenant_id)
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
   } else if (OB_FAIL(ts_source_.refresh_gts_location())) {
-    TRANS_LOG(WARN, "refresh gts location error", K(ret), K(tenant_id));
+    TRANS_LOG(WARN, "refresh gts location error", K(ret));
   } else {
     // do nothing
   }
@@ -291,7 +222,7 @@ int ObTsMgr::refresh_gts_location(const uint64_t tenant_id)
   return ret;
 }
 
-int ObTsMgr::handle_gts_result(const uint64_t tenant_id, const int64_t queue_index, const int ts_type)
+int ObTsMgr::handle_gts_result(const int64_t queue_index, const int ts_type)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -300,19 +231,15 @@ int ObTsMgr::handle_gts_result(const uint64_t tenant_id, const int64_t queue_ind
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ts_source_.handle_gts_result(tenant_id, queue_index))) {
-    TRANS_LOG(WARN, "handle gts result error", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(ts_source_.handle_gts_result(queue_index))) {
+    TRANS_LOG(WARN, "handle gts result error", KR(ret));
   } else {
     // do nothing
   }
   return ret;
 }
 
-int ObTsMgr::update_gts(const uint64_t tenant_id,
-                        const MonotonicTs srr,
+int ObTsMgr::update_gts(const MonotonicTs srr,
                         const int64_t gts,
                         const int ts_type,
                         bool &update)
@@ -326,12 +253,11 @@ int ObTsMgr::update_gts(const uint64_t tenant_id,
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) ||
-      OB_UNLIKELY(!srr.is_valid()) || OB_UNLIKELY(0 >= gts)) {
+  } else if (OB_UNLIKELY(!srr.is_valid()) || OB_UNLIKELY(0 >= gts)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(srr), K(gts));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(gts));
   } else if (OB_FAIL(ts_source_.update_gts(srr, gts, receive_gts_ts, update))) {
-    TRANS_LOG(WARN, "update gts cache failed", KR(ret), K(tenant_id), K(srr), K(gts));
+    TRANS_LOG(WARN, "update gts cache failed", KR(ret), K(srr), K(gts));
   } else {
     // do nothing
   }
@@ -340,39 +266,28 @@ int ObTsMgr::update_gts(const uint64_t tenant_id,
 }
 
 
-int ObTsMgr::delete_tenant_(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  TRANS_LOG(INFO, "delete tenant", KR(ret), K(tenant_id));
-  // do nothing
-  return ret;
-}
-
-int ObTsMgr::remove_dropped_tenant(const uint64_t tenant_id)
+int ObTsMgr::interrupt_gts_callbacks()
 {
   int ret = OB_SUCCESS;
   share::ObLSID ls_id;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObTsMgr is not inited", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id));
   } else {
     const int64_t task_count = ts_source_.get_task_count();
     if (0 != task_count) {
       ret = ts_source_.gts_callback_interrupted(OB_TENANT_NOT_EXIST, ls_id);
     }
     if (OB_SUCCESS != ret) {
-      TRANS_LOG(WARN, "remove ts resource failed", KR(ret), K(tenant_id), K(ls_id));
+      TRANS_LOG(WARN, "interrupt gts callbacks failed", KR(ret), K(ls_id));
     } else {
-      TRANS_LOG(INFO, "remove ts resource success", K(tenant_id), K(ls_id));
+      TRANS_LOG(INFO, "interrupt gts callbacks success", K(ls_id));
     }
   }
   return ret;
 }
 
-int ObTsMgr::update_gts(const uint64_t tenant_id, const int64_t gts, bool &update)
+int ObTsMgr::update_gts(const int64_t gts, bool &update)
 {
   int ret = OB_SUCCESS;
 
@@ -382,19 +297,18 @@ int ObTsMgr::update_gts(const uint64_t tenant_id, const int64_t gts, bool &updat
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) ||
-             OB_UNLIKELY(0 >= gts) ||
+  } else if (OB_UNLIKELY(0 >= gts) ||
              OB_UNLIKELY(gts > ObTimeUtility::current_time_ns() + 86400000000000L)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(gts));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(gts));
   } else if (OB_FAIL(ts_source_.update_gts(gts, update))) {
-    TRANS_LOG(WARN, "update gts cache failed", K(ret), K(tenant_id), K(gts));
+    TRANS_LOG(WARN, "update gts cache failed", K(ret), K(gts));
   }
 
   return ret;
 }
 
-int ObTsMgr::get_gts(const uint64_t tenant_id, ObTsCbTask *task, SCN &scn)
+int ObTsMgr::get_gts(ObTsCbTask *task, SCN &scn)
 {
   int ret = OB_SUCCESS;
   int64_t gts = 0;//need be invalid value for SCN
@@ -404,26 +318,22 @@ int ObTsMgr::get_gts(const uint64_t tenant_id, ObTsCbTask *task, SCN &scn)
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), KP(task));
   } else if (OB_FAIL(ts_source_.get_gts(task, gts))) {
     if (OB_EAGAIN != ret) {
-      TRANS_LOG(WARN, "get gts error", K(ret), K(tenant_id), KP(task));
+      TRANS_LOG(WARN, "get gts error", K(ret), KP(task));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scn.convert_for_gts(gts))) {
-      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(tenant_id), K(gts));
+      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(gts));
     }
   }
 
   return ret;
 }
 
-int ObTsMgr::get_gts(const uint64_t tenant_id,
-                     const MonotonicTs stc,
+int ObTsMgr::get_gts(const MonotonicTs stc,
                      ObTsCbTask *task,
                      SCN &scn,
                      MonotonicTs &receive_gts_ts)
@@ -437,31 +347,30 @@ int ObTsMgr::get_gts(const uint64_t tenant_id,
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(!stc.is_valid())) {
+  } else if (OB_UNLIKELY(!stc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(stc), KP(task));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(stc), KP(task));
   } else if (OB_FAIL(ts_source_.get_gts(stc, task, gts, receive_gts_ts))) {
     if (OB_EAGAIN != ret) {
-      TRANS_LOG(WARN, "get gts error", K(ret), K(tenant_id), K(stc), KP(task));
+      TRANS_LOG(WARN, "get gts error", K(ret), K(stc), KP(task));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scn.convert_for_gts(gts))) {
-      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(tenant_id), K(gts));
+      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(gts));
     }
   }
   return ret;
 }
 
-int ObTsMgr::get_ts_sync(const uint64_t tenant_id, const int64_t timeout_us, share::SCN &scn)
+int ObTsMgr::get_ts_sync(const int64_t timeout_us, share::SCN &scn)
 {
   bool unused_is_external_consistent = false;
-  return get_ts_sync(tenant_id, timeout_us, scn, unused_is_external_consistent);
+  return get_ts_sync(timeout_us, scn, unused_is_external_consistent);
 }
 
-int ObTsMgr::get_gts_sync(const uint64_t tenant_id,
-                          const MonotonicTs stc,
+int ObTsMgr::get_gts_sync(const MonotonicTs stc,
                           const int64_t timeout_us,
                           share::SCN &scn,
                           MonotonicTs &receive_gts_ts)
@@ -474,10 +383,10 @@ int ObTsMgr::get_gts_sync(const uint64_t tenant_id,
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(!stc.is_valid())
+  } else if (OB_UNLIKELY(!stc.is_valid())
              || OB_UNLIKELY(timeout_us < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(tenant_id), K(stc), K(timeout_us));
+    TRANS_LOG(WARN, "invalid argument", K(ret), K(stc), K(timeout_us));
   } else {
     int64_t expire_ts = ObClockGenerator::getClock() + timeout_us;
     int retry_times = 0;
@@ -502,8 +411,7 @@ int ObTsMgr::get_gts_sync(const uint64_t tenant_id,
   return ret;
 }
 
-int ObTsMgr::get_ts_sync(const uint64_t tenant_id,
-                         const int64_t timeout_us,
+int ObTsMgr::get_ts_sync(const int64_t timeout_us,
                          SCN &scn,
                          bool &is_external_consistent)
 {
@@ -519,15 +427,15 @@ int ObTsMgr::get_ts_sync(const uint64_t tenant_id,
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(timeout_us < 0)) {
+  } else if (OB_UNLIKELY(timeout_us < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(tenant_id), K(timeout_us));
+    TRANS_LOG(WARN, "invalid argument", K(ret), K(timeout_us));
   } else {
     do {
       int64_t ts = 0;
       if (OB_FAIL(ts_source_.get_gts(stc, NULL, ts, receive_gts_ts))) {
         if (OB_EAGAIN != ret) {
-          TRANS_LOG(WARN, "get gts error", K(ret), K(tenant_id), K(stc));
+          TRANS_LOG(WARN, "get gts error", K(ret), K(stc));
         } else {
           ob_usleep(sleep_us);
           sleep_us = sleep_us * 2;
@@ -546,7 +454,7 @@ int ObTsMgr::get_ts_sync(const uint64_t tenant_id,
   return ret;
 }
 
-int ObTsMgr::wait_gts_elapse(const uint64_t tenant_id, const SCN &scn,
+int ObTsMgr::wait_gts_elapse(const SCN &scn,
     ObTsCbTask *task, bool &need_wait)
 {
   int ret = OB_SUCCESS;
@@ -556,11 +464,10 @@ int ObTsMgr::wait_gts_elapse(const uint64_t tenant_id, const SCN &scn,
   // } else if (OB_UNLIKELY(!is_running_)) {
   //   ret = OB_NOT_RUNNING;
   //   TRANS_LOG(WARN, "ObTsMgr not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))
-      || OB_UNLIKELY(!scn.is_valid())
+  } else if (OB_UNLIKELY(!scn.is_valid())
       || OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(scn), KP(task));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(scn), KP(task));
   } else {
     const int64_t ts = scn.get_val_for_gts();
     if (OB_FAIL(ts_source_.wait_gts_elapse(ts, task, need_wait))) {
@@ -570,7 +477,7 @@ int ObTsMgr::wait_gts_elapse(const uint64_t tenant_id, const SCN &scn,
   return ret;
 }
 
-int ObTsMgr::wait_gts_elapse(const uint64_t tenant_id, const SCN &scn)
+int ObTsMgr::wait_gts_elapse(const SCN &scn)
 {
   int ret = OB_SUCCESS;
 
@@ -580,14 +487,14 @@ int ObTsMgr::wait_gts_elapse(const uint64_t tenant_id, const SCN &scn)
   } else if (OB_UNLIKELY(!is_running_)) {
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr not running", K(ret));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(!scn.is_valid())) {
+  } else if (OB_UNLIKELY(!scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(scn));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(scn));
   } else {
     const int64_t ts = scn.get_val_for_gts();
     if (OB_FAIL(ts_source_.wait_gts_elapse(ts))) {
       if (OB_EAGAIN != ret) {
-        TRANS_LOG(WARN, "wait gts elapse fail", K(ret), K(ts), K(tenant_id));
+        TRANS_LOG(WARN, "wait gts elapse fail", K(ret), K(ts));
       }
     }
   }
@@ -607,17 +514,7 @@ ObTsMgr &ObTsMgr::get_instance()
   return *get_instance_inner();
 }
 
-int ObTsMgr::add_tenant_(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  TRANS_LOG(INFO, "add tenant success", K(tenant_id));
-  // do nothing
-
-  return ret;
-}
-
-int ObTsMgr::interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id,
-                                                   const share::ObLSID ls_id)
+int ObTsMgr::interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -626,9 +523,6 @@ int ObTsMgr::interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id,
   } else if (OB_UNLIKELY(!ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(ls_id));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id));
   } else {
     const int64_t task_count = ts_source_.get_task_count();
     if (0 != task_count) {
@@ -636,9 +530,9 @@ int ObTsMgr::interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id,
     }
 
     if (OB_SUCCESS != ret) {
-      TRANS_LOG(WARN, "interrupt gts callback failed", KR(ret), K(tenant_id), K(ls_id));
+      TRANS_LOG(WARN, "interrupt gts callback failed", KR(ret), K(ls_id));
     } else {
-      TRANS_LOG(INFO, "interrupt gts callback success", K(tenant_id), K(ls_id));
+      TRANS_LOG(INFO, "interrupt gts callback success", K(ls_id));
     }
   }
   return ret;

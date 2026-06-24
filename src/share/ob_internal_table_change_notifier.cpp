@@ -84,8 +84,7 @@ int ObInternalTableChangeNotifier::register_module(
 }
 
 int ObInternalTableChangeNotifier::notify(
-    table::ObModuleDataArg::ObExecModule module,
-    uint64_t tenant_id)
+    table::ObModuleDataArg::ObExecModule module)
 {
   int ret = OB_SUCCESS;
   int idx = static_cast<int>(module);
@@ -93,10 +92,10 @@ int ObInternalTableChangeNotifier::notify(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid module type", K(ret), K(idx));
   } else {
-    LOG_INFO("[NOTIFIER] notifying module", K(idx), K(tenant_id));
-    int tmp_ret = entries_[idx].callback_(tenant_id);
+    LOG_INFO("[NOTIFIER] notifying module", K(idx));
+    int tmp_ret = entries_[idx].callback_();
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("module callback failed", K(tmp_ret), K(idx), K(tenant_id));
+      LOG_WARN("module callback failed", K(tmp_ret), K(idx));
       ret = tmp_ret;
     }
   }
@@ -110,11 +109,11 @@ void ObInternalTableChangeNotifier::switch_to_follower_forcedly()
 int ObInternalTableChangeNotifier::switch_to_leader()
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  LOG_INFO("[NOTIFIER] LS promoted to leader, notifying all modules", K(tenant_id));
+  
+  LOG_INFO("[NOTIFIER] LS promoted to leader, notifying all modules");
   for (int mod = 0; mod < MAX_MODULE; mod++) {
     if (entries_[mod].callback_.is_valid()) {
-      int tmp_ret = notify(static_cast<table::ObModuleDataArg::ObExecModule>(mod), tenant_id);
+      int tmp_ret = notify(static_cast<table::ObModuleDataArg::ObExecModule>(mod));
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("module notify failed on leader promotion", K(tmp_ret), K(mod));
         if (OB_SUCCESS == ret) { ret = tmp_ret; }

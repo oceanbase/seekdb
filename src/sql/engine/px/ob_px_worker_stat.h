@@ -33,10 +33,10 @@ public:
   typedef common::ObCurTraceId::TraceId TraceId;
   ObPxWorkerStat();
   ~ObPxWorkerStat();
-  int init(uint64_t session_id, uint64_t tenant_id, const TraceId &trace_id, uint64_t qc_id,
+  int init(uint64_t session_id, const TraceId &trace_id, uint64_t qc_id,
       int64_t sqc_id, int64_t worker_id, int64_t dfo_id, int64_t start_time, int64_t thread_id);
   inline void set_session_id(uint64_t session_id) { session_id_ = session_id; }
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_trace_id(const TraceId& trace_id) { trace_id_ = trace_id; }
   inline void set_qc_id(uint64_t qc_id) { qc_id_ = qc_id; }
   inline void set_sqc_id(int64_t sqc_id) { sqc_id_ = sqc_id; }
@@ -44,7 +44,7 @@ public:
   inline void set_start_time(int64_t start_time) { start_time_ = start_time; }
   inline void set_dfo_id(int64_t dfo_id) { dfo_id_ = dfo_id; }
   inline uint64_t get_session_id() const { return session_id_; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline const TraceId& get_trace_id() const { return trace_id_; }
   inline uint64_t get_qc_id() const { return qc_id_; }
   inline int64_t get_sqc_id() const { return sqc_id_; }
@@ -54,7 +54,6 @@ public:
   inline int64_t get_thread_id() const { return thread_id_; }
 private:
   uint64_t session_id_;
-  uint64_t tenant_id_;
   TraceId trace_id_;
   uint64_t qc_id_;
   int64_t sqc_id_;
@@ -70,8 +69,8 @@ public:
   static ObPxWorkerStatList &instance(); 
   int push(ObPxWorkerStat &stat_value);
   int remove(ObPxWorkerStat &stat_value);
-  // param[in] tenant_id  if tenant is sys, list all tenant stat, else list target tenant stat
-  int list_to_array(common::ObArray<ObPxWorkerStat> &stat_array, const uint64_t tenant_id);
+  // param[in] tenant  if tenant is sys, list all tenant stat, else list target tenant stat
+  int list_to_array(common::ObArray<ObPxWorkerStat> &stat_array);
 private:
   common::ObDList<ObPxWorkerStat> worker_stat_list_;
   common::ObArenaAllocator allocator_;

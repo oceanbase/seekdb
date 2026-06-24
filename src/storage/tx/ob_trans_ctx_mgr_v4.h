@@ -100,7 +100,6 @@ struct ObTxCreateArg
 {
   ObTxCreateArg(const bool for_replay,
                 const PartCtxSource ctx_source,
-                const uint64_t tenant_id,
                 const ObTransID &trans_id,
                 const share::ObLSID &ls_id,
                 const uint64_t cluster_id,
@@ -116,7 +115,6 @@ struct ObTxCreateArg
                 const ObTxCtxMoveArg *move_arg = NULL)
       : for_replay_(for_replay),
         ctx_source_(ctx_source),
-        tenant_id_(tenant_id),
         tx_id_(trans_id),
         ls_id_(ls_id),
         cluster_id_(cluster_id),
@@ -137,15 +135,13 @@ struct ObTxCreateArg
         && trans_expired_time_ > 0
         && NULL != trans_service_;
   }
-  TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_),
-                 K_(tenant_id), K_(tx_id),
+  TO_STRING_KV(K_(for_replay), "ctx_source", to_str_ctx_source(ctx_source_), K_(tx_id),
                  K_(ls_id), K_(cluster_id), K_(cluster_version),
                  K_(session_id),K_(client_sid), K_(associated_session_id),
                  K_(scheduler), K_(trans_expired_time), KP_(trans_service),
                  K_(epoch), K_(xid));
   bool for_replay_;
   PartCtxSource ctx_source_;
-  uint64_t tenant_id_;
   ObTransID tx_id_;
   share::ObLSID ls_id_;
   uint64_t cluster_id_;
@@ -193,13 +189,12 @@ public:
 
   virtual ~ObLSTxCtxMgr() { destroy(); }
 
-  // @param [in] tenant_id: ls's tenant_id, currently used by ts_mgr;
+  // @param [in] tenant: ls's tenant, currently used by ts_mgr;
   // @param [in] ls_id, associated ls_id;
   // @param [in] ts_mgr: used to get gts, see: update_max_replay_commit_version function;
   // @param [in] txs: transaction service which hold the ObTxCtxMgr;
   // @param [in] log_param: the params which is used to init ObLSTxCtxMgr's log_adapter_def_;
-  int init(const int64_t tenant_id,
-           const share::ObLSID &ls_id,
+  int init(const share::ObLSID &ls_id,
            ObTxTable *tx_table,
            ObLockTable *lock_table,
            ObTsMgr *ts_mgr,
@@ -558,8 +553,8 @@ public:
   ObTxLogCbPoolMgr &get_log_cb_pool_mgr() { return log_cb_pool_mgr_;}
   ObTxRetainCtxMgr &get_retain_ctx_mgr() { return ls_retain_ctx_mgr_; }
 
-  // Get the tenant_id corresponding to this ObLSTxCtxMgr;
-  int64_t get_tenant_id() { return tenant_id_; }
+  // Get the tenant corresponding to this ObLSTxCtxMgr;
+  
 
   // check is master
   bool is_master() const { return is_master_(); }
@@ -587,7 +582,7 @@ public:
 
   TO_STRING_KV(KP(this),
                K_(ls_id),
-               K_(tenant_id),
+               
                K_(tx_ls_state_mgr),
                K_(total_tx_ctx_count),
                K_(active_tx_count),
@@ -665,7 +660,7 @@ private:
   ObLSTxCtxMap ls_tx_ctx_map_;
 
   // The tenant ID to which this ObLSTxCtxMgr belongs
-  int64_t tenant_id_;
+  
 
   // The ls ID associated with this ObLSTxCtxMgr
   share::ObLSID ls_id_;
@@ -798,10 +793,10 @@ class ObTxCtxMgr
 public:
   ObTxCtxMgr() { reset(); }
   ~ObTxCtxMgr() { destroy(); }
-  // @param [in] tenant_id: tenant id
+  // @param [in] tenant: tenant id
   // @param [in] ts_mgr: used to get gts, see: update_max_replay_commit_version function;
   // @param [in] txs: transaction service which hold the ObTxCtxMgr;
-  int init(const int64_t tenant_id, ObTsMgr *ts_mgr, ObTransService *txs);
+  int init(ObTsMgr *ts_mgr, ObTransService *txs);
 
   // Mark ObTxCtxMgr as running
   int start();
@@ -850,11 +845,10 @@ public:
   int revert_tx_ctx(ObPartTransCtx *tx_ctx);
 
   // Create ObLSTxCtxMgr;
-  // @param [in] tenant_id: the tenant ID;
+  // @param [in] tenant: the tenant ID;
   // @param [in] ls_id: the specifiied ls ID
   // @param [in] log_param: the params which is used to init ObLSTxCtxMgr's log_adapter_def_;
-  int create_ls(const int64_t tenant_id,
-                const share::ObLSID &ls_id,
+  int create_ls(const share::ObLSID &ls_id,
                 ObTxTable *tx_table,
                 ObLockTable *lock_table,
                 storage::ObLSTxService &ls_tx_svr, /* TODO remove this argument*/
@@ -938,7 +932,7 @@ public:
     const ObLSID ls_id,
     const memtable::ObMemtableSet *memtable_set);
 
-  TO_STRING_KV(K(is_inited_), K(tenant_id_), KP(this));
+  TO_STRING_KV(K(is_inited_), KP(this));
 
 
   // Find specified ObLSTxCtxMgr from the ObTxCtxMgr and increase its reference count;
@@ -959,8 +953,7 @@ public:
 
   int check_ls_status(const share::ObLSID &ls_id);
 private:
-  int create_ls_(const int64_t tenant_id,
-                 const share::ObLSID &ls_id,
+  int create_ls_(const share::ObLSID &ls_id,
                  ObLSTxService &ls_tx_svr,
                  ObITxLogParam *param);
 
@@ -981,7 +974,7 @@ private:
   bool is_running_;
 
   // The tenant ID to which this ObTxCtxMgr belongs
-  int64_t tenant_id_;
+  
 
   // A thread-safe hashmap, used to find and traverse ObLSTxCtxMgr
   ObLSTxCtxMgrMap ls_tx_ctx_mgr_map_;

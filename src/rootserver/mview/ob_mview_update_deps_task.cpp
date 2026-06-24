@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/mview/ob_mview_update_deps_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 
@@ -27,7 +28,6 @@ ObMViewUpdateDepsTask::ObMViewUpdateDepsTask()
   : is_inited_(false),
     in_sched_(false),
     is_stop_(true),
-    tenant_id_(OB_INVALID_TENANT_ID),
     last_sched_ts_(0)
 {
 }
@@ -41,7 +41,6 @@ int ObMViewUpdateDepsTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewUpdateDepsTask init twice", KR(ret), KP(this));
   } else {
-    tenant_id_ = MTL_ID();
     is_inited_ = true;
   }
   return ret;
@@ -81,14 +80,14 @@ int ObMViewUpdateDepsTask::need_schedule(bool &need_sche)
   ObSqlString sql;
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     common::sqlclient::ObMySQLResult *result = nullptr;
-    const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id_);
+    
     if (OB_FAIL(sql.assign_fmt("SELECT EXISTS ("
                                "SELECT 1 FROM `%s`.`%s` t1, `%s`.`%s` t2"
                                " WHERE t1.mview_id = t2.p_obj) as exist_nested",
                                OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME, OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME))) {
       LOG_WARN("failed to assign sql", KR(ret));
-    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id_, sql.ptr()))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql), K(tenant_id_));
+    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -103,7 +102,7 @@ int ObMViewUpdateDepsTask::need_schedule(bool &need_sche)
       EXTRACT_BOOL_FIELD_MYSQL(*result, "exist_nested", need_sche);
     }
   }
-  LOG_INFO("check mview update deps task need schedule", K(ret), K(need_sche), K(tenant_id_));
+  LOG_INFO("check mview update deps task need schedule", K(ret), K(need_sche));
   return ret; 
 }
 
@@ -118,7 +117,7 @@ void ObMViewUpdateDepsTask::runTimerTask()
     }
   }
   if (OB_FAIL(ret) || !need_sched) {
-  } else if (OB_FAIL(MTL(ObMViewMaintenanceService*)->get_all_mview_deps())) {
+  } else if (OB_FAIL(share::g_mp->m_view_maintenance_service()->get_all_mview_deps())) {
     LOG_WARN("update_mview_mds_op failed", KR(ret));
   } else {
     last_sched_ts_ = curr_ts;

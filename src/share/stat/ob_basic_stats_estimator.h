@@ -73,14 +73,12 @@ public:
                                   bool &use_column_store);
 
   static int estimate_modified_count(ObExecContext &ctx,
-                                     const uint64_t tenant_id,
                                      const uint64_t table_id,
                                      int64_t &result,
                                      const bool need_inc_modified_count = true);
 
 
   static int estimate_stale_partition(ObExecContext &ctx,
-                                      const uint64_t tenant_id,
                                       const uint64_t table_id,
                                       const int64_t global_part_id,
                                       const ObIArray<PartInfo> &partition_infos,
@@ -94,7 +92,6 @@ public:
                                         const ObTableStatParam &param);
 
   static int check_table_statistics_state(ObExecContext &ctx,
-                                          const uint64_t tenant_id,
                                           const uint64_t table_id,
                                           const int64_t global_part_id,
                                           bool &is_locked,
@@ -110,7 +107,6 @@ public:
                              bool &is_all_update);
 
   static int do_estimate_block_count(ObExecContext &ctx,
-                                     const uint64_t tenant_id,
                                      const uint64_t table_id,
                                      const ObIArray<ObTabletID> &tablet_ids,
                                      const ObIArray<ObObjectID> &partition_ids,
@@ -118,7 +114,6 @@ public:
                                      ObIArray<EstimateBlockRes> &estimate_res);
 
   static int do_estimate_block_count_and_row_count(ObExecContext &ctx,
-                                                   const uint64_t tenant_id,
                                                    const uint64_t table_id,
                                                    bool force_leader,
                                                    const ObIArray<ObTabletID> &tablet_ids,
@@ -142,13 +137,11 @@ public:
                                              ObIArray<ObObjectID> &partition_ids);
 
   static int get_need_stats_tables(ObExecContext &ctx,
-                                   const int64_t tenant_id,
                                    const int64_t last_table_id,
                                    const int64_t slice_cnt,
                                    ObIArray<int64_t> &table_ids);
 
   static int get_async_gather_stats_tables(ObExecContext &ctx,
-                                           const int64_t tenant_id,
                                            const int64_t max_table_cnt,
                                            int64_t &last_table_id,
                                            int64_t &last_tablet_id,

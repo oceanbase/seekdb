@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_remote.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/lob/ob_lob_iterator.h"
@@ -29,7 +30,7 @@ namespace storage
 // cross-tenant LOB obcall RPC removed.
 // Previously the cross-tenant LOB read (is_across_tenant()) was issued as the OB_LOB_QUERY
 // streaming obcall RPC (obcall::ObStorageRpcProxy::lob_query) which looped back to this same
-// machine and was served by ObLobQueryP::process under MTL_SWITCH(arg.tenant_id_). We now run
+// machine and was served by ObLobQueryP::process under MOD_SCOPE. We now run
 // the exact same local LOB query in-process: MTL_SWITCH to the lob's tenant, build the same
 // ObLobAccessParam (from_rpc_ = true), and drive the same ObLobQueryIter (READ) /
 // ObLobManager::getlength (GET_LENGTH). No network / SSHandle stream is involved.
@@ -41,7 +42,7 @@ ObLobRemoteQueryCtx::~ObLobRemoteQueryCtx()
   if (OB_NOT_NULL(query_iter_)) {
     // the iterator was allocated under the lob's tenant; release it there too.
     int ret = OB_SUCCESS;
-    MTL_SWITCH(tenant_id_) {
+    MOD_SCOPE {
       query_iter_->reset();
       OB_DELETE(ObLobQueryIter, "unused", query_iter_);
     }
@@ -60,7 +61,7 @@ int ObLobRemoteQueryCtx::get_next_block(ObString &data)
     LOG_WARN("query iter not inited", K(ret), KP(query_iter_), KP(read_buf_));
   } else {
     // the iterator reads tenant storage, so it must run under the lob's tenant context.
-    MTL_SWITCH(tenant_id_) {
+    MOD_SCOPE {
       ObString out;
       out.assign_buffer(read_buf_, read_buf_len_);
       if (OB_FAIL(query_iter_->get_next_row(out))) {
@@ -83,18 +84,18 @@ int ObLobRemoteUtil::query(ObLobAccessParam& param, const ObLobQueryArg::QueryTy
   UNUSED(dst_addr);
   if (param.from_rpc_ && ! param.enable_remote_retry_) {
     ret = OB_NOT_MASTER;
-    LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(MTL_ID()), K(param));
+    LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(param));
   } else if (OB_FAIL(remote_query_init_ctx(param, qtype, remote_ctx))) {
     LOG_WARN("fail to init remote query ctx", K(ret));
   } else {
     // cross-tenant LOB obcall RPC removed: run the same local LOB query the OB_LOB_QUERY
     // processor (ObLobQueryP::process) ran, in-process under the lob's tenant.
-    const uint64_t lob_tenant_id = remote_ctx->tenant_id_;
-    MTL_SWITCH(lob_tenant_id) {
-      ObLobManager *lob_mngr = MTL(ObLobManager*);
+    
+    MOD_SCOPE {
+      ObLobManager *lob_mngr = share::g_mp->lob_manager();
       if (OB_ISNULL(lob_mngr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("lob mngr is null", K(ret), K(lob_tenant_id));
+        LOG_WARN("lob mngr is null", K(ret));
       } else if (OB_ISNULL(param.lob_locator_) || !param.lob_locator_->is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("lob locator is invalid", K(ret), KP(param.lob_locator_));
@@ -159,7 +160,7 @@ int ObLobRemoteUtil::remote_query_init_ctx(ObLobAccessParam &param, const ObLobQ
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc lob remote query ctx", K(ret), K(param));
   } else {
-    remote_ctx->tenant_id_ = param.tenant_id_;
+    
     remote_ctx->qtype_ = qtype;
     if (qtype == ObLobQueryArg::QueryType::READ) {
       // output buffer for ObLobQueryIter::get_next_row, sized as the OB_LOB_QUERY processor did.

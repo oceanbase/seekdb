@@ -61,13 +61,13 @@ public:
   TO_STRING_KV(K_(server),
                K_(free_conn_count),
                K_(busy_conn_count));
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  void set_tenant_id(uint64_t v) { tenant_id_ = v; }
+  
+  
 private:
   ObSimpleConnectionAllocator<ObMySQLConnection> connection_pool_;
   ObIConnectionAllocator<ObMySQLConnection> *connection_pool_ptr_;
   ObMySQLConnectionPool *root_;
-  uint64_t tenant_id_;
+  
   char db_user_[OB_MAX_USER_NAME_LENGTH + OB_MAX_TENANT_NAME_LENGTH + OB_MAX_CLUSTER_NAME_LENGTH + 1];
   char db_pass_[OB_MAX_PASSWORD_LENGTH];
   char db_name_[OB_MAX_DATABASE_NAME_LENGTH];

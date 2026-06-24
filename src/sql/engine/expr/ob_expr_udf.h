@@ -83,7 +83,7 @@ class ObExprUDF : public ObFuncExprOperator
     ObExprOperatorCtx(),
     param_store_buf_(nullptr),
     params_(nullptr),
-    ctx_allocator_("UDFCtxAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()) {}
+    ctx_allocator_("UDFCtxAlloc", OB_MALLOC_NORMAL_BLOCK_SIZE) {}
 
     ~ObExprUDFCtx() {}
 

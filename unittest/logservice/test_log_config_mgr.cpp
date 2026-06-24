@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #define private public
+#include "share/rc/ob_tenant_base.h"
 #include "logservice/palf/log_config_mgr.h"
 #include "mock_logservice_container/mock_election.h"
 #include "mock_logservice_container/mock_log_sliding_window.h"
@@ -87,7 +88,7 @@ public:
     mock_plugins_ = OB_NEW(LogPlugins, "TestLog");
     mock_locality_cb_ = OB_NEW(MockObLocalityManager, "TestLog");
 
-    region_map_.create(OB_MAX_MEMBER_NUMBER, ObMemAttr(MTL_ID(), ObModIds::OB_HASH_NODE,
+    region_map_.create(OB_MAX_MEMBER_NUMBER, ObMemAttr(ObModIds::OB_HASH_NODE,
         ObCtxIds::DEFAULT_CTX_ID));
     EXPECT_EQ(OB_SUCCESS, mock_locality_cb_->init(&region_map_));
     EXPECT_EQ(OB_SUCCESS, mock_plugins_->add_plugin(dynamic_cast<PalfLocalityInfoCb*>(mock_locality_cb_)));

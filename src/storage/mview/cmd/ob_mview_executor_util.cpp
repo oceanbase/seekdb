@@ -56,16 +56,15 @@ int ObMViewExecutorUtil::split_table_list(const ObString &table_list, ObIArray<O
   return ret;
 }
 
-int ObMViewExecutorUtil::check_min_data_version(const uint64_t tenant_id,
-                                                const uint64_t min_data_version, const char *errmsg)
+int ObMViewExecutorUtil::check_min_data_version(const uint64_t min_data_version, const char *errmsg)
 {
   int ret = OB_SUCCESS;
   uint64_t compat_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
+  if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(compat_version))) {
+    LOG_WARN("fail to get data version", KR(ret));
   } else if (OB_UNLIKELY(compat_version < min_data_version)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("version lower than 4.3 does not support this operation", KR(ret), K(tenant_id),
+    LOG_WARN("version lower than 4.3 does not support this operation", KR(ret),
              K(compat_version), K(min_data_version));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, errmsg);
   }
@@ -169,19 +168,19 @@ int ObMViewExecutorUtil::to_collection_level(const ObString &str,
   return ret;
 }
 
-int ObMViewExecutorUtil::generate_refresh_id(const uint64_t tenant_id, int64_t &refresh_id)
+int ObMViewExecutorUtil::generate_refresh_id(int64_t &refresh_id)
 {
   int ret = OB_SUCCESS;
   ObCommonID unique_id;
-  MTL_SWITCH(tenant_id)
+  MOD_SCOPE
   {
-    if (OB_FAIL(ObCommonIDUtils::gen_unique_id(tenant_id, unique_id))) {
+    if (OB_FAIL(ObCommonIDUtils::gen_unique_id(unique_id))) {
       LOG_WARN("failed to gen unique id", KR(ret));
     }
   }
   else
   {
-    if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc(tenant_id, unique_id))) {
+    if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( unique_id))) {
       LOG_WARN("failed to gen unique id", KR(ret));
     }
   }

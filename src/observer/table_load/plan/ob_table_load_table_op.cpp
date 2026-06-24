@@ -41,7 +41,7 @@ ObTableLoadTableOpCtx::ObTableLoadTableOpCtx()
     merge_mode_(ObDirectLoadMergeMode::INVALID_MERGE_MODE),
     allocator_("TLD_TableOpCtx")
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 /**

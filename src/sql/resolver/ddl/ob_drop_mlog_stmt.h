@@ -49,16 +49,10 @@ public:
     drop_index_arg_.index_name_ = mlog_name;
   }
   inline const common::ObString &get_mlog_name() const { return drop_index_arg_.index_name_; }
-  void set_tenant_id(const uint64_t tenant_id)
-  {
-    drop_index_arg_.tenant_id_ = tenant_id;
-  }
-  inline uint64_t get_tenant_id() const { return drop_index_arg_.tenant_id_; }
-  void set_exec_tenant_id(const uint64_t exec_tenant_id)
-  {
-    drop_index_arg_.exec_tenant_id_ = exec_tenant_id;
-  }
-  inline uint64_t get_exec_tenant_id() const { return drop_index_arg_.exec_tenant_id_; }
+  
+  
+  
+  
   inline const obcall::ObIndexArg::IndexActionType &get_index_action_type() const
   {
     return drop_index_arg_.index_action_type_;

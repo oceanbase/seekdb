@@ -50,12 +50,12 @@ public:
   ObSnapShotType snapshot_type_;
   SCN snapshot_scn_;
   int64_t schema_version_;
-  uint64_t tenant_id_; //tenant_id=OB_INVALID_ID represent all tenants
+//tenant=OB_INVALID_ID represent all tenants
   uint64_t tablet_id_; //tablet_id=OB_INVALID_ID represent all tablets of tenant
   const char* comment_;
   ObSnapshotInfo();
   ~ObSnapshotInfo() {}
-  int init(const uint64_t tenant_id, const uint64_t tablet_id,
+  int init(const uint64_t tablet_id,
            const ObSnapShotType &snapshot_type, const SCN &snapshot_scn,
            const int64_t schema_version, const char* comment);
   void reset();
@@ -65,7 +65,6 @@ public:
   TO_STRING_KV(K_(snapshot_type),
                K_(snapshot_scn),
                K_(schema_version),
-               K_(tenant_id),
                K_(tablet_id),
                KP_(comment));
 
@@ -74,13 +73,13 @@ public:
 struct TenantSnapshot
 {
 public:
-  uint64_t tenant_id_;
+  
   SCN snapshot_scn_;
   TenantSnapshot() {}
-  TenantSnapshot(const uint64_t tenant_id, const SCN &snapshot_scn)
-      : tenant_id_(tenant_id), snapshot_scn_(snapshot_scn) {}
+  TenantSnapshot(const SCN &snapshot_scn)
+      : snapshot_scn_(snapshot_scn) {}
   ~TenantSnapshot() {}
-  TO_STRING_KV(K_(tenant_id), K_(snapshot_scn));
+  TO_STRING_KV(K_(snapshot_scn));
 };
 
 class ObSnapshotTableProxy
@@ -97,56 +96,45 @@ public:
   int batch_add_snapshot(
       common::ObMySQLTransaction &trans,
       const share::ObSnapShotType snapshot_type,
-      const uint64_t tenant_id,
       const int64_t schema_version,
       const SCN &snapshot_scn,
       const char *comment,
       const common::ObIArray<ObTabletID> &tablet_id_array);
 
   int remove_snapshot(common::ObISQLClient &proxy,
-                      const uint64_t tenant_id,
                       const ObSnapshotInfo &info);
   int batch_remove_snapshots(common::ObISQLClient &proxy,
                              share::ObSnapShotType snapshot_type,
-                             const uint64_t tenant_id,
                              const int64_t schema_version,
                              const SCN &snapshot_scn,
                              const common::ObIArray<ObTabletID> &tablet_ids);
   int get_all_snapshots(common::ObISQLClient &proxy,
-                        const uint64_t tenant_id,
                         common::ObIArray<ObSnapshotInfo> &snapshots);
   int get_all_snapshots(common::ObISQLClient &proxy,
-                        const uint64_t tenant_id,
                         ObSnapShotType snapshot_type,
                         common::ObIArray<ObSnapshotInfo> &snapshots);
   int get_snapshot(common::ObISQLClient &proxy,
-                   const uint64_t tenant_id,
                    ObSnapShotType snapshot_type,
                    const char *extra_info,
                    ObSnapshotInfo &snapshot_info);
   int get_snapshot(common::ObISQLClient &proxy,
-                   const uint64_t tenant_id,
                    const ObSnapShotType snapshot_type,
                    const SCN &snapshot_scn,
                    ObSnapshotInfo &snapshot_info);
 
   int get_max_snapshot_info(common::ObISQLClient &proxy,
-                            const uint64_t tenant_id,
                             ObSnapshotInfo &snapshot_info);
   int check_snapshot_exist(common::ObISQLClient &proxy,
-                           const uint64_t tenant_id,
                            const int64_t table_id,
                            ObSnapShotType snapshot_type,
                            bool &is_exist);
   int check_snapshot_exist(common::ObISQLClient &proxy,
-                           const uint64_t tenant_id,
                            const share::ObSnapShotType snapshot_type,
                            bool &is_exist);
   int get_snapshot_count(common::ObISQLClient &proxy,
-                         const uint64_t tenant_id,
                          ObSnapShotType snapshot_type,
                          int64_t &count);
-  int push_snapshot_for_major_refresh_mv(common::ObISQLClient &proxy, const uint64_t tenant_id, const share::SCN &new_snapshot_scn);
+  int push_snapshot_for_major_refresh_mv(common::ObISQLClient &proxy, const share::SCN &new_snapshot_scn);
 private:
   int gen_event_ts(int64_t &event_ts);
   int check_snapshot_valid(const SCN &snapshot_gc_scn,

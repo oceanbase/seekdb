@@ -40,9 +40,8 @@ namespace mds
 struct MdsFlusherModulePageAllocator : public ModulePageAllocator {
   // just forward to parent
   MdsFlusherModulePageAllocator(const lib::ObLabel &label = "MdsFlusherArray",
-                                int64_t tenant_id = OB_SERVER_TENANT_ID,
                                 int64_t ctx_id = 0)
-  : ModulePageAllocator(ObMemAttr(tenant_id, label, ctx_id)) {}
+  : ModulePageAllocator(ObMemAttr(label, ctx_id)) {}
   MdsFlusherModulePageAllocator(const lib::ObMemAttr &attr) : ModulePageAllocator("MdsFlusherArray") {}
   explicit MdsFlusherModulePageAllocator(ObIAllocator &allocator,
                                          const lib::ObLabel &label = "MdsFlusherArray")

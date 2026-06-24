@@ -117,7 +117,7 @@ int ObPartTransCtx::get_log_cb_(const bool need_freeze_cb, ObTxLogCb *&log_cb)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
   if (OB_NOT_NULL(log_cb)) {
     ret = OB_INVALID_ARGUMENT;

@@ -64,7 +64,7 @@ public:
   public:
     AsyncCB(int pcode)
         : low_level_cb_(NULL), gtid_(0), pkt_id_(0),
-          dst_(), timeout_(0), tenant_id_(0),
+          dst_(), timeout_(0),
           err_(0), pcode_(pcode), send_ts_(0), payload_(0)
     {}
     virtual ~AsyncCB() {}
@@ -81,7 +81,7 @@ public:
     // invoke when get a valid packet on protocol level, but can't decode it.
     virtual void on_invalid() {
       int ret = err_;
-      RPC_FRAME_LOG(ERROR, "rpc response decode failed, tenant oom or deserialization failed", K_(pcode), K_(tenant_id), K_(dst));
+      RPC_FRAME_LOG(ERROR, "rpc response decode failed, tenant oom or deserialization failed", K_(pcode), K_(dst));
     }
     // invoke when can't get a valid or completed packet.
     virtual void on_timeout() { RPC_FRAME_LOG(DEBUG, "packet timeout"); }
@@ -91,7 +91,7 @@ public:
 
     void set_dst(const ObAddr &dst) { dst_ = dst; }
     void set_timeout(int64_t timeout) { timeout_ = timeout; }
-    void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+    
     void set_send_ts(const int64_t send_ts) { send_ts_ = send_ts; }
     int64_t get_send_ts() { return send_ts_; }
     void set_payload(const int64_t payload) { payload_ = payload; }
@@ -106,7 +106,7 @@ public:
   protected:
     ObAddr dst_;
     int64_t timeout_;
-    uint64_t tenant_id_;
+    
     int err_;
     int pcode_;
     int64_t send_ts_;

@@ -24,7 +24,6 @@ namespace share
 void ObGlobalContext::init()
 {
   server_role_ = common::PRIMARY_CLUSTER;
-  grpc_server_ = nullptr;
 }
 
 ObGlobalContext &ObGlobalContext::get_instance()
@@ -76,7 +75,6 @@ DEF_TO_STRING(ObGlobalContext)
        K_(start_service_time),
        KP_(diag),
        KP_(scramble_rand),
-       KP_(weak_read_service),
        KP_(schema_status_proxy),
        K_(ssl_key_expired_time),
        K_(inited),

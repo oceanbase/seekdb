@@ -31,8 +31,8 @@ namespace rootserver
 class ObForkTableInfoBuilder
 {
 public:
-  explicit ObForkTableInfoBuilder(const uint64_t tenant_id)
-    : tenant_id_(tenant_id), inited_(false), fork_table_infos_()
+  explicit ObForkTableInfoBuilder()
+    : inited_(false), fork_table_infos_()
   {}
   ~ObForkTableInfoBuilder();
 
@@ -67,7 +67,6 @@ private:
       share::ObForkTabletInfo &fork_tablet_info);
 
 private:
-  const uint64_t tenant_id_;
   bool inited_;
   hash::ObHashMap<uint64_t, share::ObForkTableInfo> fork_table_infos_;
 };

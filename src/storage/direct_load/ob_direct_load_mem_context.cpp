@@ -197,7 +197,7 @@ void ObDirectLoadMemContext::reset()
 
   // release mem_loader_queue_
   ObArray<ObDirectLoadMemWorker *> loader_array;
-  loader_array.set_tenant_id(MTL_ID());
+  
   mem_loader_queue_.pop_all(loader_array);
   for (int64_t i = 0; i < loader_array.count(); i ++) {
     ObDirectLoadMemWorker *tmp = loader_array.at(i);
@@ -221,7 +221,7 @@ void ObDirectLoadMemContext::reset()
 
   // release mem_chunk_queue_
   ObArray<ObDirectLoadExternalMultiPartitionRowChunk *> chunk_array;
-  chunk_array.set_tenant_id(MTL_ID());
+  
   mem_chunk_queue_.pop_all(chunk_array);
   for (int64_t i = 0; i < chunk_array.count(); i ++) {
     ObDirectLoadExternalMultiPartitionRowChunk *chunk = chunk_array.at(i);
@@ -302,7 +302,7 @@ int ObDirectLoadMemContext::acquire_chunk(ChunkType *&chunk)
     ret = OB_CANCELED;
   } else {
     chunk = nullptr;
-    ObMemAttr mem_attr(MTL_ID(), "TLD_MemChunk");
+    ObMemAttr mem_attr("TLD_MemChunk");
     int64_t sort_memory = 0;
     if (exe_mode_ == observer::ObTableLoadExeMode::MAX_TYPE) {
       sort_memory = mem_chunk_size_;
@@ -313,7 +313,7 @@ int ObDirectLoadMemContext::acquire_chunk(ChunkType *&chunk)
       if (OB_ISNULL(chunk = OB_NEW(ChunkType, mem_attr))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObDirectLoadExternalMultiPartitionRowChunk", KR(ret));
-      } else if (OB_FAIL(chunk->init(MTL_ID(), sort_memory))) {
+      } else if (OB_FAIL(chunk->init(sort_memory))) {
         LOG_WARN("fail to init external sort", KR(ret));
       }
     }

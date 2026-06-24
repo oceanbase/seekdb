@@ -183,9 +183,9 @@ void ObReceiveRowReader::free(dtl::ObDtlLinkedBuffer *buf)
 {
   // free buffer to DFC memory manager, see: ObDtlBasicChannel::free_buf()
   if (NULL != buf) {
-    LOG_DEBUG("free dtl linked buffer", KP(buf), K(buf->tenant_id()));
+    LOG_DEBUG("free dtl linked buffer", KP(buf), K(1UL));
     int ret = OB_SUCCESS;
-    auto mgr = DTL.get_dfc_server().get_tenant_mem_manager(buf->tenant_id());
+    auto mgr = DTL.get_dfc_server().get_tenant_mem_manager();
     CK(NULL != mgr);
     OZ(mgr->free(buf));
   }

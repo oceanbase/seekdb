@@ -15,6 +15,7 @@
  */
  
 #include "mds_table_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -37,7 +38,7 @@ int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
 {
   #define PRINT_WRAPPER KR(ret), K(tablet_id), K(ls_id), K(not_exist_create), K(*this)
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(storage::ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   mds::ObMdsTableMgr *mds_table_mgr;

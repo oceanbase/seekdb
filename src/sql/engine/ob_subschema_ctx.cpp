@@ -328,22 +328,18 @@ int ObSubSchemaCtx::init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sub schema ctx already inited", K(ret), K(*this));
   } else {
-    uint64_t tenant_id = MTL_ID();
-    if (tenant_id == OB_INVALID_TENANT_ID) {
-      tenant_id = OB_SERVER_TENANT_ID;
-    }
+    
+    
     if (OB_FAIL(subschema_reverse_map_.create(SUBSCHEMA_BUCKET_NUM,
                                       "SubSchemaRev",
-                                      "SubSchemaRev",
-                                      tenant_id))) {
+                                      "SubSchemaRev"))) {
       LOG_WARN("fail to create subschema reverse map", K(ret));
     } else if (OB_FAIL(enum_set_meta_reverse_map_.create(SUBSCHEMA_BUCKET_NUM,
                                                               "SubSchemaRev",
-                                                              "SubSchemaRev",
-                                                               tenant_id))) {
+                                                              "SubSchemaRev"))) {
       LOG_WARN("fail to create enum_set meta reverse map", K(ret));
     } else {
-      subschema_array_.set_attr(ObMemAttr(MTL_ID(), "SubSchemaHash"));
+      subschema_array_.set_attr(ObMemAttr("SubSchemaHash"));
       is_inited_ = true;
       used_subschema_id_ = MAX_NON_RESERVED_SUBSCHEMA_ID;
     }

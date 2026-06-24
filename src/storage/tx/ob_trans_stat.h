@@ -32,7 +32,7 @@ public:
   void reset();
   common::ObAddr &get_addr() { return addr_; }
   ObTransID &get_trans_id() { return trans_id_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   bool is_exiting() const { return is_exiting_; }
   bool is_readonly() const { return is_readonly_; }
   bool has_decided() const { return has_decided_; }
@@ -57,7 +57,7 @@ public:
   int64_t get_pending_log_size() const { return pending_log_size_; }
   int64_t get_flushed_log_size() const { return flushed_log_size_; }
 
-  TO_STRING_KV(K_(addr), K_(trans_id), K_(tenant_id), K_(is_exiting), K_(is_readonly),
+  TO_STRING_KV(K_(addr), K_(trans_id), K_(is_exiting), K_(is_readonly),
       K_(has_decided), K_(is_dirty), K_(active_memstore_version),
       K_(trans_param), K_(ctx_create_time), K_(expired_time), K_(refer),
       K_(sql_no), K_(state), K_(session_id), K_(proxy_session_id), K_(trans_type),
@@ -67,7 +67,6 @@ private:
   bool is_inited_;
   common::ObAddr addr_;
   ObTransID trans_id_;
-  uint64_t tenant_id_;
   bool is_exiting_;
   bool is_readonly_;
   bool has_decided_;
@@ -102,7 +101,7 @@ public:
   ~ObTransLockStat() {}
   void reset();
   const common::ObAddr &get_addr() const { return addr_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const ObMemtableKeyInfo &get_memtable_key() const { return memtable_key_; }
   uint32_t get_session_id() const { return session_id_; }
   uint64_t get_proxy_session_id() const { return proxy_session_id_; }
@@ -111,7 +110,6 @@ public:
   int64_t get_trans_expired_time() const { return expired_time_; }
 
   TO_STRING_KV(K_(addr),
-               K_(tenant_id),
                K_(memtable_key),
                K_(session_id),
                K_(proxy_session_id),
@@ -122,7 +120,6 @@ public:
 private:
   bool is_inited_;
   common::ObAddr addr_;
-  uint64_t tenant_id_;
   ObMemtableKeyInfo memtable_key_;
   uint32_t session_id_;
   uint64_t proxy_session_id_;

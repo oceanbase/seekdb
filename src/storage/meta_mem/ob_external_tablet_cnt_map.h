@@ -30,7 +30,7 @@ class ObExternalTabletCntMap
 {
 public:
   ObExternalTabletCntMap();
-  int init(const int64_t bucket_num, const uint64_t tenant_id);
+  int init(const int64_t bucket_num);
   int check_exist(const ObDieingTabletMapKey &key, bool &exist);
   int reg_tablet(const ObDieingTabletMapKey &key);
   int unreg_tablet(const ObDieingTabletMapKey &key);

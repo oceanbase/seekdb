@@ -59,8 +59,7 @@ private:
   * @brief storage_estimate_rowcount
   * estimate rowcount for an index access path using storage interface
   */
-  static int storage_estimate_rowcount(const uint64_t tenant_id,
-                                       storage::ObTableScanParam &param,
+  static int storage_estimate_rowcount(storage::ObTableScanParam &param,
                                        const ObSimpleBatch &batch,
                                        obcall::ObEstPartResElement &res);
 
@@ -70,9 +69,7 @@ private:
   //@param[in] table_scan_param: table scan parameter
   //@param[in] range_columns_count: index column count
   //@param[in] part_service: partition service
-  static int storage_estimate_partition_batch_rowcount(
-      const uint64_t tenant_id,
-      const ObSimpleBatch &batch,
+  static int storage_estimate_partition_batch_rowcount(const ObSimpleBatch &batch,
       storage::ObTableScanParam &table_scan_param,
       ObIArray<common::ObEstRowCountRecord> &est_records,
       double &logical_row_count,

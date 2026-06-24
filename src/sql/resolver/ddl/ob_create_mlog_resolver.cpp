@@ -56,7 +56,7 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ParseNode &parse_node = const_cast<ParseNode &>(parse_tree);
   ObCreateMLogStmt *create_mlog_stmt = nullptr;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
+  
 
   if (OB_UNLIKELY(T_CREATE_MLOG != parse_node.type_)
       || OB_UNLIKELY(ENUM_TOTAL_COUNT != parse_node.num_child_)
@@ -66,7 +66,6 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP_(session_info));
-  } else if (OB_FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
   } else if (OB_ISNULL(create_mlog_stmt = create_stmt<ObCreateMLogStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create create_mlog_stmt", KR(ret));
@@ -208,7 +207,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
   ObString mlog_table_name;
   bool table_exist = false;
   const ObTableSchema *data_table_schema = nullptr;
-  uint64_t tenant_id = session_info_->get_effective_tenant_id();
+  
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   ObCollationType cs_type = CS_TYPE_INVALID;
   ObCStringHelper helper;
@@ -220,9 +219,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
         KR(ret), K(data_table_name), K(database_name));
   } else if (OB_FAIL(set_database_name(database_name))) {
     LOG_WARN("failed to set database name", KR(ret), K(database_name));
-  } else if (OB_FAIL(schema_checker_->get_table_schema_with_synonym(
-      session_info_->get_effective_tenant_id(),
-      database_name,
+  } else if (OB_FAIL(schema_checker_->get_table_schema_with_synonym(database_name,
       data_table_name,
       false/*is index table*/,
       has_synonym,
@@ -260,9 +257,8 @@ int ObCreateMLogResolver::resolve_table_name_node(
       const ObTableSchema *real_table_schema = nullptr;
       if (data_table_schema->is_materialized_view()) {
         const ObTableSchema *container_table_schema = nullptr;
-        if (OB_FAIL(schema_checker_->get_table_schema(
-            tenant_id, data_table_schema->get_data_table_id(), container_table_schema))) {
-          LOG_WARN("failed to get table schema", KR(ret), K(tenant_id));
+        if (OB_FAIL(schema_checker_->get_table_schema( data_table_schema->get_data_table_id(), container_table_schema))) {
+          LOG_WARN("failed to get table schema", KR(ret));
         } else if (OB_ISNULL(container_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -288,7 +284,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
                      mlog_table_name))) {
         LOG_WARN("failed to check and convert table name", KR(ret), K(cs_type), K(mode),
                  K(mlog_table_name));
-      } else if (OB_FAIL(schema_checker_->check_table_exists(tenant_id, database_name,
+      } else if (OB_FAIL(schema_checker_->check_table_exists(database_name,
                                                              mlog_table_name, false /*is_index*/,
                                                              false /*is_hidden*/, table_exist))) {
         LOG_WARN("failed to check table exists", KR(ret), K(database_name), K(mlog_table_name));
@@ -306,7 +302,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
           create_mlog_stmt.set_database_name(tmp_new_db_name);
           create_mlog_stmt.set_table_name(tmp_new_tbl_name);
           create_mlog_stmt.set_mlog_name(mlog_table_name);
-          create_mlog_stmt.set_tenant_id(tenant_id);
+          
           create_mlog_stmt.set_data_table_id(data_table_schema->get_table_id());
           create_mlog_stmt.set_name_generated_type(GENERATED_TYPE_SYSTEM);
         }
@@ -319,7 +315,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
     based_info.schema_id_ = data_table_schema->get_table_id();
     based_info.schema_type_ = ObSchemaType::TABLE_SCHEMA;
     based_info.schema_version_ = data_table_schema->get_schema_version();
-    based_info.schema_tenant_id_ = tenant_id;
+    
     if (OB_FAIL(create_mlog_stmt.get_create_mlog_arg().based_schema_object_infos_.push_back(based_info))) {
       LOG_WARN("fail to push back base info", KR(ret));
     }

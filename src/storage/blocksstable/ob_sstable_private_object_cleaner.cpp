@@ -44,7 +44,8 @@ ObSSTablePrivateObjectCleaner::ObSSTablePrivateObjectCleaner()
       lock_(),
       task_succeed_(false)
 {
-  new_macro_block_ids_.set_attr(ObMemAttr(MTL_ID(), "MaWriterCleaner"));
+  new_macro_block_ids_.set_attr(ObMemAttr("MaWriterCleaner"));
+  is_ss_mode_ = GCTX.is_shared_storage_mode();
 }
 
 ObSSTablePrivateObjectCleaner::~ObSSTablePrivateObjectCleaner()

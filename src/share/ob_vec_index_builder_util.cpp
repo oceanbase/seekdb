@@ -65,14 +65,13 @@ int ObVecIndexBuilderUtil::append_vec_args(
     const ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
+  
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is null", K(ret), KP(allocator), KP(session_info));
-  } else if (FALSE_IT(tenant_id = session_info->get_effective_tenant_id())) {
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tenant_id));
+    LOG_WARN("invalid args", K(ret));
   } else {
     if (index_arg.index_type_ == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL &&
         OB_FAIL(ObVecIndexBuilderUtil::append_vec_hnsw_args(data_schema,
@@ -1095,7 +1094,6 @@ int ObVecIndexBuilderUtil::set_vec_ivf_table_columns(
                         rowkey_col_name.length(),
                         rowkey_col_name.ptr());
           LOG_WARN("get_column_schema failed",
-                  "tenant_id", data_schema.get_tenant_id(),
                   "database_id", data_schema.get_database_id(),
                   "table_name", data_schema.get_table_name(),
                   "column name", rowkey_col_name, K(ret));
@@ -1200,7 +1198,6 @@ int ObVecIndexBuilderUtil::set_vec_rowkey_vid_table_columns(
                        rowkey_col_name.length(),
                        rowkey_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", rowkey_col_name, K(ret));
@@ -1232,7 +1229,6 @@ int ObVecIndexBuilderUtil::set_vec_rowkey_vid_table_columns(
       } else if (OB_ISNULL(vid_column = data_schema.get_column_schema(vid_col_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", vid_col_name, K(ret));
@@ -1282,7 +1278,7 @@ int ObVecIndexBuilderUtil::set_vec_vid_rowkey_table_columns(
       ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
       LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                      vid_col_name.length(), vid_col_name.ptr());
-      LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+      LOG_WARN("get_column_schema failed", 
                "database_id", data_schema.get_database_id(),
                "table_name", data_schema.get_table_name(),
                "column name", vid_col_name, K(ret));
@@ -1368,7 +1364,6 @@ int ObVecIndexBuilderUtil::set_vec_delta_buffer_table_columns(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                        vec_col_name.length(), vec_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", vec_col_name, K(ret));
@@ -1400,7 +1395,7 @@ int ObVecIndexBuilderUtil::set_vec_delta_buffer_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -1468,7 +1463,6 @@ int ObVecIndexBuilderUtil::set_vec_index_id_table_columns(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                        vec_col_name.length(), vec_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", vec_col_name, K(ret));
@@ -1500,7 +1494,7 @@ int ObVecIndexBuilderUtil::set_vec_index_id_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -1568,7 +1562,6 @@ int ObVecIndexBuilderUtil::set_vec_index_snapshot_data_table_columns(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                        vec_col_name.length(), vec_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", vec_col_name, K(ret));
@@ -1605,7 +1598,7 @@ int ObVecIndexBuilderUtil::set_vec_index_snapshot_data_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -1665,7 +1658,6 @@ int ObVecIndexBuilderUtil::set_hybrid_vec_log_table_columns(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                        vec_col_name.length(), vec_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", vec_col_name, K(ret));
@@ -1697,7 +1689,7 @@ int ObVecIndexBuilderUtil::set_hybrid_vec_log_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -1764,7 +1756,6 @@ int ObVecIndexBuilderUtil::set_hybrid_vec_embedded_vec_table_columns(
         LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                        vec_col_name.length(), vec_col_name.ptr());
         LOG_WARN("get_column_schema failed",
-                 "tenant_id", data_schema.get_tenant_id(),
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", vec_col_name, K(ret));
@@ -1796,7 +1787,7 @@ int ObVecIndexBuilderUtil::set_hybrid_vec_embedded_vec_table_columns(
         LOG_WARN("column name is empty", K(ret), K(store_column_name));
       } else if (OB_ISNULL(store_column = data_schema.get_column_schema(store_column_name))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+        LOG_WARN("get_column_schema failed", 
                  "database_id", data_schema.get_database_id(),
                  "table_name", data_schema.get_table_name(),
                  "column name", store_column_name, K(ret));
@@ -3478,7 +3469,7 @@ int ObVecIndexBuilderUtil::generate_vec_ivf_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(col_flag);
@@ -3557,7 +3548,7 @@ int ObVecIndexBuilderUtil::generate_vid_column(
         column_schema.set_rowkey_position(0); //non-primary key column
         column_schema.set_index_position(0); //non-index column
         column_schema.set_tbl_part_key_pos(0); // not partition key
-        column_schema.set_tenant_id(data_schema.get_tenant_id());
+        
         column_schema.set_table_id(data_schema.get_table_id());
         column_schema.set_column_id(col_id);
         column_schema.add_column_flag(GENERATED_VEC_VID_COLUMN_FLAG);
@@ -3658,7 +3649,7 @@ int ObVecIndexBuilderUtil::generate_type_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_TYPE_COLUMN_FLAG);
@@ -3755,7 +3746,7 @@ int ObVecIndexBuilderUtil::generate_spiv_dim_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_SPIV_DIM_COLUMN_FLAG);
@@ -3849,7 +3840,7 @@ int ObVecIndexBuilderUtil::generate_spiv_value_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_SPIV_VALUE_COLUMN_FLAG);
@@ -3946,7 +3937,7 @@ int ObVecIndexBuilderUtil::generate_vector_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
@@ -4046,7 +4037,7 @@ int ObVecIndexBuilderUtil::generate_scn_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_SCN_COLUMN_FLAG);
@@ -4145,7 +4136,7 @@ int ObVecIndexBuilderUtil::generate_key_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_KEY_COLUMN_FLAG);
@@ -4243,7 +4234,7 @@ int ObVecIndexBuilderUtil::generate_data_column(
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_DATA_COLUMN_FLAG);
@@ -4342,7 +4333,7 @@ int ObVecIndexBuilderUtil::generate_chunk_column(
           column_schema.set_rowkey_position(0);
           column_schema.set_index_position(0);
           column_schema.set_tbl_part_key_pos(0);
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG);
@@ -4469,7 +4460,7 @@ int ObVecIndexBuilderUtil::generate_embedded_vec_column(
           column_schema.set_rowkey_position(0);
           column_schema.set_index_position(0);
           column_schema.set_tbl_part_key_pos(0);
-          column_schema.set_tenant_id(data_schema.get_tenant_id());
+          
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
           column_schema.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
@@ -4611,9 +4602,9 @@ int ObVecIndexBuilderUtil::check_alter_column_is_offline(const ObTableSchema &or
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() && !is_offline; i++) {
         const ObTableSchema *index_schema = NULL;
-        if (OB_FAIL(schema_guard.get_table_schema(orig_table_schema.get_tenant_id(),
+        if (OB_FAIL(schema_guard.get_table_schema(
                                                   simple_index_infos.at(i).table_id_, index_schema))) {
-          LOG_WARN("get_table_schema failed", K(orig_table_schema.get_tenant_id()), "table id",
+          LOG_WARN("get_table_schema failed", "table id",
                    simple_index_infos.at(i).table_id_, K(ret));
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -5825,7 +5816,6 @@ int ObVecIndexBuilderUtil::check_vec_gen_col(
 */
 int ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const int64_t tenant_id,
     const int64_t database_id,
     const ObString &index_name, /* domain index name */
     const share::schema::ObIndexType index_type,
@@ -5834,16 +5824,16 @@ int ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
 {
   int ret = OB_SUCCESS;
   ObString full_index_name;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id ||
+  if (OB_UNLIKELY(false || OB_INVALID_ID == database_id ||
                   index_name.empty() || OB_ISNULL(allocator))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(database_id), K(index_name), KP(allocator));
+    LOG_WARN("invalid argument", K(ret), K(database_id), K(index_name), KP(allocator));
   } else if (OB_FAIL(generate_vec_index_name(allocator,
                                              index_type,
                                              index_name,
                                              full_index_name))) {
     LOG_WARN("fail to generate vec index name", K(ret), K(index_type));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    database_id,
                                                    full_index_name,
                                                    true, /* is_index */
@@ -5851,7 +5841,7 @@ int ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
                                                    false, /* is_hidden_flag */
                                                    true/* is_built_in_flag */))) {
     LOG_WARN("fail to get table schema",
-      K(ret), K(tenant_id), K(database_id), K(index_name), K(full_index_name), K(index_type));
+      K(ret), K(database_id), K(index_name), K(full_index_name), K(index_type));
   } else if (OB_ISNULL(index_schema)) {
     LOG_INFO("get vec table schema is null, maybe index has been drop", K(ret), K(full_index_name));
   }
@@ -5958,9 +5948,8 @@ int ObVecIndexBuilderUtil::vec_set_index_arg_index_schema(
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
         const ObTableSchema *index_schema = NULL;
-        if (OB_FAIL(schema_guard.get_table_schema(
-            data_table_schema.get_tenant_id(), simple_index_infos.at(i).table_id_, index_schema))) {
-          LOG_WARN("get_table_schema failed", K(data_table_schema.get_tenant_id()), "table id", simple_index_infos.at(i).table_id_, K(ret));
+        if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_schema))) {
+          LOG_WARN("get_table_schema failed", "table id", simple_index_infos.at(i).table_id_, K(ret));
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema should not be null", K(ret));

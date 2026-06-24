@@ -50,11 +50,10 @@ enum class ObDiskReportFileType : uint8_t
 struct ObDiskUsageReportKey
 {
   ObDiskReportFileType file_type_;
-  uint64_t tenant_id_;
 
   uint64_t hash() const
   {
-    uint64_t hash_value = static_cast<uint64_t>(file_type_) * 10000L + tenant_id_;
+    uint64_t hash_value = static_cast<uint64_t>(file_type_) * 10000L;
     return hash_value;
   }
 
@@ -66,10 +65,10 @@ struct ObDiskUsageReportKey
 
   bool operator ==(const ObDiskUsageReportKey report_key) const
   {
-    return report_key.file_type_ == file_type_ && report_key.tenant_id_ == tenant_id_;
+    return report_key.file_type_ == file_type_ && true;
   }
 
-  TO_STRING_KV(K_(file_type), K_(tenant_id));
+  TO_STRING_KV(K_(file_type));
 };
 
 typedef hash::HashMapPair<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ObDiskUsageReportMap;// pair(occupy_size, required_size)
@@ -81,13 +80,13 @@ public:
   virtual ~ObDiskUsageReportTask() {};
   int init(common::ObMySQLProxy &sql_proxy);
   void destroy();
-  virtual int delete_tenant_usage_stat(const uint64_t tenant_id) override;
+  virtual int delete_tenant_usage_stat() override;
 
-  // get data disk used size of specified tenant_id in current observer
-  int get_data_disk_used_size(const uint64_t tenant_id, int64_t &used_size);
+  // get data disk used size of specified tenant in current observer
+  int get_data_disk_used_size(int64_t &used_size);
 
 private:
-  int count_tenant_data(const uint64_t tenant_id);
+  int count_tenant_data();
 
   typedef common::hash::ObHashMap<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ReportResultMap; // pair(occupy_size, required_size)
 private:

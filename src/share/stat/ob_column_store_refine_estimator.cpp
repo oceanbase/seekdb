@@ -31,7 +31,7 @@ int ObColumnStoreRefineEstimator::estimate(const ObOptStatGatherParam &param,
                                            ObOptStat &opt_stat)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator("ObCSRStatsEst", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+  ObArenaAllocator allocator("ObCSRStatsEst", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSEArray<ObOptStat, 1> tmp_opt_stats;
   ObOptTableStat *src_tab_stat = opt_stat.table_stat_;
   ObIArray<ObOptColumnStat*> &src_col_stats = opt_stat.column_stats_;

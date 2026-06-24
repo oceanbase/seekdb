@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tenant_meta_snapshot_handler.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/omt/ob_tenant.h"
 #include "src/storage/ls/ob_ls.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -47,7 +48,7 @@ int ObTenantMetaSnapshotHandler::create_tenant_snapshot(const ObTenantSnapshotID
   } else if (OB_UNLIKELY(!last_super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get tenant super block", K(ret), K(last_super_block));
-  } else if (OB_FAIL(MTL(ObTenantStorageMetaService*)->add_snapshot(snapshot))) {
+  } else if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->add_snapshot(snapshot))) {
     LOG_WARN("fail to add snapshot", K(ret), K(snapshot));
   }
   
@@ -63,7 +64,7 @@ int ObTenantMetaSnapshotHandler::create_single_ls_snapshot(const ObTenantSnapsho
   ObTenantStorageCheckpointWriter tenant_storage_meta_writer;
   MacroBlockId orig_ls_meta_entry;
   ObTenantSnapshotMeta snapshot;
-  ObSArray<MacroBlockId> ls_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CreateSnapLS", MTL_ID()));
+  ObSArray<MacroBlockId> ls_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CreateSnapLS"));
   bool inc_ls_blocks_ref_succ = false;
   bool inc_tablet_blocks_ref_succ = false;
 
@@ -85,7 +86,7 @@ int ObTenantMetaSnapshotHandler::create_single_ls_snapshot(const ObTenantSnapsho
                                               inc_ls_blocks_ref_succ,
                                               inc_tablet_blocks_ref_succ))) {
     LOG_WARN("fail to increase ref cnt for all linked blocks", K(ret), K(snapshot_id), K(ls_id));
-  } else if (OB_FAIL(MTL(ObTenantStorageMetaService*)->swap_snapshot(snapshot))) {
+  } else if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->swap_snapshot(snapshot))) {
     LOG_WARN("fail to swap snapshot", K(ret), K(snapshot_id), K(ls_id), K(snapshot));
   }
 
@@ -107,9 +108,9 @@ int ObTenantMetaSnapshotHandler::delete_single_ls_snapshot(const ObTenantSnapsho
   MacroBlockId orig_ls_meta_entry;
   MacroBlockId tablet_meta_entry;
   ObTenantSnapshotMeta snapshot;
-  ObSArray<MacroBlockId> ls_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CreateSnapLS", MTL_ID()));
-  ObSArray<ObMetaDiskAddr> deleted_tablet_addrs(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnapLS", MTL_ID()));
-  ObSArray<MacroBlockId> tablet_meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnapLS", MTL_ID()));
+  ObSArray<MacroBlockId> ls_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("CreateSnapLS"));
+  ObSArray<ObMetaDiskAddr> deleted_tablet_addrs(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnapLS"));
+  ObSArray<MacroBlockId> tablet_meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnapLS"));
   bool inc_ls_blocks_ref_succ = false;
   bool inc_tablet_blocks_ref_succ = false;
 
@@ -131,7 +132,7 @@ int ObTenantMetaSnapshotHandler::delete_single_ls_snapshot(const ObTenantSnapsho
   } else if (FALSE_IT(snapshot.snapshot_id_ = snapshot_id)) {
   } else if (OB_FAIL(inc_all_linked_block_ref(tenant_storage_meta_writer, inc_ls_blocks_ref_succ, inc_tablet_blocks_ref_succ))) {
     LOG_WARN("fail to increase ref cnt for all linked blocks", K(ret), K(snapshot_id), K(ls_id));
-  } else if (OB_FAIL(MTL(ObTenantStorageMetaService*)->swap_snapshot(snapshot))) {
+  } else if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->swap_snapshot(snapshot))) {
     LOG_WARN("fail to swap snapshot", K(ret), K(snapshot_id), K(ls_id), K(snapshot));
   }
 
@@ -265,9 +266,9 @@ int ObTenantMetaSnapshotHandler::delete_tenant_snapshot(const ObTenantSnapshotID
   const ObTenantSuperBlock last_super_block = tenant->get_super_block();
   ObTenantStorageCheckpointReader ls_snapshot_reader;
   ObTenantSnapshotMeta snapshot;
-  ObSArray<MacroBlockId> ls_meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnap", MTL_ID()));
-  ObSArray<ObMetaDiskAddr> deleted_tablet_addrs(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnap", MTL_ID()));
-  ObSArray<MacroBlockId> tablet_meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnap", MTL_ID()));
+  ObSArray<MacroBlockId> ls_meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnap"));
+  ObSArray<ObMetaDiskAddr> deleted_tablet_addrs(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnap"));
+  ObSArray<MacroBlockId> tablet_meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("DelSnap"));
   ObTenantStorageCheckpointReader::ObStorageMetaOp del_ls_snapshot_op = std::bind(
       &ObTenantMetaSnapshotHandler::delete_ls_snapshot,
       std::placeholders::_1,
@@ -290,7 +291,7 @@ int ObTenantMetaSnapshotHandler::delete_tenant_snapshot(const ObTenantSnapshotID
   } else if (OB_FAIL(ls_snapshot_reader.iter_read_meta_item(
       snapshot.ls_meta_entry_, del_ls_snapshot_op, ls_meta_block_list))) {
     LOG_WARN("fail to delete ls snapshot", K(ret), K(snapshot));      
-  } else if (OB_FAIL((MTL(ObTenantStorageMetaService*)->delete_snapshot(snapshot_id)))) {
+  } else if (OB_FAIL((share::g_mp->tenant_storage_meta_service()->delete_snapshot(snapshot_id)))) {
     LOG_WARN("fail to delete snapshot", K(ret), K(snapshot_id));
   } else {
     dec_meta_block_ref(ls_meta_block_list);
@@ -311,7 +312,7 @@ int ObTenantMetaSnapshotHandler::inner_delete_ls_snapshot(
 {
   int ret = OB_SUCCESS;
   ObTenantStorageCheckpointReader tablet_snapshot_reader;
-  ObSArray<MacroBlockId> meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SnapTablet", MTL_ID()));
+  ObSArray<MacroBlockId> meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SnapTablet"));
   ObTenantStorageCheckpointReader::ObStorageMetaOp del_tablet_snapshot_op = std::bind(
       &ObTenantMetaSnapshotHandler::delete_tablet_snapshot,
       std::placeholders::_1, 
@@ -360,7 +361,7 @@ int ObTenantMetaSnapshotHandler::inner_delete_tablet_by_addrs(
 {
   int ret = OB_SUCCESS;
 
-  ObArenaAllocator arena_allocator("DelSnapTablet", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator arena_allocator("DelSnapTablet", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTablet tablet;
   for (int64_t i = 0; i < deleted_tablet_addrs.count(); i++) {
     tablet.reset();
@@ -369,7 +370,7 @@ int ObTenantMetaSnapshotHandler::inner_delete_tablet_by_addrs(
     char *buf = nullptr;
     int64_t pos = 0;
     do {
-      if (OB_FAIL(MTL(ObTenantStorageMetaService*)->read_from_disk(
+      if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->read_from_disk(
           deleted_tablet_addrs.at(i),
           0 /* ls_epoch for share storage */,
           arena_allocator,
@@ -441,7 +442,7 @@ int ObTenantMetaSnapshotHandler::get_all_ls_snapshot(
   const ObTenantSuperBlock super_block = tenant->get_super_block();
   ObTenantSnapshotMeta snapshot;
   ObTenantStorageCheckpointReader ls_ckpt_reader;
-  ObSArray<MacroBlockId> meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("GetAllLS", MTL_ID()));
+  ObSArray<MacroBlockId> meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("GetAllLS"));
   ObTenantStorageCheckpointReader::ObStorageMetaOp push_ls_op = std::bind(
       &ObTenantMetaSnapshotHandler::push_ls_snapshot,
       std::placeholders::_1, 
@@ -518,7 +519,7 @@ int ObTenantMetaSnapshotHandler::find_tablet_meta_entry(
 {
   int ret = OB_SUCCESS;
   ObLinkedMacroBlockItemReader ls_ckpt_reader;
-  ObMemAttr mem_attr(MTL_ID(), "Snapshot");
+  ObMemAttr mem_attr("Snapshot");
   
   if (OB_UNLIKELY(!ls_meta_entry.is_valid() || !ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -569,9 +570,9 @@ int ObTenantMetaSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskH
 
   if (OB_SUCC(ret)) {
     ObTenantStorageCheckpointReader tablet_snapshot_reader;
-    ObSArray<MacroBlockId> meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SnapCreate", MTL_ID()));
+    ObSArray<MacroBlockId> meta_block_list(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SnapCreate"));
     ObSArray<ObUpdateTabletLog> slog_arr;
-    slog_arr.set_attr(ObMemAttr(MTL_ID(), "SnapRecovery"));
+    slog_arr.set_attr(ObMemAttr("SnapRecovery"));
 
     ObTenantStorageCheckpointReader::ObStorageMetaOp write_slog_op = std::bind(
         &ObTenantMetaSnapshotHandler::batch_write_slog,
@@ -590,7 +591,7 @@ int ObTenantMetaSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskH
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL((MTL(ObTenantStorageMetaService*)->clone_ls(startup_accel_handler, tablet_meta_entry)))) {
+    if (OB_FAIL((share::g_mp->tenant_storage_meta_service()->clone_ls(startup_accel_handler, tablet_meta_entry)))) {
       LOG_WARN("fail to clone one ls", K(ret));
     }
   }

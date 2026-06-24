@@ -28,18 +28,16 @@ class ObIAllocator;
 namespace sql
 {
 
-int ObLCObjectManager::init(int64_t hash_bucket, uint64_t tenant_id)
+int ObLCObjectManager::init(int64_t hash_bucket)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
                                     ObModIds::OB_HASH_BUCKET_LC_STAT,
-                                    ObModIds::OB_HASH_NODE_LC_STAT,
-                                    tenant_id))) {
+                                    ObModIds::OB_HASH_NODE_LC_STAT))) {
     LOG_WARN("failed to init cache obj map", K(ret));
   } else if (OB_FAIL(alloc_cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
                                                  ObModIds::OB_HASH_BUCKET_LC_STAT,
-                                                 ObModIds::OB_HASH_NODE_LC_STAT,
-                                                 tenant_id))) {
+                                                 ObModIds::OB_HASH_NODE_LC_STAT))) {
     LOG_WARN("failed to init alloc cache obj map", K(ret));
   }
   return ret;
@@ -47,14 +45,13 @@ int ObLCObjectManager::init(int64_t hash_bucket, uint64_t tenant_id)
 
 int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
                              ObLibCacheNameSpace ns,
-                             uint64_t tenant_id,
                              MemoryContext &parent_context)
 {
   int ret = OB_SUCCESS;
   lib::MemoryContext entity = NULL;
   ObMemAttr mem_attr;
   ObILibCacheObject *cache_obj = NULL;
-  mem_attr.tenant_id_ = tenant_id;
+  
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
   if (guard.ref_handle_ == MAX_HANDLE) {
     ret = OB_ERR_UNEXPECTED;
@@ -71,7 +68,7 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
     LOG_WARN("NULL memory entity", K(ret));
   } else {
     WITH_CONTEXT(entity) {
-      if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj, guard.ref_handle_, tenant_id))) {
+      if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj, guard.ref_handle_))) {
         LOG_WARN("failed to create lib cache node", K(ret), K(ns));
       } else {
         uint64_t obj_id = allocate_object_id();
@@ -139,14 +136,13 @@ void ObLCObjectManager::common_free(ObILibCacheObject *cache_obj,
         LOG_WARN("set logical del time", K(cache_obj->get_logical_del_time()),
                                          K(cache_obj->added_lc()),
                                          K(cache_obj->get_object_id()),
-                                         K(cache_obj->get_tenant_id()),
                                          K(lbt()));
     }
     int64_t ref_count = cache_obj->dec_ref_count(ref_handle);
     if (ref_count > 0) {
       // do nothing
     } else if (ref_count == 0) {
-      uint64_t tenant_id = cache_obj->get_tenant_id();
+      
       if (OB_FAIL(cache_obj->before_cache_evicted())) {
         LOG_WARN("failed to process before_cache_evicted");
       } else if (OB_FAIL(destroy_cache_obj(false, cache_obj->get_object_id()))) {

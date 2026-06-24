@@ -99,11 +99,9 @@ int ObLSAdapter::replay(ObLogReplayTask *replay_task)
   }
   replay_task->replay_cost_ = ObTimeUtility::fast_current_time() - start_ts;
   if (replay_task->replay_cost_ > MAX_SINGLE_REPLAY_WARNING_TIME_THRESOLD) {
-    const bool is_meta_t = is_meta_tenant(MTL_ID());
-    //meta tenant is in mini mode
     if (replay_task->replay_cost_ > MAX_SINGLE_REPLAY_ERROR_TIME_THRESOLD
         && !get_replay_is_writing_throttling()
-        && (!lib::is_mini_mode() || is_meta_t)) {
+        && !lib::is_mini_mode()) {
       CLOG_LOG_RET(ERROR, OB_ERR_TOO_MUCH_TIME, "single replay task cost too much time. replay may be delayed", KPC(replay_task));
     } else {
       CLOG_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "single replay task cost too much time", KPC(replay_task));

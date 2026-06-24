@@ -33,11 +33,11 @@ public:
   int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  void set_tenant_id(int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 private:
 
-int get_all_tenant_id();
-int get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end);
+
+int get_row_from_specified_tenant(bool &is_end);
 int fill_cells(const sql::ObOperatorStat &pstat);
 private:
   enum COLUMN_ID
@@ -55,10 +55,8 @@ private:
     EXTEND_INFO1,
     EXTEND_INFO2
   };
-  common::ObSEArray<uint64_t, 16> tenant_id_array_;
   common::ObSEArray<sql::ObOperatorStat, 128> operator_stat_array_;
-  int64_t tenant_id_;
-  int64_t tenant_id_array_idx_;
+  bool iter_end_;
   int64_t operator_stat_array_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObVirtualSqlPlanStatistics);
 };

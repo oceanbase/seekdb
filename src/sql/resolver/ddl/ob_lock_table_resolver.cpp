@@ -52,12 +52,12 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
   ParseNode *lock_list = NULL;
   ObString db_name;
 
-  uint64_t tenant_id = session_info_->get_effective_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     // if tenant config is invalid, this config will be set as false
-    LOG_WARN("tenant config is invalid", K(tenant_id));
+    LOG_WARN("tenant config is invalid");
   } else if (tenant_config->enable_lock_priority) {
     ObLockTableStmt *lock_stmt = static_cast<ObLockTableStmt *>(stmt_);
     if (parse_tree.num_child_ == 0) {

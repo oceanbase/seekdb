@@ -8,10 +8,4 @@ insert into test values(0, 2);
 insert into test values(1, 2);
 insert into test values(2, 2);
 alter system major freeze tenant = sys;
-alter system major freeze tenant = xxx;
-ERROR HY000: invalid tenant name specified in connection string
-alter system major freeze tenant = xxx, mysql;
-ERROR HY000: invalid tenant name specified in connection string
-alter system major freeze tenant = '';
-ERROR HY000: Invalid argument
 drop table if exists test;

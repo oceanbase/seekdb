@@ -37,7 +37,7 @@ int ObDirectLoadMemSample::gen_ranges(ObIArray<ChunkType *> &chunks, ObIArray<Ra
 {
   int ret = OB_SUCCESS;
   ObArray<RowType *> sample_rows;
-  sample_rows.set_tenant_id(MTL_ID());
+  
   int64_t row_count = 0;
   for (int64_t i = 0; i < chunks.count(); ++i) {
     row_count += chunks.at(i)->get_size();
@@ -88,8 +88,8 @@ int ObDirectLoadMemSample::do_work()
   ObArray<RangeType> ranges;
   ObTableLoadHandle<ObDirectLoadMemDump::Context> context_ptr;
 
-  chunks.set_tenant_id(MTL_ID());
-  ranges.set_tenant_id(MTL_ID());
+  
+  
   mem_ctx_->mem_chunk_queue_.pop_all(chunks);
   if (OB_FAIL(ObTableLoadHandle<ObDirectLoadMemDump::Context>::make_handle(context_ptr, mem_ctx_))) {
     LOG_WARN("fail to make handle", KR(ret));
@@ -129,7 +129,7 @@ int ObDirectLoadMemSample::add_dump(int64_t idx,
 {
   int ret = OB_SUCCESS;
   storage::ObDirectLoadMemDump *mem_dump = OB_NEW(
-    ObDirectLoadMemDump, ObMemAttr(MTL_ID(), "TLD_mem_dump"), ctx_, mem_ctx_, range, context_ptr, idx);
+    ObDirectLoadMemDump, ObMemAttr("TLD_mem_dump"), ctx_, mem_ctx_, range, context_ptr, idx);
   if (mem_dump == nullptr) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate mem dump", KR(ret));

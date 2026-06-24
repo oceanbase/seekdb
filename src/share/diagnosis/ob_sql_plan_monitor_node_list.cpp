@@ -39,17 +39,17 @@ ObPlanMonitorNodeList::~ObPlanMonitorNodeList()
   }
 }
 
-int ObPlanMonitorNodeList::init(uint64_t tenant_id)
+int ObPlanMonitorNodeList::init()
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id, "SqlPlanMonMap");
+  ObMemAttr attr("SqlPlanMonMap");
   // at most use 1% percent of tenant memory to store SQL PLAN MONITOR nodes
   const int64_t MAX_QUEUE_SIZE = 100000; //10w
   const int64_t MIN_QUEUE_SIZE = 10000; //1w
   int64_t queue_size = calculate_scaled_value_by_memory(MIN_QUEUE_SIZE, MAX_QUEUE_SIZE);
   if (inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(queue_.init(MOD_LABEL, queue_size, tenant_id))) {
+  } else if (OB_FAIL(queue_.init(MOD_LABEL, queue_size))) {
     SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReqMemEvict, tg_id_))) {
     SERVER_LOG(WARN, "create failed", K(ret));
@@ -59,7 +59,6 @@ int ObPlanMonitorNodeList::init(uint64_t tenant_id)
     SERVER_LOG(WARN, "init timer fail", K(ret));
   } else if (OB_FAIL(allocator_.init(MONITOR_NODE_PAGE_SIZE,
                                      MOD_LABEL,
-                                     tenant_id,
                                      INT64_MAX))) {
     SERVER_LOG(WARN, "failed to init allocator", K(ret));
   } else {
@@ -72,7 +71,7 @@ int ObPlanMonitorNodeList::init(uint64_t tenant_id)
       rt_node_id_ = -1;
       recycle_threshold_ = queue_size * 0.9; // when reach 90% usage, begin to recycle
       batch_release_ = queue_size * 0.05; // recycle 5% nodes per round
-      tenant_id_ = tenant_id;
+      
       inited_ = true;
       destroyed_ = false;
     }
@@ -98,8 +97,8 @@ void ObPlanMonitorNodeList::destroy()
 int ObPlanMonitorNodeList::mtl_init(ObPlanMonitorNodeList* &node_list)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = lib::current_resource_owner_id();
-  if (OB_FAIL(node_list->init(tenant_id))) {
+  
+  if (OB_FAIL(node_list->init())) {
     LOG_WARN("failed to init event list", K(ret));
   }
   return ret;

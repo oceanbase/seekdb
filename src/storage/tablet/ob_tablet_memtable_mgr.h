@@ -27,6 +27,8 @@
 #include "storage/multi_data_source/mds_table_mgr.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
 
+#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+
 namespace oceanbase
 {
 namespace memtable
@@ -134,7 +136,7 @@ class ObTabletMemtableMgrPool
 {
 public:
   ObTabletMemtableMgrPool()
-    : allocator_(sizeof(ObTabletMemtableMgr), lib::ObMemAttr(MTL_ID(), "TltMemtablMgr")),
+    : allocator_(sizeof(ObTabletMemtableMgr), lib::ObMemAttr("TltMemtablMgr")),
       count_(0) {}
   static int mtl_init(ObTabletMemtableMgrPool* &m) { return OB_SUCCESS; }
   void destroy() {}

@@ -152,8 +152,7 @@ int ObUpdateStmt::part_key_is_updated(bool &is_updated) const
     if (OB_ISNULL(table_info_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
-    } else if (!table_info_.at(i)->is_link_table_ &&
-               OB_FAIL(check_part_key_is_updated(table_info_.at(i)->assignments_,
+    } else if (OB_FAIL(check_part_key_is_updated(table_info_.at(i)->assignments_,
                                                  is_updated))) {
       LOG_WARN("failed to check partition key is updated", K(ret));
     } else { /*do nothing*/ }

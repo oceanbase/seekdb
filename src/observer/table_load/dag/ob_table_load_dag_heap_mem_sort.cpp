@@ -290,7 +290,7 @@ int ObTableLoadHeapMemSortTask::Sorter::close_chunk()
   ObDirectLoadMultipleHeapTableBuilder table_builder;
   ObDirectLoadMultipleHeapTableBuildParam table_builder_param;
 
-  keys.set_tenant_id(MTL_ID());
+  
   table_builder_param.table_data_desc_ = table_data_desc_;
   table_builder_param.file_mgr_ = store_ctx_->tmp_file_mgr_;
   table_builder_param.extra_buf_ = reinterpret_cast<char *>(1); // unuse, delete in future
@@ -308,7 +308,7 @@ int ObTableLoadHeapMemSortTask::Sorter::close_chunk()
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); i++) {
     const ObTabletID &tablet_id = keys.at(i);
     ObArray<const ConstRowType *> bag;
-    bag.set_tenant_id(MTL_ID());
+    
     if (OB_FAIL(chunk_.get(tablet_id, bag))) {
       LOG_WARN("fail to get bag", KR(ret));
     }

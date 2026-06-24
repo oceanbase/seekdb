@@ -78,8 +78,8 @@ class ObSemiStructDecodeCtx
 {
 public:
   ObSemiStructDecodeCtx():
-    allocator_("SemiDec", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-    handlers_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiDec", MTL_ID())),
+    allocator_("SemiDec", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    handlers_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator("SemiDec")),
     reserve_memory_(false)
   {}
 

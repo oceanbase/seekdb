@@ -31,7 +31,7 @@ class ObPluginVectorIndexAdaptor;
 class ObIvfAsyncTask : public ObVecIndexIAsyncTask
 {
 public:
-  ObIvfAsyncTask() : ObVecIndexIAsyncTask(ObMemAttr(MTL_ID(), "IvfAsyTask")) {}
+  ObIvfAsyncTask() : ObVecIndexIAsyncTask(ObMemAttr("IvfAsyTask")) {}
   virtual ~ObIvfAsyncTask() {}
   int do_work() override;
 

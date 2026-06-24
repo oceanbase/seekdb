@@ -98,35 +98,35 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FORK_TABLE, ObDagPrio::DAG_PRIO_DDL, ObSysTa
 
 // DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MIGRATE, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "MIGRATE", "MIGRATE")
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_INITIAL_COMPLETE_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "INITIAL_COMPLETE_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MIGRATE_WARMUP, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "MIGRATE_WARMUP", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_WAIT_DATA_READY, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "WAIT_DATA_READY", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_COMPLETE_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "FINISH_COMPLETE_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_INITIAL_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "INITIAL_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_START_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "START_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_SYS_TABLETS_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "SYS_TABLETS_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TABLET_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "TABLET_MIGRATION", "MIGRATE",
-    true, 4, {"tenant_id", "ls_id", "tablet_id", "op_type"})
+    true, 3, {"ls_id", "tablet_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_DATA_TABLETS_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "DATA_TABLETS_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TABLET_GROUP_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "TABLET_GROUP_MIGRATION", "MIGRATE",
-    true, 4, {"tenant_id", "ls_id", "first_tablet_id", "op_type"})
+    true, 3, {"ls_id", "first_tablet_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MIGRATION_FINISH, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "MIGRATION_FINISH", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_INITIAL_PREPARE_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "INITIAL_PREPARE_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_START_PREPARE_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "START_PREPARE_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_PREPARE_MIGRATION, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "FINISH_PREPARE_MIGRATION", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TABLET_CHECK_CONVERT, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "TABLET_CHECKE_CONVERT", "MIGRATE",
-    true, 3, {"tenant_id", "ls_id", "op_type"})
+    true, 2, {"ls_id", "op_type"})
 // DAG_TYPE_MIGRATE END
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FAST_MIGRATE, ObDagPrio::DAG_PRIO_HA_MID, ObSysTaskType::MIGRATION_TASK, "FAST_MIGRATE", "MIGRATE",
     false, 0, {})
@@ -143,21 +143,21 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_BACKFILL_TX, ObDagPrio::DAG_PRIO_HA_H
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_META, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_META", "BACKUP",
     false, 1, {"ls_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_PREPARE, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_PREPARE", "BACKUP",
-    false, 5, {"tenant_id", "backup_set_id", "ls_id", "turn_id", "retry_id"})
+    false, 4, {"backup_set_id", "ls_id", "turn_id", "retry_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_FINISH, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_FINISH", "BACKUP",
-    false, 3, {"tenant_id", "backup_set_id", "ls_id"})
+    false, 2, {"backup_set_id", "ls_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_DATA, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_DATA", "BACKUP",
-    false, 7, {"tenant_id", "backup_set_id", "backup_data_type", "ls_id", "turn_id", "retry_id", "task_id"})
+    false, 6, {"backup_set_id", "backup_data_type", "ls_id", "turn_id", "retry_id", "task_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_PREFETCH_BACKUP_INFO, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "PREFETCH_BACKUP_INFO", "BACKUP",
-    false, 7, {"tenant_id", "backup_set_id", "backup_data_type", "ls_id", "turn_id", "retry_id", "task_id"})
+    false, 6, {"backup_set_id", "backup_data_type", "ls_id", "turn_id", "retry_id", "task_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_INDEX_REBUILD, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_INDEX_REBUILD", "BACKUP",
-    false, 6, {"tenant_id", "backup_set_id", "backup_data_type", "ls_id", "turn_id", "retry_id"})
+    false, 5, {"backup_set_id", "backup_data_type", "ls_id", "turn_id", "retry_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_LS_LOG_GROUP, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_COMPLEMENT_LOG_LS_GROUP", "BACKUP",
-    false, 3, {"tenant_id", "backup_set_id", "ls_id"})
+    false, 2, {"backup_set_id", "ls_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_LS_LOG_GROUP_FINISH, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_COMPLEMENT_LOG_LS_GROUP", "BACKUP",
-    false, 3, {"tenant_id", "backup_set_id", "ls_id"})
+    false, 2, {"backup_set_id", "ls_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_LS_LOG, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "BACKUP_COMPLEMENT_LOG_LS", "BACKUP",
-    false, 3, {"tenant_id", "backup_set_id", "ls_id"})
+    false, 2, {"backup_set_id", "ls_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_INITIAL_BACKUP_FUSE, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "INITIAL_BACKUP_FUSE", "BACKUP",
     false, 0, {})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_START_BACKUP_FUSE, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_TASK, "START_BACKUP_FUSE", "BACKUP",
@@ -202,37 +202,37 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_COMPLETE_RESTORE, ObDagPrio::DAG_PRIO
 // DAG_TYPE_RESTORE END
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_BACKUP_CLEAN, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::BACKUP_CLEAN_TASK, "BACKUP_CLEAN", "BACKUP_CLEAN",
-    true, 4, {"tenant_id", "task_id", "ls_id", "id"})
+    true, 3, {"task_id", "ls_id", "id"})
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_REMOVE_MEMBER, ObDagPrio::DAG_PRIO_HA_MID, ObSysTaskType::REMOVE_MEMBER_TASK, "REMOVE_MEMBER", "REMOVE_MEMBER",
     true, 1, {"ls_id"})
 
 // DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TRANSFER, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::TRANSFER_TASK, "TRANSFER", "TRANSFER")
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TRANSFER_BACKFILL_TX, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::TRANSFER_TASK, "TRANSFER_BACKFILL_TX", "TRANSFER",
-    true, 3, {"tenant_id", "src_ls_id", "start_scn"})
+    true, 2, {"src_ls_id", "start_scn"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TRANSFER_REPLACE_TABLE, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::TRANSFER_TASK, "TRANSFER_REPLACE_TABLE", "TRANSFER",
-    true, 2, {"tenant_id", "desc_ls_id"})
+    true, 1, {"desc_ls_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TRANSFER_BUILD_TABLET_INFO, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::TRANSFER_TASK, "TRANSFER_BUILD_TABLET_INFO", "TRANSFER",
     false, 0, {})
 // DAG_TYPE_TRANSFER END
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TTL, ObDagPrio::DAG_PRIO_TTL, ObSysTaskType::TABLE_API_TTL_TASK, "TTL_DELTE_DAG", "TTL",
-    false, 4, {"tenant_id", "ls_id", "table_id", "tablet_id"})
+    false, 3, {"ls_id", "table_id", "tablet_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TENANT_SNAPSHOT_CREATE, ObDagPrio::DAG_PRIO_HA_MID, ObSysTaskType::TENANT_SNAPSHOT_CREATE_TASK, "TENANT_SNAPSHOT_CREATE", "TSNAP_CR8",
     false, 1, {"tsnap_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TENANT_SNAPSHOT_GC, ObDagPrio::DAG_PRIO_HA_LOW, ObSysTaskType::TENANT_SNAPSHOT_GC_TASK, "TENANT_SNAPSHOT_GC","TSNAP_GC",
     false, 1, {"tsnap_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_VECTOR_INDEX, ObDagPrio::DAG_PRIO_TTL, ObSysTaskType::VECTOR_INDEX_TASK, "VECTOR_INDEX_DAG", "VECTOR_INDEX",
-    false, 4, {"tenant_id", "ls_id", "table_id", "tablet_id"})
+    false, 3, {"ls_id", "table_id", "tablet_id"})
 
 // DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_REBUILD_TABLET, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::REBUILD_TABLET_TASK, "REBUILD_TABLET", "REBUILD_TABLET")
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_INITIAL_REBUILD_TABLET, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::REBUILD_TABLET_TASK, "INITIAL_REBUILD_TBALET", "REBUILD_TABLET",
-    false, 3, {"tenant_id", "ls_id", "op_type"})
+    false, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_START_REBUILD_TABLET, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::REBUILD_TABLET_TASK, "START_REBUILD_TABLET", "REBUILD_TABLET",
-    false, 3, {"tenant_id", "ls_id", "op_type"})
+    false, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FINISH_REBUILD_TABLET, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::REBUILD_TABLET_TASK, "FINISH_REBUILD_TABLET", "REBUILD_TABLET",
-    false, 3, {"tenant_id", "ls_id", "op_type"})
+    false, 2, {"ls_id", "op_type"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TABLET_REBUILD, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::REBUILD_TABLET_TASK, "TABLET_REBUILD", "REBUILD_TABLET",
-    false, 3, {"tenant_id", "ls_id", "op_type"})
+    false, 2, {"ls_id", "op_type"})
 // DAG_TYPE_REBUILD_TABLET END
 
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MAX, ObDagPrio::DAG_PRIO_MAX, ObSysTaskType::MAX_SYS_TASK_TYPE, "DAG_TYPE_MAX", "INVALID", false, 0, {})

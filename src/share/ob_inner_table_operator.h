@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_OB_INNER_TABLE_OPERATOR_H_
 #define OCEANBASE_SHARE_OB_INNER_TABLE_OPERATOR_H_
 
-#include "share/ob_i_exec_tenant_id_provider.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/mysqlclient/ob_mysql_transaction.h"
@@ -95,7 +94,7 @@ public:
 
 
 // Define inner table operator.
-class ObInnerTableOperator final : public ObIExecTenantIdProvider
+class ObInnerTableOperator final
 {
 public:
   typedef common::ObFixedLengthString<common::OB_MAX_TABLE_NAME_LENGTH> TableName;
@@ -104,16 +103,12 @@ public:
   ObInnerTableOperator();
   ~ObInnerTableOperator();
 
-  // Return tenant id to execute sql.
-  uint64_t get_exec_tenant_id() const override;
-
   // row operation
   // Init operator with operation table name.
   int init(
-    const char *tname, const ObIExecTenantIdProvider &exec_tenant_id_provider, const int32_t group_id = 0);
+    const char *tname, const int32_t group_id = 0);
   // Get operation table name.
   const char *get_table_name() const;
-  const ObIExecTenantIdProvider *get_exec_tenant_id_provider() const;
 
   // Just only lock the specific row, return OB_ENTRY_NOT_EXIST if row not exist.
   // Get specific full row.
@@ -267,7 +262,6 @@ private:
 private:
   bool is_inited_;
   TableName table_name_; // operation table name.
-  const ObIExecTenantIdProvider *exec_tenant_id_provider_; // provide tenant id to exec sql.
   int32_t group_id_; //remote inner sql rpc queue
 };
 

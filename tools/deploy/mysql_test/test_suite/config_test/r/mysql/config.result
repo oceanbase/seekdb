@@ -1,6 +1,3 @@
-SELECT effective_tenant();
-effective_tenant()
-sys
 分租户生成 inc 文件以及还原默认配置完成
 alter system set enable_record_trace_log=false;
 alter system set max_syslog_file_count=300;
@@ -50,6 +47,3 @@ set @@session.ob_query_timeout = 10000000;
 alter system set _enable_adaptive_compaction = false tenant sys;
 alter system set _enable_adaptive_compaction = false tenant all_user;
 alter system set _enable_adaptive_compaction = false tenant all_meta;
-SELECT effective_tenant();
-effective_tenant()
-sys

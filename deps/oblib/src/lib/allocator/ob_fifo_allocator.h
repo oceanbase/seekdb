@@ -89,7 +89,7 @@ public:
     BasePageHeader *page_header_;
   } __attribute__((aligned (16)));
 public:
-  explicit ObFIFOAllocator(const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+  explicit ObFIFOAllocator();
   virtual ~ObFIFOAllocator();
 
   int init(ObIAllocator *allocator,

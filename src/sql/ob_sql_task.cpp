@@ -102,9 +102,9 @@ void ObSqlTaskFactory::destroy()
 {
 }
 
-ObSqlTask *ObSqlTaskFactory::alloc(const uint64_t tenant_id)
+ObSqlTask *ObSqlTaskFactory::alloc()
 {
-  return alloc_(tenant_id);
+  return alloc_();
 }
 
 void ObSqlTaskFactory::free(ObSqlTask *task)
@@ -118,9 +118,9 @@ ObSqlTaskFactory &ObSqlTaskFactory::get_instance()
   return instance;
 }
 
-ObSqlTask *ObSqlTaskFactory::alloc_(const uint64_t tenant_id)
+ObSqlTask *ObSqlTaskFactory::alloc_()
 {
-  ObMemAttr memattr(tenant_id, "OB_SQL_TASK");
+  ObMemAttr memattr("OB_SQL_TASK");
   void *ptr = NULL;
   ObSqlTask *task = NULL;
   if (NULL != (ptr = ob_malloc(sizeof(ObSqlTask), memattr))) {

@@ -46,7 +46,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 
   int add_tenant_status(const common::ObAddr &server_addr,
                         const share::schema::ObTenantSchema &tenant_schema,
@@ -55,7 +55,6 @@ public:
                         const int64_t col_count);
   int add_all_tenant_status();
 private:
-  uint64_t tenant_id_;
 private:
   enum TENANT_STATUS_COLUMN
   {

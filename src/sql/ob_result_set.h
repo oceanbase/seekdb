@@ -77,7 +77,6 @@ public:
         has_hidden_rowid_(false),
         stmt_sql_(),
         is_bulk_(false),
-        has_link_table_(false),
         is_skip_locked_(false) {}
     virtual ~ExternalRetrieveInfo() {}
 
@@ -99,7 +98,6 @@ public:
     bool has_hidden_rowid_;
     ObString stmt_sql_;
     bool is_bulk_;
-    bool has_link_table_;
     bool is_skip_locked_;
   };
 
@@ -175,7 +173,6 @@ public:
   bool get_is_select_for_update();
   inline bool has_hidden_rowid();
   inline bool is_bulk();
-  inline bool is_link_table();
   inline bool is_skip_locked();
   /// whether the result is with rows (true for SELECT statement)
   bool is_with_rows() const;
@@ -459,7 +456,6 @@ private:
   ObExecutor executor_;
   bool is_returning_;
   bool is_com_filed_list_; //used to mark COM_FIELD_LIST
-  bool need_revert_tx_; //dblink
   bool will_retry_; // the query will retry, to figure out the final close
   bool xa_checking_lock_stoped_;
   common::ObString wild_str_;//uesd to save filed wildcard in COM_FIELD_LIST;
@@ -538,7 +534,6 @@ inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator 
       executor_(),
       is_returning_(false),
       is_com_filed_list_(false),
-      need_revert_tx_(false),
       will_retry_(false),
       xa_checking_lock_stoped_(false),
       wild_str_(),
@@ -672,11 +667,6 @@ inline bool ObResultSet::has_hidden_rowid()
 inline bool ObResultSet::is_bulk()
 {
   return external_retrieve_info_.is_bulk_;
-}
-
-inline bool ObResultSet::is_link_table()
-{
-  return external_retrieve_info_.has_link_table_;
 }
 
 inline bool ObResultSet::is_skip_locked()

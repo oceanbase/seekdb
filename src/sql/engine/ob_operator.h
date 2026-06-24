@@ -675,7 +675,7 @@ protected:
     UNUSED(ret);
   }
   #ifdef ENABLE_DEBUG_LOG
-  inline int init_dummy_mem_context(uint64_t tenant_id);
+  inline int init_dummy_mem_context();
   #endif
 public:
   uint64_t cpu_begin_time_; // start of counting cpu time

@@ -41,7 +41,7 @@ public:
 
 protected:
   int connect(sql::ObSQLSessionInfo *session_info, ObISQLClient *sql_client);
-  int start_transaction(uint64_t tenant_id);
+  int start_transaction();
   int end_transaction(const bool commit);
 
 protected:

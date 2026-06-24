@@ -52,7 +52,6 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
   if (this != &src_schema) {
     ObColumnSchemaV2::reset();
     error_ret_ = src_schema.error_ret_;
-    tenant_id_ = src_schema.tenant_id_;
     table_id_ = src_schema.table_id_;
     column_id_ = src_schema.column_id_;
     schema_version_ = src_schema.schema_version_;
@@ -114,7 +113,7 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
 
 bool ObColumnSchemaV2::operator==(const ObColumnSchemaV2 &r) const
 {
-  return (tenant_id_ == r.tenant_id_ && table_id_ == r.table_id_ && column_id_ == r.column_id_
+  return (true && table_id_ == r.table_id_ && column_id_ == r.column_id_
       && schema_version_ == r.schema_version_);
 }
 
@@ -167,7 +166,6 @@ bool ObColumnSchemaV2::is_func_idx_column() const
 
 void ObColumnSchemaV2::reset()
 {
-  tenant_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   column_id_ = OB_INVALID_ID;
   schema_version_ = 0;
@@ -209,7 +207,6 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
   int ret = OB_SUCCESS;
   bool has_column_ref = (column_ref_idxs_ != NULL);
   LST_DO_CODE(OB_UNIS_ENCODE,
-              tenant_id_,
               table_id_,
               column_id_,
               schema_version_,
@@ -268,7 +265,6 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
   bool has_column_ref = false;
 
   LST_DO_CODE(OB_UNIS_DECODE,
-              tenant_id_,
               table_id_,
               column_id_,
               schema_version_,
@@ -331,7 +327,6 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
   int64_t len = 0;
   bool has_column_ref = (column_ref_idxs_ != NULL);
   LST_DO_CODE(OB_UNIS_ADD_LEN,
-              tenant_id_,
               table_id_,
               column_id_,
               schema_version_,
@@ -409,8 +404,7 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
   int64_t pos = 0;
 
   J_OBJ_START();
-  J_KV(K_(tenant_id),
-    K_(table_id),
+  J_KV(K_(table_id),
     K_(column_id),
     K_(schema_version),
     K_(rowkey_position),

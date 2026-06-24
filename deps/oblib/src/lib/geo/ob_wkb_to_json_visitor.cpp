@@ -695,7 +695,7 @@ int ObWkbToJsonVisitor::appendMySQLFlagInfo(ObGeometry *geo)
     } else {
       box_geo = geo;
     }
-    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(), "GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
+    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
       ObGeoEvalCtx geo_ctx(CURRENT_CONTEXT);
       if (OB_FAIL(ret)) {
         // do nothing

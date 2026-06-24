@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_vector_index_ivf_cache_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "share/vector_type/ob_vector_common_util.h"
 
@@ -78,7 +79,7 @@ int ObIvfCacheUtil::is_cache_writable(const ObLSID &ls_id, int64_t table_id,
                                       bool &is_writable)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
   ObIvfCacheMgr *cache_mgr = nullptr;
   ObIvfCacheMgrGuard cache_guard;
   ObIvfCentCache *cent_cache = nullptr;

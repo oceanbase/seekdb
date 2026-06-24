@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_block_max_iter.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -293,7 +294,7 @@ int ObBlockMaxScoreIterator::inner_init(
       block_max_scan_param.stat_projectors_,
       scan_param))) {
     LOG_WARN("fail to init block stat scan param", K(ret));
-  } else if (OB_FAIL(MTL(ObAccessService *)->scan_block_stat(block_stat_scan_param_, stat_iter_))) {
+  } else if (OB_FAIL(share::g_mp->access_service()->scan_block_stat(block_stat_scan_param_, stat_iter_))) {
     LOG_WARN("fail to scan block stat", K(ret));
   } else {
     const int64_t dim_rowkey_idx = block_max_scan_param.dim_col_idx_in_rowkey_;

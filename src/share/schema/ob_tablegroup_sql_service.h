@@ -50,8 +50,7 @@ private:
                      const share::schema::ObTablegroupSchema &tablegroup,
                      const bool only_history);
 
-  int gen_tablegroup_dml(const uint64_t exec_tenant_id,
-                         const share::schema::ObTablegroupSchema &tablegroup_schema,
+  int gen_tablegroup_dml(const share::schema::ObTablegroupSchema &tablegroup_schema,
                          share::ObDMLSqlSplicer &dml);
 
   DISALLOW_COPY_AND_ASSIGN(ObTablegroupSqlService);

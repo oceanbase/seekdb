@@ -184,12 +184,10 @@ public:
       : task_result_(common::ObModIds::OB_NEW_SCANNER,
                      nullptr,
                      common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                     common::OB_SERVER_TENANT_ID,
                      use_compact_row),
       extend_result_(common::ObModIds::OB_NEW_SCANNER,
                        nullptr,
                        common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                       common::OB_SERVER_TENANT_ID,
                        use_compact_row)
   {
   }
@@ -197,22 +195,17 @@ public:
       : task_result_(allocator,
                      common::ObModIds::OB_NEW_SCANNER,
                      common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                     common::OB_SERVER_TENANT_ID,
                      use_compact_row),
         extend_result_(allocator,
                        common::ObModIds::OB_NEW_SCANNER,
                        common::ObScanner::DEFAULT_MAX_SERIALIZE_SIZE,
-                       common::OB_SERVER_TENANT_ID,
                        use_compact_row)
   {
   }
   ~ObMiniTaskResult()
   {
   }
-  void set_tenant_id(uint64_t tenant_id) {
-    task_result_.set_tenant_id(tenant_id);
-    extend_result_.set_tenant_id(tenant_id);
-  }
+  
   int init()
   {
     int ret = common::OB_SUCCESS;

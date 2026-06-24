@@ -159,9 +159,9 @@ struct Frame
 
 struct WinExprEvalCtx
 {
-  WinExprEvalCtx(RowStore &input_rows, WinFuncColExpr &win_col, const int64_t tenant_id) :
+  WinExprEvalCtx(RowStore &input_rows, WinFuncColExpr &win_col) :
     input_rows_(input_rows), win_col_(win_col),
-    allocator_(ObModIds::OB_SQL_WINDOW_LOCAL, OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id,
+    allocator_(ObModIds::OB_SQL_WINDOW_LOCAL, OB_MALLOC_NORMAL_BLOCK_SIZE,
                ObCtxIds::WORK_AREA),
     extra_(nullptr)
   {}

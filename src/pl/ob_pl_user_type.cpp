@@ -929,7 +929,7 @@ int ObRecordType::init_session_var(const ObPLResolveCtx &resolve_ctx,
   int ret = OB_SUCCESS;
   char *data = NULL;
   int64_t init_size = 0;
-  ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_INIT_SESSION_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_INIT_SESSION_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE);
   obj.set_null();
   if (OB_NOT_NULL(default_expr)) {
     ObObj calc_obj;
@@ -1324,7 +1324,7 @@ int ObPLComposite::copy_element(const ObObj &src,
                             src.get_val_len()));
       }
   } else if (NULL != dest_type && NULL != session && !src.is_null()) {
-    ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObRawExprResType result_type;
     ObObjParam result;
     ObObjParam src_tmp;

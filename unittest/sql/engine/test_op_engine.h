@@ -30,13 +30,13 @@ public:
   virtual ~MockLocationService()
   {}
 
-  virtual int nonblock_get(const uint64_t tenant_id, const ObTabletID &tablet_id, ObLSID &ls_id)
+  virtual int nonblock_get(const ObTabletID &tablet_id, ObLSID &ls_id)
   {
     ls_id = ObLSID::SYS_LS_ID;
     return OB_SUCCESS;
   }
 
-  virtual int nonblock_get(const int64_t cluster_id, const uint64_t tenant_id, const ObLSID &ls_id,
+  virtual int nonblock_get(const int64_t cluster_id, const ObLSID &ls_id,
                            ObLSLocation &location)
   {
     int ret = OB_SUCCESS;
@@ -47,7 +47,7 @@ public:
     add.set_ip_addr("1.1.1.1", 8888);
     ObLSReplicaLocation ls_replica_loc;
 
-    if (OB_FAIL(location.init(1, 1, ls_id, 1))) {
+    if (OB_FAIL(location.init(1, ls_id, 1))) {
     } else if (OB_FAIL(ls_replica_loc.init(add, LEADER, 100, REPLICA_TYPE_FULL, relica_pro, ls_restore_sta, 100))) {
     } else {
       location.add_replica_location(ls_replica_loc);

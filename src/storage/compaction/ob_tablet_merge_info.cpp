@@ -229,7 +229,7 @@ int ObTabletMergeInfo::create_sstable(
         skip_to_create_empty_cg = true;
         FLOG_INFO("skip to create empty cg sstable!", K(ret), K(param), KPC(cg_schema));
       } else { // use tmp allocator to create normal cg sstable due to the concurrent problem
-        ObArenaAllocator tmp_allocator("TmpCGSSTable", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+        ObArenaAllocator tmp_allocator("TmpCGSSTable", OB_MALLOC_NORMAL_BLOCK_SIZE);
         ObTableHandleV2 tmp_handle;
         ObSSTable *sstable = nullptr;
         ObSSTable *new_sstable = nullptr;

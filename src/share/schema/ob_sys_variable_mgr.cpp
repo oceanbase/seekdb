@@ -29,21 +29,21 @@ using namespace common;
 using namespace common::hash;
 
 ObSimpleSysVariableSchema::ObSimpleSysVariableSchema()
-  : ObSchema(), tenant_id_(common::OB_INVALID_ID), schema_version_(common::OB_INVALID_VERSION),
+  : ObSchema(), schema_version_(common::OB_INVALID_VERSION),
     name_case_mode_(OB_NAME_CASE_INVALID), read_only_(false)
 {
   reset();
 }
 
 ObSimpleSysVariableSchema::ObSimpleSysVariableSchema(ObIAllocator *allocator)
-  : ObSchema(allocator), tenant_id_(common::OB_INVALID_ID), schema_version_(common::OB_INVALID_VERSION),
+  : ObSchema(allocator), schema_version_(common::OB_INVALID_VERSION),
     name_case_mode_(OB_NAME_CASE_INVALID), read_only_(false)
 {
   reset();
 }
 
 ObSimpleSysVariableSchema::ObSimpleSysVariableSchema(const ObSimpleSysVariableSchema &other)
-  : ObSchema(), tenant_id_(common::OB_INVALID_ID), schema_version_(common::OB_INVALID_VERSION)
+  : ObSchema(), schema_version_(common::OB_INVALID_VERSION)
 {
   reset();
   *this = other;
@@ -56,7 +56,7 @@ ObSimpleSysVariableSchema::~ObSimpleSysVariableSchema()
 void ObSimpleSysVariableSchema::reset()
 {
   ObSchema::reset();
-  tenant_id_ = OB_INVALID_ID;
+  
   schema_version_ = OB_INVALID_VERSION;
   name_case_mode_ = OB_NAME_CASE_INVALID;
   read_only_ = false;
@@ -65,8 +65,7 @@ void ObSimpleSysVariableSchema::reset()
 bool ObSimpleSysVariableSchema::is_valid() const
 {
   bool ret = true;
-  if (OB_INVALID_ID == tenant_id_ ||
-      schema_version_ < 0 ||
+  if (schema_version_ < 0 ||
       OB_NAME_CASE_INVALID == name_case_mode_) {
     ret = false;
   }
@@ -85,7 +84,7 @@ ObSimpleSysVariableSchema &ObSimpleSysVariableSchema::operator =(const ObSimpleS
   if (this != &other) {
     reset();
     error_ret_ = other.error_ret_;
-    tenant_id_ = other.tenant_id_;
+    
     schema_version_ = other.schema_version_;
     name_case_mode_ = other.name_case_mode_;
     read_only_ = other.read_only_;
@@ -107,7 +106,7 @@ ObSysVariableMgr::ObSysVariableMgr(common::ObIAllocator &allocator) :
     local_allocator_(SET_USE_500(ObModIds::OB_SCHEMA_GETTER_GUARD, ObCtxIds::SCHEMA_SERVICE)),
     allocator_(allocator),
     sys_variable_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_SYS_VARIABLE, ObCtxIds::SCHEMA_SERVICE)),
-    sys_variable_map_(SET_USE_500(ObMemAttr(OB_SERVER_TENANT_ID, ObModIds::OB_SCHEMA_SYS_VARIABLE, ObCtxIds::SCHEMA_SERVICE)))
+    sys_variable_map_(SET_USE_500(ObMemAttr(ObModIds::OB_SCHEMA_SYS_VARIABLE, ObCtxIds::SCHEMA_SERVICE)))
 {
 }
 
@@ -180,7 +179,6 @@ int ObSysVariableMgr::deep_copy(const ObSysVariableMgr &other)
 }
 
 int ObSysVariableMgr::get_sys_variable_schema(
-    const uint64_t tenant_id,
     const ObSimpleSysVariableSchema *&sys_variable_schema) const
 {
   int ret = OB_SUCCESS;
@@ -188,16 +186,13 @@ int ObSysVariableMgr::get_sys_variable_schema(
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
   } else {
     ObSimpleSysVariableSchema *tmp_schema = NULL;
-    ObSysVariableHashWrapper hash_wrap(tenant_id);
+    ObSysVariableHashWrapper hash_wrap;
     if (OB_FAIL(sys_variable_map_.get_refactored(hash_wrap, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_DEBUG("sys_variable is not exist", K(tenant_id));
+        LOG_DEBUG("sys_variable is not exist");
       }
     } else {
       sys_variable_schema = tmp_schema;
@@ -233,7 +228,7 @@ int ObSysVariableMgr::add_sys_variable(const ObSimpleSysVariableSchema &sys_vari
                                         replaced_sys_variable))) {
       LOG_WARN("failed to add sys_variable schema", K(ret));
   } else {
-    ObSysVariableHashWrapper hash_wrapper(new_sys_variable_schema->get_tenant_id());
+    ObSysVariableHashWrapper hash_wrapper;
     if (OB_FAIL(sys_variable_map_.set_refactored(hash_wrapper, new_sys_variable_schema, overwrite))) {
       LOG_WARN("build sys_variable hash map failed", K(ret));
     }
@@ -249,7 +244,7 @@ int ObSysVariableMgr::add_sys_variable(const ObSimpleSysVariableSchema &sys_vari
   }
   if (OB_SUCC(ret)) { //for debug
     const ObSimpleSysVariableSchema *tmp_schema = NULL;
-    if (OB_FAIL(get_sys_variable_schema(sys_variable_schema.get_tenant_id(), tmp_schema))) {
+    if (OB_FAIL(get_sys_variable_schema( tmp_schema))) {
       LOG_WARN("fail to get sys variable schema", K(ret), K(sys_variable_schema));
     } else if (OB_ISNULL(tmp_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -272,7 +267,7 @@ int ObSysVariableMgr::rebuild_sys_variable_hashmap(const SysVariableInfos &sys_v
       LOG_WARN("sys_variable schema is NULL", K(sys_variable_schema), K(ret));
     } else {
       bool overwrite = true;
-      ObSysVariableHashWrapper hash_wrapper(sys_variable_schema->get_tenant_id());
+      ObSysVariableHashWrapper hash_wrapper;
       if (OB_FAIL(sys_variable_map.set_refactored(hash_wrapper, sys_variable_schema, overwrite))) {
         LOG_WARN("build sys_variable hash map failed", K(ret));
       }
@@ -292,34 +287,29 @@ int ObSysVariableMgr::add_sys_variables(const common::ObIArray<ObSimpleSysVariab
   return ret;
 }
 
-int ObSysVariableMgr::del_sys_variable(const uint64_t tenant_id)
+int ObSysVariableMgr::del_sys_variable()
 {
   int ret = OB_SUCCESS;
   int hash_ret = OB_SUCCESS;
   ObSimpleSysVariableSchema *schema_to_del = NULL;
   const ObSimpleSysVariableSchema *tmp_schema = NULL;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else if (OB_FAIL(get_sys_variable_schema(tenant_id, tmp_schema))) {
-    LOG_WARN("fail to get sys variable schema", K(ret), K(tenant_id));
+  if (OB_FAIL(get_sys_variable_schema( tmp_schema))) {
+    LOG_WARN("fail to get sys variable schema", K(ret));
   } else if (OB_ISNULL(tmp_schema)) {
     // sys variable schema is null, no need to del
-  } else if (OB_FAIL(sys_variable_infos_.remove_if(tenant_id,
-                                          compare_with_tenant_id,
-                                          equal_to_tenant_id,
-                                          schema_to_del))) {
-    LOG_WARN("failed to remove sys_variable schema, ", K(tenant_id), K(ret));
+  } else if (FALSE_IT(schema_to_del = sys_variable_infos_.begin() == sys_variable_infos_.end() ? NULL : *sys_variable_infos_.begin())) {
+  } else if (OB_NOT_NULL(schema_to_del) && OB_FAIL(sys_variable_infos_.remove(sys_variable_infos_.begin()))) {
+    LOG_WARN("failed to remove sys_variable schema, ", K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("removed sys_variable schema return NULL, ", K(tenant_id), K(ret));
+    LOG_WARN("removed sys_variable schema return NULL, ", K(ret));
   } else {
-    ObSysVariableHashWrapper sys_variable_wrapper(schema_to_del->get_tenant_id());
+    ObSysVariableHashWrapper sys_variable_wrapper;
     hash_ret = sys_variable_map_.erase_refactored(sys_variable_wrapper);
     if (OB_SUCCESS != hash_ret) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed delete sys_variable from sys_variable hashmap, ",
-               K(ret), K(hash_ret), "tenant_id", schema_to_del->get_tenant_id());
+               K(ret), K(hash_ret));
     }
   }
   if (sys_variable_infos_.count() != sys_variable_map_.item_count()) {
@@ -334,22 +324,7 @@ int ObSysVariableMgr::del_sys_variable(const uint64_t tenant_id)
   return ret;
 }
 
-int ObSysVariableMgr::del_schemas_in_tenant(const uint64_t tenant_id)
-{
-  return del_sys_variable(tenant_id);
-}
 
-bool ObSysVariableMgr::compare_with_tenant_id(const ObSimpleSysVariableSchema *lhs,
-                                              const uint64_t &tenant_id)
-{
-  return NULL != lhs ? (lhs->get_tenant_id() < tenant_id) : false;
-}
-
-bool ObSysVariableMgr::equal_to_tenant_id(const ObSimpleSysVariableSchema *lhs,
-                                          const uint64_t &tenant_id)
-{
-  return NULL != lhs ? (lhs->get_tenant_id() == tenant_id) : false;
-}
 
 int ObSysVariableMgr::get_sys_variable_schema_count(int64_t &sys_variable_schema_count) const
 {

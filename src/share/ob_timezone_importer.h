@@ -28,8 +28,8 @@ namespace table
 class ObTimezoneImporter
 {
 public:
-  explicit ObTimezoneImporter(uint64_t tenant_id, sql::ObExecContext& exec_ctx)
-      : tenant_id_(tenant_id), exec_ctx_(exec_ctx), affected_rows_(0)
+  explicit ObTimezoneImporter(sql::ObExecContext& exec_ctx)
+      : exec_ctx_(exec_ctx), affected_rows_(0)
   {}
   virtual ~ObTimezoneImporter() {}
   int exec_op(table::ObModuleDataArg op_arg);
@@ -38,7 +38,6 @@ public:
 private:
   int import_timezone_info(const ObString &file_path);
 
-  uint64_t tenant_id_;
   sql::ObExecContext& exec_ctx_;
   int64_t affected_rows_;
 };

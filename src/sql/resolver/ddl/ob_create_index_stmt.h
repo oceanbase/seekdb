@@ -43,8 +43,7 @@ public:
   void set_comment(const common::ObString &comment);
   void set_storage_cache_policy(const common::ObString &storage_cache_policy);
   void set_index_name(const common::ObString &index_name);
-  uint64_t get_tenant_id() const { return create_index_arg_.tenant_id_; };
-  void set_tenant_id(const uint64_t tenant_id);
+  
   void set_index_dop(int64_t index_dop);
   int64_t get_index_dop();
   inline void set_database_name(const common::ObString &db_name);
@@ -134,10 +133,7 @@ inline void ObCreateIndexStmt::set_name_generated_type(const ObNameGeneratedType
   create_index_arg_.index_schema_.set_name_generated_type(type);
 }
 
-inline void ObCreateIndexStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  create_index_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline const common::ObString &ObCreateIndexStmt::get_table_name() const
 {

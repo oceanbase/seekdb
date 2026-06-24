@@ -62,8 +62,8 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObExpr *arg1 = expr.args_[0];
   ObObjType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_LENGTH);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_LENGTH);
   double res_num = 0;
   ObDatum *gis_unit = NULL;
   if (ob_is_null(type1)) {
@@ -88,7 +88,7 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObGeometry *geo = nullptr;
     const ObSrsItem *srs = NULL;
     omt::ObSrsCacheGuard srs_guard;
-    ObGeoBoostAllocGuard guard(tenant_id);
+    ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
             temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {

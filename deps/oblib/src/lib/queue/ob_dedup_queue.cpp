@@ -158,8 +158,7 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
                        const int64_t task_map_size /*= TASK_MAP_SIZE*/,
                        const int64_t total_mem_limit /*= TOTAL_LIMIT*/,
                        const int64_t hold_mem_limit /*= HOLD_LIMIT*/,
-                       const int64_t page_size /*= ALLOC_PAGE_SIZE*/,
-                       const uint64_t tenant_id /*= OB_SERVER_TENANT_ID*/,
+                       const int64_t page_size /*= OB_SERVER_TENANT_ID*/,
                        const lib::ObLabel &label /*= "DedupQueue"*/)
 {
   int ret = OB_SUCCESS;
@@ -167,10 +166,10 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
     ret = OB_INIT_TWICE;
   } else if (thread_num <= 0 || thread_num > MAX_THREAD_NUM
              || total_mem_limit <= 0 || hold_mem_limit <= 0
-             || page_size <= 0 || OB_INVALID_TENANT_ID == tenant_id) {
+             || page_size <= 0 || false) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(thread_num), K(queue_size),
-               K(total_mem_limit), K(hold_mem_limit), K(page_size), K(tenant_id));
+               K(total_mem_limit), K(hold_mem_limit), K(page_size));
   } else if (OB_FAIL(task_queue_sync_.init(ObWaitEventIds::DEDUP_QUEUE_COND_WAIT))) {
     COMMON_LOG(WARN, "fail to init task queue sync cond, ", K(ret));
   } else if (OB_FAIL(work_thread_sync_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
@@ -181,8 +180,8 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
     work_thread_num_ = thread_num;
     set_thread_count(thread_num);
 
-    if (OB_SUCCESS != (ret = allocator_.init(page_size, label, tenant_id, total_mem_limit))) {
-      COMMON_LOG(WARN, "allocator init fail", K(page_size), K(label), K(tenant_id),
+    if (OB_SUCCESS != (ret = allocator_.init(page_size, label, total_mem_limit))) {
+      COMMON_LOG(WARN, "allocator init fail", K(page_size), K(label),
                 K(total_mem_limit), K(ret));
     } else if (OB_SUCCESS != (ret = task_map_.create(task_map_size, &hash_allocator_,
                                                       &bucket_allocator_))) {

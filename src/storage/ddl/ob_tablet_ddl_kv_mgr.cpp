@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -77,7 +78,7 @@ int ObTabletDDLKvMgr::init(const share::ObLSID &ls_id, const common::ObTabletID 
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletDDLKvMgr is already inited", K(ret));
@@ -128,14 +129,14 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
   ObTabletHandle tablet_handle;
   ObTabletFullDirectLoadMgr *tablet_mgr = nullptr;
   ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   bool is_major_sstable_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys", K(ret), K(MTL_ID()));
+    LOG_WARN("error sys", K(ret));
   } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
           ls_id_,
           tablet_id_,
@@ -154,7 +155,7 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
     LOG_WARN("unexpected err", K(ret), K(ls_id_), K(tablet_id_));
   }
   if (OB_SUCC(ret) && nullptr != tablet_mgr) {
-    if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
       LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
     } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id_,
                                                       tablet_handle,
@@ -774,7 +775,7 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
 {
   int ret = OB_SUCCESS;
   kv_handle.reset();
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr *);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   ObDDLKVHandle tmp_kv_handle;
   ObDDLKV *kv = nullptr;
   ObDDLMemtable *ddl_memtable = nullptr;
@@ -916,7 +917,7 @@ ObDDLIdemKey& ObDDLIdemKey::operator=(const ObDDLIdemKey &other)
 }
 
 ObDDLMacroIdemChecker::ObDDLMacroIdemChecker():
- checksum_map_(), allocator_(ObMemAttr(MTL_ID(), "DDL_IDEM_CHECK"))
+ checksum_map_(), allocator_(ObMemAttr("DDL_IDEM_CHECK"))
 {}
 
 ObDDLMacroIdemChecker::~ObDDLMacroIdemChecker()
@@ -930,7 +931,7 @@ int ObDDLMacroIdemChecker::init()
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("idem chekcer has already been inited", K(ret));
-  } else if (OB_FAIL(checksum_map_.create(997, ObMemAttr(MTL_ID(), "idem_checker")))) {
+  } else if (OB_FAIL(checksum_map_.create(997, ObMemAttr("idem_checker")))) {
     LOG_WARN("failed create macro block checksum map", K(ret), K(lbt()));
   }
   return ret;

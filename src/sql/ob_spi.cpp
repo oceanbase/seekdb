@@ -29,7 +29,6 @@
 #include "share/schema/ob_trigger_info.h"
 #include "sql/engine/expr/ob_expr_obj_access.h"
 #include "pl/ob_pl_exception_handling.h"
-#include "sql/dblink/ob_tm_service.h"
 
 namespace oceanbase
 {
@@ -120,8 +119,7 @@ int ObSPIService::PLPrepareResult::init(sql::ObSQLSessionInfo &session_info)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(session_info.get_effective_tenant_id(),
-                    ObModIds::OB_PL_TEMP,
+  param.set_mem_attr(ObModIds::OB_PL_TEMP,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
@@ -138,8 +136,7 @@ int ObSPIResultSet::init(sql::ObSQLSessionInfo &session_info)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(session_info.get_effective_tenant_id(),
-                    ObModIds::OB_RESULT_SET,
+  param.set_mem_attr(ObModIds::OB_RESULT_SET,
                     ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
@@ -269,7 +266,7 @@ int ObSPIResultSet::is_set_global_var(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   has_global_variable = false;
   has_sys_var = false;
-  ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_SET_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_SET_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ParseResult parse_result;
   ParseMode parse_mode = STD_MODE;
   ObParser parser(allocator, session.get_sql_mode(), session.get_charsets4parser());
@@ -818,7 +815,7 @@ int ObSPIService::spi_convert_objparam(ObPLExecCtx *ctx,
 {
   int ret = OB_SUCCESS;
   const ObPLDataType *expected_type;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   CK (OB_NOT_NULL(ctx));
   CK (OB_NOT_NULL(ctx->func_));
   CK (OB_NOT_NULL(ctx->exec_ctx_));
@@ -1147,10 +1144,9 @@ int ObSPIService::spi_calc_package_expr(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
   OZ (GCTX.schema_service_->get_tenant_schema_guard(
-                            session_info->get_effective_tenant_id(),
                             schema_guard));
   if (OB_SUCC(ret)) {
-    ObPLPackageGuard package_guard(session_info->get_effective_tenant_id());
+    ObPLPackageGuard package_guard{};
     ObSqlExpression *sql_expr = NULL;
     ObPLPackageManager &pl_manager = pl_engine->get_package_manager();
     ObPLPackageGuard &guard = ctx->guard_ != NULL ? (*ctx->guard_) : package_guard;
@@ -1253,7 +1249,7 @@ int ObSPIService::spi_set_package_variable(
     ObObj result = *const_cast<ObObj *>(&value);
     ObPLPackageManager &pl_manager = pl_engine->get_package_manager();
     share::schema::ObSchemaGetterGuard schema_guard;
-    ObPLPackageGuard package_guard(session_info->get_effective_tenant_id());
+    ObPLPackageGuard package_guard{};
     ObPLResolveCtx resolve_ctx(exec_ctx->get_allocator(),
                                *session_info,
                                schema_guard,
@@ -1261,7 +1257,7 @@ int ObSPIService::spi_set_package_variable(
                                *sql_proxy,
                                false); // is_prepare_protocol
     OZ (GCTX.schema_service_->get_tenant_schema_guard(
-        session_info->get_effective_tenant_id(), schema_guard));
+        schema_guard));
     OZ (package_guard.init());
     OZ (pl_manager.set_package_var_val(
           resolve_ctx, *exec_ctx, package_id, var_idx, result),
@@ -1371,7 +1367,7 @@ int ObSPIService::set_variable(ObPLExecCtx *ctx,
     LOG_WARN("Argument passed in is NULL", K(ctx), K(name), K(value), K(ret));
   } else {
     ObSQLSessionInfo *session = ctx->exec_ctx_->get_my_session();
-    ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_SET_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_SET_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE);
     if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Argument in pl context is NULL", K(session), K(ret));
@@ -1671,7 +1667,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
 
           bool can_retry = true;
           int64_t row_count = 0;
-          ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_STATIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+          ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_STATIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE);
           {
             ObPLSPITraceIdGuard trace_id_guard(sql, ps_sql, *session, ret);
             ObPLSubPLSqlTimeGuard guard(ctx);
@@ -1759,7 +1755,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
             || ObStmt::is_tcl_stmt(stmt_type)
             || ObStmt::is_savepoint_stmt(stmt_type)) {
           if (ObStmt::is_ddl_stmt(stmt_type, true)) {
-            OZ (force_refresh_schema(session->get_effective_tenant_id()), sql);
+            OZ (force_refresh_schema(), sql);
           }
           recreate_implicit_savapoint_if_need(ctx, ret);
         }
@@ -1906,7 +1902,7 @@ int ObSPIService::spi_query_into_expr_idx(ObPLExecCtx *ctx,
 {
   int ret = OB_SUCCESS;
 
-  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   const ObSqlExpression **into_exprs = nullptr;
 
   MAKE_EXPR_BUFFER(alloc, into_exprs_idx, into_count, into_exprs);
@@ -1959,7 +1955,7 @@ int ObSPIService::spi_execute_with_expr_idx(ObPLExecCtx *ctx,
 {
   int ret = OB_SUCCESS;
 
-  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   const ObSqlExpression **param_exprs = nullptr;
   const ObSqlExpression **into_exprs = nullptr;
 
@@ -2214,7 +2210,7 @@ int ObSPIService::spi_build_record_type(common::ObIAllocator &allocator,
     if (OB_SUCC(ret) && 1 == hidden_column_count) {
         const common::ObField &field = columns->at(columns->count() - 1);
         uint64_t table_id = OB_INVALID_ID;
-        OZ (schema_guard.get_table_id(session.get_effective_tenant_id(), field.dname_, field.org_tname_,
+        OZ (schema_guard.get_table_id(field.dname_, field.org_tname_,
                                       false, ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES, table_id));
         OX (rowid_table_id = table_id);
     } else {
@@ -2242,7 +2238,7 @@ int ObSPIService::calc_dynamic_sqlstr(
     LOG_WARN("Dynamic sql is not a string", K(ret), K(result), K(sql_str));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Dynamic sql is not a string");
   } else {
-    ObArenaAllocator temp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator temp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString tmp_sql;
     ObString user_sql;
     ObCharsetType client_cs_type = CHARSET_INVALID;
@@ -2663,7 +2659,7 @@ int ObSPIService::spi_execute_immediate(ObPLExecCtx *ctx,
   const ObSqlExpression *sql = nullptr;
   const ObSqlExpression **into_exprs = nullptr;
 
-  ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   stmt::StmtType stmt_type = stmt::T_NONE;
   ObString ps_sql;
@@ -2995,9 +2991,8 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
   OZ (GCTX.schema_service_->get_tenant_schema_guard(
-                            session_info->get_effective_tenant_id(),
                             schema_guard));
-  ObPLPackageGuard package_guard(session_info->get_effective_tenant_id());
+  ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
   if (OB_SUCC(ret)) {
     ObObj value;
@@ -3145,7 +3140,7 @@ int ObSPIService::spi_dynamic_open(ObPLExecCtx *ctx,
   int ret = OB_SUCCESS;
   ObSqlString sql_str;
   stmt::StmtType stmt_type = stmt::T_NONE;
-  ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObString ps_sql;
   bool for_update = false;
   bool hidden_rowid = false;
@@ -3172,7 +3167,7 @@ int ObSPIService::spi_dynamic_open(ObPLExecCtx *ctx,
   
   if (OB_SUCC(ret)) {
     const ObSqlExpression **sql_param_exprs = nullptr;
-    ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE);
     
     MAKE_EXPR_BUFFER(alloc, sql_param_exprs_idx, sql_param_count, sql_param_exprs);
 
@@ -3299,7 +3294,7 @@ int ObSPIService::spi_cursor_open_with_param_idx(ObPLExecCtx *ctx,
 
   const ObSqlExpression **sql_param_exprs = nullptr;
   const ObSqlExpression **actual_param_exprs = nullptr;
-  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   MAKE_EXPR_BUFFER(alloc, sql_param_idx, sql_param_count, sql_param_exprs);
   MAKE_EXPR_BUFFER(alloc, actual_param_idx, cursor_param_count,
@@ -3501,7 +3496,6 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
                          is_dbms_cursor /*is_dbms_sql*/));
           OZ (session_info.get_tmp_table_size(size));
           OZ (cursor.prepare_spi_cursor(spi_cursor,
-                                        session_info.get_effective_tenant_id(),
                                         size,
                                         (for_update && !is_server_cursor && !is_dbms_cursor),
                                         &session_info), K(size));
@@ -3939,7 +3933,7 @@ int ObSPIService::spi_cursor_fetch(ObPLExecCtx *ctx,
   ObPLCursorInfo *cursor = NULL;
   ObObjParam cur_var;
   ObCusorDeclareLoc loc;
-  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator alloc("SpiTemp", OB_MALLOC_NORMAL_BLOCK_SIZE);
   const ObSqlExpression **into_exprs = nullptr;
   MAKE_EXPR_BUFFER(alloc, into_exprs_idx, into_count, into_exprs);
   OZ (spi_get_cursor_info(ctx, package_id, routine_id, cursor_index, cursor, cur_var, loc));
@@ -4247,8 +4241,7 @@ int ObSPIService::spi_construct_collection(
       ObPLCollection* coll = NULL;
       CK (OB_NOT_NULL(ptr = reinterpret_cast<void *>(result->get_ext())));
       CK (OB_NOT_NULL(coll = reinterpret_cast<ObPLCollection *>(ptr)));
-      OZ (spi_set_collection(ctx->exec_ctx_->get_my_session()->get_effective_tenant_id(),
-                             ctx,
+      OZ (spi_set_collection(ctx,
                              *coll,
                              0,
                              false));
@@ -4464,14 +4457,13 @@ int ObSPIService::spi_sub_nestedtable(ObPLExecCtx *ctx,
 }
 
 
-int ObSPIService::spi_set_collection(int64_t tenant_id,
-                                       const ObPLINS *ns,
+int ObSPIService::spi_set_collection(const ObPLINS *ns,
                                        ObPLCollection &coll,
                                        int64_t n,
                                        bool extend_mode)
 {
   int ret = OB_SUCCESS;
-  UNUSEDx(tenant_id, ns, coll, n, extend_mode);
+  UNUSEDx(ns, coll, n, extend_mode);
   return ret;
 }
 
@@ -4515,7 +4507,7 @@ int ObSPIService::spi_reset_composite(ObPLComposite *composite,
       * */
       ObPLCollection *coll = static_cast<ObPLCollection *>(composite);
       if (OB_NOT_NULL(coll->get_allocator())) {
-        OZ (spi_set_collection(MTL_ID(), NULL, *coll, 0, false));
+        OZ (spi_set_collection(NULL, *coll, 0, false));
         OX (coll->set_count(OB_INVALID_COUNT));
       } else {
         CK (coll->get_count() == 0 || coll->get_count() == OB_INVALID_COUNT);
@@ -4543,9 +4535,8 @@ int ObSPIService::spi_get_package_allocator(
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
   OZ (GCTX.schema_service_->get_tenant_schema_guard(
-                            session_info->get_effective_tenant_id(),
                             schema_guard));
-  ObPLPackageGuard package_guard(session_info->get_effective_tenant_id());
+  ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
   OX (allocator = NULL);
   if (OB_SUCC(ret)) {
@@ -4641,7 +4632,7 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
   const ObUserDefinedType *pl_user_type = NULL;
   bool use_original_type = false;
   uint64_t compat_version = 0;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   CK (OB_NOT_NULL(param));
   CK (OB_NOT_NULL(ctx));
   CK (OB_NOT_NULL(session = ctx->exec_ctx_->get_my_session()));
@@ -4694,7 +4685,7 @@ int ObSPIService::spi_copy_datum(ObPLExecCtx *ctx,
   ObIAllocator *copy_allocator = NULL;
   ObObjParam result;
   ObObjParam src_tmp;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   CK (OB_NOT_NULL(src));
   CK (OB_NOT_NULL(dest));
   if (OB_SUCC(ret)) {
@@ -4978,7 +4969,7 @@ int ObSPIService::construct_exec_params(ObPLExecCtx *ctx,
 {
   int ret = OB_SUCCESS;
   ObObjParam result;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   CK (OB_NOT_NULL(ctx));
   for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
     const ObSqlExpression *expr = static_cast<const ObSqlExpression*>(param_exprs[i]);
@@ -5669,7 +5660,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                              bool is_type_record)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_BULK_INTO), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_BULK_INTO), OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObIAllocator *allocator = ctx->allocator_;
   ObExecContext *exec_ctx = ctx->exec_ctx_;
   ObPLCursorInfo *implicit_cursor = NULL;
@@ -5718,8 +5709,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                   || (NULL != implicit_cursor && !implicit_cursor->get_in_forall())
                   || (NULL != implicit_cursor && 0 == implicit_cursor->get_bulk_rowcount_count()))) {
             //FORALL's BULK is append mode, only needed spi_reset_collection in non-append mode or the first time in append mode
-            OZ (spi_set_collection(ctx->exec_ctx_->get_my_session()->get_effective_tenant_id(),
-                                     ctx, *table, 0));
+            OZ (spi_set_collection(ctx, *table, 0));
           }
         }
       }
@@ -5820,7 +5810,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
       }
       // Step4: Get the result and store it in the variable
       ObSEArray<std::pair<uint64_t, uint64_t>, OB_DEFAULT_SE_ARRAY_COUNT> package_vars_info;
-      lib::ObMemAttr attr(MTL_ID());
+      lib::ObMemAttr attr{};
       OX (package_vars_info.set_attr(attr));
       if (OB_SUCC(ret) && !is_bulk) { // [FETCH] INTO x, y, z OR [FETCH] INTO record
         /*
@@ -5969,8 +5959,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                 || (NULL != implicit_cursor && !implicit_cursor->get_in_forall())
                 || (NULL != implicit_cursor && 0 == implicit_cursor->get_bulk_rowcount_count()))) {
             //FORALL's BULK is append mode, only spi_reset_collection is needed in non-append mode or the first time in append mode
-            OZ (spi_set_collection(ctx->exec_ctx_->get_my_session()->get_effective_tenant_id(),
-                                     ctx, *table, 0));
+            OZ (spi_set_collection(ctx, *table, 0));
           }
           OZ (get_package_var_info_by_expr(result_expr, package_var_info.first, package_var_info.second));
           if (OB_INVALID_ID != package_var_info.first && OB_INVALID_ID != package_var_info.second) {
@@ -6396,7 +6385,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
                                bool is_type_record)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
   bool need_convert_type = true;
   ObSEArray<ObObj, OB_DEFAULT_SE_ARRAY_COUNT> tmp_obj_array;
   ObSEArray<ObObj, OB_DEFAULT_SE_ARRAY_COUNT> tmp_obj_array1;
@@ -7198,7 +7187,7 @@ bool ObSPIService::is_get_package_or_subprogram_var_expression(const ObSqlExpres
   return T_OP_GET_PACKAGE_VAR == get_expression_type(expr) || T_OP_GET_SUBPROGRAM_VAR == get_expression_type(expr);
 }
 
-int ObSPIService::force_refresh_schema(uint64_t tenant_id, int64_t refresh_version)
+int ObSPIService::force_refresh_schema(int64_t refresh_version)
 {
   int ret = OB_SUCCESS;
   int64_t local_version = OB_INVALID_VERSION;
@@ -7207,19 +7196,19 @@ int ObSPIService::force_refresh_schema(uint64_t tenant_id, int64_t refresh_versi
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is NULL", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(
-                     tenant_id, local_version))) {
-    LOG_WARN("fail to get local version", K(ret), K(tenant_id));
+                     local_version))) {
+    LOG_WARN("fail to get local version", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
-                     tenant_id, global_version))) {
-    LOG_WARN("fail to get global version", K(ret), K(tenant_id));
+                     global_version))) {
+    LOG_WARN("fail to get global version", K(ret));
   }
   if (OB_SUCC(ret)) {
     int64_t need_refresh_version = OB_INVALID_VERSION == refresh_version ? global_version : refresh_version;
     if (local_version >= need_refresh_version) {
       // do nothing
-    } else if (OB_FAIL(GCTX.schema_service_->async_refresh_schema(tenant_id, need_refresh_version))) {
+    } else if (OB_FAIL(GCTX.schema_service_->async_refresh_schema(need_refresh_version))) {
       LOG_WARN("failed to refresh schema",
-              K(ret), K(tenant_id), K(local_version), K(global_version), K(refresh_version));
+              K(ret), K(local_version), K(global_version), K(refresh_version));
     }
   }
   return ret;
@@ -7401,7 +7390,7 @@ int ObSPIService::resolve_ref_objects(const ParseResult &parse_result,
         const ObTableSchema *table_schema = NULL;
         if (OB_FAIL(ObStmtResolver::resolve_ref_factor(current_obj->node_, &session, rel_name, db_name))) {
           LOG_WARN("failed to resolve ref factor", K(ret));
-        } else if (OB_FAIL(schema_guard.get_table_schema(session.get_effective_tenant_id(),
+        } else if (OB_FAIL(schema_guard.get_table_schema(
                                                          db_name,
                                                          rel_name,
                                                          false,
@@ -7465,7 +7454,6 @@ int ObSPIService::resolve_ref_objects(const ParseResult &parse_result,
               if (OB_FAIL(schema_checker.init(schema_guard, session.get_server_sid()))) {
                 LOG_WARN("fail to init schema checker", K(ret));
               } else if (OB_FAIL(schema_checker.get_standalone_function_info(
-                                                  session.get_effective_tenant_id(),
                                                   udf_info.udf_database_,
                                                   udf_info.udf_name_,
                                                   func_info))) {
@@ -7724,7 +7712,7 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
 {
   int64_t tenant_version = 0;
   int64_t sys_version = 0;
-  uint64_t eff_tenant_id = session_info_.get_effective_tenant_id();
+  
   if (!for_fetch) {
     spi_result_.get_out_params().reset();
     spi_result_.reset_member_for_retry(session_info_);
@@ -7733,11 +7721,11 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
   if (THIS_WORKER.is_timeout()) {
     ret = OB_TIMEOUT;
     LOG_WARN("already timeout!", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(eff_tenant_id, spi_result_.get_scheme_guard()))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(spi_result_.get_scheme_guard()))) {
     LOG_WARN("get schema guard failed", K(ret));
-  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(eff_tenant_id, tenant_version))) {
+  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(tenant_version))) {
     LOG_WARN("fail get schema version", K(ret));
-  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(OB_SYS_TENANT_ID, sys_version))) {
+  } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(sys_version))) {
     LOG_WARN("fail get sys schema version", K(ret));
   } else {
     retry_ctrl_.set_tenant_local_schema_version(tenant_version);

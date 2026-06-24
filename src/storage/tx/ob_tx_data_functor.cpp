@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_data_functor.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "observer/virtual_table/ob_all_virtual_tx_data.h"
 
@@ -449,7 +450,7 @@ int LockForReadFunctor::check_clog_disk_full_()
 int LockForReadFunctor::check_for_standby(const transaction::ObTransID &tx_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_SUCC(MTL(transaction::ObTransService *)->check_for_standby(ls_id_,
+  if (OB_SUCC(share::g_mp->trans_service()->check_for_standby(ls_id_,
                                                                     tx_id,
                                                                     lock_for_read_arg_.mvcc_acc_ctx_.snapshot_.version_,
                                                                     can_read_,

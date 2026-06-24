@@ -30,7 +30,6 @@ class ObCreateDatabaseStmt : public ObDDLStmt
     explicit ObCreateDatabaseStmt(common::ObIAllocator *name_pool);
     virtual ~ObCreateDatabaseStmt();
     void set_if_not_exists(bool if_not_exists);
-    void set_tenant_id(const uint64_t tenant_id);
     void set_database_id(const uint64_t database_id);
     int set_database_name(const common::ObString &database_name);
     void set_collation_type(const common::ObCollationType type);

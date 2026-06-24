@@ -64,7 +64,6 @@ int ObHybridSearchExecutor::init(sql::ObExecContext *ctx, const ObHybridSearchAr
   } else {
     ctx_ = ctx;
     session_info_ = ctx_->get_my_session();
-    tenant_id_ = session_info_->get_effective_tenant_id();
   }
   return ret;
 }
@@ -80,8 +79,8 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   } else {
     common::ObMySQLProxy* sql_proxy = ctx_->get_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-      if (OB_FAIL(sql_proxy->read(result, tenant_id_, query_sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(query_sql), K(tenant_id_));
+      if (OB_FAIL(sql_proxy->read(result, query_sql.ptr()))) {
+        LOG_WARN("execute query failed", K(ret), K(query_sql));
       } else if (OB_NOT_NULL(result.get_result())) {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           ObObj tmp_res;
@@ -96,11 +95,11 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
             LOG_WARN("deep copy query result failed", K(ret));
           }
         } else if (OB_ITER_END == ret) {
-          LOG_INFO("no result return!", K(ret), K(tenant_id_));
+          LOG_INFO("no result return!", K(ret));
           query_res.set_null();
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to get next", K(ret), K(tenant_id_));
+          LOG_WARN("failed to get next", K(ret));
         }
       }
     }
@@ -208,7 +207,7 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
   if (OB_ISNULL(schema_guard = ctx_->get_virtual_table_ctx().schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard is null", KR(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id_, database_name, table_name,
+  } else if (OB_FAIL(schema_guard->get_table_schema( database_name, table_name,
                   false, data_table_schema))) {
     LOG_WARN("failed to get table id", K(ret), K(database_name), K(table_name));
   } else if (data_table_schema == NULL) {
@@ -227,8 +226,8 @@ int ObHybridSearchExecutor::construct_column_index_info(ObIAllocator &alloc, ObE
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id_, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id_), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));

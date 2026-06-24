@@ -77,7 +77,7 @@ int ObCGRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
       LOG_WARN("fail to initialize vectors", K(ret), K(column_schema_its));
     } else if (OB_FAIL(store_.init(bdrs_.vectors_,
                                    max_batch_size,
-                                   ObMemAttr(MTL_ID(), "CGRowFileStore"),
+                                   ObMemAttr("CGRowFileStore"),
                                    memory_limit,
                                    true/*enable_dump*/,
                                    compressor_type))) {
@@ -91,7 +91,7 @@ int ObCGRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
       cg_idx_ = cg_idx;
       column_count_ = cg_schema.get_column_count();
       store_.set_dir_id(dir_id);
-      store_.get_inner_allocator().set_tenant_id(MTL_ID());
+      
       brs_.skip_ = to_bit_vector(skip_mem);
       brs_.skip_->reset(max_batch_size);
       brs_.size_ = 0;
@@ -296,8 +296,8 @@ int ObCGRowFilesGenerater::init(
         cg_row_file_arr_.at(cg_idx) = nullptr;
       }
       if (is_generation_sync_output) {
-        cg_row_file_arr_for_output_ = OB_NEW(ObArray<ObCGRowFile *>, ObMemAttr(MTL_ID(), "CGRFArrOutput"));
-        sync_chunk_data_ = OB_NEW(ObChunk, ObMemAttr(MTL_ID(), "ChunkDataOutput"));
+        cg_row_file_arr_for_output_ = OB_NEW(ObArray<ObCGRowFile *>, ObMemAttr("CGRFArrOutput"));
+        sync_chunk_data_ = OB_NEW(ObChunk, ObMemAttr("ChunkDataOutput"));
         if (OB_UNLIKELY(nullptr == cg_row_file_arr_for_output_ || nullptr == sync_chunk_data_)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocate cg row file arr for output",
@@ -348,7 +348,7 @@ int ObCGRowFilesGenerater::append_batch(
       } else {
         cg_row_file = cg_row_file_arr_.at(cg_idx);
         if (nullptr == cg_row_file) {
-          cg_row_file = OB_NEW(ObCGRowFile, ObMemAttr(MTL_ID(), "CGRowFile"));
+          cg_row_file = OB_NEW(ObCGRowFile, ObMemAttr("CGRowFile"));
           if (OB_UNLIKELY(nullptr == cg_row_file)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to allocate cg row file obj", K(ret));
@@ -434,8 +434,8 @@ int ObCGRowFilesGenerater::try_generate_output_chunk(
           }
         } else {
           if (nullptr == chunk_data || nullptr == cg_row_files_ptr) {
-            chunk_data = OB_NEW(ObChunk, ObMemAttr(MTL_ID(), "CGRFG_Chunk"));
-            cg_row_files_ptr = OB_NEW(ObArray<ObCGRowFile *>, ObMemAttr(MTL_ID(), "CGRFG_CGRFiles"));
+            chunk_data = OB_NEW(ObChunk, ObMemAttr("CGRFG_Chunk"));
+            cg_row_files_ptr = OB_NEW(ObArray<ObCGRowFile *>, ObMemAttr("CGRFG_CGRFiles"));
             if (OB_UNLIKELY(nullptr == chunk_data || nullptr == cg_row_files_ptr)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to allocate memory", K(ret), KP(chunk_data), KP(cg_row_files_ptr));

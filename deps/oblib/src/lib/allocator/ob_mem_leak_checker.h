@@ -80,7 +80,7 @@ public:
       typedef hash::ObHashMap<Info, std::pair<int64_t, int64_t>> hashmap;
       int create(int64_t bucket_num)
       {
-        ObMemAttr attr(common::OB_SERVER_TENANT_ID, MOD_INFO_MAP_STR, ObCtxIds::DEFAULT_CTX_ID);
+        ObMemAttr attr(MOD_INFO_MAP_STR, ObCtxIds::DEFAULT_CTX_ID);
         return map_.create(bucket_num, attr, attr);
       }
       
@@ -99,7 +99,7 @@ public:
     origin_str_[0] = '\0';
     ct_ = NOCHECK;
     len_ = 0;
-    tenant_id_ = UINT64_MAX;
+    
   }
   static ObMemLeakChecker &get_instance()
   {
@@ -108,7 +108,7 @@ public:
   }
   int init()
   {
-    ObMemAttr attr(common::OB_SERVER_TENANT_ID, "leakMap", ObCtxIds::DEFAULT_CTX_ID);
+    ObMemAttr attr("leakMap", ObCtxIds::DEFAULT_CTX_ID);
     int ret = malloc_info_.create(512, attr, attr);
     if (OB_FAIL(ret)) {
       _OB_LOG(ERROR, "failed to create hashmap, err=%d", ret);
@@ -144,12 +144,9 @@ public:
       tmp_ct = LABEL_CHECK;
       char *end = (char*)memchr(cpy, '@', strlen(cpy));
       if (end != nullptr) {
-        uint64_t tenant_id = 0;
-        sscanf(end + 1, "%ld", &tenant_id);
-        tenant_id_ = tenant_id;
         *end = '\0';
       } else {
-        tenant_id_ = UINT64_MAX;
+        
       }
       STRNCPY(label_, cpy, sizeof(label_));
       label_[sizeof(label_) - 1] = '\0';
@@ -176,7 +173,7 @@ public:
   {
     if (is_label_check() &&
         label_match(obj) &&
-        (tenant_id_ == UINT64_MAX || tenant_id_ == attr.tenant_id_) &&
+        true &&
         (OB_SUCCESS == rl_.try_acquire()) &&
         malloc_info_.size() < MAP_SIZE_LIMIT) {
       Info info;
@@ -290,7 +287,7 @@ private:
 private:
   TCharArray origin_str_;
   char label_[lib::AOBJECT_LABEL_SIZE + 1];
-  uint64_t tenant_id_;
+  
   CheckType ct_;
   int len_;
   mod_alloc_info_t malloc_info_;

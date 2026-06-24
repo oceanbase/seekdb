@@ -111,8 +111,8 @@ public:
       : indegree_(0),
         lock_(common::ObLatchIds::WORK_DAG_LOCK)
   {
-    parent_.set_attr(ObMemAttr(MTL_ID(), "INodeParent"));
-    children_.set_attr(ObMemAttr(MTL_ID(), "INodeChild"));
+    parent_.set_attr(ObMemAttr("INodeParent"));
+    children_.set_attr(ObMemAttr("INodeChild"));
   }
   virtual ~ObINodeWithChild() { reset(); }
 
@@ -859,14 +859,14 @@ struct ObDagInfo
 public:
   ObDagInfo();
   ~ObDagInfo() {}
-  TO_STRING_KV(K_(tenant_id), K_(dag_type), K_(dag_net_type), K_(dag_key), K_(dag_net_key), K_(dag_id),
+  TO_STRING_KV(K_(dag_type), K_(dag_net_type), K_(dag_key), K_(dag_net_key), K_(dag_id),
       "dag_status", ObIDag::get_dag_status_str(dag_status_),
       K_(running_task_cnt), K_(add_time), K_(start_time), K_(indegree), K_(comment));
   ObDagInfo & operator = (const ObDagInfo &other);
   bool is_valid() const;
 
 public:
-  int64_t tenant_id_;
+  
   ObDagType::ObDagTypeEnum dag_type_;
   ObDagNetType::ObDagNetTypeEnum dag_net_type_;
   char dag_key_[common::OB_DAG_KEY_LENGTH];
@@ -900,7 +900,7 @@ public:
   TO_STRING_KV(K_(value_type), K_(key), K_(value));
   ObDagSchedulerInfo & operator = (const ObDagSchedulerInfo &other);
 public:
-  int64_t tenant_id_;
+  
   ObValueType value_type_;
   char key_[common::OB_DAG_KEY_LENGTH];
   int64_t value_;
@@ -983,7 +983,6 @@ public:
   ~ObDagNetScheduler() { destroy(); }
   void destroy();
   int init(
-      const uint64_t tenant_id,
       const int64_t dag_limit, 
       ObIAllocator &allocator,
       ObIAllocator &ha_allocator,
@@ -1094,7 +1093,6 @@ public:
   void destroy();
   void destroy_workers();
   int init(
-      const uint64_t tenant_id,
       const int64_t dag_limit,
       const int64_t priority,
       ObIAllocator &allocator,
@@ -1304,8 +1302,7 @@ public:
   void stop();
   void wait();
   void reload_config();
-  int init(const uint64_t tenant_id,
-           const int64_t check_period = DEFAULT_CHECK_PERIOD,
+  int init(const int64_t check_period = DEFAULT_CHECK_PERIOD,
            const int64_t loop_waiting_list_period = LOOP_WAITING_DAG_LIST_INTERVAL,
            const int64_t dag_limit = DEFAULT_MAX_DAG_NUM);
   int add_dag(ObIDag *dag, const bool emergency = false, const bool check_size_overflow = true);
@@ -1469,7 +1466,7 @@ private:
       common::ObIArray<void *> &scheduler_infos,
       int64_t &idx);
   common::ObIAllocator &get_allocator(const bool is_ha);
-  int init_allocator(const uint64_t tenant_id, const lib::ObLabel &label, lib::MemoryContext &mem_context);
+  int init_allocator(const lib::ObLabel &label, lib::MemoryContext &mem_context);
 
 private:
   bool is_inited_;

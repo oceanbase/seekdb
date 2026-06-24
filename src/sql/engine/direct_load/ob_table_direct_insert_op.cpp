@@ -48,7 +48,7 @@ ObTableDirectInsertOp::ObTableDirectInsertOp(
     ObOpInput *input)
   : ObTableModifyOp(exec_ctx, spec, input),
     ins_rtdef_(),
-    allocator_("DirectInsertOp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_("DirectInsertOp", OB_MALLOC_NORMAL_BLOCK_SIZE),
     px_task_id_(0),
     ddl_task_id_(0),
     table_ctx_(nullptr),

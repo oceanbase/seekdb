@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_lob_access_utils.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
@@ -119,7 +120,7 @@ static int init_lob_access_param(storage::ObLobAccessParam &param,
 {
   int ret = OB_SUCCESS;
   int64_t timeout_ts = 0;
-  storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+  storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
 
   if (OB_ISNULL(lob_iter_ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -162,7 +163,7 @@ static int init_lob_access_param(storage::ObLobAccessParam &param,
 int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr*/ )
 {
   int ret = OB_SUCCESS;
-  storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+  storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
 
   if (!has_lob_header_ || !is_outrow_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->alloc_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -240,7 +241,7 @@ int ObTextStringIter::get_delta_lob_full_data(ObLobLocatorV2& lob_locator, ObIAl
     } else if (OB_FAIL(partial_data.deserialize(buf, data_len, pos))) {
       COMMON_LOG(WARN, "deserialize partial data fail", K(ret), K(data_len), K(pos));
     } else {
-      storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+      storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
       storage::ObLobAccessParam param;
       ctx_->locator_ = partial_data.locator_;
       if (OB_FAIL(init_lob_access_param(param, ctx_, cs_type_, allocator))) {
@@ -292,7 +293,7 @@ int ObTextStringIter::get_delta_lob_full_data(ObLobLocatorV2& lob_locator, ObIAl
 int ObTextStringIter::get_outrow_prefix_data(uint32_t prefix_char_len)
 {
   int ret = OB_SUCCESS;
-  storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+  storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
 
   if (!has_lob_header_ || !is_outrow_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->alloc_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -425,7 +426,7 @@ int ObTextStringIter::get_inrow_or_outrow_prefix_data(ObString &data_str, uint32
 int ObTextStringIter::get_first_block(ObString &str)
 {
   int ret = OB_SUCCESS;
-  storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+  storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
 
   if (!is_outrow_ || OB_ISNULL(ctx_) || !has_lob_header_) {
     ret = OB_INVALID_ARGUMENT;
@@ -828,7 +829,7 @@ int ObTextStringIter::get_char_len(int64_t &char_length)
     char_length = ObCharset::strlen_char(cs_type_, data_str.ptr(), static_cast<int64_t>(data_str.length()));
   } else { // outrow lob
     ObString disk_loc_str;
-    storage::ObLobManager* lob_mngr = MTL(storage::ObLobManager*);
+    storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
     if (OB_ISNULL(ctx_)) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow_), KP(ctx_->session_), KP(ctx_));

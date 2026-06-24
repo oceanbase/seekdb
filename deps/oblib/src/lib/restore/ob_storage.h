@@ -587,7 +587,7 @@ public:
   bool is_opened() const { return is_opened_; }
 
   virtual int buf_append_part(
-      const char *buf, const int64_t size, const uint64_t tenant_id, bool &is_full);
+      const char *buf, const int64_t size, bool &is_full);
   virtual int get_part_id(bool &is_exist, int64_t &part_id);
   virtual int get_part_size(const int64_t part_id, int64_t &part_size) const;
 
@@ -614,7 +614,7 @@ public:
   virtual int open(const ObString &uri, ObObjectStorageInfo *storage_info) override;
   virtual int upload_part(const char *buf, const int64_t size, const int64_t part_id) override;
   virtual int buf_append_part(
-      const char *buf, const int64_t size, const uint64_t tenant_id, bool &is_full) override;
+      const char *buf, const int64_t size, bool &is_full) override;
   virtual int get_part_id(bool &is_exist, int64_t &part_id) override;
   virtual int get_part_size(const int64_t part_id, int64_t &part_size) const override;
 
@@ -629,7 +629,7 @@ public:
   };
 
 private:
-  int append_buf_(const char *buf, const int64_t size, const uint64_t tenant_id);
+  int append_buf_(const char *buf, const int64_t size);
   int save_buf_to_map_();
   static void free_part_data_(PartData &part_data);
 

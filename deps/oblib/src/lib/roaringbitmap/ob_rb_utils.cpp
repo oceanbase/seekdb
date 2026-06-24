@@ -927,8 +927,8 @@ int ObRbUtils::str_read_value_(const char *str, size_t len,  char *&value_end, u
   return ret;
 }
 
-ObRbAggCell::ObRbAggCell(ObRoaringBitmap *rb, const uint64_t tenant_id):
-    allocator_("RbAggCell", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id),
+ObRbAggCell::ObRbAggCell(ObRoaringBitmap *rb):
+    allocator_("RbAggCell", OB_MALLOC_NORMAL_BLOCK_SIZE),
     rb_(rb),
     max_cache_count_(0),
     cached_value_(),
@@ -937,7 +937,7 @@ ObRbAggCell::ObRbAggCell(ObRoaringBitmap *rb, const uint64_t tenant_id):
     is_new_(true)
 {
   max_cache_count_ = MAX_CACHED_COUNT;
-  cached_value_.set_attr(lib::ObMemAttr(tenant_id, "RbAggArray"));
+  cached_value_.set_attr(lib::ObMemAttr("RbAggArray"));
 }
 
 int ObRbAggCell::destroy()
@@ -1150,7 +1150,7 @@ int ObRbAggCell::serialize()
 int ObRbAggAllocator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(alloced_rb_.create(10, lib::ObMemAttr(tenant_id_, "RbAggAlloc")))) {
+  if (OB_FAIL(alloced_rb_.create(10, lib::ObMemAttr("RbAggAlloc")))) {
     LOG_WARN("failed to create set", K(ret));
   } else {
     is_inited_ = true;
@@ -1194,7 +1194,7 @@ ObRbAggCell *ObRbAggAllocator::alloc()
   } else if (OB_ISNULL(rb = OB_NEWx(ObRoaringBitmap, &rb_allocator_, &rb_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate rb memory failed", K(ret), "size", sizeof(ObRoaringBitmap));
-  } else if (OB_ISNULL(rb_cell = OB_NEWx(ObRbAggCell, &rb_allocator_, rb, tenant_id_))) {
+  } else if (OB_ISNULL(rb_cell = OB_NEWx(ObRbAggCell, &rb_allocator_, rb))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate cell memory failed", K(ret), "size", sizeof(ObRbAggCell));
   } else if (OB_FAIL(alloced_rb_.set_refactored(reinterpret_cast<uint64_t>(rb_cell)))) {

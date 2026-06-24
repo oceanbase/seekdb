@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_vector_index_util.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/vector_index/ob_vector_index_sched_job_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
@@ -611,7 +612,7 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
     ObString endpoint_str(param.endpoint_);
     ObAIFuncExprInfo *ai_fun_info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    omt::ObTenantAiService *ai_service = share::g_mp->tenant_ai_service();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, endpoint_str, ai_fun_info))) {
       LOG_WARN("failed to get ai fun info", K(ret), K(param_str));
@@ -1217,15 +1218,15 @@ int ObVectorIndexUtil::check_distance_algorithm_match(
   int ret = OB_SUCCESS;
   const int64_t data_table_id = table_schema.get_table_id();
   const int64_t database_id = table_schema.get_database_id();
-  const int64_t tenant_id = table_schema.get_tenant_id();
+  
   const int64_t vector_index_column_cnt = 1;
   is_match = false;
 
   if (index_column_name.empty() ||
-      OB_INVALID_ID == data_table_id || OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id) {
+      OB_INVALID_ID == data_table_id || false || OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
-      K(ret), K(index_column_name), K(data_table_id), K(tenant_id), K(database_id));
+      K(ret), K(index_column_name), K(data_table_id), K(database_id));
   } else {
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     ObSEArray<ObString, 1> col_names;
@@ -1236,8 +1237,8 @@ int ObVectorIndexUtil::check_distance_algorithm_match(
       for (int64_t i = 0; OB_SUCC(ret) && !is_match && i < simple_index_infos.count(); ++i) {
         const ObTableSchema *index_schema = nullptr;
         const int64_t table_id = simple_index_infos.at(i).table_id_;
-        if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, index_schema))) {
-          LOG_WARN("fail to get index table schema", K(ret), K(tenant_id), K(table_id));
+        if (OB_FAIL(schema_guard.get_table_schema( table_id, index_schema))) {
+          LOG_WARN("fail to get index table schema", K(ret), K(table_id));
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1311,7 +1312,6 @@ int ObVectorIndexUtil::get_index_name_prefix(
 }
 
 int ObVectorIndexUtil::check_ivf_lob_inrow_threshold(
-    const int64_t tenant_id,
     const ObString &database_name,
     const ObString &table_name,
     ObSchemaGetterGuard &schema_guard,
@@ -1321,12 +1321,12 @@ int ObVectorIndexUtil::check_ivf_lob_inrow_threshold(
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   int64_t max_vec_len_with_ivf = 0;
   const ObTableSchema *data_table_schema = NULL;
-  if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+  if (OB_FAIL(schema_guard.get_table_schema(
                                             database_name,
                                             table_name,
                                             false/*is_index*/,
                                             data_table_schema))) {
-    LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(database_name), K(table_name));
+    LOG_WARN("fail to get table schema", K(ret), K(database_name), K(table_name));
   } else if (NULL == data_table_schema) {
     ret = OB_ERR_TABLE_EXIST;
     LOG_WARN("table not exist", K(ret));
@@ -1336,8 +1336,8 @@ int ObVectorIndexUtil::check_ivf_lob_inrow_threshold(
 
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const ObTableSchema *index_table_schema = nullptr;
-    if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-      LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+    if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+      LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1409,7 +1409,7 @@ int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_ta
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   has_vec_index = false;
 
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -1417,8 +1417,8 @@ int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_ta
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !has_vec_index && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1435,7 +1435,7 @@ int ObVectorIndexUtil::check_table_has_vector_of_fts_index(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   has_fts_index = false;
   has_vec_index = false;
 
@@ -1444,8 +1444,8 @@ int ObVectorIndexUtil::check_table_has_vector_of_fts_index(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1466,7 +1466,7 @@ int ObVectorIndexUtil::check_has_extra_info(const ObTableSchema &data_table_sche
 
   has_extra_info = false;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("fail to get simple index infos failed", K(ret));
   } else {
@@ -1474,8 +1474,8 @@ int ObVectorIndexUtil::check_has_extra_info(const ObTableSchema &data_table_sche
       ObVectorIndexParam param;
       if (schema::is_vec_delta_buffer_type(simple_index_infos.at(i).index_type_)) {
         const ObTableSchema *index_table_schema = nullptr;
-        if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-          LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+        if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+          LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
         } else if (OB_ISNULL(index_table_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1535,7 +1535,7 @@ int ObVectorIndexUtil::check_column_has_vector_index(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   is_column_has_vector_index = false;
 
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -1543,8 +1543,8 @@ int ObVectorIndexUtil::check_column_has_vector_index(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1935,7 +1935,7 @@ int ObVectorIndexUtil::check_rowkey_cid_table_readable(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16>simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   tid = OB_INVALID_ID;
 
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
@@ -1946,8 +1946,8 @@ int ObVectorIndexUtil::check_rowkey_cid_table_readable(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -1979,7 +1979,7 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_table_readable(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   tid = OB_INVALID_ID;
   
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
@@ -1990,8 +1990,8 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_table_readable(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() && tid == OB_INVALID_ID; ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2015,7 +2015,7 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_cid_table_readable(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   tid = OB_INVALID_ID;
   
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
@@ -2026,8 +2026,8 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_cid_table_readable(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() && tid == OB_INVALID_ID; ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2061,7 +2061,7 @@ int ObVectorIndexUtil::get_right_index_tid_in_rebuild(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16>simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   tid = OB_INVALID_ID;
 
   ObIndexType next_index_type = index_type;
@@ -2078,8 +2078,8 @@ int ObVectorIndexUtil::get_right_index_tid_in_rebuild(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2145,8 +2145,8 @@ int ObVectorIndexUtil::get_right_index_tid_in_rebuild(
     const ObTableSchema *new_index = nullptr;
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2212,7 +2212,7 @@ int ObVectorIndexUtil::get_vector_index_tid(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   tid = OB_INVALID_ID;
 
   if (OB_ISNULL(schema_guard) || !share::schema::is_vec_index(index_type) || !data_table_schema.is_user_table()) {
@@ -2223,8 +2223,8 @@ int ObVectorIndexUtil::get_vector_index_tid(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2296,7 +2296,7 @@ int ObVectorIndexUtil::get_vector_index_tids(share::schema::ObSchemaGetterGuard 
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   if (OB_ISNULL(schema_guard) || !share::schema::is_local_vec_ivf_index(index_type) || !data_table_schema.is_user_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(schema_guard), K(index_type), K(data_table_schema));
@@ -2305,8 +2305,8 @@ int ObVectorIndexUtil::get_vector_index_tids(share::schema::ObSchemaGetterGuard 
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const ObTableSchema *index_table_schema = nullptr;
-    if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-      LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+    if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+      LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2478,7 +2478,7 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_hnsw(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
 
   inc_tid = OB_INVALID_ID;
   vbitmap_tid = OB_INVALID_ID;
@@ -2499,8 +2499,8 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_hnsw(
     ObIndexType delta_index_table_type = is_hybrid ? INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL : INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2549,8 +2549,8 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_hnsw(
 
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
         const ObTableSchema *index_table_schema = nullptr;
-        if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-          LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+        if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+          LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
         } else if (OB_ISNULL(index_table_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2614,7 +2614,7 @@ int ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   tid = OB_INVALID_ID;
 
   if (OB_ISNULL(schema_guard) || !share::schema::is_vec_index(index_type) || !data_table_schema.is_user_table()) {
@@ -2625,8 +2625,8 @@ int ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -2661,8 +2661,7 @@ int ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(
   return ret;
 }
 
-int ObVectorIndexUtil::check_vec_index_param(
-    const uint64_t tenant_id, const ParseNode *option_node,
+int ObVectorIndexUtil::check_vec_index_param(const ParseNode *option_node,
     common::ObIAllocator &allocator, const ObTableSchema &tbl_schema,
     ObString &index_params, ObString &vec_column_name, ObIndexType &vec_index_type, sql::ObSQLSessionInfo *session_info)
 {
@@ -2696,7 +2695,7 @@ int ObVectorIndexUtil::check_vec_index_param(
     } else if (!col_schema->is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argumnet", K(ret), KP(col_schema));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), tenant_data_version))) {
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
       LOG_WARN("get tenant data version failed", K(ret));
     } else if (FALSE_IT(is_text_col = ob_is_varchar_type(col_schema->get_data_type(), col_schema->get_collation_type()))) {
     } else if (!is_text_col && OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(col_schema->get_extended_type_info(), is_sparse_vec_col))) {
@@ -2795,7 +2794,6 @@ int ObVectorIndexUtil::get_vector_index_tid_check_valid(
 
 int ObVectorIndexUtil::get_vector_index_param_with_dim(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      uint64_t tenant_id,
       int64_t index_table_id,
       int64_t data_table_id,
       ObVectorIndexType index_type,
@@ -2804,10 +2802,10 @@ int ObVectorIndexUtil::get_vector_index_param_with_dim(
   int ret = OB_SUCCESS;
   const ObTableSchema *index_table_schema = nullptr;
   const ObTableSchema *data_table_schema = nullptr;
-  if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_table_schema))) {
-    LOG_WARN("failed to get simple schema", KR(ret), K(tenant_id), K(index_table_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
-    LOG_WARN("failed to get simple schema", KR(ret), K(tenant_id), K(data_table_id));
+  if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_table_schema))) {
+    LOG_WARN("failed to get simple schema", KR(ret), K(index_table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
+    LOG_WARN("failed to get simple schema", KR(ret), K(data_table_id));
   } else if (OB_ISNULL(index_table_schema) || OB_ISNULL(data_table_schema)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null table schema", K(ret), KP(index_table_schema), KP(data_table_schema));
@@ -2927,7 +2925,7 @@ int ObVectorIndexUtil::get_vector_index_param(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   param_filled = false;
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
     ret = OB_INVALID_ARGUMENT;
@@ -2937,8 +2935,8 @@ int ObVectorIndexUtil::get_vector_index_param(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() && !param_filled; ++i) {
       const ObTableSchema *index_table_schema = nullptr;
-      if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -3093,7 +3091,7 @@ int ObVectorIndexUtil::check_index_param(
     const int64_t default_nbits_value = 8;
     hash::ObHashSet<ObString> param_set;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(param_set.create(option_node->num_child_, lib::ObMemAttr(MTL_ID(), "VecParamSet")))) {
+    } else if (OB_FAIL(param_set.create(option_node->num_child_, lib::ObMemAttr("VecParamSet")))) {
       LOG_WARN("fail to create param hash set", K(ret), K(option_node->num_child_));
     }
 
@@ -4069,7 +4067,6 @@ int ObVectorIndexUtil::generate_ivfpq_switch_index_names(
 }
 
 int ObVectorIndexUtil::update_index_tables_status(
-    const int64_t tenant_id,
     const int64_t database_id,
     const ObIArray<ObString> &old_table_names,
     const ObIArray<ObString> &new_table_names,
@@ -4080,12 +4077,12 @@ int ObVectorIndexUtil::update_index_tables_status(
 {
   int ret = OB_SUCCESS;
   const bool is_index = true;
-  if (OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id ||
+  if (false || OB_INVALID_ID == database_id ||
       old_table_names.count() <= 0 || new_table_names.count() <= 0 ||
      (old_table_names.count() != new_table_names.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
-      K(ret), K(tenant_id), K(database_id), K(old_table_names), K(new_table_names));
+      K(ret), K(database_id), K(old_table_names), K(new_table_names));
   } else {
     // update old index status
     for (int64_t i = 0; OB_SUCC(ret) && i < old_table_names.count(); ++i) {
@@ -4097,7 +4094,7 @@ int ObVectorIndexUtil::update_index_tables_status(
       const ObString &new_index_name = new_table_names.at(i);
       SMART_VAR(ObTableSchema, tmp_schema) {
       // ObTableSchema tmp_schema;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+      if (OB_FAIL(schema_guard.get_table_schema(
                                                 database_id,
                                                 old_index_name,
                                                 is_index, /* is_index */
@@ -4107,7 +4104,7 @@ int ObVectorIndexUtil::update_index_tables_status(
         LOG_WARN("fail to get table schema", K(ret), K(old_index_name));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret), K(tenant_id), K(database_id), K(old_index_name));
+        LOG_WARN("unexpected nullptr", K(ret), K(database_id), K(old_index_name));
       } else if (!index_schema->is_vec_index()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected, here should be vector index schema", K(ret), K(index_schema));
@@ -4115,8 +4112,7 @@ int ObVectorIndexUtil::update_index_tables_status(
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("switch name of unaveliable index is not support", KR(ret));
       } else if (OB_FALSE_IT(in_offline_ddl_white_list = index_schema->get_table_state_flag() != TABLE_STATE_NORMAL)) {
-      } else if (OB_FAIL(ddl_operator.update_index_status(tenant_id,
-                                                          index_schema->get_data_table_id(),
+      } else if (OB_FAIL(ddl_operator.update_index_status(index_schema->get_data_table_id(),
                                                           index_schema->get_table_id(),
                                                           INDEX_STATUS_UNAVAILABLE,
                                                           in_offline_ddl_white_list,
@@ -4138,7 +4134,6 @@ int ObVectorIndexUtil::update_index_tables_status(
 }
 
 int ObVectorIndexUtil::update_index_tables_attributes(
-    const int64_t tenant_id,
     const int64_t database_id,
     const int64_t data_table_id,
     const int64_t expected_update_table_cnt,
@@ -4151,13 +4146,13 @@ int ObVectorIndexUtil::update_index_tables_attributes(
 {
   int ret = OB_SUCCESS;
   const bool is_index = true;
-  if (OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
+  if (false || OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
       old_table_names.count() <= 0 || new_table_names.count() <= 0 ||
      (table_schemas.count() != old_table_names.count()) ||
      (old_table_names.count() != new_table_names.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",
-      K(ret), K(tenant_id), K(database_id), K(data_table_id),
+      K(ret), K(database_id), K(data_table_id),
       K(table_schemas.count()), K(old_table_names.count()), K(new_table_names.count()));
   } else {
     // switch new/old index name
@@ -4169,7 +4164,7 @@ int ObVectorIndexUtil::update_index_tables_attributes(
       const ObString &old_index_name = old_table_names.at(i);
       SMART_VAR(ObTableSchema, tmp_schema) {
       // ObTableSchema tmp_schema;
-      if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+      if (OB_FAIL(schema_guard.get_table_schema(
                                                 database_id,
                                                 new_index_name,
                                                 is_index,
@@ -4179,7 +4174,7 @@ int ObVectorIndexUtil::update_index_tables_attributes(
         LOG_WARN("fail to get table schema", K(ret), K(new_index_name));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret), K(tenant_id), K(database_id), K(new_index_name));
+        LOG_WARN("unexpected nullptr", K(ret), K(database_id), K(new_index_name));
       } else if (!index_schema->is_vec_index()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected, here should be vector index schema", K(ret), KPC(index_schema));
@@ -4198,7 +4193,7 @@ int ObVectorIndexUtil::update_index_tables_attributes(
     if (OB_SUCC(ret)) { // get data table schema to update schema version
       SMART_VAR(ObTableSchema, tmp_schema) {
         const ObTableSchema *data_table_schema = nullptr;
-        if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
+        if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
           LOG_WARN("fail to get data table schema", K(ret), K(data_table_id));
         } else if (OB_ISNULL(data_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -4445,7 +4440,6 @@ int ObVectorIndexUtil::reconstruct_ivf_index_schema_in_rebuild(
 
 int ObVectorIndexUtil::generate_index_schema_from_exist_table(
     rootserver::ObDDLSQLTransaction &trans,
-    const int64_t tenant_id,
     share::schema::ObSchemaGetterGuard &schema_guard,
     rootserver::ObDDLService &ddl_service,
     const obcall::ObCreateIndexArg &create_index_arg,
@@ -4472,13 +4466,13 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
   } else if (OB_ISNULL(schema_service = GCTX.schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
-  } else if (tenant_id == OB_INVALID_TENANT_ID || old_domain_table_id == OB_INVALID_ID ||
+  } else if (false || old_domain_table_id == OB_INVALID_ID ||
       new_index_name_suffix.empty() || database_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret),
-      K(tenant_id), K(old_domain_table_id), K(new_index_name_suffix), K(database_name), KP(schema_service));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, old_domain_table_id, old_domain_index_schema))) {
-    LOG_WARN("fail to get old domain index schema", K(ret), K(tenant_id), K(old_domain_table_id));
+      K(old_domain_table_id), K(new_index_name_suffix), K(database_name), KP(schema_service));
+  } else if (OB_FAIL(schema_guard.get_table_schema( old_domain_table_id, old_domain_index_schema))) {
+    LOG_WARN("fail to get old domain index schema", K(ret), K(old_domain_table_id));
   } else if (OB_ISNULL(old_domain_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
@@ -4488,14 +4482,14 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
                                                                     old_domain_index_name,
                                                                     old_index_table_name))) {
     LOG_WARN("failed to generate index name", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    database_name,
                                                    old_index_table_name,
                                                    true, /* is_index */
                                                    old_index_schema,
                                                    false, /* with_hidden_flag */
                                                    share::schema::is_built_in_vec_index(create_index_arg.index_type_)))) {
-    LOG_WARN("fail to get origin index schema", K(ret), K(tenant_id), K(old_domain_index_name), K(old_index_table_name));
+    LOG_WARN("fail to get origin index schema", K(ret), K(old_domain_index_name), K(old_index_table_name));
   } else if (OB_ISNULL(old_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), K(old_index_table_name));
@@ -4507,10 +4501,9 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
                                                    new_index_table_name))) {
     LOG_WARN("fail to build index table name", K(ret), K(create_index_arg.index_name_));
   } else {
-    if (FALSE_IT(new_index_schema.set_tenant_id(tenant_id))) {
-    } else if (OB_FAIL(new_index_schema.set_table_name(new_index_table_name))) {
+    if (OB_FAIL(new_index_schema.set_table_name(new_index_table_name))) {
       LOG_WARN("set table name failed", K(ret), K(new_index_table_name));
-    } else if (OB_FAIL(schema_service->fetch_new_table_id(tenant_id, new_index_table_id))) {
+    } else if (OB_FAIL(schema_service->fetch_new_table_id(new_index_table_id))) {
       LOG_WARN("failed to fetch_new_table_id", K(ret));
     } else if (OB_FAIL(ddl_service.generate_object_id_for_partition_schema(new_index_schema))) {
       LOG_WARN("fail to generate object_id for partition schema", KR(ret), K(new_index_schema));
@@ -4572,55 +4565,54 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
   return ret;
 }
 
-int ObVectorIndexUtil::add_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
+int ObVectorIndexUtil::add_dbms_vector_jobs(common::ObISQLClient &sql_client,
                                             const uint64_t vidx_table_id,
                                             const common::ObString &exec_env)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
-                      sql_client, tenant_id,
+                      sql_client,
                       vidx_table_id,
                       exec_env))) {
-    LOG_WARN("fail to add vector index refresh job", KR(ret), K(tenant_id), K(vidx_table_id), K(exec_env));
+    LOG_WARN("fail to add vector index refresh job", KR(ret), K(vidx_table_id), K(exec_env));
   } else if (OB_FAIL(ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(
-                      sql_client, tenant_id,
+                      sql_client,
                       vidx_table_id,
                       exec_env))) {
-    LOG_WARN("fail to add vector index rebuild job", KR(ret), K(tenant_id), K(vidx_table_id), K(exec_env));
+    LOG_WARN("fail to add vector index rebuild job", KR(ret), K(vidx_table_id), K(exec_env));
   }
   return ret;
 }
 
-int ObVectorIndexUtil::remove_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
+int ObVectorIndexUtil::remove_dbms_vector_jobs(common::ObISQLClient &sql_client,
                                                const uint64_t vidx_table_id)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObVectorIndexSchedJobUtils::remove_vector_index_refresh_job(
-                     sql_client, tenant_id, vidx_table_id))) {
+                     sql_client, vidx_table_id))) {
     LOG_WARN("failed to remove vector index refresh job",
-            KR(ret), K(tenant_id), K(vidx_table_id));
+            KR(ret), K(vidx_table_id));
   } else if (OB_FAIL(ObVectorIndexSchedJobUtils::remove_vector_index_rebuild_job(
-                     sql_client, tenant_id, vidx_table_id))) {
+                     sql_client, vidx_table_id))) {
     LOG_WARN("failed to remove vector index rebuild job",
-            KR(ret), K(tenant_id), K(vidx_table_id));
+            KR(ret), K(vidx_table_id));
   }
   return ret;
 }
 
 int ObVectorIndexUtil::get_dbms_vector_job_info(common::ObISQLClient &sql_client,
-                                                    const uint64_t tenant_id,
                                                     const uint64_t vidx_table_id,
                                                     common::ObIAllocator &allocator,
                                                     share::schema::ObSchemaGetterGuard &schema_guard,
                                                     dbms_scheduler::ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObVectorIndexSchedJobUtils::get_vector_index_job_info(sql_client, tenant_id,
+  if (OB_FAIL(ObVectorIndexSchedJobUtils::get_vector_index_job_info(sql_client,
                                                                     vidx_table_id,
                                                                     allocator,
                                                                     schema_guard,
                                                                     job_info))) {
-    LOG_WARN("fail to get vector index job info", K(ret), K(tenant_id), K(vidx_table_id));
+    LOG_WARN("fail to get vector index job info", K(ret), K(vidx_table_id));
   }
   return ret;
 }
@@ -4636,7 +4628,8 @@ int ObVectorIndexUtil::check_rename_rebuild_confilt(
   int ret = OB_SUCCESS;
   const ObTableSchema *orig_index_schema = nullptr;
   ObDropIndexArg tmp_drop_arg;
-  tmp_drop_arg.tenant_id_ = origin_table_schema.get_tenant_id();
+  
+  
   tmp_drop_arg.index_name_ = ori_index_name;
   if (OB_FAIL(ddl_service.get_index_schema_by_name(origin_table_schema.get_table_id(),
                                       origin_table_schema.get_database_id(),
@@ -4648,7 +4641,6 @@ int ObVectorIndexUtil::check_rename_rebuild_confilt(
     bool has_rebuild_index_task = false;
     if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans,
                                                                       *orig_index_schema,
-                                                                      origin_table_schema.get_tenant_id(),
                                                                       origin_table_schema.get_table_id(),
                                                                       has_rebuild_index_task))) {
       LOG_WARN("fail to check has index or mlog task", KR(ret), K(ori_index_name));
@@ -4668,21 +4660,20 @@ int ObVectorIndexUtil::check_table_exist(
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
   bool is_exist = false;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   const int64_t database_id = data_table_schema.get_database_id();
   const int64_t data_table_id = data_table_schema.get_table_id();
   ObString index_table_name;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
 
-  if (OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
+  if (false || OB_INVALID_ID == database_id || OB_INVALID_ID == data_table_id ||
       domain_index_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(database_id), K(data_table_id), K(domain_index_name));
+    LOG_WARN("invalid argument", K(ret), K(database_id), K(data_table_id), K(domain_index_name));
   } else if (OB_FAIL(ObTableSchema::build_index_table_name(
                allocator, data_table_id, domain_index_name, index_table_name))) {
     LOG_WARN("build_index_table_name failed", K(ret), K(data_table_id), K(domain_index_name));
-  } else if (OB_FAIL(schema_service.check_table_exist(tenant_id,
-                                                      database_id,
+  } else if (OB_FAIL(schema_service.check_table_exist(database_id,
                                                       index_table_name,
                                                       true, /* is_index_table */
                                                       OB_INVALID_VERSION, /* latest version */
@@ -4691,7 +4682,7 @@ int ObVectorIndexUtil::check_table_exist(
   } else if (is_exist) {
     ret = OB_ERR_TABLE_EXIST;
     LOG_WARN("table is exist, cannot create it twice", K(ret),
-      K(tenant_id),  K(database_id), K(domain_index_name));
+       K(database_id), K(domain_index_name));
   }
   return ret;
 }
@@ -4704,16 +4695,16 @@ int ObVectorIndexUtil::check_vec_aux_index_deleted(
   int ret = OB_SUCCESS;
   const int64_t data_table_id = table_schema.get_table_id();
   const int64_t database_id = table_schema.get_database_id();
-  const int64_t tenant_id = table_schema.get_tenant_id();
+  
   bool delta_buffer_table_is_valid = false;
   bool index_id_table_is_valid = false;
   bool snapshot_table_is_valid = false;
 
   is_all_deleted = false;
 
-  if (OB_INVALID_ID == data_table_id || OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id) {
+  if (OB_INVALID_ID == data_table_id || false || OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(data_table_id), K(tenant_id), K(database_id));
+    LOG_WARN("invalid argument", K(ret), K(data_table_id), K(database_id));
   } else {
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -4722,8 +4713,8 @@ int ObVectorIndexUtil::check_vec_aux_index_deleted(
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
         const ObTableSchema *index_schema = nullptr;
         const int64_t table_id = simple_index_infos.at(i).table_id_;
-        if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, index_schema))) {
-          LOG_WARN("fail to get index table schema", K(ret), K(tenant_id), K(table_id));
+        if (OB_FAIL(schema_guard.get_table_schema( table_id, index_schema))) {
+          LOG_WARN("fail to get index table schema", K(ret), K(table_id));
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -4766,7 +4757,7 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
   int ret = OB_SUCCESS;
   const int64_t data_table_id = table_schema.get_table_id();
   const int64_t database_id = table_schema.get_database_id();
-  const int64_t tenant_id = table_schema.get_tenant_id();
+  
 
   bool is_hnsw = false;
   bool vid_rowkey_table_is_valid = false;
@@ -4791,9 +4782,9 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
   is_valid = false;
 
   if (index_column_name.empty() || OB_INVALID_ID == data_table_id ||
-      OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == database_id) {
+      false || OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(index_column_name), K(data_table_id), K(tenant_id), K(database_id));
+    LOG_WARN("invalid argument", K(ret), K(index_column_name), K(data_table_id), K(database_id));
   } else {
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -4802,8 +4793,8 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
         const ObTableSchema *index_schema = nullptr;
         const int64_t table_id = simple_index_infos.at(i).table_id_;
-        if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, index_schema))) {
-          LOG_WARN("fail to get index table schema", K(ret), K(tenant_id), K(table_id));
+        if (OB_FAIL(schema_guard.get_table_schema( table_id, index_schema))) {
+          LOG_WARN("fail to get index table schema", K(ret), K(table_id));
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -4889,7 +4880,7 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
       } else if ((is_hnsw && (is_ivf || is_spiv)) || (is_ivf && (is_hnsw || is_spiv))) {
         ret = OB_ERR_UNDEFINED;
         LOG_WARN("only one vector index can be created on a vector column.", K(ret),
-                  K(index_column_name), K(data_table_id), K(tenant_id), K(database_id));
+                  K(index_column_name), K(data_table_id), K(database_id));
       } else if (is_hnsw) {
         ObDocIDType vid_type = ObDocIDType::INVALID;
         if (OB_FAIL(ObVectorIndexUtil::determine_vid_type(table_schema, vid_type))) {
@@ -5025,7 +5016,7 @@ bool ObVectorIndexUtil::is_match_index_column_name(
 int ObVectorIndexUtil::get_rebuild_drop_index_id_and_name(share::schema::ObSchemaGetterGuard &schema_guard, obcall::ObDropIndexArg &arg)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.tenant_id_;
+  
   const uint64_t old_index_id = arg.table_id_;
   const uint64_t new_index_id = arg.index_table_id_;
   const ObString old_index_name = arg.index_name_;
@@ -5034,16 +5025,16 @@ int ObVectorIndexUtil::get_rebuild_drop_index_id_and_name(share::schema::ObSchem
   if (!arg.is_add_to_scheduler_ || !arg.is_vec_inner_drop_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected arg", K(ret), K(arg));
-  } else if (tenant_id == OB_INVALID_TENANT_ID ||
+  } else if (false ||
              old_index_id == OB_INVALID_ID || new_index_id == OB_INVALID_ID || old_index_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(old_index_id), K(new_index_id), K(old_index_name));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, old_index_id, old_index_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( old_index_id, old_index_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(old_index_id));
   } else if (OB_ISNULL(old_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, new_index_id, new_index_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( new_index_id, new_index_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(new_index_id));
   } else if (OB_ISNULL(new_index_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -5109,18 +5100,18 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
   int ret = OB_SUCCESS;
   const share::schema::ObTableSchema *data_table_schema = nullptr;
   ObSEArray<const ObSimpleTableSchemaV2 *, OB_MAX_AUX_TABLE_PER_MAIN_TABLE> indexs;
-  const uint64_t tenant_id = index_table_schema.get_tenant_id();
+  
   const uint64_t index_table_id = index_table_schema.get_table_id();
   const ObString &index_name = index_table_schema.get_table_name_str();
 
   if (OB_UNLIKELY(OB_INVALID_ID == data_table_id
         || OB_INVALID_ID == index_table_id
-        || OB_INVALID_TENANT_ID == tenant_id
+        || false
         || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(data_table_id), K(index_table_id), K(tenant_id), K(index_name));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
-    LOG_WARN("fail to get index schema with data table id", K(ret), K(tenant_id), K(data_table_id));
+    LOG_WARN("invalid arguments", K(ret), K(data_table_id), K(index_table_id), K(index_name));
+  } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
+    LOG_WARN("fail to get index schema with data table id", K(ret), K(data_table_id));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, data table schema is nullptr", K(ret), KP(data_table_schema));
@@ -5156,8 +5147,8 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
         const share::schema::ObAuxTableMetaInfo &info = indexs.at(i);
         if (share::schema::is_vec_rowkey_vid_type(info.index_type_)) {
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
-          } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, info.table_id_, rowkey_vid_schema))) {
-            LOG_WARN("fail to get vec rowkey vid table schema", K(ret), K(tenant_id), K(info));
+          } else if (OB_FAIL(schema_guard.get_table_schema( info.table_id_, rowkey_vid_schema))) {
+            LOG_WARN("fail to get vec rowkey vid table schema", K(ret), K(info));
           } else if (OB_ISNULL(rowkey_vid_schema)) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("rowkey_vid_schema is nullptr", K(ret), K(info));
@@ -5166,8 +5157,8 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           }
         } else if (share::schema::is_vec_vid_rowkey_type(info.index_type_)) {
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
-          } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, info.table_id_, vid_rowkey_schema))) {
-            LOG_WARN("fail to get vec vid rowkey table schema", K(ret), K(tenant_id), K(info));
+          } else if (OB_FAIL(schema_guard.get_table_schema( info.table_id_, vid_rowkey_schema))) {
+            LOG_WARN("fail to get vec vid rowkey table schema", K(ret), K(info));
           } else if (OB_ISNULL(vid_rowkey_schema)) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("vid_rowkey_schema is nullptr", K(ret), K(info));
@@ -5182,7 +5173,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           // If we do not check if it has already been obtained, then during the loop, it will fetch the same index_schema from the main table multiple times, which does not meet the expectation. Here, we need to skip.
           // The acquisition of other tables is similar below
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5202,7 +5192,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_snapshot_data_table) {   // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5222,7 +5211,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_embedded_vec_table || !index_table_schema.is_hybrid_vec_index_log_type()) {   // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5243,7 +5231,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
           } else if (already_get_cid_vector_table) {    // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5265,7 +5252,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
           } else if (already_get_rowkey_cid_table) {   // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5285,7 +5271,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
           } else if (already_get_sq_meta_table) {           // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5305,7 +5290,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
           } else if (already_get_pq_centroid_table) {     // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5325,7 +5309,6 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
           } else if (already_get_pq_code_table) {          // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
-                                                                                 tenant_id,
                                                                                  database_id,
                                                                                  index_name,
                                                                                  info.index_type_,
@@ -5348,7 +5331,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
         }
       }
     }
-    LOG_INFO("get dropping vec aux table name", K(ret), K(tenant_id), K(data_table_id), K(index_table_id));
+    LOG_INFO("get dropping vec aux table name", K(ret), K(data_table_id), K(index_table_id));
   }
   return ret;
 }
@@ -5564,7 +5547,7 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected distance algo", K(ret), K(dis_algo));
     } else {
-      ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+      ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
       ObExprVecIvfCenterIdCache *cache = get_ivf_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_);
       if (OB_FAIL(get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, allocator, centers, center_prefix, 0))) {
         LOG_WARN("failed to get ivf aux info", K(ret));
@@ -5805,7 +5788,7 @@ int ObVectorIndexUtil::get_vector_domain_index_type(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  const int64_t tenant_id = data_table_schema.get_tenant_id();
+  
   index_type = ObIndexType::INDEX_TYPE_MAX;
 
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
@@ -5816,8 +5799,8 @@ int ObVectorIndexUtil::get_vector_domain_index_type(
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() && index_type == ObIndexType::INDEX_TYPE_MAX; ++i) {
     const ObTableSchema *index_table_schema = nullptr;
-    if (OB_FAIL(schema_guard->get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_table_schema))) {
-      LOG_WARN("fail to get index_table_schema", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+    if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_table_schema))) {
+      LOG_WARN("fail to get index_table_schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
@@ -5887,14 +5870,14 @@ int ObVectorIndexUtil::split_vector(
 }
 
 bool ObVectorIndexUtil::check_vector_index_memory(
-    ObSchemaGetterGuard &schema_guard, const ObTableSchema &index_schema, const uint64_t tenant_id, const int64_t row_count)
+    ObSchemaGetterGuard &schema_guard, const ObTableSchema &index_schema, const int64_t row_count)
 {
   int ret = OB_SUCCESS;
   bool is_satisfied = true;
   const static double VEC_MEMORY_HOLD_FACTOR = 1.2;
-  MTL_SWITCH(tenant_id) {
-    ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
-    ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr*);
+  MOD_SCOPE {
+    ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+    ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
     if (OB_ISNULL(service) || OB_ISNULL(shared_mem_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("service or manager is nullptr", K(ret), K(service), K(shared_mem_mgr));
@@ -5905,13 +5888,13 @@ bool ObVectorIndexUtil::check_vector_index_memory(
       int64_t estimate_memory = 0;
       int64_t all_vsag_mem_used = ATOMIC_LOAD(service->get_all_vsag_use_mem());
       int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
-      if (OB_ISNULL(mem_mgr = MTL(ObRbMemMgr *))) {
+      if (OB_ISNULL(mem_mgr = share::g_mp->rb_mem_mgr())) {
       } else {
         bitmap_mem_used = mem_mgr->get_vec_idx_used();
       }
-      if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id, mem_limited_size))) {
-        LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id));
-      } else if (OB_FAIL(estimate_vector_memory_used(schema_guard, index_schema, tenant_id, row_count, estimate_memory))) {
+      if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(mem_limited_size))) {
+        LOG_WARN("failed to get vector mem limit size.", K(ret));
+      } else if (OB_FAIL(estimate_vector_memory_used(schema_guard, index_schema, row_count, estimate_memory))) {
         LOG_WARN("failed to estimate vector memory used", K(ret), K(index_schema), K(row_count));
       } else if (OB_FALSE_IT(estimate_memory = ceil(estimate_memory * VEC_ESTIMATE_MEMORY_FACTOR * VEC_MEMORY_HOLD_FACTOR))) { // multiple 2.0， and need to consider the hold memory.
       } else if (hold_mem + estimate_memory > mem_limited_size) {
@@ -5925,14 +5908,14 @@ bool ObVectorIndexUtil::check_vector_index_memory(
   return is_satisfied;
 }
 
-bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schema_guard, const uint64_t tenant_id, const ObTableSchema &index_schema, const int64_t row_count)
+bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schema_guard, const ObTableSchema &index_schema, const int64_t row_count)
 {
   int ret = OB_SUCCESS;
   bool is_satisfied = true;
   uint64_t construct_mem = 0;
   uint64_t buff_mem = 0;
   int64_t mem_limited_size = 0;
-  ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr*);
+  ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
   const ObTableSchema *data_table_schema = nullptr;
   ObVectorIndexParam param;
   int64_t dim = 0;
@@ -5944,16 +5927,16 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
   } else if (!index_schema.is_vec_ivfpq_pq_centroid_index() && !index_schema.is_vec_ivf_centroid_index()) {
   } else if (OB_NOT_NULL(shared_mem_mgr)) {
     int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
-    if (tenant_id == OB_INVALID_TENANT_ID || data_table_id == OB_INVALID_ID) {
+    if (false || data_table_id == OB_INVALID_ID) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument, skip estimated", K(ret), K(tenant_id), K(data_table_id));
+      LOG_WARN("invalid argument, skip estimated", K(ret), K(data_table_id));
     } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(index_schema, dim))) {
       LOG_WARN("failed to get vec_index_col_param", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table not exist", K(ret), K(tenant_id), K(data_table_id), K(data_table_schema));
+      LOG_WARN("table not exist", K(ret), K(data_table_id), K(data_table_schema));
     } else if OB_FAIL(get_vector_index_column_id(*data_table_schema, index_schema, col_ids)) {
       LOG_WARN("failed to get vector index column id", K(ret), K(index_schema));
     } else if (col_ids.count() != 1) {
@@ -5963,8 +5946,8 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
       LOG_WARN("failed to get vector index param", K(ret), K(col_ids.at(0)));
     } else if (!param_filled) {
       LOG_INFO("skip esitmate memory", K(ret), K(param_filled));
-    } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id, mem_limited_size))) {
-      LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id));
+    } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(mem_limited_size))) {
+      LOG_WARN("failed to get vector mem limit size.", K(ret));
     } else if (OB_FAIL(estimate_ivf_memory(row_count, param, construct_mem, buff_mem))) {
       LOG_WARN("failed to estimate ivf memory", K(ret));
     } else if (construct_mem + hold_mem > mem_limited_size) {
@@ -5976,7 +5959,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
 
 // one tablet one vsag instance
 int ObVectorIndexUtil::estimate_vector_memory_used(
-    ObSchemaGetterGuard &schema_guard, const ObTableSchema &index_schema, const uint64_t tenant_id, const int64_t row_count, int64_t &estimate_memory)
+    ObSchemaGetterGuard &schema_guard, const ObTableSchema &index_schema, const int64_t row_count, int64_t &estimate_memory)
 {
   int ret = OB_SUCCESS;
   estimate_memory = 0;
@@ -5997,16 +5980,16 @@ int ObVectorIndexUtil::estimate_vector_memory_used(
     need_estimate = false;
     LOG_INFO("target table is not table 5 or row_count <= 0, skip estimated",
       K(ret), K(index_schema), K(row_count));
-  } else if (tenant_id == OB_INVALID_TENANT_ID || data_table_id == OB_INVALID_ID) {
+  } else if (false || data_table_id == OB_INVALID_ID) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, skip estimated", K(ret), K(tenant_id), K(data_table_id));
+    LOG_WARN("invalid argument, skip estimated", K(ret), K(data_table_id));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(index_schema, dim))) {
     LOG_WARN("failed to get vec_index_col_param", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(tenant_id), K(data_table_id), K(data_table_schema));
+    LOG_WARN("table not exist", K(ret), K(data_table_id), K(data_table_schema));
   } else if OB_FAIL(get_vector_index_column_id(*data_table_schema, index_schema, col_ids)) {
     LOG_WARN("failed to get vector index column id", K(ret), K(index_schema));
   } else if (col_ids.count() != 1) {

@@ -215,17 +215,17 @@ int ObResourceMap<Key, Value>::init(
     const int64_t page_size)
 {
   int ret = common::OB_SUCCESS;
-  const uint64_t tenant_id = attr.tenant_id_;
+  
   const int64_t bkt_num = common::hash::cal_next_prime(bucket_num);
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObResourceMap has already been inited", K(ret));
   } else if (OB_UNLIKELY(bucket_num <= 0 || total_limit <= 0 || hold_limit <= 0 || page_size <= 0
-      || OB_INVALID_TENANT_ID == tenant_id)) {
+      || false)) {
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num), K(total_limit), K(hold_limit),
-        K(page_size), K(tenant_id));
-  } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr(tenant_id, "ResourMapLock")))) {
+        K(page_size));
+  } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("ResourMapLock")))) {
     STORAGE_LOG(WARN, "fail to init bucket lock", K(ret), K(bkt_num));
   } else if (OB_FAIL(map_.create(bkt_num, attr, attr))) {
     STORAGE_LOG(WARN, "fail to create map", K(ret));
@@ -233,7 +233,7 @@ int ObResourceMap<Key, Value>::init(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "lock buckets isn't equal to map buckets, which could cause concurrency issues", K(ret),
         K(bkt_num), K(map_.bucket_count()));
-  } else if (OB_FAIL(default_allocator_.init(page_size, "ResourceMap", tenant_id, total_limit))) {
+  } else if (OB_FAIL(default_allocator_.init(page_size, "ResourceMap", total_limit))) {
     STORAGE_LOG(WARN, "fail to init allocator", K(ret));
   } else {
     default_allocator_.set_attr(attr);
@@ -247,15 +247,15 @@ template <typename Key, typename Value>
 int ObResourceMap<Key, Value>::init(const int64_t bucket_num, const ObMemAttr &attr, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = attr.tenant_id_;
+  
   const int64_t bkt_num = common::hash::cal_next_prime(bucket_num);
   if (OB_UNLIKELY(is_inited_)) {
     ret = common::OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObResourceMap has already been inited", K(ret));
-  } else if (OB_UNLIKELY(bucket_num <= 0 || OB_INVALID_TENANT_ID == tenant_id)) {
+  } else if (OB_UNLIKELY(bucket_num <= 0 || false)) {
     ret = common::OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num), K(tenant_id));
-  } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr(tenant_id, "ResourMapLock")))) {
+    STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num));
+  } else if (OB_FAIL(bucket_lock_.init(bkt_num, ObLatchIds::DEFAULT_BUCKET_LOCK, ObMemAttr("ResourMapLock")))) {
     STORAGE_LOG(WARN, "fail to init bucket lock", K(ret), K(bkt_num));
   } else if (OB_FAIL(map_.create(bkt_num, attr, attr))) {
     STORAGE_LOG(WARN, "fail to create map", K(ret));
@@ -324,7 +324,7 @@ int ObResourceMap<Key, Value>::set(const Key &key, Value &value, Callback callba
   if (OB_FAIL(hash_func_(key, hash_val))) {
     STORAGE_LOG(WARN, "fail to do hash", K(ret));
   } else {
-    lib::ObMemAttr attr(MTL_ID(), "ResourceMapSet");
+    lib::ObMemAttr attr("ResourceMapSet");
     common::ObBucketHashWLockGuard guard(bucket_lock_, hash_val);
     if (OB_UNLIKELY(!is_inited_)) {
       ret = common::OB_NOT_INIT;

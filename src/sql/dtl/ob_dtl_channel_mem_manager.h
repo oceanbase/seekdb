@@ -37,7 +37,7 @@ class ObDtlTenantMemManager;
 class ObDtlChannelMemManager
 {
 public:
-  ObDtlChannelMemManager(uint64_t tenant_id, ObDtlTenantMemManager &tenant_mgr);
+  ObDtlChannelMemManager(ObDtlTenantMemManager &tenant_mgr);
   virtual ~ObDtlChannelMemManager() { destroy(); }
 
   int init();
@@ -78,7 +78,6 @@ private:
   int get_memstore_limit_percentage_();
   void real_free(ObDtlLinkedBuffer *buf);
 private:
-  uint64_t tenant_id_;
   int64_t size_per_buffer_;
   int64_t seqno_;
   static const int64_t MAX_CAPACITY = 16;
@@ -115,7 +114,7 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_tenant_memory_limit_size()
     get_memstore_limit_percentage_();
   }
   int64_t percent_execpt_memstore = 100 - memstore_limit_percent_;
-  return lib::get_tenant_memory_limit(tenant_id_) * percent_execpt_memstore / 100;
+  return lib::get_tenant_memory_limit() * percent_execpt_memstore / 100;
 }
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()

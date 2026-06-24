@@ -78,7 +78,6 @@ private:
 public:
   ObDynamicPartitionManager()
     : inited_(false),
-      tenant_id_(OB_INVALID_ID),
       table_schema_(NULL),
       session_(NULL),
       policy_() {}
@@ -112,7 +111,7 @@ public:
   static int format_dynamic_partition_policy_str(ObIAllocator &allocator, const ObString &orig_str, ObString &new_str);
   static int fill_default_value(ObIAllocator &allocator, const ObString &orig_str, ObString &new_str);
   static int update_dynamic_partition_policy_str(ObIAllocator &allocator, const ObString &orig_str, const ObString &alter_str, ObString &new_str);
-  static int check_tenant_is_valid_for_dynamic_partition(const uint64_t tenant_id, bool &is_valid);
+  static int check_tenant_is_valid_for_dynamic_partition(bool &is_valid);
   static int check_is_supported(const schema::ObTableSchema &table_schema);
   static int check_is_valid(const schema::ObTableSchema &table_schema);
   static int get_enable(const schema::ObTableSchema &table_schema, bool &enable);
@@ -132,7 +131,7 @@ private:
   static int dynamic_partition_policy_to_str_(ObIAllocator &allocator, const ObDynamicPartitionPolicy& policy, ObString &str);
   static int str_to_dynamic_partition_policy_(const ObString &str, ObDynamicPartitionPolicy &policy);
   static int64_t bigint_precision_scale_(const ObString &bigint_precision);
-  static int get_time_zone_wrap_(const uint64_t tenant_id, const ObString &time_zone, ObTimeZoneInfoWrap &tz_info_wrap);
+  static int get_time_zone_wrap_(const ObString &time_zone, ObTimeZoneInfoWrap &tz_info_wrap);
   static bool is_time_unit_matching_(const common::ObIArray<common::ObString> &time_unit_strs, const common::ObString &time_unit_str);
   static int64_t get_current_timestamp_();
   static int check_enable_is_valid_(const schema::ObTableSchema &table_schema);
@@ -149,7 +148,7 @@ private:
     int64_t& pos);
 private:
   bool inited_;
-  uint64_t tenant_id_;
+  
   const schema::ObTableSchema *table_schema_;
   sql::ObSQLSessionInfo *session_;
   ObDynamicPartitionPolicy policy_;

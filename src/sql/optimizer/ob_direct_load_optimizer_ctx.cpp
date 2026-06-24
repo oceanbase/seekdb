@@ -147,7 +147,7 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
     if (OB_ISNULL(session_info = exec_ctx->get_my_session())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected session info is null", K(ret));
-    } else if (0 != table_id && (stmt.value_from_select() && !stmt.is_external_table_overwrite())) {
+    } else if (0 != table_id && stmt.value_from_select()) {
       if (!GCONF._ob_enable_direct_load) {
         // do nothing
       } else if (stmt.is_normal_table_overwrite()) {
@@ -268,7 +268,7 @@ void ObDirectLoadOptimizerCtx::enable_by_config(ObExecContext *exec_ctx)
     load_method_ = ObDirectLoadMethod::INCREMENTAL;
     is_optimized_by_default_load_mode_ = true;
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     const ObString &config_str = tenant_config->default_load_mode.get_value_string();
     need_sort_ = true;
     insert_mode_ = ObDirectLoadInsertMode::NORMAL;
@@ -372,7 +372,7 @@ int ObDirectLoadOptimizerCtx::check_support_direct_load(ObExecContext *exec_ctx)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(
-        *schema_guard, MTL_ID(), table_id_, table_schema))) {
+        *schema_guard, table_id_, table_schema))) {
       LOG_WARN("fail to get table schema", KR(ret));
     } else if (OB_FAIL(ObTableLoadSchema::get_column_ids(table_schema, column_ids))) {
       LOG_WARN("fail to get column ids", KR(ret));
@@ -398,7 +398,7 @@ int ObDirectLoadOptimizerCtx::check_direct_load_allow_fallback(
   int ret = OB_SUCCESS;
   allow_fallback = true;
   ObSQLSessionInfo *session_info = nullptr;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_ISNULL(session_info = exec_ctx->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session info is null", K(ret));

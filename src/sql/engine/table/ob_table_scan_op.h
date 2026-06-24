@@ -426,7 +426,6 @@ public:
       uint64_t gi_above_                        : 1;
       uint64_t batch_scan_flag_                 : 1;
       uint64_t report_col_checksum_             : 1;
-      uint64_t has_tenant_id_col_               : 1;
       uint64_t is_spatial_ddl_                  : 1;
       uint64_t is_external_table_               : 1;
       uint64_t is_fts_ddl_                      : 1; // mark if ddl table is the fts index or fts doc word aux table.
@@ -436,10 +435,10 @@ public:
       uint64_t is_spiv_ddl_                     : 1;
       uint64_t is_scan_resumable_               : 1; // FARM COMPAT WHITELIST, compact with can_be_paused_
       uint64_t need_check_outrow_lob_           : 1; // mark if need check outrow lob
-      uint64_t reserved_                        : 49;
+      uint64_t reserved_                        : 50;
     };
   };
-  int64_t tenant_id_col_idx_;
+  int64_t id_col_idx_;
   int64_t partition_id_calc_type_;
 
   common::ObString parser_name_; // word segment for ddl.
@@ -641,7 +640,7 @@ protected:
   bool need_real_rescan();
   int check_need_real_rescan(bool &bret);
   inline void access_expr_sanity_check() {
-    if (OB_UNLIKELY(spec_.need_check_output_datum_ && !MY_SPEC.is_external_table_)) {
+    if (OB_UNLIKELY(spec_.need_check_output_datum_)) {
       const ObPushdownExprSpec &pd_expr_spec = MY_SPEC.tsc_ctdef_.scan_ctdef_.pd_expr_spec_;
       ObSQLUtils::access_expr_sanity_check(pd_expr_spec.access_exprs_,
                                eval_ctx_, pd_expr_spec.max_batch_size_);

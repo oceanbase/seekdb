@@ -54,14 +54,14 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
   } else {
     bool is_tenant_finish = false;
     int64_t total_purge_count = 0;
-    uint64_t tenant_id = purge_recyclebin_arg.tenant_id_;
+    
     while (OB_SUCC(ret) && !is_tenant_finish) {
       // A tenant only purges 10 objects from the recycle station to prevent blocking the RS's ddl thread
       // Each time return the number of purged rows, only when the purge count is less than affected_rows
       int64_t cal_timeout = 0;
       int64_t start_time = ObTimeUtility::current_time();
       if (OB_FAIL(GSCHEMASERVICE.cal_purge_need_timeout(purge_recyclebin_arg, cal_timeout))) {
-        LOG_WARN("fail to cal purge time out", KR(ret), K(tenant_id));
+        LOG_WARN("fail to cal purge time out", KR(ret));
       } else if (0 == cal_timeout) {
         is_tenant_finish = true;
       } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->purge_expire_recycle_objects(purge_recyclebin_arg, affected_rows); }))) {

@@ -54,7 +54,7 @@ public:
           n_times_(0), ready_ts_(0), by_pass_count_before_ready_(0), slide_window_(total_count_), flag_(0), max_wait_time_ms_(0),
           cur_row_(), cur_row_with_hash_(nullptr), skip_vector_(nullptr)
         {
-          cur_row_.set_attr(ObMemAttr(MTL_ID(), "RfCurRow"));
+          cur_row_.set_attr(ObMemAttr("RfCurRow"));
           need_wait_rf_ = true;
           need_check_ready_ = true;
           is_first_ = true;

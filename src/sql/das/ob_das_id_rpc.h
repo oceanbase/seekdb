@@ -27,16 +27,15 @@ class ObDASIDRequest
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASIDRequest() : tenant_id_(0), range_(0) {}
+  ObDASIDRequest() : range_(0) {}
   ~ObDASIDRequest() {}
-  int init(const uint64_t tenant_id, const int64_t range);
+  int init(const int64_t range);
   bool is_valid() const;
 public:
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   int64_t get_range() const { return range_; }
-  TO_STRING_KV(K_(tenant_id), K_(range));
+  TO_STRING_KV(K_(range));
 private:
-  uint64_t tenant_id_;
   int64_t range_;
 };
 } // namespace sql
@@ -47,17 +46,16 @@ class ObDASIDRpcResult
 {
   OB_UNIS_VERSION(1);
 public:
-  ObDASIDRpcResult() : tenant_id_(0), status_(0), start_id_(0), end_id_(0) {}
+  ObDASIDRpcResult() : status_(0), start_id_(0), end_id_(0) {}
   virtual ~ObDASIDRpcResult() {}
-  int init(const uint64_t tenant_id, const int status, const int64_t start_id, const int64_t end_id);
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  int init(const int status, const int64_t start_id, const int64_t end_id);
+  
   int get_status() const { return status_; }
   int64_t get_start_id() const { return start_id_; }
   int64_t get_end_id() const { return end_id_; }
   bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(status), K_(start_id), K_(end_id));
+  TO_STRING_KV(K_(status), K_(start_id), K_(end_id));
 private:
-  uint64_t tenant_id_;
   int status_;
   int64_t start_id_;
   int64_t end_id_;

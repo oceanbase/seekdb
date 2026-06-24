@@ -61,7 +61,7 @@ int ObDirectorySqlService::apply_new_schema(const ObDirectorySchema &schema,
     LOG_WARN("fail to exec ddl sql", K(ret), K(schema), K(ddl_type));
   } else {
     ObSchemaOperation operation;
-    operation.tenant_id_ = schema.get_tenant_id();
+    
     operation.table_id_ = schema.get_directory_id();
     operation.op_type_ = ddl_type;
     operation.schema_version_ = schema.get_schema_version();
@@ -79,8 +79,8 @@ int ObDirectorySqlService::add_schema(ObISQLClient &sql_client, const ObDirector
   ObSqlString sql;
   ObSqlString values;
   int64_t affected_rows = 0;
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!schema.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -101,7 +101,7 @@ int ObDirectorySqlService::add_schema(ObISQLClient &sql_client, const ObDirector
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -119,8 +119,8 @@ int ObDirectorySqlService::alter_schema(ObISQLClient &sql_client, const ObDirect
   ObSqlString sql;
   ObSqlString values;
   int64_t affected_rows = 0;
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   if (OB_UNLIKELY(!schema.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -143,7 +143,7 @@ int ObDirectorySqlService::alter_schema(ObISQLClient &sql_client, const ObDirect
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
         LOG_WARN("append sql failed, ", K(ret));
-      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
         LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -161,8 +161,8 @@ int ObDirectorySqlService::drop_schema(ObISQLClient &sql_client, const ObDirecto
    ObSqlString sql;
    ObSqlString values;
    int64_t affected_rows = 0;
-   uint64_t tenant_id = schema.get_tenant_id();
-   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+   
+   
    if (OB_UNLIKELY(!schema.is_valid())) {
      ret = OB_ERR_UNEXPECTED;
      LOG_WARN("invalid input argument", K(ret), K(schema));
@@ -170,9 +170,9 @@ int ObDirectorySqlService::drop_schema(ObISQLClient &sql_client, const ObDirecto
    if (OB_SUCC(ret)) {
      if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE directory_id = %lu",
                                 DIRECTORY_TABLES[THE_SYS_TABLE_IDX],
-                                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, schema.get_directory_id())))) {
+                                ObSchemaUtils::get_extract_schema_id(schema.get_directory_id())))) {
        LOG_WARN("fail to assign sql format", K(ret));
-     } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
        LOG_WARN("fail to execute sql", K(sql), K(ret));
      } else if (!is_single_row(affected_rows)) {
        ret = OB_ERR_UNEXPECTED;
@@ -195,7 +195,7 @@ int ObDirectorySqlService::drop_schema(ObISQLClient &sql_client, const ObDirecto
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
          LOG_WARN("append sql failed, ", K(ret));
-       } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
+       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
          LOG_WARN("fail to execute sql", K(sql), K(ret));
        } else if (!is_single_row(affected_rows)) {
          ret = OB_ERR_UNEXPECTED;
@@ -210,10 +210,10 @@ int ObDirectorySqlService::drop_schema(ObISQLClient &sql_client, const ObDirecto
 int ObDirectorySqlService::gen_sql(common::ObSqlString &sql, common::ObSqlString &values, const ObDirectorySchema &schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = schema.get_tenant_id();
-  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  
+  
   SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
-                       exec_tenant_id, schema.get_directory_id()), "directory_id", "%lu");
+                       schema.get_directory_id()), "directory_id", "%lu");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_directory_name_str().ptr(),
                                   schema.get_directory_name_str().length(), "directory_name");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_directory_path_str().ptr(),

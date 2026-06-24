@@ -75,7 +75,6 @@ private:
   int64_t get_primary_key_size() const;
   int add_primary_key_part(const common::ObString &column_name, common::ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);
   int add_hidden_tablet_seq_col();
-  int add_hidden_external_table_pk_col();
   int check_column_name_duplicate(const ParseNode *node);
   int resolve_primary_key_node(const ParseNode &pk_node, common::ObArray<ObColumnResolveStat> &stats);
   int resolve_table_elements(const ParseNode *node,
@@ -88,7 +87,6 @@ private:
   int set_temp_table_info(share::schema::ObTableSchema &table_schema, ParseNode *commit_option_node);
 
   int resolve_table_charset_info(const ParseNode *node);
-  int resolve_external_table_format_early(const ParseNode *node);
   //index
   int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   int generate_index_arg(const bool process_heap_table_primary_key);
@@ -122,12 +120,10 @@ private:
   int set_partition_info_for_oracle_temp_table(share::schema::ObTableSchema &table_schema);
   // following four functions should be used only in oracle mode
 
-  int check_external_table_generated_partition_column_sanity(ObTableSchema &table_schema, ObRawExpr *dependant_expr, ObIArray<int64_t> &external_part_idx);
   typedef common::hash::ObPlacementHashSet<uint64_t, common::OB_MAX_USER_DEFINED_COLUMNS_COUNT> VPColumnIdHashSet;
   uint64_t gen_column_group_id();
   int add_inner_index_for_heap_gtt();
   int check_max_row_data_length(const ObTableSchema &table_schema);  
-  int create_default_partition_for_table(ObTableSchema &table_schema);
   int set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema);
   int resolve_primary_key_node_in_heap_table(const ParseNode *element, common::ObArray<ObColumnResolveStat> &stats,
                                              ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> &resolved_cols);

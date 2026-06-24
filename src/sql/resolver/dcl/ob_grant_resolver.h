@@ -74,13 +74,11 @@ public:
                                  common::ObString &db,
                                  common::ObString &table,
                                  common::ObString &catalog,
-                                 const uint64_t tenant_id,
                                  ObIAllocator *allocator,
                                  bool is_grant = true); // revoke on object which has been deleted
 
   template<class T>
   static int resolve_priv_set(
-      const uint64_t tenant_id,
       const ParseNode *privs_node,
       share::schema::ObPrivLevel grant_level,
       ObPrivSet &priv_set,
@@ -154,7 +152,6 @@ int ObGrantResolver::resolve_col_names_mysql(
 
 template<class T>
 int ObGrantResolver::resolve_priv_set(
-    const uint64_t tenant_id,
     const ParseNode *privs_node,
     ObPrivLevel grant_level,
     ObPrivSet &priv_set,
@@ -254,7 +251,6 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
                                          common::ObString &db,
                                          common::ObString &table,
                                          common::ObString &catalog,
-                                         const uint64_t tenant_id,
                                          ObIAllocator *allocator,
                                          bool is_grant)
 {
@@ -267,7 +263,7 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
   } else if (priv_object_node != NULL) {
     if (priv_object_node->value_ == 1) {
       const share::schema::ObTableSchema *table_schema = NULL;
-      if (OB_FAIL(schema_checker->get_table_schema(tenant_id, db, table, false, table_schema))) {
+      if (OB_FAIL(schema_checker->get_table_schema( db, table, false, table_schema))) {
         LOG_WARN("get table schema failed", K(ret));
         if (OB_TABLE_NOT_EXIST == ret && !is_grant) {
           ret = OB_SUCCESS;
@@ -284,7 +280,7 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
       object_type = (priv_object_node->value_ == 2) ? ObObjectType::PROCEDURE : ObObjectType::FUNCTION;
       uint64_t routine_id = 0;
       bool is_proc = false;
-      if (OB_FAIL(schema_checker->get_routine_id(tenant_id, db, table, routine_id, is_proc))) {
+      if (OB_FAIL(schema_checker->get_routine_id(db, table, routine_id, is_proc))) {
         LOG_WARN("get routine id failed", K(ret));
         if (OB_ERR_SP_DOES_NOT_EXIST == ret && !is_grant) {
           ret = OB_SUCCESS;
@@ -299,14 +295,14 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
       }
     } else if (priv_object_node->value_ == 4) {
       object_type = ObObjectType::CATALOG;
-      if (OB_FAIL(schema_checker->get_catalog_id_name(tenant_id, catalog, object_id, allocator, !is_grant))) {
+      if (OB_FAIL(schema_checker->get_catalog_id_name(catalog, object_id, allocator, !is_grant))) {
         LOG_WARN("failed to get catalog id", K(ret));
       } else {
         grant_stmt->set_catalog_name(catalog);
       }
     } else if (priv_object_node->value_ == 5) {
       object_type = ObObjectType::LOCATION;
-      if (OB_FAIL(schema_checker->get_location_id(tenant_id, table, object_id))) {
+      if (OB_FAIL(schema_checker->get_location_id(table, object_id))) {
         LOG_WARN("failed to get location id", K(ret));
       }
     }

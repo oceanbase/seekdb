@@ -29,7 +29,7 @@ ObLSHandle::ObLSHandle()
     ls_(nullptr),
     mod_(ObLSGetMod::INVALID_MOD)
 {
-  INIT_OBJ_LEAK_DEBUG_NODE(node_, this, share::LEAK_CHECK_OBJ_LS_HANDLE, MTL_ID());
+  INIT_OBJ_LEAK_DEBUG_NODE(node_, this, share::LEAK_CHECK_OBJ_LS_HANDLE);
 }
 
 ObLSHandle::ObLSHandle(const ObLSHandle &other)
@@ -37,7 +37,7 @@ ObLSHandle::ObLSHandle(const ObLSHandle &other)
     ls_(nullptr),
     mod_(ObLSGetMod::INVALID_MOD)
 {
-  INIT_OBJ_LEAK_DEBUG_NODE(node_, this, share::LEAK_CHECK_OBJ_LS_HANDLE, MTL_ID());
+  INIT_OBJ_LEAK_DEBUG_NODE(node_, this, share::LEAK_CHECK_OBJ_LS_HANDLE);
   *this = other;
 }
 

@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 
@@ -50,8 +51,8 @@ int ObDTLIntermResultMonitorInfoGetter::operator() (common::hash::HashMapPair<Ob
   int ret = OB_SUCCESS;
   const ObDTLIntermResultInfo &info = *entry.second;
   const ObDTLIntermResultKey &key = entry.first;
-  int64_t tenant_id = info.is_store_valid() ? info.get_tenant_id() : OB_INVALID_ID;
-  if (OB_SYS_TENANT_ID == effective_tenant_id_ || tenant_id == effective_tenant_id_) {
+  
+  {
     int64_t hold_mem = 0;
     int64_t max_hold_mem = 0;
     int64_t dump_size = 0;
@@ -215,17 +216,14 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
   } else {
-    uint64_t cur_tenant_id = MTL_ID();
-    if(is_sys_tenant(cur_tenant_id)) {
-      omt::TenantIdList all_tenants;
-      GCTX.omt_->get_tenant_ids(all_tenants);
-      for (int i = 0; i < all_tenants.size(); ++i) {
-        uint64_t tmp_tenant_id = all_tenants[i];
-        if(!is_virtual_tenant_id(tmp_tenant_id)) {
+    
+    if(true) {
+      {
+        {
           ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
-                                  cur_row_, tmp_tenant_id);
-          MTL_SWITCH(tmp_tenant_id) {
-            if (OB_FAIL(MTL(ObDTLIntermResultManager*)->generate_monitor_info_rows(monitor_getter))) {
+                                  cur_row_);
+          MOD_SCOPE {
+            if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
               SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
             }
           } else {
@@ -237,9 +235,9 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
       }
     } else {
       ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
-                                  cur_row_, cur_tenant_id);
-      MTL_SWITCH(cur_tenant_id) {
-        if (OB_FAIL(MTL(ObDTLIntermResultManager*)->generate_monitor_info_rows(monitor_getter))) {
+                                  cur_row_);
+      MOD_SCOPE {
+        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
           SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
         }
       }

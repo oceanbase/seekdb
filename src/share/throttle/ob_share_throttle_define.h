@@ -32,7 +32,7 @@
   }                                                                                                              \
   static int64_t resource_unit_size();                                                                           \
   static void init_throttle_config(int64_t &resource_limit, int64_t &trigger_percentage, int64_t &max_duration); \
-  static void adaptive_update_limit(const int64_t tenant_id,                                                     \
+  static void adaptive_update_limit(                                                     \
                                     const int64_t holding_size,                                                  \
                                     const int64_t config_specify_resource_limit,                                 \
                                     int64_t &resource_limit,                                                     \
@@ -43,7 +43,6 @@
                                                       \
   struct FakeAllocatorFor##ThrottleName {             \
     DEFINE_CUSTOM_FUNC_FOR_THROTTLE(ThrottleName);    \
-    int64_t tenant_id_;                               \
   };                                                  \
                                                       \
   LST_DEFINE(__VA_ARGS__);                            \

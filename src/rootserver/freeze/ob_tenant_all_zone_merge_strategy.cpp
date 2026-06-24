@@ -29,13 +29,13 @@ int ObTenantAllZoneMergeStrategy::get_next_zone(ObIArray<ObZone> &to_merge_zones
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(tenant_id));
+    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(zone_merge_mgr_->get_zone(to_merge_zones))) {
-    LOG_WARN("fail to get zone", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to get zone", KR(ret));
   } else if (OB_FAIL(filter_merging_zones(to_merge_zones))) {
-    LOG_WARN("fail to filter merging zones", KR(ret), K(tenant_id_));
+    LOG_WARN("fail to filter merging zones", KR(ret));
   } else {
-    LOG_INFO("get_next_zone of merge strategy", K(tenant_id_),
+    LOG_INFO("get_next_zone of merge strategy",
              "to_merge_cnt", to_merge_zones.count(), K(to_merge_zones));
   }
 

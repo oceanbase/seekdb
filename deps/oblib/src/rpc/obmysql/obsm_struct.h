@@ -46,7 +46,6 @@ public:
   ObSMConnection()
   {
     cap_flags_.capability_ = 0;
-    is_proxy_ = false;
     is_java_client_ = false;
     is_oci_client_ = false;
     is_jdbc_client_ = false;
@@ -57,10 +56,9 @@ public:
     is_tenant_locked_ = false;
     connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED;
     sessid_ = INITIAL_SESSID;
-    proxy_sessid_ = 0;
     sess_create_time_ = 0;
     resource_group_id_ = 0;
-    tenant_id_ = 0;
+    
     proxy_cap_flags_.capability_ = 0,
     tenant_ = NULL;
     MEMSET(tenant_name_buf_, 0, sizeof(tenant_name_buf_));
@@ -71,10 +69,8 @@ public:
     connect_in_bytes_ = 0;
     ret_ = common::OB_SUCCESS;
     scramble_buf_[SCRAMBLE_BUF_SIZE] = '\0';
-    proxy_version_ = 0;
     group_id_ = 0;
     client_cs_type_ = 0;
-    sql_req_level_ = 0;
     pkt_rec_wrapper_.init();
     client_type_ = common::OB_CLIENT_INVALID_TYPE;
     client_version_ = 0;
@@ -92,13 +88,7 @@ public:
     if ((is_in_authed_phase() || (is_in_auth_switch_phase() && is_logined())) &&
         (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS
         || proxy_cap_flags_.is_ob_protocol_v2_compress())) {
-      if (is_proxy_) {
-        if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
-          type_ret = obmysql::ObCompressType::PROXY_CHECKSUM;
-        } else {
-          type_ret = obmysql::ObCompressType::PROXY_COMPRESS;
-        }
-      } else if (is_java_client_) {
+      if (is_java_client_) {
         if (1 == proxy_cap_flags_.cap_flags_.OB_CAP_CHECKSUM) {
           type_ret = obmysql::ObCompressType::DEFAULT_CHECKSUM;
         } else {
@@ -124,25 +114,15 @@ public:
   }
 
   bool need_send_extra_ok_packet() const {
-    return (is_proxy_ || (is_java_client_ && proxy_cap_flags_.is_extra_ok_packet_for_ocj_support()));
+    return (is_java_client_ && proxy_cap_flags_.is_extra_ok_packet_for_ocj_support());
   }
 
   bool is_normal_client() const {
-    return (!is_proxy_ && !is_java_client_ && !is_oci_client_ && !is_jdbc_client_);
+    return (!is_java_client_ && !is_oci_client_ && !is_jdbc_client_);
   }
 
   bool is_driver_client() const {
     return is_oci_client_ || is_jdbc_client_;
-  }
-
-  bool is_support_proxy_reroute() const {
-    return (1 == proxy_cap_flags_.cap_flags_.OB_CAP_OB_PROTOCOL_V2
-            && 1 == proxy_cap_flags_.cap_flags_.OB_CAP_PROXY_REROUTE);
-  }
-
-  bool is_support_sessinfo_sync() const {
-    return (1 == proxy_cap_flags_.cap_flags_.OB_CAP_OB_PROTOCOL_V2
-            && 1 == proxy_cap_flags_.cap_flags_.OB_CAP_PROXY_SESSIOIN_SYNC);
   }
 
   common::ObCSProtocolType get_cs_protocol_type() const
@@ -177,7 +157,6 @@ public:
   inline void set_logined(bool logined) { logined_ = logined; }
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
-  bool is_proxy_;
   bool is_java_client_;
   bool is_oci_client_;
   bool is_jdbc_client_;
@@ -190,9 +169,8 @@ public:
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
   uint32_t version_;
-  uint64_t proxy_sessid_;
   int64_t sess_create_time_; // proxy connection mode, record the session connection time from client to proxy
-  uint64_t tenant_id_;
+  
   uint64_t resource_group_id_;
   obmysql::ObProxyCapabilityFlags proxy_cap_flags_;
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
@@ -209,10 +187,8 @@ public:
   obmysql::ObCompressedPktContext compressed_pkt_context_;
   obmysql::ObProto20PktContext proto20_pkt_context_;
   char scramble_buf_[SCRAMBLE_BUF_SIZE + 1];
-  uint64_t proxy_version_;
   int32_t group_id_;
   int32_t client_cs_type_;
-  int64_t sql_req_level_;
   obmysql::ObPacketRecordWrapper pkt_rec_wrapper_;
   ObClientType client_type_;
   uint64_t client_version_;

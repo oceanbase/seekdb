@@ -18,6 +18,7 @@
 #define PRINT_TS_WRAPPER(x) (ObPrintTableStore(*(x.get_member())))
 
 #include "ob_partition_merge_policy.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tenant_compaction_progress.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -176,7 +177,7 @@ int ObPartitionMergePolicy::get_mds_merge_tables(
   }
   int64_t minor_compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       minor_compact_trigger = tenant_config->minor_compact_trigger;
     }
@@ -317,12 +318,12 @@ int ObPartitionMergePolicy::get_mini_merge_tables(
     ObPartitionMergePolicy::diagnose_table_count_unsafe(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE, tablet);
   } else if (OB_FAIL(tablet.get_all_memtables_from_memtable_mgr(memtable_handles))) {
     LOG_WARN("failed to get all memtable", K(ret), K(tablet));
-  } else if (OB_FAIL(MTL(ObTenantFreezeInfoMgr *)->get_freeze_info_behind_major_snapshot(merge_inc_base_version, false/*include_equal*/, freeze_infos))) {
+  } else if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_freeze_info_behind_major_snapshot(merge_inc_base_version, false/*include_equal*/, freeze_infos))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("failed to get freeze info behind snapshot version", K(ret), K(merge_inc_base_version));
     } else {
       ret = OB_SUCCESS;
-      next_freeze_info.frozen_scn_ = MTL(ObTenantFreezeInfoMgr *)->get_snapshot_gc_scn();
+      next_freeze_info.frozen_scn_ = share::g_mp->tenant_freeze_info_mgr()->get_snapshot_gc_scn();
     }
   } else {
     next_freeze_info = freeze_infos.at(0);
@@ -554,7 +555,7 @@ int ObPartitionMergePolicy::get_boundary_snapshot_version(
     const int64_t merge_inc_base_version = tablet.get_snapshot_version();
 
     ObTenantFreezeInfoMgr::NeighbourFreezeInfo freeze_info;
-    if (OB_SUCC(MTL(ObTenantFreezeInfoMgr *)->get_neighbour_major_freeze(merge_inc_base_version, freeze_info))) {
+    if (OB_SUCC(share::g_mp->tenant_freeze_info_mgr()->get_neighbour_major_freeze(merge_inc_base_version, freeze_info))) {
       // do nothing
     } else if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("failed to get neighbour major freeze info", K(ret), K(merge_inc_base_version));
@@ -567,12 +568,12 @@ int ObPartitionMergePolicy::get_boundary_snapshot_version(
     if (OB_SUCC(ret)) {
       min_snapshot = max(last_major_snapshot_version, freeze_info.prev.frozen_scn_.get_val_for_tx());
       max_snapshot = (freeze_info.next.frozen_scn_.is_max() && is_multi_version_merge)
-                   ? MTL(ObTenantFreezeInfoMgr *)->get_snapshot_gc_ts()
+                   ? share::g_mp->tenant_freeze_info_mgr()->get_snapshot_gc_ts()
                    : freeze_info.next.frozen_scn_.get_val_for_tx();
     }
 
     int64_t max_medium_scn = 0;
-    ObArenaAllocator allocator("GetMediumList", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator allocator("GetMediumList", OB_MALLOC_NORMAL_BLOCK_SIZE);
     const compaction::ObMediumCompactionInfoList *medium_list = nullptr;
     if (FAILEDx(tablet.read_medium_info_list(allocator, medium_list))) {
       LOG_WARN("failed to read medium info list", K(ret), KPC(medium_list));
@@ -609,7 +610,7 @@ int ObPartitionMergePolicy::find_minor_merge_tables(
     ObSSTable *table = nullptr;
     bool found_greater = false;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         minor_compact_trigger = tenant_config->minor_compact_trigger;
       }
@@ -805,11 +806,11 @@ int ObPartitionMergePolicy::deal_hist_minor_merge(
     ret = OB_NO_NEED_MERGE;
   } else if (OB_ISNULL(first_major = wrapper.get_member()->get_major_sstables().get_boundary_table(false))) {
     // index table during building, need compat with continuous multi version
-    if (0 == (max_snapshot_version = MTL(ObTenantFreezeInfoMgr*)->get_latest_frozen_version())) {
+    if (0 == (max_snapshot_version = share::g_mp->tenant_freeze_info_mgr()->get_latest_frozen_version())) {
       ret = OB_NO_NEED_MERGE; // no freeze info, need to do normal minor merge
       LOG_WARN("No freeze range to do hist minor merge for buiding index", K(ret), K(PRINT_TS_WRAPPER(wrapper)));
     }
-  } else if (OB_FAIL(MTL(ObTenantFreezeInfoMgr *)->get_freeze_info_behind_major_snapshot(first_major->get_snapshot_version(), true/*include_equal*/, freeze_infos))) {
+  } else if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_freeze_info_behind_major_snapshot(first_major->get_snapshot_version(), true/*include_equal*/, freeze_infos))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_NO_NEED_MERGE;
     } else {
@@ -895,7 +896,7 @@ int ObPartitionMergePolicy::diagnose_table_count_unsafe(
   int tmp_ret = OB_SUCCESS;
   int64_t minor_compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     minor_compact_trigger = tenant_config->minor_compact_trigger;
   }
 
@@ -1011,7 +1012,7 @@ int ObPartitionMergePolicy::refine_minor_merge_result(
     int64_t write_amplification_threshold = OB_LARGE_MINOR_SSTABLE_ROW_COUNT;
     int64_t size_amplification_factor = OB_DEFAULT_COMPACTION_AMPLIFICATION_FACTOR;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (tenant_config.is_valid()) {
         write_amplification_threshold = tenant_config->_minor_merge_write_amplification_threshold;
         if (int64_t(tenant_config->_minor_compaction_amplification_factor) > 0) {
@@ -1093,7 +1094,7 @@ if (OB_SUCC(ret)) {
 int64_t ObPartitionMergePolicy::cal_hist_minor_merge_threshold(const bool is_tablet_referenced_by_collect_mv)
 {
   int64_t compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     compact_trigger = tenant_config->minor_compact_trigger;
   }
@@ -1330,7 +1331,7 @@ int ObMinorExecuteRangeMgr::get_merge_ranges(
   param.tablet_id_ = tablet_id;
   param.skip_get_tablet_ = true;
 
-  if (OB_FAIL(MTL(ObTenantDagScheduler*)->get_minor_exe_dag_info(param, exe_range_array_))) {
+  if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_minor_exe_dag_info(param, exe_range_array_))) {
     LOG_WARN("failed to get minor exe dag info", K(ret));
   } else if (OB_FAIL(sort_ranges())) {
     LOG_WARN("failed to sort ranges", K(ret), K(param));
@@ -1614,7 +1615,7 @@ int ObAdaptiveMergePolicy::find_adaptive_merge_tables(
     } else if (scanty_tx_determ_table || scanty_inc_row_cnt) {
       int tmp_ret = OB_SUCCESS;
       ObTableQueuingModeCfg cfg;
-      if (OB_TMP_FAIL(MTL(ObTenantTabletStatMgr *)->get_queuing_cfg(tablet.get_ls_id(), tablet.get_tablet_id(), cfg))) {
+      if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_queuing_cfg(tablet.get_ls_id(), tablet.get_tablet_id(), cfg))) {
         LOG_WARN_RET(tmp_ret, "failed to get table queuing mode, treat it as normal table");
       }
       if (cfg.is_queuing_mode() && scanty_inc_row_cnt && !scanty_tx_determ_table) {
@@ -1705,7 +1706,7 @@ int ObAdaptiveMergePolicy::get_adaptive_merge_reason(
 
   if (tablet_id.is_special_merge_tablet()) {
     // do nothing
-  } else if (OB_FAIL(MTL(ObTenantTabletStatMgr *)->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet analyzer stat", K(ret), K(ls_id), K(tablet_id));
     } else if (OB_TMP_FAIL(check_inc_sstable_row_cnt_percentage(tablet, reason))) {
@@ -1767,7 +1768,7 @@ int ObAdaptiveMergePolicy::check_tombstone_reason(
   ObTabletStatAnalyzer tablet_analyzer;
   if (tablet_id.is_special_merge_tablet()) {
     // do nothing
-  } else if (OB_FAIL(MTL(ObTenantTabletStatMgr *)->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet analyzer stat", K(ret), K(ls_id), K(tablet_id));
     } else {
@@ -1918,7 +1919,7 @@ int ObAdaptiveMergePolicy::check_adaptive_merge_reason_for_event(
     // do nothing
   } else if (SCHEDULE_META == event && (ls.is_cs_replica() || !tablet.is_row_store())) {
     // column store tablet not suppoert meta compaction
-  } else if (OB_FAIL(MTL(ObTenantTabletStatMgr *)->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
+  } else if (OB_FAIL(share::g_mp->tenant_tablet_stat_mgr()->get_tablet_analyzer(ls_id, tablet_id, tablet_analyzer))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet analyzer stat", K(ret), K(ls_id), K(tablet_id));
     } else {

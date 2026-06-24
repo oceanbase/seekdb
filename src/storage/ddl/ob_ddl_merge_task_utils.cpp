@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -50,7 +51,10 @@ int ObDDLMergeTaskUtils::check_idempodency(const ObIArray<ObDDLBlockMeta> &input
     write_stat->reset();
   } 
 
-  if (input_metas.count() > 0 && OB_FAIL(id_checksum_map.create(input_metas.count(), ObMemAttr(MTL_ID(), "DDL_MER_IDEM")))) {
+  if (GCTX.is_shared_storage_mode()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("shared storage mode do not need idempodency checker", K(ret), K(lbt()));
+  } else if (input_metas.count() > 0 && OB_FAIL(id_checksum_map.create(input_metas.count(), ObMemAttr("DDL_MER_IDEM")))) {
     LOG_WARN("failed to create checksum map", K(ret), K(input_metas.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < input_metas.count(); ++i) {
@@ -117,7 +121,7 @@ int init_datum_utils(ObTablet &tablet,
       int_col_desc.col_order_ = ObOrderType::ASC;
       int_col_desc.col_type_.set_int();
       ObSEArray<schema::ObColDesc, 1> col_descs;
-      col_descs.set_attr(ObMemAttr(MTL_ID(), "DDL_Btree_descs"));
+      col_descs.set_attr(ObMemAttr("DDL_Btree_descs"));
       const bool is_column_store = true;
       if (OB_FAIL(col_descs.push_back(int_col_desc))) {
         LOG_WARN("push back col desc failed", K(ret));
@@ -233,7 +237,7 @@ int ObDDLMergeTaskUtils::freeze_ddl_kv(const ObLSID &ls_id,
     
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
@@ -423,7 +427,7 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
   bool for_major = dag_merge_param.for_major_;
   
   ObLSHandle ls_handle;
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObTabletHandle tablet_handle, new_tablet_handle;
 
   int64_t rebuild_seq = -1;
@@ -485,7 +489,7 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(target_tablet_id, table_store_param, new_tablet_handle))) {
         LOG_WARN("failed to update tablet table store", K(ret), K(target_tablet_id), K(table_store_param));
-      } else if (for_major && OB_FAIL(MTL(ObTabletTableUpdater*)->submit_tablet_update_task(target_ls_id, target_tablet_id))) {
+      } else if (for_major && OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(target_ls_id, target_tablet_id))) {
         LOG_WARN("fail to submit tablet update task", K(ret), K(dag_merge_param));
       }
     }

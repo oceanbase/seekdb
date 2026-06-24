@@ -52,7 +52,6 @@ private:
     TIME,
     STATE,
     INFO,
-    PROXY_SESSID,
     MASTER_SESSID,
     USER_CLIENT_IP,
     USER_HOST,

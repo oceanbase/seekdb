@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_independent_dag.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -70,7 +71,7 @@ int ObIndependentDag::basic_init(ObIAllocator &allocator)
    // If the input allocator is an ObArenaAllocator, the memory will not be released until the ObArenaAllocator destructs.
   UNUSED(allocator);
   int ret = OB_SUCCESS;
-  ObTenantDagScheduler* dag_scheduler = MTL(ObTenantDagScheduler*);
+  ObTenantDagScheduler* dag_scheduler = share::g_mp->tenant_dag_scheduler();
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "dag init twice", K(ret));
@@ -671,7 +672,7 @@ int64_t ObPrintIndependentDag::to_string(char *buf, const int64_t buf_len) const
       ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
       // task_list_name|task_ptr|task_type|task_status|task_priority|dag_ptr
-      BUF_PRINTF("[%ld][%s][T%ld] [", GETTID(), GETTNAME(), GET_TENANT_ID());
+      BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
       BUF_PRINTO(PC(trace_id));
       BUF_PRINTF("] ");
       BUF_PRINTF(" %-10s %-16s %-5s %-16s %-10s %-10s %-10s %-50s \n",
@@ -725,7 +726,7 @@ void ObPrintIndependentDag::task_to_string(
   if (OB_NOT_NULL(task)) {
     ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
     const char* task_status_str = ObITask::get_task_status_str(task->get_status());
-    BUF_PRINTF("[%ld][%s][T%ld] [", GETTID(), GETTNAME(), GET_TENANT_ID());
+    BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));
     BUF_PRINTF("] ");
     BUF_PRINTF(" %-10s %-16p %-5d %-16s %-10s %-10d %-10ld ",

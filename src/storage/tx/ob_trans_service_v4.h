@@ -185,7 +185,7 @@ int handle_ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
 
 // for dblink tx promotion
 
-TO_STRING_KV(K(is_inited_), K(tenant_id_), KP(this));
+TO_STRING_KV(K(is_inited_), KP(this));
 
 private:
 int check_ls_status_(const share::ObLSID &ls_id, bool &leader);
@@ -279,8 +279,7 @@ bool is_sync_replica_(const share::ObLSID &ls_id);
 
 int handle_orphan_2pc_msg_(const ObTxMsg &msg, const bool need_check_leader, const bool ls_deleted);
 
-int update_max_read_ts_(const uint64_t tenant_id,
-                        const share::ObLSID &lsid,
+int update_max_read_ts_(const share::ObLSID &lsid,
                         const share::SCN ts);
 int do_commit_tx_(ObTxDesc &tx,
                   const int64_t expire_ts,

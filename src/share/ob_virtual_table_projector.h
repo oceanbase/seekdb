@@ -118,7 +118,7 @@ private:
 class ObSimpleVirtualTableIterator: public ObVirtualTableProjector
 {
 public:
-  ObSimpleVirtualTableIterator(uint64_t tenant_id, uint64_t table_id);
+  ObSimpleVirtualTableIterator(uint64_t table_id);
   virtual ~ObSimpleVirtualTableIterator() {}
 
   virtual int inner_open() override;
@@ -135,10 +135,9 @@ private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObSimpleVirtualTableIterator);
   // function members
-  int get_table_schema(uint64_t tenant_id, uint64_t table_id);
+  int get_table_schema( uint64_t table_id);
 private:
   // data members
-  uint64_t tenant_id_;
   uint64_t table_id_;
   common::ObSEArray<Column, MAX_COLUMN_NUM> columns_;
   share::schema::ObSchemaGetterGuard schema_guard_;

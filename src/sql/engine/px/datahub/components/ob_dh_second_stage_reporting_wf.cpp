@@ -112,8 +112,7 @@ int ObReportingWFPieceMsgCtx::alloc_piece_msg_ctx(const ObReportingWFPieceMsg &p
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       msg_ctx = new (buf) ObReportingWFPieceMsgCtx(pkt.op_id_, task_cnt,
-          ctx.get_physical_plan_ctx()->get_timeout_timestamp(),
-          ctx.get_my_session()->get_effective_tenant_id());
+          ctx.get_physical_plan_ctx()->get_timeout_timestamp());
     }
   }
   return ret;

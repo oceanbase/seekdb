@@ -107,8 +107,8 @@ int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, 
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_EQUALS);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_EQUALS);
   ObDatum *gis_datum1 = nullptr;
   ObDatum *gis_datum2 = nullptr;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
@@ -122,7 +122,7 @@ int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, 
   } else {
     uint32_t srid1 = srs1 == nullptr ? 0 : srs1->get_srid();
     uint32_t srid2 = srs2 == nullptr ? 0 : srs2->get_srid();
-    ObGeoBoostAllocGuard guard(tenant_id);
+    ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
     if (srid1 != srid2) {
       ret = OB_ERR_GIS_DIFFERENT_SRIDS;

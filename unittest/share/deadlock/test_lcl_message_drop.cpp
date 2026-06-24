@@ -30,7 +30,7 @@ class TestLCLMsgDrop : public ::testing::Test {
 public:
   TestLCLMsgDrop() {}
   ~TestLCLMsgDrop() {}
-  virtual void SetUp() { share::ObTenantEnv::get_tenant_local()->id_ = 1; }
+  virtual void SetUp() {}
   virtual void TearDown() {}
   static ObLCLBatchSenderThread batch_sender_;
   int port;

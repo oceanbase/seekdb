@@ -32,9 +32,7 @@ public:
   inline void set_if_not_exists(bool if_not_exists) {
     create_ccl_rule_arg_.if_not_exist_ = if_not_exists;
   }
-  inline void set_tenant_id(uint64_t tenant_id) {
-    create_ccl_rule_arg_.ccl_rule_schema_.set_tenant_id(tenant_id);
-  }
+  
   inline void set_ccl_rule_name(const common::ObString &ccl_rule_name) {
     create_ccl_rule_arg_.ccl_rule_schema_.set_ccl_rule_name(ccl_rule_name);
   }

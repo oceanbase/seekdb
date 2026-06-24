@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_system_variable.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 #include "share/ob_version.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
@@ -1432,7 +1433,7 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
   } else if (OB_FAIL(session->get_collation_connection(coll_type))) {
     LOG_WARN("fail to get connection collation", K(coll_type), K(ret));
   } else {
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     int32_t no_sp_len = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(coll_type,
                                                                           str_val.ptr(),
                                                                           str_val.length()));
@@ -1442,7 +1443,7 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
     }
   	ObTZMapWrap tz_map_wrap;
     ObTimeZoneInfoManager *tz_info_mgr = NULL;
-    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tenant_id, tz_map_wrap, tz_info_mgr))) {
+    if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
       LOG_WARN("get tenant timezone failed", K(ret));
     } else if (OB_ISNULL(tz_info_mgr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -2397,8 +2398,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_compat_version(sql::ObExecContext &c
   uint64_t compat_version = 0;
   if (true == set_var.is_set_default_) {
     // do nothing
-  } else if (OB_FAIL(check_and_convert_version(ctx, sys_var, in_val,
-                                               set_var.actual_tenant_id_, compat_version))) {
+  } else if (OB_FAIL(check_and_convert_version(ctx, sys_var, in_val, compat_version))) {
     LOG_WARN("failed to check and convert version", K(ret));
   } else {
     out_val.set_uint64(compat_version);
@@ -2421,12 +2421,11 @@ int ObSysVarOnCheckFuncs::check_and_convert_security_version(sql::ObExecContext 
     LOG_WARN("fail to get session info", K(ret));
   } else if (true == set_var.is_set_default_) {
     // do nothing
-  } else if (OB_FAIL(check_and_convert_version(ctx, sys_var, in_val,
-                                               set_var.actual_tenant_id_, security_version))) {
+  } else if (OB_FAIL(check_and_convert_version(ctx, sys_var, in_val, security_version))) {
     LOG_WARN("failed to check and convert version", K(ret));
   } else if (OB_FAIL(session->get_security_version(old_version))) {
     LOG_WARN("failed to get security version", K(ret));
-  } else if (OB_UNLIKELY(set_var.actual_tenant_id_ != OB_INVALID_ID &&
+  } else if (OB_UNLIKELY(1UL != OB_INVALID_ID &&
                          security_version < old_version)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "decrease security version");
@@ -2439,7 +2438,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_security_version(sql::ObExecContext 
 int ObSysVarOnCheckFuncs::check_and_convert_version(sql::ObExecContext &ctx,
                                                     const ObBasicSysVar &sys_var,
                                                     const common::ObObj &in_val,
-                                                    const uint64_t tenant_id,
                                                     uint64_t &version)
 {
   int ret = OB_SUCCESS;
@@ -2463,7 +2461,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_version(sql::ObExecContext &ctx,
     LOG_WARN("invalid type", K(ret), K(in_val));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObCompatControl::check_compat_version(tenant_id, version))) {
+  } else if (OB_FAIL(ObCompatControl::check_compat_version( version))) {
     if (OB_INVALID_ARGUMENT == ret) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "target version");
@@ -2578,7 +2576,7 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
     session.get_query_timeout(query_timeout);
     int64_t stmt_expire_ts = session.get_query_start_time() + query_timeout;
     transaction::ObTxReadSnapshot snapshot;
-    if (OB_FAIL(MTL(transaction::ObTransService*)
+    if (OB_FAIL(share::g_mp->trans_service()
                 ->get_read_snapshot(*session.get_tx_desc(),
                                     isolation,
                                     stmt_expire_ts,

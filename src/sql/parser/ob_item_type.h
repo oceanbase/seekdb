@@ -286,7 +286,6 @@ typedef enum ObItemType
   T_FUN_SYS_INSTR = 556,
   T_FUN_SYS_LNNVL = 557,
   T_FUN_SYS_LOCATE = 558,
-  T_FUN_SYS_EFFECTIVE_TENANT = 559,
   T_FUN_SYS_CURRENT_USER = 560,
   T_FUN_SYS_USER = 561,
   T_FUN_SYS_VERSION = 562,
@@ -296,7 +295,6 @@ typedef enum ObItemType
   T_FUN_SYS_COERCIBILITY = 566,
   T_FUN_SYS_REVERSE = 567,
   T_FUN_SYS_RIGHT = 568,
-  T_FUN_SYS_EFFECTIVE_TENANT_ID = 569,
   T_FUN_SYS_VALUES = 570,
   T_FUN_SYS_OCT = 571,
   T_FUN_SYS_RPAD = 572,
@@ -320,7 +318,6 @@ typedef enum ObItemType
   T_FUN_SYS_IF = 591,
   T_FUN_SYS_ISNULL = 592,
   T_FUN_SYS_TIMESTAMP_NVL = 593,
-  T_FUN_IS_SERVING_TENANT = 594,
   T_FUN_SYS_POSITION = 595,
   T_FUN_SYS_ORA_DECODE = 596,
   T_FUN_SYS_ELT = 597,
@@ -1407,7 +1404,7 @@ typedef enum ObItemType
   T_SHOW_COLLATION = 3549,
   T_SHOW_TABLEGROUPS = 3550,
   T_SHOW_STATUS = 3551,
-  T_SHOW_TENANT = 3552,
+  // 3552: T_SHOW_TENANT abandoned, id reserved
   T_SHOW_CREATE_TENANT = 3553,
   T_SHOW_TRACE = 3554,
   T_SHOW_ENGINES = 3555,
@@ -3039,8 +3036,7 @@ typedef enum ObOutlineType
                            || (op) == T_SHOW_PLUGINS || (op) == T_SHOW_CHECK_TABLE \
                            || (op) == T_SHOW_OLAP_ASYNC_JOB_STATUS                \
                            || (op) == T_SHOW_CREATE_LOCATION \
-                           || (op) == T_SHOW_LOCATIONS       \
-                           || (op) == T_LOCATION_UTILS_LIST)
+                           || (op) == T_SHOW_LOCATIONS)
 
 #define EXPR_OP_NUM (T_MAX_OP-T_MIN_OP-1)
 extern const char *get_type_name(int type);

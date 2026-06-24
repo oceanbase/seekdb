@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
 #include "storage/ddl/ob_ddl_merge_schedule.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
@@ -47,7 +48,7 @@ namespace storage
 int ObDDLMergeScheduler::check_need_merge_for_idem_sn(ObTablet &tablet, ObArray<ObDDLKVHandle> &ddl_kvs, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Check_Maj"));
+  ObArenaAllocator arena(ObMemAttr("Ddl_Check_Maj"));
   ObTabletDDLCompleteMdsUserData user_data;
   if (ddl_kv_type != ObDDLKVType::DDL_KV_INVALID || need_schedule_merge) {
     ret = OB_ERR_UNEXPECTED;
@@ -118,7 +119,7 @@ int ObDDLMergeScheduler::check_need_merge_for_nidem_sn(ObTablet &tablet, ObArray
     bool is_major_sstable_exist = false;
     ObTenantDirectLoadMgr *tenant_direct_load_mgr = nullptr;
     ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-    if (OB_ISNULL(tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *))) {
+    if (OB_ISNULL(tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, tenant direct load mgr is null", K(ret));
     } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
@@ -246,7 +247,7 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
   ObDDLTableMergeDagParam param;
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTenantDirectLoadMgr *tenant_direct_load_mgr = share::g_mp->tenant_direct_load_mgr();
   bool is_major_sstable_exist = false;
   bool has_freezed_ddl_kv = false;
   SCN ddl_commit_scn;
@@ -267,7 +268,7 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
   } else if (DDL_IDEM_DATA_FORMAT_VERSION <= tablet_handle.get_obj()->get_tablet_meta().ddl_data_format_version_) {
   } else if (OB_ISNULL(tenant_direct_load_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(MTL_ID()));
+    LOG_WARN("unexpected error", K(ret));
   } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
           ls_id,
           tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
@@ -305,7 +306,7 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
     /* schedule to build major sstable, getting merge param from mds data */
     bool has_freezed_ddl_kv = false;
     ObDDLTableMergeDagParam param;
-    ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DDL_Mrg_Par"));
+    ObArenaAllocator arena(ObMemAttr("DDL_Mrg_Par"));
     ObTabletDDLCompleteMdsUserData  ddl_complete;
     if (OB_FAIL(ObDDLUtil::is_major_exist(ls_id, tablet_handle.get_obj()->get_tablet_meta().tablet_id_, is_major_sstable_exist))) {
       LOG_WARN("failed to check major sstable exist", K(ret), K(ls_id), K(tablet_handle.get_obj()->get_tablet_meta().tablet_id_));

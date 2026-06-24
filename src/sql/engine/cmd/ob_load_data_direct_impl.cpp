@@ -52,8 +52,7 @@ bool ObLoadDataDirectImpl::DataAccessParam::is_valid() const
  */
 
 ObLoadDataDirectImpl::LoadExecuteParam::LoadExecuteParam()
-  : tenant_id_(OB_INVALID_ID),
-    database_id_(OB_INVALID_ID),
+  : database_id_(OB_INVALID_ID),
     table_id_(OB_INVALID_ID),
     parallel_(0),
     thread_count_(0),
@@ -70,12 +69,12 @@ ObLoadDataDirectImpl::LoadExecuteParam::LoadExecuteParam()
     compressor_type_(ObCompressorType::INVALID_COMPRESSOR),
     online_sample_percent_(100.)
 {
-  column_ids_.set_tenant_id(MTL_ID());
+  
 }
 
 bool ObLoadDataDirectImpl::LoadExecuteParam::is_valid() const
 {
-  return OB_INVALID_ID != tenant_id_ && OB_INVALID_ID != database_id_ &&
+  return OB_INVALID_ID != database_id_ &&
          OB_INVALID_ID != table_id_ && !database_name_.empty() && !table_name_.empty() &&
          !combined_name_.empty() && parallel_ > 0 && thread_count_ > 0 && batch_row_count_ > 0 &&
          data_mem_usage_limit_ > 0 && max_error_rows_ >= 0 && ignore_row_num_ >= 0 &&
@@ -149,7 +148,7 @@ int ObLoadDataDirectImpl::Logger::init(const ObString &load_info, int64_t max_er
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(load_info));
   } else if (OB_ISNULL(buf_ = static_cast<char *>(
-                         ob_malloc(DEFAULT_BUF_LENGTH, ObMemAttr(MTL_ID(), "MTL_LogBuffer"))))) {
+                         ob_malloc(DEFAULT_BUF_LENGTH, ObMemAttr("MTL_LogBuffer"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", KR(ret));
   } else {
@@ -252,7 +251,7 @@ int ObLoadDataDirectImpl::Logger::log_error_line(const ObString &file_name, int6
 ObLoadDataDirectImpl::DataDescIterator::DataDescIterator()
   : pos_(0)
 {
-  data_descs_.set_tenant_id(MTL_ID());
+  
 }
 
 ObLoadDataDirectImpl::DataDescIterator::~DataDescIterator()
@@ -369,7 +368,7 @@ int ObLoadDataDirectImpl::DataBuffer::init(int64_t capacity)
   } else {
     const int64_t alloc_size =
       MIN(capacity + sizeof(ObLoadFileBuffer), ObLoadFileBuffer::MAX_BUFFER_SIZE);
-    ObMemAttr attr(MTL_ID(), "MTL_DataBuffer");
+    ObMemAttr attr("MTL_DataBuffer");
     void *buf = nullptr;
     if (OB_ISNULL(buf = ob_malloc(alloc_size, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -463,7 +462,7 @@ ObLoadDataDirectImpl::DataReader::DataReader()
       is_iter_end_(false),
       is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObLoadDataDirectImpl::DataReader::~DataReader()
@@ -483,7 +482,7 @@ int ObLoadDataDirectImpl::DataReader::init(const DataAccessParam &data_access_pa
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLoadDataDirectImpl::DataReader init twice", KR(ret), KP(this));
   } else {
-    allocator_.set_tenant_id(MTL_ID());
+    
     execute_ctx_ = &execute_ctx;
     read_raw_ = read_raw;
     if (OB_FAIL(csv_parser_.init(data_access_param.file_format_, data_access_param.file_column_num_,
@@ -832,7 +831,7 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
     }
   } else {
     ObArenaAllocator allocator;
-    allocator.set_tenant_id(MTL_ID());
+    
 
     int64_t end_offset = data_desc.end_;
 
@@ -938,8 +937,8 @@ ObLoadDataDirectImpl::FileLoadExecutor::FileLoadExecutor()
     total_line_count_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  handle_resource_.set_tenant_id(MTL_ID());
+  
+  
 }
 
 ObLoadDataDirectImpl::FileLoadExecutor::~FileLoadExecutor()
@@ -977,7 +976,7 @@ int ObLoadDataDirectImpl::FileLoadExecutor::inner_init(const LoadExecuteParam &e
   execute_ctx_ = &execute_ctx;
   worker_count_ = worker_count;
   // init task_allocator_
-  if (OB_FAIL(task_allocator_.init("TLD_TaskPool", execute_param_->tenant_id_))) {
+  if (OB_FAIL(task_allocator_.init("TLD_TaskPool"))) {
     LOG_WARN("fail to init allocator", KR(ret));
   }
   // init task_scheduler_
@@ -1123,7 +1122,7 @@ int ObLoadDataDirectImpl::FileLoadExecutor::alloc_task(ObTableLoadTask *&task)
     ret = OB_NOT_INIT;
     LOG_WARN("ObLoadDataDirectImpl::FileLoadExecutor not init", KR(ret), KP(this));
   } else {
-    if (OB_ISNULL(task = task_allocator_.alloc(execute_param_->tenant_id_))) {
+    if (OB_ISNULL(task = task_allocator_.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc task", KR(ret));
     }
@@ -1266,7 +1265,7 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
       ObTableLoadSharedAllocatorHandle allocator_handle;
       ObTableLoadObjRowArray obj_rows;
       if (OB_FAIL(ObTableLoadSharedAllocatorHandle::make_handle(
-            allocator_handle, "TLD_share_alloc", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()))) {
+            allocator_handle, "TLD_share_alloc", OB_MALLOC_NORMAL_BLOCK_SIZE))) {
         LOG_WARN("fail to make allocator handle", KR(ret));
       } else {
         obj_rows.set_allocator(allocator_handle);
@@ -1880,6 +1879,13 @@ int ObLoadDataDirectImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
       file_load_executor = nullptr;
     }
   }
+  if (OB_SUCC(ret) &&
+      ObLoadDataFormat::OB_BACKUP_1_4 == load_args.access_info_.get_load_data_format()) {
+    // Load from OB 1.4 backup is removed
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("load data from backup is not supported", KR(ret));
+    FORWARD_USER_ERROR_MSG(ret, "load data from backup is not supported");
+  }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(direct_loader_.commit())) {
@@ -1918,7 +1924,6 @@ int ObLoadDataDirectImpl::init_execute_param()
     load_stmt_->get_field_or_var_list();
   ObSchemaGetterGuard *schema_guard = ctx_->get_sql_ctx()->schema_guard_;
   const ObTableSchema *table_schema = nullptr;
-  execute_param_.tenant_id_ = load_args.tenant_id_;
   execute_param_.database_id_ = load_args.database_id_;
   execute_param_.table_id_ = load_args.table_id_;
   execute_param_.database_name_ = load_args.database_name_;
@@ -1927,7 +1932,6 @@ int ObLoadDataDirectImpl::init_execute_param()
   execute_param_.ignore_row_num_ = load_args.ignore_rows_;
   execute_param_.dup_action_ = load_args.dupl_action_;
   if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard,
-                                                  execute_param_.tenant_id_,
                                                   execute_param_.table_id_,
                                                   table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret), K(execute_param_));
@@ -1951,8 +1955,8 @@ int ObLoadDataDirectImpl::init_execute_param()
     int64_t hint_parallel = 0;
     if (OB_FAIL(hint.get_value(ObLoadDataHint::PARALLEL_THREADS, hint_parallel))) {
       LOG_WARN("fail to get value of PARALLEL_THREADS", KR(ret), K(hint));
-    } else if (OB_FAIL(GCTX.omt_->get_tenant(execute_param_.tenant_id_, tenant))) {
-      LOG_WARN("fail to get tenant handle", KR(ret), K(execute_param_.tenant_id_));
+    } else if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
+      LOG_WARN("fail to get tenant handle", KR(ret));
     } else {
       hint_parallel = hint_parallel > 0 ? hint_parallel : DEFAULT_PARALLEL_THREAD_COUNT;
       execute_param_.parallel_ = hint_parallel;
@@ -2010,8 +2014,8 @@ int ObLoadDataDirectImpl::init_execute_param()
       const static uint64_t INVALID_COLUMN_ID = UINT64_MAX;
       ObArray<uint64_t> user_column_ids;
       ObArray<ObString> user_column_names;
-      user_column_ids.set_tenant_id(MTL_ID());
-      user_column_names.set_tenant_id(MTL_ID());
+      
+      
       if (OB_FAIL(ObTableLoadSchema::get_user_column_id_and_names(table_schema, user_column_ids, user_column_names))) {
         LOG_WARN("fail to get user column ids and names", KR(ret));
       }
@@ -2053,7 +2057,6 @@ int ObLoadDataDirectImpl::init_execute_param()
   if (OB_SUCC(ret)) {
     if (execute_param_.online_opt_stat_gather_ &&
         OB_FAIL(ObDbmsStatsUtils::get_sys_online_estimate_percent(*ctx_,
-                                                                  execute_param_.tenant_id_,
                                                                   execute_param_.table_id_,
                                                                   execute_param_.online_sample_percent_))) {
       LOG_WARN("failed to get sys online sample percent", K(ret));
@@ -2075,7 +2078,7 @@ int ObLoadDataDirectImpl::init_execute_context()
   execute_ctx_.exec_ctx_.exec_ctx_ = ctx_;
   execute_ctx_.allocator_ = &ctx_->get_allocator();
   ObTableLoadParam load_param;
-  load_param.tenant_id_ = execute_param_.tenant_id_;
+  
   load_param.table_id_ = execute_param_.table_id_;
   load_param.parallel_ = execute_param_.parallel_;
   load_param.session_count_ = execute_param_.parallel_;

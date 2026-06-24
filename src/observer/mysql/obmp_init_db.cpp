@@ -78,7 +78,7 @@ int ObMPInitDB::process()
     setup_wb(*session);
     tmp_db_name = session->get_database_name();
     session->update_last_active_time();
-    const uint64_t effective_tenant_id = session->get_effective_tenant_id();
+    
     int64_t global_version = OB_INVALID_VERSION;
     int64_t local_version = OB_INVALID_VERSION;
     ObQueryRetryType retry_type = RETRY_TYPE_NONE;
@@ -88,10 +88,10 @@ int ObMPInitDB::process()
     if (OB_UNLIKELY(session->is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(ret), KPC(session));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(effective_tenant_id, global_version))) {
-      LOG_WARN("fail to get global_version", K(ret), K(effective_tenant_id));
-    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(effective_tenant_id, local_version))) {
-      LOG_WARN("fail to get local_version", K(ret), K(effective_tenant_id));
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(global_version))) {
+      LOG_WARN("fail to get global_version", K(ret));
+    } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
+      LOG_WARN("fail to get local_version", K(ret));
     } else if (OB_FAIL(session->get_collation_database(old_db_coll_type))) {
       LOG_WARN("fail to get collation_database", K(ret));
     } else if (OB_FAIL(session->get_collation_connection(collation_connection))) {
@@ -131,9 +131,9 @@ int ObMPInitDB::process()
                   ob_usleep(ObQueryRetryCtrl::WAIT_LOCAL_SCHEMA_REFRESHED_US
                          * ObQueryRetryCtrl::linear_timeout_factor(retry_times));
                 }
-                int tmp_ret = gctx_.schema_service_->get_tenant_refreshed_schema_version(effective_tenant_id, local_version);
+                int tmp_ret = gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version);
                 if (OB_SUCCESS != tmp_ret) {
-                  LOG_WARN("fail to get local_version", K(ret), K(tmp_ret), K(effective_tenant_id));
+                  LOG_WARN("fail to get local_version", K(ret), K(tmp_ret));
                 }
               }
               LOG_WARN("schema err, need retry", K(ret),
@@ -145,8 +145,7 @@ int ObMPInitDB::process()
           if (OB_UNLIKELY(session->is_zombie())) {
             ret = OB_ERR_SESSION_INTERRUPTED;
             LOG_WARN("session has been killed", K(ret),
-                     K(session->get_server_sid()),
-                     K(session->get_proxy_sessid()));
+                     K(session->get_server_sid()));
           } else if (RETRY_TYPE_LOCAL == retry_type) {
             // Retry in this thread
             force_local_retry = true;
@@ -214,7 +213,7 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
   if (OB_ISNULL(session) || OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session not init", K(ret), K(session), K(gctx_.schema_service_));
-  } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(session->get_effective_tenant_id(), schema_guard))) {
+  } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (session->is_tenant_changed() && 0 != db_name_.case_compare(OB_SYS_DATABASE_NAME)) {
     ret = OB_ERR_NO_DB_PRIVILEGE;
@@ -246,7 +245,7 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
     } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
       LOG_WARN("failed to update database variables", K(ret));
     } else if (is_internal_catalog_id(catalog_id)
-               && OB_FAIL(schema_guard.get_database_id(session->get_effective_tenant_id(), session->get_database_name(), db_id))) {
+               && OB_FAIL(schema_guard.get_database_id(session->get_database_name(), db_id))) {
       LOG_WARN("failed to get database id", K(ret));
     } else {
       session->set_database_id(db_id);
@@ -268,7 +267,7 @@ int ObMPInitDB::get_catalog_id_(sql::ObSQLSessionInfo &session, ObSchemaGetterGu
       catalog_id = OB_INTERNAL_CATALOG_ID;
     } else {
       const ObCatalogSchema *catalog_schema = NULL;
-      if (OB_FAIL(schema_guard.get_catalog_schema_by_name(session.get_effective_tenant_id(), catalog_name_, catalog_schema))) {
+      if (OB_FAIL(schema_guard.get_catalog_schema_by_name( catalog_name_, catalog_schema))) {
         LOG_WARN("fail to get catalog schema", K(ret));
       } else if (OB_ISNULL(catalog_schema)) {
         ret = OB_CATALOG_NOT_EXIST;

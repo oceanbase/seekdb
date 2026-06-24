@@ -52,13 +52,11 @@ void set_thread_name_inner(const char* name)
 void set_thread_name(const char* type, uint64_t idx)
 {
   char *name = ob_get_tname();
-  uint64_t tenant_id = ob_get_tenant_id();
+  
   char *ori_tname = ob_get_origin_thread_name();
   STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
-  if (tenant_id == 0) {
-    snprintf(name, OB_THREAD_NAME_BUF_LEN, "%s%ld", type, idx);
-  } else {
-    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s%ld", tenant_id, type, idx);
+  {
+    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s%ld", 1UL, type, idx);
   }
   set_thread_name_inner(name);
 }
@@ -66,13 +64,11 @@ void set_thread_name(const char* type, uint64_t idx)
 void set_thread_name(const char* type)
 {
   char *name = ob_get_tname();
-  uint64_t tenant_id = ob_get_tenant_id();
+  
   char *ori_tname = ob_get_origin_thread_name();
   STRNCPY(ori_tname, type, oceanbase::OB_THREAD_NAME_BUF_LEN);
-  if (tenant_id == 0) {
-    snprintf(name, OB_THREAD_NAME_BUF_LEN, "%s", type);
-  } else {
-    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s", tenant_id, type);
+  {
+    snprintf(name, OB_THREAD_NAME_BUF_LEN, "T%ld_%s", 1UL, type);
   }
   set_thread_name_inner(name);
 }

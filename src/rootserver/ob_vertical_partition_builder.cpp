@@ -54,7 +54,7 @@ int ObVertialPartitionBuilder::generate_schema(
     if (NULL == (data_column = data_schema.get_column_schema(vp_column_name))) {
       ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
       LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, vp_column_name.length(), vp_column_name.ptr());
-      LOG_WARN("get_column_schema failed", "tenant_id", data_schema.get_tenant_id(),
+      LOG_WARN("get_column_schema failed", 
                "database_id", data_schema.get_database_id(),
                "table_name", data_schema.get_table_name(),
                "column name", vp_column_name, K(ret));
@@ -82,7 +82,7 @@ int ObVertialPartitionBuilder::set_basic_infos(
   aux_vp_table_schema.set_data_table_id(data_schema.get_table_id());
 
   // priority same with data table schema
-  aux_vp_table_schema.set_tenant_id(data_schema.get_tenant_id());
+  
   aux_vp_table_schema.set_database_id(data_schema.get_database_id());
   aux_vp_table_schema.set_tablegroup_id(OB_INVALID_ID);
   aux_vp_table_schema.set_load_type(data_schema.get_load_type());

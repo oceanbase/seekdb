@@ -61,8 +61,8 @@ class ObSequenceExecutor {
     ObSequenceExecutor()
       : dblink_id_(OB_INVALID_ID)
     {
-      seq_schemas_.set_attr(ObMemAttr(OB_SYS_TENANT_ID, "SeqSchema"));
-      seq_ids_.set_attr(ObMemAttr(OB_SYS_TENANT_ID, "SeqId"));
+      seq_schemas_.set_attr(ObMemAttr("SeqSchema"));
+      seq_ids_.set_attr(ObMemAttr("SeqId"));
     }
     ~ObSequenceExecutor() { destroy(); }
     virtual int init(ObExecContext &ctx)=0;

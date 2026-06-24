@@ -54,8 +54,7 @@ public:
       config_(config)
   {}
   virtual ~ObVTIterCreator() {}
-  int get_latest_expected_schema(const uint64_t tenant_id,
-                                 const uint64_t table_id,
+  int get_latest_expected_schema(const uint64_t table_id,
                                  const int64_t table_version,
                                  share::schema::ObSchemaGetterGuard &schema_guard,
                                  const share::schema::ObTableSchema *&t_schema);

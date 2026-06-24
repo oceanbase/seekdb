@@ -593,13 +593,6 @@ protected:
 void TestDecoderFilterPerf::SetUp()
 {
   share::ObTenantEnv::set_tenant(&tenant_ctx_);
-  encoder_.data_buffer_.allocator_.set_tenant_id(500);
-  encoder_.row_buf_holder_.allocator_.set_tenant_id(500);
-  cs_encoder_.data_buffer_.allocator_.set_tenant_id(500);
-  cs_encoder_.row_buf_holder_.allocator_.set_tenant_id(500);
-  cs_encoder_.all_string_data_buffer_.allocator_.set_tenant_id(500);
-  raw_encoder_.data_buffer_.allocator_.set_tenant_id(500);
-  raw_encoder_.row_buf_holder_.allocator_.set_tenant_id(500);
 }
 
 void TestDecoderFilterPerf::TearDown()
@@ -807,7 +800,6 @@ void TestDecoderFilterPerf::build_table_schema(
     ObTableSchema &table_schema, const bool is_column_store)
 {
   table_schema.reset();
-  table_schema.set_tenant_id(1);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   uint64_t tid = is_column_store ? 200001 : 200002;

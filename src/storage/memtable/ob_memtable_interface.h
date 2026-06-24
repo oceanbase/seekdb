@@ -19,6 +19,7 @@
 
 #include "lib/atomic/ob_atomic.h"
 #include "lib/container/ob_iarray.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/container/ob_id_map.h"
 #include "lib/allocator/ob_lf_fifo_allocator.h"
 
@@ -28,6 +29,8 @@
 #include "storage/memtable/mvcc/ob_mvcc_ctx.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
+
+#include "storage/checkpoint/ob_checkpoint_diagnose.h"
 
 namespace oceanbase
 {
@@ -69,7 +72,7 @@ public:
   virtual int commit_to_replay() = 0;
   virtual void set_trans_ctx(transaction::ObPartTransCtx *ctx) = 0;
   virtual void inc_truncate_cnt() = 0;
-  virtual uint64_t get_tenant_id() const = 0;
+  
   virtual int get_conflict_trans_ids(common::ObIArray<transaction::ObTransIDAndAddr> &array) = 0;
   VIRTUAL_TO_STRING_KV("", "");
 public:
@@ -190,7 +193,17 @@ public:
 
   virtual bool is_empty() const override { return false; }
 
-  virtual int64_t dec_ref() { return ObITable::dec_ref(); }
+  virtual int64_t dec_ref()
+  {
+    int64_t ref_cnt = ObITable::dec_ref();
+    checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
+    if (0 == ref_cnt) {
+      if (get_tablet_id().is_ls_inner_tablet()) {
+        REPORT_CHECKPOINT_DIAGNOSE_INFO(update_start_gc_time_for_checkpoint_unit, this)
+      }
+    }
+    return ref_cnt;
+  }
 
   void set_trace_id(const int64_t trace_id)
   {

@@ -60,7 +60,7 @@ int ObColumnSequenceResolver::resolve_sequence_without_name(ObColumnSequenceStmt
     ObString db_name = session_info_->get_database_name();
     // inner sequnece, name as ISEQ$$_tableid_columnid, it can't comfirm when resolve
     mystmt->set_database_name(db_name);
-    mystmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     mystmt->set_is_system_generated();
 
     if (OB_SUCC(ret) && OB_NOT_NULL(node)) {
@@ -69,8 +69,7 @@ int ObColumnSequenceResolver::resolve_sequence_without_name(ObColumnSequenceStmt
         LOG_WARN("invalid option node type", K(node->type_), K(ret));
       } else {
         ObSequenceResolver<ObColumnSequenceStmt> resolver;
-        if (OB_FAIL(resolver.resolve_sequence_options(session_info_->get_effective_tenant_id(),
-                                                      mystmt, node))) {
+        if (OB_FAIL(resolver.resolve_sequence_options(mystmt, node))) {
           LOG_WARN("resolve sequence options failed", K(ret));
         }
       }

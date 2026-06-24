@@ -65,7 +65,7 @@ public:
       skipping_filter_nodes_(),
       skip_filter_executor_()
   {
-    skipping_filter_nodes_.set_attr(ObMemAttr(MTL_ID(), "IndexFilters"));
+    skipping_filter_nodes_.set_attr(ObMemAttr("IndexFilters"));
   }
   ~ObSSTableIndexFilter() = default;
   int init(

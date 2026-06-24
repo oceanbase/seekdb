@@ -81,8 +81,7 @@ public:
   virtual ~ObBaseLogWriter();
   virtual int init(
       const ObBaseLogWriterCfg &log_cfg,
-      const char *thread_name = "ALOG",
-      const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+      const char *thread_name = "ALOG");
   virtual int start();
   virtual void stop();
   virtual void wait();

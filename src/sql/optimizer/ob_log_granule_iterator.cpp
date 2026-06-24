@@ -198,14 +198,7 @@ int ObLogGranuleIterator::est_cost()
 
 bool ObLogGranuleIterator::is_partition_gi() const
 {
-  bool partition_granule = true;
-  if (is_used_by_external_table()) {
-    // external table only support block iter
-    partition_granule = false;
-  } else {
-    partition_granule = ObGranuleUtil::is_partition_granule_flag(gi_attri_flag_) || parallel_ == 1;
-  }
-  return partition_granule;
+  return ObGranuleUtil::is_partition_granule_flag(gi_attri_flag_) || parallel_ == 1;
 }
 
 void ObLogGranuleIterator::add_flag(uint64_t attri)
@@ -224,9 +217,8 @@ ERRSIM_POINT_DEF(ENABLE_PX_TASK_REBALANCE);
 int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id =
-        get_plan()->get_optimizer_context().get_session_info()->get_effective_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   bool exist_deadlock_condition = false;
   if (!ENABLE_PX_TASK_REBALANCE) {
   } else if (!tenant_config.is_valid() || !tenant_config->_enable_px_task_rebalance) {
@@ -259,8 +251,6 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
       // not support for access domain id in full text index
     } else if (tsc->use_das()) {
       // not support das split
-    } else if (tsc->get_table_type() == share::schema::EXTERNAL_TABLE) {
-      // not support external table now
     } else if (nullptr != pre_graph && tsc->get_pre_graph()->is_ss_range()) {
       // not support in skip scan scene
     } else if (nullptr != pre_graph && OB_FAIL(pre_graph->is_get(is_table_get))) {

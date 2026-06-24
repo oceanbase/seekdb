@@ -31,8 +31,8 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
   is_deprecated = false;
   const ObTableSchema *table_schema = nullptr;
   ObTabletHandle tablet_handle;
-  if (OB_FAIL(schema_guard_.get_table_schema(tenant_id_, cache_mgr.get_table_id(), table_schema))) {
-    LOG_WARN("failed to get simple schema", KR(ret), K(tenant_id_), K(cache_mgr));
+  if (OB_FAIL(schema_guard_.get_table_schema( cache_mgr.get_table_id(), table_schema))) {
+    LOG_WARN("failed to get simple schema", KR(ret), K(cache_mgr));
   } else if (OB_ISNULL(table_schema) || table_schema->is_in_recyclebin()) {
     is_deprecated = true;
   } else if (OB_FAIL(
@@ -72,9 +72,8 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(IvfCacheMgrEntry &entry)
     if (OB_ISNULL(task_ctx = OB_NEWx(ObVecIndexAsyncTaskCtx, allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObVecIndexAsyncTaskCtx", K(ret));
-    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(cache_mgr->get_tenant_id(),
-                                                                  new_task_id))) {
-      LOG_WARN("fail to fetch new task id", K(ret), K(cache_mgr->get_tenant_id()));
+    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(new_task_id))) {
+      LOG_WARN("fail to fetch new task id", K(ret));
     } else if (tablet_id != cache_mgr->get_cache_mgr_key()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet id is not match", K(ret), K(tablet_id), K(cache_mgr->get_cache_mgr_key()));
@@ -88,10 +87,10 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(IvfCacheMgrEntry &entry)
     } else {
       LOG_DEBUG("start load task", K(ret), K(tablet_id), K(new_task_id), K(index_table_id));
       // 1. update task_ctx to async task map
-      task_ctx->tenant_id_ = tenant_id_;
+      
       task_ctx->ls_ = ls_;
       task_ctx->task_status_.tablet_id_ = tablet_id.id();
-      task_ctx->task_status_.tenant_id_ = tenant_id_;
+      
       task_ctx->task_status_.table_id_ = index_table_id;
       task_ctx->task_status_.task_id_ = new_task_id;
       task_ctx->task_status_.task_type_ = ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN;
@@ -128,12 +127,11 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_writable(const ObIvfAuxTab
     LOG_WARN("invalid idx", K(ret), K(idx), K(table_info));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_param_with_dim(
                  schema_guard_,
-                 tenant_id_,
                  table_info.centroid_table_id_,
                  table_info.data_table_id_,
                  ObVectorIndexType::VIT_IVF_INDEX,
                  vec_param))) {
-    LOG_WARN("fail to get vector index param with dim", K(ret), K(tenant_id_), K(table_info));
+    LOG_WARN("fail to get vector index param with dim", K(ret), K(table_info));
   } else if (OB_FAIL(ObIvfCacheUtil::is_cache_writable(ls_->get_ls_id(),
                                                        table_info.centroid_table_id_,
                                                        table_info.centroid_tablet_ids_[idx],
@@ -186,18 +184,18 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(ObIvfAuxTableInfoEntry &
     } else if (OB_ISNULL(task_ctx = OB_NEWx(ObVecIndexAsyncTaskCtx, allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObVecIndexAsyncTaskCtx", K(ret));
-    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(tenant_id_, new_task_id))) {
-      LOG_WARN("fail to fetch new task id", K(ret), K(tenant_id_));
+    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(new_task_id))) {
+      LOG_WARN("fail to fetch new task id", K(ret));
     } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_trace_id(
                    ++task_trace_base_num_, allocator, new_trace_id))) {
       LOG_WARN("fail to fetch new trace id", K(ret), K(task_trace_base_num_));
     } else {
       LOG_DEBUG("start load task", K(ret), K(task_trace_base_num_), K(new_task_id), K(index_table_id));
       // 1. update task_ctx to async task map
-      task_ctx->tenant_id_ = tenant_id_;
+      
       task_ctx->ls_ = ls_;
       task_ctx->task_status_.tablet_id_ = tablet_id.id();
-      task_ctx->task_status_.tenant_id_ = tenant_id_;
+      
       task_ctx->task_status_.table_id_ = index_table_id;
       task_ctx->task_status_.task_id_ = new_task_id;
       task_ctx->task_status_.task_type_ = ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD;
@@ -205,7 +203,7 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::operator()(ObIvfAuxTableInfoEntry &
       task_ctx->task_status_.status_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE;
       task_ctx->task_status_.trace_id_ = new_trace_id;
       task_ctx->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time());
-      task_ctx->allocator_.set_tenant_id(tenant_id_);
+      
       ObIvfAuxTableInfo *copied_aux_table = nullptr;
       if (OB_ISNULL(copied_aux_table = OB_NEWx(ObIvfAuxTableInfo, &task_ctx->allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -255,18 +253,18 @@ int ObIvfAsyncTaskExector::check_and_set_thread_pool()
     LOG_WARN("vector index load task not inited", K(ret));
   } else if (OB_ISNULL(vector_index_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(tenant_id_));
+    LOG_WARN("unexpected nullptr", K(ret));
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_));
+    LOG_WARN("fail to get index ls mgr", K(ret));
   } else {
     ObIAllocator *allocator = index_ls_mgr->get_async_task_opt().get_allocator();
     ObVecIndexAsyncTaskHandler &thread_pool_handle =
         vector_index_service_->get_vec_async_task_handle();
     if (thread_pool_handle.get_tg_id() != INVALID_TG_ID) {  // no need to init twice, skip
     } else if (OB_FAIL(thread_pool_handle.init())) {
-      LOG_WARN("fail to init vec async task handle", K(ret), K(tenant_id_));
+      LOG_WARN("fail to init vec async task handle", K(ret));
     } else if (OB_FAIL(thread_pool_handle.start())) {
-      LOG_WARN("fail to start thread pool", K(ret), K(tenant_id_));
+      LOG_WARN("fail to start thread pool", K(ret));
     }
   }
   return ret;
@@ -312,12 +310,11 @@ int ObIvfAsyncTaskExector::record_aux_table_info(ObSchemaGetterGuard &schema_gua
   if (index_table_schema.is_vec_ivfpq_pq_centroid_index()) {
     if (aux_table_info.pq_centroid_table_id_ != OB_INVALID_ID) {
       const ObTableSchema *other_idx_tb_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(
-              tenant_id_, aux_table_info.pq_centroid_table_id_, other_idx_tb_schema))) {
+      if (OB_FAIL(schema_guard.get_table_schema( aux_table_info.pq_centroid_table_id_, other_idx_tb_schema))) {
         LOG_WARN("failed to get simple schema", KR(ret), K(aux_table_info));
       } else if (OB_ISNULL(other_idx_tb_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table schema is null", KR(ret), K(aux_table_info), K_(tenant_id));
+        LOG_WARN("table schema is null", KR(ret), K(aux_table_info));
       } else if (index_table_schema.get_schema_version()
                  > other_idx_tb_schema->get_schema_version()) {
         need_record = false;
@@ -335,12 +332,11 @@ int ObIvfAsyncTaskExector::record_aux_table_info(ObSchemaGetterGuard &schema_gua
   } else {
     if (aux_table_info.centroid_table_id_ != OB_INVALID_ID) {
       const ObTableSchema *other_idx_tb_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(
-              tenant_id_, aux_table_info.centroid_table_id_, other_idx_tb_schema))) {
+      if (OB_FAIL(schema_guard.get_table_schema( aux_table_info.centroid_table_id_, other_idx_tb_schema))) {
         LOG_WARN("failed to get simple schema", KR(ret), K(aux_table_info));
       } else if (OB_ISNULL(other_idx_tb_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table schema is null", KR(ret), K(aux_table_info), K_(tenant_id));
+        LOG_WARN("table schema is null", KR(ret), K(aux_table_info));
       } else if (index_table_schema.get_schema_version()
                  < other_idx_tb_schema->get_schema_version()) {
         need_record = false;
@@ -377,24 +373,22 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &sche
   ObIvfAuxTableInfo cur_aux_table_info;
   if (is_sys_table(table_id)) {
     // do nothing
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, table_id, index_table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, index_table_schema))) {
     LOG_WARN("failed to get simple schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(index_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema is null", KR(ret), K(table_id), K_(tenant_id));
+    LOG_WARN("table schema is null", KR(ret), K(table_id));
   } else if (index_table_schema->is_in_recyclebin() || !index_table_schema->can_read_index()) {
     // skip incomplete or in recyclebin indexes
   } else if (index_table_schema->is_vec_ivfpq_pq_centroid_index()
              || index_table_schema->is_vec_ivf_centroid_index()) {
-    if (OB_FAIL(schema_guard.get_table_schema(
-            tenant_id_, index_table_schema->get_data_table_id(), data_table_schema))) {
+    if (OB_FAIL(schema_guard.get_table_schema( index_table_schema->get_data_table_id(), data_table_schema))) {
       LOG_WARN("failed to get simple schema", KR(ret), K(table_id));
     } else if (OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table schema is null",
                KR(ret),
-               K(index_table_schema->get_data_table_id()),
-               K_(tenant_id));
+               K(index_table_schema->get_data_table_id()));
     } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(
                    *data_table_schema, *index_table_schema, col_ids))) {
       LOG_WARN("fail to get vector index column id", K(ret));
@@ -444,10 +438,10 @@ int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
   ObSchemaGetterGuard schema_guard;
   
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-          tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, schema_version))) {
-    LOG_WARN("fail to get tenant schema version", K(ret), K_(tenant_id));
+          schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
+    LOG_WARN("fail to get tenant schema version", K(ret));
   } else if (!ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_EAGAIN;
     LOG_INFO("is not a formal_schema_version", KR(ret), K(schema_version));
@@ -463,9 +457,9 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> table_id_array;
-  ObMemAttr memattr(tenant_id_, "IvfTaskExec");
-  if (OB_FAIL(ObTTLUtil::get_tenant_table_ids(tenant_id_, table_id_array))) {
-    LOG_WARN("fail to get tenant table ids", KR(ret), K_(tenant_id));
+  ObMemAttr memattr("IvfTaskExec");
+  if (OB_FAIL(ObTTLUtil::get_tenant_table_ids(table_id_array))) {
+    LOG_WARN("fail to get tenant table ids", KR(ret));
   } else if (!table_id_array.empty() &&
              OB_FAIL(aux_table_info_map.create(DEFAULT_TABLE_ID_ARRAY_SIZE, memattr, memattr))) {
     LOG_WARN("fail to create param map", KR(ret));
@@ -478,8 +472,8 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
     end_idx = MIN(table_id_array.count(), start_idx + DEFAULT_TABLE_ID_ARRAY_SIZE);
 
     if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-            tenant_id_, schema_guard))) {
-      LOG_WARN("fail to get schema guard", KR(ret), K_(tenant_id));
+            schema_guard))) {
+      LOG_WARN("fail to get schema guard", KR(ret));
     }
 
     for (int64_t idx = start_idx; OB_SUCC(ret) && idx < end_idx; ++idx) {
@@ -506,34 +500,34 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   // IVF maintenance task creation here. MANUAL tasks (dbms_vector.rebuild_index
   // and the auto-registered <vidx>_rebuild sched job) go through a separate
   // path (ObVecTaskManager::create_task) and must not be blocked by it.
-  } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::in_active_time(tenant_id_, is_active_time))) {
-    LOG_WARN("fail to get active time", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::in_active_time(is_active_time))) {
+    LOG_WARN("fail to get active time", KR(ret));
   } else if (!is_active_time) {
     LOG_INFO("skip auto-create per-tablet ivf maintenance tasks, not in active time",
-             K_(tenant_id), K(ls_->get_ls_id()));
+             K(ls_->get_ls_id()));
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {  // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else if (OB_ISNULL(ls_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null ls", K(ret));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-                 tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
+                 schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
   } else {
     ObVecIndexTaskCtxArray task_status_array;
     LoadTaskCallback load_task_func(
-        index_ls_mgr->get_async_task_opt(), tenant_id_, *ls_, task_status_array, schema_guard, task_trace_base_num);
+        index_ls_mgr->get_async_task_opt(), *ls_, task_status_array, schema_guard, task_trace_base_num);
     ObIvfAuxTableInfoMap aux_table_info_map;
 
     if (OB_FAIL(index_ls_mgr->get_ivf_cache_mgr_map().foreach_refactored(
             load_task_func))) {  // ivf clean task
       LOG_WARN("fail to do load task each entry", K(ret), K(load_task_func));
     } else if (OB_FAIL(generate_aux_table_info_map(aux_table_info_map))) {
-      LOG_WARN("fail to generate aux table info map", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+      LOG_WARN("fail to generate aux table info map", K(ret), K(ls_->get_ls_id()));
     } else if (OB_FAIL(aux_table_info_map.foreach_refactored(load_task_func))) {  // ivf load task
       LOG_WARN("fail to do load task each entry", K(ret), K(load_task_func));
     } else if (OB_FAIL(insert_new_task(task_status_array))) {
-      LOG_WARN("fail to insert new task", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+      LOG_WARN("fail to insert new task", K(ret), K(ls_->get_ls_id()));
     }
     // clear on fail
     if (OB_FAIL(ret) && !task_status_array.empty()) {

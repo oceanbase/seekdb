@@ -71,7 +71,6 @@ int ObDmlTableInfo::assign(const ObDmlTableInfo &other)
     ref_table_id_ = other.ref_table_id_;
     table_name_ = other.table_name_;
     table_type_ = other.table_type_;
-    is_link_table_ = other.is_link_table_;
     need_filter_null_ = other.need_filter_null_;
   }
   return ret;
@@ -94,7 +93,6 @@ int ObDmlTableInfo::deep_copy(ObIRawExprCopier &expr_copier, const ObDmlTableInf
     ref_table_id_ = other.ref_table_id_;
     table_name_ = other.table_name_;
     table_type_ = other.table_type_;
-    is_link_table_ = other.is_link_table_;
     need_filter_null_ = other.need_filter_null_;
   }
   return ret;

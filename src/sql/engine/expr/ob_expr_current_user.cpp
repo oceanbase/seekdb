@@ -60,22 +60,21 @@ int ObExprCurrentUser::eval_current_user(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("session info is null", K(ret));
   } else {
     ObSchemaGetterGuard schema_guard;
-    uint64_t tenant_id = session_info->get_effective_tenant_id();
+    
     uint64_t priv_user_id = session_info->get_priv_user_id();
     const ObUserInfo *user_info = nullptr;
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL GCTX.schema_service_", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                   tenant_id, schema_guard))) {
+                   schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(tenant_id,
-                                                  priv_user_id,
+    } else if (OB_FAIL(schema_guard.get_user_info(priv_user_id,
                                                   user_info))) {
-      LOG_WARN("failed to get user info", K(ret), K(tenant_id), K(priv_user_id));
+      LOG_WARN("failed to get user info", K(ret), K(priv_user_id));
     } else if (OB_ISNULL(user_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected NULL user_info", K(ret), K(tenant_id), K(priv_user_id));
+      LOG_WARN("unexpected NULL user_info", K(ret), K(priv_user_id));
     } else {
       const ObString &user_name = user_info->get_user_name_str();
       const ObString &hostname = user_info->get_host_name_str();

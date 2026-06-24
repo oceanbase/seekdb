@@ -1039,29 +1039,27 @@ public:
 
 public:
   ObConfigPairs()
-    : tenant_id_(common::OB_INVALID_TENANT_ID),
-      allocator_(),
+    : allocator_(),
       config_array_()
   {}
   ~ObConfigPairs() {}
-  void init(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  void init() {}
   bool is_valid() const
   {
-    return OB_INVALID_TENANT_ID != tenant_id_
+    return true
            && config_array_.count() > 0;
   }
   void reset();
   int assign(const ObConfigPairs &other);
 
-  uint64_t get_tenant_id() const { return tenant_id_; }
+  
   const common::ObSArray<ObConfigPair> &get_configs() const { return config_array_; }
   int get_config_str(char *buf, const int64_t length) const;
   int64_t get_config_str_length() const;
   int add_config(const ObString &key, const ObString &value);
 
-  TO_STRING_KV(K_(tenant_id), K_(config_array));
+  TO_STRING_KV(K_(config_array));
 private:
-  uint64_t tenant_id_;
   ObArenaAllocator allocator_;
   common::ObSArray<ObConfigPair> config_array_;
 };

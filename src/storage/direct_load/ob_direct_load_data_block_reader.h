@@ -207,7 +207,7 @@ int ObDirectLoadDataBlockReader<Header, T, align>::realloc_buf(int64_t size)
   int ret = OB_SUCCESS;
   const int64_t buf_size = align ? ALIGN_UP(size, DIO_ALIGN_SIZE) : size;
   if (buf_capacity_ != buf_size && buf_size_ - buf_pos_ <= buf_size) {
-    char *tmp_buf = (char *)ob_malloc(buf_size, ObMemAttr(MTL_ID(), "TLD_DBReader"));
+    char *tmp_buf = (char *)ob_malloc(buf_size, ObMemAttr("TLD_DBReader"));
     if (tmp_buf == nullptr) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to alloc mem", K(buf_size), KR(ret));

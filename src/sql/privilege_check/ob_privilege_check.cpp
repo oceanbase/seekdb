@@ -53,7 +53,6 @@
 #include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/cmd/ob_event_stmt.h"
-#include "sql/resolver/cmd/ob_location_utils_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 
 namespace oceanbase {
@@ -382,8 +381,6 @@ int get_dml_stmt_need_privs(
           if (OB_ISNULL(table_item)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("table item is null");
-          } else if (table_item->is_link_table()) {
-            // skip link table
           } else if (TableItem::BASE_TABLE == table_item->type_
             || TableItem::ALIAS_TABLE == table_item->type_
             || table_item->is_view_table_) {
@@ -439,39 +436,6 @@ int get_dml_stmt_need_privs(
                 need_priv.priv_set_ &= ~OB_PRIV_SELECT;
               }
             }
-            
-            if (OB_SUCC(ret) 
-               && ObTableType::EXTERNAL_TABLE == table_item->table_type_
-               && common::OB_INVALID_ID != table_item->external_location_id_) {
-              ObSchemaGetterGuard schema_guard;
-              CK(GCTX.schema_service_ != NULL);
-              OZ(GCTX.schema_service_->get_tenant_schema_guard(session_priv.tenant_id_, schema_guard));
-              // const ObTableSchema *table_schema = NULL;
-              // LOG_INFO("table id", K(table_item->table_id_), K(table_item->ref_id_), K(table_item->database_name_), K(table_item->table_name_));
-              // if (OB_FAIL(schema_guard.get_table_schema(session_priv.tenant_id_, table_item->ref_id_, table_schema))) {
-              //   LOG_WARN("failed to get table schema", K(ret));
-              // } else if (OB_ISNULL(table_schema)) {
-              //   ret = OB_ERR_UNEXPECTED;
-              //   LOG_WARN("table schema is null", K(ret));
-              // } else if (OB_INVALID_ID != table_schema->get_external_location_id()) {
-                const ObLocationSchema *location_schema = NULL;
-                if (OB_FAIL(schema_guard.get_location_schema_by_id(session_priv.tenant_id_, table_item->external_location_id_, location_schema))) {
-                  LOG_WARN("failed to get location schema", K(ret));
-                } else if (OB_ISNULL(location_schema)) {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("location schema is null", K(ret));
-                } else {
-                  ObNeedPriv tmp_need_priv;
-                  tmp_need_priv.db_ = table_item->database_name_;
-                  tmp_need_priv.table_ = location_schema->get_location_name();
-                  tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
-                  tmp_need_priv.priv_set_ = OB_PRIV_READ;
-                  tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
-                  ADD_NEED_PRIV(tmp_need_priv);
-                }
-              // }
-            }
-
             if (OB_SUCC(ret)) {
               if (OB_FAIL(add_col_priv_to_need_priv(basic_stmt, *table_item, need_privs))) {
                 LOG_WARN("add col id array to need priv failed", K(ret));
@@ -513,7 +477,7 @@ int get_alter_table_stmt_need_privs(
                "database_name", stmt->get_org_database_name());
     } else if (ObPrivilegeCheck::is_mysql_org_table(stmt->get_org_database_name(),
                                   stmt->get_org_table_name())
-               && session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
+               && false) {
       ret = OB_ERR_NO_TABLE_PRIVILEGE;
       LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen("ALTER"), "ALTER",
                      session_priv.user_name_.length(),session_priv.user_name_.ptr(),
@@ -544,7 +508,7 @@ int get_alter_table_stmt_need_privs(
 
       const AlterTableSchema &alter_schema = const_cast<ObAlterTableStmt*>(stmt)->get_alter_table_arg().alter_table_schema_;
       if (alter_schema.alter_option_bitset_.has_member(obcall::ObAlterTableArg::SESSION_ACTIVE_TIME)
-          && session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
+          && false) {
         ret = OB_ERR_NO_PRIVILEGE;
         LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
       }
@@ -717,31 +681,6 @@ int get_create_table_stmt_need_privs(
           }
         }
       }
-
-      // check location object
-      if (OB_SUCC(ret) && ObTableType::EXTERNAL_TABLE == stmt->get_table_type()
-          && OB_INVALID_ID != stmt->get_external_location_id()) {
-        ObSchemaGetterGuard schema_guard;
-        const ObLocationSchema *location_schema = NULL;
-        CK(GCTX.schema_service_ != NULL);
-        OZ(GCTX.schema_service_->get_tenant_schema_guard(session_priv.tenant_id_, schema_guard));
-        if (OB_FAIL(schema_guard.get_location_schema_by_id(session_priv.tenant_id_, 
-                                                           stmt->get_external_location_id(),
-                                                           location_schema))) {
-          LOG_WARN("failed to get location schema");
-        } else if (OB_ISNULL(location_schema)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("location schema is null");
-        } else {
-          ObNeedPriv tmp_need_priv;
-          tmp_need_priv.db_ = stmt->get_database_name();
-          tmp_need_priv.table_ = location_schema->get_location_name();
-          tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
-          tmp_need_priv.priv_set_ = OB_PRIV_READ;
-          tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
-          ADD_NEED_PRIV(tmp_need_priv);
-        }
-      }
     }
   }
   return ret;
@@ -769,7 +708,7 @@ int get_drop_table_stmt_need_privs(
       if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.database_name_))) {
         LOG_WARN("Can not drop table in information_schema database", K(session_priv), K(ret));
       } else if (ObPrivilegeCheck::is_mysql_org_table(table_item.database_name_, table_item.table_name_)
-                 && session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
+                 && false) {
         ret = OB_ERR_NO_TABLE_PRIVILEGE;
         LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen("DROP"), "DROP",
                        session_priv.user_name_.length(), session_priv.user_name_.ptr(),
@@ -786,7 +725,7 @@ int get_drop_table_stmt_need_privs(
     if ((share::schema::TMP_TABLE == stmt->get_drop_table_arg().table_type_
         || share::schema::TMP_TABLE_ALL == stmt->get_drop_table_arg().table_type_)
         && common::OB_INVALID_ID != stmt->get_drop_table_arg().session_id_
-        && session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
+        && false) {
         ret = OB_ERR_NO_PRIVILEGE;
         LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
       }
@@ -1270,10 +1209,10 @@ int get_revoke_stmt_need_privs(
       ObSchemaGetterGuard schema_guard;
       bool need_add = false;
       CK (GCTX.schema_service_ != NULL);
-      OZ(GCTX.schema_service_->get_tenant_schema_guard(session_priv.tenant_id_, schema_guard));
+      OZ(GCTX.schema_service_->get_tenant_schema_guard(schema_guard));
       for (int i = 0; OB_SUCC(ret) && i < stmt->get_users().count(); i++) {
         const ObUserInfo *user_info = NULL;
-        OZ(schema_guard.get_user_info(session_priv.tenant_id_, stmt->get_users().at(i), user_info));
+        OZ(schema_guard.get_user_info(stmt->get_users().at(i), user_info));
         CK (user_info != NULL);
         OX(need_add = (0 != (user_info->get_priv_set() & OB_PRIV_SUPER)));
       }
@@ -1509,38 +1448,6 @@ int get_location_privs(const ObSessionPrivInfo &session_priv,
   return ret;
 }
 
-int get_location_util_privs(const ObSessionPrivInfo &session_priv,
-                            const ObStmt *basic_stmt,
-                            ObIArray<ObNeedPriv> &need_privs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_stmt)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else {
-    ObNeedPriv need_priv;
-    stmt::StmtType stmt_type = basic_stmt->get_stmt_type();
-    const ObLocationUtilsStmt *stmt = static_cast<const ObLocationUtilsStmt*>(basic_stmt);
-    switch (stmt_type) {
-      case stmt::T_LOCATION_UTILS: {
-        ObNeedPriv tmp_need_priv;
-        tmp_need_priv.table_ = stmt->get_location_name();
-        tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
-        tmp_need_priv.priv_set_ = OB_PRIV_WRITE;
-        tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
-        ADD_NEED_PRIV(tmp_need_priv);
-        break;
-      }
-      default: {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Stmt type not in types dealt in this function", K(ret), K(stmt_type));
-        break;
-      }
-    }
-  }
-  return ret;
-}
-
 int get_variable_set_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
@@ -1729,11 +1636,7 @@ int get_truncate_table_stmt_need_privs(
     const ObTruncateTableStmt *stmt = static_cast<const ObTruncateTableStmt *>(basic_stmt);
     //as there is tenant id is truncate_table_arg, so I check this.
     //And not allow truncate other tenant's table. Even sys tenant.
-    if (session_priv.tenant_id_ != stmt->get_tenant_id()) {
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Can not truncate other tenant's table. Should not be here except change"
-               "tenant which not suggested", K(ret));
-    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
+    if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_database_name()))) {
       LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
     } else {
       need_priv.db_ = stmt->get_database_name();
@@ -1762,11 +1665,7 @@ int get_rename_table_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObRenameTableStmt *stmt = static_cast<const ObRenameTableStmt *>(basic_stmt);
-    if (session_priv.tenant_id_ != stmt->get_tenant_id()) {
-      ret = OB_ERR_NO_PRIVILEGE;
-      LOG_WARN("Can not rename other tenant's table. Should not be here except change"
-               "tenant which not suggested", K(ret));
-    } else {
+    {
       const obcall::ObRenameTableArg &arg = stmt->get_rename_table_arg();
       for (int64_t idx = 0; OB_SUCC(ret) && idx < arg.rename_table_items_.count(); ++idx) {
         const obcall::ObRenameTableItem &table_item = arg.rename_table_items_.at(idx);
@@ -1809,7 +1708,7 @@ int get_create_table_like_stmt_need_privs(
     ObNeedPriv need_priv;
     const ObCreateTableLikeStmt *stmt = static_cast<const ObCreateTableLikeStmt *>(basic_stmt);
     if (OB_FAIL(ret)) {
-    } else if (session_priv.tenant_id_ != stmt->get_tenant_id()) {
+    } else if (false) {
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("Can not create other tenant's table. Should not be here except change"
                "tenant which not suggested", K(ret));
@@ -1849,7 +1748,7 @@ int get_fork_table_stmt_need_privs(
     const ObForkTableStmt *stmt = static_cast<const ObForkTableStmt *>(basic_stmt);
     const obcall::ObForkTableArg &fork_table_arg = stmt->get_fork_table_arg();
     if (OB_FAIL(ret)) {
-    } else if (session_priv.tenant_id_ != fork_table_arg.tenant_id_) {
+    } else if (false) {
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("Can not fork other tenant's table. Should not be here except change"
                "tenant which not suggested", K(ret));
@@ -1891,7 +1790,7 @@ int get_fork_database_stmt_need_privs(
     const ObForkDatabaseStmt *stmt = static_cast<const ObForkDatabaseStmt *>(basic_stmt);
     const obcall::ObForkDatabaseArg &fork_database_arg = stmt->get_fork_database_arg();
     if (OB_FAIL(ret)) {
-    } else if (session_priv.tenant_id_ != fork_database_arg.tenant_id_) {
+    } else if (false) {
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("Can not fork other tenant's database. Should not be here except change"
                "tenant which not suggested", K(ret));
@@ -1922,7 +1821,7 @@ int get_sys_tenant_super_priv(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_SYS_TENANT_ID != session_priv.tenant_id_ &&
+  } else if (false &&
              stmt::T_ALTER_SYSTEM_SET_PARAMETER != basic_stmt->get_stmt_type()) {
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("Only sys tenant can do this operation",
@@ -1945,7 +1844,7 @@ int get_sys_tenant_alter_system_priv(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_SYS_TENANT_ID != session_priv.tenant_id_ &&
+  } else if (false &&
              stmt::T_FLUSH_CACHE != basic_stmt->get_stmt_type() &&
              stmt::T_ALTER_SYSTEM_SET_PARAMETER != basic_stmt->get_stmt_type() &&
              stmt::T_FREEZE != basic_stmt->get_stmt_type() &&
@@ -1982,7 +1881,7 @@ int get_boot_strap_stmt_need_privs(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Stmt type should be T_BOOTSTRAP",
              K(ret), "stmt type", basic_stmt->get_stmt_type());
-  } else if (OB_SYS_TENANT_ID != session_priv.tenant_id_) {
+  } else if (false) {
     ret = OB_ERR_NO_PRIVILEGE;
     LOG_WARN("Only sys tenant can do this operation", K(ret));
   } else {
@@ -2072,7 +1971,7 @@ int get_drop_tablegroup_stmt_need_privs(
              K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     const ObDropTablegroupStmt *stmt = static_cast<const ObDropTablegroupStmt *>(basic_stmt);
-    if (OB_SYS_TENANT_ID != session_priv.tenant_id_
+    if (false
         && 0 == stmt->get_tablegroup_name().compare(OB_SYS_TABLEGROUP_NAME)) { //tablegroup case sensetitive
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("Only sys tenant can do drop sys tablegroup",
@@ -2421,7 +2320,7 @@ int ObPrivilegeCheck::check_read_only(const ObSqlCtx &ctx,
     // super priv check
   } else {
     if (ObStmt::is_write_stmt(stmt_type, has_global_variable) &&
-        OB_FAIL(ctx.schema_guard_->verify_read_only(ctx.session_info_->get_effective_tenant_id(),
+        OB_FAIL(ctx.schema_guard_->verify_read_only(
                                                     stmt_need_privs))) {
       LOG_WARN("database or table is read only, cannot execute this stmt", K(ret));
     }
@@ -2475,8 +2374,6 @@ int ObPrivilegeCheck::check_privilege(
       bool has_global_variable = false;
       if (OB_FAIL(ctx.session_info_->get_session_priv_info(session_priv))) {
         LOG_WARN("fail to get session priv info", K(ret));
-      } else if (FALSE_IT(session_priv.set_effective_tenant_id(
-                                          ctx.session_info_->get_effective_tenant_id()))) {
       } else if (OB_FAIL(get_stmt_need_privs(session_priv, basic_stmt, tmp_need_privs))) {
         LOG_WARN("Get stmt need privs error", K(ret));
       } else if (OB_FAIL(stmt_need_privs.need_privs_.assign(tmp_need_privs))) {
@@ -2498,7 +2395,7 @@ int adjust_session_priv(ObSchemaGetterGuard &schema_guard,
                         ObSessionPrivInfo &session_priv) {
   int ret = OB_SUCCESS;
   const ObUserInfo *user_info = NULL;
-  if (OB_ISNULL(user_info = schema_guard.get_user_info(session_priv.tenant_id_, session_priv.user_id_))) {
+  if (OB_ISNULL(user_info = schema_guard.get_user_info(session_priv.user_id_))) {
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("fail to get user_info", K(ret));
   } else {
@@ -2528,7 +2425,7 @@ int ObPrivilegeCheck::check_privilege(
         LOG_WARN("fail to assign enable role id array", K(ret));
       } else if (OB_UNLIKELY(!session_priv.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Session priv is invalid", "tenant_id", session_priv.tenant_id_,
+        LOG_WARN("Session priv is invalid", 
                  "user_id", session_priv.user_id_, K(ret));
       } else if (OB_FAIL(const_cast<ObSchemaGetterGuard *>(ctx.schema_guard_)->check_priv(
                session_priv, ctx.session_info_->get_enable_role_array(), stmt_need_priv))) {
@@ -2631,18 +2528,7 @@ int ObPrivilegeCheck::can_do_operation_on_db(
              || 0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME)
              //|| 0 == db_name.case_compare(OB_MYSQL_SCHEMA_NAME)
              || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
-    if (session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
-      if ((0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME))
-          && ((0 == session_priv.user_name_.compare(OB_RESTORE_USER_NAME))
-              || (0 == session_priv.user_name_.compare(OB_DRC_USER_NAME)))) {
-        // do nothing, only allow sync ddl user to operate recyclebin
-      } else {
-				ret = OB_ERR_NO_DB_PRIVILEGE;
-				LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
-											 session_priv.host_name_.length(),session_priv.host_name_.ptr(),
-											 db_name.length(), db_name.ptr());
-			}
-		} else {
+    {
       //do nothing
 		}
   } else {
@@ -2656,7 +2542,7 @@ int ObPrivilegeCheck::can_do_operation_on_db(const ObSessionPrivInfo &session_pr
                                              const ObString &op_literal)
 {
   int ret = OB_SUCCESS;
-  if (is_sys_tenant(session_priv.tenant_id_)) {
+  if (true) {
     /* system tenant, no checking */
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); i++) {
@@ -2664,8 +2550,6 @@ int ObPrivilegeCheck::can_do_operation_on_db(const ObSessionPrivInfo &session_pr
       if (OB_ISNULL(table_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table info is null");
-      } else if (table_info->is_link_table_) {
-        // skip link table
       } else if (is_inner_table(table_info->ref_table_id_)) {
         ret = OB_ERR_NO_TABLE_PRIVILEGE;
         LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, op_literal.length(), op_literal.ptr(),
@@ -2690,7 +2574,7 @@ int ObPrivilegeCheck::can_do_grant_on_db_table(
     LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
                    session_priv.host_name_.length(),session_priv.host_name_.ptr(),
                    db_name.length(), db_name.ptr());
-  } else if (session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
+  } else if (false) {
     if (0 == db_name.case_compare(OB_INFORMATION_SCHEMA_NAME)
       || 0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME)
       || 0 == db_name.case_compare(OB_PUBLIC_SCHEMA_NAME)
@@ -2772,24 +2656,20 @@ int ObPrivilegeCheck::check_password_expired(const ObSqlCtx &ctx, const stmt::St
   return ret;
 }
 
-int ObPrivilegeCheck::check_password_expired_on_connection(
-    const uint64_t tenant_id,
-    const uint64_t user_id,
+int ObPrivilegeCheck::check_password_expired_on_connection(const uint64_t user_id,
     ObSchemaGetterGuard &schema_guard,
     ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   if (is_root_user(user_id)) {
     //do nothing
-  } else if (OB_FAIL(check_password_life_time_mysql(tenant_id, user_id, schema_guard, session))) {
-    LOG_WARN("The current user's password may be out of date", K(ret), K(tenant_id), K(user_id));
+  } else if (OB_FAIL(check_password_life_time_mysql(user_id, schema_guard, session))) {
+    LOG_WARN("The current user's password may be out of date", K(ret), K(user_id));
   }
   return ret;
 }
 
-int ObPrivilegeCheck::check_password_life_time_mysql(
-    const uint64_t tenant_id,
-    const uint64_t user_id,
+int ObPrivilegeCheck::check_password_life_time_mysql(const uint64_t user_id,
     ObSchemaGetterGuard &schema_guard,
     ObSQLSessionInfo &session)
 {
@@ -2800,8 +2680,8 @@ int ObPrivilegeCheck::check_password_life_time_mysql(
                                               password_life_time))) {
     LOG_WARN("fail to get default_password_lifetime variable", K(ret));
   } else if (password_life_time != ObPasswordLifeTime::FOREVER) {
-    if (OB_FAIL(schema_guard.get_user_info(tenant_id, user_id, user_info))) {
-      LOG_WARN("fail to get user info", K(ret), K(tenant_id), K(user_id));
+    if (OB_FAIL(schema_guard.get_user_info(user_id, user_info))) {
+      LOG_WARN("fail to get user info", K(ret), K(user_id));
     } else if (NULL == user_info) {
       ret = OB_USER_NOT_EXIST;
       LOG_WARN("user is not exist", K(user_id), K(ret));

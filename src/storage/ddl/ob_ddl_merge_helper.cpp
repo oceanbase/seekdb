@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_inc_ddl_merge_helper.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
@@ -74,7 +75,7 @@ int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
 int ObIDDLMergeHelper::freeze_ddl_kv(ObDDLTabletMergeDagParamV2 &param)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = MTL(ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
@@ -102,7 +103,7 @@ int ObSNDDLMergeHelperV2::set_ddl_complete(ObIDag *dag, ObTablet &tablet, ObDDLT
 {
   int ret = OB_SUCCESS;
   ObTabletDDLCompleteArg complete_arg;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "MrgHlpArg"));
+  ObArenaAllocator allocator(ObMemAttr("MrgHlpArg"));
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   ObStorageSchema *storage_schema = nullptr;
   ObWriteTabletParam *tablet_param = nullptr;
@@ -163,12 +164,12 @@ int ObSNDDLMergeHelperV2::set_ddl_complete_for_direct_load(
   ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObStorageSchema *storage_schema = nullptr;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DLM_CLOSE"));
+  ObArenaAllocator allocator(ObMemAttr("DLM_CLOSE"));
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   ObDDLWriteStat write_stats; // only used for empty direct load, so keep empty here
-  if (OB_ISNULL(ls_svr = MTL(ObLSService *))) {
+  if (OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("MTL ObLSService is null", KR(ret), "tenant_id", MTL_ID());
+    LOG_WARN("MTL ObLSService is null", KR(ret));
   } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("fail to get ls", KR(ret), K(ls));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
@@ -237,7 +238,7 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
   } else if (OB_FAIL(ddl_merge_param.get_tablet_param(target_ls_id, target_tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret));
   } else if (FALSE_IT(for_major = ddl_merge_param.for_major_)) {
-  } else if (OB_FAIL(slice_idxes.create(DDL_SLICE_BUCKET_NUM, ObMemAttr(MTL_ID(), "slice_idx_set")))) {
+  } else if (OB_FAIL(slice_idxes.create(DDL_SLICE_BUCKET_NUM, ObMemAttr("slice_idx_set")))) {
     LOG_WARN("create slice index set failed", K(ret));
   } else if (OB_FAIL(ddl_merge_param.get_merge_ctx(merge_ctx))) {
     LOG_WARN("failed to get merge ctx", K(ret));
@@ -263,7 +264,7 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
   if (OB_FAIL(ret)) {
   } else if (nullptr != first_major_sstable) {          /* if major exist, do nothing */
   } else if (for_major) {
-    ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DDL_Mrg_Pre"));
+    ObArenaAllocator arena(ObMemAttr("DDL_Mrg_Pre"));
     ObTabletDDLCompleteMdsUserData user_data;
     if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), arena, user_data))) {
       if (OB_EMPTY_RESULT == ret) {
@@ -415,7 +416,7 @@ int ObSNDDLMergeHelperV2::merge_cg_slice(ObIDag *dag,
 
   ObTabletDDLParam ddl_param;
 
-  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "merge_cg_slice"));
+  ObArenaAllocator arena(ObMemAttr("merge_cg_slice"));
   ObTabletDDLCompleteMdsUserData ddl_data;
 
   if (OB_ISNULL(dag) || cg_idx < 0 || start_slice_idx < 0 || end_slice_idx < 0) {
@@ -459,7 +460,7 @@ int ObSNDDLMergeHelperV2::merge_cg_slice(ObIDag *dag,
                                                    merge_param.for_major_ ? INT64_MAX : end_slice_idx,
                                                    ddl_sstables))) {
      LOG_WARN("failed to get ddl tables from  ddl kvs", K(ret));
-    } else if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(cg_index_read_info))) {
+    } else if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(cg_index_read_info))) {
       LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", K(ret));
     } else if (OB_FAIL(ObDDLMergeTaskUtils::get_sorted_meta_array(*tablet_handle.get_obj(), 
                                                                   ddl_param, 
@@ -647,7 +648,7 @@ int ObIDDLMergeHelper::remove_tablet_from_log_handler(const ObLSID &ls_id, const
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   ObSEArray<ObTabletID, 1> tablet_ids;
-  ObLSService *ls_service = MTL(ObLSService *);
+  ObLSService *ls_service = share::g_mp->ls_service();
   if (!ls_id.is_valid() || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
@@ -752,6 +753,7 @@ bool ObSNDDLMergeHelperV2::is_supported_direct_load_type(const ObDirectLoadType 
   return ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DDL  == direct_load_type ||
          ObDirectLoadType::SN_IDEM_DIRECT_LOAD_DATA == direct_load_type;
 }
+
 
 } // namespace  storage
 } // namespace oceanbase

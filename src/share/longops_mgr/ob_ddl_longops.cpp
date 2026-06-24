@@ -104,7 +104,8 @@ int ObDDLLongopsStat::init(ObDDLTask *ddl_task)
   } else if (OB_FAIL(collector_.init(ddl_task))) {
     LOG_WARN("failed to init collector", K(ret));
   } else {
-    key_.tenant_id_ = ddl_task->get_tenant_id();
+  
+    
     key_.task_id_ = ddl_task->get_task_id();
     key_.to_key_string();
     is_inited_ = true;

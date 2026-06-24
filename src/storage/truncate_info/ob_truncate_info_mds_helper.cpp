@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX MDS
 #include "storage/truncate_info/ob_truncate_info_mds_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/truncate_info/ob_truncate_info.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "logservice/replayservice/ob_tablet_replay_executor.h"
@@ -69,7 +70,7 @@ int ObTruncateInfoMdsHelper::on_register(
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("arg is invalid", K(ret), K(arg));
-  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("failed to get log stream", K(ret), K(arg));
   } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(arg.index_tablet_id_, tablet_handle))) {
     LOG_WARN("failed to get tablet", K(ret), K(arg.ls_id_), K(arg.index_tablet_id_));

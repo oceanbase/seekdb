@@ -45,9 +45,9 @@ private:
                                     const ObAiModelEndpointInfo &old_endpoint,
                                     const ObIJsonBase &alter_jbase,
                                     ObAiModelEndpointInfo &new_endpoint);
-  static int fetch_new_ai_model_endpoint_id(const uint64_t tenant_id, uint64_t &new_ai_model_endpoint_id);
-  static int lock_and_fetch_endpoint_version(ObMySQLTransaction &trans, const uint64_t tenant_id, int64_t &endpoint_version);
-  static int insert_special_endpoint_for_version(ObMySQLTransaction &trans, const uint64_t tenant_id);
+  static int fetch_new_ai_model_endpoint_id(uint64_t &new_ai_model_endpoint_id);
+  static int lock_and_fetch_endpoint_version(ObMySQLTransaction &trans, int64_t &endpoint_version);
+  static int insert_special_endpoint_for_version(ObMySQLTransaction &trans);
 };
 
 } // namespace share

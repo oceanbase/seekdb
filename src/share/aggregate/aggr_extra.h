@@ -192,7 +192,7 @@ public:
   explicit TopFreHistVecExtraResult(common::ObIAllocator &alloc,
                                     ObMonitorNode &op_monitor_info)
     : VecExtraResult(alloc, op_monitor_info),
-      lob_prefix_allocator_("CalcTopkHist", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), 
+      lob_prefix_allocator_("CalcTopkHist", OB_MALLOC_NORMAL_BLOCK_SIZE, 
                             ObCtxIds::WORK_AREA),
       tmp_batch_cap_(0),
       tmp_batch_idx_(0),
@@ -299,7 +299,7 @@ public:
       profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
       sql_mem_processor_(profile_, op_monitor_info),
       batch_vector_(NULL),
-      lob_prefix_allocator_("LobHybridHist", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID(), 
+      lob_prefix_allocator_("LobHybridHist", OB_MALLOC_NORMAL_BLOCK_SIZE, 
                             ObCtxIds::WORK_AREA),
       bucket_num_(0), num_distinct_(0),
       null_count_(0), total_count_(0),

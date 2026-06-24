@@ -29,7 +29,6 @@ namespace schema
 
 int ObTenantSqlService::insert_tenant(
     const ObTenantSchema &tenant_schema,
-    const ObSchemaOperationType op,
     ObISQLClient &sql_client,
     const ObString *ddl_stmt_str)
 {
@@ -37,15 +36,14 @@ int ObTenantSqlService::insert_tenant(
   if (!tenant_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant schema", K(tenant_schema), K(ret));
-  } else if (OB_FAIL(replace_tenant(tenant_schema, op, sql_client, ddl_stmt_str))) {
-    LOG_WARN("replace_tenant failed", K(tenant_schema), K(op), K(ret));
+  } else if (OB_FAIL(replace_tenant(tenant_schema, sql_client, ddl_stmt_str))) {
+    LOG_WARN("replace_tenant failed", K(tenant_schema), K(ret));
   }
   return ret;
 }
 
 int ObTenantSqlService::replace_tenant(
     const ObTenantSchema &tenant_schema,
-    const ObSchemaOperationType op,
     common::ObISQLClient &sql_client,
     const ObString *ddl_stmt_str)
 {
@@ -55,26 +53,16 @@ int ObTenantSqlService::replace_tenant(
     ObCStringHelper helper;
     LOG_WARN("tenant_schema is invalid", "tenant_schema",
         helper.convert(tenant_schema), K(ret));
-  } else if (OB_DDL_ADD_TENANT != op
-             && OB_DDL_ADD_TENANT_START != op
-             && OB_DDL_ADD_TENANT_END != op
-             && OB_DDL_ALTER_TENANT != op
-             && OB_DDL_DEL_TENANT_START != op
-             && OB_DDL_DROP_TENANT_TO_RECYCLEBIN != op
-             && OB_DDL_RENAME_TENANT != op
-             && OB_DDL_FLASHBACK_TENANT != op) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid replace tenant op", K(op), K(ret));
   } else {
     // log ddl_operation
     if (OB_SUCC(ret)) {
       ObSchemaOperation tenant_op;
-      tenant_op.tenant_id_ = tenant_schema.get_tenant_id();
-      tenant_op.op_type_ = op;
+
+      tenant_op.op_type_ = OB_DDL_ADD_TENANT;
       tenant_op.schema_version_ = tenant_schema.get_schema_version();
       tenant_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
-      int64_t sql_tenant_id = OB_SYS_TENANT_ID;
-      if (OB_FAIL(log_operation(tenant_op, sql_client, sql_tenant_id))) {
+      
+      if (OB_FAIL(log_operation(tenant_op, sql_client))) {
         LOG_WARN("log add tenant ddl operation failed", K(ret));
       }
     }

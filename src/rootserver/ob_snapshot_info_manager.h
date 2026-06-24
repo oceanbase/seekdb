@@ -41,13 +41,11 @@ public:
   int init(const common::ObAddr &self_addr);
 
   int check_restore_point(common::ObMySQLProxy &proxy,
-                          const uint64_t tenant_id,
                           const int64_t table_id,
                           bool &is_exist);
   int batch_acquire_snapshot(
       common::ObMySQLTransaction &trans,
       share::ObSnapShotType snapshot_type,
-      const uint64_t tenant_id,
       const int64_t schema_version,
       const share::SCN &snapshot_scn,
       const char *comment,
@@ -55,7 +53,6 @@ public:
   int batch_release_snapshot_in_trans(
       common::ObMySQLTransaction &trans,
       share::ObSnapShotType snapshot_type,
-      const uint64_t tenant_id,
       const int64_t schema_version,
       const share::SCN &snapshot_scn,
       const common::ObIArray<ObTabletID> &tablet_ids);

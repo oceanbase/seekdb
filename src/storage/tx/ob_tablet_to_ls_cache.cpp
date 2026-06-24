@@ -20,21 +20,21 @@ namespace oceanbase
 {
 namespace transaction
 {
-int ObTabletToLSCache::init(int64_t tenant_id, ObTxCtxMgr *tx_ctx_mgr)
+int ObTabletToLSCache::init(ObTxCtxMgr *tx_ctx_mgr)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    TRANS_LOG(WARN, "ObTabletToLSCache init twice", KR(ret), K(tenant_id), K(tx_ctx_mgr));
-  } else if (!is_valid_tenant_id(tenant_id) || OB_ISNULL(tx_ctx_mgr)) {
+    TRANS_LOG(WARN, "ObTabletToLSCache init twice", KR(ret), K(tx_ctx_mgr));
+  } else if (!true || OB_ISNULL(tx_ctx_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), K(tx_ctx_mgr));
-  } else if (OB_FAIL(map_.init(lib::ObMemAttr(tenant_id, lib::ObLabel("TabletToLS"))))) {
-    TRANS_LOG(WARN, "map init fail", KR(ret), K(tenant_id), K(tx_ctx_mgr));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tx_ctx_mgr));
+  } else if (OB_FAIL(map_.init(lib::ObMemAttr(lib::ObLabel("TabletToLS"))))) {
+    TRANS_LOG(WARN, "map init fail", KR(ret), K(tx_ctx_mgr));
   } else {
     tx_ctx_mgr_ = tx_ctx_mgr;
     is_inited_ = true;
-    TRANS_LOG(INFO, "ObTabletToLSCache init success", KR(ret), K(tenant_id), KPC(this));
+    TRANS_LOG(INFO, "ObTabletToLSCache init success", KR(ret), KPC(this));
   }
   return ret;
 }

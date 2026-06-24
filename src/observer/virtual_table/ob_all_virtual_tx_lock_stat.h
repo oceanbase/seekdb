@@ -44,7 +44,7 @@ class ObTxLockStat;
 
 //  bool is_inited_;
 //  common::ObAddr addr_;
-//  uint64_t tenant_id_;
+//  uint64_t tenant_;
 //  share::ObLSID ls_id_;
 //  ObMemtableKeyInfo memtable_key_;
 //  uint32_t session_id_;
@@ -65,7 +65,7 @@ public:
   int inner_get_next_row(common::ObNewRow *&row) override;
   void reset() override;
 private:
-  bool is_need_process(uint64_t tenant_id) override;
+  bool is_need_process() override;
   int process_curr_tenant(common::ObNewRow *&row) override;
   void release_last_tenant() override;
 

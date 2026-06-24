@@ -56,7 +56,6 @@ public:
       cur_row_(),
       session_(NULL),
       row_calc_buf_("VTITER_CALC_BUF"),
-      effective_tenant_id_(common::OB_INVALID_TENANT_ID),
       convert_alloc_(),
       cast_ctx_(),
       convert_row_(),
@@ -84,14 +83,13 @@ public:
   virtual int inner_close() { return common::OB_SUCCESS; }
   virtual inline void set_session(sql::ObSQLSessionInfo *session) { session_ = session; }
   virtual inline void set_convert_flag() { need_convert_ = true; }
-  virtual void set_effective_tenant_id(const uint64_t tenant_id);
   virtual inline int set_key_ranges(const common::ObIArray<common::ObNewRange> &key_ranges)
   {
     return key_ranges_.assign(key_ranges);
   }
   virtual const common::ObIArray<common::ObNewRange> &get_key_ranges() { return key_ranges_; }
   virtual int check_priv(const ObString &level_str, const ObString &db_name,
-                         const ObString &table_name, int64_t tenant_id, bool &passed);
+                         const ObString &table_name, bool &passed);
   void set_scan_flag(const common::ObQueryFlag &scan_flag) { scan_flag_ = scan_flag; }
   bool is_reverse_scan() const { return common::ObQueryFlag::Reverse == scan_flag_.scan_order_; }
   VIRTUAL_TO_STRING_KV(K_(output_column_ids));
@@ -119,7 +117,7 @@ protected:
   common::ObSEArray<common::ObNewRange, 16> key_ranges_;
   common::ObSEArray<common::ObNewRange, 16> saved_key_ranges_;
   common::ObArenaAllocator row_calc_buf_;
-  uint64_t effective_tenant_id_;
+  
 private:
   common::ObArenaAllocator convert_alloc_;
   common::ObCastCtx cast_ctx_;

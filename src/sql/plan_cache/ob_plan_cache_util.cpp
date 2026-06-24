@@ -272,11 +272,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
             LOG_INFO("Physical Location from Location Cache", K(candi_table_loc));
           }
         }
-        if (OB_SUCC(ret)) {
-          if (table_location.get_loc_meta().is_external_table_) {
-            need_check_on_same_server = false;
-          }
-        }
       } // for end
     }
 
@@ -399,7 +394,7 @@ int ObConfigInfoInPC::load_influence_plan_config()
   int ret = OB_SUCCESS;
   // Note: if you need to add a tenant config please
   //        uncomment next line to retrive tenant config.
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
   // For Cluster configs
   // here to add value of configs that can influence execution plan.

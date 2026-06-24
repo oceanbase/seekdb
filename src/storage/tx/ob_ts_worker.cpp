@@ -75,18 +75,18 @@ void ObTsWorker::destroy()
   TG_DESTROY(tg_id_);
 }
 
-int ObTsWorker::push_task(const uint64_t tenant_id, ObTsResponseTask *task)
+int ObTsWorker::push_task(ObTsResponseTask *task)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ts worker not init", KR(ret));
-  } else if (!is_valid_tenant_id(tenant_id) || NULL == task) {
+  } else if (!true || NULL == task) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(tenant_id), KP(task));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), KP(task));
   } else if (use_local_worker_) {
     if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
-      TRANS_LOG(WARN, "push task to local worker failed", K(ret), K(tenant_id), KP(task));
+      TRANS_LOG(WARN, "push task to local worker failed", K(ret), KP(task));
     }
   } else {
     ObMultiTenant *omt = GCTX.omt_;
@@ -95,13 +95,13 @@ int ObTsWorker::push_task(const uint64_t tenant_id, ObTsResponseTask *task)
       TRANS_LOG(ERROR, "unexpected error, omt is null", KR(ret), KP(omt));
     } else {
       ObTenant *tenant = nullptr;
-      if (OB_FAIL(omt->get_tenant(tenant_id, tenant))) {
-        TRANS_LOG(WARN, "get tenant failed", KR(ret), K(tenant_id));
+      if (OB_FAIL(omt->get_tenant(tenant))) {
+        TRANS_LOG(WARN, "get tenant failed", KR(ret));
       } else if (OB_ISNULL(tenant)) {
         ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "tenant is null", KR(ret), K(tenant_id));
+        TRANS_LOG(WARN, "tenant is null", KR(ret));
       } else if (OB_FAIL(tenant->recv_request(*task))) {
-        TRANS_LOG(WARN, "recv request failed", KR(ret), K(tenant_id), KP(task));
+        TRANS_LOG(WARN, "recv request failed", KR(ret), KP(task));
       }
     }
   }
@@ -115,8 +115,7 @@ void ObTsWorker::handle(void *task)
     ObTsResponseTask *ts_task = reinterpret_cast<ObTsResponseTask *>(task);
     if (NULL == ts_mgr_) {
       TRANS_LOG(WARN, "ts mgr is NULL", KP_(ts_mgr));
-    } else if (OB_FAIL(ts_mgr_->handle_gts_result(ts_task->get_tenant_id(),
-                                                  ts_task->get_arg1(),
+    } else if (OB_FAIL(ts_mgr_->handle_gts_result(ts_task->get_arg1(),
                                                   ts_task->get_ts_type()))) {
       TRANS_LOG(WARN, "handle gts result failed", KR(ret), K(*ts_task));
     } else {

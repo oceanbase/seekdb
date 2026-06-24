@@ -17,6 +17,7 @@
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_
 #include "sql/das/ob_das_task.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_factory.h"
 #include "sql/das/ob_das_def_reg.h"
@@ -74,7 +75,7 @@ public:
     parallel_type_ = DAS_SERIALIZATION;
     submitted_task_count_ = 0;
     if (OB_NOT_NULL(tx_desc_bak_)) {
-      transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+      transaction::ObTransService *txs = share::g_mp->trans_service();
       txs->release_tx(*tx_desc_bak_);
       tx_desc_bak_ = NULL;
     }

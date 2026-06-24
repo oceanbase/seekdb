@@ -148,7 +148,7 @@ bool ObEmbeddingTaskPhaseManager::is_valid_transition(ObEmbeddingTaskPhase from_
   return bret;
 }
 
-ObEmbeddingTask::ObEmbeddingTask() : local_allocator_("EmbeddingTask", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+ObEmbeddingTask::ObEmbeddingTask() : local_allocator_("EmbeddingTask", OB_MALLOC_NORMAL_BLOCK_SIZE),
                                     allocator_(local_allocator_),
                                     model_url_(),
                                     model_name_(),
@@ -161,7 +161,6 @@ ObEmbeddingTask::ObEmbeddingTask() : local_allocator_("EmbeddingTask", OB_MALLOC
                                     cb_handle_(nullptr),
                                     process_callback_offset_(0),
                                     is_inited_(false),
-                                    tenant_id_(common::OB_INVALID_ID),
                                     task_id_(OB_INVALID_ID),
                                     phase_(OB_EMBEDDING_TASK_INIT),
                                     process_start_time_us_(0),
@@ -210,7 +209,6 @@ ObEmbeddingTask::ObEmbeddingTask(ObArenaAllocator &allocator) : local_allocator_
                                      cb_handle_(nullptr),
                                      process_callback_offset_(0),
                                      is_inited_(false),
-                                     tenant_id_(common::OB_INVALID_ID),
                                      task_id_(OB_INVALID_ID),
                                      phase_(OB_EMBEDDING_TASK_INIT),
                                      process_start_time_us_(0),
@@ -283,8 +281,7 @@ int ObEmbeddingTask::init(const ObString &model_url,
   } else if (OB_FAIL(ob_write_string(allocator_, provider, provider_))) {
     LOG_WARN("failed to copy provider", K(ret));
   } else {
-    tenant_id_ = MTL_ID();
-    task_id_ = (static_cast<int64_t>(tenant_id_) << 32) | (ObTimeUtility::current_time() & 0xFFFFFFFF);
+    task_id_ = (ObTimeUtility::current_time() & 0xFFFFFFFF);
     use_base64_format_ = ObAIFuncUtils::is_provider_support_base64(provider);
     dimension_ = dimension;
     total_chunks_ = input_chunks.count();
@@ -1114,7 +1111,7 @@ int ObEmbeddingTask::get_task_info_for_virtual_table(ObEmbeddingTaskInfo &task_i
   ObThreadCondGuard guard(task_cond_);
   
   task_info.reset();
-  task_info.tenant_id_ = MTL_ID();
+  
   task_info.task_id_ = task_id_;
   task_info.model_name_ = model_name_;
   task_info.model_url_ = model_url_;

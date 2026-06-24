@@ -29,39 +29,22 @@ namespace observer
 
 bool ObAllVirtualMdsEventHistory::judge_key_in_ranges_(const MdsEventKey &key) const
 {
-  bool in_tenant_ranges = false;
   bool in_tablet_ranges = false;
-  for (int64_t idx = 0; idx < tenant_ranges_.count(); ++idx) {
-    if (key.tenant_id_ >= tenant_ranges_[idx].element<0>() && key.tenant_id_ <= tenant_ranges_[idx].element<1>()) {
-      in_tenant_ranges = true;
+  for (int64_t idx = 0; idx < tablet_ranges_.count(); ++idx) {
+    if (key.tablet_id_ >= tablet_ranges_[idx].element<0>() && key.tablet_id_ <= tablet_ranges_[idx].element<1>()) {
+      in_tablet_ranges = true;
       break;
     }
   }
-  if (!in_tenant_ranges) {
-    for (int64_t idx = 0; idx < tenant_points_.count(); ++idx) {
-      if (tenant_points_[idx] == key.tenant_id_) {
-        in_tenant_ranges = true;
-        break;
-      }
-    }
-  }
-  if (in_tenant_ranges) {
-    for (int64_t idx = 0; idx < tablet_ranges_.count(); ++idx) {
-      if (key.tablet_id_ >= tablet_ranges_[idx].element<0>() && key.tablet_id_ <= tablet_ranges_[idx].element<1>()) {
+  if (!in_tablet_ranges) {
+    for (int64_t idx = 0; idx < tablet_points_.count(); ++idx) {
+      if (tablet_points_[idx] == key.tablet_id_) {
         in_tablet_ranges = true;
         break;
       }
     }
-    if (!in_tablet_ranges) {
-      for (int64_t idx = 0; idx < tablet_points_.count(); ++idx) {
-        if (tablet_points_[idx] == key.tablet_id_) {
-          in_tablet_ranges = true;
-          break;
-        }
-      }
-    }
   }
-  return in_tenant_ranges && in_tablet_ranges;
+  return in_tablet_ranges;
 }
 
 int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
@@ -72,12 +55,10 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
     int ret = OB_SUCCESS;
     int tmp_ret = OB_SUCCESS;
     if (judge_key_in_ranges_(key)) {
-      if (MTL_ID() == OB_SYS_TENANT_ID ||// SYS tenant can see information of all tenants
-          key.tenant_id_ == MTL_ID()) {// Non-SYS tenant can only see information of its own tenant
+      if (true ||// SYS tenant can see information of all tenants
+          true) {// Non-SYS tenant can only see information of its own tenant
         MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-        if (MTL_ID() != key.tenant_id_) {
-          tmp_ret = guard.switch_to(key.tenant_id_);
-        }
+        
         if (OB_SUCCESS == tmp_ret) {
           if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
             MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
@@ -91,7 +72,7 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
     }
     return ret;
   }))) {
-    MDS_LOG(WARN, "scan read failed", KR(ret), K(MTL_ID()), K(*this));
+    MDS_LOG(WARN, "scan read failed", KR(ret), K(*this));
   }
   return ret;
 }
@@ -100,25 +81,21 @@ int ObAllVirtualMdsEventHistory::point_read_(char *temp_buffer, int64_t buf_len)
 {
   int ret = OB_SUCCESS;
   MDS_LOG(INFO, "start point read", K(*this));
-  if (tenant_points_.count() != tablet_points_.count()) {
-    MDS_LOG(WARN, "points not match", K(MTL_ID()), K(*this));
-  } else {
-    for (int64_t idx = 0; idx < tenant_points_.count() && OB_SUCC(ret); ++idx) {
-      MdsEventKey key(tenant_points_[idx], share::SYS_LS, tablet_points_[idx]);
+  {
+    for (int64_t idx = 0; idx < tablet_points_.count() && OB_SUCC(ret); ++idx) {
+      MdsEventKey key(share::SYS_LS, tablet_points_[idx]);
       if (OB_FAIL(ObMdsEventBuffer::for_each(key, [&key, this, temp_buffer, buf_len](const MdsEvent &event) -> int {
         int ret = OB_SUCCESS;
         int tmp_ret = OB_SUCCESS;
-        if (MTL_ID() == OB_SYS_TENANT_ID ||// SYS tenant can see information of all tenants
-            key.tenant_id_ == MTL_ID()) {// Non-SYS tenant can only see information of its own tenant
+        if (true ||// SYS tenant can see information of all tenants
+            true) {// Non-SYS tenant can only see information of its own tenant
           MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-          if (MTL_ID() != key.tenant_id_) {
-            tmp_ret = guard.switch_to(key.tenant_id_);
-          }
+          
           if (OB_SUCCESS == tmp_ret) {
             if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
               MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-              MDS_LOG(WARN, "fail to add_row to scanner_", K(MTL_ID()), K(*this));
+              MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
             }
           }
         }
@@ -143,15 +120,15 @@ int ObAllVirtualMdsEventHistory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     if (OB_FAIL(get_primary_key_ranges_())) {
-      MDS_LOG(WARN, "fail to get index scan ranges", KR(ret), K(MTL_ID()), K(*this));
+      MDS_LOG(WARN, "fail to get index scan ranges", KR(ret), K(*this));
     } else {
       char *temp_buffer = nullptr;
       constexpr int64_t BUFFER_SIZE = 32_MB;
       if (OB_ISNULL(temp_buffer = (char *)ob_malloc(BUFFER_SIZE, "VirMdsEvent"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        MDS_LOG(WARN, "fail to alloc buffer", K(MTL_ID()), K(*this));
+        MDS_LOG(WARN, "fail to alloc buffer", K(*this));
       } else {
-        if (!tenant_ranges_.empty() || !tablet_ranges_.empty()) {// scan read
+        if (key_ranges_.count() >= 1 || !tablet_ranges_.empty()) {// scan read
           ret = range_scan_(temp_buffer, BUFFER_SIZE);
         } else {// point read
           ret = point_read_(temp_buffer, BUFFER_SIZE);
@@ -307,19 +284,9 @@ int ObAllVirtualMdsEventHistory::get_primary_key_ranges_()
         ObObj tablet_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
         ObObj tablet_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
 
-        // Use full range for tenant in single-node mode
-        uint64_t tenant_low = 0;
-        uint64_t tenant_high = UINT64_MAX;
         ObTabletID tablet_low = tablet_obj_low.is_min_value() ? ObTabletID(0) : ObTabletID(tablet_obj_low.get_uint64());
         ObTabletID tablet_high = tablet_obj_high.is_max_value() ? ObTabletID(UINT64_MAX) : ObTabletID(tablet_obj_high.get_uint64());
 
-        if (OB_SUCC(ret)) {
-          // Always add full tenant range in single-node mode
-          if (OB_SUCCESS != (ret =
-            (tenant_ranges_.push_back(ObTuple<uint64_t, uint64_t>(tenant_low, tenant_high))))) {
-            MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
-          }
-        }
         if (OB_SUCC(ret)) {
           if (tablet_low == tablet_high) {
             if (OB_FAIL(tablet_points_.push_back(tablet_low))) {

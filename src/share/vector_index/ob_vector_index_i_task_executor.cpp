@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SHARE
 #include "ob_vector_index_i_task_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/ls/ob_ls.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
@@ -24,17 +25,16 @@ namespace oceanbase
 using namespace storage;
 namespace share 
 {
-int ObVecITaskExecutor::init(const uint64_t tenant_id, storage::ObLS *ls)
+int ObVecITaskExecutor::init(storage::ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED; 
     LOG_WARN("tenant vector index load task fail", K(ret), KP(vector_index_service), KP(ls));
   } else {
     vector_index_service_ = vector_index_service;
     ls_ = ls;
-    tenant_id_ = tenant_id;
     is_inited_ = true;
   }
   return ret;
@@ -56,7 +56,7 @@ int ObVecITaskExecutor::get_index_ls_mgr(ObPluginVectorIndexMgr *&index_ls_mgr)
   return ret;
 }
 
-// resume from __all_vector_index_task of filter tenant_id
+// resume from __all_vector_index_task of filter tenant
 int ObVecITaskExecutor::resume_task()
 {
   int ret = OB_SUCCESS;
@@ -66,15 +66,15 @@ int ObVecITaskExecutor::resume_task()
     LOG_WARN("vector index load task not inited", KR(ret));
   } else if (!check_operation_allow()) { // skip
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else {
     const bool for_update = true; // select for update
     ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
     ObVecIndexFieldArray filters;
     
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
-        tenant_id_, OB_ALL_VECTOR_INDEX_TASK_TNAME, for_update, filters, ls_,  *GCTX.sql_proxy_, task_opt))) {
-      LOG_WARN("fail to resume task from inner table", K(ret), K(tenant_id_));
+        OB_ALL_VECTOR_INDEX_TASK_TNAME, for_update, filters, ls_,  *GCTX.sql_proxy_, task_opt))) {
+      LOG_WARN("fail to resume task from inner table", K(ret));
     }
   }
   return ret;
@@ -90,7 +90,7 @@ int ObVecITaskExecutor::load_task_from_inner_table()
     LOG_WARN("vector index load task not inited", KR(ret));
   } else if (!check_operation_allow()) { // skip
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else if (OB_ISNULL(index_ls_mgr) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null pointer", K(ret), K(index_ls_mgr), K(sql_proxy));
@@ -108,7 +108,7 @@ int ObVecITaskExecutor::load_task_from_inner_table()
       LOG_WARN("fail to push back field", K(ret));
     } else if (OB_FAIL(filters.push_back(field2))) {
       LOG_WARN("fail to push back field", K(ret));
-    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(tenant_id_, OB_ALL_VECTOR_INDEX_TASK_TNAME, 
+    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(OB_ALL_VECTOR_INDEX_TASK_TNAME, 
         false, filters, ls_, *sql_proxy, task_opt))) {
       LOG_WARN("fail to load task from inner table", K(ret));
     }
@@ -128,7 +128,7 @@ int ObVecITaskExecutor::start_task()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret), KP(vector_index_service_), KP(ls_));
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) {
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else {
     ObVecIndexTaskCtxArray task_ctx_array;
     ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
@@ -150,12 +150,12 @@ int ObVecITaskExecutor::start_task()
             int tmp_ret = OB_SUCCESS;
             if (task_ctx->in_thread_pool_) {                // skip push task 
               LOG_DEBUG("task is in thread pool already", KPC(task_ctx));
-            } else if (OB_FAIL(task_handle.push_task(tenant_id_, ls_->get_ls_id(), task_ctx, task_opt.get_allocator()))) {
-              LOG_WARN("fail to push task to thread pool", K(ret), K(tenant_id_), K(ls_->get_ls_id()), K(*task_ctx));
+            } else if (OB_FAIL(task_handle.push_task(ls_->get_ls_id(), task_ctx, task_opt.get_allocator()))) {
+              LOG_WARN("fail to push task to thread pool", K(ret), K(ls_->get_ls_id()), K(*task_ctx));
             } else if (FALSE_IT(task_ctx->in_thread_pool_ = true)) {
             } else if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
               LOG_WARN("fail to update task status to inner table", 
-                K(ret), K(tenant_id_), K(ls_->get_ls_id()), K(*task_ctx));
+                K(ret), K(ls_->get_ls_id()), K(*task_ctx));
             } else if (task_ctx->sys_task_id_.is_invalid() && OB_TMP_FAIL(ObVecIndexAsyncTaskUtil::add_sys_task(task_ctx))) {
               LOG_WARN("add sys task failed", K(tmp_ret));
             }
@@ -165,7 +165,7 @@ int ObVecITaskExecutor::start_task()
           {
             if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
               LOG_WARN("fail to update task status to inner table", 
-                K(ret), K(tenant_id_), K(ls_->get_ls_id()), K(*task_ctx));
+                K(ret), K(ls_->get_ls_id()), K(*task_ctx));
             }
             break;
           }
@@ -174,7 +174,7 @@ int ObVecITaskExecutor::start_task()
             // update task status in inner table   
             if (OB_FAIL(update_status_and_ret_code(task_ctx))) {
               LOG_WARN("fail to update task status to inner table", 
-                K(ret), K(tenant_id_), K(ls_->get_ls_id()), K(*task_ctx));
+                K(ret), K(ls_->get_ls_id()), K(*task_ctx));
             } else if (OB_FAIL(task_ctx_array.push_back(task_ctx))) {
               LOG_WARN("fail to push back task_ctx_array", K(ret), K(task_ctx));
             }
@@ -206,8 +206,7 @@ int ObVecITaskExecutor::update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid task ctx", K(ret), KP(task_ctx));
   } else {
-    ObVecIndexTaskKey key(task_ctx->task_status_.tenant_id_, 
-                          task_ctx->task_status_.table_id_, 
+    ObVecIndexTaskKey key(task_ctx->task_status_.table_id_, 
                           task_ctx->task_status_.tablet_id_.id(), 
                           task_ctx->task_status_.task_id_);
   
@@ -231,10 +230,10 @@ int ObVecITaskExecutor::update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_
       LOG_WARN("fail to push back update field", K(ret), K(target_scn));
     } else {
       ObMySQLTransaction trans;
-      if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_))) {
-        LOG_WARN("fail start transaction", K(ret), K(tenant_id_));
+      if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+        LOG_WARN("fail start transaction", K(ret));
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::update_vec_task(
-          tenant_id_, OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, key, update_fields))) {
+          OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, key, update_fields))) {
         LOG_WARN("fail to update task status", K(ret));
       } else {
         LOG_DEBUG("success to update_status_and_ret_code", KPC(task_ctx));
@@ -370,11 +369,11 @@ int ObVecITaskExecutor::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array)
   } else if (task_ctx_array.count() <= 0) {  // skip empty array
   } else {
     ObMySQLTransaction trans;
-    if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_))) {
-      LOG_WARN("fail start transaction", K(ret), K(tenant_id_));
+    if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+      LOG_WARN("fail start transaction", K(ret));
     } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
-        tenant_id_, OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, task_ctx_array))) {
-      LOG_WARN("fail to insert vec tasks", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+        OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, task_ctx_array))) {
+      LOG_WARN("fail to insert vec tasks", K(ret), K(ls_->get_ls_id()));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
@@ -397,7 +396,7 @@ int ObVecITaskExecutor::clear_old_task_ctx_if_need()
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
   } else if (OB_FAIL(get_index_ls_mgr(index_ls_mgr))) { // skip
-    LOG_WARN("fail to get index ls mgr", K(ret), K(tenant_id_), K(ls_->get_ls_id()));
+    LOG_WARN("fail to get index ls mgr", K(ret), K(ls_->get_ls_id()));
   } else {
     ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
     FOREACH_X(iter, task_opt.get_async_task_map(), OB_SUCC(ret) && all_task_is_finish) {

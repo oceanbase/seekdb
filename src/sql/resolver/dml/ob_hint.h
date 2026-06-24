@@ -275,24 +275,6 @@ struct ObOptParamHint
   common::ObSEArray<ObObj, 1, common::ModulePageAllocator, true> param_vals_;
 };
 
-struct ObDBLinkHit {
-  ObDBLinkHit() { reset(); }
-  void reset() {
-    tx_id_ = 0;
-    tm_sessid_ =0;
-    hint_xa_trans_stop_check_lock_ = false;
-  }
-  int print(char *buf, int64_t &buf_len, int64_t &pos, const char* outline_indent) const;
-  bool has_valid_hint() const { return (0 < tx_id_ && 0 != tm_sessid_) || hint_xa_trans_stop_check_lock_; }
-
-  TO_STRING_KV(K_(tx_id),
-               K_(tm_sessid),
-               K_(hint_xa_trans_stop_check_lock));
-  int64_t tx_id_;
-  uint32_t tm_sessid_;
-  bool hint_xa_trans_stop_check_lock_;
-};
-
 struct ObPxNodeHint {
   static const int64_t UNSET_PX_NODE_COUNT = -1;
   ObPxNodeHint() { reset(); }
@@ -420,8 +402,6 @@ struct ObGlobalHint {
 
   ObPDMLOption get_pdml_option() const { return pdml_option_; }
   ObParamOption get_param_option() const { return param_option_; }
-  int64_t get_dblink_tx_id_hint() const { return dblink_hints_.tx_id_; }
-  uint32_t get_dblink_tm_sessid_hint() const { return dblink_hints_.tm_sessid_; }
   int64_t get_parallel_degree() const { return parallel_ >= DEFAULT_PARALLEL ? parallel_ : UNSET_PARALLEL; }
   int64_t get_dml_parallel_degree() const { return dml_parallel_; }
   bool has_parallel_degree() const { return parallel_ >= DEFAULT_PARALLEL; }
@@ -438,8 +418,6 @@ struct ObGlobalHint {
   bool get_flashback_read_tx_uncommitted() const { return flashback_read_tx_uncommitted_; }
   void set_flashback_read_tx_uncommitted(bool v) { flashback_read_tx_uncommitted_ = v; }
   ObParallelDASOption get_parallel_das_dml_option() const { return parallel_das_dml_option_; }
-  bool get_xa_trans_stop_check_lock() const { return dblink_hints_.hint_xa_trans_stop_check_lock_; }
-  void set_xa_trans_stop_check_lock(bool v) { dblink_hints_.hint_xa_trans_stop_check_lock_ = v; }
   inline const common::ObString& get_resource_group() const { return resource_group_; }
   bool has_append() const {
     return (osg_hint_.flags_ & ObOptimizerStatisticsGatheringHint::OB_APPEND_HINT) ? true : false;
@@ -503,7 +481,6 @@ struct ObGlobalHint {
                K_(parallel_das_dml_option),
                K_(dynamic_sampling),
                K_(alloc_op_hints),
-               K_(dblink_hints),
                K_(px_node_hint));
 
   int64_t frozen_version_;
@@ -535,7 +512,6 @@ struct ObGlobalHint {
   int64_t dynamic_sampling_;
   common::ObSArray<ObAllocOpHint> alloc_op_hints_;
   ObDirectLoadHint direct_load_hint_;
-  ObDBLinkHit dblink_hints_;
   common::ObString resource_group_;
   ObPxNodeHint px_node_hint_;
 };

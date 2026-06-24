@@ -69,13 +69,13 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
   ObSEArray<int64_t, 4> no_stats_partition_ids;//used to save partition which have no stats
   ObSEArray<uint64_t, 4> part_stattypes;
   ObSEArray<int64_t, 4> dummy_array;
-  uint64_t tenant_id = param.tenant_id_;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
+  
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   if (OB_ISNULL(mysql_proxy = ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy));
-  } else if (OB_FAIL(trans.start(mysql_proxy, param.tenant_id_))) {
+  } else if (OB_FAIL(trans.start(mysql_proxy))) {
     LOG_WARN("fail to start transaction", K(ret));
   } else if (OB_FAIL(get_stats_history_sql(ctx, trans, param, set_locked,
                                            need_update_lock, no_stats_partition_ids,
@@ -95,10 +95,10 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
   } else if (OB_FAIL(get_insert_locked_type_sql(param, no_stats_partition_ids,
                                                 part_stattypes, insert_sql))) {
     LOG_WARN("failed to get insert locked type sql", K(ret));
-  } else if (OB_FAIL(trans.write(param.tenant_id_, raw_sql.ptr(), affected_rows))) {
+  } else if (OB_FAIL(trans.write(raw_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
   } else if (!insert_sql.empty() &&
-             OB_FAIL(trans.write(param.tenant_id_, insert_sql.ptr(), affected_rows))) {
+             OB_FAIL(trans.write(insert_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(insert_sql), K(ret));
   } else {
     LOG_TRACE("Succeed to lock table stats", K(raw_sql), K(insert_sql));
@@ -134,9 +134,9 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
   ObSEArray<int64_t, 4> all_partition_ids;
   ObSEArray<int64_t, 4> stat_partition_ids;
   ObSEArray<int64_t, 4> stattype_locked;
-  uint64_t tenant_id = param.tenant_id_;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
+  
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   need_update_lock = false;
   if (OB_FAIL(gen_partition_list(param, partition_list, all_partition_ids))) {
     LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
@@ -154,7 +154,7 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
                                    set_locked ? lock_str.ptr() : unlock_str.ptr(),
                                    pure_table_id))) {
       LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
-    } else if (OB_FAIL(get_stat_locked_partition_ids(ctx, param.tenant_id_, raw_sql,
+    } else if (OB_FAIL(get_stat_locked_partition_ids(ctx, raw_sql,
                                                      stat_partition_ids,
                                                      stattype_locked))) {
       LOG_WARN("failed to get stat locked partition ids", K(ret));
@@ -193,9 +193,9 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
   ObSqlString raw_sql;
   ObSEArray<int64_t, 4> locked_partition_ids;
   ObSEArray<int64_t, 4> dummy_array;
-  uint64_t tenant_id = param.tenant_id_;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
+  
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   int64_t dummy_idx = -1;
   if (!param.is_index_param() &&
       OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
@@ -206,10 +206,9 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
              OB_FAIL(raw_sql.append_fmt(GET_INDEX_LOCKED_PARTITION_STAT,
                                         "stattype_locked > 0",
                                         pure_table_id,
-                                        share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.data_table_id_)))) {
+                                        share::schema::ObSchemaUtils::get_extract_schema_id(param.data_table_id_)))) {
     LOG_WARN("failed to append sql stmt", K(ret));
   } else if (OB_FAIL(get_stat_locked_partition_ids(ctx,
-                                                   param.tenant_id_,
                                                    raw_sql,
                                                    locked_partition_ids,
                                                    dummy_array))) {
@@ -234,15 +233,14 @@ int ObDbmsStatsLockUnlock::fill_stat_locked(ObExecContext &ctx,
   ObSqlString raw_sql;
   ObSEArray<int64_t, 4> locked_partition_ids;
   ObSEArray<int64_t, 4> stattype_locked_array;
-  uint64_t tenant_id = param.tenant_id_;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
+  
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   if (OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                  "stattype_locked > 0",
                                  pure_table_id))) {
     LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(get_stat_locked_partition_ids(ctx,
-                                                   param.tenant_id_,
                                                    raw_sql,
                                                    locked_partition_ids,
                                                    stattype_locked_array))) {
@@ -261,7 +259,6 @@ int ObDbmsStatsLockUnlock::fill_stat_locked(ObExecContext &ctx,
 }
 
 int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
-                                                         uint64_t tenant_id,
                                                          const ObSqlString &raw_sql,
                                                          ObIArray<int64_t> &partition_ids,
                                                          ObIArray<int64_t> &stattype_locked_array)
@@ -276,7 +273,7 @@ int ObDbmsStatsLockUnlock::get_stat_locked_partition_ids(ObExecContext &ctx,
       sqlclient::ObMySQLResult *client_result = NULL;
       const bool did_retry_weak = false;
       ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy, did_retry_weak);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, raw_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -608,9 +605,9 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
   } else if (OB_FAIL(insert_sql.append(INSERT_TABLE_STAT_SQL))) {
     LOG_WARN("failed to append", K(ret));
   } else {
-    uint64_t tenant_id = param.tenant_id_;
-    uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-    uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
+    
+    
+    uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
     StatLevel stat_level = INVALID_LEVEL;
     int64_t cur_part_id = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < no_stats_partition_ids.count(); ++i) {

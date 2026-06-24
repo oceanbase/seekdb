@@ -70,7 +70,6 @@ void TestIColumnEncoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);
@@ -141,8 +140,6 @@ TEST_F(TestEncoderOverFlow, test_append_row_with_timestamp_and_max_estimate_limi
 {
   common::ObClusterVersion::get_instance().update_cluster_version(cal_version(2, 2, 0, 75));
   ObMicroBlockEncoder encoder;
-  encoder.data_buffer_.allocator_.set_tenant_id(500);
-  encoder.row_buf_holder_.allocator_.set_tenant_id(500);
   ASSERT_EQ(OB_SUCCESS, encoder.init(ctx_));
 
   encoder.estimate_size_limit_ = ctx_.macro_block_size_;
@@ -198,8 +195,6 @@ TEST_F(TestDictLargeVarchar, test_dict_large_varchar)
     ctx_.column_encodings_[i] = ObColumnHeader::Type::DICT;
   }
   ObMicroBlockEncoder encoder;
-  encoder.data_buffer_.allocator_.set_tenant_id(500);
-  encoder.row_buf_holder_.allocator_.set_tenant_id(500);
   ASSERT_EQ(OB_SUCCESS, encoder.init(ctx_));
 
   ObDatumRow row;
@@ -364,8 +359,6 @@ TEST_F(TestStringDiffNullLength, test_string_diff_null_length)
   ctx_.micro_block_size_ = 1 << 20; // 1M
   ctx_.major_working_cluster_version_ = DATA_VERSION_1_0_0_0;
   ObMicroBlockEncoder encoder;
-  encoder.data_buffer_.allocator_.set_tenant_id(500);
-  encoder.row_buf_holder_.allocator_.set_tenant_id(500);
   ASSERT_EQ(OB_SUCCESS, encoder.init(ctx_));
 
   ObDatumRow row;

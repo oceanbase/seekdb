@@ -175,7 +175,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
 
       CK (OB_NOT_NULL(conn));
       if (OB_SUCC(ret) && set_sql.length() != 0) {
-        if (OB_FAIL(conn->execute_write(session_info->get_effective_tenant_id(), set_sql.ptr(), affected_rows))) {
+        if (OB_FAIL(conn->execute_write(set_sql.ptr(), affected_rows))) {
           LOG_WARN("execute write failed", K(ret), K(set_sql), K(affected_rows));
         }
       }
@@ -363,7 +363,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   sqlclient::ObISQLConnection *conn = NULL;
   observer::ObInnerSQLConnectionPool *pool = NULL;
   ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
-  uint64_t tenant_id = 0; 
+   
   int64_t warning_count = 0;
   ObSqlString query_virtual;
   ObSwitchCatalogHelper switch_catalog_helper;
@@ -392,9 +392,8 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
     LOG_WARN("assign format failed", K(ret));
   } else {
     SMART_VAR(ObISQLClient::ReadResult, res) {
-      tenant_id = session_info->get_effective_tenant_id();
       common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(conn->execute_read(tenant_id, query_virtual.ptr(), res))) {
+      if (OB_FAIL(conn->execute_read(query_virtual.ptr(), res))) {
         LOG_WARN("Failed to spi_query", K(query_virtual), K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -438,7 +437,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       } else {
         SMART_VAR(ObISQLClient::ReadResult, res) {
           common::sqlclient::ObMySQLResult *result = NULL;
-          if (OB_FAIL(conn->execute_read(tenant_id, query_virtual.ptr(), res))) {
+          if (OB_FAIL(conn->execute_read(query_virtual.ptr(), res))) {
             LOG_WARN("Failed to spi_query", K(query_virtual), K(ret));
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
@@ -546,7 +545,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
           }
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(conn->execute_write(tenant_id, set_sql.ptr(), affected_rows))) {
+          if (OB_FAIL(conn->execute_write(set_sql.ptr(), affected_rows))) {
             LOG_WARN("execute write failed", K(ret), K(set_sql), K(affected_rows));
           }
         }

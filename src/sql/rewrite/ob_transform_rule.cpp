@@ -416,8 +416,7 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);
     int64_t start_time_us = ObTimeUtil::current_time();
-    param.set_mem_attr(ctx_->session_info_->get_effective_tenant_id(),
-                       "CostBasedRewrit",
+    param.set_mem_attr("CostBasedRewrit",
                        ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);

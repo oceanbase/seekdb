@@ -218,7 +218,7 @@ ObTableLoadMemCompactor::ObTableLoadMemCompactor()
     finish_thread_cnt_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObTableLoadMemCompactor::~ObTableLoadMemCompactor() { reset(); }

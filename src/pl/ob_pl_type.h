@@ -524,8 +524,7 @@ public:
                   const char *&src, char *dst, const int64_t dst_len, int64_t &dst_pos) const;
 
   int convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const;
-  static int get_table_type_by_name(uint64_t tenant_id,
-                                  uint64_t owner_id,
+  static int get_table_type_by_name(uint64_t owner_id,
                                   const ObString &table,
                                   const ObString &type,
                                   common::ObIAllocator &allocator,
@@ -1089,7 +1088,6 @@ public:
                             lib::MemoryContext &entity);
   int prepare_spi_result(ObPLExecCtx *ctx, sql::ObSPIResultSet *&spi_result);
   int prepare_spi_cursor(sql::ObSPICursor *&spi_cursor,
-                          uint64_t tenant_id,
                           uint64_t mem_limit,
                           bool is_local_for_update = false,
                           sql::ObSQLSessionInfo* session_info = nullptr);

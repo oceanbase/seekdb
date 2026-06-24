@@ -40,8 +40,7 @@ public:
 private:
   int calc_show_catalog_id(uint64_t &show_catalog_id);
   int fill_row_cells(uint64_t show_catalog_id, const common::ObString &catalog_name);
-  int print_catalog_definition(const uint64_t tenant_id,
-                               const uint64_t catalog_id,
+  int print_catalog_definition(const uint64_t catalog_id,
                                char *buf,
                                const int64_t &buf_len,
                                int64_t &pos) const;

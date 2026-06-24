@@ -55,12 +55,11 @@ int ObRenameTableStmt::add_rename_table_item(const obcall::ObRenameTableItem &re
 int ObRenameTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = session->get_effective_tenant_id();
-  const int64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret), K(tenant_id));
+    SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
   } else if (tenant_config->enable_lock_priority) {
     if (!ObLockExecutor::proxy_is_support(session)) {
       ret = OB_NOT_SUPPORTED;

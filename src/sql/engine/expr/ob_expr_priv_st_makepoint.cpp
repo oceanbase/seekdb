@@ -85,8 +85,8 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
   double p[3] = {0.0};
   ObGeoSrid srid = 0;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_ASMVTGEOM);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_ASMVTGEOM);
   ObWkbBuffer res_wkb_buf(temp_allocator);
 
   for(int i = 0; OB_SUCC(ret) && i < num_args; i++) {

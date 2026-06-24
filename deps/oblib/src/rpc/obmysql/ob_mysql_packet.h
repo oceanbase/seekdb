@@ -149,71 +149,52 @@ union ObProxyCapabilityFlags
   ObProxyCapabilityFlags() : capability_(0) {}
   explicit ObProxyCapabilityFlags(uint64_t cap) : capability_(cap) {}
   bool is_checksum_support() const { return 1 == cap_flags_.OB_CAP_CHECKSUM; }
-  bool is_safe_weak_read_support() const { return 1 == cap_flags_.OB_CAP_SAFE_WEAK_READ; }
-  bool is_priority_hit_support() const { return 1 == cap_flags_.OB_CAP_PRIORITY_HIT; }
-  bool is_checksum_swittch_support() const { return 1 == cap_flags_.OB_CAP_CHECKSUM_SWITCH; }
   bool is_extra_ok_packet_for_statistics_support() const { return 1 == cap_flags_.OB_CAP_EXTRA_OK_PACKET_FOR_STATISTICS; }
   bool is_cap_used() const { return 0 != capability_; }
   bool is_extra_ok_packet_for_ocj_support() const { return 1 == cap_flags_.OB_CAP_EXTRA_OK_PACKET_FOR_OCJ; }
   bool is_ob_protocol_v2_support() const { return 1 == cap_flags_.OB_CAP_OB_PROTOCOL_V2; }
-  bool is_abundant_feedback_support() const { return 1 == cap_flags_.OB_CAP_ABUNDANT_FEEDBACK; }
-  bool is_pl_route_support() const { return 1 == cap_flags_.OB_CAP_PL_ROUTE; }
-  bool is_proxy_reroute_support() const { return 1 == cap_flags_.OB_CAP_PROXY_REROUTE; }
   bool is_full_link_trace_support() const { return 1 == cap_flags_.OB_CAP_PROXY_FULL_LINK_TRACING
                                                         && is_ob_protocol_v2_support(); }
   bool is_new_extra_info_support() const { return 1 == cap_flags_.OB_CAP_PROXY_NEW_EXTRA_INFO
                                                         && is_ob_protocol_v2_support(); }
-  bool is_session_var_sync_support() const { return 1 == cap_flags_.OB_CAP_PROXY_SESSION_VAR_SYNC
-                                                        && is_ob_protocol_v2_support(); }
-  bool is_weak_stale_feedback() const { return 1 == cap_flags_.OB_CAP_PROXY_WEAK_STALE_FEEDBACK; }
   bool is_flt_show_trace_support() const { return 1 == cap_flags_.OB_CAP_PROXY_FULL_LINK_TRACING_EXT
-                                                        && is_ob_protocol_v2_support(); }
-  bool is_session_sync_support() const { return 1 == cap_flags_.OB_CAP_PROXY_SESSIOIN_SYNC
                                                         && is_ob_protocol_v2_support(); }
   bool is_load_local_support() const { return 1 == cap_flags_.OB_CAP_LOCAL_FILES; }
   bool is_client_sessid_support() const { return 1 == cap_flags_.OB_CAP_PROXY_CLIENT_SESSION_ID; }
-  bool is_feedback_proxy_info_support() const { return 1 == cap_flags_.OB_CAP_FEEDBACK_PROXY_SHIFT
-                                                        && is_ob_protocol_v2_support(); }
 
   bool is_ob_protocol_v2_compress() const { return 1 == cap_flags_.OB_CAP_OB_PROTOCOL_V2_COMPRESS
                                                         && is_ob_protocol_v2_support(); }
   uint64_t capability_;
   struct CapabilityFlags
   {
-    uint64_t OB_CAP_PARTITION_TABLE:                   1;
+    uint64_t OB_CAP_RESERVED_BIT_0:                    1;  // was OB_CAP_PARTITION_TABLE (obproxy-only, removed)
     uint64_t OB_CAP_CHANGE_USER:                       1;
-    uint64_t OB_CAP_READ_WEAK:                         1;
+    uint64_t OB_CAP_RESERVED_BIT_2:                    1;  // was OB_CAP_READ_WEAK (obproxy-only, removed)
     uint64_t OB_CAP_CHECKSUM:                          1;
-    uint64_t OB_CAP_SAFE_WEAK_READ:                    1;
-    uint64_t OB_CAP_PRIORITY_HIT:                      1;
-    uint64_t OB_CAP_CHECKSUM_SWITCH:                   1;
+    uint64_t OB_CAP_RESERVED_BIT_4:                    1;  // was OB_CAP_SAFE_WEAK_READ (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_5:                    1;  // was OB_CAP_PRIORITY_HIT (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_6:                    1;  // was OB_CAP_CHECKSUM_SWITCH (obproxy-only, removed)
     uint64_t OB_CAP_EXTRA_OK_PACKET_FOR_OCJ:           1;
     // used since oceanbase 2.0 and aimed to replace mysql compress protocol for its low performance
     uint64_t OB_CAP_OB_PROTOCOL_V2:                    1;
     // whether following an extra ok packet at the end of COM_STATISTICS response
     uint64_t OB_CAP_EXTRA_OK_PACKET_FOR_STATISTICS:    1;
-    // for more abundant inforation in feedback
-    uint64_t OB_CAP_ABUNDANT_FEEDBACK:                 1;
-    // for pl route
-    uint64_t OB_CAP_PL_ROUTE:                          1;
-
-    uint64_t OB_CAP_PROXY_REROUTE:                     1;
-
-    // for session_info sync
-    uint64_t OB_CAP_PROXY_SESSIOIN_SYNC:               1;
+    uint64_t OB_CAP_RESERVED_BIT_10:                   1;  // was OB_CAP_ABUNDANT_FEEDBACK (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_11:                   1;  // was OB_CAP_PL_ROUTE (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_12:                   1;  // was OB_CAP_PROXY_REROUTE (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_13:                   1;  // was OB_CAP_PROXY_SESSIOIN_SYNC (obproxy-only, removed)
     // for full trace_route
     uint64_t OB_CAP_PROXY_FULL_LINK_TRACING:           1;
     uint64_t OB_CAP_PROXY_NEW_EXTRA_INFO:              1;
-    uint64_t OB_CAP_PROXY_SESSION_VAR_SYNC:            1;
-    uint64_t OB_CAP_PROXY_WEAK_STALE_FEEDBACK:         1;
+    uint64_t OB_CAP_RESERVED_BIT_16:                   1;  // was OB_CAP_PROXY_SESSION_VAR_SYNC (obproxy-only, removed)
+    uint64_t OB_CAP_RESERVED_BIT_17:                   1;  // was OB_CAP_PROXY_WEAK_STALE_FEEDBACK (obproxy-only, removed)
     uint64_t OB_CAP_PROXY_FULL_LINK_TRACING_EXT:       1;
-    // duplicate session_info sync of transaction type
-    uint64_t OB_CAP_SERVER_DUP_SESS_INFO_SYNC:         1;
+    uint64_t OB_CAP_RESERVED_BIT_19:                   1;  // was OB_CAP_SERVER_DUP_SESS_INFO_SYNC (obproxy-only, removed)
     uint64_t OB_CAP_LOCAL_FILES:                       1;
     // client session id consultation
     uint64_t OB_CAP_PROXY_CLIENT_SESSION_ID:           1;
     uint64_t OB_CAP_OB_PROTOCOL_V2_COMPRESS:           1;
-    uint64_t OB_CAP_FEEDBACK_PROXY_SHIFT:              1;
+    uint64_t OB_CAP_RESERVED_BIT_23:                   1;  // was OB_CAP_FEEDBACK_PROXY_SHIFT (obproxy-only, removed)
     uint64_t OB_CAP_RESERVED_NOT_USE:                 41;
   } cap_flags_;
 };
@@ -524,7 +505,6 @@ class ObMySQLRawPacket
 {
 public:
   ObMySQLRawPacket() : ObMySQLPacket(), cmd_(COM_MAX_NUM),
-                       can_reroute_pkt_(false),
                        is_weak_read_(false),
                        txn_free_route_(false),
                        proxy_switch_route_(false),
@@ -533,7 +513,6 @@ public:
 
   explicit ObMySQLRawPacket(obmysql::ObMySQLCmd cmd)
     : ObMySQLPacket(), cmd_(cmd),
-      can_reroute_pkt_(false),
       is_weak_read_(false),
       txn_free_route_(false),
       proxy_switch_route_(false),
@@ -548,9 +527,6 @@ public:
 
   inline const char *get_cdata() const;
   inline uint32_t get_clen() const;
-
-  inline void set_can_reroute_pkt(const bool can_rerute);
-  inline bool can_reroute_pkt() const;
 
   inline void set_is_weak_read(const bool v) { is_weak_read_ = v; }
   inline bool is_weak_read() const { return is_weak_read_; }
@@ -573,7 +549,6 @@ public:
   virtual void reset() {
     ObMySQLPacket::reset();
     cmd_ = COM_MAX_NUM;
-    can_reroute_pkt_ = false;
     is_weak_read_ = false;
     txn_free_route_ = false;
     proxy_switch_route_ = false;
@@ -585,7 +560,6 @@ public:
   {
     ObMySQLPacket::assign(other);
     cmd_ = other.cmd_;
-    can_reroute_pkt_ = other.can_reroute_pkt_;
     is_weak_read_ = other.is_weak_read_;
     txn_free_route_ = other.txn_free_route_;
     extra_info_ = other.extra_info_;
@@ -593,7 +567,7 @@ public:
     consume_size_ = other.consume_size_;
   }
 
-  TO_STRING_KV("header", hdr_, "can_reroute", can_reroute_pkt_, "weak_read", is_weak_read_,
+  TO_STRING_KV("header", hdr_, "weak_read", is_weak_read_,
             "txn_free_route_", txn_free_route_, "proxy_switch_route", proxy_switch_route_,
             "consume_size", consume_size_);
 protected:
@@ -603,7 +577,6 @@ private:
   void set_len(uint32_t len);
 private:
   ObMySQLCmd cmd_;
-  bool can_reroute_pkt_;
   bool is_weak_read_;
   bool txn_free_route_;
   bool proxy_switch_route_;
@@ -688,16 +661,6 @@ inline const char *ObMySQLRawPacket::get_cdata() const
 inline uint32_t ObMySQLRawPacket::get_clen() const
 {
   return hdr_.len_;
-}
-
-inline void ObMySQLRawPacket::set_can_reroute_pkt(const bool can_reroute)
-{
-  can_reroute_pkt_ = can_reroute;
-}
-
-inline bool ObMySQLRawPacket::can_reroute_pkt() const
-{
-  return can_reroute_pkt_;
 }
 
 union ObClientAttributeCapabilityFlags

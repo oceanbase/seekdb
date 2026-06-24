@@ -49,10 +49,9 @@ public:
   static int64_t get_schema_id(const SCHEMA &schema) { UNUSED(schema); return -1; }
   template<typename T>
   static int fill_current(
-      const uint64_t tenant_id,
       const bool check_deleted,
       T &result, SCHEMA &p,
-      bool &is_deleted) { UNUSED(tenant_id); UNUSED(check_deleted); UNUSED(result); UNUSED(p); UNUSED(is_deleted);return common::OB_SUCCESS; };
+      bool &is_deleted) { UNUSED(check_deleted); UNUSED(result); UNUSED(p); UNUSED(is_deleted);return common::OB_SUCCESS; };
   int add_schema(TABLE_SCHEMA &table_schema, SCHEMA &schema)
   { UNUSED(table_schema);UNUSED(schema);return common::OB_SUCCESS; }
 };
@@ -64,7 +63,6 @@ public:
   static int64_t get_schema_id(const ObColumnSchemaV2 &s);
   template<typename T>
   static int fill_current(
-      const uint64_t tenant_id,
       const bool check_deleted,
       T &result, ObColumnSchemaV2 &p,
       bool &is_deleted);
@@ -78,7 +76,6 @@ public:
   static int64_t get_schema_id(const ObConstraint &s);
   template<typename T>
   static int fill_current(
-      const uint64_t tenant_id,
       const bool check_deleted,
       T &result, ObConstraint &p,
       bool &is_deleted);
@@ -92,7 +89,6 @@ public:
   static int64_t get_schema_id(const ObPartition &s);
   template<typename T>
   static int fill_current(
-      const uint64_t tenant_id,
       const bool check_deleted,
       T &result, ObPartition &p,
       bool &is_deleted);
@@ -149,7 +145,6 @@ public:
   int add(SCHEMA &s);
   template<typename T>
   static int fill_current(
-      const uint64_t tenant_id,
       const bool check_deleted,
       T &result, SCHEMA &p,
       bool &is_deleted);
@@ -224,7 +219,6 @@ public:
   int add(ObSubPartition &s);
   template<typename T>
   int fill_current(
-      const uint64_t tenant_id,
       const bool check_deleted,
       T &result,
       ObSubPartition &p,
@@ -258,158 +252,133 @@ public:
  ******************************************************************/
 
   template<typename T, typename SCHEMA>
-  static int retrieve_system_variable(const uint64_t tenant_id, T &result, SCHEMA &tenant_schema);
+  static int retrieve_system_variable(T &result, SCHEMA &tenant_schema);
 
   template<typename T>
-  static int retrieve_system_variable_obj(
-             const uint64_t tenant_id,
-             T &result,
+  static int retrieve_system_variable_obj(T &result,
              ObIAllocator &allocator,
              ObObj &out_var_obj);
 
   //for batch table
   template<typename T, typename TABLE_SCHEMA>
-  static int retrieve_table_schema(const uint64_t tenant_id,
-                                   const bool check_deleted,
+  static int retrieve_table_schema(const bool check_deleted,
                                    T &result,
                                    common::ObIAllocator &allocator,
                                    common::ObIArray<TABLE_SCHEMA *> &table_schema_array);
 
   template<typename TABLE_SCHEMA, typename SCHEMA,  typename T>
-  static int retrieve_schema(const uint64_t tenant_id,
+  static int retrieve_schema(
                              const bool check_deleted,
                              T &result,
                              ObArray<TABLE_SCHEMA *> &table_schema_array);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_subpart_schema(
-             const uint64_t tenant_id,
-             const bool check_deleted,
+  static int retrieve_subpart_schema(const bool check_deleted,
              const bool is_subpart_template,
              T &result,
              ObArray<TABLE_SCHEMA *> &table_schema_array);
 
   template<typename T>
-  static int retrieve_column_schema(const uint64_t tenant_id,
-                                    const bool check_deleted,
+  static int retrieve_column_schema(const bool check_deleted,
                                     T &result,
                                     common::ObArray<ObTableSchema *> &table_schema_array);
   template<typename T>
-  static int retrieve_column_group_schema(const uint64_t tenant_id,
-                                          const bool check_deleted,
+  static int retrieve_column_group_schema(const bool check_deleted,
                                           T &result,
                                           common::ObArray<ObTableSchema *> &table_schema_array);
 
   template<typename T>
-  static int retrieve_constraint(const uint64_t tenant_id,
-                                 const bool check_deleted,
+  static int retrieve_constraint(const bool check_deleted,
                                  T &result,
                                  common::ObArray<ObTableSchema *> &table_schema_array);
 
   template<typename T>
-  static int retrieve_constraint_column_info(const uint64_t tenant_id,
-                                             T &result, ObConstraint *&cst);
+  static int retrieve_constraint_column_info(T &result, ObConstraint *&cst);
 
   template<typename T>
-  static int retrieve_aux_tables(const uint64_t tenant_id,
-                                 T &result,
+  static int retrieve_aux_tables(T &result,
                                  ObIArray<ObAuxTableMetaInfo> &aux_tables);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_part_info(const uint64_t tenant_id,
-                                const bool check_deleted,
+  static int retrieve_part_info(const bool check_deleted,
                                 T &result,
                                 common::ObArray<TABLE_SCHEMA *> &table_schema_array);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_def_subpart_info(const uint64_t tenant_id,
-                                       const bool check_deleted,
+  static int retrieve_def_subpart_info(const bool check_deleted,
                                        T &result,
                                        common::ObArray<TABLE_SCHEMA *> &table_schema_array);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_subpart_info(const uint64_t tenant_id,
-                                   const bool check_deleted,
+  static int retrieve_subpart_info(const bool check_deleted,
                                    T &result,
                                    common::ObArray<TABLE_SCHEMA *> &table_schema_array);
 
   //for single table
   template<typename T>
-  static int retrieve_table_schema(const uint64_t tenant_id,
-                                   const bool check_deleted,
+  static int retrieve_table_schema(const bool check_deleted,
                                    T &result,
                                    common::ObIAllocator &allocator,
                                    ObTableSchema *&table_schema);
   template<typename T>
-  static int retrieve_column_schema(const uint64_t tenant_id,
-                                    const bool check_deleted,
+  static int retrieve_column_schema(const bool check_deleted,
                                     T &result,
                                     ObTableSchema *&table_schema);
 
   template<typename T>
-  static int retrieve_constraint(const uint64_t tenant_id,
-                                 const bool check_deleted,
+  static int retrieve_constraint(const bool check_deleted,
                                  T &result,
                                  ObTableSchema *&table_schema);
 
   template<typename T>
-  static int retrieve_column_group_schema(const uint64_t tenant_id,
-                                          const bool check_deleted,
+  static int retrieve_column_group_schema(const bool check_deleted,
                                           T &result,
                                           ObTableSchema *&table_schema);
 
   template<typename T>
-  static int retrieve_column_group_mapping(const uint64_t tenant_id,
-                                           const bool check_deleted,
+  static int retrieve_column_group_mapping(const bool check_deleted,
                                            T &result,
                                            ObTableSchema *&table_schema);
 
   //for ObColumnSchema ObPartition
   template<typename TABLE_SCHEMA, typename SCHEMA,  typename T>
-  static int retrieve_schema(const uint64_t tenant_id,
+  static int retrieve_schema(
                              const bool check_deleted,
                              T &result,
                              TABLE_SCHEMA *&table_schema);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_subpart_schema(
-             const uint64_t tenant_id,
-             const bool check_deleted,
+  static int retrieve_subpart_schema(const bool check_deleted,
              const bool is_subpart_template,
              T &result,
              TABLE_SCHEMA *&table_schema);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_part_info(const uint64_t tenant_id,
-                                const bool check_deleted, T &result,
+  static int retrieve_part_info(const bool check_deleted, T &result,
                                 TABLE_SCHEMA *&table_schema);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_def_subpart_info(const uint64_t tenant_id,
-                                       const bool check_deleted,
+  static int retrieve_def_subpart_info(const bool check_deleted,
                                        T &result,
                                        TABLE_SCHEMA *&table_schema);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_subpart_info(const uint64_t tenant_id,
-                                   const bool check_deleted,
+  static int retrieve_subpart_info(const bool check_deleted,
                                    T &result,
                                    TABLE_SCHEMA *&table_schema);
 
   template<typename TABLE_SCHEMA, typename T>
-  static int retrieve_foreign_key_info(const uint64_t tenant_id, T &result, TABLE_SCHEMA &table_schema);
+  static int retrieve_foreign_key_info(T &result, TABLE_SCHEMA &table_schema);
 
   template<typename T>
-  static int retrieve_foreign_key_column_info(const uint64_t tenant_id,
-                                              T &result, ObForeignKeyInfo &foreign_key_info);
+  static int retrieve_foreign_key_column_info(T &result, ObForeignKeyInfo &foreign_key_info);
 
   template<typename T, typename S>
-  static int retrieve_simple_encrypt_info(const uint64_t tenant_id,
-                                          T &result,
+  static int retrieve_simple_encrypt_info(T &result,
                                           ObArray<S *> &table_schema_array);
   #define RETRIEVE_SCHEMA_FUNC_DECLARE(SCHEMA)                                \
     template<typename T, typename S>                                          \
-    static int retrieve_##SCHEMA##_schema(const uint64_t tenant_id, \
+    static int retrieve_##SCHEMA##_schema( \
                                           T &result,                          \
                                           common::ObIArray<S> &schema_array);
   RETRIEVE_SCHEMA_FUNC_DECLARE(user);
@@ -427,16 +396,15 @@ public:
   RETRIEVE_SCHEMA_FUNC_DECLARE(routine);
   RETRIEVE_SCHEMA_FUNC_DECLARE(trigger);
   template<typename T>
-  static int retrieve_trigger_list(const uint64_t tenant_id, T &result, common::ObIArray<uint64_t> &trigger_list);
+  static int retrieve_trigger_list(T &result, common::ObIArray<uint64_t> &trigger_list);
   template<typename T>
-  static int retrieve_routine_param_schema(const uint64_t tenant_id, T &result, common::ObIArray<ObRoutineInfo> &routine_infos);
+  static int retrieve_routine_param_schema(T &result, common::ObIArray<ObRoutineInfo> &routine_infos);
   RETRIEVE_SCHEMA_FUNC_DECLARE(synonym);
   RETRIEVE_SCHEMA_FUNC_DECLARE(udf);
   RETRIEVE_SCHEMA_FUNC_DECLARE(sequence);
   RETRIEVE_SCHEMA_FUNC_DECLARE(sys_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(obj_priv);
 
-  RETRIEVE_SCHEMA_FUNC_DECLARE(dblink);
   RETRIEVE_SCHEMA_FUNC_DECLARE(directory);
   RETRIEVE_SCHEMA_FUNC_DECLARE(location);
   RETRIEVE_SCHEMA_FUNC_DECLARE(context);
@@ -446,20 +414,18 @@ public:
   RETRIEVE_SCHEMA_FUNC_DECLARE(ai_model);
 
   template<typename T>
-  static int retrieve_object_list(const uint64_t tenant_id, T &result, common::ObIArray<uint64_t> &trigger_list);
+  static int retrieve_object_list(T &result, common::ObIArray<uint64_t> &trigger_list);
   template<typename T>
-  static int retrieve_mock_fk_parent_table_schema_column(
-      const uint64_t tenant_id, T &result,
+  static int retrieve_mock_fk_parent_table_schema_column(T &result,
       ObMockFKParentTableSchema &mock_fk_parent_table);
 
   template<typename T>
-  static int retrieve_tablegroup_schema(const uint64_t tenant_id,
-                                        T &result,
+  static int retrieve_tablegroup_schema(T &result,
                                         ObIAllocator &allocator,
                                         ObTablegroupSchema *&tablegroup_schema);
 
   template<typename T>
-  static int retrieve_recycle_object(const uint64_t tenant_id, T &result, ObIArray<ObRecycleObject> &recycle_objs);
+  static int retrieve_recycle_object(T &result, ObIArray<ObRecycleObject> &recycle_objs);
   template<typename T>
   static int retrieve_schema_version(T &result, VersionHisVal &version_his_val);
 
@@ -468,7 +434,7 @@ public:
  */
   #define FILL_SCHEMA_FUNC_DECLARE(SCHEMA, SCHEMA_TYPE)       \
     template<typename T>                                      \
-    static int fill_##SCHEMA##_schema(const uint64_t tenant_id,\
+    static int fill_##SCHEMA##_schema(\
                                       T &result,              \
                                       SCHEMA_TYPE &schema,    \
                                       bool &is_deleted);
@@ -512,48 +478,43 @@ public:
   FILL_SCHEMA_FUNC_DECLARE(ccl_rule, ObCCLRuleSchema);
   FILL_SCHEMA_FUNC_DECLARE(ai_model, ObAiModelSchema);
   template<typename T>
-  static int fill_mock_fk_parent_table_column_info(
-      const uint64_t tenant_id, T &result, uint64_t &parent_column_id, ObString &parent_column_name,
+  static int fill_mock_fk_parent_table_column_info(T &result, uint64_t &parent_column_id, ObString &parent_column_name,
       bool &is_deleted);
 
   template<typename T>
-  static int fill_sys_priv_schema(
-                                 const uint64_t tenant_id,
-                                 T &result,
+  static int fill_sys_priv_schema(T &result,
                                  ObSysPriv &schema,
                                  bool &is_deleted,
                                  ObRawPriv &raw_p_id,
                                  uint64_t &option);
 
   template<typename T>
-  static int fill_obj_priv_schema(const uint64_t tenant_id,
-                                  T &result,
+  static int fill_obj_priv_schema(T &result,
                                   ObObjPriv &obj_priv,
                                   bool &is_deleted,
                                   ObRawObjPriv &raw_p_id,
                                   uint64_t &option);
 
   template<typename T>
-  static int fill_obj_mysql_priv_schema(const uint64_t tenant_id, 
-                                        T &result, 
+  static int fill_obj_mysql_priv_schema(T &result, 
                                         ObObjMysqlPriv &obj_mysql_priv, 
                                         bool &is_deleted);
 
   template<typename T>
-  static int fill_trigger_id(const uint64_t tenant_id, T &result,
+  static int fill_trigger_id(T &result,
                              uint64_t &trigger_id, bool &is_deleted);
   template<typename T>
-  static int fill_table_schema(const uint64_t tenant_id, const bool check_deleted, T &result,
+  static int fill_table_schema(const bool check_deleted, T &result,
                                ObSimpleTableSchemaV2 &table_schema, bool &is_deleted);
   template<typename T>
-  static int fill_table_schema(const uint64_t tenant_id, const bool check_deleted, T &result,
+  static int fill_table_schema(const bool check_deleted, T &result,
                                ObTableSchema &table_schema, bool &is_deleted);
   template<typename T>
-  static int fill_column_schema(const uint64_t tenant_id, const bool check_deleted, T &result,
+  static int fill_column_schema(const bool check_deleted, T &result,
                                 ObColumnSchemaV2 &column, bool &is_deleted);
 
   template<typename T>
-  static int fill_constraint(const uint64_t tenant_id, const bool check_deleted, T &result,
+  static int fill_constraint(const bool check_deleted, T &result,
                              ObConstraint &constraint, bool &is_deleted);
 
   template<typename T>
@@ -562,65 +523,58 @@ public:
                                     uint64_t &table_id, bool &is_deleted);
 
   template<typename T>
-  static int fill_constraint_column_info(
-      const uint64_t tenant_id, T &result, uint64_t &column_id, bool &is_deleted);
+  static int fill_constraint_column_info(T &result, uint64_t &column_id, bool &is_deleted);
 
   template<typename T>
-  static int fill_base_part_info(const uint64_t tenant_id,
-                                 const bool check_deleted,
+  static int fill_base_part_info(const bool check_deleted,
                                  const bool is_subpart_def,
                                  const bool is_subpart_template,
                                  T &result,
                                  ObBasePartition &partition, bool &is_deleted);
 
   template<typename T>
-  static int fill_part_info(const uint64_t tenant_id, const bool check_deleted, T &result,
+  static int fill_part_info(const bool check_deleted, T &result,
                             ObPartition &partition, bool &is_deleted);
 
   template<typename T>
-  static int fill_def_subpart_info(const uint64_t tenant_id,
-                                   const bool check_deleted,
+  static int fill_def_subpart_info(const bool check_deleted,
                                    T &result,
                                    ObSubPartition &partition,
                                    bool &is_deleted);
 
   template<typename T>
-  static int fill_subpart_info(const uint64_t tenant_id,
-                               const bool check_deleted,
+  static int fill_subpart_info(const bool check_deleted,
                                T &result,
                                ObSubPartition &partition,
                                bool &is_deleted);
 
   template<typename T>
-  static int fill_foreign_key_info(const uint64_t tenant_id, uint64_t table_id, T &result, ObForeignKeyInfo &foreign_key_info, bool &is_deleted);
+  static int fill_foreign_key_info(uint64_t table_id, T &result, ObForeignKeyInfo &foreign_key_info, bool &is_deleted);
 
   template<typename T>
-  static int fill_foreign_key_column_info(const uint64_t tenant_id, T &result, int64_t &child_column_id, int64_t &parent_column_id, bool &is_deleted);
+  static int fill_foreign_key_column_info(T &result, int64_t &child_column_id, int64_t &parent_column_id, bool &is_deleted);
 
   template<typename T>
-  static int retrieve_simple_foreign_key_info(const uint64_t tenant_id, T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array);
+  static int retrieve_simple_foreign_key_info(T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array);
 
   template<typename T>
-  static int get_foreign_key_id_and_name(const uint64_t tenant_id,
-                                         T &result,
+  static int get_foreign_key_id_and_name(T &result,
                                          bool &is_deleted,
                                          uint64_t &fk_id,
                                          ObString &fk_name,
                                          uint64_t &table_id);
   template<typename T>
-  static int retrieve_simple_constraint_info(const uint64_t tenant_id, T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array);
+  static int retrieve_simple_constraint_info(T &result, ObArray<ObSimpleTableSchemaV2 *> &table_schema_array);
 
   template<typename T>
-  static int get_constraint_id_and_name(const uint64_t tenant_id,
-                                        T &result,
+  static int get_constraint_id_and_name(T &result,
                                         bool &is_deleted,
                                         uint64_t &cst_id,
                                         ObString &cst_name,
                                         uint64_t &table_id,
                                         ObConstraintType &cst_type);
   template<typename T>
-  static int retrieve_role_grantee_map_schema(const uint64_t tenant_id,
-      T &result,
+  static int retrieve_role_grantee_map_schema(T &result,
       const bool is_fetch_role,
       ObArray<ObUserInfo> &user_array);
   static inline int find_user_info(const uint64_t user_id,
@@ -629,7 +583,7 @@ public:
   template<typename T>
   static bool compare_user_id(const T &user_info, const uint64_t user_id);
   template<typename T>
-  static int fill_object_id(const uint64_t tenant_id, T &result,
+  static int fill_object_id(T &result,
                             uint64_t &object_id, bool &is_deleted);
 
 //===========================================================================
@@ -637,10 +591,9 @@ public:
   template<typename T, typename SCHEMA>
   static int fill_replica_options(T &result, SCHEMA &schema);
   template<typename T>
-  static int fill_recycle_object(const uint64_t tenant_id, T &result, ObRecycleObject &recycle_obj);
+  static int fill_recycle_object(T &result, ObRecycleObject &recycle_obj);
   template<typename T>
-  static int fill_schema_operation(const uint64_t tenant_id,
-                                   T &result, ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
+  static int fill_schema_operation(T &result, ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
                                    ObSchemaOperation &schema_op);
   template<typename SCHEMA>
   static int fill_schema_zone_region_replica_num_array(SCHEMA &schema);
@@ -650,7 +603,7 @@ public:
   static T *find_table_schema(const uint64_t table_id,
                               common::ObArray<T *> &table_schema_array);
   template<typename T>
-  static int fill_temp_table_schema(const uint64_t tenant_id, T &result, ObTableSchema &table_schema);
+  static int fill_temp_table_schema(T &result, ObTableSchema &table_schema);
 
   template<typename TABLE_SCHEMA>
   static int cascaded_generated_column(TABLE_SCHEMA &table_schema);
@@ -678,13 +631,10 @@ private:
       ObPackedObjPriv &packed_obj_privs);
 
   template<typename T, typename S>
-  static int retrieve_sys_priv_schema_inner(const uint64_t tenant_id,
-                                            T &result,
+  static int retrieve_sys_priv_schema_inner(T &result,
                                             ObIArray<S> &sys_priv_array);
   template<typename T, typename S>
-  static int retrieve_obj_priv_schema_inner(
-      const uint64_t tenant_id,
-      T &result,
+  static int retrieve_obj_priv_schema_inner(T &result,
       ObIArray<S> &obj_priv_array);
   static int fill_sys_table_lob_tid(ObTableSchema &table);
 

@@ -50,7 +50,6 @@ ObDropVecIVFIndexTask::~ObDropVecIVFIndexTask()
 }
 
 int ObDropVecIVFIndexTask::init(
-    const uint64_t tenant_id,
     const int64_t task_id,
     const uint64_t data_table_id,
     const ObDDLType task_type,
@@ -67,12 +66,11 @@ int ObDropVecIVFIndexTask::init(
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_data_format_version = tenant_data_version;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id
-               || task_id <= 0
+  if (OB_UNLIKELY(task_id <= 0
                || OB_INVALID_ID == data_table_id
                || schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(data_table_id), K(centroid),
+    LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id), K(centroid),
         K(cid_vector), K(rowkey_cid), K(sq_meta), K(pq_centroid), K(pq_code), K(schema_version));
   } else if (OB_ISNULL(root_service_ = GCTX.root_service_)) {
     ret = OB_ERR_SYS;
@@ -91,8 +89,8 @@ int ObDropVecIVFIndexTask::init(
     LOG_WARN("fail to deep copy from other", K(ret), K(pq_centroid));
   } else if (OB_FAIL(pq_code_.deep_copy_from_other(pq_code, allocator_))) {
     LOG_WARN("fail to deep copy from other", K(ret), K(pq_code));
-  } else if (tenant_data_format_version <= 0 && OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_format_version))) {
-    LOG_WARN("get min data version failed", K(ret), K(tenant_id));
+  } else if (tenant_data_format_version <= 0 && OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_format_version))) {
+    LOG_WARN("get min data version failed", K(ret));
   } else {
     // get valid object id, target_object_id_ // not use this id
     if (centroid_.is_valid()) {
@@ -115,14 +113,14 @@ int ObDropVecIVFIndexTask::init(
     } else {
       task_type_ = task_type;
       set_gmt_create(ObTimeUtility::current_time());
-      tenant_id_ = tenant_id;
+      
       object_id_ = data_table_id;
       schema_version_ = schema_version;
       task_id_ = task_id;
       parent_task_id_ = 0; // no parent task
       consumer_group_id_ = consumer_group_id;
       task_version_ = OB_DROP_VEC_IVF_INDEX_TASK_VERSION;
-      dst_tenant_id_ = tenant_id;
+      
       dst_schema_version_ = schema_version;
       is_inited_ = true;
       data_format_version_ = tenant_data_format_version;
@@ -144,7 +142,7 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("unexpected error, root service is nullptr", K(ret));
   } else {
     task_type_ = task_record.ddl_type_;
-    tenant_id_ = task_record.tenant_id_;
+    
     object_id_ = task_record.object_id_;
     target_object_id_ = task_record.target_object_id_;
     schema_version_ = task_record.schema_version_;
@@ -152,7 +150,7 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
     parent_task_id_ = task_record.parent_task_id_;
     task_version_ = task_record.task_version_;
     ret_code_ = task_record.ret_code_;
-    dst_tenant_id_ = tenant_id_;
+    
     dst_schema_version_ = schema_version_;
     execution_id_ = task_record.execution_id_;
     snapshot_version_ = task_record.snapshot_version_;
@@ -160,7 +158,7 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
     if (OB_ISNULL(task_record.message_.ptr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, task record message is nullptr", K(ret), K(task_record));
-    } else if (OB_FAIL(deserialize_params_from_message(task_record.tenant_id_, task_record.message_.ptr(),
+    } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
             task_record.message_.length(), pos))) {
       LOG_WARN("deserialize params from message failed", K(ret));
     } else {
@@ -271,7 +269,6 @@ int ObDropVecIVFIndexTask::serialize_params_to_message(char *buf, const int64_t 
 }
 
 int ObDropVecIVFIndexTask::deserialize_params_from_message(
-    const uint64_t tenant_id,
     const char *buf,
     const int64_t buf_size,
     int64_t &pos)
@@ -279,11 +276,11 @@ int ObDropVecIVFIndexTask::deserialize_params_from_message(
   int ret = OB_SUCCESS;
   obcall::ObDropIndexArg tmp_drop_index_arg;
   ObVecIndexDDLChildTaskInfo tmp_info;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
+  if (OB_UNLIKELY(!true || nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(buf_size));
-  } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(tenant_id, buf, buf_size, pos))) {
-    LOG_WARN("fail to ObDDLTask::deserialize", K(ret), K(tenant_id));
+    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
+  } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
+    LOG_WARN("fail to ObDDLTask::deserialize", K(ret));
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
     LOG_WARN("fail to deserialize rowkey vid table info", K(ret));
   } else if (OB_FAIL(centroid_.deep_copy_from_other(tmp_info, allocator_))) {
@@ -348,7 +345,7 @@ int ObDropVecIVFIndexTask::update_task_message()
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     msg.assign(buf, serialize_param_size);
-    if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, tenant_id_, task_id_, msg))) {
+    if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
       LOG_WARN("failed to update message", KR(ret));
     }
   }
@@ -374,26 +371,26 @@ int ObDropVecIVFIndexTask::check_switch_succ()
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
   } else if (OB_FAIL(refresh_schema_version())) {
     LOG_WARN("refresh schema version failed", K(ret));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema", K(ret));
   } else if (centroid_.is_valid() 
-          && OB_FAIL(schema_guard.check_table_exist(tenant_id_, centroid_.table_id_, is_centroid_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(centroid_));
+          && OB_FAIL(schema_guard.check_table_exist(centroid_.table_id_, is_centroid_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(centroid_));
   } else if (cid_vector_.is_valid()
-          && OB_FAIL(schema_guard.check_table_exist(tenant_id_, cid_vector_.table_id_, is_cid_vector_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(cid_vector_));
+          && OB_FAIL(schema_guard.check_table_exist(cid_vector_.table_id_, is_cid_vector_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(cid_vector_));
   } else if (rowkey_cid_.is_valid() 
-          && OB_FAIL(schema_guard.check_table_exist(tenant_id_, rowkey_cid_.table_id_, is_rowkey_cid_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(rowkey_cid_));
+          && OB_FAIL(schema_guard.check_table_exist(rowkey_cid_.table_id_, is_rowkey_cid_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(rowkey_cid_));
   } else if (sq_meta_.is_valid() 
-          && OB_FAIL(schema_guard.check_table_exist(tenant_id_, sq_meta_.table_id_, is_sq_meta_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(sq_meta_));
+          && OB_FAIL(schema_guard.check_table_exist(sq_meta_.table_id_, is_sq_meta_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(sq_meta_));
   } else if (pq_centroid_.is_valid()
-          && OB_FAIL(schema_guard.check_table_exist(tenant_id_, pq_centroid_.table_id_, is_pq_centroid_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(pq_centroid_));
+          && OB_FAIL(schema_guard.check_table_exist(pq_centroid_.table_id_, is_pq_centroid_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(pq_centroid_));
   } else if (pq_code_.is_valid()
-          && OB_FAIL(schema_guard.check_table_exist(tenant_id_, pq_code_.table_id_, is_pq_code_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(pq_code_));
+          && OB_FAIL(schema_guard.check_table_exist(pq_code_.table_id_, is_pq_code_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(pq_code_));
   } else {
     is_centroid_exist = centroid_.is_valid() ? is_centroid_exist : false;
     is_cid_vector_exist = cid_vector_.is_valid() ? is_cid_vector_exist : false;
@@ -486,8 +483,8 @@ int ObDropVecIVFIndexTask::drop_aux_ivfflat_index_table(const share::ObDDLTaskSt
   } else if (OB_ISNULL(root_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -514,8 +511,8 @@ int ObDropVecIVFIndexTask::drop_aux_ivfsq8_index_table(const share::ObDDLTaskSta
   } else if (OB_ISNULL(root_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -545,8 +542,8 @@ int ObDropVecIVFIndexTask::drop_aux_ivfpq_index_table(const share::ObDDLTaskStat
   } else if (OB_ISNULL(root_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
-  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(tenant_id_, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -614,9 +611,7 @@ int ObDropVecIVFIndexTask::wait_drop_task_finish(const share::ObDDLTaskStatus &n
   return ret;
 }
 
-int ObDropVecIVFIndexTask::check_drop_index_finish(
-    const uint64_t tenant_id,
-    const int64_t task_id,
+int ObDropVecIVFIndexTask::check_drop_index_finish(const int64_t task_id,
     const int64_t table_id,
     bool &has_finished)
 {
@@ -625,12 +620,10 @@ int ObDropVecIVFIndexTask::check_drop_index_finish(
   int64_t unused_user_msg_len = 0;
   share::ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
   has_finished = false;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == table_id)) {
+  if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(table_id));
-  } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(
-                                                       tenant_id,
-                                                       task_id,
+    LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id));
+  } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id,
                                                        -1/*target_object_id*/,
                                                        table_id,
                                                        *GCTX.sql_proxy_,
@@ -638,15 +631,15 @@ int ObDropVecIVFIndexTask::check_drop_index_finish(
                                                        unused_user_msg_len))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
-      LOG_INFO("ddl task not finish", K(ret), K(tenant_id),  K(task_id), K(table_id));
+      LOG_INFO("ddl task not finish", K(ret),  K(task_id), K(table_id));
     } else {
-      LOG_WARN("fail to get ddl error message", K(ret), K(tenant_id), K(task_id), K(table_id));
+      LOG_WARN("fail to get ddl error message", K(ret), K(task_id), K(table_id));
     }
   } else {
     ret = error_message.ret_code_;
     has_finished = true;
   }
-  LOG_INFO("wait build index finish", K(ret), K(tenant_id), K(task_id), K(table_id), K(has_finished));
+  LOG_INFO("wait build index finish", K(ret), K(task_id), K(table_id), K(has_finished));
   return ret;
 }
 
@@ -664,10 +657,10 @@ int ObDropVecIVFIndexTask::wait_child_task_finish(
       finished = false;
       if (-1 == task_info.task_id_) {
         finished = true;
-      } else if (OB_FAIL(check_drop_index_finish(tenant_id_, task_info.task_id_, task_info.table_id_, finished))) {
+      } else if (OB_FAIL(check_drop_index_finish(task_info.task_id_, task_info.table_id_, finished))) {
         LOG_WARN("fail to check vec index child task finish", K(ret));
       } else if (!finished) { // nothing to do
-        LOG_INFO("child task hasn't been finished", K(tenant_id_), K(task_info));
+        LOG_INFO("child task hasn't been finished", K(task_info));
       }
     }
     if (OB_SUCC(ret) && finished) {
@@ -696,19 +689,19 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
   } else if (OB_UNLIKELY(OB_INVALID_ID == index_tid || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(index_tid), K(index_name));
-  } else if (OB_FAIL(guard.check_table_exist(tenant_id_, index_tid, is_index_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(tenant_id_), K(index_tid));
+  } else if (OB_FAIL(guard.check_table_exist(index_tid, is_index_exist))) {
+    LOG_WARN("fail to check table exist", K(ret), K(index_tid));
   } else if (!is_index_exist) {
     // nothing to do, just by pass.
     task_id = -1;
-  } else if (OB_FAIL(guard.get_table_schema(tenant_id_, index_tid, index_schema))) {
-    LOG_WARN("fail to get index table schema", K(ret), K(tenant_id_), K(index_tid));
+  } else if (OB_FAIL(guard.get_table_schema( index_tid, index_schema))) {
+    LOG_WARN("fail to get index table schema", K(ret), K(index_tid));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, index schema is nullptr", K(ret), KP(index_schema));
-  } else if (OB_FAIL(guard.get_database_schema(tenant_id_, index_schema->get_database_id(), database_schema))) {
+  } else if (OB_FAIL(guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
     LOG_WARN("fail to get database schema", K(ret), K(index_schema->get_database_id()));
-  } else if (OB_FAIL(guard.get_table_schema(tenant_id_, index_schema->get_data_table_id(), data_table_schema))) {
+  } else if (OB_FAIL(guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
     LOG_WARN("fail to get data table schema", K(ret), K(index_schema->get_data_table_id()));
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     if (OB_ISNULL(data_table_schema) && drop_index_arg_.is_hidden_) {
@@ -726,8 +719,8 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
     obcall::ObDropIndexArg arg;
     obcall::ObDropIndexRes res;
     arg.is_inner_            = true;
-    arg.tenant_id_           = tenant_id_;
-    arg.exec_tenant_id_      = tenant_id_;
+    
+    
     arg.index_table_id_      = index_tid;
     arg.session_id_          = data_table_schema->get_session_id();
     arg.index_name_          = index_name;
@@ -778,7 +771,7 @@ int ObDropVecIVFIndexTask::cleanup_impl()
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, tenant_id_, task_id_))) {
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
     LOG_WARN("delete task record failed", K(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;

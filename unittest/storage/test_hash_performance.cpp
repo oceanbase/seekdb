@@ -332,8 +332,8 @@ TEST_F(TestHashMapPerformance, test_performance)
   test_array_hash_performance(query_block_ids);
   test_array_performance(query_block_ids);
   test_cuckoo_hash_performance(query_block_ids);
-  lib::ObMallocAllocator::get_instance()->print_tenant_memory_usage(500);
-  lib::ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage(500);
+  lib::ObMallocAllocator::get_instance()->print_tenant_memory_usage();
+  lib::ObMallocAllocator::get_instance()->print_tenant_ctx_memory_usage();
 }
 }
 }

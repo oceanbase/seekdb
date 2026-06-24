@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_major_mv_merge_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_service.h" // ObLSService
 
@@ -100,7 +101,7 @@ OB_SERIALIZE_MEMBER(ObUpdateMergeScnArg, ls_id_, merge_scn_);
   } else if (OB_UNLIKELY(!arg.is_valid())) { \
     ret = OB_ERR_UNEXPECTED; \
     LOG_WARN("arg is invalid", KR(ret), K(arg)); \
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::TABLET_MOD))) { \
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::TABLET_MOD))) { \
     LOG_WARN("failed to get ls", KR(ret), K(arg)); \
   } else if (OB_UNLIKELY(NULL == (ls = ls_handle.get_ls()))) { \
     ret = OB_ERR_UNEXPECTED; \
@@ -213,7 +214,7 @@ int ObMVCheckReplicaHelper::get_and_update_merge_info(
   if (!ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is not valid", KR(ret), K(ls_id));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
     LOG_WARN("failed to get ls", KR(ret), K(ls_id));
   } else if (OB_UNLIKELY(NULL == (ls = ls_handle.get_ls()))) {
     ret = OB_ERR_UNEXPECTED;
@@ -300,7 +301,7 @@ int ObMVCheckReplicaHelper::get_merge_info(
   if (!ls_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is not valid", KR(ret), K(ls_id));
-  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
+  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
     LOG_WARN("failed to get ls", KR(ret), K(ls_id));
   } else if (OB_UNLIKELY(NULL == (ls = ls_handle.get_ls()))) {
     ret = OB_ERR_UNEXPECTED;

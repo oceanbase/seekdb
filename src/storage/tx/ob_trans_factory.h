@@ -136,7 +136,7 @@ void TransObjFactory<T, STATISTIC_INTERVAL>::release(T *obj)
 class ObLSTxCtxMgrFactory
 {
 public:
-  static ObLSTxCtxMgr *alloc(const uint64_t tenant_id);
+  static ObLSTxCtxMgr *alloc();
   static void release(ObLSTxCtxMgr *mgr);
   static int64_t get_alloc_count();
   static int64_t get_release_count();

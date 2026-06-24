@@ -193,7 +193,6 @@ int ObMPChangeUser::process()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
-  bool is_proxy_mod = get_conn()->is_proxy_;
   bool need_disconnect = true;
   bool need_response_error = true;
   const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
@@ -201,8 +200,7 @@ int ObMPChangeUser::process()
   bool need_send_auth_switch =
       get_conn()->is_support_plugin_auth() &&
       get_conn()->client_type_ == common::OB_CLIENT_NON_STANDARD &&
-      GCONF._enable_auth_switch &&
-      (!is_proxy_mod || get_proxy_version() >= PROXY_VERSION_4_2_3_0);
+      GCONF._enable_auth_switch;
   if (OB_FAIL(get_session(session))) {
     LOG_ERROR("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
@@ -230,21 +228,6 @@ int ObMPChangeUser::process()
         // do nothing
       } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
         OB_LOG(WARN,"load privilige info failed", K(ret),K(session->get_server_sid()));
-      } else {
-        if (is_proxy_mod) {
-          if (!sys_vars_.empty()) {
-            for (int64_t i = 0; OB_SUCC(ret) && i < sys_vars_.count(); ++i) {
-              if (OB_FAIL(session->update_sys_variable(sys_vars_.at(i).key_, sys_vars_.at(i).value_))) {
-                OB_LOG(WARN, "fail to update session vars", "sys_var", sys_vars_.at(i), K(ret));
-              }
-            }
-          }
-          if (OB_SUCC(ret) && !user_vars_.empty()) {
-            if (OB_FAIL(replace_user_variables(*session))) {
-              OB_LOG(WARN, "fail to replace user variables", K(ret));
-            }
-          }
-        }  // end proxy client mod
       }
     }
   }

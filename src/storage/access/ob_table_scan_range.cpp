@@ -35,9 +35,9 @@ ObTableScanRange::ObTableScanRange()
     enable_new_false_range_(false),
     is_inited_(false)
 {
-  rowkeys_.set_attr(ObMemAttr(MTL_ID(), "TScanRowkeys"));
-  ranges_.set_attr(ObMemAttr(MTL_ID(), "TScanRanges"));
-  skip_scan_ranges_.set_attr(ObMemAttr(MTL_ID(), "TScanSSRanges"));
+  rowkeys_.set_attr(ObMemAttr("TScanRowkeys"));
+  ranges_.set_attr(ObMemAttr("TScanRanges"));
+  skip_scan_ranges_.set_attr(ObMemAttr("TScanSSRanges"));
 }
 
 void ObTableScanRange::reset()

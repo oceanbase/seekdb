@@ -423,7 +423,7 @@ public:
     // return row count which window function not computed
     inline int64_t to_compute_rows() const { return stored_row_cnt_ - row_cnt_; }
     inline bool is_empty() const { return stored_row_cnt_ == begin_idx_; }
-    inline int reset_buf(const uint64_t tenant_id)
+    inline int reset_buf()
     {
       int ret = common::OB_SUCCESS;
       //row_cnt_ no need reset
@@ -432,8 +432,8 @@ public:
       const int64_t mem_limit = INT64_MAX; // disable dump by mem limit, use auto memory manage instead
       const int64_t mem_ctx_id = common::ObCtxIds::WORK_AREA;
       const char *label = common::ObModIds::OB_SQL_WINDOW_ROW_STORE;
-      if (OB_FAIL(ra_rs_.init(mem_limit, tenant_id, mem_ctx_id, label))) {
-        LOG_WARN("init ra datum store failed", K(ret), K(tenant_id));
+      if (OB_FAIL(ra_rs_.init(mem_limit, mem_ctx_id, label))) {
+        LOG_WARN("init ra datum store failed", K(ret));
       } else if (OB_ISNULL(op_.mem_context_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null memory context", K(ret));
@@ -447,7 +447,7 @@ public:
       }
       return ret;
     }
-    inline int reset(const uint64_t tenant_id)
+    inline int reset()
     {
       begin_idx_ = 0;
       output_row_idx_ = 0;
@@ -455,7 +455,7 @@ public:
       row_cnt_ = 0;
       local_mem_limit_version_ = 0;
       prior_dumping_rows_stores_.clear();
-      return reset_buf(tenant_id);
+      return reset_buf();
     }
     inline int get_row(const int64_t row_idx, const ObRADatumStore::StoredRow *&sr)
     {
@@ -515,9 +515,9 @@ public:
       foreach_store([](RowsStore *&s) { s->~RowsStore(); s = NULL; return OB_SUCCESS; });
     }
 
-    int reset(const int64_t tenant_id)
+    int reset()
     {
-      return foreach_store([&](RowsStore *&s) { return s->reset(tenant_id); });
+      return foreach_store([](RowsStore *&s) { return s->reset(); });
     }
 
     void destroy()
@@ -596,7 +596,7 @@ public:
       last_valid_frame_.head_ = last_valid_frame_.tail_ = -1;
       reset_for_restart_self();
     }
-    int reset_res(const int64_t tenant_id);
+    int reset_res();
     virtual bool is_aggr() const = 0;
     VIRTUAL_TO_STRING_KV(K_(wf_idx), K_(wf_info), K_(part_first_row_idx),
                          K_(res), K_(last_valid_frame));
@@ -618,10 +618,10 @@ public:
   class AggrCell : public WinFuncCell
   {
   public:
-    AggrCell(WinFuncInfo &wf_info, ObWindowFunctionOp &op, ObIArray<ObAggrInfo> &aggr_infos, const int64_t tenant_id)
+    AggrCell(WinFuncInfo &wf_info, ObWindowFunctionOp &op, ObIArray<ObAggrInfo> &aggr_infos)
       : WinFuncCell(wf_info, op),
         finish_prepared_(false),
-        aggr_processor_(op_.eval_ctx_, aggr_infos, "WindowAggProc", op.get_monitor_info(), tenant_id),
+        aggr_processor_(op_.eval_ctx_, aggr_infos, "WindowAggProc", op.get_monitor_info()),
         result_(),
         got_result_(false),
         remove_type_(wf_info.remove_type_)
@@ -765,7 +765,7 @@ public:
   public:
     template<class FuncType>
     int alloc(WinFuncCell *&return_func, WinFuncInfo &wf_info,
-              ObWindowFunctionOp &op, const int64_t tenant_id);
+              ObWindowFunctionOp &op);
     common::ObIAllocator *local_allocator_;
   };
 public:
@@ -803,7 +803,7 @@ public:
       mem_context_(NULL),
       profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
       sql_mem_processor_(profile_, op_monitor_info_),
-      hp_infras_mgr_(MTL_ID()),
+      hp_infras_mgr_(),
       distinct_aggr_count_(0),
       global_mem_limit_version_(0),
       amm_periodic_cnt_(0)
@@ -859,8 +859,8 @@ protected:
   int create_stores(Stores &s);
   int set_it_age(Stores &s);
   int unset_it_age(Stores &s);
-  int reset_for_scan(const int64_t tenant_id);
-  int reset_for_part_scan(const int64_t tenant_id);
+  int reset_for_scan();
+  int reset_for_part_scan();
   int get_pos(RowsReader &assist_reader,
               WinFuncCell &func_ctx,
               const int64_t row_idx,

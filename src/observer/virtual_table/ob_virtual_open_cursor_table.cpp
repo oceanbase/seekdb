@@ -133,7 +133,7 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
   } else {
     ObServer &server = ObServer::get_instance();
     uint64_t cell_idx = 0;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     bool display_non_session_cursor = tenant_config.is_valid() ? tenant_config->_display_non_session_cursor : false;
     char ip_buf[common::OB_IP_STR_BUFF];
     char peer_buf[common::OB_IP_PORT_STR_BUFF];
@@ -144,9 +144,7 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
     //Otherwise, you can show only your own threads.
     if (sess_info->is_shadow()) {
       //this session info is logical free, shouldn't be added to scanner
-    } else if ((OB_SYS_TENANT_ID == my_session_->get_priv_tenant_id())
-        || (sess_info->get_priv_tenant_id() == my_session_->get_priv_tenant_id()
-            && my_session_->get_user_id() == sess_info->get_user_id())) {
+    } else {
       ObSQLSessionInfo::LockGuard lock_guard(sess_info->get_thread_data_lock());
       OZ (fill_cur_plan_cell(*sess_info));
       for (sql::ObSQLSessionInfo::CursorCache::CursorMap::iterator iter = 

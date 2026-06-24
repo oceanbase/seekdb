@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_ls_tx_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/throttle/ob_throttle_unit.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_replay_executor.h"
@@ -275,7 +276,7 @@ int ObLSTxService::revert_store_ctx(storage::ObStoreCtx &store_ctx) const
     if (!src_ls_handle.is_valid()) {
       TRANS_LOG(ERROR, "src tx guard is valid when src ls handle not valid", K(store_ctx));
       ObLSHandle ls_handle;
-      if (OB_TMP_FAIL(MTL(ObLSService*)->get_ls(src_tx_table_guard.get_ls_id(), ls_handle, ObLSGetMod::TRANS_MOD))) {
+      if (OB_TMP_FAIL(share::g_mp->ls_service()->get_ls(src_tx_table_guard.get_ls_id(), ls_handle, ObLSGetMod::TRANS_MOD))) {
         TRANS_LOG(ERROR, "get_ls failed", KR(tmp_ret), K(src_tx_table_guard));
       } else if (OB_TMP_FAIL(ls_handle.get_ls()->get_tx_svr()->end_request_for_transfer())) {
         TRANS_LOG(ERROR, "end request for transfer", KR(tmp_ret), K(src_tx_table_guard));
@@ -650,7 +651,7 @@ int ObLSTxService::flush(SCN &recycle_scn)
         && recycle_scn >= common_checkpoints_[i]->get_rec_scn()) {
       if (!has_gen_diagnose_trace) {
         has_gen_diagnose_trace = true;
-        (void)acquire_checkpoint_batch_trace_id(ls_id_, trace_id);
+        share::g_mp->checkpoint_diagnose_mgr()->acquire_trace_id(ls_id_, trace_id);
       }
       TRANS_LOG(INFO,
                 "common_checkpoints flush",
@@ -862,7 +863,7 @@ int ObLSTxService::offline()
     TRANS_LOG(WARN, "block all failed", K_(ls_id));
   } else if (OB_FAIL(mgr_->kill_all_tx(graceful, unused_is_all_tx_clean_up))) {
     TRANS_LOG(WARN, "kill_all_tx failed", K_(ls_id));
-  } else if (OB_FAIL(MTL(ObTransService *)->get_ts_mgr()->interrupt_gts_callback_for_ls_offline(MTL_ID(),
+  } else if (OB_FAIL(share::g_mp->trans_service()->get_ts_mgr()->interrupt_gts_callback_for_ls_offline(
         ls_id_))) {
     TRANS_LOG(WARN, "interrupt gts callback failed", KR(ret), K_(ls_id));
   } else if (mgr_->get_tx_ctx_count() > 0) {
@@ -950,7 +951,7 @@ int ObLSTxService::set_max_replay_commit_version(share::SCN commit_version)
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else {
     mgr_->update_max_replay_commit_version(commit_version);
-    MTL(ObTransService *)->get_tx_version_mgr().update_max_commit_ts(commit_version, false /*elr*/);
+    share::g_mp->trans_service()->get_tx_version_mgr().update_max_commit_ts(commit_version, false /*elr*/);
     TRANS_LOG(INFO, "succ set max_replay_commit_version", K(commit_version));
   }
   return ret;

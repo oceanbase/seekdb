@@ -51,21 +51,20 @@ class ObMajorMergeIdling : public ObThreadIdling
 {
 public:
   explicit ObMajorMergeIdling(volatile bool &stop)
-    : ObThreadIdling(stop), tenant_id_(OB_INVALID_TENANT_ID) {}
-  int init(const uint64_t tenant_id);
+    : ObThreadIdling(stop) {}
+  int init();
   virtual int64_t get_idle_interval_us() override;
 
 public:
   const static int64_t DEFAULT_SCHEDULE_IDLE_US = 10 * 60 * 1000L * 1000L; // 10m
 
 private:
-  uint64_t tenant_id_;
 };
 
 class ObMajorMergeScheduler : public ObFreezeReentrantThread
 {
 public:
-  ObMajorMergeScheduler(const uint64_t tenant_id);
+  ObMajorMergeScheduler();
   virtual ~ObMajorMergeScheduler();
 
   int init(const bool is_primary_service,

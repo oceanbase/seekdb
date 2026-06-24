@@ -56,7 +56,7 @@ int ObRoutePolicy::filter_replica(const ObAddr &local_server,
     bool can_read = true;
     bool is_local = cur_replica.get_server() == local_server;
 
-    if (is_local && OB_FAIL(ObSqlTransControl::check_ls_readable(ctx.tenant_id_,
+    if (is_local && OB_FAIL(ObSqlTransControl::check_ls_readable(
                                                      ls_id,
                                                      cur_replica.get_server(),
                                                      ctx.max_read_stale_time_,

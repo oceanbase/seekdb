@@ -218,7 +218,6 @@ public:
       is_stopped_(false),
       is_logging_(false),
       need_refresh_(true),
-      tenant_id_(OB_INVALID_TENANT_ID),
       ttl_tablet_timer_tg_id_(0),
       interval_factor_(1),
       basic_period_(VEC_INDEX_SCHEDULAR_BASIC_PERIOD),
@@ -236,7 +235,7 @@ public:
   {
   }
 
-  int init(uint64_t tenant_id, ObLS *ls, int ttl_tablet_timer_tg_id_);
+  int init(ObLS *ls, int ttl_tablet_timer_tg_id_);
   virtual void runTimerTask() override;
   void run_task();
   bool is_inited() { return is_inited_; }
@@ -312,7 +311,7 @@ public:
   int safe_to_destroy(bool &is_safe);
   
   TO_STRING_KV(K_(is_inited), K_(is_leader), K_(need_do_for_switch), K_(is_stopped), K_(is_logging),
-               K_(need_refresh), K_(tenant_id), K_(ttl_tablet_timer_tg_id), K_(interval_factor), 
+               K_(need_refresh), K_(ttl_tablet_timer_tg_id), K_(interval_factor), 
                K_(basic_period), K_(current_memory_config), K_(dag_ref_cnt), 
                KP_(vector_index_service), KP_(ls), 
                K_(local_schema_version), K_(local_tenant_task));
@@ -320,7 +319,7 @@ public:
 private:
   int submit_log_();
   void inner_switch_to_follower_();
-  int init_task_executors(uint64_t tenant_id, ObLS &ls);
+  int init_task_executors(ObLS &ls);
   int check_and_load_task_executors(bool &has_ivf_index);
   int start_task_executors();
   int resume_task_executors();
@@ -362,7 +361,7 @@ private:
   bool is_logging_;
   bool need_refresh_;
   common::ObSpinLock logging_lock_;
-  uint64_t tenant_id_;
+  
   int ttl_tablet_timer_tg_id_;
   int interval_factor_;
   int64_t basic_period_;
@@ -393,7 +392,7 @@ public:
       vec_idx_mgr_(nullptr),
       task_ctx_(nullptr),
       read_snapshot_(),
-      allocator_(ObMemAttr(MTL_ID(), "VecIdxTask"))
+      allocator_(ObMemAttr("VecIdxTask"))
   {}
   ~ObVectorIndexTask() {};
   int init(ObPluginVectorIndexLoadScheduler *schedular,
@@ -421,8 +420,7 @@ class ObVectorIndexTaskParam final
 {
 public:
   ObVectorIndexTaskParam()
-    : tenant_id_(OB_INVALID_ID),
-      ls_id_(share::ObLSID::INVALID_LS_ID),
+    : ls_id_(share::ObLSID::INVALID_LS_ID),
       table_id_(OB_INVALID_ID),
       tablet_id_(common::OB_INVALID_ID),
       task_ctx_(nullptr)
@@ -430,21 +428,21 @@ public:
   ~ObVectorIndexTaskParam() {}
   bool is_valid() const 
   {
-    return tenant_id_ != OB_INVALID_ID
+    return true
            && ls_id_.is_valid()
            && table_id_ != OB_INVALID_ID
            && tablet_id_.is_valid();
   }
   bool operator==(const ObVectorIndexTaskParam& param) const
   {
-    return tenant_id_ == param.tenant_id_
+    return true
            && ls_id_ == param.ls_id_
            && table_id_ == param.table_id_
            && tablet_id_ == param.tablet_id_;
   }
   TO_STRING_KV(K_(ls_id), K_(tablet_id), KP_(task_ctx));
 public:
-  int64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   uint64_t table_id_;
   common::ObTabletID tablet_id_;
@@ -480,17 +478,17 @@ typedef common::hash::ObHashMap<common::ObTabletID, ObPluginVectorIndexAdaptor*>
 class ObVectorIndexMemSyncInfo
 {
 public:
-  ObVectorIndexMemSyncInfo(uint64_t tenant_id) : 
+  ObVectorIndexMemSyncInfo() : 
     processing_first_mem_sync_(true),
     first_mem_sync_map_(),
     second_mem_sync_map_(),
-    first_task_allocator_(ObMemAttr(tenant_id, "VecIdxTask")),
-    second_task_allocator_(ObMemAttr(tenant_id, "VecIdxTask"))
+    first_task_allocator_(ObMemAttr("VecIdxTask")),
+    second_task_allocator_(ObMemAttr("VecIdxTask"))
   {}
 
   ~ObVectorIndexMemSyncInfo(){}
 
-  int init(int64_t hash_capacity, uint64_t tenant_id, ObLSID &ls_id);
+  int init(int64_t hash_capacity, ObLSID &ls_id);
   void destroy();
 
   int add_task_to_waiting_map(ObVectorIndexSyncLog &ls_log);

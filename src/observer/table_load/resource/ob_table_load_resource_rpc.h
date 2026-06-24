@@ -92,10 +92,9 @@ public:
 public:
   ObTableLoadResourceRpcProxy()
     : allocator_("TLD_RpcProxy"),
-      timeout_(DEFAULT_TIMEOUT_US),
-      tenant_id_(MTL_ID())
+      timeout_(DEFAULT_TIMEOUT_US)
   {
-    allocator_.set_tenant_id(MTL_ID());
+    
   }
 
   ObTableLoadResourceRpcProxy &to(ObAddr addr)
@@ -108,9 +107,8 @@ public:
     timeout_ = timeout;
     return *this;
   }
-  ObTableLoadResourceRpcProxy &by(uint64_t tenant_id)
+  ObTableLoadResourceRpcProxy &by()
   {
-    tenant_id_ = tenant_id;
     return *this;
   }
 
@@ -149,7 +147,6 @@ private:
   ObArenaAllocator allocator_;
   ObAddr addr_;
   int64_t timeout_;
-  uint64_t tenant_id_;
 };
 
 #define TABLE_LOAD_RESOURCE_RPC_CALL(name, addr, arg, ...)                                                     \
@@ -160,7 +157,7 @@ private:
       LOG_WARN("fail to set default timeout ctx", KR(ret));                                                    \
     } else if (OB_FAIL(proxy.to(addr)                                                                          \
                             .timeout(ctx.get_timeout())                                                        \
-                            .by(MTL_ID())                                                                      \
+                            .by()                                                                      \
                             .name(arg, ##__VA_ARGS__))) {                                                                \
       LOG_WARN("fail to rpc call " #name, KR(ret), K(addr), K(arg));                                           \
     }                                                                                                          \

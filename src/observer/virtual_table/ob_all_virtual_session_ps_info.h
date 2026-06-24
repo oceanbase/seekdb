@@ -35,17 +35,16 @@ public:
   class ObTenantSessionInfoIterator {
   public:
     ObTenantSessionInfoIterator(
-        common::hash::ObHashMap<uint64_t, common::ObArray<SessionID>> &tenant_session_map)
+        common::ObArray<SessionID> &tenant_session_list)
         : last_attach_session_info_(nullptr),
-          tenant_session_id_map_(tenant_session_map),
-          cur_tenant_id_(OB_INVALID_TENANT_ID), cur_session_id_list_(nullptr) {}
+          tenant_session_list_(tenant_session_list), cur_session_id_list_(nullptr) {}
     bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
-    int next(uint64_t tenant_id, sql::ObSQLSessionInfo *&sess_info);
+    int next(sql::ObSQLSessionInfo *&sess_info);
     void reset();
   private:
     sql::ObSQLSessionInfo *last_attach_session_info_;
-    common::hash::ObHashMap<uint64_t, common::ObArray<SessionID>> &tenant_session_id_map_;
-    uint64_t cur_tenant_id_;
+    common::ObArray<SessionID> &tenant_session_list_;
+    
     common::ObArray<SessionID> *cur_session_id_list_;
   };
 
@@ -69,9 +68,7 @@ public:
       inline uint64_t get_ps_stmt_checksum() const { return checksum_; }
       inline int get_error_code() const { return error_code_; }
       inline common::ObArray<obmysql::EMySQLFieldType> get_param_types() const { return param_types_; }
-      void set_tenant_id(uint64_t tenant_id) {
-        param_types_.set_tenant_id(tenant_id);
-      }
+      
       void reuse() {
         inner_stmt_id_ = OB_INVALID_ID;
         stmt_type_ = sql::stmt::T_NONE;
@@ -98,8 +95,8 @@ public:
   ObAllVirtualSessionPsInfo()
       : ObAllPlanCacheBase(),
         fetcher_(),
-        tenant_session_id_map_(),
-        all_sql_session_iterator_(tenant_session_id_map_),
+        tenant_session_list_(),
+        all_sql_session_iterator_(tenant_session_list_),
         cur_session_info_(nullptr),
         ps_client_stmt_ids_(),
         is_iter_end_(false) {}
@@ -109,14 +106,13 @@ public:
   virtual void reset() override;
   int operator()(common::hash::HashMapPair<uint64_t, sql::ObPsSessionInfo *> &entry);
 private:
-  int fill_cells(uint64_t tenant_id, ObPsStmtId ps_client_stmt_id,
+  int fill_cells(ObPsStmtId ps_client_stmt_id,
                  bool &is_filled);
-  int get_next_row_from_specified_tenant(uint64_t tenant_id, bool &is_filled);
+  int get_next_row_from_specified_tenant(bool &is_filled);
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSessionPsInfo);
 private:
   ObPsSessionInfoFetcher fetcher_;
-  common::hash::ObHashMap<uint64_t, common::ObArray<SessionID>>
-      tenant_session_id_map_;
+  common::ObArray<SessionID> tenant_session_list_;
   ObTenantSessionInfoIterator all_sql_session_iterator_;
   sql::ObSQLSessionInfo *cur_session_info_;
   common::ObArray<ObPsStmtId> ps_client_stmt_ids_;

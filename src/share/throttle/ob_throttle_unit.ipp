@@ -40,7 +40,7 @@ int ObThrottleUnit<ALLOCATOR>::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr attr;
-  attr.tenant_id_ = MTL_ID();
+  
   attr.label_ = "ThrottleInfoMap";
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
   if (IS_INIT) {
@@ -53,11 +53,10 @@ int ObThrottleUnit<ALLOCATOR>::init()
     (void)update_decay_factor_();
     config_specify_resource_limit_ = resource_limit_;
     enable_adaptive_limit_ = false;
-    tenant_id_ = MTL_ID();
+    
     is_inited_ = true;
     SHARE_LOG(INFO,
               "[Throttle]Init throttle config finish",
-              K(tenant_id_),
               K(unit_name_),
               K(resource_limit_),
               K(config_specify_resource_limit_),
@@ -81,7 +80,7 @@ int ObThrottleUnit<ALLOCATOR>::alloc_resource(const int64_t holding_size,
     if (enable_adaptive_limit_) {
       bool is_updated = false;
       ALLOCATOR::adaptive_update_limit(
-          tenant_id_, holding_size, config_specify_resource_limit_, resource_limit_, last_update_limit_ts_, is_updated);
+          holding_size, config_specify_resource_limit_, resource_limit_, last_update_limit_ts_, is_updated);
       if (is_updated) {
         (void)update_decay_factor_(true /* is_adaptive_update */);
       }
@@ -203,7 +202,6 @@ void ObThrottleUnit<ALLOCATOR>::print_throttle_info_(const int64_t holding_size,
 
     SHARE_LOG(INFO,
               "[Throttling] (report write throttle info) Size Info",
-              "tenant_id",                  tenant_id_,
               "Throttle Unit Name",         unit_name_,
               "Allocating Resource Size",   alloc_size,
               "Holding Resource Size",      holding_size,
@@ -315,7 +313,7 @@ void ObThrottleUnit<ALLOCATOR>::advance_clock(const int64_t holding_size)
     if (enable_adaptive_limit_) {
       bool is_updated = false;
       ALLOCATOR::adaptive_update_limit(
-          tenant_id_, holding_size, config_specify_resource_limit_, resource_limit_, last_update_limit_ts_, is_updated);
+          holding_size, config_specify_resource_limit_, resource_limit_, last_update_limit_ts_, is_updated);
       if (is_updated) {
         (void)update_decay_factor_(true /* is_adaptive_update */);
       }

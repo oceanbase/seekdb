@@ -46,10 +46,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
-  inline void set_tenant_id(uint64_t tenant_id)
-  {
-    tenant_id_ = tenant_id;
-  }
+  
 
 private:
   int add_fk_constraints_in_db(
@@ -61,7 +58,6 @@ private:
       const common::ObString &database_name,
       common::ObObj *cells,
       const int64_t col_count);
-  uint64_t tenant_id_;
 
 private:
   enum REFERENTIAL_CONSTRAINTS_COLUMN_COUNT_COLUMN

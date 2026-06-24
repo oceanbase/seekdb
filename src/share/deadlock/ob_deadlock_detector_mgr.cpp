@@ -15,6 +15,7 @@
  */
 
 #include "ob_deadlock_detector_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_deadlock_detector_rpc.h"
 #include "share/deadlock/ob_lcl_scheme/ob_lcl_node.h"
 #include "ob_deadlock_inner_table_service.h"
@@ -77,7 +78,7 @@ int ObDeadLockDetectorMgr::InnerAllocHandle::InnerFactory::create(const UserBina
 {
   int ret = OB_SUCCESS;
 
-  ObMemAttr attr(OB_SERVER_TENANT_ID, MEMORY_LABEL);
+  ObMemAttr attr(MEMORY_LABEL);
   SET_USE_500(attr);
   int64_t alived_count = ATOMIC_LOAD(&create_count_) - ATOMIC_LOAD(&release_count_);
   if (alived_count > 50 * 1000) {// limit in 5w active nodes
@@ -127,9 +128,9 @@ void ObDeadLockDetectorMgr::InnerAllocHandle::InnerFactory::release(ObIDeadLockD
 // guard should only used on stack, auto-revert pointer when guard destructed
 ObDeadLockDetectorMgr::DetectorRefGuard::~DetectorRefGuard()
 {
-  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
   if (OB_ISNULL(p_deadlock_detector_mgr)) {
-    DETECT_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr), K(MTL_ID()));
+    DETECT_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
   } else {
     p_deadlock_detector_mgr->detector_map_.revert(p_detector_);
   }
@@ -148,7 +149,7 @@ int ObDeadLockDetectorMgr::mtl_init(ObDeadLockDetectorMgr *&p_deadlock_detector_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(p_deadlock_detector_mgr->init())) {
-    DETECT_LOG(ERROR, "init failure detector failed", KR(ret), K(MTL_ID()));
+    DETECT_LOG(ERROR, "init failure detector failed", KR(ret));
   }
   return ret;
 }
@@ -164,7 +165,7 @@ int ObDeadLockDetectorMgr::init()
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "rpc_ is not null", PRINT_WRAPPER);
   } else {
-    ObMemAttr attr(OB_SERVER_TENANT_ID, MEMORY_LABEL);
+    ObMemAttr attr(MEMORY_LABEL);
     SET_USE_500(attr);
     if (nullptr == (rpc_ = (ObDeadLockDetectorRpc *)ob_malloc(sizeof(ObDeadLockDetectorRpc),
                                                               attr))) {
@@ -367,12 +368,12 @@ int ObDeadLockDetectorMgr::process_notify_parent_message(
     ret = common::OB_ENTRY_EXIST;
     detector_map_.revert(p_detector);
   } else {
-    ObMemAttr attr(OB_SERVER_TENANT_ID, MEMORY_LABEL);
+    ObMemAttr attr(MEMORY_LABEL);
     SET_USE_500(attr);
-    ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+    ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
     if (OB_ISNULL(p_deadlock_detector_mgr)) {
       ret = OB_ERR_UNEXPECTED;
-      DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr), K(MTL_ID()));
+      DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
     } else if (OB_FAIL(p_deadlock_detector_mgr->inner_alloc_handle_.inner_factory_.create(binary_key,
                                                             [](const common::ObIArray<ObDetectorInnerReportInfo> &,
                                                                const int64_t) -> int { DETECT_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "should not kill inner node");

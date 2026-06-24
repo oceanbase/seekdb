@@ -114,9 +114,9 @@ int ObCodeGenerator::detect_batch_size(
   } else if (OB_ISNULL(session)) {
     // empty session disable batch processing
   } else {
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     double scan_cardinality = 0;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     // TODO bin.lb: move to optimizer and more sophisticated rules
     bool rowsets_enabled = tenant_config.is_valid() && tenant_config->_rowsets_enabled;
     // if tenant config is invalid, use 8 as lob_rowsets_max_rows, compatible to origin behavior

@@ -28,7 +28,6 @@ ob_set_subtarget(ob_sql common
 )
 
 ob_set_subtarget(ob_sql common_mixed
-  dblink/ob_tm_service.cpp
   privilege_check/ob_privilege_check.cpp
   privilege_check/ob_ai_model_priv_util.cpp
   resolver/mv/ob_mv_checker.cpp
@@ -267,7 +266,6 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_load_data_storage_info.cpp
   engine/cmd/ob_load_data_utils.cpp
   engine/cmd/ob_location_executor.cpp
-  engine/cmd/ob_location_utils_executor.cpp
   engine/cmd/ob_lock_table_executor.cpp
   engine/cmd/ob_outline_executor.cpp
   engine/cmd/ob_package_executor.cpp
@@ -294,7 +292,6 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_mock_executor.cpp
   engine/cmd/ob_olap_async_job_executor.cpp
   engine/cmd/ob_catalog_executor.cpp
-  engine/cmd/ob_trigger_storage_cache_executor.cpp
   engine/cmd/ob_sys_dispatch_call_executor.cpp
   engine/cmd/ob_merge_table_executor.cpp
   engine/cmd/ob_ccl_rule_executor.cpp
@@ -382,8 +379,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_dll_udf.cpp
   engine/expr/ob_expr_doc_id.cpp
   engine/expr/ob_expr_doc_length.cpp
-  engine/expr/ob_expr_effective_tenant.cpp
-  engine/expr/ob_expr_effective_tenant_id.cpp
   engine/expr/ob_expr_elt.cpp
   engine/expr/ob_expr_encrypt.cpp
   engine/expr/ob_expr_equal.cpp
@@ -432,7 +427,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_interval.cpp
   engine/expr/ob_expr_ip2int.cpp
   engine/expr/ob_expr_is.cpp
-  engine/expr/ob_expr_is_serving_tenant.cpp
   engine/expr/ob_expr_json_func_helper.cpp
   engine/expr/ob_expr_json_extract.cpp
   engine/expr/ob_expr_json_schema_valid.cpp
@@ -890,10 +884,8 @@ ob_set_subtarget(ob_sql engine_px
   engine/px/ob_px_sqc_handler.cpp
   engine/px/ob_px_sqc_proxy.cpp
   engine/px/ob_px_sub_coord.cpp
-  engine/px/ob_px_target_mgr.cpp
-  engine/px/ob_px_target_monitor_rpc.cpp
   engine/px/ob_px_task_process.cpp
-  engine/px/ob_px_tenant_target_monitor.cpp
+  engine/px/ob_px_target_monitor.cpp
   engine/px/ob_px_util.cpp
   engine/px/ob_px_worker.cpp
   engine/px/ob_px_worker_stat.cpp
@@ -960,11 +952,6 @@ ob_set_subtarget(ob_sql engine_table
   engine/table/ob_table_scan_op.cpp
   engine/table/ob_index_lookup_op_impl.cpp
   engine/table/ob_table_scan_with_index_back_op.cpp
-  engine/table/ob_external_table_access_service.cpp
-  engine/table/ob_csv_table_row_iter.cpp
-  engine/table/ob_orc_table_row_iter.cpp
-  engine/table/ob_parquet_table_row_iter.cpp
-  engine/table/ob_file_prefetch_buffer.cpp
   engine/table/ob_ddl_block_sample_scan_op.cpp
 )
 
@@ -1158,7 +1145,6 @@ ob_set_subtarget(ob_sql resolver
 
 ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_alter_system_resolver.cpp
-  resolver/cmd/ob_alter_system_stmt.cpp
   resolver/cmd/ob_anonymous_block_resolver.cpp
   resolver/cmd/ob_anonymous_block_stmt.cpp
   resolver/cmd/ob_call_procedure_resolver.cpp
@@ -1172,11 +1158,9 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_mock_resolver.cpp
   resolver/cmd/ob_load_data_resolver.cpp
   resolver/cmd/ob_load_data_stmt.cpp
-  resolver/cmd/ob_location_utils_resolver.cpp
   resolver/cmd/ob_set_names_resolver.cpp
   resolver/cmd/ob_set_transaction_resolver.cpp
   resolver/cmd/ob_show_resolver.cpp
-  resolver/cmd/ob_switch_role_resolver.cpp
   resolver/cmd/ob_diff_table_resolver.cpp
   resolver/cmd/ob_merge_table_resolver.cpp
   resolver/cmd/ob_variable_set_resolver.cpp
@@ -1184,10 +1168,8 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_alter_system_resolver.cpp
   resolver/cmd/ob_olap_async_job_resolver.cpp
   resolver/cmd/ob_olap_async_job_stmt.cpp
-  resolver/cmd/ob_module_data_resolver.cpp
   resolver/cmd/ob_event_resolver.cpp
   resolver/cmd/ob_event_stmt.cpp
-  resolver/cmd/ob_trigger_storage_cache_resolver.cpp
   resolver/cmd/ob_sys_dispatch_call_resolver.cpp
 )
 
@@ -1276,7 +1258,6 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_drop_tablegroup_resolver.cpp
   resolver/ddl/ob_explain_resolver.cpp
   resolver/ddl/ob_explain_stmt.cpp
-  resolver/ddl/ob_external_file_ddl_resolver.cpp
   resolver/ddl/ob_flashback_resolver.cpp
   resolver/ddl/ob_fork_table_resolver.cpp
   resolver/ddl/ob_fork_table_stmt.cpp

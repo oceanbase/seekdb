@@ -139,7 +139,6 @@ int ObDbmsStatsUtils::check_range_skew(ObHistType hist_type,
 }
 
 int ObDbmsStatsUtils::batch_write(share::schema::ObSchemaGetterGuard *schema_guard,
-                                  const uint64_t tenant_id,
                                   sqlclient::ObISQLConnection *conn,
                                   ObIArray<ObOptTableStat *> &table_stats,
                                   ObIArray<ObOptColumnStat*> &column_stats,
@@ -150,7 +149,6 @@ int ObDbmsStatsUtils::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOptStatManager::get_instance().batch_write(schema_guard,
-                                                           tenant_id,
                                                            conn,
                                                            table_stats,
                                                            column_stats,
@@ -181,7 +179,7 @@ int ObDbmsStatsUtils::cast_number_to_double(const number::ObNumber &src_val, dou
   ObObj src_obj;
   ObObj dest_obj;
   src_obj.set_number(src_val);
-  ObArenaAllocator calc_buf("ObDbmsStatsUtil", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator calc_buf("ObDbmsStatsUtil", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
   if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, src_obj, dest_obj))) {
     LOG_WARN("failed to cast number to double type", K(ret));
@@ -194,13 +192,13 @@ int ObDbmsStatsUtils::cast_number_to_double(const number::ObNumber &src_val, dou
 }
 
 // gather statistic related inner table should not read or write restore or standby tenant
-int ObDbmsStatsUtils::check_table_read_write_valid(const uint64_t tenant_id, bool &is_valid)
+int ObDbmsStatsUtils::check_table_read_write_valid(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   is_valid = true;
   bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_valid = false;
   }
@@ -209,7 +207,6 @@ int ObDbmsStatsUtils::check_table_read_write_valid(const uint64_t tenant_id, boo
 
 //now we support user table、sys table and virtual table to gather and use optimizer stats.
 int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &schema_guard,
-                                          const uint64_t tenant_id,
                                           const int64_t table_id,
                                           bool need_index_table,
                                           bool &is_valid)
@@ -218,7 +215,7 @@ int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &sc
   is_valid = false;
   const ObTableSchema *table_schema = NULL;
   if (is_sys_table(table_id)) {//check sys table
-    if (OB_FAIL(check_is_sys_table(schema_guard, tenant_id, table_id, is_valid))) {
+    if (OB_FAIL(check_is_sys_table(schema_guard, table_id, is_valid))) {
       LOG_WARN("failed to check is sys table", K(ret));
     }
   } else if (is_virtual_table(table_id)) {
@@ -227,13 +224,12 @@ int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &sc
 #else
     is_valid = !is_no_stat_virtual_table(table_id);
 #endif
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_normal_schema())) {
     //do nothing
   } else {//check user table
     is_valid = table_schema->is_user_table()
-               || table_schema->is_external_table()
                || table_schema->is_mlog_table()
                || (need_index_table && table_schema->is_index_table());
   }
@@ -241,7 +237,6 @@ int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &sc
 }
 
 int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &schema_guard,
-                                         const uint64_t tenant_id,
                                          const int64_t table_id,
                                          bool &is_valid)
 {
@@ -265,8 +260,8 @@ int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &sch
       table_id == share::OB_ALL_SYS_VARIABLE_HISTORY_TID ||//circular dependency
       table_id == share::OB_ALL_MONITOR_MODIFIED_TID) {
     is_valid = false;
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant))) {
-    LOG_WARN("fail to get tenant info", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant))) {
+    LOG_WARN("fail to get tenant info", KR(ret));
   //now sys table stat only use and gather in normal tenant
   } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
     is_valid = false;
@@ -290,16 +285,11 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_TENANT_VIRTUAL_CURRENT_TENANT_TID ||
          table_id == share::OB_TENANT_VIRTUAL_SHOW_TABLES_TID ||
          table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_PROCEDURE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_PROXY_SCHEMA_TID ||
-         table_id == share::OB_ALL_VIRTUAL_PROXY_PARTITION_INFO_TID ||
-         table_id == share::OB_ALL_VIRTUAL_PROXY_PARTITION_TID ||
-         table_id == share::OB_ALL_VIRTUAL_PROXY_SUB_PARTITION_TID ||
          table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_TABLEGROUP_TID ||
          table_id == share::OB_TENANT_VIRTUAL_OBJECT_DEFINITION_TID ||
          table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_TRIGGER_TID ||
          table_id == share::OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID ||
          table_id == share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TID ||
-         table_id == share::OB_ALL_VIRTUAL_PROXY_ROUTINE_TID ||
          table_id == share::OB_ALL_VIRTUAL_TX_DATA_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_LOCK_STAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_SCHEDULER_TID ||
@@ -307,8 +297,7 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
 #if defined(__APPLE__) || defined(__ANDROID__)
          table_id == share::OB_ALL_VIRTUAL_THREAD_TID ||
 #endif
-         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID ||
-         table_id == share::OB_TENANT_VIRTUAL_LIST_FILE_TID;
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID;
 }
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)
@@ -356,7 +345,7 @@ int ObDbmsStatsUtils::split_batch_write(sql::ObExecContext &ctx,
   if (OB_ISNULL(ctx.get_my_session()) || OB_ISNULL(ctx.get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()), K(ctx.get_sql_proxy()));
-  } else if (OB_FAIL(trans.start(ctx.get_sql_proxy(), ctx.get_my_session()->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
     LOG_WARN("fail to start transaction", K(ret));
   } else if (OB_FAIL(split_batch_write(trans.get_connection(),
                                        ctx.get_virtual_table_ctx().schema_guard_,
@@ -394,7 +383,7 @@ int ObDbmsStatsUtils::split_batch_write(share::schema::ObSchemaGetterGuard *sche
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
-  } else if (OB_FAIL(trans.start(sql_proxy, session_info->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(trans.start(sql_proxy))) {
     LOG_WARN("fail to start transaction", K(ret));
   } else if (OB_FAIL(split_batch_write(trans.get_connection(),
                                        schema_guard,
@@ -502,7 +491,6 @@ int ObDbmsStatsUtils::split_batch_write(sqlclient::ObISQLConnection *conn,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDbmsStatsUtils::batch_write(schema_guard,
-                                                session_info->get_effective_tenant_id(),
                                                 conn,
                                                 write_table_stats,
                                                 write_column_stats,
@@ -668,8 +656,7 @@ int ObDbmsStatsUtils::merge_tab_stats(const ObTableStatParam &param,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(old_tab_stats.at(i)));
     } else {
-      ObOptTableStat::Key key(param.tenant_id_,
-                              old_tab_stats.at(i)->get_table_id(),
+      ObOptTableStat::Key key(old_tab_stats.at(i)->get_table_id(),
                               old_tab_stats.at(i)->get_partition_id());
       if (OB_FAIL(online_table_stats.get_refactored(key, tmp_tab_stat))) {
         if (OB_HASH_NOT_EXIST != ret) {
@@ -709,8 +696,7 @@ int ObDbmsStatsUtils::merge_col_stats(const ObTableStatParam &param,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(old_col_stats.at(i)));
     } else {
-      ObOptColumnStat::Key key(param.tenant_id_,
-                              old_col_stats.at(i)->get_table_id(),
+      ObOptColumnStat::Key key(old_col_stats.at(i)->get_table_id(),
                               old_col_stats.at(i)->get_partition_id(),
                               old_col_stats.at(i)->get_column_id());
       if (OB_FAIL(online_column_stats.get_refactored(key, tmp_col_stat))) {
@@ -1016,15 +1002,13 @@ int ObDbmsStatsUtils::get_current_opt_stats(const ObTableStatParam &param,
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_FAIL(get_part_ids_and_column_ids(param, part_ids, column_ids))) {
     LOG_WARN("failed to get part ids and column ids", K(ret));
-  } else if (OB_FAIL(erase_stat_cache(param.tenant_id_, param.table_id_, part_ids, column_ids))) {
+  } else if (OB_FAIL(erase_stat_cache( param.table_id_, part_ids, column_ids))) {
     LOG_WARN("failed to erase stat cache", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.tenant_id_,
-                                                                     param.table_id_,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.table_id_,
                                                                      part_ids,
                                                                      cur_tab_handles))) {
     LOG_WARN("failed to get table stat", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.tenant_id_,
-                                                                      param.table_id_,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.table_id_,
                                                                       part_ids,
                                                                       column_ids,
                                                                       cur_col_handles))) {
@@ -1078,16 +1062,14 @@ int ObDbmsStatsUtils::get_part_ids_and_column_ids(const ObTableStatParam &param,
   return ret;
 }
 
-int ObDbmsStatsUtils::erase_stat_cache(const uint64_t tenant_id,
-                                       const uint64_t table_id,
+int ObDbmsStatsUtils::erase_stat_cache(const uint64_t table_id,
                                        const ObIArray<int64_t> &part_ids,
                                        const ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOptStatManager::get_instance().erase_table_stat(tenant_id, table_id, part_ids))) {
+  if (OB_FAIL(ObOptStatManager::get_instance().erase_table_stat(table_id, part_ids))) {
     LOG_WARN("failed to erase table stats", K(ret));
-  } else if (OB_FAIL(ObOptStatManager::get_instance().erase_column_stat(tenant_id,
-                                                                        table_id,
+  } else if (OB_FAIL(ObOptStatManager::get_instance().erase_column_stat(table_id,
                                                                         part_ids,
                                                                         column_ids))) {
     LOG_WARN("failed to erase column stats", K(ret));
@@ -1145,7 +1127,7 @@ int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
                                                 ObOptStatGatherParam &gather_param)
 {
   int ret = OB_SUCCESS;
-  gather_param.tenant_id_ = param.tenant_id_;
+  
   gather_param.db_name_ = param.db_name_;
   gather_param.tab_name_ = param.tab_name_;
   gather_param.table_id_ = param.table_id_;
@@ -1237,8 +1219,7 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("memory is not enough", K(ret), K(ptr1), K(column_stats.at(idx)));
           } else {
-            ObOptColumnStat::Key *col_key = new (ptr1) ObOptColumnStat::Key(param.tenant_id_,
-                                                                            param.table_id_,
+            ObOptColumnStat::Key *col_key = new (ptr1) ObOptColumnStat::Key(param.table_id_,
                                                                             part_ids.at(i),
                                                                             column_ids.at(j));
             column_stats.at(idx)->set_table_id(param.table_id_);
@@ -1252,16 +1233,13 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(stat_manager.get_stat_service().get_sql_service().batch_fetch_table_stats(param.tenant_id_,
-                                                                                            param.table_id_,
+      if (OB_FAIL(stat_manager.get_stat_service().get_sql_service().batch_fetch_table_stats(param.table_id_,
                                                                                             part_ids,
                                                                                             table_stats,
                                                                                             conn))) {
         LOG_WARN("failed to batch fetch table stats", K(ret));
-      } else if (OB_FAIL(stat_manager.get_stat_service().get_sql_service().fetch_column_stat(param.tenant_id_,
-                                                                                             allocator,
+      } else if (OB_FAIL(stat_manager.get_stat_service().get_sql_service().fetch_column_stat(allocator,
                                                                                              key_column_stats,
-                                                                                             false,
                                                                                              conn))) {
         LOG_WARN("failed to fetch table stats", K(ret));
       } else {
@@ -1392,8 +1370,7 @@ int ObDbmsStatsUtils::implicit_commit_before_gather_stats(sql::ObExecContext &ct
   return ret;
 }
 
-int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
-                                      const common::ObIArray<ObOptTableStat*> &tab_stats,
+int ObDbmsStatsUtils::scale_col_stats(const common::ObIArray<ObOptTableStat*> &tab_stats,
                                       common::ObIArray<ObOptColumnStat*> &col_stats)
 {
   int ret = OB_SUCCESS;
@@ -1402,8 +1379,7 @@ int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
   ObOptColumnStat* col_stat = NULL;
   if (OB_FAIL(table_stats.create(512,
                                  "TabStatBkt",
-                                 "TabStatNode",
-                                 tenant_id))) {
+                                 "TabStatNode"))) {
     LOG_WARN("fail to create table stats map", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tab_stats.count(); ++i) {
@@ -1411,8 +1387,7 @@ int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected table stat is null", KR(ret));
     } else {
-      ObOptTableStat::Key key(tenant_id,
-                              table_stat->get_table_id(),
+      ObOptTableStat::Key key(table_stat->get_table_id(),
                               table_stat->get_partition_id());
       if (OB_FAIL(table_stats.set_refactored(key, table_stat))) {
         LOG_WARN("fail to set table stat", KR(ret), K(key), KPC(table_stat));
@@ -1422,16 +1397,14 @@ int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
       }
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(scale_col_stats(tenant_id,
-                                              table_stats,
+  if (OB_SUCC(ret) && OB_FAIL(scale_col_stats(table_stats,
                                               col_stats))) {
     LOG_WARN("failed to scale col stats", K(ret));
   }
   return ret;
 }
 
-int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
-                                      const TabStatIndMap &table_stats,
+int ObDbmsStatsUtils::scale_col_stats(const TabStatIndMap &table_stats,
                                       common::ObIArray<ObOptColumnStat*> &col_stats)
 {
   int ret = OB_SUCCESS;
@@ -1442,8 +1415,7 @@ int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(col_stat));
     } else {
-      ObOptTableStat::Key key(tenant_id,
-                              col_stat->get_table_id(),
+      ObOptTableStat::Key key(col_stat->get_table_id(),
                               col_stat->get_partition_id());
       if (OB_FAIL(table_stats.get_refactored(key, table_stat))) {
         if (OB_UNLIKELY(OB_HASH_NOT_EXIST != ret)) {
@@ -1472,17 +1444,16 @@ int ObDbmsStatsUtils::scale_col_stats(const uint64_t tenant_id,
 }
 
 int ObDbmsStatsUtils::get_sys_online_estimate_percent(sql::ObExecContext &ctx,
-                                                      const uint64_t tenant_id,
                                                       const uint64_t table_id,
                                                       double &percent)
 {
   int ret = OB_SUCCESS;
   ObTableStatParam stat_param;
-  ObArenaAllocator tmp_alloc("ObDbmsStatsUtil", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_alloc("ObDbmsStatsUtil", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObSEArray<ObStatPrefs*, 4> stat_prefs;
   ObOnlineEstimatePercentPrefs *tmp_pref = NULL;
   stat_param.allocator_ = &tmp_alloc;
-  stat_param.tenant_id_ = tenant_id;
+  
   stat_param.table_id_ = table_id;
   if (OB_FAIL(new_stat_prefs(*stat_param.allocator_, ctx.get_my_session(), ObString(), tmp_pref))) {
     LOG_WARN("failed to new stat prefs", K(ret));
@@ -1507,11 +1478,11 @@ int ObDbmsStatsUtils::check_can_async_gather_stats(sql::ObExecContext &ctx)
                                         share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
-    uint64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(ctx.get_sql_proxy());
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, raw_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1539,7 +1510,6 @@ int ObDbmsStatsUtils::check_can_async_gather_stats(sql::ObExecContext &ctx)
   return ret;
 }
 int ObDbmsStatsUtils::build_index_part_to_table_part_maps(share::schema::ObSchemaGetterGuard *schema_guard,
-                                                          uint64_t tenant_id,
                                                           uint64_t index_table_id,
                                                           common::hash::ObHashMap<ObObjectID, ObObjectID> &part_id_map)
 {
@@ -1549,11 +1519,11 @@ int ObDbmsStatsUtils::build_index_part_to_table_part_maps(share::schema::ObSchem
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                              index_table_id,
                                              index_schema))) {
     LOG_WARN("failed to get simple table schema", K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     index_schema->get_data_table_id(),
                                                     table_schema))) {
     LOG_WARN("failed to get simple table schema", K(ret));
@@ -1617,7 +1587,6 @@ int ObDbmsStatsUtils::build_sub_part_maps(const ObTableSchema* table_schema,
 }
 
 int ObDbmsStatsUtils::deduce_index_column_stat_to_table(share::schema::ObSchemaGetterGuard *schema_guard,
-                                                        uint64_t tenant_id,
                                                         uint64_t index_table_id,
                                                         uint64_t data_table_id,
                                                         ObPartitionLevel part_level,
@@ -1639,7 +1608,6 @@ int ObDbmsStatsUtils::deduce_index_column_stat_to_table(share::schema::ObSchemaG
     if (OB_FAIL(part_ids.create(128, "DbmsStatsParts"))) {
       LOG_WARN("failed to create map", K(ret));
     } else if (OB_FAIL(build_index_part_to_table_part_maps(schema_guard,
-                                                           tenant_id,
                                                            index_table_id,
                                                            part_ids))) {
       LOG_WARN("failed to build index part to table maps", K(ret));
@@ -1679,8 +1647,8 @@ int ObDbmsStatsUtils::cancel_async_gather_stats(sql::ObExecContext &ctx)
     LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
   } else {
     ObSEArray<ObString, 1> task_ids;
-    uint64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
-    ObArenaAllocator allocator("CancelAsyGather", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+    
+    ObArenaAllocator allocator("CancelAsyGather", OB_MALLOC_NORMAL_BLOCK_SIZE);
     if (OB_FAIL(fetch_need_cancel_async_gather_stats_task(allocator, ctx, task_ids))) {
       LOG_WARN("failed to fetch need cancel async gather stats task", K(ret));
     } else {
@@ -1717,7 +1685,6 @@ int ObDbmsStatsUtils::get_prefix_index_substr_length(const share::schema::ObColu
 }
 
 int ObDbmsStatsUtils::get_prefix_index_text_pairs(share::schema::ObSchemaGetterGuard *schema_guard,
-                                                  uint64_t tenant_id,
                                                   uint64_t data_table_id,
                                                   ObIArray<uint64_t> &func_idxs,
                                                   ObIArray<uint64_t> &ignore_cols,
@@ -1731,7 +1698,7 @@ int ObDbmsStatsUtils::get_prefix_index_text_pairs(share::schema::ObSchemaGetterG
     LOG_WARN("get unexpected null", K(ret));
   } else if (func_idxs.empty()) {
     // do nothing
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     data_table_id,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
@@ -1775,11 +1742,11 @@ int ObDbmsStatsUtils::fetch_need_cancel_async_gather_stats_task(ObIAllocator &al
                                         ObOptStatGatherType::AYSNC_GATHER))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
-    uint64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(ctx.get_sql_proxy());
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, raw_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1908,7 +1875,6 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
                                                              ObIAllocator &allocator,
                                                              const ObIArray<ObOptColumnStat*> &column_stats,
                                                              const ObIArray<PrefixColumnPair> &pairs,
-                                                             uint64_t tenant_id,
                                                              uint64_t data_table_id,
                                                              ObIArray<ObOptColumnStat *> &copy_stats)
 {
@@ -1918,7 +1884,7 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     data_table_id,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
@@ -2003,7 +1969,7 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
   return ret;
 }
 
-int ObDbmsStatsUtils::get_max_work_area_size(uint64_t tenant_id, int64_t &max_wa_memory_size)
+int ObDbmsStatsUtils::get_max_work_area_size(int64_t &max_wa_memory_size)
 {
   int ret = OB_SUCCESS;
   max_wa_memory_size = 0;
@@ -2013,9 +1979,9 @@ int ObDbmsStatsUtils::get_max_work_area_size(uint64_t tenant_id, int64_t &max_wa
     LOG_WARN("unexpected null", K(ret));
   } else {
     int64_t worker_cnt = std::max(static_cast<const omt::ObTenant *>(tenant)->min_worker_cnt(), static_cast<int64_t>(4L));
-    max_wa_memory_size = lib::get_tenant_memory_limit(tenant_id) / worker_cnt;
+    max_wa_memory_size = lib::get_tenant_memory_limit() / worker_cnt;
     if (lib::ObMallocAllocator::get_instance() != NULL) {
-      ObTenantCtxAllocatorGuard ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, common::ObCtxIds::WORK_AREA);
+      ObTenantCtxAllocatorGuard ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(common::ObCtxIds::WORK_AREA);
       max_wa_memory_size = ta->get_limit() / worker_cnt;
     }
     max_wa_memory_size = std::max(MIN_GATHER_WORK_ARANA_SIZE, max_wa_memory_size);
@@ -2024,7 +1990,6 @@ int ObDbmsStatsUtils::get_max_work_area_size(uint64_t tenant_id, int64_t &max_wa
 }
 
 int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *schema_guard,
-                                       const uint64_t tenant_id,
                                        const uint64_t table_id,
                                        uint64_t *index_tid_arr,
                                        int64_t &index_count)
@@ -2035,8 +2000,7 @@ int ObDbmsStatsUtils::get_table_index_infos(share::schema::ObSchemaGetterGuard *
     LOG_WARN("get unexpected null", K(ret), K(schema_guard));
   } else if (share::is_oracle_mapping_real_virtual_table(table_id)) {
     // do not gather stat for oracle inner table index
-  } else if (OB_FAIL(schema_guard->get_can_read_index_array(tenant_id,
-                                                            table_id,
+  } else if (OB_FAIL(schema_guard->get_can_read_index_array(table_id,
                                                             index_tid_arr,
                                                             index_count,
                                                             false, /*with_mv*/

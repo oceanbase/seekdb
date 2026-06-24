@@ -233,7 +233,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
       hash::ObHashMap<ObString, int32_t> tokens_map;
       const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
       bool dummy_has_duplicate_boolean_tokens = false;
-      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+      if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
         LOG_WARN("failed to create token map", K(ret));
       } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, node, cs_type, alloc, query_tokens, tokens_map, dummy_has_duplicate_boolean_tokens))) {
         LOG_WARN("failed to get query tokens", K(ret));
@@ -256,7 +256,7 @@ int ObDASTextRetrievalMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_c
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr(MTL_ID(), "FTWordMap")))) {
+    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
       LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            meta,
@@ -354,7 +354,7 @@ int ObDASTextRetrievalMergeIter::inner_init(ObDASIterParam &param)
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(MTL_ID(), "TextIRIter", ObCtxIds::DEFAULT_CTX_ID);
+      param.set_mem_attr("TextIRIter", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("failed to create text retrieval iterator memory context", K(ret));
       }
@@ -698,7 +698,7 @@ int ObDASTextRetrievalMergeIter::init_total_doc_cnt_param(
     LOG_WARN("unexpected scan descriptor", K(ret));
   } else {
     ObTableScanParam &scan_param = whole_doc_agg_param_;
-    scan_param.tenant_id_ = MTL_ID();
+    
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = false; // scan
@@ -1222,7 +1222,7 @@ int ObDASTRTaatIter::init_stores_by_partition()
         LOG_WARN("failed to allocate enough memory", K(sizeof(ObDASTRTaatHashMap)), K(ret));
       } else {
         ObDASTRTaatHashMap *hash_map = new(buf) ObDASTRTaatHashMap();
-        if (OB_FAIL(hash_map->create(10, common::ObMemAttr(MTL_ID(), "FTTaatMap")))) {
+        if (OB_FAIL(hash_map->create(10, common::ObMemAttr("FTTaatMap")))) {
           LOG_WARN("failed to create token map", K(ret));
         } else {
           hash_maps_[i] = hash_map;
@@ -1235,8 +1235,7 @@ int ObDASTRTaatIter::init_stores_by_partition()
       } else {
         sql::ObChunkDatumStore *store = new(buf) sql::ObChunkDatumStore(common::ObModIds::OB_SQL_CHUNK_ROW_STORE);
         if(OB_FAIL(store->init(
-          1024 * 8 /* mem limit */,
-          MTL_ID(), common::ObCtxIds::DEFAULT_CTX_ID, common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
+          1024 * 8, common::ObCtxIds::DEFAULT_CTX_ID, common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
           true /* enable dump */,
           0, /* row_extra_size */
           ObChunkDatumStore::BLOCK_SIZE))) {

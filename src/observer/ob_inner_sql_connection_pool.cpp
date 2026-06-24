@@ -30,7 +30,7 @@ namespace observer
 ObInnerSQLConnectionPool::ObInnerSQLConnectionPool()
     : inited_(false), stop_(false), total_conn_cnt_(0),
       free_conn_list_(), used_conn_list_(),
-      allocator_(SET_USE_500(ObMemAttr(OB_SERVER_TENANT_ID, ObModIds::OB_INNER_SQL_CONN_POOL))),
+      allocator_(SET_USE_500(ObMemAttr(ObModIds::OB_INNER_SQL_CONN_POOL))),
       schema_service_(NULL),
       ob_sql_(NULL),
       vt_iter_creator_(NULL),
@@ -94,10 +94,9 @@ int ObInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_service,
   return ret;
 }
 
-int ObInnerSQLConnectionPool::acquire(const uint64_t tenant_id, common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id)
+int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   ObInnerSQLConnection *inner_sql_conn = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;

@@ -472,7 +472,7 @@ ObTestFTParseHelper::ObTestFTParseHelper()
 void ObTestFTParseHelper::SetUp()
 {
   if (OB_ISNULL(GCTX.plugin_mgr_)) {
-    GCTX.plugin_mgr_ = OB_NEW(ObPluginMgr, ObMemAttr(OB_SYS_TENANT_ID, "test"));
+    GCTX.plugin_mgr_ = OB_NEW(ObPluginMgr, ObMemAttr("test"));
     ASSERT_NE(nullptr, GCTX.plugin_mgr_);
     ASSERT_EQ(OB_SUCCESS, GCTX.plugin_mgr_->init(ObString("")));
     ASSERT_EQ(OB_SUCCESS, GCTX.plugin_mgr_->load_builtin_plugins());

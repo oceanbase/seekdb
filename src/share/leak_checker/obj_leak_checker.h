@@ -43,7 +43,7 @@ public:
   // key_token -> lbt info 
   using ObLeakCheckObjMap = std::unordered_map<uint64_t, std::string>;
   using ObLeakCheckTenantObjVec = std::vector<ObLeakCheckObjMap>;
-  // tenant_id -> ObLeakCheckTenantObjVec;
+  // owner -> ObLeakCheckTenantObjVec;
   using ObLeakCheckAllMap = std::unordered_map<uint64_t, ObLeakCheckTenantObjVec>;
 
   ObObjLeakChecker() : key_token_(0) {
@@ -56,7 +56,7 @@ public:
   }
 
   template<typename T>
-  void add(const uint64_t tenant_id, const ObLeakCheckObjType obj_type, const T *obj, uint64_t &key_token)
+  void add(const ObLeakCheckObjType obj_type, const T *obj, uint64_t &key_token)
   {
     int ret = OB_SUCCESS;
     common::ObSpinLockGuard guard(lock_);
@@ -66,29 +66,29 @@ public:
     if (n <= 0) {
       abort();
     }
-    auto it = map_.find(tenant_id);
+    auto it = map_.find(1UL);
     if (it == map_.end()) {
       ObLeakCheckTenantObjVec obj_vec;
       obj_vec.resize(LEAK_CHECK_OBJ_MAX_NUM);
-      it = map_.insert({tenant_id, obj_vec}).first;
+      it = map_.insert({1UL, obj_vec}).first;
     }
     bool insert_ret = it->second[obj_type].insert({key_token, lbt_buf_}).second;
     ob_assert(insert_ret == true);
   }
 
-  void del(const uint64_t tenant_id, const ObLeakCheckObjType obj_type, const uint64_t key_token)
+  void del(const ObLeakCheckObjType obj_type, const uint64_t key_token)
   {
     common::ObSpinLockGuard guard(lock_);
-    auto &obj_map = map_[tenant_id].at(obj_type);
+    auto &obj_map = map_[1UL].at(obj_type);
     auto it = obj_map.find(key_token);
     ob_assert(it != obj_map.end());
     obj_map.erase(it);
   }
 
-  void print_obj_leak(const uint64_t tenant_id, const ObLeakCheckObjType obj_type)
+  void print_obj_leak(const ObLeakCheckObjType obj_type)
   {
     common::ObSpinLockGuard guard(lock_);
-    auto it = map_.find(tenant_id);
+    auto it = map_.find(1UL);
     if (it != map_.end()) {
       if (LEAK_CHECK_OBJ_MAX_NUM == obj_type) {
         for (int64_t i = 0; i < LEAK_CHECK_OBJ_MAX_NUM; i++) {
@@ -128,15 +128,14 @@ public:
 
 
   template<typename T>
-  void init(const T *obj, const ObLeakCheckObjType obj_type, const uint64_t tenant_id)
+  void init(const T *obj, const ObLeakCheckObjType obj_type)
   {
     if (is_inited_) {
       abort();
     } else if (nullptr == obj) {
       abort();
     } else {
-      OBJ_LEAK_CHECKER.add(tenant_id, obj_type, obj, key_token_);
-      tenant_id_ = tenant_id;
+      OBJ_LEAK_CHECKER.add(obj_type, obj, key_token_);
       obj_type_ = obj_type;
       is_inited_ = true;
     }
@@ -144,13 +143,12 @@ public:
   void reset()
   {
     if (is_inited_) {
-      OBJ_LEAK_CHECKER.del(tenant_id_, obj_type_, key_token_);
+      OBJ_LEAK_CHECKER.del(obj_type_, key_token_);
       key_token_ = 0;
       is_inited_ = false;
     }
   }
   bool is_inited_;
-  uint64_t tenant_id_;
   ObLeakCheckObjType obj_type_;
 
   uint64_t key_token_;
@@ -161,18 +159,18 @@ public:
 
 #ifdef ENABLE_OBJ_LEAK_CHECK
 #define DEFINE_OBJ_LEAK_DEBUG_NODE(node) oceanbase::share::ObObjLeakDebugNode node
-#define INIT_OBJ_LEAK_DEBUG_NODE(node, obj_ptr, obj_type, tenant_id)  node.init(obj_ptr, obj_type, tenant_id)
+#define INIT_OBJ_LEAK_DEBUG_NODE(node, obj_ptr, obj_type)  node.init(obj_ptr, obj_type)
 
 // if obj_type == LEAK_CHECK_OBJ_MAX_NUM, dump all type obj
-#define PRINT_OBJ_LEAK(tenant_id, obj_type)                                       \
+#define PRINT_OBJ_LEAK(obj_type)                                                  \
   {                                                                               \
-    OBJ_LEAK_CHECKER.print_obj_leak(tenant_id, obj_type);                         \
+    OBJ_LEAK_CHECKER.print_obj_leak(obj_type);                                    \
   }
 
 #else
 #define DEFINE_OBJ_LEAK_DEBUG_NODE(node)
-#define INIT_OBJ_LEAK_DEBUG_NODE(node, obj_ptr, desc, tenant_id)
-#define PRINT_OBJ_LEAK(tenant_id, obj_type)
+#define INIT_OBJ_LEAK_DEBUG_NODE(node, obj_ptr, desc)
+#define PRINT_OBJ_LEAK(obj_type)
 #endif
 
 

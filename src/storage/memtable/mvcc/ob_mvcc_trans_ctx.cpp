@@ -15,6 +15,7 @@
  */
 
 #include "ob_mvcc_trans_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 
@@ -277,7 +278,7 @@ void *ObTransCallbackMgr::alloc_mvcc_row_callback()
         } else {
           for (int i = 0; OB_SUCC(ret) && i < MAX_CB_ALLOCATOR_COUNT; ++i) {
             UNUSED(new(tmp_cb_allocators + i) ObMemtableCtxCbAllocator());
-            if (OB_FAIL(tmp_cb_allocators[i].init(MTL_ID()))) {
+            if (OB_FAIL(tmp_cb_allocators[i].init())) {
               TRANS_LOG(ERROR, "cb_allocator_ init error", K(ret));
             }
           }
@@ -1413,11 +1414,11 @@ void ObTransCallbackMgr::revert_callback_list()
 
 void ObTransCallbackMgr::wakeup_waiting_txns_()
 {
-  if (OB_ISNULL(MTL(ObLockWaitMgr*))) {
-    TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "MTL(ObLockWaitMgr*) is null");
+  if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
+    TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "share::g_mp->lock_wait_mgr() is null");
   } else {
     ObMemtableCtx &mem_ctx = static_cast<ObMemtableCtx&>(host_);
-    MTL(ObLockWaitMgr*)->wakeup(mem_ctx.get_trans_ctx()->get_trans_id());
+    share::g_mp->lock_wait_mgr()->wakeup(mem_ctx.get_trans_ctx()->get_trans_id());
   }
 }
 
@@ -1984,7 +1985,7 @@ int ObMvccRowCallback::wakeup_row_waiter_if_need_()
     //   case 1: elr transaction
     ret = value_.wakeup_waiter(get_tablet_id(), key_);
     /*****[for deadlock]*****/
-    ObLockWaitMgr *p_lwm = MTL(ObLockWaitMgr *);
+    ObLockWaitMgr *p_lwm = share::g_mp->lock_wait_mgr();
     if (OB_ISNULL(p_lwm)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "lock wait mgr is nullptr", K(*this));

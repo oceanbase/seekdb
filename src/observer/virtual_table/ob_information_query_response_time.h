@@ -44,7 +44,7 @@ public:
   virtual ~ObInfoSchemaQueryResponseTimeTable();
   virtual int inner_open() override;
   virtual int inner_get_next_row(common::ObNewRow*& row) override;
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
   virtual void release_last_tenant() override;
   virtual void reset() override;

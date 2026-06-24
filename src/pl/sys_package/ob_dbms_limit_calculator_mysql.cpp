@@ -1,4 +1,5 @@
 #include "observer/ob_ex_rpc.h"
+#include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -41,11 +42,11 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
   ObUserResourceCalculateArg arg;
   ObMinPhyResourceResult res;
   ObCStringHelper helper;
-  const int64_t curr_tenant_id = MTL_ID();
+  
   const char *str = NULL;
-  if (!is_sys_tenant(curr_tenant_id)) {
+  if (false) {
     ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("only sys tenant can do this", K(ret), K(curr_tenant_id));
+    LOG_WARN("only sys tenant can do this", K(ret));
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "Only sys tenant can do this. Operator is");
   } else if (OB_UNLIKELY(2 > params.count())) {
     ret = OB_INVALID_ARGUMENT;
@@ -62,7 +63,7 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     LOG_WARN("convert cstring failed", K(ret));
   } else if (OB_FAIL(parse_dict_like_args_(str, arg))) {
     LOG_WARN("parse argument failed", K(ret));
-  } else if (OB_FAIL(MTL(ObResourceLimitCalculator *)->get_tenant_min_phy_resource_value(arg, res))) {
+  } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_tenant_min_phy_resource_value(arg, res))) {
     LOG_WARN("get tenant min physical resource needed failed", K(ret));
   } else if (OB_FAIL(get_json_result_(res, ptr, MAX_RES_LEN, pos))) {
     LOG_WARN("get json result failed", K(ret), K(res), K(pos));
@@ -81,23 +82,22 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_unit(
 {
   int ret = OB_SUCCESS;
   ObAddr addr;
-  int64_t tenant_id = 0;
+  
   ObString addr_str;
   const int64_t MAX_RES_LEN = 2048;
   ObMinPhyResourceResult res;
   char* ptr = NULL;
   int64_t pos = 0;
   int64_t timeout = -1;
-  const int64_t curr_tenant_id = MTL_ID();
-  if (!is_sys_tenant(curr_tenant_id)) {
+  
+  if (false) {
     ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("only sys tenant can do this", K(ret), K(curr_tenant_id));
+    LOG_WARN("only sys tenant can do this", K(ret));
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "Only sys tenant can do this. Operator is");
-  } else if (OB_UNLIKELY(3 > params.count())) {
+  } else if (OB_UNLIKELY(2 > params.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("params not valid", KR(ret), K(params));
-  } else if (FALSE_IT(tenant_id = params.at(0).get_int())) {
-  } else if (FALSE_IT(addr_str = params.at(1).get_varchar())) {
+  } else if (FALSE_IT(addr_str = params.at(0).get_varchar())) {
   } else if (OB_FAIL(addr.parse_from_string(addr_str))) {
     LOG_WARN("parse address failed", K(ret), K(addr_str));
   }
@@ -110,22 +110,22 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_unit(
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
     int r = OB_SUCCESS;
-    MTL_SWITCH(tenant_id) { r = MTL(ObResourceLimitCalculator*)->get_tenant_min_phy_resource_value(res); }
+    MOD_SCOPE { r = share::g_mp->resource_limit_calculator()->get_tenant_min_phy_resource_value(res); }
     return r;
   }))) {
     LOG_WARN("failed to update local stat cache caused by unknow error",
-             K(ret), K(addr), K(timeout), K(tenant_id));
+             K(ret), K(addr), K(timeout));
     // rewrite the error code to make user recheck the argument and retry.
     // we should never retry here because there is something error.
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "calculate physical resource needed by unit. "
                                         "Please check the tenant id and observer address and retry.");
-  } else if (OB_FAIL(get_json_result_(tenant_id, addr, res, ptr, MAX_RES_LEN, pos))) {
+  } else if (OB_FAIL(get_json_result_(addr, res, ptr, MAX_RES_LEN, pos))) {
     LOG_WARN("get json result failed", K(ret), K(addr), K(res), K(pos), K(MAX_RES_LEN));
   } else {
-    params.at(2).set_varchar(ptr, pos);
-    LOG_INFO("phy_res_calculate_by_unit success", K(params.at(0).get_int()),
-             K(params.at(1).get_varchar()), K(params.at(2).get_varchar()));
+    params.at(1).set_varchar(ptr, pos);
+    LOG_INFO("phy_res_calculate_by_unit success",
+             K(params.at(0).get_varchar()), K(params.at(1).get_varchar()));
   }
   return ret;
 }
@@ -208,7 +208,6 @@ int ObDBMSLimitCalculator::get_json_result_(
 }
 
 int ObDBMSLimitCalculator::get_json_result_(
-    const int64_t tenant_id,
     const ObAddr &addr,
     const ObMinPhyResourceResult &res,
     char *buf,
@@ -229,10 +228,9 @@ int ObDBMSLimitCalculator::get_json_result_(
   } else if (OB_FAIL(databuff_printf(buf,
                                      buf_len,
                                      pos,
-                                     "[{\"svr_ip\": \"%s\", \"svr_port\": \"%ld\", \"tenant_id\" : \"%ld\", \"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
+                                     "[{\"svr_ip\": \"%s\", \"svr_port\": \"%ld\", \"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
                                      ip,
                                      port,
-                                     tenant_id,
                                      get_phy_res_type_name(i),
                                      value))) {
     LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
@@ -245,10 +243,9 @@ int ObDBMSLimitCalculator::get_json_result_(
       } else if (OB_FAIL(databuff_printf(buf,
                                          buf_len,
                                          pos,
-                                         ", {\"svr_ip\": \"%s\", \"svr_port\": \"%ld\", \"tenant_id\" : \"%ld\", \"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
+                                         ", {\"svr_ip\": \"%s\", \"svr_port\": \"%ld\", \"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
                                          ip,
                                          port,
-                                         tenant_id,
                                          get_phy_res_type_name(i),
                                          value))) {
         LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));

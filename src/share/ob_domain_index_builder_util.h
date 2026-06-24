@@ -45,7 +45,6 @@ public:
                                 int64_t &res_task_id,
                                 const common::TCRWLock& lock,
                                 const uint64_t& data_table_id,
-                                const uint64_t& tenant_id,
                                 const int64_t& task_id,
                                 obcall::ObCreateIndexArg& index_arg,
                                 rootserver::ObRootService *root_service,

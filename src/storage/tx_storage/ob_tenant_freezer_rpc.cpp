@@ -18,6 +18,7 @@
 
 
 #include "ob_tenant_freezer_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -70,8 +71,8 @@ static int do_tx_data_table_freeze_(const ObTenantFreezeArg &arg)
 
   common::ObSharedGuard<ObLSIterator> iter_guard;
   ObTenantTxDataFreezeGuard tenant_freeze_guard;
-  ObLSService *ls_srv = MTL(ObLSService *);
-  ObTenantFreezer *freezer = MTL(ObTenantFreezer *);
+  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   if (OB_FAIL(tenant_freeze_guard.init(freezer))) {
     LOG_WARN("[TenantFreezer] fail to get log stream iterator", K(ret));
@@ -116,17 +117,16 @@ static int do_major_freeze_(const ObTenantFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   SCN frozen_scn;
 
-  if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(tenant_id, frozen_scn))) {
+  if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
     LOG_WARN("get_frozen_scn failed", KR(ret));
   } else {
     int64_t frozen_scn_val = frozen_scn.get_val_for_tx();
     bool need_major = true;
-    ObTenantFreezer *freezer = MTL(ObTenantFreezer *);
+    ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
     ObRetryMajorInfo retry_major_info = freezer->get_retry_major_info();
-    retry_major_info.tenant_id_ = tenant_id;
     retry_major_info.frozen_scn_ = arg.try_frozen_scn_;
     if (arg.try_frozen_scn_ > 0) {
       if (arg.try_frozen_scn_ < frozen_scn_val) {
@@ -144,8 +144,8 @@ static int do_major_freeze_(const ObTenantFreezeArg &arg)
 
       ObMajorFreezeParam param;
       param.freeze_reason_ = rootserver::MF_MAJOR_COMPACT_TRIGGER;
-      if (OB_FAIL(param.add_freeze_info(tenant_id))) {
-        LOG_WARN("push back failed", KR(ret), K(tenant_id));
+      if (OB_FAIL(param.add_freeze_info())) {
+        LOG_WARN("push back failed", KR(ret));
       } else {
         LOG_INFO("do major freeze", K(param));
         if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
@@ -158,7 +158,7 @@ static int do_major_freeze_(const ObTenantFreezeArg &arg)
     freezer->set_retry_major_info(retry_major_info);
   }
 
-  LOG_INFO("finish tenant major freeze", KR(ret), K(tenant_id), K(frozen_scn));
+  LOG_INFO("finish tenant major freeze", KR(ret), K(frozen_scn));
   return ret;
 }
 
@@ -168,7 +168,7 @@ static int do_mds_table_freeze_(const ObTenantFreezeArg &arg)
   LOG_INFO("start mds table self freeze task in rpc handle thread", K(arg));
 
   common::ObSharedGuard<ObLSIterator> iter_guard;
-  ObLSService *ls_srv = MTL(ObLSService *);
+  ObLSService *ls_srv = share::g_mp->ls_service();
 
   if (OB_FAIL(ls_srv->get_ls_iter(iter_guard, ObLSGetMod::TXSTORAGE_MOD))) {
     LOG_WARN("[TenantFreezer] fail to get log stream iterator", K(ret));

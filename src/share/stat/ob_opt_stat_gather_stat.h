@@ -75,7 +75,6 @@ static const int64_t running_progress_ratio[ObOptStatRunningPhase::GATHER_END + 
 struct ObOptStatTaskInfo
 {
   ObOptStatTaskInfo() :
-    tenant_id_(0),
     session_id_(0),
     trace_id_(),
     task_id_(),
@@ -96,8 +95,7 @@ struct ObOptStatTaskInfo
            uint64_t task_start_time,
            int64_t task_table_cnt);
   int deep_copy(ObOptStatTaskInfo &other, char *buf, int64_t buf_len, int64_t &pos);
-  TO_STRING_KV(K(tenant_id_),
-               K(session_id_),
+  TO_STRING_KV(K(session_id_),
                K(trace_id_),
                K(task_id_),
                K(type_),
@@ -107,7 +105,6 @@ struct ObOptStatTaskInfo
                K(ret_code_),
                K(failed_count_),
                K(completed_table_count_));
-  uint64_t tenant_id_;
   uint64_t session_id_;
   ObString trace_id_;
   ObString task_id_;
@@ -135,8 +132,8 @@ public:
   void set_session_id(uint64_t session_id) { task_info_.session_id_ = session_id; }
   inline const ObString &get_trace_id() const { return task_info_.trace_id_; }
   inline void set_trace_id(const char *ptr, int32_t len) { task_info_.trace_id_.assign_ptr(ptr, len); }
-  inline uint64_t get_tenant_id() const { return task_info_.tenant_id_; }
-  void set_tenant_id(uint64_t tenant_id) { task_info_.tenant_id_ = tenant_id; }
+  
+  
   inline const ObString &get_task_id() const { return task_info_.task_id_; }
   inline int64_t get_type() const { return task_info_.type_; }
   inline void set_type(int64_t type) { task_info_.type_ = type; }
@@ -262,14 +259,12 @@ public:
                                ObOptStatGatherStat &stat_value);
   void update_table_gather_progress(ObString &table_gather_progress,
                                     ObOptStatGatherStat &stat_value);
-  int cancel_gather_stats(const uint64_t tenant_id, const ObString &task_id);
+  int cancel_gather_stats(const ObString &task_id);
   void update_gather_stat_refresh_failed_list(ObString &failed_list,
                                               ObOptStatGatherStat &stat_value);
   void update_gather_stat_audit(const ObString &audit,
                                 ObOptStatGatherStat &stat_value);
-  // param[in] tenant_id  if tenant is sys, list all tenant stat, else list target tenant stat
   int list_to_array(common::ObIAllocator &allocator,
-                    const uint64_t target_tenant_id,
                     common::ObIArray<ObOptStatGatherStat> &stat_array);
 private:
   common::ObDList<ObOptStatGatherStat> stat_list_;

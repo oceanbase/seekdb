@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ls_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_ls.h"
-#include "storage/high_availability/ob_restore_status.h"
+#include "share/ls/ob_restore_status.h"
 #include "logservice/ob_log_service.h"
 #include "observer/ob_srv_network_frame.h"
 #include "storage/tx_storage/ob_ls_safe_destroy_task.h"
@@ -41,7 +42,6 @@ ObLSService::ObLSService()
   : is_inited_(false),
     is_running_(false),
     is_stopped_(false),
-    tenant_id_(OB_INVALID_ID),
     ls_map_(),
     ls_allocator_(),
     iter_allocator_(),
@@ -70,7 +70,6 @@ void ObLSService::destroy()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls iter cnt is not 0", K(ret), K_(iter_cnt), KP(this));
   }
-  tenant_id_ = OB_INVALID_ID;
   ls_map_.reset();
   ls_allocator_.destroy();
   iter_allocator_.destroy();
@@ -86,7 +85,7 @@ bool ObLSService::is_empty()
                   ATOMIC_LOAD(&safe_ls_destroy_task_cnt_) == 0);
   if (!is_safe && REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
     bool is_t3m_meta_released = false;
-    MTL(ObTenantMetaMemMgr*)->check_all_meta_mem_released(is_t3m_meta_released, "ObLSService"); //just for debug
+    share::g_mp->tenant_meta_mem_mgr()->check_all_meta_mem_released(is_t3m_meta_released, "ObLSService"); //just for debug
     LOG_INFO("ls service is not empty and not safe to destroy", K(ls_map_.is_empty()),
              K_(safe_ls_destroy_task_cnt), K(is_t3m_meta_released));
   }
@@ -136,20 +135,20 @@ int ObLSService::get_resource_constraint_value_(ObResoureConstraintValue &constr
   int64_t memory_value = INT64_MAX;
   int64_t clog_disk_value = INT64_MAX;
   // 1. configuration
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_LIKELY(tenant_config.is_valid())) {
     config_value = (tenant_config->_max_ls_cnt_per_server != 0
                     ? tenant_config->_max_ls_cnt_per_server : config_value);
   }
 
   // 2. memory
-  const int64_t tenant_memory = lib::get_tenant_memory_limit(MTL_ID());
+  const int64_t tenant_memory = lib::get_tenant_memory_limit();
   memory_value = OB_MAX(tenant_memory - SMALL_TENANT_MEMORY_LIMIT, 0) / TENANT_MEMORY_PER_LS_NEED +
     OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_FOR_SMALL_TENANT;
 
   // 3. clog disk
   palf::PalfOptions palf_opts;
-  if (OB_FAIL(MTL(ObLogService*)->get_palf_options(palf_opts))) {
+  if (OB_FAIL(share::g_mp->log_service()->get_palf_options(palf_opts))) {
     LOG_WARN("get palf options failed", K(ret));
   } else {
     const palf::PalfDiskOptions &disk_opts = palf_opts.disk_options_;
@@ -304,12 +303,12 @@ int ObLSService::wait()
 
 int ObLSService::mtl_init(ObLSService* &ls_service)
 {
-  uint64_t tenant_id = MTL_ID();
+  
 
-  return ls_service->init(tenant_id);
+  return ls_service->init();
 }
 
-int ObLSService::init(const uint64_t tenant_id)
+int ObLSService::init()
 {
   int ret = OB_SUCCESS;
   const char *OB_LS_SERVICE = "LSSvr";
@@ -320,27 +319,24 @@ int ObLSService::init(const uint64_t tenant_id)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ls service is inited.", K_(is_inited), K(ret));
-  } else if (!is_valid_tenant_id(tenant_id)) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id));
+    LOG_WARN("invalid arguments", K(ret));
   } else if (OB_FAIL(ls_allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                         OB_LS_SERVICE,
-                                        tenant_id,
                                         LS_ALLOC_TOTAL_LIMIT))) {
     LOG_WARN("fail to init ls allocator, ", K(ret));
   } else if (OB_FAIL(iter_allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                           OB_LS_ITER,
-                                          tenant_id,
                                           ITER_ALLOC_TOTAL_LIMIT))) {
     LOG_WARN("fail to init iter allocator, ", K(ret));
-  } else if (OB_FAIL(ls_map_.init(tenant_id, &ls_allocator_))) {
+  } else if (OB_FAIL(ls_map_.init(&ls_allocator_))) {
     LOG_WARN("fail to init ls map", K(ret));
   } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.self_addr()))) {
     LOG_WARN("failed to init storage svr rpc proxy", K(ret));
   } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr()))) {
     STORAGE_LOG(WARN, "fail to init partition service rpc", K(ret));
   } else {
-    tenant_id_ = tenant_id;
     is_inited_ = true;
   }
   return ret;
@@ -373,7 +369,7 @@ int ObLSService::inner_create_ls_(const share::ObLSID &lsid,
   int ret = OB_SUCCESS;
 
   const char *OB_LS_MODE = "ObLS";
-  ObMemAttr memattr(tenant_id_, OB_LS_MODE);
+  ObMemAttr memattr(OB_LS_MODE);
   void *buf = NULL;
   if (OB_ISNULL(buf = ls_allocator_.alloc(sizeof(ObLS), memattr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -381,7 +377,6 @@ int ObLSService::inner_create_ls_(const share::ObLSID &lsid,
   } else if (FALSE_IT(ls = new (buf) ObLS())) {
 
   } else if (OB_FAIL(ls->init(lsid,
-                              tenant_id_,
                               migration_status,
                               restore_status,
                               create_scn,
@@ -935,7 +930,7 @@ void ObLSService::remove_ls_(ObLS *ls, const bool remove_from_disk, const bool w
   static const int64_t SLEEP_TS = 100_ms;
   int64_t retry_cnt = 0;
   int64_t success_step = 0;
-  transaction::ObTransService *tx_svr = MTL(transaction::ObTransService*);
+  transaction::ObTransService *tx_svr = share::g_mp->trans_service();
 
   do {
     // We must do prepare_for_safe_destroy to remove tablets from ObLSTabletService before writing the remove_ls_slog,
@@ -1207,7 +1202,7 @@ int ObLSService::get_ls_iter(common::ObSharedGuard<ObLSIterator> &guard, ObLSGet
   ObLSIterator *ls_iter = NULL;
   void *buf = NULL;
   const char* LS = "ObLSIter";
-  ObMemAttr attr(tenant_id_, LS);
+  ObMemAttr attr(LS);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -1285,11 +1280,11 @@ int ObLSService::get_restore_status_(
     ObRestoreStatus &restore_status)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   restore_status = ObRestoreStatus::Status::NONE;
   bool is_primary = true;
 
-  if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
+  if (true) {
     if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary))) {
       LOG_WARN("fail to check whether is primary cluster", KR(ret));
     } else if (is_primary) {

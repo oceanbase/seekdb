@@ -92,8 +92,7 @@ public:
   // for TimerTask
   void runTimerTask() override;
 
-  static int create_ls_with_tenant_mv_merge_scn(const uint64_t tenant_id,
-                                                const share::ObLSID &ls_id,
+  static int create_ls_with_tenant_mv_merge_scn(const share::ObLSID &ls_id,
                                                 common::ObMySQLTransaction &trans);
 
   TO_STRING_KV(K_(status), K_(in_sched), K_(is_stop), K_(is_inited), K_(merge_scn), K_(ls_cache));

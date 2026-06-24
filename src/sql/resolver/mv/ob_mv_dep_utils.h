@@ -37,8 +37,7 @@ namespace sql
 class ObMVDepInfo
 {
 public:
-  ObMVDepInfo() : tenant_id_(OB_INVALID_TENANT_ID),
-                  mview_id_(OB_INVALID_ID),
+  ObMVDepInfo() : mview_id_(OB_INVALID_ID),
                   p_order_(0),
                   p_obj_(OB_INVALID_ID),
                   p_type_(0),
@@ -47,10 +46,9 @@ public:
   virtual ~ObMVDepInfo() {}
   bool is_valid() const;
 
-  TO_STRING_KV(K_(tenant_id), K_(mview_id), K_(p_order), K_(p_obj), K_(p_type), K_(qbcid), K_(flags));
+  TO_STRING_KV(K_(mview_id), K_(p_order), K_(p_obj), K_(p_type), K_(qbcid), K_(flags));
 
 public:
-  uint64_t tenant_id_;
   uint64_t mview_id_;
   int64_t p_order_;
   uint64_t p_obj_;
@@ -63,34 +61,28 @@ class ObMVDepUtils
 {
 public:
   static int get_mview_dep_infos(common::ObISQLClient &sql_client,
-                                 const uint64_t tenant_id,
                                  const uint64_t mview_table_id,
                                  common::ObIArray<ObMVDepInfo> &dep_infos);
   static int insert_mview_dep_infos(common::ObISQLClient &sql_client,
-                                    const uint64_t tenant_id,
                                     const uint64_t mview_table_id,
                                     const common::ObIArray<ObMVDepInfo> &dep_infos);
   static int delete_mview_dep_infos(common::ObISQLClient &sql_client,
-                                    const uint64_t tenant_id,
                                     const uint64_t mview_table_id);
   static int convert_to_mview_dep_infos(
       const common::ObIArray<share::schema::ObDependencyInfo> &deps,
       common::ObIArray<ObMVDepInfo> &mv_deps);
   static int get_table_ids_only_referenced_by_given_mv(
       common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
       const uint64_t mview_table_id,
       common::ObIArray<uint64_t> &ref_table_ids);
   static int get_table_ids_only_referenced_by_given_fast_lsm_mv(
       common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
       const uint64_t mview_table_id,
       common::ObIArray<uint64_t> &ref_table_ids);
-  static int get_referring_mv_of_base_table(ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int get_referring_mv_of_base_table(ObISQLClient &sql_client,
                                             const uint64_t base_table_id,
                                             ObIArray<uint64_t> &mview_ids);
   static int get_all_mview_dep_infos(common::ObMySQLProxy *sql_proxy,
-                                     const uint64_t tenant_id,
                                      common::ObIArray<ObMVDepInfo> &dep_infos);
 };
 } // end of sql

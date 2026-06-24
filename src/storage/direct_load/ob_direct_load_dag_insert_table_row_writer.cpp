@@ -36,7 +36,7 @@ using namespace share;
 ObDirectLoadDagInsertTableBatchRowDirectWriter::ObDirectLoadDagInsertTableBatchRowDirectWriter()
   : insert_tablet_ctx_(nullptr),
     dml_row_handler_(nullptr),
-    allocator_(ObMemAttr(MTL_ID(), "storage_writer")),
+    allocator_(ObMemAttr("storage_writer")),
     slice_writer_(nullptr),
     row_count_(0),
     is_inited_(false)

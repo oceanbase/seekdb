@@ -15,6 +15,7 @@
  */
 
 #include "ob_lcl_node.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/deadlock/ob_deadlock_inner_table_service.h"
 #include "share/deadlock/ob_deadlock_detector_rpc.h"
 
@@ -142,7 +143,7 @@ int ObLCLNode::register_timer_with_necessary_retry_with_lock_()
 {
   int ret = OB_SUCCESS;
   int64_t delay = 0;
-  ObTimeWheel &time_wheel = MTL(ObDeadLockDetectorMgr*)->get_time_wheel();;
+  ObTimeWheel &time_wheel = share::g_mp->dead_lock_detector_mgr()->get_time_wheel();
 
   DETECT_TIME_GUARD(100_ms);
   // timewheel execute timer task without lock's protection
@@ -184,7 +185,7 @@ int ObLCLNode::add_self_ref_count_()
   ObIDeadLockDetector *p_detector = nullptr;
 
   DETECT_TIME_GUARD(100_ms);
-  if (CLICK() && OB_FAIL(MTL(ObDeadLockDetectorMgr*)->detector_map_.get(self_key_, p_detector))) {
+  if (CLICK() && OB_FAIL(share::g_mp->dead_lock_detector_mgr()->detector_map_.get(self_key_, p_detector))) {
     // this may happen when register process not done, but user call unregister
     DETECT_LOG_(WARN, "get detector from map failed, which not expected", K(*this));
   } else if (p_detector != this) {
@@ -193,7 +194,7 @@ int ObLCLNode::add_self_ref_count_()
     DETECT_LOG_(WARN, "get detector from map use self_key_, but obj not myself",
                       K(*this), KP(p_detector));
     CLICK();
-    MTL(ObDeadLockDetectorMgr*)->detector_map_.revert(p_detector);
+    share::g_mp->dead_lock_detector_mgr()->detector_map_.revert(p_detector);
   } else {
     // do nothing
   }
@@ -204,7 +205,7 @@ int ObLCLNode::add_self_ref_count_()
 void ObLCLNode::revert_self_ref_count_()
 {
   DETECT_TIME_GUARD(100_ms);
-  MTL(ObDeadLockDetectorMgr*)->detector_map_.revert(this);
+  share::g_mp->dead_lock_detector_mgr()->detector_map_.revert(this);
 }
 
 int ObLCLNode::add_resource_to_list_(const ObDependencyResource &resource,
@@ -503,7 +504,7 @@ int ObLCLNode::broadcast_(const BlockList &list,
                  lclv,
                  public_label,
                  ObClockGenerator::getRealClock());
-    MTL(ObDeadLockDetectorMgr*)->sender_thread_.cache_msg(list.at(idx), msg);
+    share::g_mp->dead_lock_detector_mgr()->sender_thread_.cache_msg(list.at(idx), msg);
   }
   
   return ret;
@@ -792,7 +793,7 @@ int ObLCLNode::broadcast_with_lock_(ObDeadLockCollectInfoMessage &msg)
   for (int64_t idx = 0; idx < block_list_copy.count() && OB_SUCC(ret); ++idx) {
     msg.set_dest_key(block_list_copy.at(idx).get_user_key());
     if (CLICK() &&
-        OB_FAIL(MTL(ObDeadLockDetectorMgr*)->get_rpc().
+        OB_FAIL(share::g_mp->dead_lock_detector_mgr()->get_rpc().
                 post_collect_info_message(block_list_copy.at(idx).get_addr(), msg))) {
       DETECT_LOG_(WARN, "send collect info message failed", KR(ret), K(msg));
     }
@@ -840,7 +841,7 @@ int ObLCLNode::push_state_to_downstreams_with_lock_()
                             parent_list_.at(idx).get_user_key(),
                             GCTX.self_addr(),
                             self_key_);
-        if (OB_FAIL(MTL(ObDeadLockDetectorMgr*)->get_rpc().
+        if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->get_rpc().
                     post_notify_parent_message(parent_list_.at(idx).get_addr(), notify_msg))) {
           DETECT_LOG_(WARN, "post notify parent message failed", KR(ret), K(notify_msg), K(*this));
         }
@@ -868,7 +869,7 @@ void ObLCLNode::update_lcl_period_if_necessary_with_lock_()
     }
   }
   if (timeout_ts != 0 && ObClockGenerator::getRealClock() > timeout_ts) {
-    if (OB_FAIL(MTL(ObDeadLockDetectorMgr*)->unregister_key_(self_key_))) {
+    if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key_(self_key_))) {
       DETECT_LOG_(WARN, "fail to gc lcl node", K(*this), KR(ret), K(timeout_ts));
     }
   }

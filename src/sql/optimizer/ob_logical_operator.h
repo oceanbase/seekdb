@@ -1575,8 +1575,6 @@ public:
   int pw_allocate_granule_pre(AllocGIContext &ctx);
   int pw_allocate_granule_post(AllocGIContext &ctx);
 
-  // dblink
-
   int check_sharding_compatible_with_reduce_expr(const common::ObIArray<ObRawExpr*> &reduce_exprs,
                                                  bool &compatible) const;
   inline bool is_local() const
@@ -1934,8 +1932,6 @@ protected:
   ObPhyPlanType location_type_;
   bool is_partition_wise_;
   PxOpSizeFactor px_est_size_factor_;
-  // dblink
-  uint64_t dblink_id_;
   int64_t plan_depth_;
   bool contain_fake_cte_;
   bool contain_pw_merge_op_;

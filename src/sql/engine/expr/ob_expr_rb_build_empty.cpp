@@ -52,7 +52,7 @@ int ObExprRbBuildEmpty::eval_rb_build_empty(const ObExpr &expr,
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(ObRbExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session()), "ROARINGBITMAP"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
   ObString rb_bin;
   if (OB_FAIL(ObRbUtils::build_empty_binary(tmp_allocator, rb_bin))) {
     LOG_WARN("fail to build empty rb binary", K(ret));

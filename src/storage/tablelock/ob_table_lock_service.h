@@ -294,7 +294,6 @@ public:
   int get_obj_lock_garbage_collector(ObOBJLockGarbageCollector *&obj_lock_garbage_collector);
 
 private:
-  int check_cluster_version_after_(const uint64_t version);
   bool need_retry_trans_(const ObTableLockCtx &ctx,
                          const int64_t ret) const;
   bool need_retry_single_task_(const ObTableLockCtx &ctx,
@@ -352,7 +351,6 @@ private:
                       share::ObLSID &ls_id,
                       bool force_refresh = false);
   int get_ls_leader_(const int64_t cluster_id,
-                     const uint64_t tenant_id,
                      const share::ObLSID &ls_id,
                      const int64_t abs_timeout_ts,
                      ObAddr &addr);

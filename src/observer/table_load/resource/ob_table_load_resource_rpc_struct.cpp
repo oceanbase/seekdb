@@ -61,22 +61,18 @@ OB_SERIALIZE_MEMBER_SIMPLE(ObDirectLoadResourceUnit,
                            memory_size_);
 
 OB_SERIALIZE_MEMBER_SIMPLE(ObDirectLoadResourceApplyArg, 
-                           tenant_id_, 
                            task_key_, 
                            apply_array_);
 
 OB_SERIALIZE_MEMBER_SIMPLE(ObDirectLoadResourceReleaseArg, 
-                           tenant_id_, 
                            task_key_);
 
 OB_SERIALIZE_MEMBER_SIMPLE(ObDirectLoadResourceUpdateArg, 
-                           tenant_id_, 
                            thread_count_,
                            memory_size_,
                            addrs_);
 
 OB_SERIALIZE_MEMBER_SIMPLE(ObDirectLoadResourceCheckArg, 
-                           tenant_id_,
                            avail_memory_,
                            first_check_);
 

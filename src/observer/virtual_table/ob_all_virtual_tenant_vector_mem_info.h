@@ -46,7 +46,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 private:
-  int64_t fill_glibc_used_info(uint64_t tenant_id);
+  int64_t fill_glibc_used_info();
   common::ObAddr addr_;
   uint64_t current_pos_;
   lib::ObMallocSampleMap::const_iterator it_;

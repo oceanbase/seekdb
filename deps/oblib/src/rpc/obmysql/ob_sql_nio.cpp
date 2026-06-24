@@ -1750,13 +1750,12 @@ private:
 #endif
 };
 
-int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread,
-                    const uint64_t tenant_id, bool disable_tcp)
+int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread, bool disable_tcp)
 {
   int ret = OB_SUCCESS;
   port_ = port;
   handler_ = handler;
-  tenant_id_ = tenant_id;
+  
   if (n_thread > MAX_THREAD_CNT) {
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == (impl_ = (typeof(impl_))ob_malloc(

@@ -42,7 +42,7 @@ public:
 
   virtual ~ObReqQueue();
 
-  int init(const int64_t tenant_id = OB_SERVER_TENANT_ID);
+  int init();
 
   void set_qhandler(ObiReqQHandler *handler);
 

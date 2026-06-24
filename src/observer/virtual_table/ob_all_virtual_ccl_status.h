@@ -28,13 +28,11 @@ namespace observer
 { 
 
 struct ObCCLStatus {
-  uint64_t tenant_id_;
   uint64_t ccl_rule_id_;
   ObString format_sqlid_;
   uint64_t max_concurrency_;
   uint64_t cur_concurrency_;
-  TO_STRING_KV(K_(tenant_id),
-               K_(ccl_rule_id),
+  TO_STRING_KV(K_(ccl_rule_id),
                K_(format_sqlid),
                K_(max_concurrency),
                K_(cur_concurrency));
@@ -69,7 +67,7 @@ ObAllVirtualCCLStatus()
   virtual void reset();
   int set_svr_addr(common::ObAddr &addr);
 private:
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
   virtual void release_last_tenant() override;
 private:

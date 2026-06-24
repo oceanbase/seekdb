@@ -27,7 +27,7 @@
 #include "storage/ob_dml_common.h"
 #include "storage/ob_relative_table.h"
 #include "storage/slog/ob_storage_log.h"
-#include "storage/high_availability/ob_tablet_ha_status.h"
+#include "storage/ob_tablet_ha_status.h"
 #include "storage/tablelock/ob_lock_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_ctx_memtable_mgr.h"
 #include "storage/tx_table/ob_tx_data_memtable_mgr.h"

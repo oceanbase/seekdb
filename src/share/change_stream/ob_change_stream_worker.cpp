@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/atomic/ob_atomic.h"
 #include "share/change_stream/ob_change_stream_worker.h"
@@ -48,7 +49,7 @@ ObCSExecutor::~ObCSExecutor()
 }
 
 int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_queue_limit,
-                       const char *name, uint64_t tenant_id)
+                       const char *name)
 {
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
@@ -61,7 +62,7 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
   } else if (OB_FAIL(set_thread_count(thread_num))) {
     LOG_WARN("ObCSExecutor set_thread_count failed", K(ret), K(executor_id));
     ObLinkQueueThreadPool::destroy();
-  } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_num, task_queue_limit, name, tenant_id))) {
+  } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_num, task_queue_limit, name))) {
     LOG_WARN("ObCSExecutor base init failed", K(ret), K(executor_id));
   } else {
     executor_id_ = executor_id;
@@ -133,7 +134,7 @@ void ObCSExecutor::handle_drop(common::LinkTask *task)
     ATOMIC_AAF(&ctx->task_fail_, 1);
     const int64_t finished = ATOMIC_AAF(&ctx->task_finish_, 1);
     if (finished == ctx->task_count_) {
-      ObCSDispatcher &dispatcher = MTL(ObChangeStreamMgr *)->get_dispatcher();
+      ObCSDispatcher &dispatcher = share::g_mp->change_stream_mgr()->get_dispatcher();
       do_finish_batch_(ctx, dispatcher);
     }
   }
@@ -144,7 +145,7 @@ int ObCSExecutor::process_sub_task(ObCSExecSubTask *sub_task)
   int ret = common::OB_SUCCESS;
   ObCSExecCtx *ctx = sub_task->get_exec_ctx();
   ATOMIC_CAS(&ctx->process_time_, 0, ObTimeUtil::current_time());
-  ObCSDispatcher &dispatcher = MTL(ObChangeStreamMgr *)->get_dispatcher();
+  ObCSDispatcher &dispatcher = share::g_mp->change_stream_mgr()->get_dispatcher();
   const int64_t row_count = sub_task->get_rows().count();
 
   // ── Phase 1: process ──
@@ -246,7 +247,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
         SCN ctx_refresh_scn;
         int64_t affected_rows = 0;
         if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-                ctx->trans_, MTL_ID(), true, curr_refresh_scn))) {
+                ctx->trans_, true, curr_refresh_scn))) {
           LOG_WARN("get_change_stream_refresh_scn fail", KR(ret));
         } else if (curr_refresh_scn.get_val_for_gts() > static_cast<uint64_t>(ctx->refresh_scn_)) {
           ret = OB_ERR_UNEXPECTED;
@@ -254,7 +255,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
         } else if (OB_FAIL(ctx_refresh_scn.convert_for_tx(ctx->refresh_scn_))) {
           LOG_WARN("convert scn failed", KR(ret));
         } else if (OB_FAIL(ObGlobalStatProxy::advance_change_stream_refresh_scn(
-                ctx->trans_, MTL_ID(), ctx_refresh_scn, affected_rows))) {
+                ctx->trans_, ctx_refresh_scn, affected_rows))) {
           LOG_WARN("advance refresh_scn failed", KR(ret));
         }
       }
@@ -333,8 +334,8 @@ int ObCSWorker::init(int64_t executor_count)
     LOG_WARN("ObCSWorker invalid executor_count", K(ret), K(executor_count));
   } else {
     executor_count_ = executor_count;
-    const uint64_t tenant_id = MTL_ID();
-    const common::ObMemAttr attr(tenant_id, "CSExecutors");
+    
+    const common::ObMemAttr attr("CSExecutors");
     void *buf = ob_malloc(executor_count_ * sizeof(ObCSExecutor *), attr);
     if (OB_ISNULL(buf)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
@@ -351,7 +352,7 @@ int ObCSWorker::init(int64_t executor_count)
           break;
         }
         (void)snprintf(executors_[i]->get_name(), 64, "CSWorker%ld", i);
-        if (OB_FAIL(executors_[i]->init(i, 1, CS_EXECUTOR_QUEUE_LIMIT, executors_[i]->get_name(), tenant_id))) {
+        if (OB_FAIL(executors_[i]->init(i, 1, CS_EXECUTOR_QUEUE_LIMIT, executors_[i]->get_name()))) {
           LOG_WARN("ObCSWorker: executor init failed", K(ret), K(i));
           break;
         }

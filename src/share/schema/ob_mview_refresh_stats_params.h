@@ -66,30 +66,30 @@ public:
 #undef DEFINE_GETTER_AND_SETTER
 
   // sys_defaults
-  int gen_sys_defaults_dml(uint64_t tenant_id, share::ObDMLSqlSplicer &dml) const;
-  static int set_sys_defaults(ObISQLClient &sql_client, uint64_t tenant_id,
+  int gen_sys_defaults_dml(share::ObDMLSqlSplicer &dml) const;
+  static int set_sys_defaults(ObISQLClient &sql_client,
                               const ObMViewRefreshStatsParams &params);
-  static int fetch_sys_defaults(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int fetch_sys_defaults(ObISQLClient &sql_client,
                                 ObMViewRefreshStatsParams &params, bool for_update = false);
 
   // mview_refresh_params
-  int gen_mview_refresh_stats_params_dml(uint64_t tenant_id, uint64_t mview_id,
+  int gen_mview_refresh_stats_params_dml(uint64_t mview_id,
                                          share::ObDMLSqlSplicer &dml) const;
-  static int set_mview_refresh_stats_params(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int set_mview_refresh_stats_params(ObISQLClient &sql_client,
                                             uint64_t mview_id,
                                             const ObMViewRefreshStatsParams &params);
-  static int drop_mview_refresh_stats_params(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int drop_mview_refresh_stats_params(ObISQLClient &sql_client,
                                              uint64_t mview_id, bool if_exists = false);
-  static int drop_all_mview_refresh_stats_params(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int drop_all_mview_refresh_stats_params(ObISQLClient &sql_client,
                                                  int64_t &affected_rows, int64_t limit = -1);
-  static int fetch_mview_refresh_stats_params(ObISQLClient &sql_client, uint64_t tenant_id,
+  static int fetch_mview_refresh_stats_params(ObISQLClient &sql_client,
                                               uint64_t mview_id, ObMViewRefreshStatsParams &params,
                                               bool with_sys_defaults);
 
   TO_STRING_KV(K_(collection_level), K_(retention_period));
 
 private:
-  static int read_stats_params(ObISQLClient &sql_client, uint64_t exec_tenant_id, ObSqlString &sql,
+  static int read_stats_params(ObISQLClient &sql_client, ObSqlString &sql,
                                ObMViewRefreshStatsParams &params);
 
 public:

@@ -34,11 +34,10 @@ public:
   virtual void destroy() override;
   int get_ls_id(share::ObLSID &ls_id) const;
   INHERIT_TO_STRING_KV("ObSafeDestroyTask", ObSafeDestroyTask, K_(is_inited),
-                       K_(tenant_id), K_(ls_handle), KP_(ls_service));
+                       K_(ls_handle), KP_(ls_service));
 private:
   bool is_inited_;
   // used to switch to the tenant to make sure destroy process is right.
-  uint64_t tenant_id_;
   // contain the ls need to check.
   ObLSHandle ls_handle_;
   // the ls service, if a ls is not safe to destroy the ls service

@@ -29,7 +29,6 @@ public:
   ObAlterDatabaseStmt();
   explicit ObAlterDatabaseStmt(common::ObIAllocator *name_pool);
   virtual ~ObAlterDatabaseStmt();
-  void set_tenant_id(const uint64_t tenant_id);
   void set_database_id(const uint64_t database_id);
   int set_database_name(const common::ObString &database_name);
   void set_collation_type(const common::ObCollationType type);

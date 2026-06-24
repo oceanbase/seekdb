@@ -62,8 +62,7 @@ public:
   int alter_package(const ObPackageInfo &package_info,
                     common::ObISQLClient *sql_client,
                     const common::ObString *ddl_stmt_str);
-  int drop_package(const uint64_t tenant_id,
-                   const uint64_t database_id,
+  int drop_package(const uint64_t database_id,
                    const uint64_t package_id,
                    const int64_t new_schema_version,
                    common::ObISQLClient &sql_client,
@@ -73,26 +72,22 @@ public:
                   bool is_replace = false,
                   bool only_history = false);
 private:
-  int gen_package_dml(const uint64_t exec_tenant_id,
-                      const ObPackageInfo &package_info,
+  int gen_package_dml(const ObPackageInfo &package_info,
                       ObDMLSqlSplicer &dml);
   int add_package(common::ObISQLClient &sql_client,
                   const ObPackageInfo &package_info,
                   bool is_replace,
                   bool only_history = false);
   int del_package(common::ObISQLClient &sql_client,
-                  const uint64_t tenant_id,
                   const uint64_t package_id,
                   int64_t new_schema_version);
-  int gen_routine_dml(const uint64_t exec_tenant_id,
-                      const ObRoutineInfo &routine_info,
+  int gen_routine_dml(const ObRoutineInfo &routine_info,
                       ObDMLSqlSplicer &dml,
                       bool is_replace = false);
   int del_routine(common::ObISQLClient &sql_client,
                   const ObRoutineInfo &routine_info,
                   int64_t new_schema_version);
-  int gen_routine_param_dml(const uint64_t exec_tenant_id,
-                            const ObRoutineParam &routine_param,
+  int gen_routine_param_dml(const ObRoutineParam &routine_param,
                             ObDMLSqlSplicer &dml);
   int add_routine_params(common::ObISQLClient &sql_client,
                          ObRoutineInfo &routine_info,

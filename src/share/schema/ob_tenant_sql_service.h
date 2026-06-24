@@ -40,12 +40,10 @@ public:
   virtual ~ObTenantSqlService() {}
 
   virtual int insert_tenant(const ObTenantSchema &tenant_schema,
-                            const ObSchemaOperationType op,
                             common::ObISQLClient &sql_client,
                             const common::ObString *ddl_stmt_str = NULL);
 private:
   int replace_tenant(const ObTenantSchema &tenant_schema,
-                     const ObSchemaOperationType op,
                      common::ObISQLClient &sql_client,
                      const common::ObString *ddl_stmt_str);
 private:

@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_SQL_ENGINE_DML_OB_DML_SERVICE_H_
 #define DEV_SRC_SQL_ENGINE_DML_OB_DML_SERVICE_H_
 #include "sql/engine/dml/ob_dml_ctx_define.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_context.h"
 #include "ob_table_modify_op.h"
 #include "storage/tx_storage/ob_access_service.h"
@@ -261,8 +262,7 @@ public:
   static int copy_heap_table_hidden_pk(ObEvalCtx &eval_ctx,
                                        const ObUpdCtDef &upd_ctdef);
 
-  static int get_heap_table_hidden_pk(uint64_t tenant_id,
-                                      const common::ObTabletID &tablet_id,
+  static int get_heap_table_hidden_pk(const common::ObTabletID &tablet_id,
                                       uint64_t &pk);
 
   static int set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
@@ -394,7 +394,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
       LOG_WARN("write tablet with ignore failed", K(ret));
     }
   } else {
-    ObAccessService *as = MTL(ObAccessService *);
+    ObAccessService *as = share::g_mp->access_service();
     storage::ObStoreCtxGuard store_ctx_guard;
     concurrent_control::ObWriteFlag write_flag;
 
@@ -462,7 +462,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
   affected_rows = 0;
   const ObDASWriteBuffer::DmlRow *dml_row = nullptr;
   ObDASWriteBuffer::Iterator write_iter;
-  ObAccessService *as = MTL(ObAccessService *);
+  ObAccessService *as = share::g_mp->access_service();
   const bool with_local_index = related_ctdefs_ != nullptr && !related_ctdefs_->empty();
   if (OB_FAIL(iter.get_write_buffer().begin(write_iter))) {
     LOG_WARN("begin write iterator failed", K(ret));
@@ -478,7 +478,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
     dsr.store_row_ = const_cast<ObDASWriteBuffer::DmlRow*>(dml_row);
     if (OB_FAIL(ObDMLService::create_anonymous_savepoint(*tx_desc_, savepoint_no))) {
       SQL_DAS_LOG(WARN, "create anonymous savepoint failed", K(ret));
-    } else if (OB_FAIL(single_row_buffer.init(*das_allocator_, ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE, MTL_ID()))) {
+    } else if (OB_FAIL(single_row_buffer.init(*das_allocator_, ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE))) {
       SQL_DAS_LOG(WARN, "init single row buffer failed", K(ret));
     } else if (OB_FAIL(single_row_buffer.try_add_row(dsr, das::OB_DAS_MAX_PACKET_SIZE, added, &store_row))) {
       SQL_DAS_LOG(WARN, "try add row to single row buffer failed", K(ret));

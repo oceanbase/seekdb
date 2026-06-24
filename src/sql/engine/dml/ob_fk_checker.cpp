@@ -246,7 +246,7 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
   ObSQLSessionInfo *session = eval_ctx_.exec_ctx_.get_my_session();
   const ObDASTableLocMeta &loc_meta = fk_ctdef.loc_meta_;
   ObMemAttr mem_attr;
-  mem_attr.tenant_id_ = session->get_effective_tenant_id();
+  
   mem_attr.label_ = "SqlFKeyCkr";
   das_ref_.set_expr_frame_info(expr_frame_info);
   das_ref_.set_mem_attr(mem_attr);

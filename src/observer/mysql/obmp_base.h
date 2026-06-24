@@ -40,8 +40,6 @@ public:
   virtual ~ObMPBase();
 
   int64_t get_process_timestamp() const { return process_timestamp_; };
-  inline void set_proxy_version(uint64_t v) { proxy_version_ = v; }
-  inline uint64_t get_proxy_version() { return proxy_version_; }
 protected:
   virtual void cleanup() final; // please don't overload cleanup in child class, mark as final
   virtual int setup_packet_sender();
@@ -110,9 +108,7 @@ protected:
   {
     return session.set_session_active(sql, get_receive_timestamp(), last_active_time_ts, cmd);
   }
-  int check_and_refresh_schema(uint64_t login_tenant_id,
-                               uint64_t effective_tenant_id,
-                               sql::ObSQLSessionInfo *session = NULL);
+  int check_and_refresh_schema(sql::ObSQLSessionInfo *session = NULL);
   bool need_flush_buffer() const;
   int update_transmission_checksum_flag(const sql::ObSQLSessionInfo &session);
   int update_proxy_and_client_sys_vars(sql::ObSQLSessionInfo &session);
@@ -142,7 +138,6 @@ protected:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPBase);
   int64_t process_timestamp_;
-  uint64_t proxy_version_; // Control the strategy for prepare statement to return stmt id
 }; // end of class ObMPBase
 
 inline void ObMPBase::setup_wb(sql::ObSQLSessionInfo &session)

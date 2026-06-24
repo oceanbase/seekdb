@@ -24,7 +24,7 @@
 #include "lib/ob_errno.h"
 #include "lib/restore/ob_storage_file.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/backup/ob_backup_io_adapter.h"
+#include "share/io/ob_backup_io_adapter.h"
 
 #undef private
 #undef protected

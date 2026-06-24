@@ -15,9 +15,10 @@
  */
 
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/tx/wrs/ob_weak_read_util.h"
+#include "storage/tx/ob_weak_read_util.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "share/ob_server_struct.h"
 #include "lib/container/ob_array.h"
@@ -100,7 +101,7 @@ int ObMultiVersionGarbageCollector::start()
 
   if(!is_inited_) {
     ret = OB_NOT_INIT;
-    MVCC_LOG(ERROR, "has not been inited", KR(ret), K(MTL_ID()));
+    MVCC_LOG(ERROR, "has not been inited", KR(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::MultiVersionGarbageCollector, timer_tg_id_))) {
     MVCC_LOG(ERROR, "fail to create MultiVersionGarbageCollector tg", KR(ret));
   } else if (OB_FAIL(TG_START(timer_tg_id_))) {
@@ -163,7 +164,7 @@ void ObMultiVersionGarbageCollector::run_timer_task()
 {
    int ret = OB_SUCCESS;
    uint64_t data_version = 0;
-   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+   omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
    if (!tenant_config->_mvcc_gc_using_min_txn_snapshot) {
      cure();
    } else {
@@ -343,9 +344,9 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     bool is_primary = true;
-    const uint64_t tenant_id = MTL_ID();
-    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
-      MVCC_LOG(WARN, "fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+    
+    if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
+      MVCC_LOG(WARN, "fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
       MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {
@@ -419,8 +420,7 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_GTS(share::SCN &min_un
   do {
     // We get the gts each 10ms in order not to report too much error during reboot
     // and continue to fetch under the failure among 1s.
-    ret = OB_TS_MGR.get_gts(MTL_ID(),
-                            stc_ahead,
+    ret = OB_TS_MGR.get_gts(stc_ahead,
                             NULL, // gts task
                             gts_scn,
                             unused_receive_gts_ts);
@@ -452,9 +452,9 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_WRS(
 
   const int64_t current_time = ObTimeUtility::current_time();
   const int64_t max_read_stale_time =
-    transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency(MTL_ID());
+    transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency();
 
-  if (OB_FAIL(MTL(transaction::ObTransService*)->get_weak_read_snapshot_version(
+  if (OB_FAIL(share::g_mp->trans_service()->get_weak_read_snapshot_version(
                 -1, // system variable : max read stale time for user
                 false,
                 min_unallocated_WRS))) {
@@ -479,7 +479,7 @@ int ObMultiVersionGarbageCollector::study_max_committed_txn_version(
 {
   int ret = OB_SUCCESS;
 
-  max_committed_txn_version = MTL(transaction::ObTransService*)->
+  max_committed_txn_version = share::g_mp->trans_service()->
     get_tx_version_mgr().get_max_commit_ts(false/*elr*/);
 
   if (max_committed_txn_version.is_base_scn()) {
@@ -517,7 +517,7 @@ int ObMultiVersionGarbageCollector::study_min_active_txn_version(
   }
 
   share::SCN min_mview_mds_snapshot;
-  if (FAILEDx(MTL(rootserver::ObMViewMaintenanceService*)->get_min_mview_mds_snapshot(min_mview_mds_snapshot))) {
+  if (FAILEDx(share::g_mp->m_view_maintenance_service()->get_min_mview_mds_snapshot(min_mview_mds_snapshot))) {
     MVCC_LOG(WARN, "get min mview active snaphot version failed", K(ret));
   } else if (min_mview_mds_snapshot.is_valid() && min_mview_mds_snapshot < min_active_txn_version) {
     MVCC_LOG(INFO, "study_min_active_txn_version", K(min_active_txn_version), K(min_mview_mds_snapshot));
@@ -541,7 +541,7 @@ int ObMultiVersionGarbageCollector::refresh_()
   if (is_refresh_fail()) {
     ret = OB_EAGAIN;
     MVCC_LOG(WARN, "mock refresh failed", K(ret), KPC(this), K(collector));
-  } else if (OB_FAIL(MTL(concurrency_control::ObMultiVersionGarbageCollector *)->collect(collector))) {
+  } else if (OB_FAIL(share::g_mp->multi_version_garbage_collector()->collect(collector))) {
     MVCC_LOG(WARN, "collect snapshot info sql failed", K(ret), KPC(this), K(collector));
   } else {
     // Step1: check whether gc status is disabled, then set or reset the gc
@@ -605,17 +605,17 @@ void ObMultiVersionGarbageCollector::decide_reserved_snapshot_version_(
       // NB: There may be WRS service which disables the monotonic weak read and
       // finally causes the timestamp to go back, so we should ignore it.
       if (ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS == reserved_type
-          && !transaction::ObWeakReadUtil::enable_monotonic_weak_read(MTL_ID())) {
+          && !transaction::ObWeakReadUtil::enable_monotonic_weak_read()) {
         MVCC_LOG(WARN, "update a smaller reserved snapshot with wrs disable monotonic weak read",
                  K(ret), KPC(this), K(global_reserved_snapshot_), K(reserved_snapshot));
       } else if (ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS == reserved_type
                  && ((global_reserved_snapshot_.get_val_for_tx() -
                       reserved_snapshot.get_val_for_tx()) / 1000 >
-                     MAX(transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency(MTL_ID()),
+                     MAX(transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency(),
                          100 * 1_min))) {
         MVCC_LOG(ERROR, "update a too too smaller reserved snapshot with wrs!!!",
                  K(ret), KPC(this), K(global_reserved_snapshot_), K(reserved_snapshot),
-                 K(transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency(MTL_ID())));
+                 K(transaction::ObWeakReadUtil::max_stale_time_for_weak_consistency()));
       } else if ((global_reserved_snapshot_.get_val_for_tx() -
                   reserved_snapshot.get_val_for_tx()) / 1000 > 100 * 1_min) {
         MVCC_LOG(WARN, "update a too too smaller reserved snapshot!!!", K(ret), KPC(this),
@@ -640,7 +640,7 @@ void ObMultiVersionGarbageCollector::decide_reserved_snapshot_version_(
 
 share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn() const
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
   if (!tenant_config->_mvcc_gc_using_min_txn_snapshot) {
     return share::SCN::max_scn();
@@ -671,14 +671,14 @@ bool ObMultiVersionGarbageCollector::is_gc_disabled() const
 int ObMultiVersionGarbageCollector::collect(ObMultiVersionGCSnapshotFunctor& calculator)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
 
   if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
     ret = OB_NOT_INIT;
     MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
   } else {
     ObArray<share::ObReservedSnapshotEntry> entries;
-    if (OB_FAIL(snapshot_storage_.get_all(tenant_id, entries))) {
+    if (OB_FAIL(snapshot_storage_.get_all(entries))) {
       MVCC_LOG(WARN, "failed to get all snapshot entries", KR(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
@@ -727,7 +727,7 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
 {
   int ret = OB_SUCCESS;
   const ObAddr &self_addr = GCTX.self_addr();
-  const uint64_t tenant_id = MTL_ID();
+  
   const int64_t current_ts = ObClockGenerator::getRealClock();
 
   if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
@@ -738,7 +738,7 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
     share::ObReservedSnapshotEntry entry;
 
     // MIN_UNALLOCATED_GTS
-    entry.tenant_id_ = tenant_id;
+    
     entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_GTS);
     entry.svr_addr_ = self_addr;
     entry.create_time_ = current_ts;
@@ -776,7 +776,7 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(snapshot_storage_.insert_or_update(tenant_id, entries))) {
+      if (OB_FAIL(snapshot_storage_.insert_or_update(entries))) {
         MVCC_LOG(WARN, "failed to insert or update snapshot entries", KR(ret));
       } else {
         MVCC_LOG(INFO, "report multi version snapshot success", KR(ret), K(entries.count()));
@@ -794,12 +794,12 @@ int ObMultiVersionGarbageCollector::update_status(const ObMultiVersionGCStatus s
 {
   int ret = OB_SUCCESS;
   const ObAddr &self_addr = GCTX.self_addr();
-  const uint64_t tenant_id = MTL_ID();
+  
 
   if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
     ret = OB_NOT_INIT;
     MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
-  } else if (OB_FAIL(snapshot_storage_.update_status(tenant_id, self_addr, (uint64_t)(status)))) {
+  } else if (OB_FAIL(snapshot_storage_.update_status(self_addr, (uint64_t)(status)))) {
     MVCC_LOG(WARN, "failed to update status", KR(ret), K(status));
   } else {
     MVCC_LOG(INFO, "update multi version snapshot status success", KR(ret), K(status));
@@ -848,7 +848,7 @@ int ObMultiVersionGarbageCollector::reclaim()
 
   ObTimeGuard timeguard(__func__, 1 * 1000 * 1000);
 
-  if (OB_FAIL(MTL(storage::ObLSService*)->
+  if (OB_FAIL(share::g_mp->ls_service()->
               get_ls(share::SYS_LS, ls_handle, ObLSGetMod::MULTI_VERSION_GARBAGE_COLLOECTOR_MOD))) {
     MVCC_LOG(WARN, "get sys ls failed", K(ret));
     ret = OB_SUCCESS;
@@ -1011,7 +1011,7 @@ int ObMultiVersionGarbageCollector::disk_monitor_(const bool is_this_server_alom
 int ObMultiVersionGarbageCollector::reclaim_(const ObArray<ObAddr> &reclaimable_servers)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
 
   if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
     ret = OB_NOT_INIT;
@@ -1019,7 +1019,7 @@ int ObMultiVersionGarbageCollector::reclaim_(const ObArray<ObAddr> &reclaimable_
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < reclaimable_servers.count(); ++i) {
       const ObAddr &addr = reclaimable_servers[i];
-      if (OB_FAIL(snapshot_storage_.delete_expired(tenant_id, addr))) {
+      if (OB_FAIL(snapshot_storage_.delete_expired(addr))) {
         MVCC_LOG(WARN, "failed to delete expired snapshot", KR(ret), K(addr));
       } else {
         MVCC_LOG(INFO, "reclaim expired multi version snapshot success", KR(ret), K(addr));
@@ -1234,7 +1234,7 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
     MVCC_LOG(WARN, "session info is not valid", K(ret));
   } else if (sess_info->get_is_deserialized()) {
     // skip deserialized session, only visit the original
-  } else if (MTL_ID() == sess_info->get_effective_tenant_id()) {
+  } else if (true) {
     sql::ObSQLSessionInfo::LockGuard data_lock_guard(sess_info->get_thread_data_lock());
     share::SCN snapshot_version(share::SCN::max_scn());
 
@@ -1252,7 +1252,7 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
         if (desc_snapshot.is_valid()) {
           snapshot_version = desc_snapshot;
         }
-        MVCC_LOG(DEBUG, "RR/SI txn with tx_desc", K(MTL_ID()), KPC(sess_info),
+        MVCC_LOG(DEBUG, "RR/SI txn with tx_desc", KPC(sess_info),
                  K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot),
                  K(sess_snapshot), K(desc_snapshot));
       } else if (tx_desc->is_RC_isolevel()) {
@@ -1271,16 +1271,16 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
             snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
                                              - 5L * 1000L * 1000L * 60L);
             MVCC_LOG(INFO, "RC txn with tx_desc while from session start time",
-                     K(MTL_ID()), KPC(sess_info), K(snapshot_version),
+                     KPC(sess_info), K(snapshot_version),
                      K(min_active_snapshot_version_),
                      K(sess_info->get_cur_state_start_time()));
           }
         }
-        MVCC_LOG(DEBUG, "RC txn with tx_desc", K(MTL_ID()), KPC(sess_info),
+        MVCC_LOG(DEBUG, "RC txn with tx_desc", KPC(sess_info),
                  K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot),
                  K(sess_snapshot), K(desc_snapshot));
       } else {
-        MVCC_LOG(INFO, "unknown txn with tx_desc", K(MTL_ID()), KPC(sess_info),
+        MVCC_LOG(INFO, "unknown txn with tx_desc", KPC(sess_info),
                  K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot));
       }
     } else {
@@ -1299,11 +1299,11 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
             snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
                                              - 5L * 1000L * 1000L * 60L);
             MVCC_LOG(INFO, "RR/SI txn with non tx_desc while from session start time",
-                     K(MTL_ID()), KPC(sess_info), K(snapshot_version), K(sess_snapshot),
+                     KPC(sess_info), K(snapshot_version), K(sess_snapshot),
                      K(min_active_snapshot_version_), K(sess_info->get_cur_state_start_time()));
           }
         }
-        MVCC_LOG(DEBUG, "RR/SI txn with non tx_desc", K(MTL_ID()), KPC(sess_info),
+        MVCC_LOG(DEBUG, "RR/SI txn with non tx_desc", KPC(sess_info),
                  K(snapshot_version), K(min_active_snapshot_version_), K(sess_snapshot));
       } else if (transaction::ObTxIsolationLevel::RC == sess_info->get_tx_isolation()) {
         // Case 4: RC with tx desc does not exist, and the snapshot version may not
@@ -1318,14 +1318,14 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
             snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
                                              - 5L * 1000L * 1000L * 60L);
             MVCC_LOG(INFO, "RC txn with non tx_desc while from session start time",
-                     K(MTL_ID()), KPC(sess_info), K(snapshot_version), K(sess_snapshot),
+                     KPC(sess_info), K(snapshot_version), K(sess_snapshot),
                      K(min_active_snapshot_version_), K(sess_info->get_cur_state_start_time()));
           }
         }
-        MVCC_LOG(DEBUG, "RC txn with non tx_desc", K(MTL_ID()), KPC(sess_info),
+        MVCC_LOG(DEBUG, "RC txn with non tx_desc", KPC(sess_info),
                  K(snapshot_version), K(min_active_snapshot_version_), K(sess_snapshot));
       } else {
-        MVCC_LOG(INFO, "unknown txn with non tx_desc", K(MTL_ID()), KPC(sess_info),
+        MVCC_LOG(INFO, "unknown txn with non tx_desc", KPC(sess_info),
                  K(snapshot_version), K(min_active_snapshot_version_));
       }
     }
@@ -1338,7 +1338,7 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
       if (snapshot_version_ts < current_timestamp
           && current_timestamp - snapshot_version_ts > 100 * 1_min) {
         MVCC_LOG(INFO, "GetMinActiveSnapshotVersionFunctor find a small snapshot txn",
-                 K(MTL_ID()), KPC(sess_info), K(snapshot_version),
+                 KPC(sess_info), K(snapshot_version),
                  K(current_timestamp), K(min_active_snapshot_version_));
       }
       min_active_snapshot_version_ = snapshot_version;

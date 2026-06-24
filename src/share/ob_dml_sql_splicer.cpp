@@ -691,8 +691,7 @@ int ObPTSqlSplicer::splice_batch_insert_update_replica_column(
   for (int64_t i = 0; OB_SUCCESS == ret && i < N; ++i)
   {
     const ObString &name = names.at(i);
-    if (0 == name.case_compare("tenant_id")
-        || 0 == name.case_compare("table_id")
+    if (0 == name.case_compare("table_id")
         || 0 == name.case_compare("partition_id")
         || 0 == name.case_compare("svr_ip")
         || 0 == name.case_compare("svr_port")
@@ -1369,7 +1368,7 @@ int ObDMLSqlSplicer::splice_batch_predicates_sql(common::ObSqlString &sql) const
       LOG_WARN("invalid argument", K(ret), KP(table_name));                          \
     } else if (OB_FAIL(splicer.splice_##dml##_sql(table_name, sql))) {               \
       LOG_WARN("splice sql failed", K(ret));                                         \
-    } else if (OB_FAIL(sql_client_.write(tenant_id_, sql.ptr(), affected_rows))) {   \
+    } else if (OB_FAIL(sql_client_.write(sql.ptr(), affected_rows))) {   \
       LOG_WARN("execute sql failed", K(ret), K(sql));                                \
     }  \
     return ret;                                                                      \
@@ -1397,7 +1396,7 @@ int ObDMLExecHelper::exec_batch_insert(const char *table_name,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < sqls.count(); i++) {
       int64_t tmp_affected_rows = 0;
-      if (OB_FAIL(sql_client_.write(tenant_id_, sqls.at(i).ptr(), tmp_affected_rows))) {
+      if (OB_FAIL(sql_client_.write(sqls.at(i).ptr(), tmp_affected_rows))) {
         LOG_WARN("execute sql failed", K(ret), K(sqls.at(i)));
       } else {
         affected_rows += tmp_affected_rows;
@@ -1420,7 +1419,7 @@ int ObDMLExecHelper::check_row_exist(const char *table_name,
     LOG_WARN("splice select sql failed", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (OB_FAIL(sql_client_.read(res, tenant_id_, sql.ptr()))) {
+      if (OB_FAIL(sql_client_.read(res, sql.ptr()))) {
         LOG_WARN("execute query failed", K(ret), K(sql));
       } else {
         if (res.get_result() != NULL && OB_SUCCESS == (ret = res.get_result()->next())) {

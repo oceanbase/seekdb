@@ -48,7 +48,7 @@ public:
   ObAllVirtualTxDataTable();
   ~ObAllVirtualTxDataTable();
 
-  TO_STRING_KV(K(MTL_ID()), K_(memtable_array_pos), K_(sstable_array_pos));
+  TO_STRING_KV(K_(memtable_array_pos), K_(sstable_array_pos));
 public:
   virtual int inner_get_next_row(common::ObNewRow *&row) { return execute(row);}
   virtual void reset();
@@ -62,7 +62,7 @@ private:
 
   int prepare_row_data_(ObITable *tx_data_table, RowData &row_data);
 
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
 
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
 

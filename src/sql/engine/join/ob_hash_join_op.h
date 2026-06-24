@@ -831,7 +831,7 @@ private:
   void init_system_parameters();
   inline int64_t get_level_one_part(int64_t hash_val)
   { return hash_val & (level1_part_count_ - 1); }
-  inline int init_mem_context(uint64_t tenant_id);
+  inline int init_mem_context();
   void part_rescan();
   int part_rescan(bool reset_all);
   void reset();
@@ -1164,7 +1164,7 @@ private:
   int64_t part_count_;
   bool force_hash_join_spill_;
   int8_t hash_join_processor_;
-  int64_t tenant_id_;
+  
   int64_t input_size_;
   int64_t total_extra_size_;
   int64_t predict_row_cnt_;
@@ -1278,13 +1278,13 @@ private:
   ObChunkDatumStore::IterationAge iter_age_;
 };
 
-inline int ObHashJoinOp::init_mem_context(uint64_t tenant_id)
+inline int ObHashJoinOp::init_mem_context()
 {
   int ret = common::OB_SUCCESS;
   if (OB_LIKELY(NULL == mem_context_)) {
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_mem_attr(tenant_id, common::ObModIds::OB_ARENA_HASH_JOIN,
+      .set_mem_attr(common::ObModIds::OB_ARENA_HASH_JOIN,
                      common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       SQL_ENG_LOG(WARN, "create entity failed", K(ret));

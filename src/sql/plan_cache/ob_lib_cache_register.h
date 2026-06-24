@@ -65,8 +65,7 @@ typedef int (*CNAllocFunc) (lib::MemoryContext &mem_ctx,
                             ObPlanCache *lib_cahe);
 typedef int (*COAllocFunc) (lib::MemoryContext &mem_ctx,
                             ObILibCacheObject *&cache_obj,
-                            CacheRefHandleID ref_handle,
-                            uint64_t tenant_id);
+                            CacheRefHandleID ref_handle);
 typedef int (*CKAllocFunc) (ObIAllocator &allocator,
                             ObILibCacheKey *&cache_key);
 

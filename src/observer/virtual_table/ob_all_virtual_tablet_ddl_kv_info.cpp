@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_ddl_kv_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
@@ -66,9 +67,9 @@ int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-bool ObAllVirtualTabletDDLKVInfo::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualTabletDDLKVInfo::is_need_process()
 {
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
+  if (true || true) {
     return true;
   }
   return false;
@@ -77,7 +78,7 @@ bool ObAllVirtualTabletDDLKVInfo::is_need_process(uint64_t tenant_id)
 int ObAllVirtualTabletDDLKVInfo::get_next_ls(ObLS *&ls)
 {
   int ret = OB_SUCCESS;
-  if (nullptr == ls_iter_guard_.get_ptr() && OB_FAIL(MTL(ObLSService*)->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
+  if (nullptr == ls_iter_guard_.get_ptr() && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "fail to get ls iter", K(ret));
   } else if (OB_FAIL(ls_iter_guard_->get_next(ls))) {
     if (OB_ITER_END != ret) {

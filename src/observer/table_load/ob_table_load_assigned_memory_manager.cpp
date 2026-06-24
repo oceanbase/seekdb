@@ -72,7 +72,7 @@ int ObTableLoadAssignedMemoryManager::assign_memory(bool is_sort, int64_t assign
     chunk_count_ += (is_sort ? assign_memory / ObDirectLoadExternalMultiPartitionRowChunk::MIN_MEMORY_LIMIT : 0);
     avail_sort_memory_ -= (is_sort ? 0 : assign_memory);
     LOG_INFO("ObTableLoadAssignedMemoryManager::assign_memory", 
-        K(MTL_ID()), K(is_sort), K(chunk_count_), K(assign_memory), K(avail_sort_memory_), K(avail_memory_));
+        K(is_sort), K(chunk_count_), K(assign_memory), K(avail_sort_memory_), K(avail_memory_));
   }
   
   return ret;
@@ -89,7 +89,7 @@ int ObTableLoadAssignedMemoryManager::recycle_memory(bool is_sort, int64_t assig
     chunk_count_ -= (is_sort ? assign_memory / ObDirectLoadExternalMultiPartitionRowChunk::MIN_MEMORY_LIMIT : 0);
     avail_sort_memory_ += (is_sort ? 0 : assign_memory);
     LOG_INFO("ObTableLoadAssignedMemoryManager::recycle_memory", 
-        K(MTL_ID()), K(is_sort), K(chunk_count_), K(assign_memory), K(avail_sort_memory_), K(avail_memory_));
+        K(is_sort), K(chunk_count_), K(assign_memory), K(avail_sort_memory_), K(avail_memory_));
   }
 
   return ret;

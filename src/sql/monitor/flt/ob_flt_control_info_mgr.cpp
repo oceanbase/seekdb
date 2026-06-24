@@ -45,7 +45,7 @@ bool ObFLTResetSessOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInf
         } else {
           ret = OB_SUCCESS;
         }
-      } else if (sess_info->get_effective_tenant_id() != tenant_id_) {
+      } else if (false) {
         // do nothing
         (void)sess_info->unlock_thread_data();
       } else if (sess_info->is_coninfo_set_by_sess()) {
@@ -89,7 +89,7 @@ bool ObFLTApplyByClientIDOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSess
       } else {
         if (sess_info->is_coninfo_set_by_sess()) {
           // already has, do nothing
-        } else if (sess_info->get_effective_tenant_id() != tenant_id_) {
+        } else if (false) {
           // do nothing
         } else if (sess_info->get_client_identifier().case_compare(id_con_info_.identifier_name_) != 0) {
           // do nothing
@@ -132,7 +132,7 @@ bool ObFLTApplyByModActOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessio
       } else {
         if (sess_info->is_coninfo_set_by_sess()) {
           // already has, do nothing
-        } else if (sess_info->get_effective_tenant_id() != tenant_id_) {
+        } else if (false) {
         // do nothing
         } else if (sess_info->get_module_name().case_compare(mod_act_info_.mod_name_) != 0) {
         // do nothing
@@ -177,7 +177,7 @@ bool ObFLTApplyByTenantOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessio
       } else {
         if (sess_info->is_coninfo_set_by_sess()) {
           // already has, do nothing
-        } else if (sess_info->get_effective_tenant_id() != tenant_id_) {
+        } else if (false) {
           // do nothing
         } else {
           sess_info->set_send_control_info(false);
@@ -196,7 +196,7 @@ int ObFLTControlInfoManager::apply_control_info()
   int ret = OB_SUCCESS;
 
   sql::ObSQLSessionMgr *session_mgr = GCTX.session_mgr_;
-  ObFLTResetSessOp reset_op(tenant_id_);
+  ObFLTResetSessOp reset_op{};
   if (OB_ISNULL(session_mgr)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "sessionMgr is NULL", K(ret));
@@ -211,7 +211,7 @@ int ObFLTControlInfoManager::apply_control_info()
   } else if (!tenant_info_.is_valid()) {
     // do nothing
   } else {
-    ObFLTApplyByTenantOp t_op(tenant_id_, tenant_info_);
+    ObFLTApplyByTenantOp t_op(tenant_info_);
     if (OB_FAIL(session_mgr->for_each_session(t_op))) {
       SERVER_LOG(WARN, "fill scanner fail", K(ret));
     } else {
@@ -225,7 +225,7 @@ int ObFLTControlInfoManager::apply_control_info()
     // do nothing
   } else {
     for (int64_t i=0; OB_SUCC(ret) && i<mod_infos_.count(); i++) {
-      ObFLTApplyByModActOp mod_op(tenant_id_, mod_infos_.at(i));
+      ObFLTApplyByModActOp mod_op(mod_infos_.at(i));
       if (OB_FAIL(session_mgr->for_each_session(mod_op))) {
         SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
@@ -240,7 +240,7 @@ int ObFLTControlInfoManager::apply_control_info()
     // do nothing
   } else {
     for (int64_t i=0; OB_SUCC(ret) && i<identifier_infos_.count(); i++) {
-      ObFLTApplyByClientIDOp i_op(tenant_id_, identifier_infos_.at(i));
+      ObFLTApplyByClientIDOp i_op(identifier_infos_.at(i));
       if (OB_FAIL(session_mgr->for_each_session(i_op))) {
         SERVER_LOG(WARN, "fill scanner fail", K(ret), K(lbt()));
       } else {
@@ -276,7 +276,7 @@ int ObFLTControlInfoManager::set_control_info(sql::ObExecContext &ctx)
         LOG_WARN("sql_proxy is null", K(ret));
       } else if (OB_FAIL(sql.assign_fmt("ALTER SYSTEM SET `_trace_control_info` = '%s'", trace_info.ptr()))) {
         LOG_WARN("failed to set trace control info", K(ret));
-      } else if (OB_FAIL(sql_proxy->write(tenant_id_, sql.ptr(), affected_rows))) {
+      } else if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
         LOG_WARN("execute sql failed", K(ret), K(sql));
       } else {
         // do nothing
@@ -967,7 +967,7 @@ int ObFLTControlInfoManager::remove_tenant_con_info(sql::ObExecContext &ctx)
 int ObFLTControlInfoManager::init()
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()){
     // do nothing
   } else {
@@ -1067,7 +1067,7 @@ int ObFLTControlInfoManager::get_all_flt_config(common::ObIArray<ObFLTConfRec> &
   int ret = OB_SUCCESS;
   // teannt_level
   ObFLTConfRec rec;
-  rec.tenant_id_ = tenant_id_;
+  
   rec.type_ = FLT_TENANT_TYPE;
   rec.control_info_ = tenant_info_;
   if (OB_FAIL(rec_list.push_back(rec))) {
@@ -1076,7 +1076,7 @@ int ObFLTControlInfoManager::get_all_flt_config(common::ObIArray<ObFLTConfRec> &
 
   for (int64_t i = 0; OB_SUCC(ret) && i < mod_infos_.count(); i++) {
     ObFLTConfRec rec;
-    rec.tenant_id_ = tenant_id_;
+    
     rec.type_ = FLT_MOD_ACT_TYPE;
     rec.control_info_ = mod_infos_.at(i).control_info_;
     if (OB_FAIL(ob_write_string(alloc, mod_infos_.at(i).mod_name_, rec.mod_name_))) {
@@ -1090,7 +1090,7 @@ int ObFLTControlInfoManager::get_all_flt_config(common::ObIArray<ObFLTConfRec> &
 
   for (int64_t i = 0; OB_SUCC(ret) && i < identifier_infos_.count(); i++) {
     ObFLTConfRec rec;
-    rec.tenant_id_ = tenant_id_;
+    
     rec.type_ = FLT_CLIENT_ID_TYPE;
     rec.control_info_ = identifier_infos_.at(i).control_info_;
     if (OB_FAIL(ob_write_string(alloc, identifier_infos_.at(i).identifier_name_, rec.identifier_name_))) {

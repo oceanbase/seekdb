@@ -38,6 +38,7 @@
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -95,6 +96,8 @@ protected:
   const int64_t macro_block_size_;
   const int64_t macro_block_count_;
   ObITenantMemLimitGetter *getter_;
+  oceanbase::share::ObIModuleProvider mock_module_provider_;
+  oceanbase::share::ObIModuleProvider *old_g_mp_ = nullptr;
 };
 
 TestDataFilePrepare::TestDataFilePrepare(ObITenantMemLimitGetter *getter,
@@ -117,6 +120,8 @@ TestDataFilePrepare::~TestDataFilePrepare()
 
 void TestDataFilePrepare::SetUp()
 {
+  old_g_mp_ = oceanbase::share::g_mp;
+  oceanbase::share::g_mp = &mock_module_provider_;
   ASSERT_EQ(OB_SUCCESS, util_.init(getter_, test_name_, macro_block_size_, macro_block_count_));
   ASSERT_EQ(OB_SUCCESS, util_.open());
 }
@@ -124,6 +129,7 @@ void TestDataFilePrepare::SetUp()
 void TestDataFilePrepare::TearDown()
 {
   util_.destory();
+  oceanbase::share::g_mp = old_g_mp_;
 }
 
 

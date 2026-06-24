@@ -46,8 +46,8 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
   this->sql_mode_ = other.sql_mode_;
   this->dml_base_param_ = other.dml_base_param_;
 
-  this->tenant_id_ = other.tenant_id_;
-  this->src_tenant_id_ = other.src_tenant_id_;
+  
+  
   this->ls_id_ = other.ls_id_;
   this->tablet_id_ = other.tablet_id_;
   this->lob_meta_tablet_id_ = other.lob_meta_tablet_id_;
@@ -207,7 +207,7 @@ bool ObLobAccessParam::has_single_chunk() const
 bool ObLobAccessParam::enable_block_cache() const
 {
   bool res = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     res = false;
   } else {
@@ -219,7 +219,7 @@ bool ObLobAccessParam::enable_block_cache() const
 // 1. from rpc can not remote again
 // 2. lob from other tenant also should read by rpc
 bool ObLobAccessParam::is_remote() const  { return (! from_rpc_ || enable_remote_retry_) && addr_.is_valid() && (MYADDR != addr_ || is_across_tenant()); }
-bool ObLobAccessParam::is_across_tenant() const { return MTL_ID() != tenant_id_; }
+bool ObLobAccessParam::is_across_tenant() const { return false; }
 
 int ObLobAccessParam::check_handle_size() const
 {

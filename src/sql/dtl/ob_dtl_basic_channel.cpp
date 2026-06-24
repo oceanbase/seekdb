@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_basic_channel.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/dtl/ob_dtl_channel_loop.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -141,7 +142,6 @@ int SendMsgResponse::wait()
 }
 
 ObDtlBasicChannel::ObDtlBasicChannel(
-    const uint64_t tenant_id,
     const uint64_t id,
     const ObAddr &peer,
     DtlChannelType type)
@@ -156,7 +156,6 @@ ObDtlBasicChannel::ObDtlBasicChannel(
       send_buffer_cnt_(0),
       recv_buffer_cnt_(0),
       processed_buffer_cnt_(0),
-      tenant_id_(tenant_id),
       is_data_msg_(false),
       hash_val_(0),
       dfc_idx_(OB_INVALID_ID),
@@ -178,7 +177,6 @@ ObDtlBasicChannel::ObDtlBasicChannel(
 }
 
 ObDtlBasicChannel::ObDtlBasicChannel(
-    const uint64_t tenant_id,
     const uint64_t id,
     const ObAddr &peer,
     const int64_t hash_val,
@@ -194,7 +192,6 @@ ObDtlBasicChannel::ObDtlBasicChannel(
           send_buffer_cnt_(0),
           recv_buffer_cnt_(0),
           processed_buffer_cnt_(0),
-          tenant_id_(tenant_id),
           is_data_msg_(false),
           hash_val_(hash_val),
           dfc_idx_(OB_INVALID_ID),
@@ -346,7 +343,7 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
   int ret = OB_SUCCESS;
   int64_t min_buf_size = ObChunkDatumStore::Block::min_buf_size(0);
   ObDtlLinkedBuffer *buffer = NULL;
-  MTL_SWITCH(tenant_id_) {
+  MOD_SCOPE {
     ObChunkDatumStore row_store("MockDtlStore");
     ObChunkDatumStore::Block* block = NULL;
     if (OB_ISNULL(buffer = alloc_buf(min_buf_size))) {
@@ -357,14 +354,13 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
     } else {
       buffer->msg_type() = ObDtlMsgType::PX_DATUM_ROW;
       buffer->is_eof() = true;
-      buffer->tenant_id() = tenant_id_;
       buffer->timeout_ts() = timeout_ts;
       buffer->size() = block->data_size();
       buffer->set_data_msg(true);
       buffer->seq_no() = 1;
       buffer->pos() = 0;
       if (use_interm_result_) {
-        if (OB_FAIL(MTL(ObDTLIntermResultManager*)->process_interm_result(buffer, id_))) {
+        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buffer, id_))) {
           LOG_WARN("fail to process internal result", K(ret));
         }
       } else {
@@ -527,7 +523,7 @@ int ObDtlBasicChannel::get_processed_buffer(int64_t timeout)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("it's not the first msg", KP(id_), K_(peer), K(ret),
             K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()),
-            K(process_buffer_->seq_no()), K(process_buffer_->tenant_id()),
+            K(process_buffer_->seq_no()), K(1UL),
             K(got_from_dtl_cache_), K(dfc_idx_), K(process_buffer_->is_eof()));
         }
       }
@@ -617,10 +613,10 @@ int ObDtlBasicChannel::process1(
       ObDTLIntermResultKey key;
       key.channel_id_ = id_;
       key.batch_id_ = batch_id_;
-      MTL_SWITCH(tenant_id_) {
+      MOD_SCOPE {
         if (channel_is_eof_) {
           ret = OB_DTL_WAIT_EAGAIN;
-        } else if (OB_FAIL(MTL(ObDTLIntermResultManager*)->atomic_get_interm_result_info(
+        } else if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->atomic_get_interm_result_info(
               key, result_info_guard_))) {
           if (is_px_channel()) {
             ret = OB_DTL_WAIT_EAGAIN;
@@ -877,10 +873,10 @@ ObDtlLinkedBuffer *ObDtlBasicChannel::alloc_buf(const int64_t payload_size)
 {
   int ret = OB_SUCCESS;
   ObDtlLinkedBuffer *buf = nullptr;
-  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager(tenant_id_);
+  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager();
   if (nullptr == tenant_mem_mgr) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant_mem_mgr is null", K(ret), K(tenant_id_));
+    LOG_ERROR("tenant_mem_mgr is null", K(ret));
   } else {
     //int64_t hash = nullptr != dfc_ ? reinterpret_cast<int64_t>(dfc_) : id_;
     // int64_t hash = reinterpret_cast<int64_t>(this);
@@ -899,7 +895,7 @@ ObDtlLinkedBuffer *ObDtlBasicChannel::alloc_buf(const int64_t payload_size)
 void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
 {
   int ret = OB_SUCCESS;
-  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager(tenant_id_);
+  ObDtlTenantMemManager *tenant_mem_mgr = DTL.get_dfc_server().get_tenant_mem_manager();
 
   if (OB_NOT_NULL(buf)
       && buf->is_bcast()
@@ -910,9 +906,9 @@ void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
   } else {
     if (nullptr == tenant_mem_mgr) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(tenant_id_), K(ret));
+      LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(ret));
     } else if (OB_FAIL(tenant_mem_mgr->free(buf))) {
-      LOG_WARN("failed to free buffer", K(ret), K(lbt()), K(tenant_id_));
+      LOG_WARN("failed to free buffer", K(ret), K(lbt()));
     }
     if (nullptr != buf) {
       free_buffer_count();
@@ -952,7 +948,6 @@ int ObDtlBasicChannel::push_back_send_list()
     inc_msg_seq_no();
     write_buffer_->size() = write_buffer_->pos();
     write_buffer_->seq_no() = get_msg_seq_no();
-    write_buffer_->tenant_id() = tenant_id_;
     if (write_buffer_->is_data_msg()) {
       write_buffer_->set_use_interm_result(use_interm_result_);
       write_buffer_->set_enable_channel_sync(enable_channel_sync_);
@@ -963,7 +958,7 @@ int ObDtlBasicChannel::push_back_send_list()
     msg_writer_->reset();
     write_buffer_->pos() = 0;
     LOG_TRACE("push message to send list", K(write_buffer_->seq_no()), K(ret),
-      KP(id_), KP(peer_id_), K(write_buffer_->tenant_id()), K(is_data_msg_),
+      KP(id_), KP(peer_id_), K(1UL), K(is_data_msg_),
       K(write_buffer_->size()), K(write_buffer_->pos()), K(get_send_buffer_cnt()),
       K(write_buffer_->is_data_msg()), K(write_buffer_->is_eof()), K(get_msg_seq_no()),
       K(write_buffer_->msg_type()), K(get_channel_type()));
@@ -1097,7 +1092,7 @@ int ObDtlBasicChannel::switch_buffer(const int64_t min_size, const bool is_eof,
     if (OB_ISNULL(write_buffer_ = alloc_buf(std::max(send_buffer_size_, min_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc buffer failed", K(ret));
-    } else if (OB_FAIL(msg_writer_->init(write_buffer_, tenant_id_))) {
+    } else if (OB_FAIL(msg_writer_->init(write_buffer_))) {
       free_buf(write_buffer_);
       write_buffer_ = nullptr;
       LOG_WARN("failed to init message writer", K(ret));
@@ -1152,7 +1147,6 @@ int ObDtlBasicChannel::send_buffer(ObDtlLinkedBuffer *&buffer)
     inc_msg_seq_no();
     buffer->size() = buffer->pos();
     buffer->seq_no() = get_msg_seq_no();
-    buffer->tenant_id() = tenant_id_;
     if (buffer->is_data_msg()) {
       buffer->set_use_interm_result(use_interm_result_);
       buffer->set_enable_channel_sync(enable_channel_sync_);
@@ -1168,7 +1162,7 @@ int ObDtlBasicChannel::send_buffer(ObDtlLinkedBuffer *&buffer)
     }
     buffer->pos() = 0;
     LOG_TRACE("push buffer to send list", K(buffer->seq_no()), K(ret),
-      KP(id_), KP(peer_id_), K(buffer->tenant_id()), K(is_data_msg_),
+      KP(id_), KP(peer_id_), K(1UL), K(is_data_msg_),
       K(buffer->size()), K(buffer->pos()), K(get_send_buffer_cnt()),
       K(buffer->is_data_msg()), K(buffer->is_eof()), K(get_msg_seq_no()));
     buffer = nullptr;
@@ -1218,7 +1212,7 @@ ObDtlRowMsgWriter::~ObDtlRowMsgWriter()
   reset();
 }
 
-int ObDtlRowMsgWriter::init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
+int ObDtlRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
 {
   int ret = OB_SUCCESS;
   if (nullptr == buffer) {
@@ -1226,7 +1220,7 @@ int ObDtlRowMsgWriter::init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
     LOG_WARN("write buffer is null", K(ret));
   } else {
     reset();
-    row_store_.init(0, tenant_id, common::ObCtxIds::DEFAULT_CTX_ID, "SqlDtlRowMsg");
+    row_store_.init(0, common::ObCtxIds::DEFAULT_CTX_ID, "SqlDtlRowMsg");
     if (OB_FAIL(row_store_.init_block_buffer(static_cast<void *>(buffer->buf()), buffer->size(), block_))) {
       LOG_WARN("init shrink buffer failed", K(ret));
     } else {
@@ -1284,10 +1278,9 @@ ObDtlDatumMsgWriter::~ObDtlDatumMsgWriter()
   reset();
 }
 
-int ObDtlDatumMsgWriter::init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
+int ObDtlDatumMsgWriter::init(ObDtlLinkedBuffer *buffer)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   if (nullptr == buffer) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write buffer is null", K(ret));
@@ -1369,10 +1362,9 @@ ObDtlVectorRowMsgWriter::~ObDtlVectorRowMsgWriter()
   reset();
 }
 
-int ObDtlVectorRowMsgWriter::init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
+int ObDtlVectorRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   if (nullptr == buffer) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write buffer is null", K(ret));
@@ -1448,10 +1440,9 @@ ObDtlVectorMsgWriter::~ObDtlVectorMsgWriter()
   reset();
 }
 
-int ObDtlVectorMsgWriter::init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
+int ObDtlVectorMsgWriter::init(ObDtlLinkedBuffer *buffer)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   if (nullptr == buffer) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write buffer is null", K(ret));
@@ -1523,10 +1514,9 @@ ObDtlVectorFixedMsgWriter::~ObDtlVectorFixedMsgWriter()
   reset();
 }
 
-int ObDtlVectorFixedMsgWriter::init(ObDtlLinkedBuffer *buffer, uint64_t tenant_id)
+int ObDtlVectorFixedMsgWriter::init(ObDtlLinkedBuffer *buffer)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
   if (nullptr == buffer || size_per_buffer_ < 0 || buffer->size() < size_per_buffer_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write buffer is null", K(ret), K(size_per_buffer_), K(buffer->size()), K(lbt()));

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_gais_rpc.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_global_autoinc_service.h"
 #include "observer/ob_ex_rpc.h"
 
@@ -135,9 +136,9 @@ int ObGAISRequestRpc::next_autoinc_val(const ObAddr &server,
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
     ObGlobalAutoIncService *gais = nullptr;
-    const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
-    MTL_SWITCH(tenant_id) {
-      if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
+    
+    MOD_SCOPE {
+      if (OB_ISNULL(gais = share::g_mp->global_auto_inc_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_next_autoinc_request(msg, rpc_result))) {
@@ -168,9 +169,9 @@ int ObGAISRequestRpc::curr_autoinc_val(const ObAddr &server,
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
     ObGlobalAutoIncService *gais = nullptr;
-    const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
-    MTL_SWITCH(tenant_id) {
-      if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
+    
+    MOD_SCOPE {
+      if (OB_ISNULL(gais = share::g_mp->global_auto_inc_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_curr_autoinc_request(msg, rpc_result))) {
@@ -197,9 +198,9 @@ int ObGAISRequestRpc::push_autoinc_val(const ObAddr &server,
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
     ObGlobalAutoIncService *gais = nullptr;
-    const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
-    MTL_SWITCH(tenant_id) {
-      if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
+    
+    MOD_SCOPE {
+      if (OB_ISNULL(gais = share::g_mp->global_auto_inc_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_push_autoinc_request(msg, sync_value))) {
@@ -224,9 +225,9 @@ int ObGAISRequestRpc::clear_autoinc_cache(const ObAddr &server, const ObGAISAuto
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
     ObGlobalAutoIncService *gais = nullptr;
-    const uint64_t tenant_id = msg.autoinc_key_.tenant_id_;
-    MTL_SWITCH(tenant_id) {
-      if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
+    
+    MOD_SCOPE {
+      if (OB_ISNULL(gais = share::g_mp->global_auto_inc_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_clear_autoinc_cache_request(msg))) {
@@ -268,9 +269,9 @@ int ObGAISRequestRpc::next_sequence_val(const common::ObAddr &server,
     LOG_WARN("invalid argument", KR(ret), K(server), K(msg));
   } else {
     ObGlobalAutoIncService *gais = nullptr;
-    const uint64_t tenant_id = msg.schema_.get_tenant_id();
-    MTL_SWITCH(tenant_id) {
-      if (OB_ISNULL(gais = MTL(ObGlobalAutoIncService *))) {
+    
+    MOD_SCOPE {
+      if (OB_ISNULL(gais = share::g_mp->global_auto_inc_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_next_sequence_request(msg, rpc_result))) {

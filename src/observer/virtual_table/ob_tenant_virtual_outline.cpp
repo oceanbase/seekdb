@@ -29,7 +29,6 @@ using namespace oceanbase::share::schema;
 void ObTenantVirtualOutlineBase::reset()
 {
   ObVirtualTableIterator::reset();
-  tenant_id_ = OB_INVALID_TENANT_ID;
   outline_info_idx_ = OB_INVALID_INDEX;
   outline_infos_.reset();
   database_infos_.reuse();
@@ -40,11 +39,11 @@ int ObTenantVirtualOutlineBase::inner_open()
   int ret = OB_SUCCESS;
   const uint64_t BUCKET_NUM = 100;
   if (OB_UNLIKELY(NULL == schema_guard_
-                  || OB_INVALID_TENANT_ID == tenant_id_)) {
+                  || false)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member is not init", K(ret), K(schema_guard_), K(tenant_id_));
-  } else if (OB_FAIL(schema_guard_->get_outline_infos_in_tenant(tenant_id_, outline_infos_))) {
-    LOG_WARN("fail to get outline infos", K(ret), K(tenant_id_), K(outline_infos_));
+    LOG_WARN("data member is not init", K(ret), K(schema_guard_));
+  } else if (OB_FAIL(schema_guard_->get_outline_infos_in_tenant(outline_infos_))) {
+    LOG_WARN("fail to get outline infos", K(ret), K(outline_infos_));
   } else if (OB_FAIL(database_infos_.create(BUCKET_NUM, ObModIds::OMT_VIRTUAL_TABLE, ObModIds::OMT_VIRTUAL_TABLE))) {
     LOG_WARN("fail to create hash map", K(ret), K(BUCKET_NUM));
   } else {
@@ -74,8 +73,8 @@ int ObTenantVirtualOutlineBase::set_database_infos_and_get_value(uint64_t databa
     } else {
       is_recycle = false;
     }
-  } else if (OB_FAIL(schema_guard_->get_database_schema(tenant_id_, database_id, db_schema))) {
-    LOG_WARN("fail to get database schema", K(ret), K_(tenant_id), K(database_id));
+  } else if (OB_FAIL(schema_guard_->get_database_schema( database_id, db_schema))) {
+    LOG_WARN("fail to get database schema", K(ret), K(database_id));
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("db_schema is NULL", K(ret), K(database_id));

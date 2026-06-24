@@ -96,8 +96,8 @@ public:
   ObAllVirtualIOQuota();
   virtual ~ObAllVirtualIOQuota();
   int init(const common::ObAddr &addr);
-  int record_user_group(const uint64_t tenant_id, ObIOUsage &io_usage, const ObTenantIOConfig &io_config);
-  int record_sys_group(const uint64_t tenant_id, ObIOUsage &sys_io_usage);
+  int record_user_group(ObIOUsage &io_usage, const ObTenantIOConfig &io_config);
+  int record_sys_group(ObIOUsage &sys_io_usage);
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
 private:
@@ -121,9 +121,8 @@ private:
   public:
     QuotaInfo();
     ~QuotaInfo();
-    TO_STRING_KV(K(tenant_id_), K(group_id_), K(group_mode_), K(size_), K(real_iops_), K(min_iops_), K(max_iops_), K(schedule_us_), K(io_delay_us_), K(total_us_));
+    TO_STRING_KV(K(group_id_), K(group_mode_), K(size_), K(real_iops_), K(min_iops_), K(max_iops_), K(schedule_us_), K(io_delay_us_), K(total_us_));
   public:
-    uint64_t tenant_id_;
     uint64_t group_id_;
     common::ObIOGroupMode group_mode_;
     int64_t size_;
@@ -152,8 +151,8 @@ public:
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
   int init(const common::ObAddr &addr);
-  int record_user_group_io_status(const int64_t tenant_id, ObTenantIOManager *io_manager);
-  int record_sys_group_io_status(const int64_t tenant_id, ObTenantIOManager *io_manager);
+  int record_user_group_io_status(ObTenantIOManager *io_manager);
+  int record_sys_group_io_status(ObTenantIOManager *io_manager);
   int convert_bandwidth_format(const int64_t bandwidth, char *buf);
 private:
   enum COLUMN
@@ -180,7 +179,6 @@ private:
       reset();
     }
     void reset() {
-      tenant_id_ = 0;
       group_id_ = 0;
       mode_ = common::ObIOMode::MAX_MODE;
       min_iops_ = 0;
@@ -193,12 +191,11 @@ private:
       memset(max_net_bandwidth_display_, 0, sizeof(max_net_bandwidth_display_));
       memset(real_net_bandwidth_display_, 0, sizeof(real_net_bandwidth_display_));
     }
-    TO_STRING_KV(K(tenant_id_), K(group_id_), K(mode_), K_(group_name),
+    TO_STRING_KV(K(group_id_), K(mode_), K_(group_name),
                  K(min_iops_), K(max_iops_), K_(norm_iops), K_(real_iops),
                  K_(max_net_bandwidth), K_(max_net_bandwidth_display),
                  K_(real_net_bandwidth), K_(real_net_bandwidth_display));
   public:
-    uint64_t tenant_id_;
     uint64_t group_id_;
     common::ObIOMode mode_;
     char group_name_[GroupIoStatusStringLength];
@@ -223,7 +220,7 @@ public:
   ObAllVirtualFunctionIOStat();
   virtual ~ObAllVirtualFunctionIOStat();
   int init(const common::ObAddr &addr);
-  int record_function_info(const uint64_t tenant_id, const ObIOFuncUsageArr& func_infos);
+  int record_function_info(const ObIOFuncUsageArr& func_infos);
   virtual void reset() override;
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
 private:
@@ -243,9 +240,9 @@ private:
   public:
     FuncInfo();
     ~FuncInfo();
-    TO_STRING_KV(K(tenant_id_), K(function_type_), K(group_mode_), K(size_), K(real_iops_), K(real_bw_), K(schedule_us_), K(io_delay_us_), K(total_us_));
+    TO_STRING_KV(K(function_type_), K(group_mode_), K(size_), K(real_iops_), K(real_bw_), K(schedule_us_), K(io_delay_us_), K(total_us_));
   public:
-    uint64_t tenant_id_;
+    
     share::ObFunctionType function_type_;
     common::ObIOGroupMode group_mode_;
     int64_t size_;

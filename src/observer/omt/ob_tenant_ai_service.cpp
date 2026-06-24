@@ -75,7 +75,7 @@ int ObTenantAiService::get_ai_service_guard(ObAiServiceGuard &ai_service_guard)
 }
 
 ObAiServiceGuard::ObAiServiceGuard()
-  : local_allocator_(ObMemAttr(MTL_ID(), "AiServiceGuard", ObCtxIds::DEFAULT_CTX_ID))
+  : local_allocator_(ObMemAttr("AiServiceGuard", ObCtxIds::DEFAULT_CTX_ID))
 {
 }
 
@@ -101,10 +101,10 @@ int ObAiServiceGuard::check_access_privilege()
       sql::ObAIServiceEndpointPrivUtil priv_util(*schema_guard);
       share::schema::ObSessionPrivInfo session_priv;
       uint64_t user_id = session->get_priv_user_id();
-      if (user_id == OB_INVALID_ID && session->get_priv_tenant_id() == OB_SYS_TENANT_ID) {
+      if (user_id == OB_INVALID_ID) {
         user_id = OB_SYS_USER_ID;
       }
-      if (OB_FAIL(schema_guard->get_session_priv_info(session->get_priv_tenant_id(),
+      if (OB_FAIL(schema_guard->get_session_priv_info(
                                                     user_id,
                                                     session->get_database_name(),
                                                     session_priv))) {

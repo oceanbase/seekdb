@@ -49,7 +49,7 @@ public:
   bool operator!=(const ObConstraint &r) const = delete;
 
   //set methods
-  inline void set_tenant_id(const uint64_t id) { tenant_id_ = id; }
+  
   inline void set_table_id(const uint64_t id) { table_id_ = id; }
   inline void set_constraint_id(const uint64_t id) { constraint_id_ = id; }
   inline void set_constraint_type(const ObConstraintType constraint_type) {
@@ -85,7 +85,7 @@ public:
   int assign_column_ids(const common::ObIArray<uint64_t> &column_ids_array);
   int assign_not_null_cst_column_id(const uint64_t column_id);
   //get methods
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
+  
   inline uint64_t get_table_id() const { return table_id_; }
   inline uint64_t get_constraint_id() const { return constraint_id_; }
   inline ObConstraintType get_constraint_type() const { return constraint_type_; }
@@ -127,7 +127,7 @@ public:
   void reset();
   DECLARE_VIRTUAL_TO_STRING;
 private:
-  uint64_t tenant_id_;
+  
   uint64_t table_id_;
   uint64_t constraint_id_;
   int64_t schema_version_;

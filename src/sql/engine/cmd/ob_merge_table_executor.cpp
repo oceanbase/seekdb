@@ -38,7 +38,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   ObSQLSessionInfo *session = ctx.get_my_session();
   ObInnerSQLConnectionPool *pool = NULL;
   ObInnerSQLConnection *conn = NULL;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
+  
   bool need_tx = false;
   int64_t total_affected_rows = 0;
 
@@ -55,11 +55,10 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   } else if (OB_FAIL(pool->acquire_spi_conn(session, conn))) {
     LOG_WARN("failed to acquire inner sql connection", K(ret));
   } else {
-    tenant_id = session->get_effective_tenant_id();
   }
 
   if (OB_SUCC(ret) && !session->is_in_transaction()) {
-    if (OB_FAIL(conn->start_transaction(tenant_id))) {
+    if (OB_FAIL(conn->start_transaction())) {
       LOG_WARN("failed to start transaction", K(ret));
     } else {
       need_tx = true;
@@ -72,7 +71,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
       && !stmt.get_conflict_check_sql().empty()) {
     {
       ObISQLClient::ReadResult res;
-      if (OB_FAIL(conn->execute_read(tenant_id, stmt.get_conflict_check_sql(), res))) {
+      if (OB_FAIL(conn->execute_read(stmt.get_conflict_check_sql(), res))) {
         LOG_WARN("failed to execute conflict check", K(ret));
       } else {
         common::sqlclient::ObMySQLResult *result = res.get_result();
@@ -102,7 +101,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   // Execute INSERT (incoming-only rows)
   if (OB_SUCC(ret) && !stmt.get_insert_sql().empty()) {
     int64_t affected_rows = 0;
-    if (OB_FAIL(conn->execute_write(tenant_id, stmt.get_insert_sql(), affected_rows))) {
+    if (OB_FAIL(conn->execute_write(stmt.get_insert_sql(), affected_rows))) {
       LOG_WARN("failed to execute merge insert sql", K(ret), K(stmt.get_insert_sql()));
     } else {
       total_affected_rows += affected_rows;
@@ -113,7 +112,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
   // Execute UPDATE (conflict rows, THEIRS strategy only)
   if (OB_SUCC(ret) && !stmt.get_update_sql().empty()) {
     int64_t affected_rows = 0;
-    if (OB_FAIL(conn->execute_write(tenant_id, stmt.get_update_sql(), affected_rows))) {
+    if (OB_FAIL(conn->execute_write(stmt.get_update_sql(), affected_rows))) {
       LOG_WARN("failed to execute merge update sql", K(ret), K(stmt.get_update_sql()));
     } else {
       total_affected_rows += affected_rows;

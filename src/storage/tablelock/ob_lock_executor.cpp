@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_lock_executor.h"
+#include "share/rc/ob_module_provider.h"
 
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/mysqlclient/ob_mysql_result.h"
@@ -328,14 +329,12 @@ bool ObLockExecutor::proxy_is_support(sql::ObSQLSessionInfo *session)
   if (OB_ISNULL(session)) {
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "session is null!");
   } else {
-    is_support = ((session->is_feedback_proxy_info_support() && session->is_client_sessid_support())
-                  || !session->is_obproxy_mode())
-                 && session->get_client_sid() != INVALID_SESSID;
+    // obproxy support removed: only the client session id requirement remains
+    is_support = session->get_client_sid() != INVALID_SESSID;
     if (!is_support) {
       LOG_WARN_RET(OB_NOT_SUPPORTED,
-                   "proxy is not support this feature",
+                   "this feature is not supported without a valid client session id",
                    K(session->get_server_sid()),
-                   K(session->is_feedback_proxy_info_support()),
                    K(session->is_client_sessid_support()));
     }
   }
@@ -439,7 +438,7 @@ int ObLockExecutor::unlock_obj_(ObTxDesc *tx_desc,
                                 const ObUnLockObjsRequest &arg)
 {
   int ret = OB_SUCCESS;
-  ObTableLockService *lock_service = MTL(ObTableLockService *);
+  ObTableLockService *lock_service = share::g_mp->table_lock_service();
   if (OB_FAIL(lock_service->unlock(*tx_desc, tx_param, arg))) {
     LOG_WARN("unlock obj failed", K(ret), KPC(tx_desc), K(arg));
   }
@@ -451,7 +450,7 @@ int ObLockExecutor::unlock_table_(ObTxDesc *tx_desc,
                                   const ObUnLockTableRequest &arg)
 {
   int ret = OB_SUCCESS;
-  ObTableLockService *lock_service = MTL(ObTableLockService *);
+  ObTableLockService *lock_service = share::g_mp->table_lock_service();
   if (OB_FAIL(lock_service->unlock(*tx_desc, tx_param, arg))) {
     LOG_WARN("unlock obj failed", K(ret), KPC(tx_desc), K(arg));
   }
@@ -462,7 +461,7 @@ int ObLockExecutor::query_lock_id_(const ObString &lock_name,
                                    uint64_t &lock_id)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   ObStringHolder query_lock_handle;
   // 1. check if there's a lock with the same lock name
   char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
@@ -477,7 +476,7 @@ int ObLockExecutor::query_lock_id_(const ObString &lock_name,
                       "WHERE name = '%s'", helper.convert(lock_name)));
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
-  OZ (ObTableAccessHelper::read_single_row(tenant_id,
+  OZ (ObTableAccessHelper::read_single_row(
                                            { "lockhandle" },
                                            table_name,
                                            where_cond,
@@ -495,7 +494,7 @@ int ObLockExecutor::query_lock_id_and_lock_handle_(const ObString &lock_name,
                                                    char *lock_handle_buf)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   ObStringHolder query_lock_handle;
   // 1. check if there's a lock with the same lock name
   char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
@@ -508,7 +507,7 @@ int ObLockExecutor::query_lock_id_and_lock_handle_(const ObString &lock_name,
                       "WHERE name = '%s'", helper.convert(lock_name)));
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
-  OZ (ObTableAccessHelper::read_single_row(tenant_id,
+  OZ (ObTableAccessHelper::read_single_row(
                                            { "lockhandle" },
                                            table_name,
                                            where_cond,
@@ -544,12 +543,10 @@ void ObLockExecutor::mark_lock_session_(sql::ObSQLSessionInfo *session,
   if (session->is_lock_session() != is_lock_session) {
     LOG_INFO("mark lock_session", K(session->get_server_sid()), K(is_lock_session));
     session->set_is_lock_session(is_lock_session);
-    session->set_need_send_feedback_proxy_info(true);
   } else {
     LOG_DEBUG("the lock_session status on the session won't be changed, no need to mark again",
               K(session->get_server_sid()),
-              K(session->is_lock_session()),
-              K(session->is_need_send_feedback_proxy_info()));
+              K(session->is_lock_session()));
   }
 }
 
@@ -670,18 +667,16 @@ int ObUnLockExecutor::execute(const ObTableLockOwnerID &owner_id)
   SMART_VAR(sql::ObSQLSessionInfo, session) {
     SMART_VAR(sql::ObExecContext, exec_ctx, allocator) {
       ObSqlCtx sql_ctx;
-      uint64_t tenant_id = MTL_ID();
+      
       const ObTenantSchema *tenant_schema = NULL;
       ObSchemaGetterGuard guard;
       LinkExecCtxGuard link_guard(session, exec_ctx);
       sql::ObPhysicalPlanCtx phy_plan_ctx(allocator);
-      OZ (session.init(0 /*default session id*/,
-                       0 /*default proxy id*/,
-                       &allocator));
+      OZ (session.init(0 /*default session id*/, &allocator));
       OX (session.set_inner_session());
-      OZ (GCTX.schema_service_->get_tenant_schema_guard(tenant_id, guard));
-      OZ (guard.get_tenant_info(tenant_id, tenant_schema));
-      OZ (session.init_tenant(tenant_schema->get_tenant_name_str(), tenant_id));
+      OZ (GCTX.schema_service_->get_tenant_schema_guard(guard));
+      OZ (guard.get_tenant_info(tenant_schema));
+      OZ (session.init_tenant(tenant_schema->get_tenant_name_str()));
       OZ (session.load_all_sys_vars(guard));
       OZ (session.load_default_configs_in_pc());
       OX (sql_ctx.schema_guard_ = &guard);

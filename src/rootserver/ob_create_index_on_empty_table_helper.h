@@ -41,9 +41,7 @@ public:
     const ObSQLMode sql_mode,
     bool &is_create_index_on_empty_table_opt);
 
-  static int get_major_frozen_scn(
-    const uint64_t tenant_id,
-    share::SCN &major_frozen_scn);
+  static int get_major_frozen_scn(share::SCN &major_frozen_scn);
 };
 
 } //namespace rootserver

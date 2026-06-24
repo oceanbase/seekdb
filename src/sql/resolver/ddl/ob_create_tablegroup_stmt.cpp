@@ -41,10 +41,7 @@ void ObCreateTablegroupStmt::set_if_not_exists(bool if_not_exists)
   create_tablegroup_arg_.if_not_exist_ = if_not_exists;
 }
 
-void ObCreateTablegroupStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  create_tablegroup_arg_.tablegroup_schema_.set_tenant_id(tenant_id);
-}
+
 
 obcall::ObCreateTablegroupArg& ObCreateTablegroupStmt::get_create_tablegroup_arg()
 {

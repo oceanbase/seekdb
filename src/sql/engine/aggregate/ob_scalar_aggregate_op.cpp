@@ -30,10 +30,10 @@ OB_SERIALIZE_MEMBER((ObScalarAggregateSpec, ObGroupBySpec), enable_hash_base_dis
 int ObScalarAggregateOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (OB_FAIL(ObGroupByOp::inner_open())) {
     LOG_WARN("failed to inner_open", K(ret));
-  } else if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id, dir_id_))) {
+  } else if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
     LOG_WARN("failed to alloc dir id", K(ret));
   } else if (FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
   } else if (FALSE_IT(aggr_processor_.set_io_event_observer(&io_event_observer_))) {
@@ -44,7 +44,7 @@ int ObScalarAggregateOp::inner_open()
     LOG_WARN("failed to init one group",  K(ret));
   } else {
     bool need_dir_id = aggr_processor_.processor_need_alloc_dir_id();
-    if (need_dir_id && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(tenant_id, dir_id_))) {
+    if (need_dir_id && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
       LOG_WARN("failed to alloc dir id", K(ret));
     } else if (need_dir_id && FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
     } else if (FALSE_IT(aggr_processor_.set_io_event_observer(&io_event_observer_))) {
@@ -218,7 +218,7 @@ int ObScalarAggregateOp::init_hp_infras_group_mgr()
 {
   int ret = OB_SUCCESS;
   int64_t distinct_cnt = 0;
-  uint64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
+  
   if (aggr_processor_.has_distinct()) {
     int64_t est_rows = MY_SPEC.rows_;
     aggr_processor_.set_io_event_observer(&io_event_observer_);
@@ -227,13 +227,12 @@ int ObScalarAggregateOp::init_hp_infras_group_mgr()
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
                     &ctx_.get_allocator(),
-                    tenant_id,
                     est_rows * MY_SPEC.width_,
                     MY_SPEC.type_,
                     MY_SPEC.id_,
                     &ctx_))) {
       LOG_WARN("failed to init sql mem processor", K(ret));
-    } else if (OB_FAIL(hp_infras_mgr_.init(tenant_id,
+    } else if (OB_FAIL(hp_infras_mgr_.init(
       GCONF.is_sql_operator_dump_enabled(), est_rows, MY_SPEC.width_, true/*unique*/, 1/*ways*/,
       &eval_ctx_, &sql_mem_processor_, &io_event_observer_))) {
       LOG_WARN("failed to init hash infras group", K(ret));

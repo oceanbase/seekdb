@@ -54,8 +54,8 @@ struct ObIvfAuxTableInfo
         pq_centroid_tablet_ids_(),
         type_(ObVectorIndexAlgorithmType::VIAT_MAX)
   {
-    centroid_tablet_ids_.set_attr(ObMemAttr(MTL_ID(), "IvfAuxInfo"));
-    pq_centroid_tablet_ids_.set_attr(ObMemAttr(MTL_ID(), "IvfAuxInfo"));
+    centroid_tablet_ids_.set_attr(ObMemAttr("IvfAuxInfo"));
+    pq_centroid_tablet_ids_.set_attr(ObMemAttr("IvfAuxInfo"));
   }
   ~ObIvfAuxTableInfo() {
     reset();
@@ -113,10 +113,9 @@ class ObIvfICache
 public:
   friend class ObIvfCacheMgr;
 
-  explicit ObIvfICache(ObIAllocator &allocator, int64_t tenant_id)
+  explicit ObIvfICache(ObIAllocator &allocator)
       : is_inited_(false),
         self_allocator_(allocator),
-        tenant_id_(tenant_id),
         key_(IvfCacheType::IVF_CACHE_MAX),
         sub_mem_ctx_(nullptr),
         rwlock_(),
@@ -156,7 +155,7 @@ protected:
 
   bool is_inited_;
   ObIAllocator &self_allocator_;  // allocator for alloc ObIvfICache self
-  int64_t tenant_id_;
+  
   IvfCacheKey key_;
   ObIvfMemContext *sub_mem_ctx_;
   RWLock rwlock_;
@@ -167,8 +166,8 @@ class ObIvfCentCache : public ObIvfICache
 {
 public:
   friend class ObIvfCacheMgr;
-  explicit ObIvfCentCache(ObIAllocator &allocator, int64_t tenant_id)
-      : ObIvfICache(allocator, tenant_id), centroids_(nullptr), center_prefix_(0), cent_vec_dim_(0), nlist_(0), capacity_(0), count_(0)
+  explicit ObIvfCentCache(ObIAllocator &allocator)
+      : ObIvfICache(allocator), centroids_(nullptr), center_prefix_(0), cent_vec_dim_(0), nlist_(0), capacity_(0), count_(0)
   {}
   virtual ~ObIvfCentCache();
   // NOTE(liyao): attention! read_centroid and write_centroid are not thread-safe
@@ -215,7 +214,7 @@ using ObIvfCacheMap = common::hash::ObHashMap<IvfCacheKey, ObIvfICache *>;
 class ObIvfCacheMgr
 {
 public:
-  explicit ObIvfCacheMgr(ObIAllocator &allocator, int64_t tenant_id)
+  explicit ObIvfCacheMgr(ObIAllocator &allocator)
       : ref_cnt_(0),
         mem_ctx_(nullptr),
         cache_objs_(),
@@ -223,7 +222,6 @@ public:
         reach_limit_cnt_(0),
         is_inited_(false),
         self_allocator_(allocator),
-        tenant_id_(tenant_id),
         cache_mgr_key_(ObTabletID::INVALID_TABLET_ID),
         vec_param_(),
         table_id_(OB_INVALID_ID),
@@ -246,11 +244,11 @@ public:
   int write_pq_centroid_cache(const IvfCacheKey &key, float *centroid_vec, int64_t length);
   int check_memory_limit(int64_t base);
   int fill_cache_info(ObVectorIndexInfo &info);
-  OB_INLINE int64_t get_tenant_id() const { return tenant_id_; }
+  
   OB_INLINE ObIvfCacheMgrKey get_cache_mgr_key() const { return cache_mgr_key_; }
   OB_INLINE int64_t get_table_id() const { return table_id_; }
 
-  TO_STRING_KV(K(ref_cnt_), K(is_inited_), K(is_reach_limit_), K(reach_limit_cnt_), K(tenant_id_),
+  TO_STRING_KV(K(ref_cnt_), K(is_inited_), K(is_reach_limit_), K(reach_limit_cnt_),
                K(cache_mgr_key_), K(vec_param_), K(table_id_));
 
 private:
@@ -266,7 +264,7 @@ private:
   int reach_limit_cnt_;  // check memory every reach_limit_cnt_ % 10 after is_reach_limit_ = true
   bool is_inited_;
   ObIAllocator &self_allocator_;  // allocator for alloc ObIvfCacheMgr self
-  int64_t tenant_id_;
+  
   ObIvfCacheMgrKey cache_mgr_key_;  // equal to index tablet id currently
   ObVectorIndexParam vec_param_;
   int64_t table_id_;

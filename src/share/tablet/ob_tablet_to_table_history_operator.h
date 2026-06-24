@@ -39,12 +39,10 @@ public:
 
   static int create_tablet_to_table_history(
              common::ObISQLClient &sql_proxy,
-             const uint64_t tenant_id,
              const int64_t schema_version,
              const common::ObIArray<ObTabletTablePair> &pairs);
   static int drop_tablet_to_table_history(
              common::ObISQLClient &sql_proxy,
-             const uint64_t tenant_id,
              const int64_t schema_version,
              const common::ObIArray<ObTabletID> &tablet_ids);
 };

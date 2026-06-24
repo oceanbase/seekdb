@@ -30,7 +30,6 @@ struct ObDDLArg
 public:
   ObDDLArg() :
       ddl_stmt_str_(),
-      exec_tenant_id_(common::OB_INVALID_TENANT_ID),
       ddl_id_str_(),
       sync_from_primary_(false),
       based_schema_object_infos_(),
@@ -52,13 +51,13 @@ public:
   }
   //user tenant can not ddl in standby
   virtual bool is_allow_in_standby() const
-  { return !is_user_tenant(exec_tenant_id_); }
+  { return true; }
   virtual int assign(const ObDDLArg &other);
   virtual bool contain_sensitive_data() const { return false; }
   void reset()
   {
     ddl_stmt_str_.reset();
-    exec_tenant_id_ = common::OB_INVALID_TENANT_ID;
+    
     ddl_id_str_.reset();
     sync_from_primary_ = false;
     based_schema_object_infos_.reset();
@@ -70,7 +69,7 @@ public:
   DECLARE_TO_STRING;
 
   common::ObString ddl_stmt_str_;
-  uint64_t exec_tenant_id_;
+  
   common::ObString ddl_id_str_;
   bool sync_from_primary_;
   common::ObSArray<share::schema::ObBasedSchemaObjectInfo> based_schema_object_infos_;

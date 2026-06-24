@@ -102,7 +102,7 @@ public:
   // Create channel and register it into DTL service, so that we can
   // retrieve it back by channel ID.
   int create_local_channel(
-      uint64_t tenant_id, uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, ObDtlFlowControl *dfc = nullptr);
+      uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, ObDtlFlowControl *dfc = nullptr);
   //
   // Destroy channel from DTL service.
   int destroy_channel(uint64_t chid);
@@ -135,9 +135,9 @@ public:
   }
 private:
   int new_channel(
-      uint64_t tenant_id, uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, bool is_local);
+      uint64_t chid, const common::ObAddr &peer, ObDtlChannel *&chan, bool is_local);
   int init_channel(
-      uint64_t tenant_id, uint64_t chid, const ObAddr &peer, ObDtlChannel *&chan,
+      uint64_t chid, const ObAddr &peer, ObDtlChannel *&chan,
       ObDtlFlowControl *dfc, const bool need_free_chan);
   int get_dtl_channel_manager(uint64_t hash_val, ObDtlChannelManager *&ch_mgr);
 private:

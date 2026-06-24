@@ -136,7 +136,7 @@ OB_DEF_SERIALIZE(ObLoadbuffer)
               task_id_,
               tablet_id_,
               table_id_,
-              tenant_id_,
+              
               stored_pos_,
               stored_row_cnt_,
               insert_mode_,
@@ -161,7 +161,7 @@ OB_DEF_DESERIALIZE(ObLoadbuffer)
               task_id_,
               tablet_id_,
               table_id_,
-              tenant_id_,
+              
               stored_pos_,
               stored_row_cnt_,
               insert_mode_,
@@ -186,7 +186,7 @@ OB_DEF_SERIALIZE_SIZE(ObLoadbuffer)
               task_id_,
               tablet_id_,
               table_id_,
-              tenant_id_,
+              
               stored_pos_,
               stored_row_cnt_,
               insert_mode_,
@@ -259,7 +259,7 @@ OB_SERIALIZE_MEMBER(ObShuffleResult,
                     row_cnt_);
 
 OB_SERIALIZE_MEMBER(ObInsertTask,
-                    tenant_id_,
+                    
                     task_id_,
                     row_count_,
                     column_count_,

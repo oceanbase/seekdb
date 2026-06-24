@@ -122,7 +122,6 @@ public:
     routine_id_(common::OB_INVALID_ID),
     package_id_(common::OB_INVALID_ID),
     database_id_(common::OB_INVALID_ID),
-    tenant_id_(common::OB_INVALID_ID),
     package_version_(common::OB_INVALID_VERSION),
     owner_(common::OB_INVALID_ID),
     priv_user_(common::OB_INVALID_ID),
@@ -141,8 +140,6 @@ public:
   inline void set_package_id(uint64_t package_id) { package_id_ = package_id; }
   inline uint64_t get_database_id() const { return database_id_; }
   inline void set_database_id(uint64_t database_id) { database_id_ = database_id; }
-  // inline uint64_t get_tenant_id() const { return tenant_id_; }
-  // inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
   inline uint64_t get_package_version() const { return package_version_; }
   inline void set_package_version(uint64_t package_version) { package_version_ = package_version; }
   inline uint64_t get_owner() const { return owner_; }
@@ -217,7 +214,6 @@ private:
   uint64_t routine_id_;
   uint64_t package_id_;
   uint64_t database_id_;
-  uint64_t tenant_id_;
   uint64_t package_version_;
   uint64_t owner_;
   uint64_t priv_user_;
@@ -668,7 +664,7 @@ struct ObPLExecCtx : public ObPLINS
       allocator_(allocator), exec_ctx_(exec_ctx), params_(params),
       result_(result), status_(status), func_(func),
       in_function_(in_function), pl_ctx_(NULL), nocopy_params_(nocopy_params), guard_(guard),
-      local_expr_alloc_("PLBlockExpr", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      local_expr_alloc_("PLBlockExpr", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {
     if (NULL != exec_ctx && NULL != exec_ctx_->get_my_session()) {
       pl_ctx_ = exec_ctx_->get_my_session()->get_pl_context();
@@ -787,7 +783,6 @@ public:
   int set_var(int64_t var_idx, const ObObjParam& value);
   ObPLExecCtx& get_exec_ctx() { return ctx_; }
   int check_pl_execute_priv(ObSchemaGetterGuard &guard,
-                                          const uint64_t tenant_id,
                                           const uint64_t user_id,
                                           const ObSchemaObjVersion &schema_obj,
                                           const ObIArray<uint64_t> &role_id_array);

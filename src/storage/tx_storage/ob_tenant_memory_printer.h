@@ -51,8 +51,7 @@ public:
 private:
   ObTenantMemoryPrinter() : print_mutex_(common::ObLatchIds::TENANT_MEM_USAGE_LOCK) {}
   virtual ~ObTenantMemoryPrinter() {}
-  int print_tenant_usage_(const uint64_t tenant_id,
-                          char *print_buf,
+  int print_tenant_usage_(char *print_buf,
                           int64_t buf_len,
                           int64_t &pos);
 private:

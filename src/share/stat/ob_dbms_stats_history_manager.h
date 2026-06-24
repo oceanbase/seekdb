@@ -109,7 +109,7 @@ private:
   static int gen_column_list(const ObIArray<uint64_t> &column_ids,
                              ObSqlString &column_list);
 
-  static int remove_useless_column_stats(ObMySQLTransaction &trans, uint64_t tenant_id);
+  static int remove_useless_column_stats(ObMySQLTransaction &trans);
 
   static int backup_table_stats(ObExecContext &ctx,
                                 ObMySQLTransaction &trans,
@@ -118,7 +118,6 @@ private:
                                 ObIArray<int64_t> &part_ids);
 
   static int calssify_table_stat_part_ids(ObExecContext &ctx,
-                                          const uint64_t tenant_id,
                                           const uint64_t table_id,
                                           const bool is_specify_partition,
                                           const ObIArray<int64_t> &partition_ids,
@@ -126,14 +125,12 @@ private:
                                           ObIArray<int64_t> &have_stat_part_ids);
 
   static int backup_having_table_part_stats(ObMySQLTransaction &trans,
-                                            const uint64_t tenant_id,
                                             const uint64_t table_id,
                                             const bool is_specify_partition,
                                             const ObIArray<int64_t> &partition_ids,
                                             const int64_t saving_time);
 
   static int backup_no_table_part_stats(ObMySQLTransaction &trans,
-                                        const uint64_t tenant_id,
                                         const uint64_t table_id,
                                         const ObIArray<int64_t> &partition_ids,
                                         const int64_t saving_time);
@@ -146,7 +143,6 @@ private:
                                  const ObIArray<uint64_t> &column_ids);
 
   static int generate_having_stat_part_col_map(ObExecContext &ctx,
-                                               const uint64_t tenant_id,
                                                const uint64_t table_id,
                                                const bool is_specify_partition,
                                                const bool is_specify_column,
@@ -155,7 +151,6 @@ private:
                                                hash::ObHashMap<ObOptColumnStat::Key, bool> &have_stat_part_col_map);
 
   static int backup_having_column_stats(ObMySQLTransaction &trans,
-                                        const uint64_t tenant_id,
                                         const uint64_t table_id,
                                         const bool is_specify_gather,
                                         const ObIArray<int64_t> &partition_ids,
@@ -164,7 +159,6 @@ private:
                                         const int64_t saving_time);
 
   static int backup_no_column_stats(ObMySQLTransaction &trans,
-                                    const uint64_t tenant_id,
                                     const uint64_t table_id,
                                     const ObIArray<int64_t> &partition_ids,
                                     const ObIArray<uint64_t> &column_ids,
@@ -172,7 +166,6 @@ private:
                                     const int64_t saving_time);
 
    static int backup_histogram_stats(ObMySQLTransaction &trans,
-                                     const uint64_t tenant_id,
                                      const uint64_t table_id,
                                      const bool is_specify_partition,
                                      const bool is_specify_column,
@@ -182,13 +175,11 @@ private:
                                      const int64_t saving_time);
 
   static int remove_useless_column_stats(ObMySQLTransaction &trans,
-                                         uint64_t tenant_id,
                                          const uint64_t start_time,
                                          const uint64_t max_duration_time,
                                          int64_t &delete_flags);
 
   static int do_delete_expired_stat_history(ObMySQLTransaction &trans,
-                                            const uint64_t tenant_id,
                                             const uint64_t start_time,
                                             const uint64_t max_duration_time,
                                             const char* specify_time_str,

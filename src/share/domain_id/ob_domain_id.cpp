@@ -484,7 +484,7 @@ int ObDomainIdUtils::check_has_domain_index(const void *table_schema, ObIArray<i
   } else {
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     const ObSimpleTableSchemaV2 *index_schema = NULL;
-    const uint64_t tenant_id = table->get_tenant_id();
+    
     if (OB_FAIL(table->get_simple_index_infos(simple_index_infos))) {
       LOG_WARN("get simple_index_infos failed", K(ret));
     }

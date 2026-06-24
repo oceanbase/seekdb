@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ddl_index_block_row_iterator.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
@@ -501,8 +502,8 @@ ObDDLSStableAllRangeIterator::ObDDLSStableAllRangeIterator()
     index_macro_iter_(),
     iter_param_(),
     cur_index_info_(),
-    macro_iter_allocator_("DDLMerge_Iter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-    idx_row_allocator_("DDL_IdxRow", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+    macro_iter_allocator_("DDLMerge_Iter", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    idx_row_allocator_("DDL_IdxRow", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
 }
 
@@ -550,7 +551,7 @@ int ObDDLSStableAllRangeIterator::init(const ObMicroBlockData &idx_block_data,
   } else {
     ObTablet *cur_tablet = const_cast<ObTablet *>(iter_param.tablet_);
     if (iter_param.sstable_->is_normal_cg_sstable()) {
-      if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(rowkey_read_info_))) {
+      if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(rowkey_read_info_))) {
         LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", K(ret));
       }
     } else {
@@ -724,7 +725,7 @@ int ObDDLSStableAllRangeIterator::get_index_row_count(const ObDatumRange &range,
     bool tmp_reach_cursor_end = false;
     ObMicroIndexRowItem tmp_index_item;
     int64_t tmp_row_offset = 0;
-    ObArenaAllocator idx_row_allocator("DDL_Row_Cnt", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    ObArenaAllocator idx_row_allocator("DDL_Row_Cnt", OB_MALLOC_NORMAL_BLOCK_SIZE);
     while (OB_SUCC(ret)) {      
       if (OB_FAIL(tmp_index_macro_iter.get_next_idx_row(idx_row_allocator, tmp_index_item, tmp_row_offset, tmp_reach_cursor_end))) {
         if (OB_ITER_END != ret) {
@@ -1035,8 +1036,8 @@ int ObDDLMergeBlockRowIterator::inner_init(const ObMicroBlockData &idx_block_dat
 {
   int ret = OB_SUCCESS;
   reuse();
-  ddl_memtable_iters_.set_attr(ObMemAttr(MTL_ID(), "ddl_mem_iters"));
-  iters_.set_attr(ObMemAttr(MTL_ID(), "index_iters"));
+  ddl_memtable_iters_.set_attr(ObMemAttr("ddl_mem_iters"));
+  iters_.set_attr(ObMemAttr("index_iters"));
   if (OB_UNLIKELY(ObMicroBlockData::DDL_MERGE_INDEX_BLOCK != idx_block_data.type_
         || OB_ISNULL(datum_utils) || !datum_utils->is_valid()
         || OB_ISNULL(allocator)
@@ -2319,7 +2320,7 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
   } else if (0 == ddl_sstable_iter.count() && 0 == ddl_kvs.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("both ddl sstables and ddl kv is empty", K(ret), K(ddl_sstable_iter), K(ddl_kvs));
-  } else if (OB_FAIL(slice_row_count_map.create(97, ObMemAttr(MTL_ID(), "slice_rc_map")))) {
+  } else if (OB_FAIL(slice_row_count_map.create(97, ObMemAttr("slice_rc_map")))) {
     LOG_WARN("create slice row count map failed", K(ret));
   } else {
     cg_idx = iter_param.sstable_->get_column_group_id();

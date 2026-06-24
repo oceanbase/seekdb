@@ -46,10 +46,10 @@ int ObTmpFileFlushListIterator::init(ObTmpFileFlushPriorityManager *prio_mgr)
   } else if (OB_ISNULL(prio_mgr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(prio_mgr));
-  } else if (FALSE_IT(files_.set_attr(ObMemAttr(MTL_ID(), "TFFlushIterFile")))) {
+  } else if (FALSE_IT(files_.set_attr(ObMemAttr("TFFlushIterFile")))) {
   } else if (OB_FAIL(files_.prepare_allocate(MAX_CACHE_NUM))) {
     LOG_WARN("fail to prepare allocate", KR(ret));
-  } else if (FALSE_IT(dirs_.set_attr(ObMemAttr(MTL_ID(), "TFFlushIterDir")))) {
+  } else if (FALSE_IT(dirs_.set_attr(ObMemAttr("TFFlushIterDir")))) {
   } else if (OB_FAIL(dirs_.prepare_allocate(MAX_CACHE_NUM))) {
     LOG_WARN("fail to prepare allocate", KR(ret));
   } else {

@@ -222,6 +222,11 @@ public:
     attr_ = ObMemAttr(args...);
     return *this;
   }
+  ContextParam &set_mem_attr(const ObMemAttr &attr)
+  {
+    attr_ = attr;
+    return *this;
+  }
   ContextParam &set_label(const ObLabel &label)
   {
     attr_.label_ = label;
@@ -414,13 +419,13 @@ public:
   {
     tree_node_.init();
     int ret = common::OB_SUCCESS;
-    // change tenant_id
+    // change tenant context
     ObMemAttr inner_attr = param_.attr_;
     auto *ma = ObMallocAllocator::get_instance();
     // tenant_allocator is created synchronously when the tenant is built, and 500 tenant memory is used when there is no such tenant
-    auto ta = ma->get_tenant_ctx_allocator(inner_attr.tenant_id_, inner_attr.ctx_id_);
+    auto ta = ma->get_tenant_ctx_allocator(inner_attr.ctx_id_);
     if (nullptr == ta) {
-      inner_attr.tenant_id_ = common::OB_SERVER_TENANT_ID;
+      
     }
     attr_ = inner_attr;
     // init allocator

@@ -37,14 +37,13 @@ public:
   ObLocalityZone() { reset(); }
   ~ObLocalityZone() {}
   void reset();
-  int init(const uint64_t tenant_id, const uint64_t region_priority);
+  int init(const uint64_t region_priority);
   ObLocalityZone &operator =(const ObLocalityZone &item);
-  TO_STRING_KV(K_(tenant_id), K_(region_priority));
+  TO_STRING_KV(K_(region_priority));
 public:
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   uint64_t get_region_priority() { return region_priority_; }
 public:
-  uint64_t tenant_id_;
   uint64_t region_priority_;
 };
 
@@ -72,7 +71,7 @@ public:
   void reset();
   void destroy();
   int add_locality_zone(const ObLocalityZone &item);
-  int get_locality_zone(const uint64_t tenant_id, ObLocalityZone &item);
+  int get_locality_zone(ObLocalityZone &item);
   void set_version(const int64_t version);
   int64_t get_version() const;
   int copy_to(ObLocalityInfo &locality_info);

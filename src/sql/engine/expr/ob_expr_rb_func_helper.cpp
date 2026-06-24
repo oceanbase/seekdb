@@ -127,17 +127,6 @@ int ObRbExprHelper::pack_rb_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
   return ret;
 }
 
-uint64_t ObRbExprHelper::get_tenant_id(ObSQLSessionInfo *session)
-{
-  uint64_t tenant_id = 0;
-  if (OB_ISNULL(session)) {
-  } else if (session->get_ddl_info().is_ddl_check_default_value()) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  } else {
-    tenant_id = session->get_effective_tenant_id();
-  }
-  return tenant_id;
-}
 
 } // namespace sql
 } // namespace oceanbase

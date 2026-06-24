@@ -16,6 +16,7 @@
 
 
 #include "ob_trans_factory.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_trans_part_ctx.h"
 #include "storage/tx/ob_gti_rpc.h"
 #include "storage/tx/ob_leak_checker.h"
@@ -160,18 +161,16 @@ void ObTransCtxFactory::release(ObTransCtx *ctx)
 }
 
 //ObLSTxCtxMgrFactory
-ObLSTxCtxMgr *ObLSTxCtxMgrFactory::alloc(const uint64_t tenant_id)
+ObLSTxCtxMgr *ObLSTxCtxMgrFactory::alloc()
 {
   void *ptr = NULL;
   ObLSTxCtxMgr *partition_trans_ctx_mgr = NULL;
-  ObMemAttr memattr(tenant_id, ObModIds::OB_PARTITION_TRANS_CTX_MGR, ObCtxIds::TRANS_CTX_MGR_ID);
+  ObMemAttr memattr(ObModIds::OB_PARTITION_TRANS_CTX_MGR, ObCtxIds::TRANS_CTX_MGR_ID);
   if (REACH_TIME_INTERVAL(TRANS_MEM_STAT_INTERVAL)) {
     TRANS_LOG(INFO, "ObLSTxCtxMgr statistics",
       K_(alloc_count), K_(release_count), "used", alloc_count_ - release_count_);
   }
-  if (!is_valid_tenant_id(tenant_id)) {
-    TRANS_LOG_RET(WARN, OB_INVALID_ARGUMENT, "invalid tenant_id", K(tenant_id));
-  } else if (NULL != (ptr = ob_malloc(sizeof(ObLSTxCtxMgr), memattr))) {
+  if (NULL != (ptr = ob_malloc(sizeof(ObLSTxCtxMgr), memattr))) {
     partition_trans_ctx_mgr = new(ptr) ObLSTxCtxMgr;
     (void)ATOMIC_FAA(&alloc_count_, 1);
   }

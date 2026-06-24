@@ -183,7 +183,7 @@ private:
   static const int64_t DEFAULT_TABLET_CNT_PER_GB = 20000;
 
 private:
-  explicit ObTenantMetaMemMgr(const uint64_t tenant_id);
+  explicit ObTenantMetaMemMgr();
 public:
   ~ObTenantMetaMemMgr();
   static int mtl_new(ObTenantMetaMemMgr *&meta_mem_mgr);
@@ -310,7 +310,7 @@ public:
   int release_memtable_and_mds_table_for_ls_offline(const ObTabletMapKey &key);
   OB_INLINE share::ObIResourceLimitCalculatorHandler * get_t3m_limit_calculator() { return &t3m_limit_calculator_; }
 
-  TO_STRING_KV(K_(tenant_id), K_(is_inited), "tablet count", tablet_map_.count());
+  TO_STRING_KV(K_(is_inited), "tablet count", tablet_map_.count());
 
   int inc_ref_in_leak_checker(const int32_t index);
   int dec_ref_in_leak_checker(const int32_t index);
@@ -542,7 +542,6 @@ private:
 private:
   common::SpinRWLock wash_lock_;
   TryWashTabletFunc wash_func_;
-  const uint64_t tenant_id_;
   ObBucketLock bucket_lock_;
   ObFullTabletCreator full_tablet_creator_;
   ObTabletPointerMap tablet_map_;

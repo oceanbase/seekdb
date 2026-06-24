@@ -653,7 +653,7 @@ int ObArrayFixedSize<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) co
     if (OB_ISNULL(arr_data)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
       OB_LOG(WARN, "invalid array type", K(ret), K(this->get_format()));
-    } else if (OB_FAIL(elem_set.create(this->length_, ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistSet")))) {
+    } else if (OB_FAIL(elem_set.create(this->length_, ObMemAttr("ArrayDistSet")))) {
       OB_LOG(WARN, "failed to create cellid set", K(ret));
     } else {
       for (uint32_t i = 0; i < this->length_ && OB_SUCC(ret); ++i) {
@@ -741,7 +741,7 @@ int ObArrayFixedSize<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArra
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
     OB_LOG(WARN, "invalid array type", K(ret), K(arr_ptr->get_format()), K(arr2->get_format())); 
   } else if (OB_FAIL(elem_set.create(arr2_bin_ptr->length_ + this->length_, 
-                                  ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistSet")))) {
+                                  ObMemAttr("ArrayDistSet")))) {
     OB_LOG(WARN, "failed to create cellid set", K(ret), K(arr2_bin_ptr->length_ + this->length_));
   } else {
     for (uint32_t i = 0; i < arr2_bin_ptr->length_ && OB_SUCC(ret); ++i) {
@@ -787,7 +787,7 @@ int ObArrayFixedSize<T>::unionize(ObIAllocator &alloc, ObIArrayType **arr, uint3
     } else if (arr_bin_ptr->size() == 0) {
       // skip
     } else if (!elem_set.created() && OB_FAIL(elem_set.create(arr_bin_ptr->length_, 
-                                            ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistSet")))) {
+                                            ObMemAttr("ArrayDistSet")))) {
       OB_LOG(WARN, "failed to create cellid set", K(ret));
     } else if (OB_FAIL(this->push_not_in_set(arr_bin_ptr, elem_set, arr_contain_null, false))) {
       OB_LOG(WARN, "failed to push not in set", K(ret));
@@ -812,7 +812,7 @@ int ObArrayFixedSize<T>::intersect(ObIAllocator &alloc, ObIArrayType **arr, uint
     } else if (arr_bin_ptr ->size() == 0) {
       is_null_res = true;
     } else if (!elem_map.created() && elem_map.create(arr_bin_ptr->length_,
-                                         ObMemAttr(common::OB_SERVER_TENANT_ID, "ArrayDistMap"))) {
+                                         ObMemAttr("ArrayDistMap"))) {
       OB_LOG(WARN, "failed to create cellid map", K(ret));
     } else {
       bool arr_contain_null = false;

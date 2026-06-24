@@ -122,7 +122,6 @@ class ObHTableLockHelper : public ObDDLHelper
 {
 public:
   ObHTableLockHelper(share::schema::ObMultiVersionSchemaService *schema_service, 
-                     const uint64_t tenant_id, 
                      ObDDLSQLTransaction *external_trans);
   virtual ~ObHTableLockHelper() {}
   int lock_objects(const common::ObString &tablegroup_name, 

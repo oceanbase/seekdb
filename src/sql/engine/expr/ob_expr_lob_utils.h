@@ -330,10 +330,10 @@ public:
     if (datum.is_null()) {
       str.reset();
     } else if (is_lob_storage(meta.type_)) {
-      uint64_t tenant_id = MTL_ID();
+      
       ObArenaAllocator *tmp_alloc_ptr = nullptr;
-      ObArenaAllocator tmp_allocator("ObLobRRSD", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
-      if (tenant_id != OB_INVALID_TENANT_ID) {
+      ObArenaAllocator tmp_allocator("ObLobRRSD", OB_MALLOC_NORMAL_BLOCK_SIZE);
+      {
         tmp_alloc_ptr = &tmp_allocator;
       }
       ObTextStringIter str_iter(meta.type_, meta.cs_type_, str, has_lob_header);

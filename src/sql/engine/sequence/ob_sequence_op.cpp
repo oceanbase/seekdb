@@ -85,16 +85,14 @@ int ObLocalSequenceExecutor::init(ObExecContext &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_FAIL(schema_service->get_tenant_schema_guard(
-                      my_session->get_effective_tenant_id(),
                       schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else {
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
+    
     ARRAY_FOREACH_X(seq_ids_, idx, cnt, OB_SUCC(ret)) {
       const uint64_t seq_id = seq_ids_.at(idx);
       const ObSequenceSchema *seq_schema = nullptr;
       if (OB_FAIL(schema_guard.get_sequence_schema(
-                  tenant_id,
                   seq_id,
                   seq_schema))) {
         LOG_WARN("fail get sequence schema", K(seq_id), K(ret));
@@ -104,7 +102,7 @@ int ObLocalSequenceExecutor::init(ObExecContext &ctx)
       } else if (OB_FAIL(seq_schemas_.push_back(*seq_schema))) {
         // Note: here the schema is cached to the array, it will automatically deep copy sequence name
         //       Even if schema guard is released, the memory of sequence name remains valid until the request ends
-        LOG_WARN("cache seq_schema fail", K(tenant_id), K(seq_id), K(ret));
+        LOG_WARN("cache seq_schema fail", K(seq_id), K(ret));
       }
     }
   }
@@ -133,7 +131,7 @@ int ObLocalSequenceExecutor::get_nextval(ObExecContext &ctx)
              "schema_cnt", seq_schemas_.count(),
              K(ret));
   } else {
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
+    
     ObArenaAllocator allocator; // nextval temporary calculation memory
     // When and only when there is nextval in select item, it is necessary to update nextval in cache
     // Otherwise directly use the value from the session
@@ -147,16 +145,16 @@ int ObLocalSequenceExecutor::get_nextval(ObExecContext &ctx)
       if (seq_schemas_.at(idx).get_order_flag()
           && seq_schemas_.at(idx).get_cache_order_mode() == NEW_ACTION) {
         if (OB_FAIL(auto_service.get_handle(seq_schemas_.at(idx), seq_value))) {
-          LOG_WARN("fail get nextval from rpc for seq", K(tenant_id), K(seq_id), K(ret));
+          LOG_WARN("fail get nextval from rpc for seq", K(seq_id), K(ret));
         }
       } else {
         if (OB_FAIL(sequence_cache_->nextval(seq_schemas_.at(idx), allocator, seq_value))) {
-          LOG_WARN("fail get nextval for seq", K(tenant_id), K(seq_id), K(ret));
+          LOG_WARN("fail get nextval for seq", K(seq_id), K(ret));
         }
       }
-      if (OB_SUCC(ret) && OB_FAIL(my_session->set_sequence_value(tenant_id, seq_id, seq_value))) {
+      if (OB_SUCC(ret) && OB_FAIL(my_session->set_sequence_value(seq_id, seq_value))) {
         LOG_WARN("save seq_value to session as currval for later read fail",
-                 K(tenant_id), K(seq_id), K(seq_value), K(ret));
+                 K(seq_id), K(seq_value), K(ret));
       }
     }
   }

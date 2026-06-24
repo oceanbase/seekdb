@@ -23,11 +23,11 @@ namespace oceanbase
 {
 namespace common
 {
-ObFIFOAllocator::ObFIFOAllocator(const uint64_t tenant_id /*= OB_SERVER_TENANT_ID */)
+ObFIFOAllocator::ObFIFOAllocator( /*= OB_SERVER_TENANT_ID */)
     : is_inited_(false),
       allocator_(nullptr),
       page_size_(0),
-      attr_(tenant_id, ObModIds::OB_FIFO_ALLOC),
+      attr_(ObModIds::OB_FIFO_ALLOC),
       idle_size_(0),
       max_size_(0),
       current_using_(nullptr),

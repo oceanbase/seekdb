@@ -44,7 +44,7 @@ public:
   virtual ~ObCSExecutor();
 
   int init(int64_t executor_id, int64_t thread_num, int64_t task_queue_limit,
-           const char *name, uint64_t tenant_id);
+           const char *name);
   int start();
   void stop();
   void wait();

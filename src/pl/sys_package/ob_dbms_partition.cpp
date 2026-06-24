@@ -54,7 +54,7 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
   UNUSED(result);
   DEBUG_SYNC(BEFORE_MANAGE_DYNAMIC_PARTITION);
 
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   bool is_valid_tenant = false;
   ObString precreate_time_str;
   ObArray<ObString> time_unit_strs;
@@ -66,19 +66,18 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (FALSE_IT(tenant_id = exec_ctx.get_my_session()->get_effective_tenant_id())) {
-  } else if (OB_FAIL(ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(tenant_id, is_valid_tenant))) {
-    LOG_WARN("fail to check tenant is valid for dynamic partition", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(is_valid_tenant))) {
+    LOG_WARN("fail to check tenant is valid for dynamic partition", KR(ret));
   } else if (!is_valid_tenant) {
     ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("invalid tenant for dynamic partition, manage_dynamic_partition is not allowed", KR(ret), K(tenant_id));
+    LOG_WARN("invalid tenant for dynamic partition, manage_dynamic_partition is not allowed", KR(ret));
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "invalid tenant for dynamic partition, manage_dynamic_partition is");
   } else if (OB_FAIL(get_and_check_params_(params, precreate_time_str, time_unit_strs))) {
     LOG_WARN("fail to check and get params", KR(ret), K(params));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(tenant_id, table_schemas))) {
-    LOG_WARN("fail to get table schemas in tenant", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
+    LOG_WARN("fail to get table schemas in tenant", KR(ret));
   } else {
     // collect dynamic partition table ids
     ObArray<uint64_t> table_ids;
@@ -91,8 +90,8 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
           || table_schema->is_in_recyclebin()
           || !table_schema->is_normal_schema()) {
         // skip
-      } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), database_schema))) {
-        LOG_WARN("fail to get database schema", KR(ret), K(tenant_id), K(table_schema->get_database_id()));
+      } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
+        LOG_WARN("fail to get database schema", KR(ret), K(table_schema->get_database_id()));
       } else if (OB_ISNULL(database_schema) || database_schema->is_in_recyclebin()) {
         // skip
       } else if (OB_FAIL(table_ids.push_back(table_schema->get_table_id()))) {
@@ -106,10 +105,10 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
     for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); i++) {
       const uint64_t table_id = table_ids.at(i);
       const ObTableSchema *table_schema = NULL;
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+        LOG_WARN("fail to get table schema", KR(ret), K(table_id));
       } else if (OB_ISNULL(table_schema)) {
         // table may be dropped, skip
       } else {
@@ -132,7 +131,7 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
       }
     }
     const int64_t end_ts = ObTimeUtil::current_time();
-    TENANT_EVENT(tenant_id, DBMS_PARTITION, MANAGE_DYNAMIC_PARTITION, end_ts, ret, end_ts - begin_ts,
+    TENANT_EVENT(DBMS_PARTITION, MANAGE_DYNAMIC_PARTITION, end_ts, ret, end_ts - begin_ts,
                  success_table_ids,
                  failed_table_ids);
   }

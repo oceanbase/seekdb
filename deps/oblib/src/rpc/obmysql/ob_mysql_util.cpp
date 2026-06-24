@@ -944,10 +944,10 @@ int ObMySQLUtil::bit_cell_str(
   return ret;
 }
 
-int ObMySQLUtil::sql_utd_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos)
+int ObMySQLUtil::sql_utd_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos)
 {
   INIT_SUCC(ret);
-  lib::ObMemAttr mem_attr(tenant_id, "XMLModule");
+  lib::ObMemAttr mem_attr("XMLModule");
   lib::ObMallocHookAttrGuard malloc_guard(mem_attr);
   ObArenaAllocator allocator(mem_attr);
   ObMulModeNodeType node_type = M_MAX_TYPE;
@@ -986,10 +986,10 @@ int ObMySQLUtil::sql_utd_cell_str(uint64_t tenant_id, char *buf, const int64_t l
   return ret;
 }
 
-int ObMySQLUtil::json_cell_str(uint64_t tenant_id, char *buf, const int64_t len, const ObString &val, int64_t &pos)
+int ObMySQLUtil::json_cell_str(char *buf, const int64_t len, const ObString &val, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  lib::ObMemAttr mem_attr(tenant_id, "JsonAlloc");
+  lib::ObMemAttr mem_attr("JsonAlloc");
   ObArenaAllocator allocator(mem_attr);
   ObJsonBin j_bin(val.ptr(), val.length(), &allocator);
   ObIJsonBase *j_base = &j_bin;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/ob_debug_sync.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
@@ -101,7 +102,7 @@ int ObCSFetcher::init_consumption_position_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: sql_proxy is null", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-                 *GCTX.sql_proxy_, MTL_ID(), false, persisted_min_dep_lsn))) {
+                 *GCTX.sql_proxy_, false, persisted_min_dep_lsn))) {
     LOG_WARN("CSFetcher: fail to load change_stream_min_dep_lsn", KR(ret));
   } else {
     start_lsn = palf::LSN(persisted_min_dep_lsn);
@@ -121,7 +122,7 @@ int ObCSFetcher::init_consumption_position_()
     }
   }
   if (OB_SUCC(ret)) {
-    palf::LogIOContext io_ctx(MTL_ID(), ls_id_.id(), palf::LogIOUser::CDC);
+    palf::LogIOContext io_ctx(ls_id_.id(), palf::LogIOUser::CDC);
     if (OB_FAIL(iter_.set_io_context(io_ctx))) {
       LOG_WARN("CSFetcher: fail to set_io_context", KR(ret));
     }
@@ -154,9 +155,10 @@ int ObCSFetcher::init_consumption_position_()
           LOG_WARN("CSFetcher: scn convert_to_ts invalid, schema_version stays 0");
         } else {
           schema::ObRefreshSchemaStatus schema_status;
-          schema_status.tenant_id_ = MTL_ID();
+          
+          
           if (OB_FAIL(GCTX.schema_service_->get_schema_version_by_timestamp(
-                          schema_status, MTL_ID(), timestamp_us, current_schema_version_))) {
+                          schema_status, timestamp_us, current_schema_version_))) {
             LOG_WARN("CSFetcher: get_schema_version_by_timestamp failed", KR(ret), K(timestamp_us));
           } else if (current_schema_version_ <= 0 || !ObSchemaService::is_formal_version(current_schema_version_)) {
             ret = OB_SCHEMA_EAGAIN;
@@ -247,7 +249,7 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
   storage::ObLSHandle tmp_handle;
   storage::ObLS *ls = nullptr;
   logservice::ObLogHandler *log_handler = nullptr;
-  if (OB_FAIL(MTL(storage::ObLSService*)->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
       || OB_ISNULL(ls = tmp_handle.get_ls())
       || OB_ISNULL(log_handler = ls->get_log_handler())
       || OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
@@ -300,7 +302,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   refresh_scn.reset();
 
   SCN gts_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), NULL, gts_scn))) {
+  if (OB_FAIL(OB_TS_MGR.get_gts(NULL, gts_scn))) {
     LOG_WARN("CSFetcher: fail to get GTS for refresh_scn", KR(ret));
     return ret;
   }
@@ -327,7 +329,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
     storage::ObLSHandle tmp_handle;
     storage::ObLS *ls = nullptr;
     logservice::ObLogHandler *log_handler = nullptr;
-    if (OB_FAIL(MTL(storage::ObLSService*)->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
+    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_handle, storage::ObLSGetMod::LOG_MOD))
         || OB_ISNULL(ls = tmp_handle.get_ls())
         || OB_ISNULL(log_handler = ls->get_log_handler())
         || OB_FAIL(log_handler->get_max_lsn(max_lsn))) {
@@ -339,7 +341,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
     // Case 3: caught up — no pending logs, advance to GTS.
     SCN gts_scn;
-    if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), NULL, gts_scn))) {
+    if (OB_FAIL(OB_TS_MGR.get_gts(NULL, gts_scn))) {
       LOG_WARN("CSFetcher: fail to get GTS for refresh_scn (caught-up)", KR(ret));
     } else {
       refresh_scn = gts_scn;
@@ -361,7 +363,7 @@ int ObCSFetcher::get_has_async_cached_(bool &has_async)
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: schema_service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(MTL_ID(), refreshed_version))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(refreshed_version))) {
     LOG_WARN("CSFetcher: get_tenant_refreshed_schema_version failed", KR(ret));
   } else if (refreshed_version == last_checked_schema_version_) {
     has_async = has_async_index_tables_;
@@ -388,17 +390,17 @@ int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
     LOG_WARN("CSFetcher: schema_service or sql_proxy is null", KR(ret));
   } else {
     schema::ObSchemaGetterGuard guard;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard_with_version_in_inner_table(MTL_ID(), guard))) {
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard_with_version_in_inner_table(guard))) {
       LOG_WARN("CSFetcher: fail to get_tenant_schema_guard_with_version_in_inner_table", KR(ret));
     } else {
       bool has_ivf_index = false;
       common::ObArray<uint64_t> table_ids;
-      if (OB_FAIL(guard.get_vector_info_index_ids_in_tenant(MTL_ID(), has_ivf_index, table_ids))) {
+      if (OB_FAIL(guard.get_vector_info_index_ids_in_tenant( has_ivf_index, table_ids))) {
         LOG_WARN("CSFetcher: fail to get_vector_info_index_ids_in_tenant", KR(ret));
       } else {
         for (int64_t i = 0; !has_async && i < table_ids.count(); ++i) {
           const schema::ObTableSchema *table_schema = nullptr;
-          if (OB_FAIL(guard.get_table_schema(MTL_ID(), table_ids.at(i), table_schema))) {
+          if (OB_FAIL(guard.get_table_schema( table_ids.at(i), table_schema))) {
             LOG_WARN("CSFetcher: fail to get_table_schema for vector index", KR(ret), K(table_ids.at(i)));
           } else if (OB_ISNULL(table_schema) || !table_schema->is_vec_index()) {
             continue;
@@ -467,7 +469,7 @@ void ObCSFetcher::try_advance_min_dep_lsn_()
   if (min_lsn.is_valid()) {
     int64_t affected = 0;
     if (OB_FAIL(ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
-                    *GCTX.sql_proxy_, MTL_ID(), static_cast<int64_t>(min_lsn.val_), affected))) {
+                    *GCTX.sql_proxy_, static_cast<int64_t>(min_lsn.val_), affected))) {
       LOG_WARN("CSFetcher: fail to advance_change_stream_min_dep_lsn", KR(ret), K(min_lsn));
     } else {
       LOG_INFO("CSFetcher: min_dep_lsn advanced",
@@ -778,7 +780,7 @@ void ObCSFetcher::run1()
   if (!has_set_stop()) {
     int64_t refreshed_version = 0;
     if (OB_SUCC(GCTX.schema_service_->get_tenant_refreshed_schema_version(
-                    MTL_ID(), refreshed_version))) {
+                    refreshed_version))) {
       last_checked_schema_version_ = refreshed_version;
     }
     bool has_async = false;
@@ -861,7 +863,7 @@ void ObCSFetcher::run1()
       if (IDLE == running_mode_ && !has_set_stop()) {
         int64_t current_version = 0;
         if (OB_NOT_NULL(GCTX.schema_service_)) {
-          GCTX.schema_service_->get_tenant_refreshed_schema_version(MTL_ID(), current_version);
+          GCTX.schema_service_->get_tenant_refreshed_schema_version(current_version);
         }
         if (current_version == last_checked_schema_version_) {
           idle_cond_.wait(CS_FETCHER_IDLE_COND_WAIT_MS);

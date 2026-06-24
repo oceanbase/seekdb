@@ -60,11 +60,11 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext 
   if (is_inited()) {
     ret = OB_INIT_TWICE;
     SQL_ENG_LOG(WARN, "init twice", K(ret));
-  } else if (OB_INVALID_ID == ctx.tenant_id_ || OB_ISNULL(ctx.sk_collations_)
+  } else if (OB_ISNULL(ctx.sk_collations_)
              || OB_ISNULL(ctx.eval_ctx_) || OB_ISNULL(ctx.op_) || ctx.prefix_pos_ <= 0
              || ctx.prefix_pos_ > ctx.sk_collations_->count()) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(ctx.tenant_id_), K(ctx.prefix_pos_));
+    SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(ctx.prefix_pos_));
   } else {
     int64_t batch_size = ctx.eval_ctx_->max_batch_size_;
     full_sk_collations_ = ctx.sk_collations_;

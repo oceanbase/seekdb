@@ -29,7 +29,7 @@ public:
   ObCGBlockFilesIterator() :
     can_put_cg_block_back_(true),
     total_data_size_(0),
-    allocator_(ObMemAttr(MTL_ID(), "CGBFIter")),
+    allocator_(ObMemAttr("CGBFIter")),
     cg_block_files_(allocator_) { }
   ~ObCGBlockFilesIterator()
   {

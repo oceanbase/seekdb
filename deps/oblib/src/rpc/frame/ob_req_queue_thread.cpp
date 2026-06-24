@@ -40,9 +40,8 @@ ObReqQueue::~ObReqQueue()
   LOG_INFO("begin to destroy queue", K(queue_.size()));
 }
 
-int ObReqQueue::init(const int64_t tenant_id)
+int ObReqQueue::init()
 {
-  UNUSED(tenant_id);
   return OB_SUCCESS;
 }
 
@@ -83,7 +82,7 @@ int ObReqQueue::process_task(ObLink *task)
     LOG_ERROR("queue pop NULL task", K(task), K(ret), K(qhandler_));
   } else {
     lib::ContextParam param;
-    param.set_mem_attr(common::OB_SERVER_TENANT_ID, ObModIds::OB_ROOT_CONTEXT)
+    param.set_mem_attr(ObModIds::OB_ROOT_CONTEXT)
       .set_properties(USE_TL_PAGE_OPTIONAL);
     CREATE_WITH_TEMP_CONTEXT(param) {
       ObRequest *req = static_cast<ObRequest *>(task);

@@ -60,63 +60,63 @@ public:
   // count the number of system transactions
   // count the number of user transactions
   // count the number of committed transactions
-  void add_commit_trans_count(const uint64_t tenant_id, const int64_t value);
+  void add_commit_trans_count(const int64_t value);
   // count the number of aborted transactions
-  void add_rollback_trans_count(const uint64_t tenant_id, const int64_t value);
+  void add_rollback_trans_count(const int64_t value);
   // count the number of elr enable transactions
   // count the number of elr unable transactions
-  void add_read_elr_row_count(const uint64_t tenant_id, const int64_t value);
+  void add_read_elr_row_count(const int64_t value);
   // count the number of timeout transactions: count when commit the transaction(end_trans)
-  void add_trans_timeout_count(const uint64_t tenant_id, const int64_t value);
+  void add_trans_timeout_count(const int64_t value);
   // count how many transactions are started, via start_trans
-  void add_trans_start_count(const uint64_t tenant_id, const int64_t value);
+  void add_trans_start_count(const int64_t value);
   // count the total time of transactions, from start_trans to the end of receiving ack from coordinator
-  void add_trans_total_used_time(const uint64_t tenant_id, const int64_t value);
+  void add_trans_total_used_time(const int64_t value);
   // count the total time of local trans
-  void add_local_trans_total_used_time(const uint64_t tenant_id, const int64_t value);
+  void add_local_trans_total_used_time(const int64_t value);
   // count the total time of distributed trans
-  void add_dist_trans_total_used_time(const uint64_t tenant_id, const int64_t value);
+  void add_dist_trans_total_used_time(const int64_t value);
   // count the number of local stmt
   // count the number of remote stmt
   // count the number of distributed stmt
   // count the number of total stmt
   // count the interval time between statements
   // count the number of submitted logs
-  void add_clog_submit_count(const uint64_t tenant_id, const int64_t value);
+  void add_clog_submit_count(const int64_t value);
   // Count the time from submitting a log to calling back the transaction module after flushing majority
-  void add_clog_sync_time(const uint64_t tenant_id, const int64_t value);
+  void add_clog_sync_time(const int64_t value);
   // Count the number of calling back transaction modules through asynchronously submitting log
-  void add_clog_sync_count(const uint64_t tenant_id, const int64_t value);
+  void add_clog_sync_count(const int64_t value);
   // Count the time from beginning commit to receiving the commit response
-  void add_trans_commit_time(const uint64_t tenant_id, const int64_t value);
+  void add_trans_commit_time(const int64_t value);
   //Count the time from beginning rollback to receiving the abort response
-  void add_trans_rollback_time(const uint64_t tenant_id, const int64_t value);
+  void add_trans_rollback_time(const int64_t value);
   // count the number of transactions with 0 participant
-  void add_readonly_count(const uint64_t tenant_id, const int64_t value);
+  void add_readonly_count(const int64_t value);
   // count the number of transactions with a single participant
-  void add_local_count(const uint64_t tenant_id, const int64_t value);
+  void add_local_count(const int64_t value);
   // count the number of transactions with multiple participant
-  void add_dist_count(const uint64_t tenant_id, const int64_t value);
+  void add_dist_count(const int64_t value);
   // count how many redo logs are replayed
-  void add_redo_log_replay_count(const uint64_t tenant_id, const int64_t value);
+  void add_redo_log_replay_count(const int64_t value);
   // count the time spent on replaying redo logs
-  void add_redo_log_replay_time(const uint64_t tenant_id, const int64_t value);
+  void add_redo_log_replay_time(const int64_t value);
   // count how many prepare logs are replayed
-  void add_prepare_log_replay_count(const uint64_t tenant_id, const int64_t value);
+  void add_prepare_log_replay_count(const int64_t value);
   // count the time spent on replaying prepare logs
-  void add_prepare_log_replay_time(const uint64_t tenant_id, const int64_t value);
+  void add_prepare_log_replay_time(const int64_t value);
   // count how many commit logs are replayed
-  void add_commit_log_replay_count(const uint64_t tenant_id, const int64_t value);
+  void add_commit_log_replay_count(const int64_t value);
   // count the time spent on replaying commit logs
-  void add_commit_log_replay_time(const uint64_t tenant_id, const int64_t value);
+  void add_commit_log_replay_time(const int64_t value);
   // count how many abort logs are replayed
-  void add_abort_log_replay_count(const uint64_t tenant_id, const int64_t value);
+  void add_abort_log_replay_count(const int64_t value);
   // count the time spent on replaying abort logs
-  void add_abort_log_replay_time(const uint64_t tenant_id, const int64_t value);
+  void add_abort_log_replay_time(const int64_t value);
   // count how many clear logs are replayed
-  void add_clear_log_replay_count(const uint64_t tenant_id, const int64_t value);
+  void add_clear_log_replay_count(const int64_t value);
   // count the time spent on replaying clear logs
-  void add_clear_log_replay_time(const uint64_t tenant_id, const int64_t value);
+  void add_clear_log_replay_time(const int64_t value);
   // count the number of callbacks of sp redo logs
   // count the callback time of sp redo log
   // count the number of callbacks of sp commit logs
@@ -145,21 +145,21 @@ public:
   // count the time of submitting trans log
   // count the number of multiple-partition update statements of non-system tenant
   // count the number of total requests processed by gts mgr
-  void add_gts_request_total_count(const uint64_t tenant_id, const int64_t value);
+  void add_gts_request_total_count(const int64_t value);
   // count the total time spent on acquiring gts
-  void add_gts_acquire_total_time(const uint64_t tenant_id, const int64_t value);
+  void add_gts_acquire_total_time(const int64_t value);
   // count the total count of gts acqusition
   // count the number of gts wait: gts_acquire_total_count = not_wait_count + wait_count
-  void add_gts_acquire_total_wait_count(const uint64_t tenant_id, const int64_t value);
+  void add_gts_acquire_total_wait_count(const int64_t value);
   // count the total time spent on waiting gts elapse
-  void add_gts_wait_elapse_total_time(const uint64_t tenant_id, const int64_t value);
+  void add_gts_wait_elapse_total_time(const int64_t value);
   // count the number of waitting gts
-  void add_gts_wait_elapse_total_wait_count(const uint64_t tenant_id, const int64_t value);
+  void add_gts_wait_elapse_total_wait_count(const int64_t value);
   // Count the number of rpc requests initiated by the gts client
   // Count the total number of obtaining gts synchronously
   // count the total number of synchronously waitting gts
   // count the number of batch commit trans
-  void add_trans_log_total_size(const uint64_t tenant_id, const int64_t value);
+  void add_trans_log_total_size(const int64_t value);
 
 private:
   ObTransStatistic() : sys_trans_count_stat_("trans_sys_count"), user_trans_count_stat_("trans_user_count"),
@@ -245,31 +245,18 @@ private:
 } // oceanbase
 
 // count the number of commit/abort transactions
-#define TX_STAT_COMMIT_INC ObTransStatistic::get_instance().add_commit_trans_count(tenant_id_, 1);
-#define TX_STAT_ROLLBACK_INC ObTransStatistic::get_instance().add_rollback_trans_count(tenant_id_, 1);
-#define TX_STAT_START_INC ObTransStatistic::get_instance().add_trans_start_count(tenant_id_, 1);
-#define TX_STAT_TIMEOUT_INC ObTransStatistic::get_instance().add_trans_timeout_count(tenant_id_, 1);
-#define TX_STAT_TIME_USED(time) ObTransStatistic::get_instance().add_trans_total_used_time(tenant_id_, time);
-#define TX_STAT_COMMIT_TIME_USED(time) ObTransStatistic::get_instance().add_trans_commit_time(tenant_id_, time);
-#define TX_STAT_ROLLBACK_TIME_USED(time) ObTransStatistic::get_instance().add_trans_rollback_time(tenant_id_, time);
-#define TX_STAT_DIST_INC ObTransStatistic::get_instance().add_dist_count(tenant_id_, 1);
-#define TX_STAT_LOCAL_INC ObTransStatistic::get_instance().add_local_count(tenant_id_, 1);
-#define TX_STAT_READONLY_INC ObTransStatistic::get_instance().add_readonly_count(tenant_id_, 1);
-#define TX_STAT_ELR_ENABLE_TRANS_INC ObTransStatistic::get_instance().add_elr_enable_trans_count(MTL_ID(), 1);
-#define TX_STAT_ELR_UNABLE_TRANS_INC ObTransStatistic::get_instance().add_elr_unable_trans_count(MTL_ID(), 1);
-#define TX_STAT_READ_ELR_ROW_COUNT_INC transaction::ObTransStatistic::get_instance().add_read_elr_row_count(MTL_ID(), 1);
-#define TX_STAT_LOCAL_TOTAL_TIME_USED(time) ObTransStatistic::get_instance().add_local_trans_total_used_time(MTL_ID(), time);
-#define TX_STAT_DIST_TOTAL_TIME_USED(time) ObTransStatistic::get_instance().add_dist_trans_total_used_time(MTL_ID(), time);
-
-// TODO: following events is not used, do clean up
-// count the interval time between statements
-#define TRANS_STAT_STMT_INTERVAL_TIME(tenant_id, last_end_stmt_ts)                       \
-  { if (last_end_stmt_ts > 0) {ObTransStatistic::get_instance().add_stmt_interval_time(tenant_id, ObClockGenerator::getClock() - last_end_stmt_ts);} }
-
-#define TRANS_STAT_STMT_TOTAL_COUNT_INC(tenant_id)                               \
-  { ObTransStatistic::get_instance().add_stmt_total_count(tenant_id, 1); }
-
-#define TRANS_MULTI_PARTITION_UPDATE_STMT_COUNT_INC(tenant_id)                  \
-  { ObTransStatistic::get_instance().add_trans_multi_partition_update_stmt_count(tenant_id, 1); }
+#define TX_STAT_COMMIT_INC ObTransStatistic::get_instance().add_commit_trans_count( 1);
+#define TX_STAT_ROLLBACK_INC ObTransStatistic::get_instance().add_rollback_trans_count( 1);
+#define TX_STAT_START_INC ObTransStatistic::get_instance().add_trans_start_count( 1);
+#define TX_STAT_TIMEOUT_INC ObTransStatistic::get_instance().add_trans_timeout_count( 1);
+#define TX_STAT_TIME_USED(time) ObTransStatistic::get_instance().add_trans_total_used_time( time);
+#define TX_STAT_COMMIT_TIME_USED(time) ObTransStatistic::get_instance().add_trans_commit_time( time);
+#define TX_STAT_ROLLBACK_TIME_USED(time) ObTransStatistic::get_instance().add_trans_rollback_time( time);
+#define TX_STAT_DIST_INC ObTransStatistic::get_instance().add_dist_count( 1);
+#define TX_STAT_LOCAL_INC ObTransStatistic::get_instance().add_local_count( 1);
+#define TX_STAT_READONLY_INC ObTransStatistic::get_instance().add_readonly_count( 1);
+#define TX_STAT_READ_ELR_ROW_COUNT_INC transaction::ObTransStatistic::get_instance().add_read_elr_row_count( 1);
+#define TX_STAT_LOCAL_TOTAL_TIME_USED(time) ObTransStatistic::get_instance().add_local_trans_total_used_time( time);
+#define TX_STAT_DIST_TOTAL_TIME_USED(time) ObTransStatistic::get_instance().add_dist_trans_total_used_time( time);
 
 #endif // OCEANABAE_TRANSACTION_OB_TRANS_EVENT_

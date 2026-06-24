@@ -27,9 +27,8 @@ namespace common
 class ObSafeArena : public ObIAllocator
 {
 public:
-  ObSafeArena(const lib::ObLabel &label, const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
-              int64_t tenant_id = OB_SERVER_TENANT_ID)
-      : arena_alloc_(label, page_size, tenant_id),
+  ObSafeArena(const lib::ObLabel &label, const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
+      : arena_alloc_(label, page_size),
         lock_(ObLatchIds::OB_AREAN_ALLOCATOR_LOCK)
   {}
 

@@ -49,7 +49,6 @@ public:
   virtual int get_sequence_value(const AutoincKey &key, const int64_t &autoinc_version, uint64_t &sequence_value) = 0;
 
   virtual int get_auto_increment_values(
-      const uint64_t tenant_id,
       const common::ObIArray<AutoincKey> &autoinc_keys,
       const common::ObIArray<int64_t> &autoinc_versions,
       common::hash::ObHashMap<AutoincKey, uint64_t> &inc_values) = 0;

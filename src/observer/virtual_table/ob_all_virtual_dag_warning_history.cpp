@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_dag_warning_history.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -47,9 +48,9 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
   return ret;
 }
 
-bool ObAllVirtualDagWarningHistory::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualDagWarningHistory::is_need_process()
 {
-  if (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_) {
+  if (true || true) {
     return true;
   }
   return false;
@@ -64,7 +65,7 @@ int ObAllVirtualDagWarningHistory::process_curr_tenant(ObNewRow *&row)
   int64_t compression_ratio = 0;
   int n = 0;
   if (!dag_warning_info_iter_.is_opened()) {
-    if (OB_FAIL(MTL(ObDagWarningHistoryManager *)->open_iter(dag_warning_info_iter_))) {
+    if (OB_FAIL(share::g_mp->dag_warning_history_manager()->open_iter(dag_warning_info_iter_))) {
       STORAGE_LOG(WARN, "fail to begin ObTenantSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }

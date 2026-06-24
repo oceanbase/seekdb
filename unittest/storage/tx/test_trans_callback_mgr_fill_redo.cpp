@@ -101,7 +101,7 @@ public:
   virtual void SetUp() override
   {
     oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     ObAddr ip_port(ObAddr::VER::IPV4, "119.119.0.1",2023);
     ObCurTraceId::init(ip_port);
     GCONF._ob_trans_rpc_timeout = 500;
@@ -112,7 +112,7 @@ public:
     _TRANS_LOG(INFO, ">>>> starting test : %s", test_name);
     mdo_.fill_ctx_.helper_ = &helper_;
     mock_ptr = &mdo_;
-    cb_allocator_.init(1001);
+    cb_allocator_.init();
   }
   virtual void TearDown() override
   {
@@ -121,7 +121,7 @@ public:
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
     ObClockGenerator::destroy();
-    ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->recycle_tenant_allocator();
   }
   void extend_callback_lists_(int cnt)
   {

@@ -96,7 +96,6 @@ private:
                                          ObIArray<ObSqlPlanItem*> &plan_infos);
 
   static int get_plan_info_by_id(sql::ObExecContext &ctx,
-                                  int64_t tenant_id,
                                   const ObString &svr_ip,
                                   int64_t svr_port,
                                   uint64_t plan_id,
@@ -105,7 +104,6 @@ private:
                                   ObIArray<ObSqlPlanItem*> &plan_infos);
 
   static int get_baseline_plan_info(sql::ObExecContext &ctx,
-                                    int64_t tenant_id,
                                     const ObString &svr_ip,
                                     int64_t svr_port,
                                     const ObString &sql_handle,
@@ -114,8 +112,7 @@ private:
 
   static int get_baseline_plan_detail(sql::ObExecContext &ctx,
                                       const ObString& sql_handle, 
-                                      const ObString& plan_name, 
-                                      int64_t tenant_id,
+                                      const ObString& plan_name,
                                       PlanText &plan_text,
                                       bool from_plan_cache);
 
@@ -133,7 +130,6 @@ private:
                                         int64_t session_id,
                                         const ObString &svr_ip,
                                         int64_t svr_port,
-                                        int64_t tenant_id,
                                         ObIArray<ObSqlPlanItem*> &plan_infos);
 
   static int inner_get_plan_info(sql::ObExecContext &ctx, 

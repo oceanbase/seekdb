@@ -395,7 +395,7 @@ int ObDelUpdLogPlan::calculate_insert_table_location_and_sharding(ObTablePartiti
   } else if (OB_UNLIKELY(dml_table_infos.count() != 1) || OB_ISNULL(dml_table_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected dml table infos", K(ret), K(dml_table_infos));
-  } else if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     dml_table_infos.at(0)->ref_table_id_,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
@@ -1248,7 +1248,7 @@ int ObDelUpdLogPlan::get_ddl_sample_sort_column_count(int64_t &sample_sort_colum
     LOG_WARN("error unexpected, table item size is not as expected", K(ret), "table_item_size", ins_stmt->get_table_size());
   } else {
     TableItem* table_item = ins_stmt->get_table_item_by_id(ins_stmt->get_insert_table_info().table_id_);
-    const uint64_t tenant_id = optimizer_context_.get_session_info()->get_effective_tenant_id();
+    
     ObSchemaGetterGuard *schema_guard = nullptr;
     const ObTableSchema *table_schema = nullptr;
     if (OB_ISNULL(schema_guard = optimizer_context_.get_schema_guard())) {
@@ -1257,11 +1257,11 @@ int ObDelUpdLogPlan::get_ddl_sample_sort_column_count(int64_t &sample_sort_colum
     } else if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table item of insert stmt is null", K(ret));
-    } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id, table_item->ddl_table_id_, table_schema))) {
-      LOG_WARN("get target table schema failed", K(ret), K(tenant_id), KPC(table_item));
+    } else if (OB_FAIL(schema_guard->get_table_schema( table_item->ddl_table_id_, table_schema))) {
+      LOG_WARN("get target table schema failed", K(ret), KPC(table_item));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("target table not exist", K(ret), K(tenant_id), KPC(table_item));
+      LOG_WARN("target table not exist", K(ret), KPC(table_item));
     } else if (table_schema->is_unique_index()) {
       sample_sort_column_count = table_schema->get_index_column_num();
     }
@@ -1624,15 +1624,14 @@ int ObDelUpdLogPlan::collect_related_local_index_ids(IndexDMLInfo &primary_dml_i
   int64_t index_tid_array_size = OB_MAX_AUX_TABLE_PER_MAIN_TABLE;
   uint64_t index_tid_array[OB_MAX_AUX_TABLE_PER_MAIN_TABLE];
   ObArray<uint64_t> base_column_ids;
-  const uint64_t tenant_id = optimizer_context_.get_session_info()->get_effective_tenant_id();
+  
   ObInsertLogPlan *insert_plan = dynamic_cast<ObInsertLogPlan*>(this);
   if (OB_ISNULL(stmt) || OB_ISNULL(schema_guard = optimizer_context_.get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard is nullptr", K(ret), K(stmt), K(schema_guard));
   } else if (NULL != insert_plan && get_optimizer_context().get_direct_load_optimizer_ctx().use_direct_load()) {
     index_tid_array_size = 0; // no need building index
-  } else if (OB_FAIL(schema_guard->get_can_write_index_array(tenant_id,
-                                                             primary_dml_info.ref_table_id_,
+  } else if (OB_FAIL(schema_guard->get_can_write_index_array(primary_dml_info.ref_table_id_,
                                                              index_tid_array,
                                                              index_tid_array_size,
                                                              false /*only global*/,
@@ -1654,7 +1653,7 @@ int ObDelUpdLogPlan::collect_related_local_index_ids(IndexDMLInfo &primary_dml_i
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_tid_array_size; ++i) {
-    if (OB_FAIL(schema_guard->get_table_schema(tenant_id, index_tid_array[i], index_schema))) {
+    if (OB_FAIL(schema_guard->get_table_schema( index_tid_array[i], index_schema))) {
       LOG_WARN("get index schema failed", K(ret), K(index_tid_array[i]), K(i));
     } else if (index_schema->is_index_local_storage() || index_schema->is_mlog_table()) {
       // Skip delta_buffer_table DML maintenance only when ALL conditions hold:
@@ -1666,7 +1665,7 @@ int ObDelUpdLogPlan::collect_related_local_index_ids(IndexDMLInfo &primary_dml_i
         bool is_heap_table = false;
         bool is_sync_mode_async = false;
         const ObTableSchema *data_table_schema = nullptr;
-        if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+        if (OB_FAIL(schema_guard->get_table_schema(
                                                    primary_dml_info.ref_table_id_,
                                                    data_table_schema))) {
           LOG_WARN("get data table schema failed",
@@ -1786,7 +1785,7 @@ int ObDelUpdLogPlan::prepare_table_dml_info_basic(const ObDmlTableInfo& table_in
       LOG_WARN("failed to assign table info", K(ret));
     } else if (has_tg) {
       table_dml_info->is_primary_index_ = true;
-    } else if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+    } else if (OB_FAIL(schema_guard->get_table_schema(
                                                       table_info.ref_table_id_, index_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
@@ -1831,12 +1830,11 @@ int ObDelUpdLogPlan::prepare_table_dml_info_basic(const ObDmlTableInfo& table_in
     ObInsertLogPlan *insert_plan = dynamic_cast<ObInsertLogPlan*>(this);
     if (NULL != insert_plan && get_optimizer_context().get_direct_load_optimizer_ctx().use_direct_load()) {
       index_cnt = 0; // no need building index
-    } else if (OB_FAIL(schema_guard->get_can_write_index_array(session_info->get_effective_tenant_id(),
-                                                        table_info.ref_table_id_, index_tid, index_cnt, true))) {
+    } else if (OB_FAIL(schema_guard->get_can_write_index_array(table_info.ref_table_id_, index_tid, index_cnt, true))) {
       LOG_WARN("failed to get can read index array", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < index_cnt; ++i) {
-      if (OB_FAIL(schema_guard->get_table_schema(session_info->get_effective_tenant_id(),
+      if (OB_FAIL(schema_guard->get_table_schema(
                                                  index_tid[i], index_schema))) {
         LOG_WARN("failed to get table schema", K(ret));
       } else if (OB_ISNULL(index_schema)) {
@@ -2394,13 +2392,12 @@ int ObDelUpdLogPlan::check_dml_table_write_dependency(
   ObSEArray<uint64_t, 4> read_dependent_tables;
   ObSchemaGetterGuard* schema_guard = optimizer_context_.get_schema_guard();
   ObSQLSessionInfo* session_info = optimizer_context_.get_session_info();
-  uint64_t tenant_id = OB_INVALID_ID;
+  
   const ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(schema_guard) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null" ,K(ret), KP(schema_guard), KP(session_info));
-  } else if (FALSE_IT(tenant_id = session_info->get_effective_tenant_id())) {
-  } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id, table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2435,8 +2432,8 @@ int ObDelUpdLogPlan::check_dml_table_write_dependency(
         const ObSimpleTableSchemaV2 *fwd_idx_schema = nullptr;
         if (!share::schema::is_fts_doc_word_aux(index_info.index_type_)) {
           // skip
-        } else if (OB_FAIL(schema_guard->get_simple_table_schema(tenant_id, index_info.table_id_, fwd_idx_schema))) {
-          LOG_WARN("failed to get fwd idx schema", K(ret), K(tenant_id), K(index_info));
+        } else if (OB_FAIL(schema_guard->get_simple_table_schema( index_info.table_id_, fwd_idx_schema))) {
+          LOG_WARN("failed to get fwd idx schema", K(ret), K(index_info));
         } else if (OB_ISNULL(fwd_idx_schema)) {
           // skip dropped fwd idx schema
         } else if (!fwd_idx_schema->get_table_name_str().prefix_match(inv_idx_name)) {
@@ -2459,11 +2456,11 @@ int ObDelUpdLogPlan::check_dml_table_write_dependency(
   for (int64_t i = 0; OB_SUCC(ret) && i < read_dependent_tables.count(); ++i) {
     const ObTableSchema *depend_schema = nullptr;
     const uint64_t depend_tid = read_dependent_tables.at(i);
-    if (OB_FAIL(schema_guard->get_table_schema(tenant_id, depend_tid, depend_schema))) {
-      LOG_WARN("failed to get depend table schema", K(ret), K(tenant_id), K(depend_tid));
+    if (OB_FAIL(schema_guard->get_table_schema( depend_tid, depend_schema))) {
+      LOG_WARN("failed to get depend table schema", K(ret), K(depend_tid));
     } else if (OB_ISNULL(depend_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null depend schema for check", K(ret), K(tenant_id), K(depend_tid));
+      LOG_WARN("unexpected null depend schema for check", K(ret), K(depend_tid));
     } else if (OB_UNLIKELY(!depend_schema->can_read_index() || !depend_schema->is_index_visible())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid index table for its dependent table is not readable", K(ret), K(index_schema), KPC(depend_schema));

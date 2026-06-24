@@ -51,7 +51,6 @@ public:
 private:
 
   static int get_stat_locked_partition_ids(ObExecContext &ctx,
-                                           uint64_t tenant_id,
                                            const ObSqlString &raw_sql,
                                            ObIArray<int64_t> &partition_ids,
                                            ObIArray<int64_t> &stattype_locked_array);

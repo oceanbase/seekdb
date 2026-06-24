@@ -99,7 +99,7 @@ int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
     CLOG_LOG(WARN, "invalid argument", K(type_), K(ret), K(replay_status));
   } else if (OB_FAIL(seek_log_iterator(id, base_lsn, iterator_))) {
     CLOG_LOG(WARN, "seek iterator failed", KR(ret), K(type_), K(id), K(base_lsn));
-  } else if (OB_FAIL(iterator_.set_io_context(palf::LogIOContext(MTL_ID(), id.id(), palf::LogIOUser::REPLAY)))) {
+  } else if (OB_FAIL(iterator_.set_io_context(palf::LogIOContext(id.id(), palf::LogIOUser::REPLAY)))) {
     CLOG_LOG(WARN, "iterator set_io_context failed", KR(ret), K(id));
   } else if (OB_UNLIKELY(!base_scn.is_valid())) {
     ret = OB_ERR_UNEXPECTED;

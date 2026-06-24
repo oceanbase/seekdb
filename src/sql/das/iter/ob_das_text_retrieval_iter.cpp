@@ -28,7 +28,7 @@ namespace sql
 ObDASTextRetrievalIter::ObDASTextRetrievalIter()
   : ObDASIter(ObDASIterType::DAS_ITER_TEXT_RETRIEVAL),
     mem_context_(nullptr),
-    allocator_(lib::ObMemAttr(MTL_ID(), "TextIRIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    allocator_(lib::ObMemAttr("TextIRIterSelf"), OB_MALLOC_NORMAL_BLOCK_SIZE),
     ir_ctdef_(nullptr),
     ir_rtdef_(nullptr),
     tx_desc_(nullptr),
@@ -194,7 +194,7 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
 
     if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(MTL_ID(), "TextIRIter", ObCtxIds::DEFAULT_CTX_ID);
+      param.set_mem_attr("TextIRIter", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("failed to create text retrieval iterator memory context", K(ret));
       }
@@ -526,10 +526,10 @@ int ObDASTextRetrievalIter::init_base_idx_scan_param(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(ctdef), KPC(rtdef), K(ls_id), K(tablet_id));
   } else {
-    uint64_t tenant_id = MTL_ID();
-    scan_param.tenant_id_ = tenant_id;
-    scan_param.key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamKR"));
-    scan_param.ss_key_ranges_.set_attr(ObMemAttr(tenant_id, "ScanParamSSKR"));
+    
+    
+    scan_param.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
+    scan_param.ss_key_ranges_.set_attr(ObMemAttr("ScanParamSSKR"));
     scan_param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     scan_param.index_id_ = ctdef->ref_table_id_;
     scan_param.is_get_ = false; // scan

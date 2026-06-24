@@ -32,7 +32,6 @@ ObLocationSchema::ObLocationSchema()
 
 ObLocationSchema::ObLocationSchema(common::ObIAllocator *allocator)
   : ObSchema(allocator),
-    tenant_id_(common::OB_INVALID_TENANT_ID),
     location_id_(OB_INVALID_ID),
     schema_version_(common::OB_INVALID_VERSION),
     location_name_(),
@@ -58,7 +57,7 @@ ObLocationSchema &ObLocationSchema::operator=(const ObLocationSchema &other)
     reset();
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
-    tenant_id_ = other.tenant_id_;
+    
     location_id_ = other.location_id_;
     schema_version_ = other.schema_version_;
     set_name_case_mode(other.name_case_mode_);
@@ -90,7 +89,7 @@ bool ObLocationSchema::is_valid() const
 {
   bool ret = true;
   if (!ObSchema::is_valid()
-      || !is_valid_tenant_id(tenant_id_)
+      || !true
       || !is_valid_id(location_id_)
       || schema_version_ < 0
       || location_name_.empty()
@@ -102,7 +101,7 @@ bool ObLocationSchema::is_valid() const
 
 void ObLocationSchema::reset()
 {
-  tenant_id_ = common::OB_INVALID_TENANT_ID;
+  
   location_id_ = OB_INVALID_ID;
   schema_version_ = common::OB_INVALID_VERSION;
   location_name_.reset();
@@ -120,7 +119,6 @@ int64_t ObLocationSchema::get_convert_size() const
 }
 
 OB_SERIALIZE_MEMBER(ObLocationSchema,
-                    tenant_id_,
                     location_id_,
                     schema_version_,
                     location_name_,

@@ -728,7 +728,7 @@ int ObGeoTypeUtil::correct_polygon(ObIAllocator &alloc,
       LOG_WARN("wkb close ring failed", K(ret));
     }
     if (OB_SUCC(ret)) {
-      CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(), "GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
+      CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
         ObGeoEvalCtx correct_context(CURRENT_CONTEXT, srs);
         int res_unused;
         if (OB_FAIL(correct_context.append_geo_arg(&geo))) {
@@ -818,7 +818,7 @@ int ObGeoTypeUtil::get_buffered_geo(ObArenaAllocator *allocator,
                                     ObString &res_wkb)
 {
   int ret = OB_SUCCESS;
-  CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(), "GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
+  CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
     ObGeoBufferStrategy buf_strat;
     ObGeoEvalCtx gis_context(CURRENT_CONTEXT, srs);
     int correct_result;
@@ -2051,7 +2051,7 @@ int ObGeoTypeUtil::get_mbr_polygon(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObCartesianBox box; // mbr box of input geo
   ObCartesianBox bounds_box; // bounds box of corresponding srs
-  CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(), "GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
+  CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)) {
     ObGeoEvalCtx gis_context(CURRENT_CONTEXT, NULL);
     if (OB_FAIL(srs_bounds_to_mbr_box(bounds, bounds_box))) {
       LOG_WARN("get srs bounds box failed", K(ret));
@@ -3007,7 +3007,7 @@ int ObGeoBoostAllocGuard::init()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(tenant_id_, "GISModule", ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr("GISModule", ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL) // todo: need thread safe?
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {

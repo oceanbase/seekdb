@@ -54,7 +54,7 @@ int ObFifoArena::init()
   }
 
   if (OB_SUCC(ret)) {
-    attr_.tenant_id_ = MTL_ID();
+    
     attr_.label_ = ObNewModIds::OB_MEMSTORE;
     attr_.ctx_id_ = ctx_id;
   }
@@ -63,7 +63,7 @@ int ObFifoArena::init()
 
 void ObFifoArena::reset()
 {
-  COMMON_LOG(INFO, "MTALLOC.reset", "tenant_id", get_tenant_id());
+  COMMON_LOG(INFO, "MTALLOC.reset");
   shrink_cached_page(0);
 }
 

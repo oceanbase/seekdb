@@ -28,14 +28,13 @@ class ObCreateMaterializedViewHelper : public ObCreateViewHelper, public ObTable
 public:
   ObCreateMaterializedViewHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObCreateTableArg &arg,
     obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans = nullptr,
     bool enable_ddl_parallel = true)
-    : ObDDLHelper(schema_service, tenant_id, "[parallel create materialized view]", external_trans, enable_ddl_parallel),
-      ObCreateViewHelper(schema_service, tenant_id, arg, res, external_trans, enable_ddl_parallel),
-      ObTableHelper(schema_service, tenant_id, "[parallel create materialized view]", external_trans, enable_ddl_parallel),
+    : ObDDLHelper(schema_service, "[parallel create materialized view]", external_trans, enable_ddl_parallel),
+      ObCreateViewHelper(schema_service, arg, res, external_trans, enable_ddl_parallel),
+      ObTableHelper(schema_service, "[parallel create materialized view]", external_trans, enable_ddl_parallel),
       task_record_() {}
   virtual ~ObCreateMaterializedViewHelper() {}
 

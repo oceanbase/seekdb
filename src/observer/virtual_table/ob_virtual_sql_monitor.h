@@ -46,7 +46,7 @@ public:
   int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  void set_tenant_id(int64_t tenant_id) { tenant_id_ = tenant_id; }
+  
 private:
 enum COLUMN_ID
   {
@@ -70,7 +70,7 @@ private:
   int64_t end_id_;
   common::ObRaQueue::Ref ref_;
   sql::ObPhyPlanMonitorInfo *plan_info_;
-  int64_t tenant_id_;
+  
   int64_t request_id_;
   int64_t plan_id_;
   char scheduler_ipstr_[common::OB_IP_STR_BUFF];

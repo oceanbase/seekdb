@@ -72,8 +72,7 @@ int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
     } else if (OB_INVALID_VERSION == create_mlog_res.schema_version_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected schema version", KR(ret), K(create_mlog_res));
-    } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(create_mlog_arg.tenant_id_,
-        create_mlog_res.task_id_, false/*do not need retry at executor*/, my_session))) {
+    } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(create_mlog_res.task_id_, false/*do not need retry at executor*/, my_session))) {
       LOG_WARN("failed to wait ddl finish", KR(ret));
     }
   }
@@ -114,13 +113,11 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
   } else if (FALSE_IT(drop_index_arg.is_add_to_scheduler_ = true)) {
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
     LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), KR(ret));
-  } else if (OB_FAIL(ObDropIndexExecutor::wait_drop_index_finish(drop_index_res.tenant_id_,
-                                                                 drop_index_res.task_id_,
+  } else if (OB_FAIL(ObDropIndexExecutor::wait_drop_index_finish(drop_index_res.task_id_,
                                                                  *my_session))) {
     LOG_WARN("failed to wait drop index finish", KR(ret));
   }
   SERVER_EVENT_ADD("ddl", "drop mlog execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", drop_index_res.task_id_,

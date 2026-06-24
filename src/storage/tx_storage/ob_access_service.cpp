@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_access_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE
 #include "storage/ob_query_iterator_factory.h"
@@ -29,7 +30,6 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace logservice::coordinator;
 namespace storage
 {
 
@@ -87,7 +87,7 @@ int ObAccessService::mtl_init(ObAccessService* &access_service)
 {
   int ret = OB_SUCCESS;
 
-  return access_service->init(MTL(ObLSService*));
+  return access_service->init(share::g_mp->ls_service());
 }
 
 int ObAccessService::init(
@@ -120,7 +120,7 @@ int ObAccessService::check_tenant_out_of_memstore_limit_(bool &is_out_of_mem)
   int ret = OB_SUCCESS;
   is_out_of_mem = false;
   ObTenantFreezer *freezer = nullptr;
-  freezer = MTL(ObTenantFreezer *);
+  freezer = share::g_mp->tenant_freezer();
   if (OB_FAIL(freezer->check_memstore_full(is_out_of_mem))) {
     LOG_WARN("check tenant out of memstore limit", K(ret));
   } else {
@@ -134,18 +134,7 @@ int ObAccessService::check_data_disk_full_(
     bool &is_full)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
-  is_full = false;
-  if (!is_user_tenant(tenant_id) || ls_id.is_sys_ls()) {
-    is_full = false;
-  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.check_write_limited())) {
-    if (OB_SERVER_OUTOF_DISK_SPACE != ret) {
-      LOG_WARN("check space full failed", KR(ret));
-    } else {
-      ret = OB_SUCCESS;
-      is_full = true;
-    }
-  }
+  is_full = false; // lite: sys tenant -> this disk-full check path is user-tenant-only
   return ret;
 }
 
@@ -599,7 +588,7 @@ int ObAccessService::get_source_ls_tx_table_guard_(
     }
   } else {
     ObLS *src_ls = nullptr;
-    ObLSService *ls_service = MTL(ObLSService*);
+    ObLSService *ls_service = share::g_mp->ls_service();
     ObLSHandle ls_handle;
     ObTxTableGuard src_tx_table_guard;
     if (OB_FAIL(ls_service->get_ls(user_data.transfer_ls_id_, ls_handle, ObLSGetMod::HA_MOD))) {
@@ -756,19 +745,7 @@ int ObAccessService::check_read_allowed_(
       }
     }
     if (OB_FAIL(ret)) {
-      if (OB_LS_NOT_EXIST == ret) {
-        int tmp_ret = OB_SUCCESS;
-        bool is_dropped = false;
-        schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-        if (OB_ISNULL(schema_service)) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("schema_service is nullptr", "tmp_ret", tmp_ret);
-        } else if (OB_SUCCESS != (tmp_ret = schema_service->check_if_tenant_has_been_dropped(MTL_ID(), is_dropped))) {
-          LOG_WARN("check if tenant has been dropped fail", "tmp_ret", tmp_ret);
-        } else {
-          ret = is_dropped ? OB_TENANT_HAS_BEEN_DROPPED : ret;
-        }
-      }
+      // single tenant never drops tenant; no extra handling for OB_LS_NOT_EXIST
     } else if (OB_FAIL(construct_store_ctx_other_variables_(*ls, tablet_id, scan_param.timeout_,
          ctx.mvcc_acc_ctx_.get_snapshot_version(), tablet_handle, ctx_guard))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param.fb_snapshot_.is_valid()) {

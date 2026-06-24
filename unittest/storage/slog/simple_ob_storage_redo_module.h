@@ -33,6 +33,7 @@
 #include "src/storage/tx_storage/ob_ls_service.h"
 #include "src/storage/tablet/ob_tablet.h"
 #include "src/storage/meta_store/ob_tenant_storage_meta_service.h"
+#include "src/share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -226,7 +227,7 @@ int SimpleObStorageModule::get_tablet_svr(
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     STORAGE_LOG(WARN, "fail to get ls handle", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
@@ -333,7 +334,7 @@ int SimpleObStorageModule::read_from_slog(const ObMetaDiskAddr &addr,
     char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  ObStorageLogger &logger = MTL(ObTenantStorageMetaService*)->get_slogger();
+  ObStorageLogger &logger = share::g_mp->tenant_storage_meta_service()->get_slogger();
 
   if (OB_UNLIKELY(!addr.is_valid()
                || !addr.is_file()
@@ -348,7 +349,7 @@ int SimpleObStorageModule::read_from_slog(const ObMetaDiskAddr &addr,
     int64_t retry_count = 2;
     do {
       int64_t tmp_pos = pos;
-      if (OB_FAIL(ObStorageLogReader::read_log(logger.get_dir(), addr, buf_len, buf, tmp_pos, MTL_ID()))) {
+      if (OB_FAIL(ObStorageLogReader::read_log(logger.get_dir(), addr, buf_len, buf, tmp_pos))) {
         STORAGE_LOG(WARN, "fail to read slog", K(ret), "logger directory", logger.get_dir(), K(addr),
             K(buf_len), KP(buf));
         if (retry_count > 1) {

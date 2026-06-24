@@ -54,12 +54,6 @@ enum ObSQLConnPoolType
   INNER_POOL,
 };
 
-enum DblinkDriverProto{
-  DBLINK_UNKNOWN = -1,
-  DBLINK_DRV_OB = 0,
-  DBLINK_DRV_OCI,
-};
-
 class ObISQLConnectionPool
 {
 public:
@@ -73,9 +67,9 @@ public:
   // acquired connection must be released
   virtual int acquire(ObISQLConnection *&conn, ObISQLClient *client_addr)
   {
-    return this->acquire(OB_INVALID_TENANT_ID, conn, client_addr, 0);
+    return this->acquire(conn, client_addr, 0);
   }
-  virtual int acquire(const uint64_t tenant_id, ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) = 0;
+  virtual int acquire(ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id) = 0;
   virtual int release(ObISQLConnection *conn, const bool success) = 0;
   virtual int on_client_inactive(ObISQLClient *client_addr) = 0;
   virtual ObSQLConnPoolType get_type() = 0;

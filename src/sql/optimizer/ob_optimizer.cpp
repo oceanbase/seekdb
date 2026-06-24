@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_optimizer.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/optimizer/ob_explain_note.h"
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
@@ -322,9 +323,6 @@ int ObOptimizer::check_parallel_das_dml_supported_feature(const ObDelUpdStmt &pd
   int ret = OB_SUCCESS;
   if (pdml_stmt.is_ignore()) {
     use_parallel_das_dml = false;
-  } else if (ctx_.has_dblink()) {
-    use_parallel_das_dml = false;
-    LOG_TRACE("has dblink not use parallel das dml");
   } else if (!ctx_.has_fk() && ctx_.contain_user_nested_sql()) {
     use_parallel_das_dml = false;
     LOG_TRACE("ctx has user nexted sql not use parallel das dml");
@@ -502,7 +500,7 @@ int ObOptimizer::check_direct_load_enabled(const ObDMLStmt &stmt, const ObSQLSes
   int ret = OB_SUCCESS;
   if (stmt::T_INSERT == stmt.get_stmt_type()) {
     const ObInsertStmt &insert_stmt = static_cast<const ObInsertStmt &>(stmt);
-    if (insert_stmt.value_from_select() && !insert_stmt.is_external_table_overwrite() && !insert_stmt.is_ignore() && !insert_stmt.is_insert_up()) {
+    if (insert_stmt.value_from_select() && !insert_stmt.is_ignore() && !insert_stmt.is_insert_up()) {
       ObDirectLoadOptimizerCtx &direct_load_optimize_ctx = ctx_.get_direct_load_optimizer_ctx();
       if (OB_FAIL(direct_load_optimize_ctx.init_direct_load_ctx(insert_stmt, ctx_))) {
         LOG_WARN("fail to init direct load ctx", K(ret));
@@ -538,8 +536,6 @@ int ObOptimizer::check_pdml_supported_feature(const ObDelUpdStmt &pdml_stmt,
   } else if (pdml_stmt.is_pdml_disabled()) {
     is_use_pdml = false;
     ctx_.add_plan_note(PDML_DISABLED_BY_TRANSFORMATIONS);
-  } else if (ctx_.has_dblink()) {
-    is_use_pdml = false;
   } else if (ctx_.contain_user_nested_sql()) {
     //user nested sql can't use PDML plan, force to use DAS plan
     //if online ddl has pl udf, only this way, allow it use PDML plan
@@ -573,9 +569,7 @@ int ObOptimizer::check_pdml_supported_feature(const ObDelUpdStmt &pdml_stmt,
     // However, if there are more than one unique local index, this method will still fail.
     uint64_t main_table_tid = table_infos.at(0)->ref_table_id_;
     bool with_unique_local_idx = false;
-    if (OB_FAIL(schema_guard->check_has_local_unique_index(
-                session.get_effective_tenant_id(),
-                main_table_tid, with_unique_local_idx))) {
+    if (OB_FAIL(schema_guard->check_has_local_unique_index(main_table_tid, with_unique_local_idx))) {
       LOG_WARN("fail check if table with local unqiue index", K(main_table_tid), K(ret));
     } else if (stmt::T_UPDATE == pdml_stmt.get_stmt_type()) {
       if (!table_infos.at(0)->part_ids_.empty()) {
@@ -633,7 +627,7 @@ int ObOptimizer::check_pdml_insert_up_enabled(const ObDelUpdStmt &pdml_stmt,
       } else if (OB_INVALID_ID == ref_table_id) {
         is_use_pdml = false;
         // do nothing.
-      } else if (OB_FAIL(schema_guard->get_table_schema(session.get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_guard->get_table_schema(
                   ref_table_id, table_schema))) {
         LOG_WARN("get table schema failed", K(ret));
       } else if (table_schema->is_heap_organized_table()) {
@@ -657,8 +651,7 @@ int ObOptimizer::check_pdml_insert_up_enabled(const ObDelUpdStmt &pdml_stmt,
         }
       }
       if (OB_FAIL(ret) || !is_use_pdml) {
-      } else if (OB_FAIL(schema_guard->get_index_schemas_with_data_table_id(session.get_effective_tenant_id(),
-                                                      ref_table_id, index_schema))) {
+      } else if (OB_FAIL(schema_guard->get_index_schemas_with_data_table_id(ref_table_id, index_schema))) {
         LOG_WARN("get unique index ids failed", K(ret), K(ref_table_id));;
       } else {
         // 3. exist unique or global or fulltext/spatial/vector/multivalue index 
@@ -719,7 +712,7 @@ int ObOptimizer::check_is_heap_table(const ObDMLStmt &stmt)
     LOG_WARN("get unexpected dml table infos", K(ret), K(dml_table_infos));
   } else if (OB_INVALID_ID == dml_table_infos.at(0)->ref_table_id_) {
     // do nothing
-  } else if (OB_FAIL(schema_guard->get_table_schema(session->get_effective_tenant_id(),
+  } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     dml_table_infos.at(0)->ref_table_id_,
                                                     table_schema))) {
     LOG_WARN("failed to get table schema", K(ret));
@@ -793,7 +786,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
   bool push_join_pred_into_view_enabled = true;
   bool partition_wise_plan_enabled = true;
   bool exists_partition_wise_plan_enabled_hint = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session.get_effective_tenant_id()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   bool rowsets_enabled = tenant_config.is_valid() && tenant_config->_rowsets_enabled;
   ctx_.set_is_online_ddl(session.get_ddl_info().is_ddl());  // set is online ddl first, is used by other extract operations
   bool das_keep_order_enabled = tenant_config.is_valid() && tenant_config->_enable_das_keep_order;
@@ -916,7 +909,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
 }
 
 /* parallel policy priority:
-    1. not support parallel: pl udf, dblink
+    1. not support parallel: pl udf
     2. global parallel hint:
       a. force parallel dop: parallel(4)
       b. auto dop: parallel(auto)
@@ -950,9 +943,6 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
   } else if (ctx_.has_cursor_expression()) {
     // if stmt contain cursor expression, cannot remote execute, force das, parallel should be 1
     ctx_.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
-  } else if (ctx_.has_dblink()) {
-    //if stmt contain dblink, force das, parallel should be 1
-    ctx_.set_parallel_rule(PXParallelRule::DBLINK_FORCE_SERIALIZE);
   } else if (ctx_.get_global_hint().has_parallel_degree()) {
     ctx_.set_parallel_rule(PXParallelRule::MANUAL_HINT);
     ctx_.set_parallel(ctx_.get_global_hint().get_parallel_degree());
@@ -983,7 +973,7 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
   if (OB_FAIL(ret)) {
   } else if (ctx_.is_use_auto_dop() && OB_FAIL(set_auto_dop_params(session))) {
     LOG_WARN("failed to set auto dop params", K(ret));
-  } else if (OB_FAIL(init_px_node_opt_info(session.get_effective_tenant_id()))) {
+  } else if (OB_FAIL(init_px_node_opt_info())) {
     LOG_WARN("failed to init px node opt info", K(ret));
   } else {
     LOG_TRACE("succeed to init parallel policy", K(session.is_user_session()),
@@ -993,7 +983,7 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
   return ret;
 }
 
-int ObOptimizer::init_px_node_opt_info(int64_t tenant_id)
+int ObOptimizer::init_px_node_opt_info()
 {
   int ret = OB_SUCCESS;
   const ObGlobalHint &global_hint = ctx_.get_global_hint();
@@ -1012,8 +1002,7 @@ int ObOptimizer::init_px_node_opt_info(int64_t tenant_id)
       ctx_.set_px_node_policy(global_hint.px_node_hint_.px_node_policy_);
     } else {
       ObPxNodePolicy tenant_config_px_node_policy;
-      if (OB_FAIL(ObPxNodePool::get_tenant_config_px_node_policy(tenant_id,
-                          tenant_config_px_node_policy))) {
+      if (OB_FAIL(ObPxNodePool::get_tenant_config_px_node_policy(tenant_config_px_node_policy))) {
         LOG_WARN("Failed to get tenant config px_node_policy", K(ret));
       } else {
         ctx_.set_px_node_policy(tenant_config_px_node_policy);
@@ -1131,10 +1120,9 @@ int ObOptimizer::set_auto_dop_params(const ObSQLSessionInfo &session)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (session.is_user_session() &&
-               OB_FAIL(ObSchemaUtils::get_tenant_int_variable(session.get_effective_tenant_id(),
-                                                              SYS_VAR_PARALLEL_SERVERS_TARGET,
+               OB_FAIL(ObSchemaUtils::get_tenant_int_variable(SYS_VAR_PARALLEL_SERVERS_TARGET,
                                                               parallel_servers_target))) {
-      LOG_WARN("fail read tenant variable", K(ret), K(session.get_effective_tenant_id()));
+      LOG_WARN("fail read tenant variable", K(ret));
     } else {
       params.unit_min_cpu_ = std::max(tenant->unit_min_cpu(), 0.0);
       params.parallel_servers_target_ = std::max(parallel_servers_target, static_cast<int64_t>(0));
@@ -1179,7 +1167,7 @@ int ObOptimizer::check_whether_contain_nested_sql(const ObDMLStmt &stmt)
       if (OB_ISNULL(table_info) || OB_ISNULL(schema_guard) || OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql schema guard is nullptr", K(ret), K(table_info), K(schema_guard), K(session));
-      } else if (OB_FAIL(schema_guard->get_table_schema(session->get_effective_tenant_id(),
+      } else if (OB_FAIL(schema_guard->get_table_schema(
                                                         table_info->ref_table_id_, table_schema))) {
         LOG_WARN("get table schema failed", K(ret), K(table_info->ref_table_id_));
       } else if (!table_schema->get_foreign_key_infos().empty()) {
@@ -1385,9 +1373,9 @@ int ObOptimizer::update_column_usage_infos()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
   } else {
-    MTL_SWITCH(session->get_effective_tenant_id()) {
+    MOD_SCOPE {
       ObOptStatMonitorManager *optstat_monitor_mgr = NULL;
-      if (OB_ISNULL(optstat_monitor_mgr = MTL(ObOptStatMonitorManager*))) {
+      if (OB_ISNULL(optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(optstat_monitor_mgr));
       } else if (OB_FAIL(optstat_monitor_mgr->update_local_cache(ctx_.get_column_usage_infos()))) {
@@ -1410,9 +1398,8 @@ int ObOptimizer::check_force_default_stat()
   if (OB_ISNULL(schema_guard) || OB_ISNULL(session) || OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(schema_guard), K(session), K(query_ctx));
-  } else if (OB_FAIL(schema_guard->check_tenant_is_restore(session->get_effective_tenant_id(),
-                                                           is_restore))) {
-    LOG_WARN("fail to check if tenant is restore", K(session->get_effective_tenant_id()));
+  } else if (OB_FAIL(schema_guard->check_tenant_is_restore(is_restore))) {
+    LOG_WARN("fail to check if tenant is restore");
   } else if (is_restore) {
     // To avoid the SQL dependency on the statistics information tables that need to be restored during the system table recovery phase of the physical recovery stage,
     // For tenants in recovery, only default statistics need to be obtained
@@ -1440,12 +1427,11 @@ int ObOptimizer::init_system_stat()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null param", K(ret));
   } else if (OB_FAIL(opt_stat_manager->check_system_stat_validity(ctx_.get_exec_ctx(),
-                                                                  session->get_effective_tenant_id(),
                                                                   is_valid))) {
     LOG_WARN("failed to check system stat is valid", K(ret));
   } else if (!ctx_.use_default_stat() && is_valid) {
     ObOptSystemStat stat;
-    if (OB_FAIL(opt_stat_manager->get_system_stat(session->get_effective_tenant_id(), stat))) {
+    if (OB_FAIL(opt_stat_manager->get_system_stat(stat))) {
       LOG_WARN("failed to get system stat", K(ret));
     } else {
       meta.set_cpu_speed(stat.get_cpu_speed());
@@ -1483,9 +1469,9 @@ int ObOptimizer::check_enable_topn_runtime_filter()
   } else {
     bool hint_enable = false;
     bool config_enable = false;
-    int64_t tenant_id = session_info->get_effective_tenant_id();
+    
     bool hint_exist = false;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       config_enable = tenant_config->_enable_topn_runtime_filter;
     }

@@ -32,7 +32,6 @@ public:
   // create scheduled manage dynamic partition daily and hourly jobs
   static int create_jobs(
     const schema::ObSysVariableSchema &sys_variable,
-    const uint64_t tenant_id,
     ObMySQLTransaction &trans);
 
   // create scheduled manage dynamic partition daily and hourly jobs
@@ -40,7 +39,6 @@ public:
   static int create_jobs_for_upgrade(
     common::ObMySQLProxy *sql_proxy,
     const schema::ObSysVariableSchema &sys_variable,
-    const uint64_t tenant_id,
     ObMySQLTransaction &trans);
 
   static int set_attribute(
@@ -54,17 +52,14 @@ public:
 private:
   static int create_daily_job_(
     const schema::ObSysVariableSchema &sys_variable,
-    const uint64_t tenant_id,
     ObMySQLTransaction &trans);
 
   static int create_hourly_job_(
     const schema::ObSysVariableSchema &sys_variable,
-    const uint64_t tenant_id,
     ObMySQLTransaction &trans);
 
   static int create_job_(
     const schema::ObSysVariableSchema &sys_variable,
-    const uint64_t tenant_id,
     const int64_t start_usec,
     const ObString &job_name,
     const ObString &repeat_interval,

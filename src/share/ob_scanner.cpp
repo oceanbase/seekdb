@@ -30,12 +30,10 @@ namespace common
 
 ObScanner::ObScanner(const char *label /*= ObModIds::OB_NEW_SCANNER*/,
                      ObIAllocator *allocator /*= NULL*/,
-                     int64_t mem_size_limit /*= DEFAULT_MAX_SERIALIZE_SIZE*/,
-                     uint64_t tenant_id /*= OB_INVALID_TENANT_ID*/,
+                     int64_t mem_size_limit /*= OB_INVALID_TENANT_ID*/,
                      bool use_row_compact/*= true*/)
-    : row_store_(label, tenant_id, use_row_compact),
+    : row_store_(label, use_row_compact),
       mem_size_limit_(mem_size_limit),
-      tenant_id_(tenant_id),
       label_(label),
       affected_rows_(0),
       last_insert_id_to_client_(0),
@@ -47,8 +45,7 @@ ObScanner::ObScanner(const char *label /*= ObModIds::OB_NEW_SCANNER*/,
       row_matched_count_(0),
       row_duplicated_count_(0),
       inner_allocator_(ObModIds::OB_SCANNER,
-                       OB_MALLOC_NORMAL_BLOCK_SIZE,
-                       tenant_id),
+                       OB_MALLOC_NORMAL_BLOCK_SIZE),
       is_result_accurate_(true),
       implicit_cursors_(inner_allocator_),
       datum_store_(label),
@@ -63,11 +60,9 @@ ObScanner::ObScanner(const char *label /*= ObModIds::OB_NEW_SCANNER*/,
 ObScanner::ObScanner(ObIAllocator &allocator,
                      const char *label,
                      int64_t mem_size_limit,
-                     uint64_t tenant_id,
                      bool use_row_compact)
-    : row_store_(allocator, label, tenant_id, use_row_compact),
+    : row_store_(allocator, label, use_row_compact),
       mem_size_limit_(mem_size_limit),
-      tenant_id_(tenant_id),
       label_(label),
       affected_rows_(0),
       last_insert_id_to_client_(0),
@@ -79,8 +74,7 @@ ObScanner::ObScanner(ObIAllocator &allocator,
       row_matched_count_(0),
       row_duplicated_count_(0),
       inner_allocator_(ObModIds::OB_SCANNER,
-                       OB_MALLOC_NORMAL_BLOCK_SIZE,
-                       tenant_id),
+                       OB_MALLOC_NORMAL_BLOCK_SIZE),
       is_result_accurate_(true),
       implicit_cursors_(allocator),
       datum_store_(label, &allocator),
@@ -135,7 +129,7 @@ int ObScanner::init(int64_t mem_size_limit /*= DEFAULT_MAX_SERIALIZE_SIZE*/)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("user var map has been inited already", K(ret));
-  } else if (OB_FAIL(datum_store_.init(UINT64_MAX, tenant_id_,
+  } else if (OB_FAIL(datum_store_.init(UINT64_MAX,
                                        ObCtxIds::DEFAULT_CTX_ID, label_, false/*enable_dump*/))) {
     LOG_WARN("fail to init datum store", K(ret));
   } else {
@@ -244,7 +238,7 @@ int ObScanner::assign(const ObScanner &other)
       LOG_WARN("assign rowstore failed", K(ret));
     }
   }
-  tenant_id_ = other.tenant_id_;
+  
   label_ = other.label_;
   mem_size_limit_ = other.mem_size_limit_;
   last_insert_id_to_client_ = other.last_insert_id_to_client_;
@@ -351,7 +345,6 @@ OB_DEF_SERIALIZE(ObScanner)
               table_row_counts_,
               implicit_cursors_,
               rcode_.warnings_,
-              tenant_id_,
               datum_store_,
               fb_info_,
               memstore_read_row_count_,
@@ -381,7 +374,6 @@ OB_DEF_SERIALIZE_SIZE(ObScanner)
               table_row_counts_,
               implicit_cursors_,
               rcode_.warnings_,
-              tenant_id_,
               datum_store_,
               fb_info_,
               memstore_read_row_count_,
@@ -411,13 +403,12 @@ OB_DEF_DESERIALIZE(ObScanner)
               trans_result_,
               table_row_counts_,
               implicit_cursors_,
-              rcode_.warnings_,
-              tenant_id_)
+              rcode_.warnings_)
   if (OB_SUCC(ret)) {
     if (!datum_store_.is_inited()) {
       // When reverse serialization from ob_rpc_proxy, the init interface of obscanner is not called, datum_store_ relies on init when deserializing,
       // So here to judge, if there is no init, then init, the existing logic is not changed for the time being
-      if (OB_FAIL(datum_store_.init(UINT64_MAX, tenant_id_,
+      if (OB_FAIL(datum_store_.init(UINT64_MAX,
                                     ObCtxIds::DEFAULT_CTX_ID, label_, false/*enable_dump*/))) {
         LOG_WARN("fail to init datum store", K(ret));
       }

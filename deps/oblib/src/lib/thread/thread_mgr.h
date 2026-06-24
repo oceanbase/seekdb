@@ -123,8 +123,7 @@ class ITG
 public:
   ITG() : tg_helper_(nullptr) {}
   virtual ~ITG() {}
-  int64_t get_tenant_id() const
-  { return NULL == tg_helper_ ? common::OB_SERVER_TENANT_ID : tg_helper_->id(); }
+  
   virtual int thread_cnt() = 0;
   virtual int set_thread_cnt(int64_t) = 0;
   virtual int start() = 0;
@@ -488,7 +487,6 @@ public:
   int set_handler(TGTaskHandlerTemplate<typename ThreadPoolType::TaskType> &handler)
   {
     int ret = common::OB_SUCCESS;
-    uint64_t tenant_id = get_tenant_id();
     if (qth_ != nullptr) {
       ret = common::OB_ERR_UNEXPECTED;
     } else {
@@ -499,7 +497,7 @@ public:
         ret = qth_->set_adaptive_thread(min_thread_num_, max_thread_num_);
       }
       if (OB_SUCC(ret)) {
-        ret = qth_->init(max_thread_num_, task_num_limit_, attr_.name_, tenant_id);
+        ret = qth_->init(max_thread_num_, task_num_limit_, attr_.name_);
       }
     }
     return ret;
@@ -612,14 +610,14 @@ public:
   int set_handler(TGTaskHandler &handler)
   {
     int ret = common::OB_SUCCESS;
-    uint64_t tenant_id = NULL == tg_helper_ ? common::OB_SERVER_TENANT_ID : tg_helper_->id();
+    
     if (qth_ != nullptr) {
       ret = common::OB_ERR_UNEXPECTED;
     } else {
       qth_ = new (buf_) MyMapQueueThreadPool();
       qth_->handler_ = &handler;
       qth_->set_run_wrapper(tg_helper_);
-      ret = qth_->init(tenant_id, thread_num_, attr_.name_);
+      ret = qth_->init(thread_num_, attr_.name_);
     }
     return ret;
   }
@@ -811,7 +809,7 @@ public:
       if (OB_FAIL(timer_->set_run_wrapper_with_ret(tg_helper_))) {
         OB_LOG(WARN, "timer set run wrapper failed", K(ret));
       } else if (OB_FAIL(timer_->init(attr_.name_,
-                               ObMemAttr(get_tenant_id(), "TGTimer")))) {
+                               ObMemAttr("TGTimer")))) {
         OB_LOG(WARN, "init failed", K(ret));
       }
     }

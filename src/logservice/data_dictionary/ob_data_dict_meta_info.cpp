@@ -16,6 +16,7 @@
 
 
 #include "ob_data_dict_meta_info.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_data_dict_service.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 
@@ -128,7 +129,7 @@ void ObDataDictMetaInfoHeader::reset()
 {
   magic_ = 0;
   meta_version_ = 0;
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   item_cnt_ = 0;
   min_snapshot_scn_ = share::OB_INVALID_SCN_VAL;
   max_snapshot_scn_ = share::OB_INVALID_SCN_VAL;
@@ -137,7 +138,6 @@ void ObDataDictMetaInfoHeader::reset()
 }
 
 int ObDataDictMetaInfoHeader::generate(
-    const uint64_t tenant_id,
     const int32_t item_cnt,
     const uint64_t max_snapshot_scn,
     const uint64_t min_snapshot_scn,
@@ -152,7 +152,7 @@ int ObDataDictMetaInfoHeader::generate(
   } else {
     magic_ = DATADICT_METAINFO_HEADER_MAGIC;
     meta_version_ = DATADICT_METAINFO_META_VERSION;
-    tenant_id_ = tenant_id;
+    
     item_cnt_ = item_cnt;
     max_snapshot_scn_ = max_snapshot_scn;
     min_snapshot_scn_ = min_snapshot_scn;
@@ -202,8 +202,6 @@ DEFINE_SERIALIZE(ObDataDictMetaInfoHeader)
     DDLOG(WARN, "serialize magic failed", K(ret), K(buf), K(buf_len), K(pos), K(magic_));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, meta_version_))) {
     DDLOG(WARN, "serialize meta_version failed", K(ret), K(buf), K(buf_len), K(pos), K(meta_version_));
-  } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, tenant_id_))) {
-    DDLOG(WARN, "serialize tenant_id_ failed", K(ret), K(buf), K(buf_len), K(pos), K(tenant_id_));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, item_cnt_))) {
     DDLOG(WARN, "serialize item_cnt failed", K(ret), K(buf), K(buf_len), K(pos), K(item_cnt_));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, min_snapshot_scn_))) {
@@ -227,8 +225,6 @@ DEFINE_DESERIALIZE(ObDataDictMetaInfoHeader)
     DDLOG(WARN, "deserialize magic failed", K(ret), K(buf), K(data_len), K(pos), K(magic_));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &meta_version_))) {
     DDLOG(WARN, "deserialize meta_version failed", K(ret), K(buf), K(data_len), K(pos), K(meta_version_));
-  } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, (int64_t *)&tenant_id_))) {
-    DDLOG(WARN, "deserialize tenant_id_ failed", K(ret), K(buf), K(data_len), K(pos), K(tenant_id_));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &item_cnt_))) {
     DDLOG(WARN, "deserialize item_cnt failed", K(ret), K(buf), K(data_len), K(pos), K(item_cnt_));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, (int64_t *)&min_snapshot_scn_))) {
@@ -248,7 +244,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObDataDictMetaInfoHeader)
 {
   return serialization::encoded_length_i16(magic_) +
       serialization::encoded_length_i16(meta_version_) +
-      serialization::encoded_length_i64(tenant_id_) +
       serialization::encoded_length_i32(item_cnt_) +
       serialization::encoded_length_i64(min_snapshot_scn_) +
       serialization::encoded_length_i64(max_snapshot_scn_) +
@@ -386,18 +381,18 @@ int MetaInfoQueryHelper::get_data(
     ret = OB_INVALID_ARGUMENT;
     DDLOG(WARN, "invalid args to get data_dict data", KR(ret), K(base_scn), KP(data), K(data_size));
   } else if (OB_FAIL(get_data_dict_meta_info_(base_scn, item_arr))) {
-    DDLOG(WARN, "get data dict meta info failed", K(ret), K_(tenant_id), K(base_scn));
+    DDLOG(WARN, "get data dict meta info failed", K(ret), K(base_scn));
   } else if (item_arr.count() <= 0) {
     ret = OB_ENTRY_NOT_EXIST;
     int tmp_ret = OB_SUCCESS;
 
     if (OB_TMP_FAIL(mark_dump_data_dict_())) {
-      DDLOG(WARN, "mark_dump_data_dict_ failed", KR(ret), KR(tmp_ret), K_(tenant_id), K(base_scn));
+      DDLOG(WARN, "mark_dump_data_dict_ failed", KR(ret), KR(tmp_ret), K(base_scn));
     } else {
-      DDLOG(WARN, "no valid result was fetched from result", KR(ret), K_(tenant_id), K(base_scn));
+      DDLOG(WARN, "no valid result was fetched from result", KR(ret), K(base_scn));
     }
   } else if (OB_FAIL(generate_data_(item_arr, data, data_size, real_size, scn))) {
-    DDLOG(WARN, "generate data from item_arr failed", KR(ret), K_(tenant_id), K(base_scn));
+    DDLOG(WARN, "generate data from item_arr failed", KR(ret), K(base_scn));
   }
 
   return ret;
@@ -425,7 +420,7 @@ int MetaInfoQueryHelper::generate_data_(const DataDictMetaInfoItemArr &item_arr,
       have_enough_buffer = false;
     } else if (OB_FAIL(item.serialize(data, data_size, meta_data_pos))) {
       DDLOG(WARN, "serialize datadict metainfo item failed", K(ret), K(data),
-          K(data_size), K(meta_data_pos), K(tenant_id_));
+          K(data_size), K(meta_data_pos));
     } else {
       // succ
       serialized_item_cnt++;
@@ -435,7 +430,7 @@ int MetaInfoQueryHelper::generate_data_(const DataDictMetaInfoItemArr &item_arr,
     const datadict::ObDataDictMetaInfoItem &max_scn_item = item_arr.at(0);
     const datadict::ObDataDictMetaInfoItem &min_scn_item = item_arr.at(serialized_item_cnt-1);
 
-    if (OB_FAIL(header.generate(tenant_id_, serialized_item_cnt, max_scn_item.snapshot_scn_,
+    if (OB_FAIL(header.generate(serialized_item_cnt, max_scn_item.snapshot_scn_,
         min_scn_item.snapshot_scn_, data + header_size, meta_data_pos - header_size))) {
       DDLOG(WARN, "generate metainfo header failed", K(ret), K(serialized_item_cnt),
           K(data), K(header_size), K(meta_data_pos));
@@ -465,17 +460,17 @@ int MetaInfoQueryHelper::get_data_dict_meta_info_(const share::SCN &base_scn, Da
     if (OB_FAIL(sql.assign_fmt(QUERY_META_INFO_SQL_STR, DATA_DICT_META_TABLE_NAME))) {
       DDLOG(WARN, "assign format to sqlstring failed", KR(ret), KCSTRING(QUERY_META_INFO_SQL_STR),
           KCSTRING(DATA_DICT_META_TABLE_NAME));
-    } else if (OB_FAIL(sql_proxy_.read(result, tenant_id_, sql.ptr()))) {
+    } else if (OB_FAIL(sql_proxy_.read(result, sql.ptr()))) {
       DDLOG(WARN, "sql proxy failed to read result when querying datadict metainfo", K(ret),
-          K(tenant_id_), "sql", sql.ptr());
+          "sql", sql.ptr());
     } else if (OB_ISNULL((sql_result = result.get_result()))) {
       ret = OB_ERR_UNEXPECTED;
       DDLOG(WARN, "get sql result failed", K(ret), "sql", sql.ptr());
     } else if (OB_FAIL(parse_record_from_result_(base_scn, *sql_result, record_count, valid_record_count, item_arr))) {
       DDLOG(WARN, "parse record from result failed", KR(ret),
-          K_(tenant_id), "sql", sql.ptr(), K(base_scn), K(record_count), K(valid_record_count));
+          "sql", sql.ptr(), K(base_scn), K(record_count), K(valid_record_count));
     } else {
-      DDLOG(INFO, "get_data_dict_meta_info", K(tenant_id_), K(base_scn), K(record_count), K(valid_record_count));
+      DDLOG(INFO, "get_data_dict_meta_info", K(base_scn), K(record_count), K(valid_record_count));
     }
   }
 
@@ -537,17 +532,14 @@ int MetaInfoQueryHelper::mark_dump_data_dict_()
 {
   int ret = OB_SUCCESS;
   ObDataDictService *dict_service = NULL;
-  const uint64_t ctx_tenant_id = MTL_ID();
+  
 
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == ctx_tenant_id || ctx_tenant_id != tenant_id_)) {
-    ret = OB_STATE_NOT_MATCH;
-    DDLOG(WARN, "current mtl ctx tenant is invalid or not match", KR(ret), K(ctx_tenant_id), K_(tenant_id));
-  } else if (OB_ISNULL(dict_service = MTL(ObDataDictService*))) {
+  if (OB_ISNULL(dict_service = share::g_mp->data_dict_service())) {
     ret = OB_ERR_UNEXPECTED;
-    DDLOG(WARN, "data_dict_service is not valid, server may not has resource for ctx_tenant", KR(ret), K(ctx_tenant_id));
+    DDLOG(WARN, "data_dict_service is not valid, server may not has resource for ctx_tenant", KR(ret));
   } else {
     dict_service->mark_force_dump_data_dict();
-    DDLOG(INFO, "mark_force_dump_data_dict", K(ctx_tenant_id));
+    DDLOG(INFO, "mark_force_dump_data_dict");
   }
 
   return ret;

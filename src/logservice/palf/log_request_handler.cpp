@@ -431,36 +431,8 @@ int LogRequestHandler::handle_request<LogRegisterParentResp>(
   return ret;
 }
 
-/********************[Election Message]********************/
-#define HANDLE_ELECTION_MSG(MsgType) \
-template <>\
-int LogRequestHandler::handle_request<MsgType>(\
-    const int64_t palf_id,\
-    const ObAddr &server,\
-    const MsgType &req)\
-{\
-  TIMEGUARD_INIT(ELECT, 50_ms);\
-  int ret = common::OB_SUCCESS;\
-  if (false == is_valid_palf_id(palf_id) || false == req.is_valid()) {\
-    ret = OB_INVALID_ARGUMENT;\
-    PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(palf_id), K(req));\
-  } else {\
-    IPalfHandleImplGuard guard;\
-    if (CLICK_FAIL(palf_env_impl_->get_palf_handle_impl(palf_id, guard))) {\
-      PALF_LOG(WARN, "ObLogMgr get_log_service failed", K(ret), K(palf_id), KP(palf_env_impl_));\
-    } else if (CLICK_FAIL(guard.get_palf_handle_impl()->handle_election_message(req))) {\
-      PALF_LOG(WARN, "handle message failed", K(ret), K(palf_id), K(server), K(req));\
-    } else {\
-      PALF_LOG(DEBUG, "handle message success", K(ret), K(palf_id), K(server), K(req));\
-    }\
-  }\
-  return ret;\
-}
-HANDLE_ELECTION_MSG(ElectionPrepareRequestMsg)
-HANDLE_ELECTION_MSG(ElectionPrepareResponseMsg)
-HANDLE_ELECTION_MSG(ElectionAcceptRequestMsg)
-HANDLE_ELECTION_MSG(ElectionAcceptResponseMsg)
-HANDLE_ELECTION_MSG(ElectionChangeLeaderMsg)
+// [Election Message] handlers removed: single-replica seekdb has no election
+// transport, so these request specializations are dead.
 
 template <>
 int LogRequestHandler::handle_sync_request<LogGetMCStReq, LogGetMCStResp>(

@@ -37,9 +37,8 @@ public:
   virtual bool is_valid() const;
   virtual int to_key_string() { return common::OB_NOT_SUPPORTED; }
   bool operator ==(const ObILongopsKey &other) const;
-  TO_STRING_KV(K_(tenant_id), K_(sid), K_(name), K_(target));
+  TO_STRING_KV(K_(sid), K_(name), K_(target));
 public:
-  uint64_t tenant_id_;
   uint64_t sid_;
   char name_[common::MAX_LONG_OPS_NAME_LENGTH];
   char target_[common::MAX_LONG_OPS_TARGET_LENGTH];
@@ -59,12 +58,11 @@ public:
   virtual ~ObLongopsValue() = default;
   ObLongopsValue &operator=(const ObLongopsValue &other);
   void reset();
-  TO_STRING_KV(K_(tenant_id), K_(trace_id), K_(start_time), K_(finish_time),K_(elapsed_seconds), K_(time_remaining),
+  TO_STRING_KV(K_(trace_id), K_(start_time), K_(finish_time),K_(elapsed_seconds), K_(time_remaining),
                K_(percentage), K_(last_update_time), K_(op_name), K_(target), K_(message));
 public:
   common::ObCurTraceId::TraceId trace_id_;
   uint64_t sid_;
-  uint64_t tenant_id_;
   int64_t start_time_;
   int64_t finish_time_;
   int64_t elapsed_seconds_;

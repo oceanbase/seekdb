@@ -123,11 +123,8 @@ int HashBasedDistinctVecExtraResult::init_distinct_set(
   aggr_info_ = &aggr_info;
   need_rewind_ = need_rewind;
   max_batch_size_ = eval_ctx.max_batch_size_;
-  const int64_t tenant_id = eval_ctx.exec_ctx_.get_my_session()->get_effective_tenant_id();
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else if (!hp_infras_mgr.is_inited()) {
+  
+  if (!hp_infras_mgr.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("hash part infras group not initialized", K(ret));
   } else if (eval_ctx.max_batch_size_ > 0) {
@@ -429,7 +426,7 @@ int DataStoreVecExtraResult::init_data_set(ObAggrInfo &aggr_info, ObEvalCtx &eva
     SQL_LOG(WARN, "inited", K(data_store_inited_), K(ret));
   } else if (need_sort_) {
     ObSortVecOpContext context;
-    context.tenant_id_ = eval_ctx.exec_ctx_.get_my_session()->get_effective_tenant_id();
+    
 
     // Get the sort key exprs
     OB_ASSERT(aggr_info.sort_collations_.count() > 0);
@@ -514,8 +511,7 @@ int DataStoreVecExtraResult::init_data_set(ObAggrInfo &aggr_info, ObEvalCtx &eva
     }
   } else {
     void *store_buf = nullptr;
-    ObMemAttr attr(eval_ctx.exec_ctx_.get_my_session()->get_effective_tenant_id(),
-                   ObModIds::OB_SQL_AGGR_FUN_GROUP_CONCAT, ObCtxIds::WORK_AREA);
+    ObMemAttr attr(ObModIds::OB_SQL_AGGR_FUN_GROUP_CONCAT, ObCtxIds::WORK_AREA);
     if (OB_ISNULL(store_buf = allocator.alloc(sizeof(ObTempRowStore)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_LOG(WARN, "allocate memory failed", K(ret));
@@ -672,10 +668,10 @@ int HybridHistVecExtraResult::init_data_set(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObDatum *bucket_num_result = NULL;
   void *row_store_buf = nullptr;
-  int64_t tenant_id = eval_ctx.exec_ctx_.get_my_session()->get_effective_tenant_id();
-  ObMemAttr attr(tenant_id, "HybirdHist", ObCtxIds::WORK_AREA);
+  
+  ObMemAttr attr("HybirdHist", ObCtxIds::WORK_AREA);
   lib::ContextParam param;
-  param.set_mem_attr(tenant_id, "HybirdHist", ObCtxIds::WORK_AREA)
+  param.set_mem_attr("HybirdHist", ObCtxIds::WORK_AREA)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL);
 
   if (OB_ISNULL(aggr_info.bucket_num_param_expr_) ||
@@ -707,8 +703,7 @@ int HybridHistVecExtraResult::init_data_set(ObIAllocator &allocator,
                                  sizeof(BucketDesc), 
                                  ObCompressorType::NONE_COMPRESSOR))) {
     LOG_WARN("init temp row store failed", K(ret));
-  } else if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
-                                             tenant_id, 0, 
+  } else if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), 0, 
                                              op_monitor_info_.get_operator_type(), 
                                              0, &eval_ctx.exec_ctx_))) {
     LOG_WARN("failed to init sql memory manager processor", K(ret));

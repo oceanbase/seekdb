@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_i_store.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -77,7 +78,7 @@ int ObStoreCtx::init_for_read(const ObLSID &ls_id,
                               const SCN &snapshot_version)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     STORAGE_LOG(WARN, "get_ls from ls service fail.", K(ret), K(*ls_svr));

@@ -58,7 +58,6 @@ public:
   ObCommonServerConnectionPool() : free_conn_count_(0), busy_conn_count_(0) {}
   virtual ~ObCommonServerConnectionPool() {}
 
-  //dblink
   virtual int release(common::sqlclient::ObISQLConnection *connection, const bool succ) = 0;
   TO_STRING_KV(K_(free_conn_count), K_(busy_conn_count));
 protected:
@@ -91,42 +90,27 @@ class ObISQLConnection
 {
 public:
   ObISQLConnection() :
-       is_inited_(false),
        sessid_(-1),
        consumer_group_id_(0),
-       has_reverse_link_credentials_(false),
        usable_(true),
-       last_set_sql_mode_cstr_(NULL),
-       last_set_sql_mode_cstr_buf_size_(0),
-       last_set_client_charset_cstr_(NULL),
-       last_set_connection_charset_cstr_(NULL),
-       last_set_results_charset_cstr_(NULL),
-       next_conn_(NULL),
        check_priv_(false)
   {}
   virtual ~ObISQLConnection() {
     allocator_.reset();
-    last_set_sql_mode_cstr_buf_size_ = 0;
-    last_set_sql_mode_cstr_ = NULL;
-    last_set_client_charset_cstr_ = NULL;
-    last_set_connection_charset_cstr_ = NULL;
-    last_set_results_charset_cstr_ = NULL;
-    next_conn_ = NULL;
   }
 
   // sql execute interface
-  virtual int execute_read(const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_read(const ObString &sql,
       ObISQLClient::ReadResult &res, bool is_user_sql = false,
       const common::ObAddr *sql_exec_addr = nullptr) = 0;
-  virtual int execute_read(const int64_t cluster_id, const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_read(const int64_t cluster_id, const ObString &sql,
       ObISQLClient::ReadResult &res, bool is_user_sql = false,
       const common::ObAddr *sql_exec_addr = nullptr) = 0;
-  virtual int execute_write(const uint64_t tenant_id, const ObString &sql,
+  virtual int execute_write(const ObString &sql,
       int64_t &affected_rows, bool is_user_sql = false,
       const common::ObAddr *sql_exec_addr = nullptr) = 0;
   virtual int execute_proc() { return OB_NOT_SUPPORTED; }
-  virtual int execute_proc(const uint64_t tenant_id,
-                        ObIAllocator &allocator,
+  virtual int execute_proc(ObIAllocator &allocator,
                         ParamStore &params,
                         ObString &sql,
                         const share::schema::ObRoutineInfo &routine_info,
@@ -162,16 +146,8 @@ public:
   virtual int get_server_major_version(int64_t &major_version) {
     return OB_NOT_SUPPORTED;
   }
-  virtual int get_package_udts(ObIAllocator &alloctor,
-                               const common::ObString &database_name,
-                               const common::ObString &package_name,
-                               common::ObIArray<pl::ObUserDefinedType *> &udts,
-                               uint64_t dblink_id,
-                               uint64_t &next_object_id)
-  { return OB_NOT_SUPPORTED; }
-
   // transaction interface
-  virtual int start_transaction(const uint64_t &tenant_id, bool with_snap_shot = false) = 0;
+  virtual int start_transaction(bool with_snap_shot = false) = 0;
   virtual int rollback() = 0;
   virtual int commit() = 0;
 
@@ -180,15 +156,13 @@ public:
   virtual int set_session_variable(const ObString &name, int64_t val) = 0;
   virtual int set_session_variable(const ObString &name, const ObString &val) = 0;
 
-  virtual int execute(const uint64_t tenant_id, ObIExecutor &executor)
+  virtual int execute(ObIExecutor &executor)
   {
-    UNUSED(tenant_id);
     UNUSED(executor);
     return OB_NOT_SUPPORTED;
   }
 
 
-  // dblink
   virtual ObCommonServerConnectionPool *get_common_server_pool() = 0;
   void set_sessid(uint32_t sessid) { sessid_ = sessid; }
   uint32_t get_sessid() { return sessid_; }
@@ -200,7 +174,6 @@ public:
   virtual void set_use_external_session(bool v) { UNUSED(v); }
   virtual void set_ob_enable_pl_cache(bool v) { UNUSED(v); }
   virtual int64_t get_cluster_id() const { return common::OB_INVALID_ID; }
-  void set_session_init_status(bool status) { is_inited_ = status;}
   virtual void set_user_timeout(int64_t user_timeout) { UNUSED(user_timeout); }
   virtual int64_t get_user_timeout() const { return 0; }
   void set_group_id(const uint64_t v) {consumer_group_id_ = v; }
@@ -208,24 +181,13 @@ public:
   void set_usable(bool flag) { usable_ = flag; }
   bool usable() { return usable_; }
   virtual int ping() { return OB_SUCCESS; }
-  ObISQLConnection *get_next_conn() { return next_conn_; }
-  void set_next_conn(ObISQLConnection *conn) { next_conn_ = conn; }
   void set_check_priv(bool on) { check_priv_ = on; }
   bool is_check_priv() { return check_priv_; }
 protected:
-  bool is_inited_; // for oracle dblink, we have to init remote env with some sql
   uint32_t sessid_;
   uint64_t consumer_group_id_; //for resource isolation
-  bool has_reverse_link_credentials_; // for dblink, mark if this link has credentials set
   bool usable_;  // usable_ = false: connection is unusable, should not execute query again.
-  char *last_set_sql_mode_cstr_; // for mysql dblink to set sql mode
-  int64_t last_set_sql_mode_cstr_buf_size_;
-  const char *last_set_client_charset_cstr_;
-  const char *last_set_connection_charset_cstr_;
-  const char *last_set_results_charset_cstr_;
-  const char *last_set_transaction_isolation_cstr_;
   common::ObArenaAllocator allocator_;
-  ObISQLConnection *next_conn_; // used in dblink_conn_map_
   bool check_priv_;
 };
 

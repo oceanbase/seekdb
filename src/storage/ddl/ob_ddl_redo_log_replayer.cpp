@@ -39,7 +39,7 @@ ObDDLRedoLogReplayer::~ObDDLRedoLogReplayer()
 int ObDDLRedoLogReplayer::init(ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(ls->get_tenant_id(), "RedoLogBuckLock");
+  ObMemAttr attr("RedoLogBuckLock");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDDLRedoLogReplayer has been inited twice", K(ret));

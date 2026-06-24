@@ -38,8 +38,7 @@ public:
   {}
   virtual ~ObFlashBackTableFromRecyclebinStmt() {}
   const obcall::ObFlashBackTableFromRecyclebinArg& get_flashback_table_arg() const { return flashback_table_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const { return flashback_table_arg_.tenant_id_; }
+  
   inline void set_origin_table_id(const uint64_t origin_table);
   uint64_t get_origin_table_id() const { return flashback_table_arg_.origin_table_id_; }
   common::ObString get_origin_db_name() const { return flashback_table_arg_.origin_db_name_; };
@@ -56,10 +55,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObFlashBackTableFromRecyclebinStmt);
 };
 
-inline void ObFlashBackTableFromRecyclebinStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  flashback_table_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline void ObFlashBackTableFromRecyclebinStmt::set_origin_db_name(
             const common::ObString &origin_db_name)
@@ -101,7 +97,7 @@ public:
   virtual ~ObFlashBackTableToScnStmt() {}
   void set_time_expr(ObRawExpr* expr) { expr_  = expr; }
   void set_time_type(int type) { time_type_ = type; }
-  void set_tenant_id(const uint64_t tenant_id) { flashback_table_to_scn_arg_.tenant_id_ = tenant_id; }
+  
   void set_query_end_time(const int64_t query_end_time)
   {
     flashback_table_to_scn_arg_.query_end_time_ = query_end_time;
@@ -133,8 +129,7 @@ public:
   {}
   virtual ~ObFlashBackIndexStmt() {}
   const obcall::ObFlashBackIndexArg& get_flashback_index_arg() const { return flashback_index_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const { return flashback_index_arg_.tenant_id_; }
+  
   inline void set_origin_table_id(const uint64_t origin_table_id);
   uint64_t get_origin_table_id() const { return flashback_index_arg_.origin_table_id_; }
   void set_origin_table_name(const common::ObString &origin_table_name);
@@ -148,10 +143,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObFlashBackIndexStmt);
 };
 
-inline void ObFlashBackIndexStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  flashback_index_arg_.tenant_id_ = tenant_id;
-}
+
 inline void ObFlashBackIndexStmt::set_origin_table_id(const uint64_t origin_table_id)
 {
   flashback_index_arg_.origin_table_id_ = origin_table_id;
@@ -185,8 +177,7 @@ public:
   {}
   virtual ~ObFlashBackDatabaseStmt() {}
   const obcall::ObFlashBackDatabaseArg& get_flashback_database_arg() const { return flashback_db_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const { return flashback_db_arg_.tenant_id_; }
+  
   const common::ObString &get_origin_db_name() const { return flashback_db_arg_.origin_db_name_; }
   const common::ObString &get_new_db_name() const { return flashback_db_arg_.new_db_name_; }
   void set_origin_db_name(const common::ObString origin_db_name);
@@ -198,10 +189,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObFlashBackDatabaseStmt);
 };
 
-inline void ObFlashBackDatabaseStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  flashback_db_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline void ObFlashBackDatabaseStmt::set_origin_db_name(const common::ObString origin_db_name)
 {

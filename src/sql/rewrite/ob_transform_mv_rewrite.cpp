@@ -250,7 +250,7 @@ int ObTransformMVRewrite::gen_base_table_map(const ObIArray<TableItem*> &from_ta
       if (OB_ISNULL(from_table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null table", K(ret), K(i));
-      } else if (!(from_table->is_basic_table() || from_table->is_link_table())
+      } else if (!(from_table->is_basic_table())
                  || OB_INVALID_ID == from_table->ref_id_) {
         // do nothing
       } else if (NULL == (num = from_table_num.get(from_table->ref_id_))) {
@@ -268,7 +268,7 @@ int ObTransformMVRewrite::gen_base_table_map(const ObIArray<TableItem*> &from_ta
       if (OB_ISNULL(to_table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null table", K(ret), K(i));
-      } else if (!(to_table->is_basic_table() || to_table->is_link_table())
+      } else if (!(to_table->is_basic_table())
                  || OB_INVALID_ID == to_table->ref_id_) {
         // do nothing
       } else if (NULL == (idx = to_table_map.get(to_table->ref_id_))) {
@@ -347,7 +347,7 @@ int ObTransformMVRewrite::inner_gen_base_table_map(int64_t from_table_idx,
     if (OB_ISNULL(from_table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("from table item is NULL", K(ret), K(from_table_idx));
-    } else if (!(from_table->is_basic_table() || from_table->is_link_table())
+    } else if (!(from_table->is_basic_table())
                || OB_INVALID_ID == from_table->ref_id_
                || NULL == (to_idx = to_table_map.get(from_table->ref_id_))) {
       // table does not exists in to_tables, map from_table to nothing

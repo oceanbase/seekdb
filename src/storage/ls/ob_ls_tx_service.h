@@ -67,7 +67,6 @@ class ObLSTxService : public logservice::ObIReplaySubHandler,
 public:
   ObLSTxService(ObLS *parent)
       : parent_(parent),
-        tenant_id_(0),
         ls_id_(),
         mgr_(NULL),
         trans_service_(NULL),
@@ -222,7 +221,7 @@ private:
   void reset_();
 
   storage::ObLS *parent_;
-  int64_t tenant_id_;
+  
   share::ObLSID ls_id_;
   transaction::ObLSTxCtxMgr *mgr_;
   transaction::ObTransService *trans_service_;

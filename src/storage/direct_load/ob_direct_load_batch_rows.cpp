@@ -35,7 +35,7 @@ ObDirectLoadBatchRows::ObDirectLoadBatchRows()
     size_(0),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
   vectors_.set_block_allocator(ModulePageAllocator(allocator_));
 }
 

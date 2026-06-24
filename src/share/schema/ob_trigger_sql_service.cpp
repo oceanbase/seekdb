@@ -32,7 +32,7 @@ int ObTriggerSqlService::create_trigger(const ObTriggerInfo &trigger_info,
                                         const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
@@ -60,7 +60,7 @@ int ObTriggerSqlService::drop_trigger(const ObTriggerInfo &trigger_info,
                                       const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   ObSchemaOperationType drop_type = OB_INVALID_DDL_OP;
@@ -90,7 +90,7 @@ int ObTriggerSqlService::alter_trigger(const ObTriggerInfo &trigger_info,
                                        const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
@@ -112,7 +112,7 @@ int ObTriggerSqlService::flashback_trigger(const ObTriggerInfo &trigger_info,
 {
   int ret = OB_SUCCESS;
   ObTriggerValues new_values;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
@@ -142,7 +142,7 @@ int ObTriggerSqlService::rebuild_trigger_on_rename(const ObTriggerInfo &trigger_
   ObString spec_source;
   ObString body_source;
   ObArenaAllocator inner_alloc;
-  ObDMLExecHelper exec(sql_client, trigger_info.get_exec_tenant_id());
+  ObDMLExecHelper exec(sql_client);
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
   ObTriggerInfo new_trigger_info(&inner_alloc);
@@ -194,17 +194,12 @@ int ObTriggerSqlService::fill_dml_sql(const ObTriggerInfo &trigger_info,
   const ObString &body_source = new_values.new_body_source() ?
                                   new_values.get_body_source() :
                                   trigger_info.get_package_body_source();
-  uint64_t exec_tenant_id = trigger_info.get_exec_tenant_id();
-  uint64_t pure_tenant_id = ObSchemaUtils::get_extract_tenant_id(exec_tenant_id,
-                                                                 trigger_info.get_tenant_id());
-  uint64_t pure_trigger_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                  trigger_info.get_trigger_id());
-  uint64_t pure_owner_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                trigger_info.get_owner_id());
-  uint64_t pure_database_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                   database_id);
-  uint64_t pure_base_object_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
-                                                                      base_object_id);
+  
+  
+  uint64_t pure_trigger_id = ObSchemaUtils::get_extract_schema_id(trigger_info.get_trigger_id());
+  uint64_t pure_owner_id = ObSchemaUtils::get_extract_schema_id(trigger_info.get_owner_id());
+  uint64_t pure_database_id = ObSchemaUtils::get_extract_schema_id(database_id);
+  uint64_t pure_base_object_id = ObSchemaUtils::get_extract_schema_id(base_object_id);
   OZ (dml.add_pk_column("trigger_id", pure_trigger_id));
   OZ (dml.add_column("owner_id", pure_owner_id));
   OZ (dml.add_column("database_id", pure_database_id));
@@ -256,7 +251,6 @@ int ObTriggerSqlService::log_trigger_operation(const ObTriggerInfo &trigger_info
 {
   int ret = OB_SUCCESS;
   ObSchemaOperation opt;
-  OX (opt.tenant_id_ = trigger_info.get_tenant_id());
   OX (opt.database_id_ = trigger_info.get_database_id());
   OX (opt.table_id_ = trigger_info.get_trigger_id());
   OX (opt.schema_version_ = new_schema_version);

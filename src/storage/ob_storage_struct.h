@@ -31,7 +31,7 @@
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/compaction/ob_medium_compaction_mgr.h"
 #include "storage/ddl/ob_ddl_struct.h"
-#include "storage/high_availability/ob_tablet_ha_status.h"
+#include "storage/ob_tablet_ha_status.h"
 #include "storage/blocksstable/ob_major_checksum_info.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/column_store/ob_column_store_replica_ddl_helper.h"

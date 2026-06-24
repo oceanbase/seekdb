@@ -128,7 +128,7 @@ int TruncateInfoHelper::get_tablet(
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
 
-  if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     COMMON_LOG(WARN, "failed to get ls", K(ret));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;

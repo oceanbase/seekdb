@@ -70,7 +70,7 @@ int ObDropUserResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "user_list_node is null", K(ret));
     } else {
-      uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
+      
       // resolved user_list_node
       for (int i = 0; i < user_list_node->num_child_ && OB_SUCCESS == ret; ++i) {
         ObString user_name;
@@ -83,7 +83,7 @@ int ObDropUserResolver::resolve(const ParseNode &parse_tree)
         }
       }
       if (OB_SUCC(ret)) {
-        drop_user_stmt->set_tenant_id(tenant_id);
+        
         drop_user_stmt->set_if_exists(if_exists);
       }
     }

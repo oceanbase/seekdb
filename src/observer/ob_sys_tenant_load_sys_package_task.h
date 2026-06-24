@@ -31,7 +31,7 @@ public:
   ObSysTenantLoadSysPackageTask();
   virtual ~ObSysTenantLoadSysPackageTask() {}
 
-  int init(const uint64_t tenant_id);
+  int init();
   bool is_inited() const { return inited_; }
   int start(const int tg_id);
   void stop(const int tg_id);

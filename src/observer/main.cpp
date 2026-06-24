@@ -611,7 +611,7 @@ int inner_main(int argc, char *argv[])
   }
 #endif
 
-  lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "ObserverAlloc");
+  lib::ObMemAttr mem_attr("ObserverAlloc");
   ObServerOptions *opts = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(opts = OB_NEW(ObServerOptions, mem_attr))) {

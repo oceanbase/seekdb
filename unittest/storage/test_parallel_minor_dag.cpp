@@ -36,7 +36,7 @@ class TestParallelMinorDag : public ::testing::Test
 {
 public:
   TestParallelMinorDag()
-    : tenant_id_(1), allocator_(ObModIds::TEST), tenant_base_(tenant_id_) {}
+    : tenant_id_(1), allocator_(ObModIds::TEST) {}
   virtual ~TestParallelMinorDag() {}
   int prepare_merge_result(const int64_t sstable_cnt, ObGetMergeTablesResult &result);
 
@@ -60,7 +60,6 @@ public:
 
   const uint64_t tenant_id_;
   common::ObArenaAllocator allocator_;
-  ObTenantBase tenant_base_;
   ObSSTable *fake_sstables_[MAX_SSTABLE_CNT];
 };
 
@@ -78,12 +77,7 @@ void TestParallelMinorDag::TearDownTestCase()
 }
 void TestParallelMinorDag::SetUp()
 {
-  ObTenantMetaMemMgr *t3m = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST, tenant_id_);
-  ASSERT_EQ(OB_SUCCESS, t3m->init());
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  tenant_base_.set(t3m);
-  ObTenantEnv::set_tenant(&tenant_base_);
-  ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
 
   MEMSET(fake_sstables_, 0, sizeof(ObSSTable*) * MAX_SSTABLE_CNT );
 }
@@ -98,12 +92,9 @@ void TestParallelMinorDag::TearDown()
   }
   allocator_.reset();
 
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr *);
-  t3m->destroy();
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
-  ObTenantEnv::set_tenant(nullptr);
 }
 
 int TestParallelMinorDag::prepare_merge_result(

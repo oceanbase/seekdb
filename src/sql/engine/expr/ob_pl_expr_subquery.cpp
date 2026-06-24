@@ -201,13 +201,11 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
             spi_result.reset_member_for_retry(*session);
           }
           retry_ctrl.clear_state_before_each_retry(session->get_retry_info_for_update());
-          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(session->get_effective_tenant_id(),
-                                                                  spi_result.get_scheme_guard()))) {
+          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(spi_result.get_scheme_guard()))) {
             LOG_WARN("get schema guard failed", K(ret));
-          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(session->get_effective_tenant_id(),
-                                                            tenant_version))) {
+          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(tenant_version))) {
             LOG_WARN("fail get schema version", K(ret));
-          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(OB_SYS_TENANT_ID, sys_version))) {
+          } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(sys_version))) {
             LOG_WARN("fail get sys schema version", K(ret));
           } else {
             retry_ctrl.set_tenant_local_schema_version(tenant_version);

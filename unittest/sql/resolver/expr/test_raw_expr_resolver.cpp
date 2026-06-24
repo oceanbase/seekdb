@@ -80,14 +80,14 @@ void TestRawExprResolver::resolve(const char* expr, const char *&json_expr)
   ObSQLSessionInfo session;
   ctx.session_info_ = &session;
   LinkExecCtxGuard link_guard(session, exec_ctx_);
-  ObTenantConfigGuard tenant_config(TENANT_CONF(sys_tenant_id_));
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
   EXPECT_TRUE(tenant_config.is_valid());
   // disable decimal_int to make json parser happy
   tenant_config->_enable_decimal_int_type = false;
   session.cached_tenant_config_info_.enable_decimal_int_type_ = false;
 
   EXPECT_TRUE(OB_SUCCESS == oceanbase::ObPreProcessSysVars::init_sys_var());
-  EXPECT_TRUE(OB_SUCCESS == session.test_init(0, 0, 0, NULL));
+  EXPECT_TRUE(OB_SUCCESS == session.test_init(0, 0, NULL));
   EXPECT_TRUE(OB_SUCCESS == session.load_default_sys_variable(false, true));
 
   ObRawExpr *raw_expr = NULL;
@@ -119,7 +119,20 @@ TEST_F(TestRawExprResolver, all)
   while (std::getline(if_tests, line)) {
     of_result << '[' << case_id++ << "] " << line << std::endl;
     resolve(line.c_str(), json_expr);
-    of_result << json_expr << std::endl;
+    // The expr to_string() output carries a non-deterministic `"this":0x...`
+    // pointer token (added by commit d0299a14fc01 "refine ObRawExpr memory usage").
+    // Strip it so the golden-file comparison stays stable across runs.
+    std::string dumped(json_expr);
+    for (size_t p = dumped.find("\"this\":"); p != std::string::npos; p = dumped.find("\"this\":")) {
+      size_t end = dumped.find_first_of(",}", p);
+      if (end == std::string::npos) { end = dumped.size(); }
+      if (end < dumped.size() && dumped[end] == ',') {
+        ++end;
+        while (end < dumped.size() && dumped[end] == ' ') { ++end; }
+      }
+      dumped.erase(p, end - p);
+    }
+    of_result << dumped.c_str() << std::endl;
   }
   of_result.close();
   // verify results
@@ -142,7 +155,7 @@ int main(int argc, char **argv)
   OB_LOGGER.set_log_level("INFO");
   OB_LOGGER.set_file_name("test_raw_expr_resolver.log", true);
   ContextParam param;
-  param.set_mem_attr(1001, "RawExprResolver", ObCtxIds::WORK_AREA)
+  param.set_mem_attr("RawExprResolver", ObCtxIds::WORK_AREA)
     .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE);
   init_sql_factories();
   CREATE_WITH_TEMP_CONTEXT(param) {

@@ -65,8 +65,7 @@ public:
   int hash(uint64_t &hash_value) const;
   bool operator== (const ObStorageCheckerValue &other) const;
   ObStorageCheckerValue & operator= (const ObStorageCheckerValue &other);
-  TO_STRING_KV(K_(tenant_id), K_(check_id), K_(bt));
-  uint64_t tenant_id_;
+  TO_STRING_KV(K_(check_id), K_(bt));
   ObStorageCheckID check_id_;
   char bt_[512];
 };

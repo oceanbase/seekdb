@@ -33,7 +33,7 @@ const int64_t init_size = 0;
 
 int64_t glibc_alloc_count = 0;
 int64_t glibc_free_count = 0;
-const ObMemAttr default_memattr(OB_SYS_TENANT_ID, ObNewModIds::TEST);
+const ObMemAttr default_memattr(ObNewModIds::TEST);
 
 #define MOCK_ALIGN 512
 #define MOCK_ALLOC_ALIGN 1

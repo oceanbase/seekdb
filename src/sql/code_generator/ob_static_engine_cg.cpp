@@ -350,19 +350,6 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
       LOG_WARN("assign exprs failed", K(ret));
     }
   }
-
-  if (OB_SUCC(ret) && log_op_def::LOG_TABLE_SCAN == op.get_type()
-      && static_cast<ObLogTableScan *>(&op)->get_table_type() == share::schema::EXTERNAL_TABLE) {
-    ObDASScanCtDef &scan_ctdef = static_cast<ObTableScanSpec*>(spec)->tsc_ctdef_.scan_ctdef_;
-    ObExternalFileFormat::FormatType format_type = ObExternalFileFormat::INVALID_FORMAT;
-    if (OB_FAIL(ObSQLUtils::get_external_table_type(scan_ctdef.external_file_format_str_.str_,
-                                                    format_type))) {
-      LOG_WARN("fail to get external table format", K(ret));
-    } else if (ObExternalFileFormat::CSV_FORMAT != format_type && !spec->use_rich_format_) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using non-rich vector format in external tables");
-    }
-  }
   partial_frame_gen.px_coord_cnt_ -= is_px_coord ? 1 : 0;
   partial_frame_gen.dfo_raw_exprs_ = origin_dfo_raw_exprs;
   return ret;
@@ -796,9 +783,8 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
 {
   int ret = OB_SUCCESS;
   ObString codec_str;
-  const int64_t tenant_id =
-    log_plan.get_optimizer_context().get_session_info()->get_effective_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_ISNULL(log_plan.get_stmt()) || OB_ISNULL(log_plan.get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt or query ctx is null", K(ret));
@@ -900,8 +886,6 @@ int ObStaticEngineCG::generate_calc_exprs(
               || contain_batch_stmt_parameter // calculate the folding parameter containing batch optimization
               || !raw_expr->is_const_expr())) {
         if (check_eval_once
-            && T_PSEUDO_EXTERNAL_FILE_COL != raw_expr->get_expr_type()
-            && T_PSEUDO_EXTERNAL_FILE_URL != raw_expr->get_expr_type()
             && T_PSEUDO_PARTITION_LIST_COL != raw_expr->get_expr_type()
             && T_ORA_ROWSCN != raw_expr->get_expr_type()
             && !(raw_expr->is_const_expr() || raw_expr->has_flag(IS_DYNAMIC_USER_VARIABLE))
@@ -2193,7 +2177,7 @@ int ObStaticEngineCG::fill_compress_type(ObLogSort &op, ObCompressorType &compr_
 {
   int ret = OB_SUCCESS;
   compr_type = NONE_COMPRESSOR;
-  int64_t tenant_id = op.get_plan()->get_optimizer_context().get_session_info()->get_effective_tenant_id();
+  
   // for normal sort we use default compress type. for online ddl, we use the compress type in source table
   ObLogicalOperator *child_op = op.get_child(0);
   const share::schema::ObTableSchema *table_schema = nullptr;
@@ -2205,7 +2189,7 @@ int ObStaticEngineCG::fill_compress_type(ObLogSort &op, ObCompressorType &compr_
       if (OB_ISNULL(schema_guard = opt_ctx_->get_schema_guard())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get schema guard", K(ret));
-      } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id, table_id, table_schema))) {
+      } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
         LOG_WARN("fail to get table schema", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
@@ -2940,7 +2924,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
     const ObTableSchema *table_schema = NULL;
     CK(OB_NOT_NULL(log_plan));
     CK(OB_NOT_NULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()));
-    OZ(schema_guard->get_table_schema(MTL_ID(), primary_dml_info->ref_table_id_, table_schema));
+    OZ(schema_guard->get_table_schema( primary_dml_info->ref_table_id_, table_schema));
     CK(OB_NOT_NULL(table_schema));
     OZ(check_only_one_unique_key(*log_plan, table_schema, spec.only_one_unique_key_));
     uint64_t ft_col_id = OB_INVALID_ID;
@@ -3232,7 +3216,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableInsertUpSpec &spec, 
     const ObTableSchema *table_schema = NULL;
     CK (OB_NOT_NULL(log_plan));
     CK (OB_NOT_NULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()));
-    OZ (schema_guard->get_table_schema(MTL_ID(), primary_dml_info->ref_table_id_, table_schema));
+    OZ (schema_guard->get_table_schema( primary_dml_info->ref_table_id_, table_schema));
     CK (OB_NOT_NULL(table_schema));
 
     OZ(spec.insert_up_ctdefs_.allocate_array(phy_plan_->get_allocator(), insert_dml_infos.count()));
@@ -3759,9 +3743,8 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
   }
 
   if (OB_SUCC(ret)) {
-    int64_t tenant_id =
-        op.get_plan()->get_optimizer_context().get_session_info()->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       const char *ptr = NULL;
       if (OB_ISNULL(ptr = tenant_config->_px_bloom_filter_group_size.get_value())) {
@@ -4998,8 +4981,8 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObHashGroupBySpec &spec,
     spec.set_est_group_cnt(op.get_total_ndv());
     OZ(set_3stage_info(op, spec));
     spec.by_pass_enabled_ = op.is_adaptive_aggregate();
-    int64_t tenant_id = op.get_plan()->get_optimizer_context().get_session_info()->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (tenant_config.is_valid()) {
       spec.llc_ndv_est_enabled_ = tenant_config->_enable_hgby_llc_ndv_adaptive;
       spec.skew_detection_enabled_ = tenant_config->_enable_hgby_skew_detection;
@@ -5351,10 +5334,6 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
     }
   }
 
-  if (OB_SUCC(ret) && op.get_table_type() == share::schema::EXTERNAL_TABLE) {
-    spec.is_external_table_ = true;
-  }
-
   if (OB_SUCC(ret) && opt_ctx_->is_insert_stmt_in_online_ddl()) {
     const TableItem *insert_table_item = opt_ctx_->get_root_stmt()->get_table_item(0);
     if (OB_ISNULL(insert_table_item)) {
@@ -5434,12 +5413,12 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
     int64_t hint_io_read_batch_size = 0;
     int64_t hint_io_gap_percentage = 0;
     const ObOptParamHint *opt_params = &log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
-    uint64_t tenant_id = session_info->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+    
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     int64_t pd_level = 0;
     if (OB_UNLIKELY(!tenant_config.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init tenant config", K(tenant_id));
+      LOG_WARN("failed to init tenant config");
     } else if (OB_ISNULL(opt_params)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid opt params", K(ret), KP(opt_params));
@@ -8318,42 +8297,15 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
       }
       LOG_DEBUG("is contain global index or dep base table", K(has_dep_table));
       phy_plan.set_is_dep_base_table(has_dep_table);
-
-      ObArray<uint64_t> immediate_refresh_external_table_ids;
-      for (int64_t i = 0; OB_SUCC(ret) && i < dependency_table->count(); i++) {
-        if (DEPENDENCY_TABLE == dependency_table->at(i).object_type_) {
-          const ObTableSchema *table_schema = NULL;
-          int64_t object_id = dependency_table->at(i).get_object_id();
-          if (OB_FAIL(sql_schema_guard->get_table_schema(object_id, table_schema))) {
-            LOG_WARN("fail to get table schema", K(ret), K(object_id));
-          } else if (OB_ISNULL(table_schema)) {
-            ret = OB_TABLE_NOT_EXIST;
-            LOG_WARN("fail to get table schema", K(ret), K(object_id));
-          } else {
-            if (table_schema->is_external_table() && table_schema->is_external_table_immediate_refresh()) {
-              if (OB_FAIL(add_var_to_array_no_dup(immediate_refresh_external_table_ids, (uint64_t)object_id))) {
-                LOG_WARN("fail to push back", K(ret));
-              }
-            }
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(phy_plan.get_immediate_refresh_external_table_ids().assign(immediate_refresh_external_table_ids))) {
-          LOG_WARN("fail to assign array", K(ret));
-        }
-      }
     }
     if (OB_SUCC(ret)) {
       int64_t tenant_schema_version = OB_INVALID_VERSION;
       int64_t sys_schema_version = OB_INVALID_VERSION;
       if (OB_FAIL(phy_plan.get_dependency_table().assign(*dependency_table))) {
         LOG_WARN("init dependency table store failed", K(ret));
-      } else if (OB_FAIL(schema_guard->get_schema_version(my_session->get_effective_tenant_id(),
-                                                        tenant_schema_version))) {
+      } else if (OB_FAIL(schema_guard->get_schema_version(tenant_schema_version))) {
         LOG_WARN("fail to get schema version", K(ret), K(tenant_schema_version));
-      } else if (OB_FAIL(schema_guard->get_schema_version(OB_SYS_TENANT_ID,
-                                                        sys_schema_version))) {
+      } else if (OB_FAIL(schema_guard->get_schema_version(sys_schema_version))) {
         LOG_WARN("fail to get schema version", K(ret), K(tenant_schema_version));
       } else {
         phy_plan.set_tenant_schema_version(tenant_schema_version);
@@ -8486,7 +8438,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     if (OB_SUCC(ret)) {
       phy_plan_->set_contain_pl_udf_or_trigger(log_plan.get_stmt()->get_query_ctx()->has_pl_udf_);
       phy_plan_->set_udf_has_dml_stmt(log_plan.get_stmt()->get_query_ctx()->udf_has_dml_stmt_);
-      phy_plan_->set_has_link_udf(log_plan.get_stmt()->get_query_ctx()->has_dblink_udf_);
     }
   }
 
@@ -8539,7 +8490,7 @@ int ObStaticEngineCG::check_refreshing_mview_session_var(ObSchemaGetterGuard &sc
     LOG_WARN("fail to get modified mview_id", K(ret), K(mview_id));
   } else if (OB_INVALID_ID == mview_id) {
     /* do nothing */
-  } else if (OB_FAIL(schema_guard.get_table_schema(session.get_effective_tenant_id(), mview_id, mview_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( mview_id, mview_schema))) {
     LOG_WARN("fail to get mview schema", K(ret), K(mview_id));
   } else if (OB_ISNULL(mview_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -9145,7 +9096,7 @@ int ObStaticEngineCG::check_only_one_unique_key(const ObLogPlan& log_plan,
       LOG_WARN("get simple_index_infos failed", K(ret));
     } else if (simple_index_infos.count() > 0) {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
-        if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), simple_index_infos.at(i).table_id_, index_schema))) {
+        if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos.at(i).table_id_, index_schema))) {
           LOG_WARN("fail to get table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -9177,12 +9128,12 @@ int ObStaticEngineCG::check_has_global_partiton_index(ObLogPlan *log_plan,
   } else if (OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ptr", K(ret));
-  } else if (OB_FAIL(schema_guard->get_can_write_index_array(MTL_ID(), table_id, index_tid, index_cnt, true))) {
+  } else if (OB_FAIL(schema_guard->get_can_write_index_array(table_id, index_tid, index_cnt, true))) {
     LOG_WARN("failed to get can read index array", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !has_global_partition_index && i < index_cnt; ++i) {
     const ObTableSchema* index_schema = NULL;
-    if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), index_tid[i], index_schema))) {
+    if (OB_FAIL(schema_guard->get_table_schema( index_tid[i], index_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -9210,12 +9161,12 @@ int ObStaticEngineCG::check_has_global_unique_index(ObLogPlan *log_plan, const u
   } else if (OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ptr", K(ret));
-  } else if (OB_FAIL(schema_guard->get_can_write_index_array(MTL_ID(), table_id, index_tid, index_cnt, true))) {
+  } else if (OB_FAIL(schema_guard->get_can_write_index_array(table_id, index_tid, index_cnt, true))) {
     LOG_WARN("failed to get can read index array", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !has_unique_index && i < index_cnt; ++i) {
     const ObTableSchema* index_schema = NULL;
-    if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), index_tid[i], index_schema))) {
+    if (OB_FAIL(schema_guard->get_table_schema( index_tid[i], index_schema))) {
       LOG_WARN("failed to get table schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -9262,13 +9213,13 @@ int ObStaticEngineCG::check_fk_nested_dup_del(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(parent_tables.push_back(root_table_id))) {
     LOG_WARN("failed to push root_table_id to parent tables list", K(ret), K(root_table_id), K(parent_tables.size()));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, root_table_id, table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(root_table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( root_table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(root_table_id));
   } else if (!OB_ISNULL(table_schema)) {
     const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema->get_foreign_key_infos();
     for (int64_t i = 0; OB_SUCC(ret) && i < foreign_key_infos.count() && !is_dup; ++i) {
@@ -9304,13 +9255,13 @@ int ObStaticEngineCG::check_fk_nested_dup_upd(const ObIArray<uint64_t>& table_id
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
-  const uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(visited_columns.push_back(std::make_pair(root_table_id, root_column_id)))) {
     LOG_WARN("failed to push root_table_id to visited columns list", K(ret), K(root_table_id), K(visited_columns.count()));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, root_table_id, table_schema))) {
-    LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(root_table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( root_table_id, table_schema))) {
+    LOG_WARN("get table schema failed", K(ret), K(root_table_id));
   } else if (!OB_ISNULL(table_schema)) {
     const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema->get_foreign_key_infos();
     // Enumerate all fks on the table, find the foreign keys having parent_column_id = root_column_id.

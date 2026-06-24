@@ -11,8 +11,8 @@ while($__i__ > 0)
 {
     sleep 1;
     dec $__i__;
-    let $__frozen_scn__ = query_get_value(select /*+query_timeout(100000000)*/sum(frozen_scn/1000) as sum_value from oceanbase.CDB_OB_MAJOR_COMPACTION, sum_value, 1);
-    let $__merged_version__ = query_get_value(select /*+query_timeout(100000000)*/sum(last_scn/1000) as sum_value from oceanbase.CDB_OB_MAJOR_COMPACTION, sum_value, 1);
+    let $__frozen_scn__ = query_get_value(select /*+query_timeout(100000000)*/sum(frozen_scn/1000) as sum_value from oceanbase.DBA_OB_MAJOR_COMPACTION, sum_value, 1);
+    let $__merged_version__ = query_get_value(select /*+query_timeout(100000000)*/sum(last_scn/1000) as sum_value from oceanbase.DBA_OB_MAJOR_COMPACTION, sum_value, 1);
     if($__frozen_scn__ == $__merged_version__)
     {
         let $__i__ = -5;
@@ -22,10 +22,10 @@ while($__i__ > 0)
 if($__i__ != -5)
 {
     --echo major freeze failed
-    select * from oceanbase.CDB_OB_MAJOR_COMPACTION;
-    let $__tenant_id__ = query_get_value(select tenant_id from oceanbase.CDB_OB_MAJOR_COMPACTION where last_scn != frozen_scn, tenant_id, 1);
-    let $__frozen_scn__ = query_get_value(select frozen_scn from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $__tenant_id__, frozen_scn, 1);
-    eval select * from oceanbase.__all_virtual_server_compaction_event_history where tenant_id = $__tenant_id__ and compaction_scn = $__frozen_scn__;
+    select * from oceanbase.DBA_OB_MAJOR_COMPACTION;
+    let $__tenant_id__ = query_get_value(select tenant_id from oceanbase.DBA_OB_MAJOR_COMPACTION where last_scn != frozen_scn, tenant_id, 1);
+    let $__frozen_scn__ = query_get_value(select frozen_scn from oceanbase.DBA_OB_MAJOR_COMPACTION where tenant_id = $__tenant_id__, frozen_scn, 1);
+    eval select * from oceanbase.__all_virtual_server_compaction_event_history where compaction_scn = $__frozen_scn__;
     select * from oceanbase.__all_virtual_compaction_diagnose_info;
 }
 sleep 1;

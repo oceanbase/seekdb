@@ -16,6 +16,7 @@
 
 
 #include "ob_tenant_vector_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
@@ -41,7 +42,7 @@ int64_t ObTenantVectorAllocator::get_vector_mem_limit_percentage(omt::ObTenantCo
   const int64_t SMALL_TENANT_MEMORY_LIMIT = 8 * 1024 * 1024 * 1024L; // 8G
   const int64_t SMALL_VECTOR_LIMIT_PERCENTAGE = 40;
   const int64_t LARGE_VECTOR_LIMIT_PERCENTAGE = 50;
-  const int64_t tenant_memory = lib::get_tenant_memory_limit(MTL_ID());
+  const int64_t tenant_memory = lib::get_tenant_memory_limit();
   int64_t tenant_memstore_limit_percent = 0;
   int64_t percent = 0;
   if (tenant_config.is_valid()) {
@@ -65,7 +66,7 @@ void ObTenantVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int
   const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
   const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t percent = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     max_duration = tenant_config->writing_throttling_maximum_duration;
   } else {
@@ -83,12 +84,12 @@ int ObTenantVectorAllocator::init()
   int ret = OB_SUCCESS;
 
   lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(), "VectorIndex", ObCtxIds::VECTOR_CTX_ID)
+  param.set_mem_attr("VectorIndex", ObCtxIds::VECTOR_CTX_ID)
     .set_properties(lib::ADD_CHILD_THREAD_SAFE | lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_label("VectorIndex")
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = MTL(ObSharedMemAllocMgr *);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   MDS_TG(10_ms);
   if (IS_INIT){
@@ -110,12 +111,12 @@ int ObTenantVectorAllocator::init()
 
 int64_t ObTenantVectorAllocator::hold()
 { 
-  return lib::get_tenant_memory_hold(MTL_ID(), ObCtxIds::VECTOR_CTX_ID) + get_rb_mem_used();
+  return lib::get_tenant_memory_hold(ObCtxIds::VECTOR_CTX_ID) + get_rb_mem_used();
 }
 
 int64_t ObTenantVectorAllocator::get_rb_mem_used()
 { 
-  ObRbMemMgr *rb_mgr = MTL(ObRbMemMgr *);
+  ObRbMemMgr *rb_mgr = share::g_mp->rb_mem_mgr();
   return rb_mgr != nullptr ? rb_mgr->get_vec_idx_used() : 0;
 }
 
@@ -189,13 +190,12 @@ void *ObVsagMemContext::Reallocate(void* p, uint64_t size)
 }
 
 int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context, 
-                           uint64_t *all_vsag_use_mem,
-                           uint64_t tenant_id) 
+                           uint64_t *all_vsag_use_mem) 
 {
   INIT_SUCC(ret);
   lib::ContextParam param;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = MTL(ObSharedMemAllocMgr *);
-  ObMemAttr attr(tenant_id, "VIndexVsagADP", ObCtxIds::VECTOR_CTX_ID);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObMemAttr attr("VIndexVsagADP", ObCtxIds::VECTOR_CTX_ID);
   param.set_mem_attr(attr)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_parallel(8)
@@ -259,13 +259,13 @@ int ObVectorMemContext::init(lib::MemoryContext &mem_context, share::TxShareThro
 const char* ObIvfMemContext::IVF_CACHE_LABEL = "IvfCacheCtx";
 const char* ObIvfMemContext::IVF_BUILD_LABEL = "IvfBuildCtx";
 
-int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_vsag_use_mem, uint64_t tenant_id,
+int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_vsag_use_mem,
                           const char *label /*IVF_CACHE_LABEL*/)
 {
   INIT_SUCC(ret);
   lib::ContextParam param;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = MTL(ObSharedMemAllocMgr *);
-  ObMemAttr attr(tenant_id, label, ObCtxIds::VECTOR_CTX_ID);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObMemAttr attr(label, ObCtxIds::VECTOR_CTX_ID);
   param.set_mem_attr(attr)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_parallel(8)

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_manager.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "storage/lob/ob_lob_location.h"
 #include "storage/lob/ob_lob_handler.h"
@@ -61,12 +62,12 @@ static int is_store_char_len(ObLobAccessParam& param, int64_t store_chunk_size, 
 
 int ObLobManager::mtl_new(ObLobManager *&m) {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = MTL_ID();
+  
   auto attr = SET_USE_500("LobManager");
-  m = OB_NEW(ObLobManager, attr, tenant_id);
+  m = OB_NEW(ObLobManager, attr);
   if (OB_ISNULL(m)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret), K(tenant_id));
+    LOG_WARN("failed to alloc memory", K(ret));
   }
   return ret;
 }
@@ -76,8 +77,8 @@ int ObLobManager::mtl_new(ObLobManager *&m) {
 int ObLobManager::init()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
-  lib::ObMemAttr mem_attr(tenant_id, "LobAllocator", ObCtxIds::LOB_CTX_ID);
+  
+  lib::ObMemAttr mem_attr("LobAllocator", ObCtxIds::LOB_CTX_ID);
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLobManager init twice.", K(ret));
@@ -86,7 +87,7 @@ int ObLobManager::init()
   } else if (OB_FAIL(ext_info_log_allocator_.init(
       common::ObMallocAllocator::get_instance(), 
       OB_MALLOC_NORMAL_BLOCK_SIZE,
-      lib::ObMemAttr(tenant_id, "ExtInfoLog", ObCtxIds::LOB_CTX_ID)))) {
+      lib::ObMemAttr("ExtInfoLog", ObCtxIds::LOB_CTX_ID)))) {
     LOG_WARN("init ext info log allocator failed.", K(ret));
   } else {
     OB_ASSERT(sizeof(ObLobCommon) == sizeof(uint32));
@@ -279,7 +280,7 @@ int ObLobManager::query_inrow_get_iter(
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("data length is not enough.", K(ret), K(byte_offset), K(param.len_));
   } else {
-    ObLobInRowQueryIter* iter = OB_NEW(ObLobInRowQueryIter, ObMemAttr(MTL_ID(), "LobQueryIter"));
+    ObLobInRowQueryIter* iter = OB_NEW(ObLobInRowQueryIter, ObMemAttr("LobQueryIter"));
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("alloc lob meta scan iterator fail", K(ret));
@@ -349,7 +350,7 @@ int ObLobManager::query(
 int ObLobManager::query(ObString& data, ObLobQueryIter *&result)
 {
   INIT_SUCC(ret);
-  ObLobInRowQueryIter* iter = OB_NEW(ObLobInRowQueryIter, ObMemAttr(MTL_ID(), "LobQueryIter"));
+  ObLobInRowQueryIter* iter = OB_NEW(ObLobInRowQueryIter, ObMemAttr("LobQueryIter"));
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc lob meta scan iterator fail", K(ret));
@@ -511,8 +512,8 @@ int ObLobManager::compare(ObLobLocatorV2& lob_left,
                           ObLobCompareParams& cmp_params,
                           int64_t& result) {
   INIT_SUCC(ret);
-  ObArenaAllocator tmp_allocator("LobCmp", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID());
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObArenaAllocator tmp_allocator("LobCmp", OB_MALLOC_MIDDLE_BLOCK_SIZE);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get lob manager handle null.", K(ret));
@@ -871,7 +872,7 @@ int ObLobManager::append(
     ObLobLocatorV2 &lob)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator("LobTmp", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator("LobTmp", OB_MALLOC_MIDDLE_BLOCK_SIZE);
   param.set_tmp_allocator(&tmp_allocator);
 
   bool is_char = param.coll_type_ != common::ObCollationType::CS_TYPE_BINARY;
@@ -948,7 +949,7 @@ int ObLobManager::append(
         ObString data;
         data.assign_buffer(buf + cur_handle_size, append_lob_len);
         SMART_VAR(ObLobAccessParam, read_param) {
-          read_param.tenant_id_ = param.src_tenant_id_;
+          
           if (OB_FAIL(build_lob_param(read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, lob))) {
             LOG_WARN("fail to build read param", K(ret), K(lob));
@@ -1048,7 +1049,7 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
         ObString data;
         data.assign_buffer(buf + cur_handle_size, append_lob_len);
         SMART_VAR(ObLobAccessParam, read_param) {
-          read_param.tenant_id_ = param.src_tenant_id_;
+          
           if (OB_FAIL(build_lob_param(read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, lob))) {
             LOG_WARN("fail to build read param", K(ret), K(lob));
@@ -1115,7 +1116,7 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
           LOG_WARN("alloc ObLobLocatorV2 failed.", K(ret), K(sizeof(ObLobLocatorV2)));
         } else {
           read_param = new(read_param)ObLobAccessParam();
-          read_param->tenant_id_ = param.src_tenant_id_;
+          
           *copy_locator = lob;
           if (OB_FAIL(build_lob_param(*read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, *copy_locator))) {
@@ -1175,7 +1176,7 @@ int ObLobManager::append(
     ObString& data)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator("LobTmp", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator("LobTmp", OB_MALLOC_MIDDLE_BLOCK_SIZE);
   param.set_tmp_allocator(&tmp_allocator);
   bool save_is_reverse = param.scan_backward_;
   uint64_t save_param_len = param.len_;
@@ -1986,7 +1987,7 @@ int ObLobManager::append_outrow(
   int ret = OB_SUCCESS;
   ObLobQueryIter *iter = nullptr;
   SMART_VAR(ObLobAccessParam, read_param) {
-    read_param.tenant_id_ = param.src_tenant_id_;
+    
     if (OB_ISNULL(param.get_tmp_allocator())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("param allocator is null", K(ret), K(param));

@@ -130,8 +130,7 @@ ObMergeInfoItem &ObMergeInfoItem::operator =(const ObMergeInfoItem &item)
   INIT_SCN_ITEM(frozen_scn, SCN::base_scn(), false)
 
 ObZoneMergeInfo::ObZoneMergeInfo()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    CONSTRUCT_ZONE_MERGE_INFO(),
+  : CONSTRUCT_ZONE_MERGE_INFO(),
     start_merge_fail_times_(0)
 {
 }
@@ -140,7 +139,6 @@ int ObZoneMergeInfo::assign(const ObZoneMergeInfo &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     start_merge_fail_times_ = other.start_merge_fail_times_;
     ObMergeInfoItem *it = list_.get_first();
     const ObMergeInfoItem *o_it = other.list_.get_first();
@@ -163,7 +161,6 @@ int ObZoneMergeInfo::assign_value(
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     start_merge_fail_times_ = other.start_merge_fail_times_;
     ObMergeInfoItem *it = list_.get_first();
     const ObMergeInfoItem *o_it = other.list_.get_first();
@@ -214,8 +211,7 @@ bool ObZoneMergeInfo::is_valid() const
   INIT_VAL_ITEM(last_merged_time, 0, false)
 
 ObGlobalMergeInfo::ObGlobalMergeInfo()
-  : tenant_id_(OB_INVALID_TENANT_ID),
-    CONSTRUCT_GLOBAL_MERGE_INFO()
+  : CONSTRUCT_GLOBAL_MERGE_INFO()
 {
   // tmp defensive code
   int ret = OB_SUCCESS;
@@ -224,13 +220,13 @@ ObGlobalMergeInfo::ObGlobalMergeInfo()
 
   if (OB_ISNULL(header)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("get unexpected null list", K(ret), K(list_), K(tenant_id_));
+    LOG_ERROR("get unexpected null list", K(ret), K(list_));
   }
 
   while (OB_SUCC(ret) && it != header) {
     if (OB_ISNULL(it)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("get unexpected null item", K(ret), KP(it), K(list_), K(tenant_id_));
+      LOG_ERROR("get unexpected null item", K(ret), KP(it), K(list_));
     } else {
       it = it->get_next();
     }
@@ -279,7 +275,6 @@ int ObGlobalMergeInfo::assign(
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     ObMergeInfoItem *it = list_.get_first();
     const ObMergeInfoItem *o_it = other.list_.get_first();
     while (OB_SUCC(ret) && (it != list_.get_header()) && (o_it != other.list_.get_header())) {
@@ -301,7 +296,6 @@ int ObGlobalMergeInfo::assign_value(
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
     ObMergeInfoItem *it = list_.get_first();
     const ObMergeInfoItem *o_it = other.list_.get_first();
     while (OB_SUCC(ret) && (it != list_.get_header()) && (o_it != other.list_.get_header())) {

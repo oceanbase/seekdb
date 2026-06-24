@@ -9,7 +9,7 @@ set @@session.explicit_defaults_for_timestamp=off;
 connect (my_obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection my_obsys;
 
-select tenant_id, table_name from oceanbase.__all_virtual_table where table_name = '__all_virtual_sys_parameter_stat';
+select table_name from oceanbase.__all_table where table_name = '__all_virtual_sys_parameter_stat';
 use oceanbase;
 desc __all_virtual_sys_parameter_stat;
 select name from __all_virtual_sys_parameter_stat where name not like "module_test_%" group by name order by name;

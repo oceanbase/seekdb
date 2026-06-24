@@ -88,7 +88,7 @@ public:
   void check_task_free();
   void set_task_finish();
 
-  TO_STRING_KV(K_(tenant_id), KP_(ls), K_(task_status), K_(sys_task_id), K_(in_thread_pool));
+  TO_STRING_KV(KP_(ls), K_(task_status), K_(sys_task_id), K_(in_thread_pool));
 
   ObHybridVectorRefreshTaskStatus status_;
   ObTableScanIterator *scan_iter_; // [vid][type][vector][chunk][other key columns]
@@ -114,7 +114,7 @@ public:
 class ObHybridVectorRefreshTask : public ObVecIndexIAsyncTask
 {
 public:
-  ObHybridVectorRefreshTask() : ObVecIndexIAsyncTask(ObMemAttr(MTL_ID(), "VecIdxASyTask")) {}
+  ObHybridVectorRefreshTask() : ObVecIndexIAsyncTask(ObMemAttr("VecIdxASyTask")) {}
   virtual ~ObHybridVectorRefreshTask() {}
   virtual void check_task_free() override {
     all_finished_ = true;

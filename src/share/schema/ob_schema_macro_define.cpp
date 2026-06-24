@@ -59,7 +59,7 @@ int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,
  
   if(OB_SUCC(ret)) {
     ObObj orig_default_value;
-    column.set_tenant_id(table_schema.get_tenant_id());
+    
     column.set_table_id(table_schema.get_table_id());
     column.set_column_id(col_id);
     column.set_rowkey_position(rowkey_position);
@@ -166,7 +166,7 @@ int ADD_COLUMN_SCHEMA_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_sch
   }
  
   if(OB_SUCC(ret)) {
-    column.set_tenant_id(table_schema.get_tenant_id());
+    
     column.set_table_id(table_schema.get_table_id());
     column.set_column_id(col_id);
     column.set_rowkey_position(rowkey_position);
@@ -279,7 +279,7 @@ int ADD_COLUMN_SCHEMA_TS_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_
   }
  
   if(OB_SUCC(ret)) {
-    column.set_tenant_id(table_schema.get_tenant_id());
+    
     column.set_table_id(table_schema.get_table_id());
     column.set_column_id(col_id);
     column.set_rowkey_position(rowkey_position);
@@ -389,7 +389,7 @@ int ADD_COLUMN_SCHEMA_TS_FULL(share::schema::ObTableSchema &table_schema,
  
   if(OB_SUCC(ret)) {
     ObObj orig_default_value;
-    column.set_tenant_id(table_schema.get_tenant_id());
+    
     column.set_table_id(table_schema.get_table_id());
     column.set_column_id(col_id);
     column.set_rowkey_position(rowkey_position);

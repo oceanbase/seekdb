@@ -35,25 +35,24 @@ class ObOptTableStat : public common::ObIKVCacheValue
 public:
   struct Key : public common::ObIKVCacheKey
   {
-    Key() : tenant_id_(0),
-            table_id_(OB_INVALID_ID),
+    Key() : table_id_(OB_INVALID_ID),
             partition_id_(OB_INVALID_INDEX),
             tablet_id_(ObTabletID::INVALID_TABLET_ID)
     {
     }
-    explicit Key(uint64_t tenant_id, uint64_t table_id, int64_t partition_id) :
-      tenant_id_(tenant_id), table_id_(table_id), partition_id_(partition_id),
+    explicit Key(uint64_t table_id, int64_t partition_id) :
+      table_id_(table_id), partition_id_(partition_id),
       tablet_id_(ObTabletID::INVALID_TABLET_ID)
     {
     }
-    explicit Key(uint64_t tenant_id, uint64_t table_id, uint64_t tablet_id) :
-      tenant_id_(tenant_id), table_id_(table_id), partition_id_(OB_INVALID_INDEX),
+    explicit Key(uint64_t table_id, uint64_t tablet_id) :
+      table_id_(table_id), partition_id_(OB_INVALID_INDEX),
       tablet_id_(tablet_id)
     {
     }
-    void init(uint64_t tenant_id, uint64_t table_id, int64_t partition_id)
+    void init(uint64_t table_id, int64_t partition_id)
     {
-      tenant_id_ = tenant_id;
+      
       table_id_ = table_id;
       partition_id_ = partition_id;
       tablet_id_ = ObTabletID::INVALID_TABLET_ID;
@@ -66,15 +65,12 @@ public:
     bool operator==(const ObIKVCacheKey &other) const
     {
       const Key &other_key = reinterpret_cast<const Key&>(other);
-      return tenant_id_ == other_key.tenant_id_ &&
+      return true &&
              table_id_ == other_key.table_id_ &&
              partition_id_ == other_key.partition_id_ &&
              tablet_id_ == other_key.tablet_id_;
     }
-    uint64_t get_tenant_id() const
-    {
-      return tenant_id_;
-    }
+    
 
     uint64_t get_table_id() const
     {
@@ -104,20 +100,20 @@ public:
 
     bool is_valid() const
     {
-      return tenant_id_ != 0 && table_id_ != OB_INVALID_ID;
+      return table_id_ != OB_INVALID_ID;
     }
 
     void reset()
     {
-      tenant_id_ = 0;
+      
       table_id_ = OB_INVALID_ID;
       partition_id_ = OB_INVALID_INDEX;
       tablet_id_ = ObTabletID::INVALID_TABLET_ID;
     }
 
-    TO_STRING_KV(K_(tenant_id), K_(table_id), K_(partition_id), K_(tablet_id));
+    TO_STRING_KV(K_(table_id), K_(partition_id), K_(tablet_id));
 
-    uint64_t tenant_id_;
+    
     uint64_t table_id_;
     int64_t partition_id_;
     uint64_t tablet_id_;

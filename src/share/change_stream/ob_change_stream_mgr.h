@@ -37,7 +37,7 @@ public:
   ObChangeStreamMgr();
   virtual ~ObChangeStreamMgr();
 
-  /// MTL init: called after default new; inits tenant_id and internal state.
+  /// MTL init: called after default new; inits tenant and internal state.
   static int mtl_init(ObChangeStreamMgr *&mgr);
 
   int init();
@@ -52,7 +52,6 @@ public:
   /// Can be called from any node (RS / observer) as long as sql_client is valid.
   static int wait_refresh_scn(
       common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
       const int64_t timeout_us);
 
   /// Fetcher: consumes CLOG by transaction, pushes committed tx to Dispatcher.

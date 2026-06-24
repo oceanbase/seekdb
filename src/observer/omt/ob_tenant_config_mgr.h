@@ -55,8 +55,8 @@ private:
   ObServerConfig *config_;
 };
 
-#define TENANT_CONF(tenant_id) &GCONF
-#define TENANT_CONF_TIL(tenant_id) &GCONF
+#define TENANT_CONF() &GCONF
+#define TENANT_CONF_TIL() &GCONF
 
 }
 }

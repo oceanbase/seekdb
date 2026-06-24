@@ -48,7 +48,7 @@ ObDirectLoadInsertTableBatchRowBufferWriter::ObDirectLoadInsertTableBatchRowBuff
     is_canceled_(false),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
+  
 }
 
 ObDirectLoadInsertTableBatchRowBufferWriter::~ObDirectLoadInsertTableBatchRowBufferWriter() {}

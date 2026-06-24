@@ -81,8 +81,8 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObObjType input_type2 = gis_arg2->datum_meta_.type_;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_ST_DISTANCE);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_DISTANCE);
   const int max_arg_num = 3;
   ObDatum *gis_unit = NULL;
   double factor = 0.0;
@@ -112,7 +112,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ObString wkb2 = gis_datum2->get_string();
     omt::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
-    ObGeoBoostAllocGuard guard(tenant_id);
+    ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum1,

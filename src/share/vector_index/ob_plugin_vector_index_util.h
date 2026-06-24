@@ -152,8 +152,7 @@ public:
                                             int64_t *&vids_result,
                                             float *&float_result,
                                             ObVecExtraInfoPtr &extra_info_result);
-  static int get_vector_memory_limit_size(const uint64_t tenant_id,
-                                          int64_t& memory_limit);
+  static int get_vector_memory_limit_size(int64_t& memory_limit);
 };
 
 };

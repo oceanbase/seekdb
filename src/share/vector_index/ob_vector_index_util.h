@@ -375,7 +375,7 @@ public:
       tablet_id_(),
       center_prefix_(0),
       centers_(),
-      allocator_("IvfCIdCache", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
+      allocator_("IvfCIdCache", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   virtual ~ObExprVecIvfCenterIdCache() {}
   bool hit(ObTableID table_id, ObTabletID tablet_id) { return table_id == table_id_ && tablet_id == tablet_id_; }
@@ -448,9 +448,7 @@ public:
       int64_t extra_info_max_size,
       int64_t& extra_info_actual_size);
   static int update_param_extra_actual_size(const ObTableSchema &data_schema, ObTableSchema &index_schema);
-  static int check_vec_index_param(
-      const uint64_t tenant_id,
-      const ParseNode *option_node,
+  static int check_vec_index_param(const ParseNode *option_node,
       common::ObIAllocator &allocator,
       const ObTableSchema &tbl_schema,
       ObString &index_params,
@@ -502,7 +500,6 @@ public:
       const schema::ObTableSchema &index_schema,
       ObString &prefix);
   static int check_ivf_lob_inrow_threshold(
-    const int64_t tenant_id,
     const ObString &database_name,
     const ObString &table_name,
     ObSchemaGetterGuard &schema_guard,
@@ -640,7 +637,6 @@ public:
       bool &param_filled);
   static int get_vector_index_param_with_dim(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      uint64_t tenant_id,
       int64_t index_table_id,
       int64_t data_table_id,
       ObVectorIndexType index_type,
@@ -671,7 +667,6 @@ public:
       ObIArray<ObString> &old_table_names,
       ObIArray<ObString> &new_table_names);
   static int update_index_tables_status(
-      const int64_t tenant_id,
       const int64_t database_id,
       const ObIArray<ObString> &old_table_names,
       const ObIArray<ObString> &new_table_names,
@@ -680,7 +675,6 @@ public:
       common::ObMySQLTransaction &trans,
       ObIArray<ObTableSchema> &table_schemas);
   static int update_index_tables_attributes(
-      const int64_t tenant_id,
       const int64_t database_id,
       const int64_t data_table_id,
       const int64_t expected_update_table_cnt,
@@ -708,7 +702,6 @@ public:
       ObTableSchema &new_index_schema);
   static int generate_index_schema_from_exist_table(
       rootserver::ObDDLSQLTransaction &trans,
-      const int64_t tenant_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       rootserver::ObDDLService &ddl_service,
       const obcall::ObCreateIndexArg &create_index_arg,
@@ -737,13 +730,12 @@ public:
       rootserver::ObDDLService &ddl_service,
       const ObTableSchema &origin_table_schema, 
       const ObString &ori_index_name);
-  static int add_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int add_dbms_vector_jobs(common::ObISQLClient &sql_client,
                                   const uint64_t vidx_table_id,
                                   const common::ObString &exec_env);
-  static int remove_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
+  static int remove_dbms_vector_jobs(common::ObISQLClient &sql_client,
                                      const uint64_t vidx_table_id);
   static int get_dbms_vector_job_info(common::ObISQLClient &sql_client,
-                                      const uint64_t tenant_id,
                                       const uint64_t vidx_table_id,
                                       common::ObIAllocator &allocator,
                                       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -837,13 +829,11 @@ public:
   static bool check_vector_index_memory(
       ObSchemaGetterGuard &schema_guard,
       const ObTableSchema &index_schema,
-      const uint64_t tenant_id,
       const int64_t row_count);
-  static bool check_ivf_vector_index_memory(ObSchemaGetterGuard &schema_guard, const uint64_t tenant_id, const ObTableSchema &index_schema, const int64_t row_count);
+  static bool check_ivf_vector_index_memory(ObSchemaGetterGuard &schema_guard, const ObTableSchema &index_schema, const int64_t row_count);
   static int estimate_vector_memory_used(
       ObSchemaGetterGuard &schema_guard,
       const ObTableSchema &index_schema,
-      const uint64_t tenant_id,
       const int64_t tablet_row_count,
       int64_t &estimate_memory);
   static int alter_vec_aux_column_schema(const ObTableSchema &aux_table_schema,
@@ -961,7 +951,7 @@ typedef struct ObExtraInfoIdxType {
 
 class ObVecExtraInfoBuffer : public ObStringBuffer {
 public:
-  ObVecExtraInfoBuffer() : alloctor_("ExtraInfoB", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()) {
+  ObVecExtraInfoBuffer() : alloctor_("ExtraInfoB", OB_MALLOC_NORMAL_BLOCK_SIZE) {
     set_allocator(&alloctor_);
   }
   virtual ~ObVecExtraInfoBuffer() {}

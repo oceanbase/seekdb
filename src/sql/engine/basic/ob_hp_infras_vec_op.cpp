@@ -29,7 +29,7 @@ ObIHashPartInfrastructure::~ObIHashPartInfrastructure()
 }
 
 int ObIHashPartInfrastructure::init(
-  uint64_t tenant_id, bool enable_sql_dumped, bool unique, bool need_pre_part, int64_t ways,
+  bool enable_sql_dumped, bool unique, bool need_pre_part, int64_t ways,
   int64_t max_batch_size, const common::ObIArray<ObExpr*> &exprs,
   ObSqlMemMgrProcessor *sql_mem_processor, const common::ObCompressorType compressor_type,
   bool need_rewind)
@@ -40,7 +40,7 @@ int ObIHashPartInfrastructure::init(
     ret = OB_NOT_SUPPORTED;
     SQL_ENG_LOG(WARN, "Two-way input does not support rewind", K(ret), K(need_rewind), K(ways));
   } else {
-    tenant_id_ = tenant_id;
+    
     enable_sql_dumped_ = enable_sql_dumped;
     unique_ = unique;
     need_pre_part_ = need_pre_part;
@@ -289,7 +289,7 @@ int ObIHashPartInfrastructure::init_default_part(
     part->part_key_.part_shift_ = part_shift_ + delta_shift;
     part->part_key_.level_ = cur_level_ + 1;
     part->part_key_.nth_part_ = nth_part;
-    ObMemAttr attr(tenant_id_, "HashPartInfra", ObCtxIds::WORK_AREA);
+    ObMemAttr attr("HashPartInfra", ObCtxIds::WORK_AREA);
     if (OB_FAIL(part->store_.init(*exprs_, max_batch_size_, attr, limit, true, /*enable_dump*/
                                   ObHashPartItem::get_extra_size(), compressor_type_))) {
       SQL_ENG_LOG(WARN, "failed to init row store", K(ret));
@@ -563,10 +563,10 @@ int ObIHashPartInfrastructure::create_dumped_partitions(
   } else if (!has_create_part_map_) {
     has_create_part_map_ = true;
     if (OB_FAIL(left_part_map_.create(
-        512, "HashInfraOp", "HashInfraOp", tenant_id_))) {
+        512, "HashInfraOp", "HashInfraOp"))) {
       SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     } else if (OB_FAIL(right_part_map_.create(
-        512, "HashInfraOp", "HashInfraOp", tenant_id_))) {
+        512, "HashInfraOp", "HashInfraOp"))) {
       SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     }
   }
@@ -1237,14 +1237,14 @@ void ObHashPartInfrastructureVecImpl::destroy()
   is_destroyed_ = true;
 }
 
-int ObHashPartInfrastructureVecImpl::init_mem_context(uint64_t tenant_id)
+int ObHashPartInfrastructureVecImpl::init_mem_context()
 {
   int ret = common::OB_SUCCESS;
   if (OB_LIKELY(NULL == mem_context_)) {
     void *buf = nullptr;
     lib::ContextParam param;
     param.set_properties(lib::USE_TL_PAGE_OPTIONAL)
-      .set_mem_attr(tenant_id, "HashPartInfra",
+      .set_mem_attr("HashPartInfra",
                     common::ObCtxIds::WORK_AREA)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
@@ -1308,8 +1308,7 @@ int ObHashPartInfrastructureVecImpl::decide_hp_infras_type(const common::ObIArra
   return ret;
 }
 
-int ObHashPartInfrastructureVecImpl::init_hp_infras(const int64_t tenant_id,
-                                                    const common::ObIArray<ObExpr *> &exprs,
+int ObHashPartInfrastructureVecImpl::init_hp_infras(const common::ObIArray<ObExpr *> &exprs,
                                                     ObIHashPartInfrastructure *&hp_infras)
 {
   int ret = OB_SUCCESS;
@@ -1325,28 +1324,28 @@ int ObHashPartInfrastructureVecImpl::init_hp_infras(const int64_t tenant_id,
     switch (bkt_type_) {
     case TYPE_GENERAL:
       bkt_size_ = sizeof(HPInfrasBktGeneral);
-      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasBktGeneral>(tenant_id, hp_infras_))) {
+      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasBktGeneral>(hp_infras_))) {
         SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
                     K(payload_len));
       }
       break;
     case BYTE_TYPE_48:
       bkt_size_ = sizeof(HPInfrasFixedBktByte48);
-      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte48>(tenant_id, hp_infras_))) {
+      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte48>(hp_infras_))) {
         SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
                     K(payload_len));
       }
       break;
     case BYTE_TYPE_56:
       bkt_size_ = sizeof(HPInfrasFixedBktByte56);
-      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte56>(tenant_id, hp_infras_))) {
+      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte56>(hp_infras_))) {
         SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
                     K(payload_len));
       }
       break;
     case BYTE_TYPE_64:
       bkt_size_ = sizeof(HPInfrasFixedBktByte64);
-      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte64>(tenant_id, hp_infras_))) {
+      if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte64>(hp_infras_))) {
         SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
                     K(payload_len));
       }
@@ -1365,8 +1364,7 @@ int64_t ObHashPartInfrastructureVecImpl::get_bucket_size() const
   return bkt_size_;
 }
 
-int ObHashPartInfrastructureVecImpl::init(uint64_t tenant_id,
-  bool enable_sql_dumped, bool unique, bool need_pre_part,
+int ObHashPartInfrastructureVecImpl::init(bool enable_sql_dumped, bool unique, bool need_pre_part,
   int64_t ways, int64_t max_batch_size, const common::ObIArray<ObExpr*> &exprs,
   ObSqlMemMgrProcessor *sql_mem_processor, const common::ObCompressorType compressor_type,
   bool need_rewind/*=false*/)
@@ -1375,11 +1373,11 @@ int ObHashPartInfrastructureVecImpl::init(uint64_t tenant_id,
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("failed to init", K(ret));
-  } else if (OB_FAIL(init_mem_context(tenant_id))) {
-    LOG_WARN("failed to init mem context", K(ret), K(tenant_id));
-  } else if (OB_FAIL(init_hp_infras(tenant_id, exprs, hp_infras_))) {
+  } else if (OB_FAIL(init_mem_context())) {
+    LOG_WARN("failed to init mem context", K(ret));
+  } else if (OB_FAIL(init_hp_infras(exprs, hp_infras_))) {
     LOG_WARN("failed to init hash part infras instance", K(ret));
-  } else if (OB_FAIL(hp_infras_->init(tenant_id, enable_sql_dumped, unique,
+  } else if (OB_FAIL(hp_infras_->init(enable_sql_dumped, unique,
     need_pre_part, ways, max_batch_size, exprs, sql_mem_processor, compressor_type, need_rewind))) {
     LOG_WARN("failed to init hash part infras", K(ret));
     ret = OB_ALLOCATE_MEMORY_FAILED;

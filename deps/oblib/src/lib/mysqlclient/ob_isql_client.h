@@ -52,20 +52,18 @@ public:
 
   // FIXME baihua: replace 'const char *' with 'const ObString &'
   // execute query and return data result
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql) = 0;
-  virtual int read(ReadResult &res, const int64_t cluster_id, const uint64_t tenant_id, const char *sql) = 0;
-  virtual int read(ReadResult &res, const char *sql) { return this->read(res, OB_SYS_TENANT_ID, sql); }
-  virtual int read(ReadResult &res, const uint64_t tenant_id, const char *sql, const int32_t group_id) = 0;
+  virtual int read(ReadResult &res, const int64_t cluster_id, const char *sql) = 0;
+  virtual int read(ReadResult &res, const char *sql) { return this->read(res, sql, 0); }
+  virtual int read(ReadResult &res, const char *sql, const int32_t group_id) = 0;
 
   // execute update sql
-  virtual int write(const uint64_t tenant_id, const char *sql, int64_t &affected_rows) = 0;
-  virtual int write(const char *sql, int64_t &affected_rows) { return this->write(OB_SYS_TENANT_ID, sql, affected_rows); }
-  virtual int write(const uint64_t tenant_id, const char *sql,  const int32_t group_id, int64_t &affected_rows) = 0;
+  virtual int write(const char *sql, int64_t &affected_rows) { return this->write(sql, 0, affected_rows); }
+  virtual int write(const char *sql,  const int32_t group_id, int64_t &affected_rows) = 0;
 
   // executor execute
-  int execute(const uint64_t tenant_id, sqlclient::ObIExecutor &executor)
+  int execute(sqlclient::ObIExecutor &executor)
   {
-    UNUSEDx(tenant_id, executor);
+    UNUSEDx(executor);
     return OB_NOT_SUPPORTED;
   }
 
@@ -104,7 +102,7 @@ public:
   private:
     sqlclient::ObISQLResultHandler *result_handler_;
     char buf_[BUF_SIZE];
-    bool enable_use_result_; // only dblink set will it to true, in order to use mysql_use_result()
+    bool enable_use_result_; // when true, use mysql_use_result() instead of mysql_store_result()
   };
 
   bool is_active() const { return active_; }

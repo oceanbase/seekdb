@@ -1498,7 +1498,7 @@ static int common_get_srs_item(omt::ObSrsCacheGuard &srs_guard,
   int ret = OB_SUCCESS;
   uint32_t srid = UINT32_MAX;
   // todo : get effective tenant id
-  uint64_t tenant_id = MTL_ID();
+  
   if (wkb.length() < WKB_GEO_SRID_SIZE) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_WARN("invalid data length", K(ret), K(wkb.length()));
@@ -1511,7 +1511,7 @@ static int common_get_srs_item(omt::ObSrsCacheGuard &srs_guard,
   } else if (0 == srid) {
     // do nothing
   } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("fail to get srs guard", K(ret), K(tenant_id));
+    LOG_WARN("fail to get srs guard", K(ret));
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
     LOG_WARN("fail to get srs", K(ret), K(srid));
   }
@@ -14537,7 +14537,7 @@ int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type
   } else {
     ObString str;
     int64_t well_formed_len = 0;
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
 
     if (!obj.has_lob_header()) {
       if (OB_FAIL(obj.get_string(str))) {
@@ -14788,7 +14788,7 @@ int ob_obj_to_ob_time_with_date(const ObObj& obj,
       break;
     }
     case ObTextTC: {
-      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString val;
       if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&lob_allocator, obj, val))) {
         LOG_WARN("fail to get real data.", K(ret), K(val));
@@ -14891,7 +14891,7 @@ int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_in
       break;
     }
     case ObTextTC: {
-      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+      ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObString val;
       if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&lob_allocator, obj, val))) {
         LOG_WARN("fail to get real data.", K(ret), K(val));

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_vector_kmeans_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/container/ob_array_array.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -33,7 +34,6 @@ void ObKmeansCtx::destroy()
 }
 
 int ObKmeansCtx::init(
-    const int64_t tenant_id,
     const int64_t lists,
     const int64_t samples_per_nlist,
     const int64_t dim,
@@ -42,10 +42,10 @@ int ObKmeansCtx::init(
     int64_t pq_m)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id || 0 >= lists || 0 >= samples_per_nlist || 0 >= dim || VIDA_MAX <= dist_algo
+  if (0 >= lists || 0 >= samples_per_nlist || 0 >= dim || VIDA_MAX <= dist_algo
     || dim % pq_m != 0) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid argument", K(ret), K(lists), K(tenant_id), K(samples_per_nlist), K(dim), K(dist_algo));
+    SHARE_LOG(WARN, "invalid argument", K(ret), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
   } else if (INT64_MAX / samples_per_nlist < lists) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ivf vector index param nlist_value * sample_per_nlist_value should less than int64_max", K(ret),
@@ -53,8 +53,8 @@ int ObKmeansCtx::init(
     LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                    "ivf vector index param nlist_value * sample_per_nlist_value should less than int64_max");
   } else {
-    sample_vectors_.set_attr(ObMemAttr(tenant_id, "KmeansSample"));
-    tenant_id_ = tenant_id;
+    sample_vectors_.set_attr(ObMemAttr("KmeansSample"));
+    
     sample_dim_ = dim;
     dim_ = sample_dim_ / pq_m;
     lists_ = lists;
@@ -137,12 +137,12 @@ void ObKmeansAlgo::destroy()
 int ObKmeansAlgo::init(ObKmeansCtx &kmeans_ctx)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = kmeans_ctx.tenant_id_;
+  
   int64_t lists = kmeans_ctx.lists_;
   int64_t dim = kmeans_ctx.dim_;
-  if (OB_INVALID_ID == tenant_id || 0 >= lists || 0 >= dim) {
+  if (0 >= lists || 0 >= dim) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid argument", K(ret), K(lists), K(tenant_id), K(dim));
+    SHARE_LOG(WARN, "invalid argument", K(ret), K(lists), K(dim));
   } else {
     kmeans_ctx_ = &kmeans_ctx;
     is_inited_ = true;
@@ -401,7 +401,6 @@ int ObKmeansExecutor::append_sample_vector(float* vector)
 // ------------------ ObSingleKmeansExecutor implement ------------------
 int ObSingleKmeansExecutor::init(
     ObKmeansAlgoType algo_type,
-    const int64_t tenant_id,
     const int64_t lists,
     const int64_t samples_per_nlist,
     const int64_t dim,
@@ -410,8 +409,8 @@ int ObSingleKmeansExecutor::init(
     const int64_t pq_m_size/* = 1*/)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ctx_.init(tenant_id, lists, samples_per_nlist, dim, dist_algo, norm_info, 1 /*pq_m*/))) {
-    LOG_WARN("fail to init kmeans ctx", K(ret), K(tenant_id), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
+  if (OB_FAIL(ctx_.init(lists, samples_per_nlist, dim, dist_algo, norm_info, 1 /*pq_m*/))) {
+    LOG_WARN("fail to init kmeans ctx", K(ret), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
   } else {
     if (algo_type == ObKmeansAlgoType::KAT_ELKAN) {
       void *tmp_buf = nullptr;
@@ -512,7 +511,6 @@ ObMultiKmeansExecutor::~ObMultiKmeansExecutor()
 
 int ObMultiKmeansExecutor::init(
     ObKmeansAlgoType algo_type,
-    const int64_t tenant_id,
     const int64_t lists,
     const int64_t samples_per_nlist,
     const int64_t dim,
@@ -521,8 +519,8 @@ int ObMultiKmeansExecutor::init(
     const int64_t pq_m_size/* = 1*/)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ctx_.init(tenant_id, lists, samples_per_nlist, dim, dist_algo, norm_info, pq_m_size))) {
-    LOG_WARN("fail to init kmeans ctx", K(ret), K(tenant_id), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
+  if (OB_FAIL(ctx_.init(lists, samples_per_nlist, dim, dist_algo, norm_info, pq_m_size))) {
+    LOG_WARN("fail to init kmeans ctx", K(ret), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
   } else {
     pq_m_size_ = pq_m_size;
     if (OB_FAIL(algos_.prepare_allocate(pq_m_size))) {
@@ -621,7 +619,7 @@ int ObMultiKmeansExecutor::init_build_handle(ObKmeansBuildTaskHandler &handle)
   int ret = OB_SUCCESS;
 
   common::ObSpinLockGuard init_guard(handle.lock_);                  // lock thread pool init to avoid init twice
-  ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
   if (OB_ISNULL(service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
@@ -685,7 +683,7 @@ int ObMultiKmeansExecutor::build_parallel(const common::ObTableID &table_id, con
       LOG_WARN("fail to prepare splited_arrs", K(ret));
     } else {
       // build_parallel
-      ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
+      ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
       if (OB_ISNULL(service)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr", K(ret));
@@ -1017,7 +1015,7 @@ int ObIvfBuildHelper::init(ObString &init_str, lib::MemoryContext &parent_mem_ct
   } else if (OB_ISNULL(ivf_build_mem_ctx_ = OB_NEWx(ObIvfMemContext, get_allocator(), all_vsag_use_mem))) { 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create ivf_build_mem_ctx", K(ret)); 
-  } else if (OB_FAIL(ivf_build_mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem, tenant_id_, ObIvfMemContext::IVF_BUILD_LABEL))) {
+  } else if (OB_FAIL(ivf_build_mem_ctx_->init(parent_mem_ctx, all_vsag_use_mem, ObIvfMemContext::IVF_BUILD_LABEL))) {
     LOG_WARN("failed to init memory context", K(ret));
     get_allocator()->free(ivf_build_mem_ctx_);
     ivf_build_mem_ctx_ = nullptr;
@@ -1071,8 +1069,8 @@ int64_t ObIvfBuildHelper::get_free_vector_mem_size()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mem ctx is null", K(ret));
   } else if (OB_FALSE_IT(curr_used = ATOMIC_LOAD(ivf_build_mem_ctx_->get_all_vsag_use_mem()))) {
-  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id_, tenant_mem_size))) {
-    LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id_));
+  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_mem_size))) {
+    LOG_WARN("failed to get vector mem limit size.", K(ret));
   } else if (tenant_mem_size > curr_used) {
     free_vector_mem_size = tenant_mem_size - curr_used;
   }
@@ -1113,7 +1111,7 @@ int ObIvfFlatBuildHelper::init_kmeans_ctx(const int64_t dim)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc tmp_buf", K(ret), K(ivf_build_mem_ctx_->get_all_vsag_use_mem_byte()));
     } else if (OB_FALSE_IT(executor_ = new (tmp_buf) ObSingleKmeansExecutor(*ivf_build_mem_ctx_))) {
-    } else if (OB_FAIL(executor_->init(algo_type, tenant_id_, param_.nlist_,
+    } else if (OB_FAIL(executor_->init(algo_type, param_.nlist_,
                                        param_.sample_per_nlist_, dim, param_.dist_algorithm_, norm_info))) {
       LOG_WARN("failed to init kmeans ctx", K(ret));
     } else {
@@ -1265,7 +1263,6 @@ int ObIvfPqBuildHelper::init_kmeans_ctx(const int64_t dim)
       LOG_WARN("failed to alloc tmp_buf", K(ret), K(ivf_build_mem_ctx_->get_all_vsag_use_mem_byte()));
     } else if (OB_FALSE_IT(executor_ = new (tmp_buf) ObMultiKmeansExecutor(*ivf_build_mem_ctx_))) {
     } else if (OB_FAIL(executor_->init(algo_type, 
-                                  tenant_id_, 
                                   pqnlist, 
                                   param_.sample_per_nlist_, 
                                   dim, 

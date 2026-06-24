@@ -59,7 +59,7 @@ public:
 private:
   /* functions */
   int process_schema_version_changes(const ObMySQLResultSet &result);
-  int check_and_refresh_schema(uint64_t tenant_id);
+  int check_and_refresh_schema();
   int response_query_result(ObMySQLResultSet &result);
   void free_output_row(ObMySQLResultSet &result);
   /* variables */

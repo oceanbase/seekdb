@@ -84,17 +84,17 @@ public:
     return is_mini_and_minor_merge_tablet() || is_only_mini_merge_tablet();
   }
 
-  bool is_valid_with_tenant(const uint64_t tenant_id) const
+  bool is_valid_with_tenant() const
   {
     // 1. Meta tenant only has inner tablet, no user tablet
     // 2. User tenant and SYS tenant support all valid tablet
-    return (is_meta_tenant(tenant_id) && is_inner_tablet())
-        || ((is_sys_tenant(tenant_id) || is_user_tenant(tenant_id)) && is_valid());
+    return (false && is_inner_tablet())
+        || ((true || false) && is_valid());
   }
 
-  bool belong_to_sys_ls(const uint64_t tenant_id) const
+  bool belong_to_sys_ls() const
   {
-    return is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id) || is_sys_tablet();
+    return true || false || is_sys_tablet();
   }
 
   bool is_user_normal_rowid_table_tablet() const

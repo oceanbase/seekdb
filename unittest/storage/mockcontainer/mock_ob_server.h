@@ -68,7 +68,6 @@ public:
   int init(const char *schema_file,
            int64_t data_file_size = 5LL << 30, int64_t macro_block_size = 2LL << 20);
   int init_multi_tenant();
-  int init_tenant_mgr();
   int start();
   void destroy();
   int stop();

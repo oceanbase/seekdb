@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_obj_lock.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -96,8 +97,8 @@ int ObOBJLock::recover_(
   ObTableLockOpList *op_list = NULL;
   ObTableLockOpLinkNode *lock_op_node = NULL;
   bool need_recover = true;
-  uint64_t tenant_id = MTL_ID();
-  ObMemAttr attr(tenant_id, "ObTableLockOp");
+  
+  ObMemAttr attr("ObTableLockOp");
   // 1. record lock op.
   if (OB_LIKELY(!lock_op.need_record_lock_op())) {
     // only have lock op, should not have unlock op.
@@ -107,7 +108,6 @@ int ObOBJLock::recover_(
       lock_row_share_();
     }
   } else if (OB_FAIL(get_or_create_op_list(lock_op.lock_mode_,
-                                           tenant_id,
                                            allocator,
                                            op_list))) {
     LOG_WARN("get or create owner map failed.", K(ret));
@@ -152,13 +152,13 @@ int ObOBJLock::slow_lock(
   void *ptr = NULL;
   ObTableLockOpList *op_list = NULL;
   ObTableLockOpLinkNode *lock_op_node = NULL;
-  uint64_t tenant_id = MTL_ID();
+  
   bool conflict_with_dml_lock = false;
   const bool is_two_phase_lock = param.is_two_phase_lock_;
   const int64_t trans_id_value = lock_op.create_trans_id_;
   bool enable_lock_priority = false;
   const ObTableLockPriority priority = param.lock_priority_;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant config is invalid", K(ret), K(lock_op));
@@ -170,7 +170,7 @@ int ObOBJLock::slow_lock(
   // NOTE that we set enable_lock_priority to false to avoid unexpected cases
   // e.g., no lock operations but priority is not empty
   const bool need_check_first = is_two_phase_lock || enable_lock_priority;
-  ObMemAttr attr(tenant_id, "ObTableLockOp");
+  ObMemAttr attr("ObTableLockOp");
   // 1. check lock conflict.
   // 2. record lock op.
   int64_t abs_timeout_us = ObTimeUtility::current_time() + DEFAULT_RWLOCK_TIMEOUT_US;
@@ -225,7 +225,7 @@ int ObOBJLock::slow_lock(
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("check allow lock failed", K(ret), K(lock_op));
     }
-  } else if (OB_FAIL(get_or_create_op_list(lock_op.lock_mode_, tenant_id, allocator, op_list))) {
+  } else if (OB_FAIL(get_or_create_op_list(lock_op.lock_mode_, allocator, op_list))) {
     LOG_WARN("get or create owner map failed.", K(ret));
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObTableLockOpLinkNode), attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -279,8 +279,8 @@ int ObOBJLock::unlock_(
   void *ptr = NULL;
   ObTableLockOpList *op_list = NULL;
   ObTableLockOpLinkNode *lock_op = NULL;
-  uint64_t tenant_id = MTL_ID();
-  ObMemAttr attr(tenant_id, "ObTableLockOp");
+  
+  ObMemAttr attr("ObTableLockOp");
   // 1. check unlock op conflict.
   // 2. record lock op.
   if (OB_FAIL(check_allow_unlock_(unlock_op))) {
@@ -530,7 +530,7 @@ int ObOBJLock::check_enable_lock_priority_(bool &enable_lock_priority)
   bool tmp_enable_lock_priority = false;
   if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (!tenant_config.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant config is invalid", K(ret));
@@ -788,10 +788,10 @@ void ObOBJLock::wakeup_waiters_(const ObTableLockOp &lock_op)
   // dml in trans lock does not need do this.
   if (OB_LIKELY(!lock_op.need_wakeup_waiter())) {
     // do nothing
-  } else if (OB_ISNULL(MTL(ObLockWaitMgr*))) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "MTL(ObLockWaitMgr*) is null");
+  } else if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "share::g_mp->lock_wait_mgr() is null");
   } else {
-    MTL(ObLockWaitMgr*)->wakeup(lock_op.lock_id_);
+    share::g_mp->lock_wait_mgr()->wakeup(lock_op.lock_id_);
     LOG_DEBUG("ObOBJLock::wakeup_waiters_ ", K(lock_op));
   }
 }
@@ -2005,7 +2005,7 @@ int ObOBJLock::check_allow_replace_from_list_(ObTableLockOpList *op_list, const 
   ObTableLockOp *lock_op = nullptr;
 
   LOG_DEBUG("start check_allow_replace_from_list_", K(lock_op_cnt));
-  if (OB_FAIL(lock_op_map.create(10, lib::ObMemAttr(MTL_ID(), "TableLockOpMap")))) {
+  if (OB_FAIL(lock_op_map.create(10, lib::ObMemAttr("TableLockOpMap")))) {
     LOG_WARN("create lock_map for replace check failed", K(ret));
   } else {
     DLIST_FOREACH_NORET(curr, *op_list)
@@ -2361,7 +2361,7 @@ int ObOBJLock::submit_log_(ObLockTableSplitLogCb &callback,
       const bool need_nonblock = false;
       palf::LSN lsn;
       SCN scn;
-      ObMemAttr attr(MTL_ID(), "SplitLog");
+      ObMemAttr attr("SplitLog");
       if (OB_ISNULL(buffer = static_cast<char *>(mtl_malloc(buffer_size, attr)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc buffer", K(ret));
@@ -2369,7 +2369,7 @@ int ObOBJLock::submit_log_(ObLockTableSplitLogCb &callback,
         LOG_WARN("failed to serialize split log header", K(ret), K(buffer_size), K(pos));
       } else if (OB_FAIL(split_log.serialize(buffer, buffer_size, pos))) {
         LOG_WARN("failed to serialize split log", K(ret), K(buffer_size), K(pos));
-      } else if (OB_ISNULL(ls_service = MTL(ObLSService *))) {
+      } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("mtl ObLSService should not be null", K(ret));
       } else if (OB_FAIL(ls_service->get_ls(callback.ls_id_, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
@@ -2485,7 +2485,6 @@ void ObOBJLock::check_curr_trans_lock_is_valid_(const uint64_t lock_mode_cnt_in_
 }
 
 int ObOBJLock::get_or_create_op_list(const ObTableLockMode mode,
-                                     const uint64_t tenant_id,
                                      ObMalloc &allocator,
                                      ObTableLockOpList *&op_list)
 {
@@ -2493,7 +2492,7 @@ int ObOBJLock::get_or_create_op_list(const ObTableLockMode mode,
   void *ptr = NULL;
   int map_index = 0;
   op_list = NULL;
-  ObMemAttr attr(tenant_id, "ObTableLockOpL");
+  ObMemAttr attr("ObTableLockOpL");
   if (OB_UNLIKELY(!is_lock_mode_valid(mode))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("lock mode is invalid.", K(ret), K(mode));
@@ -2592,15 +2591,15 @@ int ObOBJLock::switch_to_follower(ObMalloc &allocator)
   return ret;
 }
 
-ObOBJLock *ObOBJLockFactory::alloc(const uint64_t tenant_id, const ObLockID &lock_id)
+ObOBJLock *ObOBJLockFactory::alloc(const ObLockID &lock_id)
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
   ObOBJLock* obj_lock = NULL;
-  ObMemAttr attr(tenant_id, OB_TABLE_LOCK_NODE);
-  if (!is_valid_tenant_id(tenant_id) || !lock_id.is_valid()) {
+  ObMemAttr attr(OB_TABLE_LOCK_NODE);
+  if (!true || !lock_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id), K(lock_id));
+    LOG_WARN("invalid argument", K(ret), K(lock_id));
   } else if (NULL != (ptr = ob_malloc(sizeof(ObOBJLock), attr))) {
     obj_lock = new(ptr) ObOBJLock(lock_id);
     (void)ATOMIC_FAA(&alloc_count_, 1);
@@ -2637,7 +2636,7 @@ int ObOBJLockMap::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObOBJLockMap has been inited already", K(ret));
-  } else if (OB_FAIL(lock_map_.init(lib::ObMemAttr(MTL_ID(), "ObOBJLockMap")))) {
+  } else if (OB_FAIL(lock_map_.init(lib::ObMemAttr("ObOBJLockMap")))) {
     LOG_WARN("ObOBJLockMap create lock map failed", K(ret));
   } else {
     is_inited_ = true;
@@ -2685,7 +2684,7 @@ int ObOBJLockMap::get_or_create_obj_lock_with_ref_(
     ObOBJLock *&obj_lock)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   obj_lock = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -2694,7 +2693,7 @@ int ObOBJLockMap::get_or_create_obj_lock_with_ref_(
     do {
       if (OB_FAIL(lock_map_.get(lock_id, obj_lock))) {
         if (ret == OB_ENTRY_NOT_EXIST) {
-          if (OB_ISNULL(obj_lock = ObOBJLockFactory::alloc(tenant_id, lock_id))) {
+          if (OB_ISNULL(obj_lock = ObOBJLockFactory::alloc(lock_id))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("failed to alllocate ObOBJLock ", K(ret));
           } else if (OB_FAIL(lock_map_.insert_and_get(obj_lock->get_lock_id(),
@@ -3392,8 +3391,8 @@ int ObObjLockPriorityQueue::push(
   int ret = OB_SUCCESS;
   void *ptr = NULL;
   ObObjLockPriorityTask *task = NULL;
-  uint64_t tenant_id = MTL_ID();
-  ObMemAttr attr(tenant_id, "ObObjLockPrioT");
+  
+  ObMemAttr attr("ObObjLockPrioT");
   // step 1, check duplicate
   ObObjLockPriorityTask *exist_task = NULL;
   if (is_exist(id, priority, exist_task)) {
@@ -3475,8 +3474,8 @@ int ObObjLockPriorityQueue::add_with_create_ts(
   void *ptr = NULL;
   ObObjLockPriorityTask *task = NULL;
   ObObjLockPriorityTask *position_task = NULL;
-  uint64_t tenant_id = MTL_ID();
-  ObMemAttr attr(tenant_id, "ObObjLockPrioT");
+  
+  ObMemAttr attr("ObObjLockPrioT");
   // step 1, check duplicate
 
   ObObjLockPriorityTaskList *task_list = NULL;

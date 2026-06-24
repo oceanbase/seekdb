@@ -15,7 +15,7 @@
  */
 #include "ob_log_external_storage_utils.h"
 #include "share/ob_device_manager.h"                          // ObDeviceManager
-#include "share/backup/ob_backup_io_adapter.h"                // ObBackupIOAdapter
+#include "share/io/ob_backup_io_adapter.h"                // ObBackupIOAdapter
 namespace oceanbase
 {
 namespace common

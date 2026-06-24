@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_resource_limit_calculator.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -57,7 +58,7 @@ int ObLogicResourceStatIterator::get_next(ObResourceInfo &info)
         ret = OB_ITER_END;
       } else if (!is_valid_logic_res_type(curr_type_)) {
         need_retry = true;
-      } else if (OB_FAIL(MTL(ObResourceLimitCalculator *)->get_logic_resource_stat(curr_type_,
+      } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_logic_resource_stat(curr_type_,
                                                                                    info))) {
         LOG_WARN("get_next failed", K(ret), K(curr_type_));
       }
@@ -105,7 +106,7 @@ int ObResourceConstraintIterator::set_ready(const int64_t res_type)
   } else if (!is_valid_logic_res_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(res_type));
-  } else if (OB_FAIL(MTL(ObResourceLimitCalculator *)->get_logic_resource_constraint_value(res_type,
+  } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_logic_resource_constraint_value(res_type,
                                                                                            res_))) {
     LOG_WARN("get resource constraint value failed", K(ret), K(res_type));
   } else {

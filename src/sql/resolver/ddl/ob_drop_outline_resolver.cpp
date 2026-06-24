@@ -47,8 +47,8 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(drop_outline_stmt = create_stmt<ObDropOutlineStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create drop_outline_stmt", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret), K(MTL_ID()));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
+    LOG_WARN("fail to get data version", KR(ret));
   } else {
     stmt_ = drop_outline_stmt;
     //resolve database_name and outline_name
@@ -68,7 +68,7 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
                          == ObOutlineType::OUTLINE_TYPE_FORMAT);
         static_cast<ObDropOutlineStmt *>(stmt_)->set_database_name(db_name);
         static_cast<ObDropOutlineStmt *>(stmt_)->set_outline_name(outline_name);
-        static_cast<ObDropOutlineStmt *>(stmt_)->set_tenant_id(params_.session_info_->get_effective_tenant_id());
+        (void)0;
         static_cast<ObDropOutlineStmt *>(stmt_)->set_is_format(is_format_otl);
       }
     }

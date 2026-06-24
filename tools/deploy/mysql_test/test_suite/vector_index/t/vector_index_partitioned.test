@@ -435,7 +435,7 @@ drop table t1;
 alter system set ob_vector_memory_limit_percentage = 0;
 
 --sleep 25
-select count(*) as count from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b  where a.data_table_id = b.table_id and b.table_name = 't1';
+select count(*) as count from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_table b  where a.data_table_id = b.table_id and b.table_name = 't1';
 
 # check virtual table later
 PURGE RECYCLEBIN;

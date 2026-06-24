@@ -118,7 +118,7 @@ public:
   virtual ~ObAnalyzeStmt();
   virtual int get_cmd_type() const { return get_stmt_type(); }
 
-  void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   int add_table(const ObString database_name,
                  const uint64_t database_id,
                  const ObString table_name,
@@ -131,7 +131,7 @@ public:
   void set_statistic_scope(const StatisticType statistic_type)
   { statistic_type_ = statistic_type; }
   void set_is_drop() { is_drop_ = true; }
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
   StatisticType get_statistic_type() { return statistic_type_; }
   const ObAnalyzeSampleInfo &get_sample_info() const { return sample_info_; }
   ObAnalyzeSampleInfo &get_sample_info() { return sample_info_; }
@@ -146,14 +146,12 @@ public:
   int fill_table_stat_params(ObExecContext &ctx, ObIArray<common::ObTableStatParam> &params);
 
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(statistic_type),
+  TO_STRING_KV(K_(statistic_type),
                K_(sample_info),
                K_(parallel_degree),
                K_(tables));
 
 private:
-  uint64_t tenant_id_;
   //ANALYZE TABLE without histogram clause support multi tables.For example:
   //  ANALYZE TABLE db1.t1, db2.t1;
   //And in other cases, size of tables_ is always 1.

@@ -42,8 +42,7 @@ public:
   int init(
       const char *log_dir,
       const common::ObLogCursor cursor,
-      const blocksstable::ObLogFileSpec &log_file_spec,
-      const uint64_t tenant_id);
+      const blocksstable::ObLogFileSpec &log_file_spec);
   void destroy();
 
   // iterator read
@@ -54,8 +53,7 @@ public:
       const ObMetaDiskAddr &disk_addr,
       const int64_t buf_len,
       void *buf,
-      int64_t &pos,
-      const uint64_t tenant_id);
+      int64_t &pos);
 
   // when replay finishes, replayer will call this func to get the finish cursor
   int get_finish_cursor(common::ObLogCursor &cursor) const;

@@ -31,6 +31,7 @@ using namespace share;
 
 
 static ObSharedMemAllocMgr MTL_MEM_ALLOC_MGR;
+static FakeModuleProvider G_TEST_MODULE_PROVIDER;
 
 namespace share {
 
@@ -86,14 +87,18 @@ public:
   virtual void SetUp() override
   {
     oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     ObAddr ip_port(ObAddr::VER::IPV4, "119.119.0.1",2023);
     ObCurTraceId::init(ip_port);
     GCONF._ob_trans_rpc_timeout = 500;
     ObClockGenerator::init();
     const testing::TestInfo* const test_info =
       testing::UnitTest::GetInstance()->current_test_info();
-    MTL_MEM_ALLOC_MGR.init();
+    // publish the fake module set as the process-global provider (see tx_node.h).
+    publish_test_module_provider(G_TEST_MODULE_PROVIDER, MTL_MEM_ALLOC_MGR);
+    // reset the static fake location adapter so cross-test ls_id residue can't
+    // leak into this case (many cases reset themselves, some don't -> OB_HASH_EXIST).
+    ObTxNode::reset_localtion_adapter();
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> starting test : %s", test_name);
   }
@@ -104,7 +109,7 @@ public:
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
     ObClockGenerator::destroy();
-    ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->recycle_tenant_allocator();
   }
   MsgBus bus_;
 };
@@ -415,121 +420,6 @@ TEST_F(ObTestTx, switch_to_follower_gracefully)
     ASSERT_EQ(OB_SUCCESS, n1->release_tx(tx));
   }
 
-  ASSERT_EQ(OB_SUCCESS, n1->wait_all_tx_ctx_is_destoryed());
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr));
-}
-
-TEST_F(ObTestTx, switch_to_follower_gracefully_fail)
-{
-  int ret = OB_SUCCESS;
-  ObTxNode::reset_localtion_adapter();
-
-  auto n1 = new ObTxNode(1, ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_);
-  DEFER(delete(n1));
-
-  ASSERT_EQ(OB_SUCCESS, n1->start());
-
-  ObTxParam tx_param;
-  tx_param.timeout_us_ = 10 * 1000000;
-  tx_param.access_mode_ = ObTxAccessMode::RW;
-  tx_param.isolation_ = ObTxIsolationLevel::RC;
-  tx_param.cluster_id_ = 100;
-
-  const int64_t TX_CNT = 128;
-  ObTxDesc *tx_ptr_arr[TX_CNT] = { nullptr };
-  for (int64_t i = 0; i < TX_CNT; ++i) {
-    ASSERT_EQ(OB_SUCCESS, n1->acquire_tx(tx_ptr_arr[i]));
-    ObTxDesc &tx = *tx_ptr_arr[i];
-    // prepare snapshot for write
-    ObTxReadSnapshot snapshot;
-    ASSERT_EQ(OB_SUCCESS, n1->get_read_snapshot(tx,
-                             tx_param.isolation_,
-                             n1->ts_after_ms(100),
-                             snapshot));
-    ObTxSEQ sp;
-    ASSERT_EQ(OB_SUCCESS, n1->create_implicit_savepoint(tx, tx_param, sp));
-    ASSERT_EQ(OB_SUCCESS, n1->write(tx, snapshot, 1000 + i, 2000 + i));
-  }
-
-  ObLSTxCtxMgr *ls_tx_ctx_mgr = NULL;
-  ASSERT_EQ(OB_SUCCESS, n1->txs_.tx_ctx_mgr_.get_ls_tx_ctx_mgr(n1->ls_id_, ls_tx_ctx_mgr));
-
-// make switch_to_follower_gracefully_failed
-  ObPartTransCtx* last_tx_ctx = nullptr;
-  {
-    ObLSTxCtxIterator iter;
-    ObPartTransCtx* tx_ctx = nullptr;
-
-    ASSERT_EQ(OB_SUCCESS, iter.set_ready(ls_tx_ctx_mgr));
-    while (OB_SUCC(iter.get_next_tx_ctx(tx_ctx))) {
-      last_tx_ctx = tx_ctx;
-      iter.revert_tx_ctx(tx_ctx);
-    }
-    ASSERT_EQ(OB_ITER_END, ret);
-    iter.reset();
-  }
-
-  uint64_t tenant_id_backup = last_tx_ctx->tenant_id_;
-// make last tx ctx fails to exec switch_to_follower_gracefully,
-  last_tx_ctx->tenant_id_ = 0xbaba;
-
-// switch_to_follower_gracefully
-  n1->fake_tx_log_adapter_->set_pause();
-  ASSERT_NE(OB_SUCCESS, ls_tx_ctx_mgr->switch_to_follower_gracefully());
-  n1->fake_tx_log_adapter_->clear_pause();
-// reset
-  last_tx_ctx->tenant_id_ = tenant_id_backup;
-  n1->wait_all_redolog_applied();
-
-// check data_complete
-// TODO The maintenance of the data_completed_ variable is currently incorrect, and the
-// verification will be turned on after it is fixed
-  //{
-  //  ObLSTxCtxIterator iter;
-  //  ObPartTransCtx* tx_ctx = nullptr;
-  //  ASSERT_EQ(OB_SUCCESS, iter.set_ready(ls_tx_ctx_mgr));
-  //  while (OB_SUCC(iter.get_next_tx_ctx(tx_ctx))) {
-  //    ASSERT_EQ(false, tx_ctx->exec_info_.data_complete_);
-  //    iter.revert_tx_ctx(tx_ctx);
-  //  }
-  //  ASSERT_EQ(OB_ITER_END, ret);
-  //  iter.reset();
-  //}
-
-  for (int64_t i = 0; i < TX_CNT; ++i) {
-    ObTxDesc &tx = *tx_ptr_arr[i];
-    int64_t val1 = 0;
-
-    ObTxReadSnapshot snapshot;
-    ASSERT_EQ(OB_SUCCESS, n1->get_read_snapshot(tx,
-                             tx_param.isolation_,
-                             n1->ts_after_ms(100),
-                             snapshot));
-    ASSERT_EQ(OB_SUCCESS, n1->read(snapshot, 1000 + i, val1));
-    ASSERT_EQ(2000 + i, val1);
-    ObTxSEQ sp;
-    ASSERT_EQ(OB_SUCCESS, n1->create_implicit_savepoint(tx, tx_param, sp));
-    ASSERT_EQ(OB_SUCCESS, n1->write(tx, snapshot, 1000 + i, 3000 + i));
-  }
-
-  for (int64_t i = 0; i < TX_CNT; ++i) {
-    ObTxDesc &tx = *tx_ptr_arr[i];
-    int64_t val2 = 0;
-
-    ObTxReadSnapshot snapshot;
-    ASSERT_EQ(OB_SUCCESS, n1->get_read_snapshot(tx,
-                             tx_param.isolation_,
-                             n1->ts_after_ms(100),
-                             snapshot));
-    ASSERT_EQ(OB_SUCCESS, n1->read(snapshot, 1000 + i, val2));
-    ASSERT_EQ(3000 + i, val2);
-  }
-
-  for (int64_t i = 0; i < TX_CNT; ++i) {
-    ObTxDesc &tx = *tx_ptr_arr[i];
-    ASSERT_EQ(OB_SUCCESS, n1->commit_tx(tx, n1->ts_after_ms(10000)));
-    ASSERT_EQ(OB_SUCCESS, n1->release_tx(tx));
-  }
   ASSERT_EQ(OB_SUCCESS, n1->wait_all_tx_ctx_is_destoryed());
   ASSERT_EQ(OB_SUCCESS, n1->txs_.tx_ctx_mgr_.revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr));
 }

@@ -168,9 +168,9 @@ TEST_F(TestObjectMgr, TestFragmentWash)
 #endif
   ObTenantResourceMgrHandle resource_handle;
   ObResourceMgr::get_instance().get_tenant_resource_mgr(
-      OB_SYS_TENANT_ID, resource_handle);
+      resource_handle);
   auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(
-		  OB_SYS_TENANT_ID, ObCtxIds::DEFAULT_CTX_ID);
+		  ObCtxIds::DEFAULT_CTX_ID);
   ta->sync_wash(INT64_MAX);
   int washed_size = ta->sync_wash(INT64_MAX);
   ASSERT_EQ(washed_size, 0);
@@ -241,15 +241,14 @@ TEST_F(TestObjectMgr, TestSubObjectMgr)
   int64_t total_size = fileInfo.st_size;
   void *ptr = ::mmap(0, total_size, PROT_READ, MAP_SHARED, fd, 0);
   abort_unless(ptr != MAP_FAILED);
-  int64_t tenant_id = OB_SYS_TENANT_ID;
   int64_t ctx_id = ObCtxIds::DEFAULT_CTX_ID;
   auto ta = ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(
-    tenant_id, ctx_id);
+    ctx_id);
   ObjectMgr som(*ta.ref_allocator(), false, INTACT_NORMAL_AOBJECT_SIZE, 1, false, NULL);
   ObMemAttr attr;
   ObTenantResourceMgrHandle resource_handle;
   ObResourceMgr::get_instance().get_tenant_resource_mgr(
-		  tenant_id, resource_handle);
+		  resource_handle);
   map<int64_t, AObject*> allocs;
   int i = total_size/sizeof(Record);
   auto *rec = (Record*)ptr;

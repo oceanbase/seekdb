@@ -62,8 +62,8 @@ public:
   bool is_valid() const;
   void reset();
   int64_t get_convert_size() const;
-  uint64_t get_tenant_id() const { return tenant_id_; }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   uint64_t get_database_id() const { return database_id_; }
   void set_database_id(uint64_t database_id) { database_id_ = database_id; }
   uint64_t get_package_id() const { return package_id_; }
@@ -128,8 +128,7 @@ public:
     return PKG_FLAG_ACCESSIBLE_BY == (flag_ & PKG_FLAG_ACCESSIBLE_BY);
   }
 
-  TO_STRING_KV(K_(tenant_id),
-               K_(database_id),
+  TO_STRING_KV(K_(database_id),
                K_(owner_id),
                K_(package_id),
                K_(package_name),
@@ -142,7 +141,6 @@ public:
                K_(comment),
                K_(route_sql));
 private:
-  uint64_t tenant_id_;
   uint64_t database_id_;
   uint64_t owner_id_;
   uint64_t package_id_;

@@ -444,7 +444,6 @@ void TestDmlCommon::build_data_table_schema(
 
   table_schema.reset();
   table_schema.set_table_name("test_dml_common");
-  table_schema.set_tenant_id(tenant_id);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_id(table_id);
@@ -460,7 +459,6 @@ void TestDmlCommon::build_data_table_schema(
 #define TEST_DML_ADD_COLUMN(column_id, column_name, data_type, collation_type, is_row_key) \
   { \
     ObColumnSchemaV2 column; \
-    column.set_tenant_id(tenant_id); \
     column.set_column_id(column_id); \
     column.set_column_name(column_name); \
     column.set_data_type(data_type); \
@@ -491,7 +489,6 @@ void TestDmlCommon::build_index_table_schema(
 
   table_schema.reset();
   table_schema.set_table_name("test_dml_common_index");
-  table_schema.set_tenant_id(tenant_id);
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_data_table_id(data_table_id);
@@ -506,7 +503,6 @@ void TestDmlCommon::build_index_table_schema(
   // add index column: a
   {
     ObColumnSchemaV2 column;
-    column.set_tenant_id(tenant_id);
     column.set_column_id(OB_APP_MIN_COLUMN_ID);
     column.set_column_name("index_a");
     column.set_data_type(ObIntType);

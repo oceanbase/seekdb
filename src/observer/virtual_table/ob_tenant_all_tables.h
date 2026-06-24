@@ -58,7 +58,7 @@ namespace observer
                     "NULL as MAX_DATA_LENGTH," \
                     "NULL as INDEX_LENGTH," \
                     "NULL as DATA_FREE," \
-                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_sequence_getter(effective_tenant_id(), a.table_id, a.autoinc_column_id) END as AUTO_INCREMENT," \
+                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_sequence_getter(a.table_id, a.autoinc_column_id) END as AUTO_INCREMENT," \
                     "a.gmt_create as CREATE_TIME," \
                     "CASE a.table_type WHEN 4 THEN NULL ELSE a.gmt_modified END as UPDATE_TIME," \
                     "NULL as CHECK_TIME," \
@@ -68,7 +68,7 @@ namespace observer
                     "WHEN 63 THEN 'binary' " \
                     "ELSE NULL END as COLLATION," \
                     "CASE a.table_type WHEN 4 THEN NULL ELSE 0 END as CHECKSUM," \
-                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_option_printer(effective_tenant_id(), a.database_id, a.table_id) END as CREATE_OPTIONS," \
+                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_option_printer(a.database_id, a.table_id) END as CREATE_OPTIONS," \
                     "CASE a.table_type WHEN 4 THEN 'VIEW' ELSE a.comment END as COMMENT " \
                     "from " \
                     "(" \
@@ -98,7 +98,7 @@ namespace observer
                     "where a.table_type in (0, 1, 2, 3, 4, 14) " \
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \
-                    "and 0 = sys_privilege_check('table_acc', effective_tenant_id(), b.database_name, a.table_name) "
+                    "and 0 = sys_privilege_check('table_acc', 1, b.database_name, a.table_name) "
 
 #define NEW_TABLE_STATUS_SQL_ORA  "select /*+ leading(a) no_use_nl(ts)*/" \
                     "a.database_id as DATABASE_ID," \
@@ -113,7 +113,7 @@ namespace observer
                     "NULL as MAX_DATA_LENGTH," \
                     "NULL as INDEX_LENGTH," \
                     "NULL as DATA_FREE," \
-                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_sequence_getter(effective_tenant_id(), a.table_id, a.autoinc_column_id) END as AUTO_INCREMENT," \
+                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_sequence_getter(a.table_id, a.autoinc_column_id) END as AUTO_INCREMENT," \
                     "a.gmt_create as CREATE_TIME," \
                     "CASE a.table_type WHEN 4 THEN NULL ELSE a.gmt_modified END as UPDATE_TIME," \
                     "NULL as CHECK_TIME," \
@@ -123,7 +123,7 @@ namespace observer
                     "WHEN 63 THEN 'binary' " \
                     "ELSE NULL END as COLLATION," \
                     "CASE a.table_type WHEN 4 THEN NULL ELSE 0 END as CHECKSUM," \
-                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_option_printer(effective_tenant_id(), a.database_id, a.table_id) END as CREATE_OPTIONS," \
+                    "CASE a.table_type WHEN 4 THEN NULL ELSE inner_table_option_printer(a.database_id, a.table_id) END as CREATE_OPTIONS," \
                     "CASE a.table_type WHEN 4 THEN 'VIEW' ELSE a.cmt END as \"COMMENT\" " \
                     "from " \
                     "(" \
@@ -228,7 +228,7 @@ public:
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
   inline void set_sql_proxy(common::ObMySQLProxy *sql_proxy) { sql_proxy_ = sql_proxy; }
 private:
   int inner_get_next_row();
@@ -236,7 +236,6 @@ private:
   int get_table_stats();
 private:
   common::ObMySQLProxy *sql_proxy_;
-  uint64_t tenant_id_;
   uint64_t database_id_;
   common::ObSEArray<const share::schema::ObTableSchema *, 128> table_schemas_;
   int64_t table_schema_idx_;

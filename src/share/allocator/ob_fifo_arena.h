@@ -187,7 +187,7 @@ public:
   int64_t hold() const {
     return hold_;
   }
-  uint64_t get_tenant_id() const { return attr_.tenant_id_; }
+  
   int64_t get_max_cached_memstore_size() const
   {
     return MAX_CACHED_GROUP_COUNT * ATOMIC_LOAD(&nway_) * (ALLOC_PAGE_SIZE + ACHUNK_PRESERVE_SIZE);

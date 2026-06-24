@@ -44,7 +44,7 @@ private:
   {
     int ret = OB_SUCCESS;
     lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
-    lib::ObMallocHookAttrGuard tmp_500(lib::ObMemAttr(OB_SERVER_TENANT_ID, "BoostCache"));
+    lib::ObMallocHookAttrGuard tmp_500(lib::ObMemAttr("BoostCache"));
     boost::geometry::srs::proj4 src_proj4(context.get_val_arg(0)->string_->ptr());
     boost::geometry::srs::proj4 dest_proj4(context.get_val_arg(1)->string_->ptr());
     boost::geometry::srs::transformation<> transformer(src_proj4, dest_proj4);
@@ -82,7 +82,7 @@ private:
       LOG_WARN("fail to create geo by type", K(ret));
     } else {
       lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
-      lib::ObMallocHookAttrGuard tmp_500(lib::ObMemAttr(OB_SERVER_TENANT_ID, "BoostCache"));
+      lib::ObMallocHookAttrGuard tmp_500(lib::ObMemAttr("BoostCache"));
       boost::geometry::srs::proj4 src_proj4(context.get_val_arg(0)->string_->ptr());
       boost::geometry::srs::proj4 dest_proj4(context.get_val_arg(1)->string_->ptr());
       boost::geometry::srs::transformation<> transformer(src_proj4, dest_proj4);

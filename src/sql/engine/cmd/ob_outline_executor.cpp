@@ -40,7 +40,7 @@ int ObOutlineExecutor::generate_outline_info2(ObExecContext &ctx,
                                              ObOutlineInfo &outline_info)
 {
   int ret = OB_SUCCESS;
-  outline_info.set_tenant_id(ctx.get_my_session()->get_effective_tenant_id());
+  
   outline_info.set_outline_content(create_outline_stmt->get_hint());
   outline_info.set_sql_id(create_outline_stmt->get_sql_id());
   outline_info.set_format_sql_id(create_outline_stmt->get_format_sql_id());
@@ -128,7 +128,7 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
   } else {
     //to check whether ok
     outline_info.set_outline_content(outline);
-    outline_info.set_tenant_id(ctx.get_my_session()->get_effective_tenant_id());
+    
     outline_info.set_signature(outline_key);
     ObString &target_sql = outline_info.get_outline_target_str();
     if (!target_sql.empty()) {
@@ -206,7 +206,7 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parameter", K(session_info), K(outline_stmt));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(
-                  guard, ObLibCacheNameSpace::NS_CRSR, session_info->get_effective_tenant_id()))) {
+                  guard, ObLibCacheNameSpace::NS_CRSR))) {
     LOG_WARN("fail to alloc phy_plan", K(ret));
   } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
     // do nothing

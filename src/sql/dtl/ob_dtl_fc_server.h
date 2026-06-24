@@ -37,7 +37,7 @@ namespace dtl {
 class ObTenantDfc
 {
 public:
-  ObTenantDfc(uint64_t tenant_id);
+  ObTenantDfc();
   virtual ~ObTenantDfc();
 public:
   static int mtl_new(ObTenantDfc *&tenant_dfc);
@@ -63,7 +63,7 @@ public:
 public:
   // for cache first msg and release first msg
   int64_t get_hash_value(int64_t chid);
-  void check_dtl(uint64_t tenant_id);
+  void check_dtl();
   // for block and unblock
   int enforce_block(ObDtlFlowControl *dfc, int64_t ch_idx);
 
@@ -77,7 +77,7 @@ public:
   OB_INLINE virtual void decrease_channel_cnt(int64_t n_ch);
 
   virtual void calc_max_buffer(int64_t max_parallel_cnt);
-  uint64_t get_tenant_id() { return tenant_id_; }
+  
 
   int64_t get_current_buffer_used() { return tenant_dfc_.get_used(); }
   int64_t get_current_blocked_cnt() { return tenant_dfc_.get_blocked_cnt(); }
@@ -98,7 +98,6 @@ private:
 private:
   // global data flow control
   ObDtlFlowControl tenant_dfc_;
-  uint64_t tenant_id_;
   int64_t blocked_dfc_cnt_;
   int64_t channel_total_cnt_;
 
@@ -118,7 +117,7 @@ private:
 
   ObDtlTenantMemManager tenant_mem_mgr_;
 public:
-  TO_STRING_KV(K_(tenant_id), K_(blocked_dfc_cnt), K_(channel_total_cnt));
+  TO_STRING_KV(K_(blocked_dfc_cnt), K_(channel_total_cnt));
 };
 
 class ObDfcServer
@@ -142,9 +141,9 @@ public:
   int register_dfc(ObDtlFlowControl &dfc);
   int deregister_dfc(ObDtlFlowControl &dfc);
 
-  ObDtlTenantMemManager *get_tenant_mem_manager(int64_t tenant_id);
+  ObDtlTenantMemManager *get_tenant_mem_manager();
 private:
-  int get_current_tenant_dfc(uint64_t tenant_id, ObTenantDfc *&tenant_dfc);
+  int get_current_tenant_dfc(ObTenantDfc *&tenant_dfc);
 };
 
 OB_INLINE int64_t ObTenantDfc::get_max_size_per_channel()

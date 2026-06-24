@@ -30,7 +30,7 @@ namespace schema
 {
 
 OB_SERIALIZE_MEMBER((ObTriggerInfo, ObSimpleTriggerSchema),
-//                  tenant_id_,
+//                  tenant_,
 //                  trigger_id_,
                     owner_id_,
 //                  database_id_,
@@ -78,8 +78,7 @@ int ObTriggerInfo::assign(const ObTriggerInfo &other)
 
 void ObTriggerInfo::reset()
 {
-//tenant_id_ = OB_INVALID_TENANT_ID;
-//trigger_id_ = OB_INVALID_ID;
+////trigger_id_ = OB_INVALID_ID;
   owner_id_ = OB_INVALID_ID;
 //database_id_ = OB_INVALID_ID;
 //schema_version_ = common::OB_INVALID_VERSION;;
@@ -112,7 +111,7 @@ void ObTriggerInfo::reset()
 bool ObTriggerInfo::is_valid_for_create() const
 {
   return ObSchema::is_valid() &&
-         tenant_id_ != OB_INVALID_TENANT_ID &&
+         true &&
          trigger_type_ != TT_INVALID &&
          trigger_events_.get_value() != 0 &&
          timing_points_.get_value() != 0 &&
@@ -125,7 +124,7 @@ bool ObTriggerInfo::is_valid_for_create() const
 bool ObTriggerInfo::is_valid() const
 {
   return ObSimpleTriggerSchema::is_valid() &&
-//       tenant_id_ != OB_INVALID_TENANT_ID &&
+//       true &&
          trigger_type_ != TT_INVALID &&
          trigger_events_.get_value() != 0 &&
          timing_points_.get_value() != 0 &&
@@ -139,7 +138,6 @@ int ObTriggerInfo::deep_copy(const ObTriggerInfo &other)
 {
   int ret = OB_SUCCESS;
   OZ (ObSimpleTriggerSchema::deep_copy(other));
-//OX (set_tenant_id(other.get_tenant_id()));
 //OX (set_trigger_id(other.get_trigger_id()));
   OX (set_owner_id(other.get_owner_id()));
 //OX (set_database_id(other.get_database_id()));
@@ -386,8 +384,7 @@ int64_t ObTriggerInfo::get_convert_size() const
   "%.*s \n"
 /************************* mysql mode procedure *************************/
 
-int ObTriggerInfo::gen_package_source(const uint64_t tenant_id,
-                                      const uint64_t tg_package_id,
+int ObTriggerInfo::gen_package_source(const uint64_t tg_package_id,
                                       common::ObString &source,
                                       bool is_header,
                                       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -400,7 +397,7 @@ int ObTriggerInfo::gen_package_source(const uint64_t tenant_id,
   const ParseNode *trigger_define_node = NULL;
   const ParseNode *trigger_body_node = NULL;
   const ObTriggerInfo *trigger_info = NULL;
-  OZ (schema_guard.get_trigger_info(tenant_id, get_package_trigger_id(tg_package_id), trigger_info));
+  OZ (schema_guard.get_trigger_info( get_package_trigger_id(tg_package_id), trigger_info));
   CK (OB_NOT_NULL(trigger_info));
   if (OB_SUCC(ret)) {
     ObParser parser(alloc, trigger_info->get_sql_mode());
@@ -427,9 +424,9 @@ int ObTriggerInfo::gen_package_source(const uint64_t tenant_id,
       } else if (trigger_info->is_dml_type()) {
         OV (4 == trigger_define_node->num_child_);
         OV (OB_NOT_NULL(trigger_body_node = trigger_define_node->children_[3]));
-        OZ (schema_guard.get_simple_table_schema(tenant_id, trigger_info->get_base_object_id(), table_schema));
+        OZ (schema_guard.get_simple_table_schema( trigger_info->get_base_object_id(), table_schema));
         CK (OB_NOT_NULL(table_schema));
-        OZ (schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), base_db_schema));
+        OZ (schema_guard.get_database_schema( table_schema->get_database_id(), base_db_schema));
         CK (OB_NOT_NULL(base_db_schema));
       } else {
         OV (4 == trigger_define_node->num_child_);

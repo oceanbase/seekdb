@@ -147,7 +147,7 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
 
   HEAP_VARS_2((ObPLPackageAST, package_spec_ast, *allocator_),
               (ObPLPackageAST, package_body_ast, *allocator_)) {
-    ObPLPackageGuard package_guard(session_info_->get_effective_tenant_id());
+    ObPLPackageGuard package_guard{};
     ObPLCompiler compiler(*allocator_,
                           *session_info_,
                           *(schema_checker_->get_schema_guard()),
@@ -159,7 +159,7 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
     OZ (ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos));
     OZ (ob_write_string(*allocator_, ObString(pos, buf), pkg_arg.exec_env_));
     OZ (package_guard.init());
-    OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
+    OZ (schema_checker_->get_package_info(
                                           db_name,
                                           package_name,
                                           share::schema::PACKAGE_TYPE,
@@ -168,7 +168,6 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
     OZ (ob_add_ddl_dependency(package_spec_info->get_package_id(),
                               PACKAGE_SCHEMA,
                               package_spec_info->get_schema_version(),
-                              package_spec_info->get_tenant_id(),
                               pkg_arg));
     OZ (package_spec_ast.init(db_name,
                               package_spec_info->get_package_name(),
@@ -187,7 +186,7 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
         collect_package_body_info = false;  // compile package spec
       } break;
       case PACKAGE_UNIT_PACKAGE: {
-        OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
+        OZ (schema_checker_->get_package_info(
                                               db_name,
                                               package_name,
                                               share::schema::PACKAGE_BODY_TYPE,
@@ -203,7 +202,7 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
         }
       } break;
       case PACKAGE_UNIT_BODY: {
-        OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
+        OZ (schema_checker_->get_package_info(
                                               db_name,
                                               package_name,
                                               share::schema::PACKAGE_BODY_TYPE,
@@ -227,7 +226,6 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
 #define COLLECT_PACKAGE_INFO(alt_pkg_arg, package_info)                            \
   do {                                                                             \
     OV(OB_NOT_NULL(package_info), OB_INVALID_ARGUMENT);                            \
-    OX(alt_pkg_arg.tenant_id_ = package_info->get_tenant_id());                    \
     OX(alt_pkg_arg.package_type_ = package_info->get_type());                      \
     OX(alt_pkg_arg.compatible_mode_ = package_info->get_compatibility_mode());     \
   } while (0)
@@ -244,7 +242,6 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
       OZ (ob_add_ddl_dependency(package_body_info->get_package_id(),
                                 PACKAGE_SCHEMA,
                                 package_body_info->get_schema_version(),
-                                package_body_info->get_tenant_id(),
                                 pkg_arg));
       bool body_has_error = false;
       OZ (package_body_ast.init(db_name,
@@ -258,9 +255,7 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
                           package_body_ast, db_name, package_body_info, error_info, body_has_error));
       if (OB_SUCC(ret)) {
         ObArray<const ObRoutineInfo *> routine_infos;
-        OZ (schema_checker_->get_schema_guard()->get_routine_infos_in_package(
-              session_info_->get_effective_tenant_id(),
-              package_spec_info->get_package_id(),
+        OZ (schema_checker_->get_schema_guard()->get_routine_infos_in_package(package_spec_info->get_package_id(),
               routine_infos));
         if (OB_FAIL(ret)) {
         } else if (!body_has_error) {

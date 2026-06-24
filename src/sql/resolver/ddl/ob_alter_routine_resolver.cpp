@@ -57,10 +57,10 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
     if (OB_FAIL(ret)) {
     } else if (T_SP_ALTER == parse_tree.type_) {
       OZ (schema_checker_->get_standalone_procedure_info(
-        session_info_->get_effective_tenant_id(), db_name, sp_name, routine_info));
+        db_name, sp_name, routine_info));
     } else {
       OZ (schema_checker_->get_standalone_function_info(
-       session_info_->get_effective_tenant_id(), db_name, sp_name, routine_info));
+       db_name, sp_name, routine_info));
     }
     if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
@@ -73,7 +73,6 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
     OZ (ob_add_ddl_dependency(routine_info->get_routine_id(),
                               ROUTINE_SCHEMA,
                               routine_info->get_schema_version(),
-                              routine_info->get_tenant_id(),
                               alter_routine_stmt->get_routine_arg()));
     //Step4: do real alter resolve
     if (OB_FAIL(ret)) {
@@ -84,7 +83,6 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
         OX (alter_routine_stmt->get_routine_arg().routine_info_ = *routine_info);
       }
       OX (alter_routine_stmt->get_routine_arg().db_name_ = db_name);
-      OX (alter_routine_stmt->get_routine_arg().routine_info_.set_tenant_id(routine_info->get_tenant_id()));
       OX (alter_routine_stmt->get_routine_arg().routine_info_.set_routine_id(routine_info->get_routine_id()));
       OX (alter_routine_stmt->get_routine_arg().is_need_alter_ = true);
     }

@@ -59,85 +59,75 @@ public:
   void reset();
   void set_batch_size(int64_t batch_size) {batch_size_ = batch_size;}
   int get(
-      const uint64_t tenant_id,
       const common::ObTabletID &tablet_id,
       const ObLSID &ls_id,
       const common::ObAddr &addr,
       ObTabletReplica &tablet_replica);
   // get ObTabletInfo according to tablet_id
   //
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_id, tablet id for query
   // @param [in] ls_id, the ls which tablet belongs to
   // @param [out] tablet_info, tablet info get from __all_tablet_meta_table.
   //              return empty tablet_info if tablet does not exist in meta table.
   int get(
-      const uint64_t tenant_id,
       const common::ObTabletID &tablet_id,
       const ObLSID &ls_id,
       ObTabletInfo &tablet_info);
   // update ObTabletReplica into __all_tablet_meta_table
   //
   // @param [in] replica, ObTabletReplica for update
-  // batch get ObTabletInfos according to tenant_id, ls_id and tablet_ids
+  // batch get ObTabletInfos according to tenant, ls_id and tablet_ids
   //
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] tablet_ls_pairs, tablet_id with ls_id
   // @param [out] tablet_infos, array of tablet infos from __all_tablet_meta_table.
   // @return empty tablet_info if tablet does not exist in meta table.
   int batch_get(
-      const uint64_t tenant_id,
       const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
       ObIArray<ObTabletInfo> &tablet_infos);
   // range get tablet infos from start_tablet_id
   //
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] start_tablet_id, starting point of the range (not included in output!)
   //             Usually start from 0.
   // @param [in] range_size, range size of the query
   // @param [out] tablet_infos, ObTabletInfos from __all_tablet_meta_table
   // @return OB_SUCCESS if success
-  int range_get(
-      const uint64_t tenant_id,
-      const common::ObTabletID &start_tablet_id,
+  int range_get(const common::ObTabletID &start_tablet_id,
       const int64_t range_size,
       ObIArray<ObTabletInfo> &tablet_infos);
   // batch update replicas into __all_tablet_meta_table
   //
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] replicas, ObTabletReplicas for updating(should belong to the same tenant!)
   int batch_update(
-      const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
   // batch update replicas within an external SQLite transaction
   int batch_update(
       ObSQLiteConnection *conn,
-      const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
   // batch remove replicas from __all_tablet_meta_table
   //
-  // @param [in] tenant_id, target tenant_id
+  // @param [in] tenant, target tenant
   // @param [in] replicas, ObTabletReplicas for removing(should belong to the same tenant!)
-  //             (only tenant_id, tablet_id, ls_id, server are used in this interface)
+  //             (only tenant, tablet_id, ls_id, server are used in this interface)
   // Legacy method for backward compatibility (will use SQLite internally)
   int batch_remove(
-      const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
   // batch remove replicas within an external SQLite transaction
   int batch_remove(
       ObSQLiteConnection *conn,
-      const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
   // remove residual tablet in __all_tablet_meta_table for ObServerMetaTableChecker
   //
   // @param [in] sql_client, client for executing query (legacy, will use SQLite internally)
-  // @param [in] tenant_id, tenant for query
+  // @param [in] tenant, tenant for query
   // @param [in] server, target ObAddr
   // @param [in] limit, limit number for delete sql
   // @param [out] residual_count, count of residual tablets in table
   int remove_residual_tablet(
       ObISQLClient &sql_client,
-      const uint64_t tenant_id,
       const ObAddr &server,
       const int64_t limit,
       int64_t &affected_rows);
@@ -147,7 +137,6 @@ public:
 public:
   static int batch_get_tablet_info(
       common::ObISQLClient *sql_proxy,
-      const uint64_t tenant_id,
       const ObIArray<compaction::ObTabletCheckInfo> &tablet_ls_infos,
       const int32_t group_id,
       ObArrayWithMap<ObTabletInfo> &tablet_infos);

@@ -32,7 +32,7 @@ class ObTableLoadClientTaskBrief;
 class ObTableLoadManager
 {
 public:
-  ObTableLoadManager(const uint64_t tenant_id);
+  ObTableLoadManager();
   ~ObTableLoadManager();
   int init();
 
@@ -289,7 +289,6 @@ private:
   };
 
 private:
-  const uint64_t tenant_id_;
 
   ObjAllocator<ObTableLoadTableCtx> table_ctx_alloc_;
   ObjAllocator<ObTableLoadClientTask> client_task_alloc_;

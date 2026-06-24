@@ -46,7 +46,7 @@ int ObResourceInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_s
   int ret = OB_SUCCESS;
   ObLatchWGuard guard(lock_, ObLatchIds::INNER_CONN_POOL_LOCK);
 
-  ObMemAttr attr(OB_SERVER_TENANT_ID, "IdConnMap");
+  ObMemAttr attr("IdConnMap");
   SET_USE_500(attr);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;

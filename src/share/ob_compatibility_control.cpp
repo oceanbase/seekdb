@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_compatibility_control.h"
-#include "share/ob_upgrade_utils.h"
+#include "share/ob_cluster_version.h"
+#include "common/ob_version_def.h"
+#include "lib/string/ob_sql_string.h"
 
 namespace oceanbase
 {
@@ -132,24 +134,46 @@ int ObCompatControl::get_compat_version(const ObString &str, uint64_t &version)
   return ret;
 }
 
-int ObCompatControl::check_compat_version(const uint64_t tenant_id, const uint64_t compat_version)
+// Inlined from the removed share::ObUpgradeChecker (ob_upgrade_utils.cpp);
+// rolling upgrade machinery is gone in seekdb-lite.
+static int get_data_version_by_cluster_version_(
+    const uint64_t cluster_version,
+    uint64_t &data_version)
+{
+  int ret = OB_SUCCESS;
+  switch (cluster_version) {
+#define CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION, DATA_VERSION) \
+    case CLUSTER_VERSION : { \
+      data_version = DATA_VERSION; \
+      break; \
+    }
+    CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_0_0_0, DATA_VERSION_1_0_0_0)
+    CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_0_1_0, DATA_VERSION_1_0_1_0)
+    CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_1_0_0, DATA_VERSION_1_1_0_0)
+    CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_2_0_0, DATA_VERSION_1_2_0_0)
+    CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_3_0_0, DATA_VERSION_1_3_0_0)
+
+#undef CONVERT_CLUSTER_VERSION_TO_DATA_VERSION
+    default: {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid cluster_version", KR(ret), KCV(cluster_version));
+    }
+  }
+  return ret;
+}
+
+int ObCompatControl::check_compat_version(const uint64_t compat_version)
 {
   int ret = OB_SUCCESS;
   uint64_t data_version = 0;
   uint64_t min_data_version = 0;
-  if (OB_UNLIKELY(compat_version > GET_MIN_CLUSTER_VERSION())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("compat version must less than min cluster version", K(ret), K(compat_version), K(GET_MIN_CLUSTER_VERSION()));
-  } else if (OB_FAIL(ObUpgradeChecker::get_data_version_by_cluster_version(compat_version,
-                                                                           data_version))) {
+  if (OB_FAIL(get_data_version_by_cluster_version_(compat_version, data_version))) {
     LOG_WARN("failed to get data version", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    // tenant_id is invalid when create tenant, there is no need to check min data version
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, min_data_version))) {
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version))) {
     LOG_WARN("failed to get min data version", K(ret));
   } else if (OB_UNLIKELY(data_version > min_data_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data version", K(ret), K(compat_version), K(tenant_id), K(min_data_version));
+    LOG_WARN("invalid data version", K(ret), K(compat_version), K(min_data_version));
   }
   return ret;
 }

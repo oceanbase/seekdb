@@ -76,7 +76,6 @@ namespace transaction
       explicit ObTxMsg(const int16_t msg_type = TX_UNKNOWN) :
                     type_(msg_type),
                     cluster_version_(0),
-                    tenant_id_(OB_INVALID_TENANT_ID),
                     tx_id_(),
                     receiver_(share::ObLSID::INVALID_LS_ID),
                     epoch_(-1),
@@ -90,7 +89,6 @@ namespace transaction
       ~ObTxMsg() {}
       int16_t type_;
       int64_t cluster_version_;
-      uint64_t tenant_id_;
       ObTransID tx_id_;
       share::ObLSID receiver_;
       /* the target participant's born epoch, used to verify its health */
@@ -104,7 +102,6 @@ namespace transaction
       int64_t cluster_id_;
       VIRTUAL_TO_STRING_KV(K_(type),
                            K_(cluster_version),
-                           K_(tenant_id),
                            K_(tx_id),
                            K_(receiver),
                            K_(sender),
@@ -125,7 +122,7 @@ namespace transaction
       int16_t get_msg_type() const { return type_; }
       int64_t get_request_id() const { return request_id_; }
       int64_t get_timestamp() const { return timestamp_; }
-      uint64_t get_tenant_id() const { return tenant_id_; }
+      
       int64_t get_cluster_id() const { return cluster_id_; }
       int64_t get_cluster_version() const { return cluster_version_; }
       virtual int fill_buffer(char* buf, int64_t size, int64_t &filled_size) const override

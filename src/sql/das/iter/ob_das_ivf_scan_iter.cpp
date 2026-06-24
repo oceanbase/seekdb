@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_ivf_scan_iter.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "src/storage/access/ob_table_scan_iterator.h"
@@ -232,7 +233,7 @@ int ObDASIvfBaseScanIter::inner_init(ObDASIterParam &param)
 
     if (OB_ISNULL(mem_context_)) {
       lib::ContextParam param;
-      param.set_mem_attr(MTL_ID(), "IVF", ObCtxIds::DEFAULT_CTX_ID);
+      param.set_mem_attr("IVF", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
         LOG_WARN("failed to create vector ivf memory context", K(ret));
       }
@@ -797,7 +798,7 @@ int ObDASIvfBaseScanIter::get_centers_cache(bool is_vectorized,
                                         bool &is_cache_usable)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
   ObIvfCacheMgr *cache_mgr = nullptr;
   const ObDASScanCtDef *centroid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_centroid_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CENTROID_SCAN);
@@ -2736,7 +2737,7 @@ int ObDASIvfPQScanIter::process_ivf_scan_pre(ObIAllocator &allocator, bool is_ve
   bool is_rk_opt = vec_aux_ctdef_->can_use_vec_pri_opt();
   ObDASScanIter* inv_iter = (ObDASScanIter*)inv_idx_scan_iter_;
   bool is_range_prefilter = is_rk_opt && (inv_iter->get_scan_param().pd_storage_filters_ == nullptr);
-  ObIvfPreFilter prefilter(MTL_ID());
+  ObIvfPreFilter prefilter{};
   // 1. Scan the ivf_centroid table, calculate the distance between vec_x and cid_vec, 
   //    and get the nearest cluster center (cid 1, cid_vec 1)... (cid n, cid_vec n)
   if (OB_FAIL(get_nearest_probe_centers(is_vectorized))) {
@@ -2951,7 +2952,7 @@ int ObDASIvfPQScanIter::get_pq_precomputetable_cache(
     bool &is_cache_usable)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
   ObIvfCacheMgr *cache_mgr = nullptr;
   const ObDASScanCtDef *centroid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_centroid_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CENTROID_SCAN);
@@ -3121,7 +3122,7 @@ int ObDASIvfPQScanIter::build_rowkey_hash_set(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid rowkey cnt", K(ret));
   } else {
-    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(MTL_ID(), "IVFRBTMP"));
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("IVFRBTMP"));
     if (!is_vectorized) {
       while (OB_SUCC(ret) && !index_end) {
         inv_idx_scan_iter_->clear_evaluated_flag();

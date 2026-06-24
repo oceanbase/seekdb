@@ -58,7 +58,7 @@ public:
   virtual ~ObLSService();
 
   static int mtl_init(ObLSService* &ls_service);
-  int init(const uint64_t tenant_id);
+  int init();
   int start();
   int stop();
   int wait();
@@ -155,7 +155,8 @@ public:
   int64_t get_ls_count() const { return ls_map_.get_ls_count(); }
   int dump_ls_info();
 
-  TO_STRING_KV(K_(tenant_id), K_(is_inited));
+
+  TO_STRING_KV(K_(is_inited));
 private:
   enum class ObLSCreateState {
       CREATE_STATE_INIT = 0, // begin
@@ -212,7 +213,6 @@ private:
   bool is_inited_;
   bool is_running_; // used by create/remove, only can be used after start and before stop.
   bool is_stopped_; // only for ls iter, get ls iter will cause OB_NOT_RUNNING after stop.
-  uint64_t tenant_id_;
   // a map from ls id to ls
   ObLSMap ls_map_;
 

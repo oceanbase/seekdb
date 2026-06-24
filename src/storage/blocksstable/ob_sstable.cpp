@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_sstable.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_sstable_multi_version_row_iterator.h"
 #include "storage/access/ob_sstable_row_lock_checker.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -1330,7 +1331,7 @@ void ObSSTable::dec_macro_ref() const
   int ret = OB_SUCCESS;
   MacroBlockId macro_id;
   ObMacroIdIterator iterator;
-  common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "CacheSST"));
+  common::ObArenaAllocator tmp_allocator(common::ObMemAttr("CacheSST"));
   ObSafeArenaAllocator safe_allocator(tmp_allocator);
   ObSSTableMetaHandle meta_handle;
 
@@ -1405,7 +1406,7 @@ int ObSSTable::inc_macro_ref(bool &inc_success) const
   int64_t data_blk_cnt = 0;
   int64_t other_blk_cnt = 0;
   int64_t linked_blk_cnt = 0;
-  common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "CacheSST"));
+  common::ObArenaAllocator tmp_allocator(common::ObMemAttr("CacheSST"));
   ObSafeArenaAllocator safe_allocator(tmp_allocator);
   ObSSTableMetaHandle meta_handle;
   if (OB_FAIL(get_meta(meta_handle, &safe_allocator))) {
@@ -1543,7 +1544,7 @@ int ObSSTable::add_used_size() const
   ObSSTableMetaHandle meta_handle;
   ObMacroIdIterator id_iterator;
   MacroBlockId macro_id;
-  ObSharedMacroBlockMgr *shared_block_mgr = MTL(ObSharedMacroBlockMgr*);
+  ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
 
   if (OB_FAIL(get_meta(meta_handle))) {
     LOG_WARN("get meta handle fail", K(ret), KPC(this));
@@ -1570,7 +1571,7 @@ int ObSSTable::dec_used_size() const
   ObSSTableMetaHandle meta_handle;
   ObMacroIdIterator id_iterator;
   MacroBlockId macro_id;
-  ObSharedMacroBlockMgr *shared_block_mgr = MTL(ObSharedMacroBlockMgr*);
+  ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
 
   if (OB_FAIL(get_meta(meta_handle))) {
     LOG_WARN("get meta handle fail", K(ret), KPC(this));
@@ -1829,7 +1830,7 @@ int ObSSTable::get_meta(
     ObStorageMetaCache &meta_cache = OB_STORE_CACHE.get_storage_meta_cache();
     const ObStorageMetaValue *value = nullptr;
     const ObSSTable *sstable_ptr = nullptr;
-    ObStorageMetaKey meta_key(MTL_ID(), addr_);
+    ObStorageMetaKey meta_key(addr_);
     ObStorageMetaValue::MetaType meta_type = is_co_sstable()
                                            ? ObStorageMetaValue::MetaType::CO_SSTABLE
                                            : ObStorageMetaValue::MetaType::SSTABLE;
@@ -1878,7 +1879,7 @@ int ObSSTable::bypass_load_meta(common::ObArenaAllocator &allocator)
     ObStorageMetaCache &meta_cache = OB_STORE_CACHE.get_storage_meta_cache();
     const ObStorageMetaValue *value = nullptr;
     ObSSTable *sstable_ptr = nullptr;
-    ObStorageMetaKey meta_key(MTL_ID(), addr_);
+    ObStorageMetaKey meta_key(addr_);
     ObStorageMetaValue::MetaType meta_type = is_co_sstable()
                                            ? ObStorageMetaValue::MetaType::CO_SSTABLE
                                            : ObStorageMetaValue::MetaType::SSTABLE;

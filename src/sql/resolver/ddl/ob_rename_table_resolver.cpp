@@ -52,14 +52,14 @@ int ObRenameTableResolver::resolve(const ParseNode &parser_tree)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("failed to create rename table stmt", K(ret));
     } else if (OB_FAIL(rename_table_stmt->set_lock_priority(session_info_))) {
-      LOG_WARN("set lock priority failed", K(ret), K(session_info_->get_effective_tenant_id()));
+      LOG_WARN("set lock priority failed", K(ret));
     } else {
       stmt_ = rename_table_stmt;
     }
   }
   if (OB_SUCC(ret)) {
     int64_t count = node->num_child_;
-    rename_table_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    
     rename_table_stmt->set_client_session_info(session_info_->get_client_sid(),
                                                session_info_->get_client_create_time());
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
@@ -111,7 +111,7 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
       LOG_WARN("failed to resolve new table node.",
                    K(new_table_name), K(new_db_name), K(ret));
     } else {
-      UNUSED(schema_checker_->get_table_schema(rename_table_stmt->get_tenant_id(),
+      UNUSED(schema_checker_->get_table_schema(
                                                                origin_db_name,
                                                                origin_table_name,
                                                                false, /*is_index*/

@@ -23,25 +23,23 @@ namespace oceanbase
 {
 namespace storage
 {
-int ObDicLock::lock_dic_tables_out_trans(
-    const uint64_t tenant_id, 
-    const ObTenantDicLoader &dic_loader, 
+int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || dic_tables_info.count() <= 0)) {
+  if (OB_UNLIKELY(!true || dic_tables_info.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(tenant_id), K(dic_tables_info));
+    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
-     LOG_WARN("failed to start trans", K(ret), K(tenant_id));
-  } else if (OB_FAIL(lock_dic_tables_out_trans(tenant_id, dic_loader, lock_mode, lock_owner, trans))) {
-    LOG_WARN("fail to lock dic tables", K(ret), K(tenant_id));
+  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+     LOG_WARN("failed to start trans", K(ret));
+  } else if (OB_FAIL(lock_dic_tables_out_trans(dic_loader, lock_mode, lock_owner, trans))) {
+    LOG_WARN("fail to lock dic tables", K(ret));
   }
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
@@ -53,46 +51,42 @@ int ObDicLock::lock_dic_tables_out_trans(
   return ret;
 }
 
-int ObDicLock::lock_dic_tables_out_trans(
-    const uint64_t tenant_id, 
-    const ObTenantDicLoader &dic_loader, 
+int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || dic_tables_info.count() <= 0)) {
+  if (OB_UNLIKELY(!true || dic_tables_info.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(tenant_id), K(dic_tables_info));
+    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
-      if (OB_FAIL(do_table_lock(tenant_id, table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, true/*is_lock*/, trans))) {
-          LOG_WARN("fail to do lock table", K(ret), K(tenant_id));
+      if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, true/*is_lock*/, trans))) {
+          LOG_WARN("fail to do lock table", K(ret));
       }
     }
   }
   return ret;
 }
 
-int ObDicLock::unlock_dic_tables(
-    const uint64_t tenant_id, 
-    const ObTenantDicLoader &dic_loader, 
+int ObDicLock::unlock_dic_tables(const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID lock_owner,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || dic_tables_info.empty())) {
+  if (OB_UNLIKELY(!true || dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(tenant_id), K(dic_tables_info));
+    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
-      if (OB_FAIL(do_table_lock(tenant_id, table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, false/*is_lock*/, trans))) {
-        LOG_WARN("fail to do unlock table", K(ret), K(tenant_id));
+      if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, false/*is_lock*/, trans))) {
+        LOG_WARN("fail to do unlock table", K(ret));
       }
     }
   }
@@ -100,7 +94,6 @@ int ObDicLock::unlock_dic_tables(
 }
 
 int ObDicLock::lock_dic_tables_in_trans(
-    const int64_t tenant_id, 
     const ObTenantDicLoader &dic_loader, 
     const transaction::tablelock::ObTableLockMode lock_mode, 
     ObMySQLTransaction &trans)
@@ -108,18 +101,18 @@ int ObDicLock::lock_dic_tables_in_trans(
   int ret = OB_SUCCESS;
   observer::ObInnerSQLConnection *conn = NULL;
   const ObArray<ObTenantDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || dic_tables_info.empty())) {
+  if (OB_UNLIKELY(!true || dic_tables_info.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(tenant_id), K(dic_tables_info));
+    LOG_WARN("the tenant id or dic loader is invalid", K(ret), K(dic_tables_info));
   } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
-      LOG_INFO("lock table", KR(ret), K(table_id), K(tenant_id), KPC(conn));
-      if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(tenant_id, table_id, lock_mode, DEFAULT_TIMEOUT, conn))) {
-        LOG_WARN("lock dest table failed", KR(ret), K(tenant_id), K(table_id));
+      LOG_INFO("lock table", KR(ret), K(table_id), KPC(conn));
+      if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, DEFAULT_TIMEOUT, conn))) {
+        LOG_WARN("lock dest table failed", KR(ret), K(table_id));
       }
     }
   }

@@ -64,7 +64,7 @@ int ObDriverRowBuffer::init(ObOperator *op,
     max_group_size_ = max_group_size;
     group_scan_size_ = group_scan_size;
     rescan_params_ = rescan_params;
-    ObMemAttr mem_attr(ctx_->get_my_session()->get_effective_tenant_id(), ObModIds::OB_SQL_NLJ_CACHE, ObCtxIds::WORK_AREA);
+    ObMemAttr mem_attr(ObModIds::OB_SQL_NLJ_CACHE, ObCtxIds::WORK_AREA);
     lib::ContextParam param;
     ObCompressorType compressor_type = ObCompressorType::NONE_COMPRESSOR;
     bool reorder_fixed_expr = false;

@@ -49,9 +49,7 @@ public:
   const common::ObString &get_new_table_name() const
   { return create_table_like_arg_.new_table_name_; }
 
-  void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const
-  { return create_table_like_arg_.tenant_id_; }
+  
 
   void set_table_type(const share::schema::ObTableType table_type)
   { create_table_like_arg_.table_type_ = table_type; }
@@ -105,10 +103,7 @@ inline void ObCreateTableLikeStmt::set_new_table_name(const common::ObString &ta
   create_table_like_arg_.new_table_name_ = table_name;
 }
 
-inline void ObCreateTableLikeStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  create_table_like_arg_.tenant_id_ = tenant_id;
-}
+
 
 inline void ObCreateTableLikeStmt::set_if_not_exist(const bool if_not_exist)
 {

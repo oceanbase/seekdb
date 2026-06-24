@@ -18,7 +18,7 @@
 #include "share/ob_virtual_table_iterator.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
-#include "share/external_table/ob_external_object_ctx.h"
+#include "share/catalog/ob_external_object_ctx.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -173,7 +173,7 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
         if (OB_INVALID_ID == org_table_id) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get origin table id", K(ret), K(table_schema_->get_table_id()));
-        } else if (OB_FAIL(schema_guard_->get_table_schema(OB_SYS_TENANT_ID, org_table_id, org_table_schema))) {
+        } else if (OB_FAIL(schema_guard_->get_table_schema( org_table_id, org_table_schema))) {
           LOG_WARN("get table schema failed", K(org_table_id), K(ret));
         } else if (NULL == org_table_schema) {
           ret = OB_TABLE_NOT_EXIST;
@@ -248,8 +248,8 @@ int ObVirtualTableIterator::convert_key_ranges()
 int ObVirtualTableIterator::init_convert_ctx()
 {
   int ret = OB_SUCCESS;
-  row_calc_buf_.set_tenant_id(table_schema_->get_tenant_id());
-  convert_alloc_.set_tenant_id(table_schema_->get_tenant_id());
+  
+  
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
   ObCastCtx cast_ctx(&convert_alloc_, &dtc_params, CM_NONE, table_schema_->get_collation_type());
   cast_ctx_ = cast_ctx;
@@ -558,7 +558,6 @@ int ObVirtualTableIterator::close()
 int ObVirtualTableIterator::check_priv(const ObString &level_str,
                                        const ObString &db_name,
                                        const ObString &table_name,
-                                       int64_t tenant_id,
                                        bool &passed)
 {
   int ret = OB_SUCCESS;
@@ -568,11 +567,11 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
   OZ (session_->get_session_priv_info(session_priv));
   // bool allow_show = true;
   if (OB_SUCC(ret)) {
-    //tenant_id in table is static casted to int64_t,
+    //tenant in table is static casted to int64_t,
     //and use statis_cast<uint64_t> for retrieving(same with schema_service)
-    // After schema split, the tenant_id of the normal tenant schema table is 0, at this time, authentication takes session_priv.tenant_id_
-    if (session_priv.tenant_id_ != static_cast<uint64_t>(tenant_id)
-        && OB_INVALID_TENANT_ID != tenant_id) {
+    // After schema split, the tenant of the normal tenant schema table is 0, at this time, authentication takes session_priv.tenant_
+    if (false
+        && true) {
       //not current tenant's row
     } else if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(schema_guard_->check_db_show(session_priv, enable_role_id_array, db_name, passed))) {
@@ -591,10 +590,6 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
   return ret;
 }
 
-void ObVirtualTableIterator::set_effective_tenant_id(const uint64_t tenant_id)
-{
-  effective_tenant_id_ = tenant_id;
-}
 
 int ObVirtualTableIterator::init_sql_schema_guard_()
 {

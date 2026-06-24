@@ -18,6 +18,7 @@
 #define OCEANBASE_TENANT_SRS_H_
 
 #include "share/ob_define.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_tenant_base.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/hash/ob_pointer_hashmap.h"
@@ -47,9 +48,9 @@ class ObSrsCacheSnapShot
 public:
   static const uint32_t SRS_ITEM_BUCKET_NUM = 6144;
   explicit ObSrsCacheSnapShot()
-    : allocator_("SrsSnapShot", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()), ref_count_(0) {}
+    : allocator_("SrsSnapShot", OB_MALLOC_NORMAL_BLOCK_SIZE), ref_count_(0) {}
   virtual ~ObSrsCacheSnapShot() { srs_item_map_.destroy(); }
-  int init() { return srs_item_map_.create(SRS_ITEM_BUCKET_NUM, "SrsSnapShot", "SrsSnapShot", MTL_ID()); }
+  int init() { return srs_item_map_.create(SRS_ITEM_BUCKET_NUM, "SrsSnapShot", "SrsSnapShot"); }
   int add_srs_item(uint64_t srid, const common::ObSrsItem* srs_item) { return srs_item_map_.set_refactored(srid, srs_item); }
   int get_srs_item(uint64_t srid, const common::ObSrsItem *&srs_item);
   void dec_ref_count() { ATOMIC_DEC(&ref_count_); }
@@ -129,7 +130,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantSrs);
 };
 
-#define OTSRS_MGR (MTL(omt::ObTenantSrs*))
+#define OTSRS_MGR (share::g_mp->tenant_srs())
 
 }  // namespace omt
 }  // namespace oceanbase

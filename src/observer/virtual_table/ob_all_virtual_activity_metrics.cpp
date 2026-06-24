@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -46,10 +47,10 @@ void ObAllVirtualActivityMetric::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-bool ObAllVirtualActivityMetric::is_need_process(uint64_t tenant_id)
+bool ObAllVirtualActivityMetric::is_need_process()
 {
-  if (!is_virtual_tenant_id(tenant_id) &&
-      (is_sys_tenant(effective_tenant_id_) || tenant_id == effective_tenant_id_)) {
+  if (!false &&
+      (true || true)) {
     return true;
   }
   return false;
@@ -74,7 +75,7 @@ int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
 int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObTenantFreezerStat& stat)
 {
   int ret = OB_SUCCESS;
-  storage::ObTenantFreezer *freezer = MTL(storage::ObTenantFreezer *);
+  storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   if (current_pos_ < length_) {
     (void)freezer->get_freezer_stat_from_history(current_pos_, stat);
@@ -89,7 +90,7 @@ int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObTenantFreezerStat& stat
 int ObAllVirtualActivityMetric::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
-  storage::ObTenantFreezer *freezer = MTL(storage::ObTenantFreezer *);
+  storage::ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   (void)freezer->get_freezer_stat_history_snapshot(length_);
   current_pos_ = 0;

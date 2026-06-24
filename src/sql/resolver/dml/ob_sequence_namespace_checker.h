@@ -46,8 +46,7 @@ public:
     return 0 == s.case_compare("nextval")  || 0 == s.case_compare("currval");
   }
 private:
-  int check_sequence_with_synonym_recursively(const uint64_t tenant_id,
-                                              const uint64_t database_id,
+  int check_sequence_with_synonym_recursively(const uint64_t database_id,
                                               const common::ObString &sequence_name,
                                               const ObSchemaChecker *schema_checker,
                                               bool &exists,

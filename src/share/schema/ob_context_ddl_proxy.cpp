@@ -65,17 +65,17 @@ int ObContextDDLProxy::inner_create_context(
     const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = ctx_schema.get_tenant_id();
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   uint64_t new_context_id = OB_INVALID_ID;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service must not null", K(ret));
-  } else if (OB_FAIL(schema_service->fetch_new_context_id(tenant_id, new_context_id))) {
-    LOG_WARN("failed to fetch new_context_id", K(tenant_id), K(ret));
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service->fetch_new_context_id(new_context_id))) {
+    LOG_WARN("failed to fetch new_context_id", K(ret));
+  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     ctx_schema.set_schema_version(new_schema_version);
     ctx_schema.set_context_id(new_context_id);
@@ -96,7 +96,7 @@ int ObContextDDLProxy::drop_context(
     const common::ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = ctx_schema.get_tenant_id();
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   uint64_t context_id = OB_INVALID_ID;
@@ -115,8 +115,8 @@ int ObContextDDLProxy::drop_context(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(schema_service->get_context_sql_service().drop_context(
               ctx_schema, new_schema_version, &trans, need_clean, ddl_stmt_str))) {
     LOG_WARN("drop context info failed", K(ctx_schema.get_namespace()), K(ret));
@@ -174,15 +174,15 @@ int ObContextDDLProxy::inner_alter_context(
     const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = ctx_schema.get_tenant_id();
+  
   int64_t new_schema_version = OB_INVALID_VERSION;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   uint64_t new_context_id = OB_INVALID_ID;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service must not null", K(ret));
-  } else if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     ctx_schema.set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service->get_context_sql_service().alter_context(

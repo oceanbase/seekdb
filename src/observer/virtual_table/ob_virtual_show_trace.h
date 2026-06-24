@@ -26,12 +26,10 @@ class ObVirtualShowTrace : public common::ObVirtualTableScannerIterator
 public:
   ObVirtualShowTrace();
   int inner_open();
-  int extract_tenant_ids();
   virtual ~ObVirtualShowTrace();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
-  int extract_request_ids(const uint64_t tenant_id,
-                          int64_t &start_id,
+  int extract_request_ids(int64_t &start_id,
                           int64_t &end_id,
                           bool &is_valid);
   int retrive_all_span_info();
@@ -75,10 +73,9 @@ private:
   char client_ip_[common::MAX_IP_ADDR_LENGTH + 2];
   char user_client_ip_[common::MAX_IP_ADDR_LENGTH + 2];
   ObString trace_id_;
-  int64_t tenant_id_;
+  
   bool is_first_get_;
   bool is_use_index_;
-  common::ObSEArray<uint64_t, 16> tenant_id_array_;
   int64_t show_trace_rec_idx_;
   ObArenaAllocator alloc_;
   ObSEArray<sql::ObFLTShowTraceRec*, 16> show_trace_arr_;

@@ -71,7 +71,7 @@ public:
   inline void set_osg_id(uint64_t target_id) { target_osg_id_ = target_id; };
   inline uint64_t get_osg_id() { return target_osg_id_; };
 
-  inline void set_tenant_id(uint64_t tenant_id) { arena_.set_tenant_id(tenant_id); };
+  
   common::ObSEArray<ObOptColumnStat*, 4> column_stats_;
   common::ObSEArray<ObOptTableStat*, 4> table_stats_;
 

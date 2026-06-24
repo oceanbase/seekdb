@@ -223,8 +223,7 @@ struct VecTCHashCalc<VEC_TC_LOB, HashMethod, hash_v2>
         }
       } else {
         ObString in_data = ObString(len, reinterpret_cast<const char *>(data));
-        common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                           MTL_ID());
+        common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
         // all lob tc can use longtext type for lob iter
         if (OB_FAIL(
               lob_locator_get_string(reinterpret_cast<const char *>(data), len, allocator, in_data))) {
@@ -237,8 +236,7 @@ struct VecTCHashCalc<VEC_TC_LOB, HashMethod, hash_v2>
       }
     } else {
       ObString in_data = ObString(len, reinterpret_cast<const char *>(data));
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                         MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       // all lob tc can use longtext type for lob iter
       if (OB_FAIL(
             lob_locator_get_string(reinterpret_cast<const char *>(data), len, allocator, in_data))) {
@@ -288,8 +286,7 @@ struct VecTCHashCalc<VEC_TC_JSON, HashMethod, hash_v2>
     int ret = OB_SUCCESS;
     ObString j_bin_str;
     res = 0;
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                       MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTextStringIter str_iter(ObJsonType, CS_TYPE_BINARY,
                               ObString(len, reinterpret_cast<const char *>(data)),
                               meta.has_lob_header());
@@ -722,8 +719,7 @@ struct VecTCCmpCalc<VEC_TC_JSON, VEC_TC_JSON>
     cmp_ret = 0;
     ObString l_data;
     ObString r_data;
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                       MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     common::ObTextStringIter l_instr_iter(ObJsonType, CS_TYPE_BINARY,
                                           ObString(l_len, reinterpret_cast<const char *>(l_v)),
                                           l_meta.has_lob_header());
@@ -767,8 +763,7 @@ struct VecTCCmpCalc<VEC_TC_GEO, VEC_TC_GEO>
     int ret = OB_SUCCESS;
     cmp_ret = 0;
     ObString l_data, r_data;
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                       MTL_ID());
+    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTextStringIter l_instr_iter(ObGeometryType, CS_TYPE_BINARY,
                                   ObString(l_len, reinterpret_cast<const char *>(l_v)),
                                   l_meta.has_lob_header());
@@ -993,8 +988,7 @@ struct VecTCCmpCalc<VEC_TC_LOB, VEC_TC_LOB>
       } else {
         ObString l_data;
         ObString r_data;
-        common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                           MTL_ID());
+        common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
         ObTextStringIter l_instr_iter(ObLongTextType, l_meta.get_collation_type(),
                                       ObString(l_len, reinterpret_cast<const char *>(l_v)), true);
         ObTextStringIter r_instr_iter(ObLongTextType, l_meta.get_collation_type(),
@@ -1037,8 +1031,7 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_LOB>
     ObString r_data;
     bool has_lob_header = (l_meta.has_lob_header() || r_meta.has_lob_header());
     if (has_lob_header) {
-      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                         MTL_ID());
+      common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter r_instr_iter(ObLongTextType, r_meta.get_collation_type(),
                                     ObString(r_len, reinterpret_cast<const char *>(r_v)), true);
       if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {

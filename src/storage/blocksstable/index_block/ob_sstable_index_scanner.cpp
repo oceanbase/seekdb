@@ -248,7 +248,7 @@ int ObSSTableIndexBlockLevelScanner::prefetch_next_index_block(ObSSTableIndexBlo
     // when parent advance to a key that is already prefetched, do not repeatedly prefetch block
   } else {
     ++prefetch_idx_;
-    ObMicroBlockCacheKey key(MTL_ID(), idx_block_row);
+    ObMicroBlockCacheKey key(idx_block_row);
     PrefetchItem &prefetch_item = get_current_prefetch_item();
     storage::ObMicroBlockDataHandle &prefetch_handle = get_current_prefetch_item().data_handle_;
     ObIndexMicroBlockCache &index_block_cache = ObStorageCacheSuite::get_instance().get_index_block_cache();
@@ -259,7 +259,6 @@ int ObSSTableIndexBlockLevelScanner::prefetch_next_index_block(ObSSTableIndexBlo
       if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
         LOG_WARN("fail to get cache block", K(ret));
       } else if (OB_FAIL(index_block_cache.prefetch(
-          MTL_ID(),
           idx_block_row.get_macro_id(),
           idx_block_row,
           use_block_cache_,
@@ -267,7 +266,7 @@ int ObSSTableIndexBlockLevelScanner::prefetch_next_index_block(ObSSTableIndexBlo
           io_allocator_))) {
         LOG_WARN("failed to prefetch next index block", K(ret), K(idx_block_row));
       } else {
-        prefetch_handle.tenant_id_ = MTL_ID();
+        
         prefetch_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
         prefetch_handle.macro_block_id_ = idx_block_row.get_macro_id();
         prefetch_handle.micro_info_.set(
@@ -487,7 +486,7 @@ int ObSSTableIndexScanner::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(sstable), K(scan_range), K(scan_param));
   } else if (sstable.is_empty()) {
-  } else if (OB_FAIL(block_io_allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, lib::ObMemAttr(MTL_ID(), "SSTIdxScanIO")))) {
+  } else if (OB_FAIL(block_io_allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, lib::ObMemAttr("SSTIdxScanIO")))) {
     LOG_WARN("failed to init block io allocator", K(ret));
   } else if (OB_FAIL(init_level_scanners(scan_range, scan_param, sstable, scan_allocator))) {
     LOG_WARN("failed to init level scanners", K(ret));

@@ -45,9 +45,8 @@ int ObPartitionEst::add(const ObPartitionEst &pe)
 ObIndexBlockScanEstimator::ObIndexBlockScanEstimator(const ObIndexSSTableEstimateContext &context)
   : level_(0),
     context_(context),
-    allocator_("OB_STORAGE_EST", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID())
+    allocator_("OB_STORAGE_EST", OB_MALLOC_MIDDLE_BLOCK_SIZE)
 {
-  tenant_id_ = MTL_ID();
 }
 
 ObIndexBlockScanEstimator::~ObIndexBlockScanEstimator()
@@ -398,7 +397,7 @@ int ObIndexBlockScanEstimator::prefetch_index_block_data(
   bool found = false;
   const MacroBlockId &macro_id = micro_index_info.get_macro_id();
   micro_handle.allocator_ = &allocator_;
-  ObMicroBlockCacheKey key(tenant_id_, micro_index_info);
+  ObMicroBlockCacheKey key(micro_index_info);
 
   ObIMicroBlockCache *cache = nullptr;
   if (micro_index_info.is_data_block()) {
@@ -422,11 +421,11 @@ int ObIndexBlockScanEstimator::prefetch_index_block_data(
   if (OB_SUCC(ret) && !found) {
     if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(true /* deep_copy_key */, micro_handle.des_meta_))) {
       STORAGE_LOG(WARN, "Failed to fill micro block deserialize meta", K(ret));
-    } else if (OB_FAIL(cache->prefetch(tenant_id_, macro_id, micro_index_info,
+    } else if (OB_FAIL(cache->prefetch(macro_id, micro_index_info,
             context_.query_flag_.is_use_block_cache(), micro_handle.io_handle_, &allocator_))) {
       STORAGE_LOG(WARN, "Failed to prefetch data micro block", K(ret), K(micro_index_info));
     } else if (ObSSTableMicroBlockState::UNKNOWN_STATE == micro_handle.block_state_) {
-      micro_handle.tenant_id_ = tenant_id_;
+      
       micro_handle.macro_block_id_ = micro_index_info.get_macro_id();
       micro_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
       micro_handle.micro_info_.set(micro_index_info.get_block_offset(),

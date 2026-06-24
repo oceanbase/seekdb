@@ -53,13 +53,12 @@ public:
   static const uint64_t LOB_READ_BUFFER_LEN = 1024L*1024L; // 1M
   static const ObLobCommon ZERO_LOB; // static empty lob for zero val
 private:
-  explicit ObLobManager(const uint64_t tenant_id)
-    : tenant_id_(tenant_id),
-      is_inited_(false),
-      allocator_(tenant_id),
+  explicit ObLobManager()
+    : is_inited_(false),
+      allocator_{},
       lob_ctx_(),
-      meta_manager_(tenant_id),
-      piece_manager_(tenant_id)
+      meta_manager_{},
+      piece_manager_{}
   {}
 public:
   ~ObLobManager() { destroy(); }
@@ -190,7 +189,6 @@ private:
   int alloc_lob_id(ObLobAccessParam& param, ObLobId &lob_id);
   int prepare_seq_no(ObLobAccessParam& param, ObLobDiskLocatorBuilder &locator_builder, ObLobDataInsertTask &task);
 private:
-  const uint64_t tenant_id_;
   bool is_inited_;
   common::ObFIFOAllocator allocator_;
   // global ctx

@@ -85,22 +85,16 @@ public:
       : is_retro_(false), tenant_ctx_(OB_SERVER_TENANT_ID)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   TestColumnDecoder(ObColumnHeader::Type column_encoding_type)
       : is_retro_(false), column_encoding_type_(column_encoding_type), tenant_ctx_(OB_SERVER_TENANT_ID)
   {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   TestColumnDecoder(bool is_retro)
       : is_retro_(is_retro), tenant_ctx_(OB_SERVER_TENANT_ID)
  {
     share::ObTenantEnv::set_tenant(&tenant_ctx_);
-    encoder_.data_buffer_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
-    encoder_.row_buf_holder_.allocator_.set_tenant_id(OB_SERVER_TENANT_ID);
   }
   virtual ~TestColumnDecoder() {}
 
@@ -304,7 +298,6 @@ void TestColumnDecoder::SetUp()
   ObTableSchema table;
   ObColumnSchemaV2 col;
   table.reset();
-  table.set_tenant_id(1);
   table.set_tablegroup_id(1);
   table.set_database_id(1);
   table.set_table_id(tid);

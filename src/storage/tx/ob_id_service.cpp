@@ -15,6 +15,7 @@
  */
 
 #include "ob_id_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_timestamp_service.h"
 #include "ob_trans_id_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -69,21 +70,21 @@ int ObIDService::check_and_fill_ls()
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ls_)) {
-    ObLSService *ls_svr =  MTL(ObLSService *);
+    ObLSService *ls_svr =  share::g_mp->ls_service();
     ObLSHandle handle;
     ObLS *ls = nullptr;
 
     if (OB_ISNULL(ls_svr)) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "log stream service is NULL", K(ret), K(MTL_ID()), K(IDS_LS));
+      TRANS_LOG(WARN, "log stream service is NULL", K(ret), K(IDS_LS));
     } else if (OB_FAIL(ls_svr->get_ls(IDS_LS, handle, ObLSGetMod::TRANS_MOD))) {
-      TRANS_LOG(WARN, "get id service log stream failed", K(ret), K(MTL_ID()), K(IDS_LS));
+      TRANS_LOG(WARN, "get id service log stream failed", K(ret), K(IDS_LS));
     } else if (OB_ISNULL(ls = handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "id service log stream not exist", K(ret), K(MTL_ID()), K(IDS_LS));
+      TRANS_LOG(WARN, "id service log stream not exist", K(ret), K(IDS_LS));
     } else {
       ls_ = ls;
-      TRANS_LOG(INFO, "ls set success", K(MTL_ID()), K(IDS_LS), KP(ls_));
+      TRANS_LOG(INFO, "ls set success", K(IDS_LS), KP(ls_));
     }
   }
   return ret;
@@ -434,17 +435,17 @@ int ObIDService::get_id_service(const int64_t id_service_type, ObIDService *&id_
   int ret = OB_SUCCESS;
   switch (id_service_type) {
   case transaction::ObIDService::TimestampService:
-    id_service = (ObIDService *)MTL(transaction::ObTimestampService *);
+    id_service = (ObIDService *)share::g_mp->timestamp_service();
     break;
   case transaction::ObIDService::TransIDService:
-    id_service = (ObIDService *)MTL(transaction::ObTransIDService *);
+    id_service = (ObIDService *)share::g_mp->trans_id_service();
     break;
   case transaction::ObIDService::DASIDService:
-    id_service = (ObIDService *)MTL(sql::ObDASIDService *);
+    id_service = (ObIDService *)share::g_mp->dasid_service();
     break;
   default:
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "get wrong id_service_type", K(ret), K(MTL_ID()), K(id_service_type));
+    TRANS_LOG(ERROR, "get wrong id_service_type", K(ret), K(id_service_type));
   }
 
   return ret;
@@ -548,7 +549,7 @@ int ObPresistIDLogCb::on_success()
   switch (id_srv_type_) {
     case ObIDService::ServiceType::TimestampService: {
       transaction::ObTimestampService *timestamp_service = nullptr;
-      if (OB_ISNULL(timestamp_service = MTL(transaction::ObTimestampService *))) {
+      if (OB_ISNULL(timestamp_service = share::g_mp->timestamp_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
@@ -562,7 +563,7 @@ int ObPresistIDLogCb::on_success()
     }
     case ObIDService::ServiceType::TransIDService: {
       transaction::ObTransIDService *trans_id_service = nullptr;
-      if (OB_ISNULL(trans_id_service = MTL(transaction::ObTransIDService *))) {
+      if (OB_ISNULL(trans_id_service = share::g_mp->trans_id_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {
@@ -576,7 +577,7 @@ int ObPresistIDLogCb::on_success()
     }
     case ObIDService::ServiceType::DASIDService: {
       sql::ObDASIDService *das_id_service = nullptr;
-      if (OB_ISNULL(das_id_service = MTL(sql::ObDASIDService *))) {
+      if (OB_ISNULL(das_id_service = share::g_mp->dasid_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "das id service is null", K(ret));
       } else {
@@ -605,7 +606,7 @@ int ObPresistIDLogCb::on_failure()
   switch (id_srv_type_) {
     case ObIDService::ServiceType::TimestampService: {
       transaction::ObTimestampService *timestamp_service = nullptr;
-      if (OB_ISNULL(timestamp_service = MTL(transaction::ObTimestampService *))) {
+      if (OB_ISNULL(timestamp_service = share::g_mp->timestamp_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
@@ -618,7 +619,7 @@ int ObPresistIDLogCb::on_failure()
     }
     case ObIDService::ServiceType::TransIDService: {
       transaction::ObTransIDService *trans_id_service = nullptr;
-      if (OB_ISNULL(trans_id_service = MTL(transaction::ObTransIDService *))) {
+      if (OB_ISNULL(trans_id_service = share::g_mp->trans_id_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {
@@ -631,7 +632,7 @@ int ObPresistIDLogCb::on_failure()
     }
     case ObIDService::ServiceType::DASIDService: {
       sql::ObDASIDService *das_id_service = nullptr;
-      if (OB_ISNULL(das_id_service = MTL(sql::ObDASIDService *))) {
+      if (OB_ISNULL(das_id_service = share::g_mp->dasid_service())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "das id service is null", K(ret));
       } else {

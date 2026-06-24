@@ -109,7 +109,7 @@ private:
     ObRowStoreType row_store_type_;
   };
 private:
-  virtual bool is_need_process(uint64_t tenant_id) override;
+  virtual bool is_need_process() override;
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
   virtual void release_last_tenant() override;
 
@@ -120,7 +120,7 @@ private:
   int get_next_tablet();
   int get_next_sstable();
   void clean_cur_sstable();
-  bool check_tenant_need_ignore(uint64_t tenant_id);
+  bool check_tenant_need_ignore();
   bool check_tablet_need_ignore(const ObTabletMeta &tablet_meta);
   bool check_sstable_need_ignore(const ObITable::TableKey &table_key);
   int gen_sstable_range(common::ObNewRange &range);

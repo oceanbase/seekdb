@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/resource/ob_table_load_resource_manager.h"
+#include "share/rc/ob_module_provider.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/omt/ob_tenant.h"
 
@@ -75,15 +76,15 @@ ObTableLoadResourceManager::~ObTableLoadResourceManager()
 int ObTableLoadResourceManager::init()
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = MTL_ID();
+  
   const int64_t bucket_num = 1024;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadResourceManager init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(resource_pool_.create(bucket_num, "TLD_ResourceMgr", "TLD_ResourceMgr", tenant_id))) {
+  } else if (OB_FAIL(resource_pool_.create(bucket_num, "TLD_ResourceMgr", "TLD_ResourceMgr"))) {
     LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
-  } else if (OB_FAIL(assigned_tasks_.create(bucket_num, "TLD_AssignedMgr", "TLD_AssignedMgr", tenant_id))) {
+  } else if (OB_FAIL(assigned_tasks_.create(bucket_num, "TLD_AssignedMgr", "TLD_AssignedMgr"))) {
     LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
   } else {
     is_inited_ = true;
@@ -98,10 +99,10 @@ int ObTableLoadResourceManager::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_INFO("ObTableLoadResourceManager init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_,
+  } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_,
                                  REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL, true))) {
     LOG_WARN("fail to schedule first refresh_and_check task", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_,
+  } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_,
                                  REFRESH_AND_CHECK_TASK_INTERVAL, true))) {
     LOG_WARN("fail to schedule refresh_and_check task", KR(ret));
   }
@@ -112,8 +113,8 @@ int ObTableLoadResourceManager::start()
 
 void ObTableLoadResourceManager::stop()
 {
-  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
-  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
+  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
+  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
   {
     lib::ObMutexGuard guard(mutex_);
     is_stop_ = true;
@@ -122,8 +123,8 @@ void ObTableLoadResourceManager::stop()
 
 int ObTableLoadResourceManager::wait() 
 {
-  TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), init_resource_task_);
-  TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
+  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
+  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
   return release_all_resource();
 }
 
@@ -131,11 +132,11 @@ void ObTableLoadResourceManager::destroy()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
-    TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
-    TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
+    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
+    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
 
-    TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
-    TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
+    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
+    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
     is_inited_ = false;
   }
 }
@@ -143,12 +144,12 @@ void ObTableLoadResourceManager::destroy()
 int ObTableLoadResourceManager::resume()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(),
+  if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(),
                                  init_resource_task_,
                                  REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL,
                                  true))) {
     LOG_WARN("fail to schedule first refresh_and_check task", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(),
+  } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(),
                                  refresh_and_check_task_,
                                  REFRESH_AND_CHECK_TASK_INTERVAL,
                                  true))) {
@@ -164,10 +165,10 @@ int ObTableLoadResourceManager::resume()
 
 void ObTableLoadResourceManager::pause()
 {
-  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
-  TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
-  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
-  TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
+  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
+  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), init_resource_task_);
+  TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
+  TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_and_check_task_);
   resource_inited_ = false;
 }
 
@@ -295,8 +296,8 @@ int ObTableLoadResourceManager::update_resource(ObDirectLoadResourceUpdateArg &a
     const int64_t bucket_num = 1024;
     typedef common::hash::ObHashMap<ObAddr, bool, common::hash::NoPthreadDefendMode> AddrMap;
     AddrMap addrs_map;
-    new_addrs.set_tenant_id(MTL_ID());
-    if (OB_FAIL(addrs_map.create(bucket_num, "TLD_ResourceMgr", "TLD_ResourceMgr", arg.tenant_id_))) {
+    
+    if (OB_FAIL(addrs_map.create(bucket_num, "TLD_ResourceMgr", "TLD_ResourceMgr"))) {
       LOG_INFO("fail to create hashmap", KR(ret), K(bucket_num));
     } else {
       ObResourceCtx ctx;
@@ -335,7 +336,7 @@ int ObTableLoadResourceManager::update_resource(ObDirectLoadResourceUpdateArg &a
           } else if (OB_FAIL(resource_pool_.erase_refactored(iter->first))) {
             LOG_WARN("fail to erase refactored", K(iter->first));
           } else {
-            LOG_INFO("update resource delete observer", K(arg.tenant_id_), K(iter->first));
+            LOG_INFO("update resource delete observer", K(iter->first));
           }
         }
       }
@@ -344,7 +345,7 @@ int ObTableLoadResourceManager::update_resource(ObDirectLoadResourceUpdateArg &a
         if (OB_FAIL(resource_pool_.set_refactored(new_addrs[i], ctx))) {
           LOG_WARN("fail to set refactored", K(new_addrs[i]));
         } else {
-          LOG_INFO("update resource add observer", K(arg.tenant_id_), K(new_addrs[i]), K(ctx));
+          LOG_INFO("update resource add observer", K(new_addrs[i]), K(ctx));
         }
       }
       for (ResourceCtxMap::iterator iter = resource_pool_.begin(); OB_SUCC(ret) && iter != resource_pool_.end(); iter++) {
@@ -352,7 +353,7 @@ int ObTableLoadResourceManager::update_resource(ObDirectLoadResourceUpdateArg &a
           LOG_WARN("fail to get refactored", K(iter->first));
         } else {
           if (ctx.memory_total_ != arg.memory_size_) {
-            LOG_INFO("update resource memory", K(arg.tenant_id_), K(iter->first), K(ctx.memory_total_), K(arg.memory_size_));
+            LOG_INFO("update resource memory", K(iter->first), K(ctx.memory_total_), K(arg.memory_size_));
           }
           ctx.memory_remain_ += arg.memory_size_ - ctx.memory_total_;
           ctx.memory_total_ = arg.memory_size_;
@@ -371,17 +372,17 @@ int ObTableLoadResourceManager::gen_update_arg(ObDirectLoadResourceUpdateArg &up
 {
   int ret = OB_SUCCESS;
   ObTenant *tenant = nullptr;
-  uint64_t tenant_id = MTL_ID();
+  
   if (OB_FAIL(update_arg.addrs_.push_back(GCTX.self_addr()))) {
     LOG_WARN("failed to push back obj", KR(ret));
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(GCTX.omt_->get_tenant(tenant_id, tenant))) {
-      LOG_WARN("fail to get tenant", KR(ret), K(tenant_id));
+    if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
+      LOG_WARN("fail to get tenant", KR(ret));
     } else if (OB_FAIL(ObTableLoadService::get_memory_limit(update_arg.memory_size_))) {
-      LOG_WARN("fail to get memory_limit", KR(ret), K(tenant_id));
+      LOG_WARN("fail to get memory_limit", KR(ret));
     } else {
-      update_arg.tenant_id_ = tenant_id;
+      
     }
   }
 
@@ -392,7 +393,7 @@ int ObTableLoadResourceManager::gen_check_res(bool first_check, ObDirectLoadReso
 {
   int ret = OB_SUCCESS;
   ObDirectLoadResourceCheckArg check_arg;
-  check_arg.tenant_id_ = update_arg.tenant_id_;
+  
   check_arg.first_check_ = first_check;
   if (OB_FAIL(check_res.reserve(update_arg.addrs_.size()))) {
     LOG_WARN("fail to reserve check_res", KR(ret));
@@ -421,14 +422,14 @@ void ObTableLoadResourceManager::check_assigned_task(common::ObArray<ObDirectLoa
 {
   int ret = OB_SUCCESS;
   const int64_t bucket_num = 1024;
-  uint64_t tenant_id = MTL_ID();
+  
   typedef common::hash::ObHashMap<ObTableLoadUniqueKey, bool, common::hash::NoPthreadDefendMode> UniqueKeyMap;
   UniqueKeyMap refreshed_assigned_tasks;
   common::ObArray<int64_t> need_track_array;
   common::ObArray<ObTableLoadUniqueKey> need_release_array;
-  need_track_array.set_tenant_id(MTL_ID());
-  need_release_array.set_tenant_id(MTL_ID());
-  if (OB_FAIL(refreshed_assigned_tasks.create(bucket_num, "TLD_ResourceMgr", "TLD_ResourceMgr", tenant_id))) {
+  
+  
+  if (OB_FAIL(refreshed_assigned_tasks.create(bucket_num, "TLD_ResourceMgr", "TLD_ResourceMgr"))) {
     LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
   } else {
     ObResourceAssigned assigned_arg;
@@ -478,7 +479,7 @@ void ObTableLoadResourceManager::check_assigned_task(common::ObArray<ObDirectLoa
   }
 
   ObDirectLoadResourceReleaseArg release_arg;
-  release_arg.tenant_id_ = MTL_ID();
+  
   if (need_release_array.count()) {
     LOG_INFO("need release assigned tasks", K(need_release_array));
     for (int64_t i = 0; i < need_release_array.count(); i++) {
@@ -512,9 +513,9 @@ int ObTableLoadResourceManager::refresh_and_check(bool first_check)
   int ret = OB_SUCCESS;
   ObDirectLoadResourceUpdateArg update_arg;
   common::ObArray<ObDirectLoadResourceOpRes> check_res;
-  check_res.set_tenant_id(MTL_ID());
+  
   if (OB_FAIL(gen_update_arg(update_arg))) {
-    LOG_WARN("fail to gen_update_arg", KR(ret), K(MTL_ID()));
+    LOG_WARN("fail to gen_update_arg", KR(ret));
   } else if (OB_UNLIKELY(!update_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(update_arg));
@@ -581,7 +582,7 @@ int ObTableLoadResourceManager::refresh_and_check(bool first_check)
           }
           ret = OB_SUCCESS;
         }
-        LOG_INFO("refresh_and_check first check", K(update_arg.tenant_id_), K(assigned_tasks_.size()));
+        LOG_INFO("refresh_and_check first check", K(assigned_tasks_.size()));
       }
     }
   } else {
@@ -604,13 +605,13 @@ int ObTableLoadResourceManager::init_resource()
   while (retry_time < MAX_INIT_RETRY_TIMES && resource_inited_ == false) {
     if (OB_FAIL(refresh_and_check(!resource_inited_))) {
       retry_time++;
-      LOG_INFO("init_resource retry", KR(ret), K(MTL_ID()), K(retry_time));
+      LOG_INFO("init_resource retry", KR(ret), K(retry_time));
     } else {
       resource_inited_ = true;
       if (OB_FAIL(refresh_and_check(!resource_inited_))) {
         LOG_WARN("fail to refresh_and_check", KR(ret));
       }
-      LOG_INFO("ObTableLoadResourceManager::init_resource", KR(ret), K(MTL_ID()));
+      LOG_INFO("ObTableLoadResourceManager::init_resource", KR(ret));
       break;
     }
   }
@@ -626,7 +627,7 @@ int ObTableLoadResourceManager::release_all_resource()
     LOG_WARN("ObTableLoadResourceManager not init", KR(ret), KP(this));
   } else {
     ObDirectLoadResourceReleaseArg arg;
-    arg.tenant_id_ = MTL_ID();
+    
     for (ResourceAssignedMap::iterator iter = assigned_tasks_.begin(); iter != assigned_tasks_.end(); iter++) {
       arg.task_key_ = iter->first;
       if (OB_FAIL(release_resource(arg))) {

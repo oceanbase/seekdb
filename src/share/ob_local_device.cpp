@@ -299,7 +299,7 @@ ObLocalDevice::~ObLocalDevice()
 int ObLocalDevice::init(const common::ObIODOpts &opts)
 {
   int ret = OB_SUCCESS;
-  const ObMemAttr mem_attr = ObMemAttr(OB_SYS_TENANT_ID, "LDIOSetup");
+  const ObMemAttr mem_attr = ObMemAttr("LDIOSetup");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "The local device has been inited, ", K(ret));
@@ -1058,13 +1058,11 @@ int ObLocalDevice::buf_append_part(
     const ObIOFd &fd,
     const char *buf,
     const int64_t size,
-    const uint64_t tenant_id,
     bool &is_full)
 {
   UNUSED(fd);
   UNUSED(buf);
   UNUSED(size);
-  UNUSED(tenant_id);
   UNUSED(is_full);
   return OB_NOT_SUPPORTED;
 }
@@ -1349,9 +1347,8 @@ int ObLocalDevice::io_getevents(
   return ret;
 }
 
-common::ObIOCB* ObLocalDevice::alloc_iocb(const uint64_t tenant_id)
+common::ObIOCB* ObLocalDevice::alloc_iocb()
 {
-  UNUSED(tenant_id);
   ObLocalIOCB *iocb = nullptr;
   ObLocalIOCB *buf = nullptr;
   if (OB_LIKELY(is_inited_)) {
@@ -1543,7 +1540,7 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
   // copy free block info to new_free_block_array
   int ret = OB_SUCCESS;
   int sys_ret = 0;
-  const ObMemAttr mem_attr = ObMemAttr(OB_SYS_TENANT_ID, "LDBlockBitMap");
+  const ObMemAttr mem_attr = ObMemAttr("LDBlockBitMap");
   int64_t new_total_block_cnt = new_size / block_size_;
   int64_t *new_free_block_array = nullptr;
   bool *new_block_bitmap = nullptr;

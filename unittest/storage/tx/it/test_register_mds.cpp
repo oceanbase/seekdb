@@ -27,6 +27,7 @@ using namespace transaction;
 using namespace share;
 
 static ObSharedMemAllocMgr MTL_MEM_ALLOC_MGR;
+static FakeModuleProvider G_TEST_MODULE_PROVIDER;
 
 namespace share {
 
@@ -129,7 +130,7 @@ class ObTestRegisterMDS : public ::testing::Test
 public:
   virtual void SetUp() override
   {
-    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->create_and_add_tenant_allocator();
     const uint64_t tv = ObTimeUtility::current_time();
     ObCurTraceId::set(&tv);
     GCONF._ob_trans_rpc_timeout = 500;
@@ -137,7 +138,8 @@ public:
     const testing::TestInfo *const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
     auto test_name = test_info->name();
-    MTL_MEM_ALLOC_MGR.init();
+    // publish the fake module set as the process-global provider (see tx_node.h).
+    publish_test_module_provider(G_TEST_MODULE_PROVIDER, MTL_MEM_ALLOC_MGR);
     _TRANS_LOG(INFO, ">>>> starting test : %s", test_name);
     LOG_INFO(">>>>>>starting>>>>>>>>", K(test_name));
   }
@@ -148,7 +150,7 @@ public:
     auto test_name = test_info->name();
     _TRANS_LOG(INFO, ">>>> tearDown test : %s", test_name);
     ObClockGenerator::destroy();
-    ObMallocAllocator::get_instance()->recycle_tenant_allocator(1001);
+    ObMallocAllocator::get_instance()->recycle_tenant_allocator();
     LOG_INFO(">>>>>teardown>>>>>>>>", K(test_name));
   }
   MsgBus bus_;

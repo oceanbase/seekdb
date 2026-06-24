@@ -134,7 +134,7 @@ int ObDataBlockCachePreWarmer::add(
   } else if (OB_FAIL(do_put_kvpair(micro_block_desc, *kvcache))) {
     COMMON_LOG(WARN, "Fail to put kvpair into kvcache", K(ret));
   }
-  COMMON_LOG(DEBUG, "pre warmer build cache key and put details", K(ret), K(MTL_ID()), K(rest_size_), K(update_step_),
+  COMMON_LOG(DEBUG, "pre warmer build cache key and put details", K(ret), K(rest_size_), K(update_step_),
                                                                   K(micro_block_desc), KPC(micro_block_desc.header_));
   // reuse handles outside
 
@@ -150,7 +150,7 @@ void ObDataBlockCachePreWarmer::update_rest()
 
 void ObDataBlockCachePreWarmer::inner_update_rest()
 {
-  int64_t free_memory = lib::get_tenant_memory_limit(MTL_ID()) - lib::get_tenant_memory_hold(MTL_ID());
+  int64_t free_memory = lib::get_tenant_memory_limit() - lib::get_tenant_memory_hold();
   rest_size_ = free_memory / 100 * warm_size_percentage_;
   calculate_base_percentage(free_memory);
   update_step_ = 0;
@@ -159,7 +159,7 @@ void ObDataBlockCachePreWarmer::inner_update_rest()
 
 void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t free_memory)
 {
-  base_percentage_ = MIN(free_memory * 200 / lib::get_tenant_memory_limit(MTL_ID()), 50);
+  base_percentage_ = MIN(free_memory * 200 / lib::get_tenant_memory_limit(), 50);
 }
 
 bool ObDataBlockCachePreWarmer::warm_block_for_memory(const int64_t level)
@@ -204,12 +204,10 @@ int ObDataBlockCachePreWarmer::do_put_kvpair(
   } else {
     if (micro_block_desc.logic_micro_id_.is_valid()) {
       static_cast<blocksstable::ObMicroBlockCacheKey *>(kvpair_->key_)->set(
-        MTL_ID(),
         micro_block_desc.logic_micro_id_,
         micro_block_desc.header_->data_checksum_);
     } else {
       static_cast<blocksstable::ObMicroBlockCacheKey *>(kvpair_->key_)->set(
-        MTL_ID(),
         micro_block_desc.macro_id_,
         micro_block_desc.block_offset_,
         micro_block_desc.buf_size_ + micro_block_desc.header_->header_size_);
@@ -227,7 +225,7 @@ int ObDataBlockCachePreWarmer::do_put_kvpair(
 
 ObIndexBlockCachePreWarmer::ObIndexBlockCachePreWarmer(const int64_t fixed_percentage)
   : ObDataBlockCachePreWarmer(fixed_percentage),
-    allocator_("IdxBlkPreWarmer", OB_MALLOC_MIDDLE_BLOCK_SIZE, MTL_ID()),
+    allocator_("IdxBlkPreWarmer", OB_MALLOC_MIDDLE_BLOCK_SIZE),
     idx_transformer_(),
     key_(),
     value_()
@@ -287,12 +285,10 @@ int ObIndexBlockCachePreWarmer::do_put_kvpair(
   } else {
     if (micro_block_desc.logic_micro_id_.is_valid()) {
       key_.set(
-        MTL_ID(),
         micro_block_desc.logic_micro_id_,
         micro_block_desc.header_->data_checksum_);
     } else {
       key_.set(
-        MTL_ID(),
         micro_block_desc.macro_id_,
         micro_block_desc.block_offset_,
         micro_block_desc.buf_size_ + micro_block_desc.header_->header_size_);

@@ -197,8 +197,8 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
   } else {
     query_ctx_->type_demotion_flag_ = 0;
     // check tenant configure.
-    const uint64_t effective_tenant_id = session_->get_effective_tenant_id();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(effective_tenant_id));
+    
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (OB_LIKELY(tenant_config.is_valid())) {
       query_ctx_->enable_constant_type_demotion_ = tenant_config->_enable_constant_type_demotion;
       if (0 == tenant_config->_non_standard_comparison_level.case_compare("range")) {

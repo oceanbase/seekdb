@@ -33,11 +33,10 @@ public:
   virtual ~ObMySQLServerProvider() {};
   virtual int get_server(const int64_t svr_idx, common::ObAddr &server) = 0;
   virtual int64_t get_server_count() const = 0;
-  // should imply get_tenant_ids/get_tenant_servers
+  // should imply get_tenants/get_tenant_servers
   // if using MySQLConnectionPool and MySQLConnectionPoolType is TENANT_POOL
   // MUST contains SYS_TENANT
-  virtual int get_tenant_ids(ObIArray<uint64_t> &tenant_ids) = 0;
-  virtual int get_tenant_servers(const uint64_t tenant_id, ObIArray<ObAddr> &tenant_servers) = 0;
+  virtual int get_tenant_servers(ObIArray<ObAddr> &tenant_servers) = 0;
   virtual int refresh_server_list(void) = 0;
   virtual int prepare_refresh() = 0;
   virtual int end_refresh() = 0;

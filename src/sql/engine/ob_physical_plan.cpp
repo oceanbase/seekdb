@@ -66,7 +66,6 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     contain_table_scan_(false),
     has_nested_sql_(false),
     session_id_(0),
-    immediate_refresh_external_table_ids_(allocator_),
     concurrent_num_(0),
     max_concurrent_num_(ObMaxConcurrentParam::UNLIMITED),
     table_locations_(allocator_),
@@ -95,9 +94,7 @@ ObPhysicalPlan::ObPhysicalPlan(MemoryContext &mem_context /* = CURRENT_CONTEXT *
     is_new_engine_(false),
     use_pdml_(false),
     use_temp_table_(false),
-    has_link_table_(false),
     has_link_sfd_(false),
-    has_link_udf_(false),
     need_serial_exec_(false),
     temp_sql_can_prepare_(false),
     is_need_trans_(false),
@@ -182,7 +179,6 @@ void ObPhysicalPlan::reset()
   contain_table_scan_ = false;
   has_nested_sql_ = false;
   session_id_ = 0;
-  immediate_refresh_external_table_ids_.reset();
   concurrent_num_ = 0;
   max_concurrent_num_ = ObMaxConcurrentParam::UNLIMITED;
   is_update_uniq_index_ = false;
@@ -208,7 +204,6 @@ void ObPhysicalPlan::reset()
 #endif
   use_pdml_ = false;
   use_temp_table_ = false;
-  has_link_table_ = false;
   has_link_sfd_ = false;
   need_serial_exec_ = false;
   batch_size_ = 0;
@@ -815,7 +810,6 @@ OB_SERIALIZE_MEMBER(ObPhysicalPlan,
                     mview_ids_,
                     enable_inc_direct_load_,
                     enable_replace_,
-                    immediate_refresh_external_table_ids_,
                     insert_overwrite_,
                     online_sample_percent_,
                     need_switch_to_table_lock_worker_,
@@ -850,7 +844,7 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
     } else if (OB_FAIL(table_locations_.push_back(tl))) {
       LOG_WARN("fail to push table location", K(ret), K(i));
     } else if (!is_external_object_id(tl.get_ref_table_id())) {
-      if (OB_FAIL(schema_guard.get_table_schema(MTL_ID(), tl.get_ref_table_id(), table_schema))) {
+      if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
         LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
       } else {
         contain_index_location_ |= table_schema->is_index_table();
@@ -1189,8 +1183,8 @@ int ObPhysicalPlan::set_minimal_worker_map(const common::hash::ObHashMap<ObAddr,
 int ObPhysicalPlan::assign_worker_map(ObPlanStat::AddrMap &worker_map, const common::hash::ObHashMap<ObAddr, int64_t> &c)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(tenant_id_, "WorkerMap");
-  ObMemAttr node_attr(tenant_id_, "WorkerMapNode");
+  ObMemAttr attr("WorkerMap");
+  ObMemAttr node_attr("WorkerMapNode");
   if (worker_map.created()) {
     worker_map.clear();
   } else if (OB_FAIL(worker_map.create(common::hash::cal_next_prime(100), attr, node_attr))){

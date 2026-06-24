@@ -36,7 +36,6 @@ class ObCreateTableLikeHelper : public ObTableHelper
 {
 public:
   ObCreateTableLikeHelper(share::schema::ObMultiVersionSchemaService *schema_service,
-                          const uint64_t tenant_id,
                           const obcall::ObCreateTableLikeArg &arg,
                           obcall::ObCreateTableRes &res,
                           bool enable_ddl_parallel,

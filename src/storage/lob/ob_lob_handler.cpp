@@ -96,7 +96,7 @@ int ObLobQueryIterHandler::do_execute()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("handler not init", K(ret));
-  } else if (OB_ISNULL(result_ = OB_NEW(ObLobOutRowQueryIter, ObMemAttr(MTL_ID(), "LobQueryIter")))) {
+  } else if (OB_ISNULL(result_ = OB_NEW(ObLobOutRowQueryIter, ObMemAttr("LobQueryIter")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc lob meta scan iterator fail", K(ret));
   } else if (OB_FAIL(result_->open(param_, lob_meta_mngr_))) {

@@ -46,8 +46,7 @@ public:
       const char *log_dir,
       const int64_t log_file_size,
       const int64_t max_log_size,
-      const blocksstable::ObLogFileSpec &log_file_spec,
-      const uint64_t tenant_id);
+      const blocksstable::ObLogFileSpec &log_file_spec);
   virtual int start() override;
   virtual void wait() override;
   void destroy();

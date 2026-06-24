@@ -152,18 +152,16 @@ struct ObCompactionSuggestion
 {
   ObCompactionSuggestion()
     : merge_type_(compaction::INVALID_MERGE_TYPE),
-      tenant_id_(OB_INVALID_TENANT_ID),
       ls_id_(0),
       tablet_id_(0),
       merge_start_time_(0),
       merge_finish_time_(0),
       suggestion_()
     {}
-  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(tenant_id), K_(ls_id), K_(tablet_id), K_(merge_start_time),
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(ls_id), K_(tablet_id), K_(merge_start_time),
       K_(merge_finish_time), K_(suggestion));
 
   compaction::ObMergeType merge_type_;
-  uint64_t tenant_id_;
   int64_t ls_id_;
   int64_t tablet_id_;
   int64_t merge_start_time_;
@@ -303,7 +301,7 @@ public:
   {
   }
   virtual ~ObCompactionSuggestionIterator() { reset(); }
-  int open(const int64_t tenant_id);
+  int open();
   int get_next_info(ObCompactionSuggestion &info);
   void reset()
   {

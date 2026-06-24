@@ -15,6 +15,7 @@
  */
 
 #include "ob_tablet_delete_mds_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_tablet_delete_replay_executor.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -130,13 +131,13 @@ int ObTabletDeleteMdsHelper::delete_tablets(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
+  ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   bool exist = false;
   ObTabletHandle tablet_handle;
   ObTabletMapKey key;
   key.ls_id_ = arg.id_;
 
-  ObLSService *ls_service = MTL(ObLSService*);
+  ObLSService *ls_service = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   if (CLICK_FAIL(ls_service->get_ls(key.ls_id_, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {

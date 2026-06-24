@@ -83,7 +83,7 @@ public:
     }
     interrupt_proc_ = nullptr;
   }
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id;}
+  
 
   void reset_eof_cnt() { eof_channel_cnt_ = 0; }
   void inc_eof_cnt() { eof_channel_cnt_ += 1; }
@@ -130,7 +130,6 @@ private:
   uint16_t last_msg_type_;
   common::SimpleCond cond_; // 1-to-1 wake-up mode, SimpleCond is sufficient
   bool ignore_interrupt_;
-  uint64_t tenant_id_;
   int64_t timeout_;
 
   // list hold channels that has msg

@@ -148,17 +148,13 @@ public:
       const share::schema::ObTableSchema &data_schema,
       obcall::ObCreateIndexArg &arg,
       ObIAllocator *allocator);
-  static int check_need_to_load_dic(
-      const uint64_t tenant_id,
-      const ObString &parser_name,
+  static int check_need_to_load_dic(const ObString &parser_name,
       bool &need_to_load_dic);
   static int try_load_and_lock_dictionary_tables(
       const ObTableSchema &index_schema,
       ObMySQLTransaction &trans);
   static int try_load_dictionary_for_all_tenants();
-  static int check_supportability_for_loader_key(
-        const uint64_t tenant_id,
-        const ObString &parser_name,
+  static int check_supportability_for_loader_key(const ObString &parser_name,
         const ObCharsetType charset_type);
   static int check_supportability_for_building_index(
         const ObTableSchema *data_schema,

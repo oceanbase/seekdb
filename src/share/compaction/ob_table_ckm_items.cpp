@@ -29,7 +29,6 @@ namespace compaction
 {
 ERRSIM_POINT_DEF(EN_FAILED_TO_CHECK_FTS);
 int ObSortColumnIdArray::build(
-  const uint64_t tenant_id,
   const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -45,9 +44,9 @@ int ObSortColumnIdArray::build(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty input column desc array", KR(ret), K(column_descs));
   } else if (col_cnt > BUILD_HASH_MAP_TABLET_CNT_THRESHOLD) { // build hash map
-    ret = build_hash_map(tenant_id, column_descs);
+    ret = build_hash_map(column_descs);
   } else {
-    array_.set_attr(ObMemAttr(tenant_id, "SortColIdArr"));
+    array_.set_attr(ObMemAttr("SortColIdArr"));
     ret = build_sort_array(column_descs);
   }
   if (OB_SUCC(ret)) {
@@ -74,13 +73,11 @@ int32_t ObSortColumnIdArray::get_func_from_map(
   return ret;
 }
 
-int ObSortColumnIdArray::build_hash_map(
-  const uint64_t tenant_id,
-  const ObIArray<ObColDesc> &column_descs)
+int ObSortColumnIdArray::build_hash_map(const ObIArray<ObColDesc> &column_descs)
 {
   int ret = OB_SUCCESS;
   const int64_t col_cnt = column_descs.count();
-  if (OB_FAIL(map_.create(col_cnt, "RSCompColId", "RSCompColId", tenant_id))) {
+  if (OB_FAIL(map_.create(col_cnt, "RSCompColId", "RSCompColId"))) {
     LOG_WARN("failed to create hash map", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && (i < col_cnt); ++i) {
@@ -152,10 +149,9 @@ ObTableCkmItems::VALIDATE_CKM_FUNC ObTableCkmItems::validate_ckm_func[FUNC_CNT] 
     ObTableCkmItems::validate_column_ckm_sum
 };
 
-ObTableCkmItems::ObTableCkmItems(const uint64_t tenant_id)
+ObTableCkmItems::ObTableCkmItems()
   : is_inited_(false),
     is_fts_index_(false),
-    tenant_id_(tenant_id),
     table_id_(0),
     row_count_(0),
     table_schema_(nullptr),
@@ -164,7 +160,7 @@ ObTableCkmItems::ObTableCkmItems(const uint64_t tenant_id)
     sort_col_id_array_(),
     ckm_sum_array_()
 {
-  ckm_sum_array_.set_attr(ObMemAttr(tenant_id, "TableCkmItems"));
+  ckm_sum_array_.set_attr(ObMemAttr("TableCkmItems"));
 }
 
 ObTableCkmItems::~ObTableCkmItems()
@@ -185,12 +181,12 @@ int ObTableCkmItems::build(
     LOG_WARN("is inited before", KR(ret), KPC(this));
   } else if (OB_FAIL(tablet_pairs_.assign(input_tablet_pairs))) {
     LOG_WARN("failed to assgin tablet ls pair array", KR(ret), K(input_tablet_pairs));
-  } else if (OB_FAIL(ckm_items_.init(tenant_id_, input_ckm_items))) {
+  } else if (OB_FAIL(ckm_items_.init(input_ckm_items))) {
     LOG_WARN("failed to assgin tablet replica ckm array", KR(ret), K(input_ckm_items));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, table_id, table_schema_))) {
-    LOG_WARN("fail to get table schema", KR(ret), K_(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema_))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if ((!simple_schema.is_index_table() || simple_schema.is_fts_or_multivalue_index())
-      && OB_FAIL(sort_col_id_array_.build(tenant_id_, *table_schema_))) {
+      && OB_FAIL(sort_col_id_array_.build(*table_schema_))) {
     LOG_WARN("failed to build column id array for data table", KR(ret), KPC_(table_schema));
   } else {
     table_id_ = simple_schema.get_table_id();
@@ -213,8 +209,8 @@ int ObTableCkmItems::prepare_build(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("is inited before", KR(ret), KPC(this));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, table_id, table_schema_))) {
-    LOG_WARN("fail to get table schema", KR(ret), K_(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema_))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema_)) {
     // table schemas are changed, and index_table or data_table does not exist
     // in new table schemas. no need to check index column checksum.
@@ -223,7 +219,7 @@ int ObTableCkmItems::prepare_build(
   } else if (OB_FAIL(table_schema_->get_tablet_ids(tablet_id_array))) {
     LOG_WARN("fail to get tablet_ids from table schema", KR(ret), KPC(table_schema_));
   } else if (OB_FAIL(tablet_ls_pair_cache.get_tablet_ls_pairs(table_id, tablet_id_array, tablet_pairs_))) {
-    LOG_WARN("failed to get tablet ls pairs", KR(ret), K_(tenant_id), K(table_id), K(tablet_id_array));
+    LOG_WARN("failed to get tablet ls pairs", KR(ret), K(table_id), K(tablet_id_array));
   }
   return ret;
 }
@@ -240,15 +236,14 @@ int ObTableCkmItems::build(
 
   if (OB_FAIL(prepare_build(table_id, schema_guard, tablet_ls_pair_cache, tablet_id_array))) {
     LOG_WARN("failed to prepare build ckm items", K(ret));
-  } else if (OB_FAIL(ckm_items_.init(tenant_id_, tablet_pairs_.count()))) {
-    STORAGE_LOG(WARN, "failed to init ckm array", K(ret), K_(tenant_id), K(tablet_pairs_.count()));
-  } else if (OB_FAIL(ObTabletReplicaChecksumOperator::get_tablet_replica_checksum_items(
-                             tenant_id_, sql_proxy,
+  } else if (OB_FAIL(ckm_items_.init(tablet_pairs_.count()))) {
+    STORAGE_LOG(WARN, "failed to init ckm array", K(ret), K(tablet_pairs_.count()));
+  } else if (OB_FAIL(ObTabletReplicaChecksumOperator::get_tablet_replica_checksum_items(sql_proxy,
                              compaction_scn, tablet_pairs_,
                              ckm_items_))) {
     LOG_WARN("failed to get table column checksum items", KR(ret));
   } else if ((!table_schema_->is_index_table() || table_schema_->is_fts_or_multivalue_index())
-      && OB_FAIL(sort_col_id_array_.build(tenant_id_, *table_schema_))) {
+      && OB_FAIL(sort_col_id_array_.build(*table_schema_))) {
     LOG_WARN("failed to build column id array for data table", KR(ret), KPC(table_schema_));
   } else {
     table_id_ = table_id;
@@ -370,7 +365,6 @@ int ObTableCkmItems::build_column_ckm_sum_array(
 }
 
 #define RECORD_CKM_ERROR_INFO(tablet_array_idx, is_global_index) \
-  ckm_error_info.tenant_id_ = data_ckm.tenant_id_; \
   ckm_error_info.is_global_index_ = is_global_index; \
   ckm_error_info.frozen_scn_ = compaction_scn; \
   ckm_error_info.data_table_id_ = data_table_schema->get_table_id(); \
@@ -432,7 +426,7 @@ int ObTableCkmItems::validate_column_ckm_sum(
     RECORD_CKM_ERROR_INFO(OB_INVALID_INDEX /*array_idx*/, true/*is_global_index*/);
     LOG_ERROR("failed to compare column checksum", KR(ret), K(ckm_error_info),
       K(data_ckm.ckm_items_), K(index_ckm.ckm_items_));
-    if (OB_TMP_FAIL(ObColumnChecksumErrorOperator::insert_column_checksum_err_info(sql_proxy, data_ckm.tenant_id_,
+    if (OB_TMP_FAIL(ObColumnChecksumErrorOperator::insert_column_checksum_err_info(sql_proxy,
         ckm_error_info))) {
       LOG_WARN("fail to insert global index column checksum error info", KR(tmp_ret), K(ckm_error_info));
     }
@@ -533,7 +527,7 @@ int ObTableCkmItems::validate_tablet_column_ckm(
             "data_tablet", data_ckm.tablet_pairs_.at(idx), "data_row_cnt", data_replica_ckm->row_count_, KPC(data_replica_ckm),
             "index_tablet", index_ckm.tablet_pairs_.at(idx), "index_row_cnt", index_replica_ckm->row_count_, KPC(index_replica_ckm),
             K(data_ckm.ckm_items_), K(index_ckm.ckm_items_));
-          if (OB_TMP_FAIL(ObColumnChecksumErrorOperator::insert_column_checksum_err_info(sql_proxy, data_ckm.tenant_id_,
+          if (OB_TMP_FAIL(ObColumnChecksumErrorOperator::insert_column_checksum_err_info(sql_proxy,
             ckm_error_info))) {
             LOG_WARN("fail to insert global index column checksum error info", KR(tmp_ret), K(ckm_error_info));
           }
@@ -635,16 +629,16 @@ int ObTableCkmItems::check_schema_change_after_major_freeze(
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
-  const uint64_t tenant_id = data_ckm.tenant_id_;
+  
   const ObTableSchema *old_table_schema = nullptr;
   const ObTableSchema *old_index_schema = nullptr;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-          tenant_id, schema_guard, freeze_info.schema_version_, OB_INVALID_VERSION,
+          schema_guard, freeze_info.schema_version_, OB_INVALID_VERSION,
           ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_LAZY))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_ckm.table_id_, old_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(data_ckm));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_ckm.table_id_, old_index_schema))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( data_ckm.table_id_, old_table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(data_ckm));
+  } else if (OB_FAIL(schema_guard.get_table_schema( index_ckm.table_id_, old_index_schema))) {
     if (OB_TABLE_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       FLOG_INFO("[IGNORE CHECKSUM_ERROR] index not exist when major freeze", KR(ret), K(index_ckm.table_id_));
@@ -657,7 +651,7 @@ int ObTableCkmItems::check_schema_change_after_major_freeze(
       "new_partition_num", data_ckm.tablet_pairs_.count(),
       K(data_ckm));
 #ifdef ERRSIM
-    SERVER_EVENT_SYNC_ADD("merge_errsim", "ignore_checksum_error", K(tenant_id), "reason", "partition_num_changed");
+    SERVER_EVENT_SYNC_ADD("merge_errsim", "ignore_checksum_error", "reason", "partition_num_changed");
 #endif
   } else {
     ret = OB_CHECKSUM_ERROR;

@@ -1243,7 +1243,7 @@ int ObIODeviceLocalFileOp::open_block_file(
     }
 
     if (OB_SUCC(ret)) {
-      const ObMemAttr mem_attr(OB_SERVER_TENANT_ID, block_file_attr.device_name_);
+      const ObMemAttr mem_attr(block_file_attr.device_name_);
       block_file_attr.total_block_cnt_ = block_file_attr.block_file_size_ / block_file_attr.block_size_;
       if (OB_ISNULL(block_file_attr.free_block_array_ = (int64_t *) ob_malloc(
                     sizeof(int64_t) * block_file_attr.total_block_cnt_, mem_attr))) {

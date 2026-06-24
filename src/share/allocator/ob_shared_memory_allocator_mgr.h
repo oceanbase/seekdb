@@ -18,6 +18,7 @@
 #define OCEANBASE_ALLOCATOR_OB_SHARED_MEMORY_ALLOCATOR_MGR_H_
 
 #include "share/allocator/ob_memstore_allocator.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/allocator/ob_tx_data_allocator.h"
 #include "share/allocator/ob_mds_allocator.h"
 #include "share/allocator/ob_tenant_vector_allocator.h"
@@ -59,9 +60,9 @@ public:
                    share_resource_throttle_tool_.init(&memstore_allocator_, &tx_data_allocator_, &mds_allocator_, &vector_allocator_))) {
       SHARE_LOG(ERROR, "init share resource throttle tool failed", KR(ret));
     } else {
-      tenant_id_ = MTL_ID();
+      
       share_resource_throttle_tool_.enable_adaptive_limit<FakeAllocatorForTxShare>();
-      SHARE_LOG(INFO, "finish init mtl share mem allocator mgr", K(tenant_id_), KP(this));
+      SHARE_LOG(INFO, "finish init mtl share mem allocator mgr", KP(this));
     }
     return ret;
   }
@@ -86,7 +87,7 @@ private:
   void update_mds_throttle_config_(const int64_t total_memory, omt::ObTenantConfigGuard &config);
 
 private:
-  int64_t tenant_id_;
+  
   TxShareThrottleTool share_resource_throttle_tool_;
   ObMemstoreAllocator memstore_allocator_;
   ObTenantTxDataAllocator tx_data_allocator_;
@@ -122,7 +123,7 @@ public:
     while (throttle_tool.still_throttling<ALLOCATOR>(share_ti_guard, module_ti_guard) &&
            (left_interval > 0)) {
       int64_t expected_wait_time = 0;
-      if ((for_replay && MTL(ObTenantFreezer *)->exist_ls_throttle_is_skipping()) || ls.is_offline()) {
+      if ((for_replay && share::g_mp->tenant_freezer()->exist_ls_throttle_is_skipping()) || ls.is_offline()) {
         // skip throttle if : 1) throttle need skipping; 2) this logstream offline
         break;
       } else if ((expected_wait_time =

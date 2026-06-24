@@ -161,7 +161,7 @@ private:
   bool is_inited_;
   bool is_running_;
   // common info
-  int64_t tenant_id_;
+  
   ObTransService *trans_service_;
   // statistic info
   int64_t total_trans_msg_count_ CACHE_ALIGNED;

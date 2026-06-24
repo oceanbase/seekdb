@@ -88,7 +88,6 @@ private:
   sql::ObSQLSessionInfo *session_info_;
   sql::ObSchemaChecker schema_checker_;
 
-  uint64_t tenant_id_;
   uint64_t table_id_;
   ObString search_params_;
   SearchResultType result_type_;

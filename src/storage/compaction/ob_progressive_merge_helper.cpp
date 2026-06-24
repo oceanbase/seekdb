@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_progressive_merge_helper.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_partition_merger.h"
 #include "observer/ob_server_event_history_table_operator.h"
 
@@ -195,7 +196,7 @@ int ObProgressiveMergeHelper::collect_macro_info(
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_allocator;
-  tmp_allocator.set_attr(ObMemAttr(MTL_ID(), "ProgMacroIter"));
+  tmp_allocator.set_attr(ObMemAttr("ProgMacroIter"));
   ObSSTableSecMetaIterator *sec_meta_iter = nullptr;
   ObDataMacroBlockMeta macro_meta;
   bool last_is_small_data_macro = false;
@@ -241,7 +242,7 @@ int ObProgressiveMergeHelper::open_macro_iter(
   const ObStaticMergeParam &static_param = merge_param.static_param_;
   const storage::ObITableReadInfo *index_read_info = nullptr;
   if (sstable.is_normal_cg_sstable()) {
-    if (OB_FAIL(MTL(ObTenantCGReadInfoMgr *)->get_index_read_info(index_read_info))) {
+    if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
       LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", KR(ret));
     }
   } else {

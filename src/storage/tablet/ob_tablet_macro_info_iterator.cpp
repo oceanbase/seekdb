@@ -52,7 +52,7 @@ ObMacroInfoIterator::ObMacroInfoIterator()
   : macro_info_(nullptr), block_reader_(), cur_pos_(0), cur_size_(0),
     cur_type_(ObTabletMacroType::INVALID_TYPE),
     target_type_(ObTabletMacroType::INVALID_TYPE), block_info_arr_(),
-    allocator_("MacroInfoIter", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    allocator_("MacroInfoIter", OB_MALLOC_NORMAL_BLOCK_SIZE),
     is_linked_(false), is_inited_(false)
 {
 }
@@ -86,7 +86,7 @@ int ObMacroInfoIterator::init(const ObTabletMacroType target_type, const ObTable
     LOG_WARN("invalid args", K(ret), K(macro_info));
   } else {
     const MacroBlockId &entry_block = macro_info.entry_block_;
-    ObMemAttr mem_attr(MTL_ID(), "TabletBlockId");
+    ObMemAttr mem_attr("TabletBlockId");
     if (!IS_EMPTY_BLOCK_LIST(entry_block)) {
       if (OB_FAIL(block_reader_.init(entry_block, mem_attr))) {
         LOG_WARN("fail to init block reader", K(ret), K(entry_block));
@@ -126,7 +126,7 @@ int ObMacroInfoIterator::reuse()
     if (is_linked_) {
       block_reader_.reset();
       const MacroBlockId &entry_block = macro_info_->entry_block_;
-      ObMemAttr mem_attr(MTL_ID(), "TabletBlockId");
+      ObMemAttr mem_attr("TabletBlockId");
       if (OB_UNLIKELY(!entry_block.is_valid() || IS_EMPTY_BLOCK_LIST(entry_block))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected entry block", K(ret), K(entry_block), K(is_linked_));
@@ -175,7 +175,7 @@ int ObMacroInfoIterator::get_next(ObTabletBlockInfo &block_info)
 int ObMacroInfoIterator::read_from_memory()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DiskMacroIter"));
+  ObArenaAllocator allocator(ObMemAttr("DiskMacroIter"));
   if (OB_ISNULL(macro_info_) || OB_UNLIKELY(ObTabletMacroType::INVALID_TYPE == target_type_
       || ObTabletMacroType::INVALID_TYPE == cur_type_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -255,7 +255,7 @@ int ObMacroInfoIterator::read_from_memory()
 int ObMacroInfoIterator::read_from_disk()
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DiskMacroIter"));
+  ObArenaAllocator allocator(ObMemAttr("DiskMacroIter"));
   char *buf = nullptr;
   int64_t buf_len = 0;
   ObMetaDiskAddr addr;

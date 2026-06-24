@@ -439,8 +439,8 @@ int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx 
   ObGeometry *geo2 = nullptr;
   bool is_geo_empty = false;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-  uint64_t tenant_id = ObMultiModeExprHelper::get_tenant_id(ctx.exec_ctx_.get_my_session());
-  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, tenant_id, ret, N_PRIV_ST_ASMVTGEOM);
+  
+  MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_PRIV_ST_ASMVTGEOM);
   ObGeogBox *bounds = nullptr;
   int32_t extent = 4096;
   int32_t buffer = 256;
@@ -451,7 +451,7 @@ int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx 
           expr, ctx, temp_allocator, is_null_res, geo1, geo2, extent, buffer, clip_geom))) {
     LOG_WARN("fail to process input geometry", K(ret), K(geo1), K(is_null_res));
   }
-  ObGeoBoostAllocGuard guard(tenant_id);
+  ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
   if (OB_FAIL(ret) || is_null_res) {
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo_empty))) {

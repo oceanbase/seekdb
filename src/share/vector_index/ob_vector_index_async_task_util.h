@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_VECTOR_INDEX_ASYNC_TASK_UTIL_H_
 
 #include "lib/string/ob_string.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/container/ob_array.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
@@ -43,7 +44,7 @@ class ObPluginVectorIndexMgr;
 #define CHECK_TASK_CANCELLED_IN_PROCESS(ret, loop_cnt, ctx_)  \
   if (OB_FAIL(ret)) { \
   } else if (++loop_cnt > 20) { \
-    ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *); \
+    ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service(); \
     bool is_cancel = false; \
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::check_task_is_cancel(ctx_, is_cancel))) { \
       LOG_WARN("fail to check task is cancel", KPC(ctx_));  \
@@ -85,7 +86,6 @@ struct ObVecIndexTaskStatus
   int64_t gmt_create_;
   int64_t gmt_modified_;
 
-  uint64_t tenant_id_;
   uint64_t table_id_;
   ObTabletID tablet_id_;
   int64_t task_id_;
@@ -101,7 +101,6 @@ struct ObVecIndexTaskStatus
 
   ObVecIndexTaskStatus() :  gmt_create_(0),
                             gmt_modified_(0),
-                            tenant_id_(OB_INVALID_ID),
                             table_id_(OB_INVALID_ID),
                             tablet_id_(OB_INVALID_ID),
                             task_id_(-1),
@@ -114,24 +113,22 @@ struct ObVecIndexTaskStatus
                             trace_id_(),
                             all_finished_(false) {}
 
-  TO_STRING_KV(K_(gmt_create), K_(gmt_modified), K_(tenant_id), K_(table_id),
+  TO_STRING_KV(K_(gmt_create), K_(gmt_modified), K_(table_id),
                 K_(tablet_id), K_(task_type), K_(trigger_type), K_(task_id),
                 K_(status), K_(target_scn), K_(trace_id), K_(ret_code), K_(all_finished), K_(last_error_code));
 };
 
 struct ObVecIndexTaskKey
 {
-  uint64_t tenant_id_;
   uint64_t table_id_;
   uint64_t tablet_id_;
   int64_t task_id_;
-  explicit ObVecIndexTaskKey(uint64_t tenant_id, uint64_t table_id, 
+  explicit ObVecIndexTaskKey(uint64_t table_id, 
       uint64_t tablet_id, int64_t task_id) : 
-    tenant_id_(tenant_id),
     table_id_(table_id),
     tablet_id_(tablet_id),
     task_id_(task_id) {}
-  TO_STRING_KV(K_(tenant_id), K_(table_id), K_(tablet_id), K_(task_id));
+  TO_STRING_KV(K_(table_id), K_(tablet_id), K_(task_id));
 };
 
 struct ObVecIndexTaskStatusField
@@ -165,20 +162,18 @@ struct ObVecIndexAsyncTaskCtx
 {
 public:
   ObVecIndexAsyncTaskCtx()
-      : tenant_id_(OB_INVALID_TENANT_ID),
-        retry_time_(0),
+      : retry_time_(0),
         ls_(nullptr),
         task_status_(),
         sys_task_id_(),
         in_thread_pool_(false),
-        allocator_(ObMemAttr(MTL_ID(), "VecIdxTaskCtx")), // set after init
+        allocator_(ObMemAttr("VecIdxTaskCtx")), // set after init
         extra_data_()
   {}
   virtual ~ObVecIndexAsyncTaskCtx();
 
-  TO_STRING_KV(K_(tenant_id), K_(retry_time), KP_(ls), K_(task_status), K_(sys_task_id), K_(in_thread_pool), KP_(extra_data));
+  TO_STRING_KV(K_(retry_time), KP_(ls), K_(task_status), K_(sys_task_id), K_(in_thread_pool), KP_(extra_data));
 
-  uint64_t tenant_id_;
   uint64_t retry_time_;
   storage::ObLS *ls_;
   ObVecIndexTaskStatus task_status_;
@@ -205,8 +200,8 @@ private:
 class ObVecIndexAsyncTaskOption
 {
 public:
-  ObVecIndexAsyncTaskOption(uint64_t tenant_id) : 
-    mem_attr_(tenant_id, "VecIdxATaskCtx"),
+  ObVecIndexAsyncTaskOption() : 
+    mem_attr_("VecIdxATaskCtx"),
     allocator_(mem_attr_), 
     ls_task_cnt_(0),
     stop_(false)
@@ -215,7 +210,7 @@ public:
 
   ~ObVecIndexAsyncTaskOption();
 
-  int init(const int64_t capacity, const int64_t tenant_id, ObLSID &ls_id);
+  int init(const int64_t capacity, ObLSID &ls_id);
   void destroy();
   int add_task_ctx(ObTabletID &tablet_id, ObVecIndexAsyncTaskCtx *task, bool &inc_new_task);
   int del_task_ctx(ObTabletID &tablet_id);
@@ -247,7 +242,7 @@ public:
   int start();
   void stop();
   void destroy();
-  int push_task(const uint64_t tenant_id, const ObLSID &ls_id, ObVecIndexAsyncTaskCtx *ctx, ObIAllocator *allocator);
+  int push_task(const ObLSID &ls_id, ObVecIndexAsyncTaskCtx *ctx, ObIAllocator *allocator);
   int get_allocator_by_ls(const ObLSID &ls_id, ObIAllocator *&allocator);
   int get_tg_id() { return tg_id_; }
 
@@ -281,18 +276,17 @@ public:
   ObVecIndexIAsyncTask(const ObMemAttr &mem_attr)
       : is_inited_(false),
         task_type_(ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_TASK_TYPE_INVALID),
-        tenant_id_(OB_INVALID_TENANT_ID),
         ls_id_(ObLSID::INVALID_LS_ID),
         ctx_(nullptr),
         vec_idx_mgr_(nullptr),
         old_adapter_(nullptr),
         mem_attr_(mem_attr),
-        allocator_(ObMemAttr(MTL_ID(), "VecIdxASyTask")),
+        allocator_(ObMemAttr("VecIdxASyTask")),
         vid_obj_(),
         all_finished_(false)
   {}
   virtual ~ObVecIndexIAsyncTask() {}
-  int init(const uint64_t tenant_id, const ObLSID &ls_id, const int task_type,
+  int init(const ObLSID &ls_id, const int task_type,
            ObVecIndexAsyncTaskCtx *ctx);
   int get_task_type() { return task_type_; }
   ObLSID &get_ls_id() { return ls_id_; }
@@ -302,12 +296,12 @@ public:
   virtual void check_task_free() {}
   virtual int do_work() = 0;
 
-  VIRTUAL_TO_STRING_KV(K_(is_inited), K_(task_type), K_(tenant_id), K_(ls_id), KPC(ctx_));
+  VIRTUAL_TO_STRING_KV(K_(is_inited), K_(task_type), K_(ls_id), KPC(ctx_));
 
 protected:
   bool is_inited_;
   int task_type_;  // 0. built; 1. opt; 2. ivf load; 3. ivf clean
-  uint64_t tenant_id_;
+  
   ObLSID ls_id_;
   ObVecIndexAsyncTaskCtx *ctx_;
   ObPluginVectorIndexMgr *vec_idx_mgr_;
@@ -353,7 +347,7 @@ class ObVecIndexAsyncTask : public ObVecIndexIAsyncTask
 {
 public:
   ObVecIndexAsyncTask() 
-      : ObVecIndexIAsyncTask(ObMemAttr(MTL_ID(), "VecIdxASyTask"))
+      : ObVecIndexIAsyncTask(ObMemAttr("VecIdxASyTask"))
   {
   }
   virtual ~ObVecIndexAsyncTask() {}
@@ -397,34 +391,27 @@ class ObVecIndexAsyncTaskUtil final
 
 public:
   static int update_vec_task(
-      uint64_t tenant_id,
       const char *tname,
       common::ObISQLClient &proxy,
       ObVecIndexTaskKey &key,
       ObVecIndexFieldArray &update_fields);
   static int insert_vec_tasks(
-      uint64_t tenant_id,
       const char *tname,
       const int64_t batch_size,
       common::ObISQLClient &proxy,
       ObVecIndexTaskCtxArray &task);
   static int batch_insert_vec_task(
-      uint64_t tenant_id,
       const char *tname,
       common::ObISQLClient &proxy,
       ObVecIndexTaskCtxArray &task);
-  static int clear_history_expire_task_record(
-      const uint64_t tenant_id,
-      const int64_t batch_size,
+  static int clear_history_expire_task_record(const int64_t batch_size,
       common::ObMySQLTransaction &proxy,
       int64_t &clear_rows);
   static int move_task_to_history_table(
-      const uint64_t tenant_id,
       const int64_t batch_size,
       common::ObMySQLTransaction &proxy,
       int64_t &move_rows);
   static int resume_task_from_inner_table(
-      const int64_t tenant_id,
       const char *tname,
       const bool for_update /*false*/,
       const ObVecIndexFieldArray &filters,
@@ -439,31 +426,21 @@ public:
   static int64_t get_processing_task_cnt(ObVecIndexAsyncTaskOption &task_opt);
   static bool check_can_do_work();
   
-  static int fetch_new_task_id(const uint64_t tenant_id, int64_t &new_task_id);
+  static int fetch_new_task_id(int64_t &new_task_id);
   static int add_sys_task(ObVecIndexAsyncTaskCtx *task);
   static int remove_sys_task(ObVecIndexAsyncTaskCtx *task);
   static int fetch_new_trace_id(const uint64_t basic_num, ObIAllocator *allocator, TraceId &new_trace_id);
-  static int in_active_time(const uint64_t tenant_id, bool& is_active_time);
+  static int in_active_time(bool& is_active_time);
   static int check_task_is_cancel(ObVecIndexAsyncTaskCtx *task, bool &is_cancel);
-  static int read_vec_tasks(
-      const uint64_t tenant_id,
-      const char* tname,
+  static int read_vec_tasks(const char* tname,
       const bool for_update,
       const ObVecIndexFieldArray& filters,
       storage::ObLS *ls,
       common::ObISQLClient& proxy,
       ObVecIndexTaskStatusArray& result_arr,
       common::ObIAllocator *allocator);
-  static int construct_task_key(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
-      const uint64_t tablet_id,
-      const int64_t task_id,
-      ObVecIndexFieldArray& task_key);
-  static int insert_new_task(uint64_t tenant_id, ObVecIndexTaskCtxArray &task_ctx_array);
-  static int construct_read_task_sql(
-      const uint64_t tenant_id,
-      const char *tname,
+  static int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array);
+  static int construct_read_task_sql(const char *tname,
       const bool for_update /* select for update*/,
       const bool is_read_tenant_async_task,
       const ObVecIndexFieldArray &filters,

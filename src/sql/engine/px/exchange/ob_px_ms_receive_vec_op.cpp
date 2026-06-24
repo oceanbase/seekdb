@@ -93,8 +93,7 @@ int ObPxMSReceiveVecOp::init_merge_sort_input(int64_t n_channel)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("create merge sort input fail", K(idx), K(ret));
         } else {
-          MergeSortInput *msi = new (buf) GlobalOrderInput(
-            ctx_.get_my_session()->get_effective_tenant_id());
+          MergeSortInput *msi = new (buf) GlobalOrderInput{};
           msi->alloc_ = &mem_context_->get_malloc_allocator();
           msi->sql_mem_processor_ = &sql_mem_processor_;
           msi->io_event_observer_ = &io_event_observer_;
@@ -113,8 +112,7 @@ int ObPxMSReceiveVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
-  param.set_mem_attr(ctx_.get_my_session()->get_effective_tenant_id(),
-        "PxMsReceiveOp",
+  param.set_mem_attr("PxMsReceiveOp",
         ObCtxIds::WORK_AREA);
   if (OB_FAIL(ObPxReceiveOp::inner_open())) {
     LOG_WARN("initialize operator context failed", K(ret));
@@ -130,13 +128,11 @@ int ObPxMSReceiveVecOp::inner_open()
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
         &mem_context_->get_malloc_allocator(),
-        ctx_.get_my_session()->get_effective_tenant_id(),
         row_count * MY_SPEC.width_, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else {
       void *mem = NULL;
-      ObMemAttr attr(ctx_.get_my_session()->get_effective_tenant_id(),
-                     "PxMsOutputStore", ObCtxIds::EXECUTE_CTX_ID);
+      ObMemAttr attr("PxMsOutputStore", ObCtxIds::EXECUTE_CTX_ID);
       if (OB_FAIL(output_store_.init(MY_SPEC.all_exprs_, get_spec().max_batch_size_,
                                      attr, 0 /*mem_limit*/, false /*enable_dump*/,
                                      0 /*row_extra_size*/, NONE_COMPRESSOR))) {
@@ -564,7 +560,7 @@ void ObPxMSReceiveVecOp::GlobalOrderInput::destroy()
 }
 
 int ObPxMSReceiveVecOp::GlobalOrderInput::create_temp_row_store(
-  ObPxMSReceiveVecOp &ms_receive_op, uint64_t tenant_id, ObTempRowStore *&row_store)
+  ObPxMSReceiveVecOp &ms_receive_op, ObTempRowStore *&row_store)
 {
   int ret = OB_SUCCESS;
   ObExecContext &ctx = ms_receive_op.get_exec_ctx();
@@ -583,7 +579,7 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::create_temp_row_store(
     row_store->set_allocator(*alloc_);
     row_store->set_callback(sql_mem_processor_);
     row_store->set_io_event_observer(io_event_observer_);
-    ObMemAttr mem_attr(tenant_id, "PxMSRecvGlobalV", ObCtxIds::WORK_AREA);
+    ObMemAttr mem_attr("PxMSRecvGlobalV", ObCtxIds::WORK_AREA);
     const ObPxMSReceiveVecSpec &spec = ms_receive_op.my_spec();
     if (OB_FAIL(row_store->init(spec.all_exprs_, spec.max_batch_size_,
                                 mem_attr, mem_limit, true /* enable_dump*/,
@@ -609,7 +605,7 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::add_batch(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(add_row_store_)) {
     ObTempRowStore *row_store = nullptr;
-    if (OB_FAIL(create_temp_row_store(ms_receive_op, tenant_id_, row_store))) {
+    if (OB_FAIL(create_temp_row_store(ms_receive_op, row_store))) {
       LOG_WARN("failed to create row store", K(ret));
     } else {
       add_row_store_ = row_store;
@@ -810,7 +806,7 @@ int ObPxMSReceiveVecOp::new_local_order_input(MergeSortInput *&out_msi)
     local_input->row_store_.set_allocator(mem_context_->get_malloc_allocator());
     local_input->row_store_.set_callback(&sql_mem_processor_);
     local_input->row_store_.set_io_event_observer(&io_event_observer_);
-    ObMemAttr mem_attr(ctx_.get_my_session()->get_effective_tenant_id(), "PxMSRecvLocal", ObCtxIds::WORK_AREA);
+    ObMemAttr mem_attr("PxMSRecvLocal", ObCtxIds::WORK_AREA);
     if (OB_FAIL(local_input->row_store_.init(MY_SPEC.all_exprs_, get_spec().max_batch_size_,
                                          mem_attr, 0 /* mem_limit */, true /* enable_dump*/,
                                          0 /*row_extra_size*/,

@@ -72,7 +72,7 @@ ObTableAccessContext::ObTableAccessContext()
     trans_version_range_(),
     range_array_pos_(nullptr),
     merge_scn_(),
-    lob_allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    lob_allocator_(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE),
     lob_locator_helper_(nullptr),
     cached_iter_node_(nullptr),
     stmt_iter_pool_(nullptr),
@@ -472,8 +472,7 @@ int ObTableAccessContext::init_scan_allocator(ObTableScanParam &scan_param)
   } else {
     if (scan_mem_ == nullptr) {
       lib::ContextParam param;
-      param.set_mem_attr(scan_param.tenant_id_,
-                        ObModIds::OB_TABLE_SCAN_ITER,
+      param.set_mem_attr(ObModIds::OB_TABLE_SCAN_ITER,
                         ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL)
         .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);

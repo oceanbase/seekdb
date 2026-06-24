@@ -54,11 +54,10 @@ ObServerSchemaTask::ObServerSchemaTask(TYPE type)
 
 ObServerSchemaTask::ObServerSchemaTask(
   TYPE type,
-  const uint64_t tenant_id,
   const int64_t schema_version)
   : type_(type), did_retry_(false), schema_info_()
 {
-  schema_info_.set_tenant_id(tenant_id);
+  
   schema_info_.set_schema_version(schema_version);
 }
 
@@ -84,9 +83,9 @@ int64_t ObServerSchemaTask::hash() const
   uint64_t hash_val = 0;
   hash_val = murmurhash(&type_, sizeof(type_), hash_val);
   if (ASYNC_REFRESH == type_) {
-    const uint64_t tenant_id = get_tenant_id();
+    const uint64_t const_id = 1UL;
     const int64_t schema_version = get_schema_version();
-    hash_val = murmurhash(&tenant_id, sizeof(tenant_id), hash_val);
+    hash_val = murmurhash(&const_id, sizeof(const_id), hash_val);
     hash_val = murmurhash(&schema_version, sizeof(schema_version), hash_val);
   }
   return static_cast<int64_t>(hash_val);
@@ -96,8 +95,7 @@ bool ObServerSchemaTask::operator ==(const ObServerSchemaTask &other) const
 {
   bool bret = (type_ == other.type_);
   if (bret && ASYNC_REFRESH == type_) {
-    bret = (get_tenant_id() == other.get_tenant_id())
-            && (get_schema_version() == other.get_schema_version());
+    bret = (get_schema_version() == other.get_schema_version());
   }
   return bret;
 }
@@ -109,9 +107,7 @@ bool ObServerSchemaTask::greator_than(
 {
   bool bret = (lt.type_ > rt.type_);
   if (!bret && ASYNC_REFRESH == lt.type_ && ASYNC_REFRESH == rt.type_) {
-    if (lt.get_tenant_id() > rt.get_tenant_id()) {
-      bret = true;
-    } else if (lt.get_tenant_id() == rt.get_tenant_id()
+    if (true
                && lt.get_schema_version() > rt.get_schema_version()) {
       bret = true;
     } else {
@@ -242,42 +238,42 @@ int ObServerSchemaUpdater::batch_process_tasks(
 int ObServerSchemaUpdater::construct_tenants_to_refresh_schema_(
     const ObRefreshSchemaInfo &local_schema_info,
     const ObRefreshSchemaInfo &new_schema_info,
-    ObIArray<uint64_t> &tenant_ids,
+    ObIArray<uint64_t> &refresh_ids,
     bool &skip_refresh)
 {
   int ret = OB_SUCCESS;
-  tenant_ids.reset();
+  refresh_ids.reset();
   skip_refresh = false;
-  uint64_t refresh_tenant_id = new_schema_info.get_tenant_id();
+  
   const ObDDLSequenceID local_sequence_id = local_schema_info.get_sequence_id();
   const ObDDLSequenceID new_sequence_id = new_schema_info.get_sequence_id();
   switch (new_sequence_id.compare_to_other_id(local_sequence_id)) {
     case ObDDLSequenceID::NOT_COMPARABLE:
     case ObDDLSequenceID::MORE_OVER: {
-      // refresh all tenant schema
-      tenant_ids.reset();
+      // refresh all schema
+      refresh_ids.reset();
       skip_refresh = false;
       LOG_INFO("[REFRESH_SCHEMA] sequence_id is not comparable or local schema is far behind,"
-               " refresh all tenant schema", K(new_sequence_id), K(local_sequence_id));
+               " refresh all schema", K(new_sequence_id), K(local_sequence_id));
       break;
     }
     case ObDDLSequenceID::LESS_THAN:
     case ObDDLSequenceID::EQUAL_TO: {
-      // do not refresh any tenant schema
-      tenant_ids.reset();
+      // do not refresh any schema
+      refresh_ids.reset();
       skip_refresh = true;
-      LOG_INFO("[REFRESH_SCHEMA] local schema is newer, do not refresh any tenant schema",
+      LOG_INFO("[REFRESH_SCHEMA] local schema is newer, do not refresh any schema",
                K(new_sequence_id), K(local_sequence_id));
       break;
     }
     case ObDDLSequenceID::ONE_OVER: {
-      // refresh specified tenant schema
-      if (OB_FAIL(tenant_ids.push_back(refresh_tenant_id))) {
-        LOG_WARN("fail to push back tenant_id", KR(ret), K(refresh_tenant_id));
+      // refresh specified schema
+      if (OB_FAIL(refresh_ids.push_back(1UL))) {
+        LOG_WARN("fail to push back id", KR(ret));
       } else {
         skip_refresh = false;
-        LOG_INFO("[REFRESH_SCHEMA] refresh specified tenant schema",
-                 K(refresh_tenant_id), K(new_sequence_id), K(local_sequence_id));
+        LOG_INFO("[REFRESH_SCHEMA] refresh specified schema",
+                 K(new_sequence_id), K(local_sequence_id));
       }
       break;
     }
@@ -296,7 +292,7 @@ int ObServerSchemaUpdater::process_refresh_task(const ObServerSchemaTask &task)
   int ret = OB_SUCCESS;
   const ObRefreshSchemaInfo &schema_info = task.schema_info_;
   ObRefreshSchemaInfo local_schema_info;
-  ObSEArray<uint64_t, 1> tenant_ids;
+  ObSEArray<uint64_t, 1> refresh_ids;
   bool skip_refresh = false;
   ObTaskController::get().switch_task(share::ObTaskType::SCHEMA);
   THIS_WORKER.set_timeout_ts(INT64_MAX);
@@ -316,7 +312,7 @@ int ObServerSchemaUpdater::process_refresh_task(const ObServerSchemaTask &task)
              K(GCTX.root_service_->in_service()), K(GCTX.root_service_->is_full_service()));
   } else if (OB_FAIL(schema_mgr_->get_last_refreshed_schema_info(local_schema_info))) {
     LOG_WARN("fail to get local schema info", KR(ret));
-  } else if (OB_FAIL(construct_tenants_to_refresh_schema_(local_schema_info, schema_info, tenant_ids, skip_refresh))) {
+  } else if (OB_FAIL(construct_tenants_to_refresh_schema_(local_schema_info, schema_info, refresh_ids, skip_refresh))) {
     LOG_WARN("fail to construct tenants to refresh schema", KR(ret), K(schema_info), K(local_schema_info), K(skip_refresh));
   } else if (skip_refresh) {
     // skip
@@ -324,18 +320,18 @@ int ObServerSchemaUpdater::process_refresh_task(const ObServerSchemaTask &task)
               KR(ret), K(local_schema_info), K(schema_info));
   } else {
     int64_t begin_time = ::oceanbase::common::ObTimeUtility::current_time();
-    LOG_INFO("[REFRESH_SCHEMA] begin refresh schema, ", K(begin_time), K(tenant_ids), K(schema_info));
+    LOG_INFO("[REFRESH_SCHEMA] begin refresh schema, ", K(begin_time), K(refresh_ids), K(schema_info));
     bool check_bootstrap = GCTX.in_bootstrap_;
     // GCTX.in_bootstrap_ = false only when sys full schema version is refreshed
     // check bootstrap to avoid refreshing schema too early
-    // empty tenant_ids means refresh all tenants' schema.
-    if (FAILEDx(schema_mgr_->refresh_and_add_schema(tenant_ids, check_bootstrap))) {
+    // empty tenants means refresh all tenants' schema.
+    if (FAILEDx(schema_mgr_->refresh_and_add_schema(check_bootstrap))) {
       LOG_WARN("fail to refresh and add schema", KR(ret), K(check_bootstrap));
     } else if (OB_FAIL(schema_mgr_->set_last_refreshed_schema_info(schema_info))) {
       LOG_WARN("fail to set last_refreshed_schema_info", KR(ret), K(schema_info));
     }
     LOG_INFO("[REFRESH_SCHEMA] end refresh schema with new mode, ",
-             KR(ret), K(tenant_ids), "used time", ObTimeUtility::current_time() - begin_time,
+             KR(ret), K(refresh_ids), "used time", ObTimeUtility::current_time() - begin_time,
              K(check_bootstrap), K(schema_info));
   }
 
@@ -389,7 +385,7 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
     LOG_WARN("schema_mgr_ is NULL", KR(ret));
   } else {
     // For each tenant, we can only execute the async refresh schema task which has maximum schema_version.
-    ObSEArray<uint64_t, UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM> tenant_ids;
+    bool need_refresh = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < tasks.count(); i++) {
       const ObServerSchemaTask &cur_task = tasks.at(i);
       if (ObServerSchemaTask::ASYNC_REFRESH != cur_task.type_) {
@@ -397,38 +393,33 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
         LOG_WARN("cur task type should be ASYNC_REFRESH", KR(ret), K(cur_task));
       } else if (i > 0) {
         const ObServerSchemaTask &last_task = tasks.at(i - 1);
-        if (last_task.get_tenant_id() < cur_task.get_tenant_id()
-            || (last_task.get_tenant_id() == cur_task.get_tenant_id()
-                && last_task.get_schema_version() < cur_task.get_schema_version())) {
+        if (true
+                && last_task.get_schema_version() < cur_task.get_schema_version()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("cur task should be less than last task",
                    KR(ret), K(last_task), K(cur_task));
         }
       }
       if (OB_SUCC(ret)) {
-        int64_t cnt = tenant_ids.count();
-        if (0 == cnt || tenant_ids.at(cnt - 1) != cur_task.get_tenant_id()) {
-          const uint64_t tenant_id = cur_task.get_tenant_id();
+        if (!need_refresh) {
           int64_t local_version = OB_INVALID_VERSION;
           int tmp_ret = OB_SUCCESS;
-          if (i > 0 && tasks.at(i - 1).get_tenant_id() == cur_task.get_tenant_id()) {
-            // Tasks have been sorted by (tenant_id, schema_version) in desc order, so we just get first task by tenant.
+          if (i > 0 && true) {
+            // Tasks have been sorted by schema_version in desc order, so we just get the first task.
           } else if (OB_SUCCESS != (tmp_ret = schema_mgr_->get_tenant_refreshed_schema_version(
-                     tenant_id, local_version))) { // ignore ret
+                     local_version))) { // ignore ret
             if (OB_ENTRY_NOT_EXIST != tmp_ret) {
-              LOG_WARN("failed to get tenant refreshed schema version", KR(tmp_ret), K(tenant_id));
+              LOG_WARN("failed to get refreshed schema version", KR(tmp_ret));
             }
           } else if (cur_task.get_schema_version() > local_version) {
-            if (OB_FAIL(tenant_ids.push_back(cur_task.get_tenant_id()))) {
-              LOG_WARN("fail to push back task", KR(ret), K(cur_task));
-            }
+            need_refresh = true;
           }
         }
       }
     }
-    if (OB_SUCC(ret) && tenant_ids.count() > 0) {
-      if (OB_FAIL(schema_mgr_->refresh_and_add_schema(tenant_ids))) {
-        LOG_WARN("fail to refresh schema", KR(ret), K(tenant_ids));
+    if (OB_SUCC(ret) && need_refresh) {
+      if (OB_FAIL(schema_mgr_->refresh_and_add_schema())) {
+        LOG_WARN("fail to refresh schema", KR(ret));
       }
     }
   }
@@ -452,11 +443,11 @@ int ObServerSchemaUpdater::try_reload_schema(
     // Try to update received_broadcast_version which used to check if local schema is new enough for SQL execution.
     // Here, we ignore error since set_tenant_received_broadcast_version() may fail before tenant firstly refresh schema.
     int tmp_ret = OB_SUCCESS;
-    if (OB_INVALID_TENANT_ID != schema_info.get_tenant_id()
+    if (true
         && schema_info.get_schema_version() > 0
         && set_received_schema_version
         && OB_TMP_FAIL(schema_mgr_->set_tenant_received_broadcast_version(
-           schema_info.get_tenant_id(), schema_info.get_schema_version()))) {
+           schema_info.get_schema_version()))) {
       LOG_WARN("fail to set tenant received broadcast version", K(tmp_ret), K(schema_info));
     }
 
@@ -491,29 +482,22 @@ int ObServerSchemaUpdater::try_release_schema()
   return ret;
 }
 
-int ObServerSchemaUpdater::async_refresh_schema(
-    const uint64_t tenant_id,
-    const int64_t schema_version)
+int ObServerSchemaUpdater::async_refresh_schema(const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   DEBUG_SYNC(BEFORE_ADD_ASYNC_REFRESH_SCHEMA_TASK);
-  ObServerSchemaTask refresh_task(ObServerSchemaTask::ASYNC_REFRESH,
-                                  tenant_id, schema_version);
+  ObServerSchemaTask refresh_task(ObServerSchemaTask::ASYNC_REFRESH, schema_version);
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ob_server_schema_updeter is not inited.", KR(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-             || OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(schema_version));
   } else if (OB_FAIL(task_queue_.add(refresh_task))) {
     if (OB_EAGAIN != ret) {
       LOG_WARN("schedule async refresh schema task failed",
-               KR(ret), K(tenant_id), K(schema_version));
+               KR(ret), K(schema_version));
     }
   } else {
     LOG_INFO("schedule async refresh schema task",
-             KR(ret), K(tenant_id), K(schema_version));
+             KR(ret), K(schema_version));
   }
   return ret;
 }
@@ -521,7 +505,6 @@ int ObServerSchemaUpdater::async_refresh_schema(
 int ObServerSchemaUpdater::try_load_baseline_schema_version_()
 {
   int ret = OB_SUCCESS;
-  ObArray<uint64_t> tenant_ids;
   if (OB_ISNULL(schema_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_mgr_ is NULL", KR(ret));
@@ -529,23 +512,21 @@ int ObServerSchemaUpdater::try_load_baseline_schema_version_()
 
   {
     ObSchemaGetterGuard guard;
-    if (FAILEDx(schema_mgr_->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+    if (FAILEDx(schema_mgr_->get_tenant_schema_guard(guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
-    } else if (OB_FAIL(guard.get_available_tenant_ids(tenant_ids))) {
-      LOG_WARN("fail to get avaliable tenant ids", KR(ret));
     }
   }
 
   int64_t timeout = GCONF.rpc_timeout;
   int64_t baseline_schema_version = OB_INVALID_VERSION; // not used
-  FOREACH_X(tenant_id, tenant_ids, OB_SUCC(ret)) { // ignore ret
+  if (OB_SUCC(ret)) { // ignore ret
     int tmp_ret = OB_SUCCESS;
     ObTimeoutCtx ctx;
     if (OB_TMP_FAIL(ctx.set_timeout(timeout))) {
-      LOG_WARN("fail to set timeout", KR(tmp_ret), K(*tenant_id), K(timeout));
+      LOG_WARN("fail to set timeout", KR(tmp_ret), K(timeout));
     } else if (OB_TMP_FAIL(schema_mgr_->get_baseline_schema_version(
-      *tenant_id, true/*auto_update*/, baseline_schema_version))) {
-      LOG_WARN("fail to update baseline schema version", KR(tmp_ret), K(*tenant_id));
+      true/*auto_update*/, baseline_schema_version))) {
+      LOG_WARN("fail to update baseline schema version", KR(tmp_ret));
     }
   }
   return ret;

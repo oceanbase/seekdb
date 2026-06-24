@@ -42,7 +42,7 @@ class ObAllVirtualMdsEventHistory : public common::ObVirtualTableScannerIterator
 public:
   explicit ObAllVirtualMdsEventHistory(omt::ObMultiTenant *omt) : omt_(omt) {}
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  TO_STRING_KV(K_(tenant_ranges), K_(tenant_points), K_(tablet_ranges), K_(tablet_points))
+  TO_STRING_KV(K_(tablet_ranges), K_(tablet_points))
 private:
   int convert_event_info_to_row_(const MdsEventKey &key,
                                  const MdsEvent &event,
@@ -56,8 +56,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualMdsEventHistory);
   omt::ObMultiTenant *omt_;
   char ip_buffer_[IP_BUFFER_SIZE];
-  ObArray<ObTuple<uint64_t, uint64_t>> tenant_ranges_;
-  ObArray<uint64_t> tenant_points_;
   ObArray<ObTuple<common::ObTabletID, common::ObTabletID>> tablet_ranges_;
   ObArray<common::ObTabletID> tablet_points_;
 };

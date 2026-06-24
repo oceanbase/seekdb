@@ -41,21 +41,18 @@ struct ObSqlMemPool::Page
   int64_t cur_;
   char base_[];
 };
-static void* rpc_mem_pool_direct_alloc(int64_t tenant_id, const char* label, int64_t sz) {
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    tenant_id = OB_SERVER_TENANT_ID;
-  }
-  ObMemAttr attr(tenant_id, label, common::ObCtxIds::DEFAULT_CTX_ID);
-  lib::ObTenantCtxAllocatorGuard allocator = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, common::ObCtxIds::DEFAULT_CTX_ID);
+static void* rpc_mem_pool_direct_alloc(const char* label, int64_t sz) {
+  ObMemAttr attr(label, common::ObCtxIds::DEFAULT_CTX_ID);
+  lib::ObTenantCtxAllocatorGuard allocator = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(common::ObCtxIds::DEFAULT_CTX_ID);
   if (OB_ISNULL(allocator)) {
-    attr.tenant_id_ = OB_SERVER_TENANT_ID;
+    
   }
   return common::ob_malloc(sz, attr);
 }
 static void rpc_mem_pool_direct_free(void* p) { common::ob_free(p); }
-static ObSqlMemPool::Page* rpc_mem_pool_create_page(int64_t tenant_id, const char* label, int64_t sz, int64_t cache_sz = ObSqlMemPool::RPC_POOL_PAGE_SIZE) {
+static ObSqlMemPool::Page* rpc_mem_pool_create_page(const char* label, int64_t sz, int64_t cache_sz = ObSqlMemPool::RPC_POOL_PAGE_SIZE) {
   int64_t alloc_sz = std::max(sizeof(ObSqlMemPool::Page) + sz, (uint64_t)cache_sz);
-  ObSqlMemPool::Page* page = (typeof(page))rpc_mem_pool_direct_alloc(tenant_id, label, alloc_sz);
+  ObSqlMemPool::Page* page = (typeof(page))rpc_mem_pool_direct_alloc(label, alloc_sz);
   if (OB_ISNULL(page)) {
     LOG_WARN_RET(common::OB_ALLOCATE_MEMORY_FAILED, "rpc memory pool alloc memory failed", K(sz), K(alloc_sz));
   } else {
@@ -70,13 +67,13 @@ static void rpc_mem_pool_destroy_page(ObSqlMemPool::Page* page) {
   }
 }
 
-ObSqlMemPool* ObSqlMemPool::create(int64_t tenant_id, const char* label, int64_t req_sz, int64_t cache_sz)
+ObSqlMemPool* ObSqlMemPool::create(const char* label, int64_t req_sz, int64_t cache_sz)
 {
   Page* page = nullptr;
   ObSqlMemPool* pool = nullptr;
-  if (OB_NOT_NULL(page = rpc_mem_pool_create_page(tenant_id, label, req_sz + sizeof(ObSqlMemPool), cache_sz))) {
+  if (OB_NOT_NULL(page = rpc_mem_pool_create_page(label, req_sz + sizeof(ObSqlMemPool), cache_sz))) {
     if (OB_NOT_NULL(pool = (typeof(pool))page->alloc(sizeof(ObSqlMemPool)))) {
-      new(pool)ObSqlMemPool(tenant_id, label); // can not be null
+      new(pool)ObSqlMemPool(label); // can not be null
       pool->add_page(page);
     } else {
       rpc_mem_pool_destroy_page(page);
@@ -90,7 +87,7 @@ void* ObSqlMemPool::alloc(int64_t sz)
   void* ret = NULL;
   Page* page = NULL;
   if (NULL != last_ && NULL != (ret = last_->alloc(sz))) {
-  } else if (NULL == (page = rpc_mem_pool_create_page(tenant_id_, mem_label_, sz))) {
+  } else if (NULL == (page = rpc_mem_pool_create_page(mem_label_, sz))) {
   } else {
     ret = page->alloc(sz);
     add_page(page);

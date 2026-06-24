@@ -86,24 +86,22 @@ public:
 
   static int fetch_current_data_version(
              common::ObISQLClient &client,
-             const uint64_t tenant_id,
              uint64_t &data_version);
 
   // get ora_rowscn from one row
-  // @params[in]: tenant_id, the table owner
+  // @params[in]: tenant, the table owner
   // @params[in]: sql, the sql should be "select ORA_ROWSCN from xxx", where count() is 1
   // @params[out]: the ORA_ROWSCN
   static int get_ora_rowscn(
     common::ObISQLClient &client,
-    const uint64_t tenant_id,
     const ObSqlString &sql,
     SCN &ora_rowscn);
-  static int mtl_get_tenant_role(const uint64_t tenant_id, ObTenantRole::Role &tenant_role);
-  static int mtl_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary);
-  static int mtl_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby);
-  static int table_get_tenant_role(const uint64_t tenant_id, ObTenantRole &tenant_role);
-  static int table_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary);
-  static int table_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby);
+  static int mtl_get_tenant_role(ObTenantRole::Role &tenant_role);
+  static int mtl_check_if_tenant_role_is_primary(bool &is_primary);
+  static int mtl_check_if_tenant_role_is_standby(bool &is_standby);
+  static int table_get_tenant_role(ObTenantRole &tenant_role);
+  static int table_check_if_tenant_role_is_primary(bool &is_primary);
+  static int table_check_if_tenant_role_is_standby(bool &is_standby);
   static const char *replica_type_to_string(const ObReplicaType type);
   static ObReplicaType string_to_replica_type(const char *str);
   static ObReplicaType string_to_replica_type(const ObString &str);
@@ -116,7 +114,7 @@ public:
              bool &clog_disk_is_hang);
   static int check_data_disk_health_status(
              bool &is_data_disk_healthy);
-  static int get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn);
+  static int get_tenant_gts(SCN &gts_scn);
   static int gen_sys_unit(ObUnit &unit);
   static int gen_sys_resource_pool(ObResourcePool &resource_pool);
   static int gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema);

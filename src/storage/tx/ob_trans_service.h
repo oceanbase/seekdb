@@ -187,7 +187,7 @@ public:
   int remove_callback_for_uncommited_txn(
     const share::ObLSID ls_id,
     const memtable::ObMemtableSet *memtable_set);
-  int64_t get_tenant_id() const { return tenant_id_; }
+  
   const common::ObAddr &get_server() { return self_; }
   ObTransTimer &get_trans_timer() { return timer_; }
   ObITransRpc *get_trans_rpc() { return rpc_; }
@@ -262,7 +262,7 @@ protected:
   bool is_running_;
   // for ObTransID
   common::ObAddr self_;
-  int64_t tenant_id_;
+  
   ObTransRpc rpc_def_;
   ObLocationAdapter location_adapter_def_;
   // transaction timer

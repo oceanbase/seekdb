@@ -51,7 +51,7 @@ int ObMVProvider::init_mv_provider(ObSQLSessionInfo *session_info,
     LOG_WARN("unexpected null", K(ret), K(session_info));
   } else {
     lib::ContextParam param;
-    param.set_mem_attr(session_info->get_effective_tenant_id(), "MVProvider", ObCtxIds::DEFAULT_CTX_ID)
+    param.set_mem_attr("MVProvider", ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL)
          .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
     CREATE_WITH_TEMP_CONTEXT(param) {
@@ -260,8 +260,7 @@ int ObMVProvider::print_mv_operators(ObMVPrinterCtx &mv_printer_ctx,
   return ret;
 }
 
-int ObMVProvider::check_mv_refreshable(const uint64_t tenant_id,
-                                       const uint64_t mview_id,
+int ObMVProvider::check_mv_refreshable(const uint64_t mview_id,
                                        ObSQLSessionInfo *session_info,
                                        ObSchemaGetterGuard *schema_guard,
                                        bool &can_fast_refresh,
@@ -269,9 +268,9 @@ int ObMVProvider::check_mv_refreshable(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   can_fast_refresh = false;
-  ObMVProvider mv_provider(tenant_id, mview_id);
+  ObMVProvider mv_provider(mview_id);
   if (OB_FAIL(mv_provider.init_mv_provider(session_info, schema_guard, NULL, true))) {
-    LOG_WARN("fail to init mv provider", KR(ret), K(tenant_id));
+    LOG_WARN("fail to init mv provider", KR(ret));
   } else if (OB_UNLIKELY(ObMVRefreshableType::OB_MV_REFRESH_INVALID == mv_provider.refreshable_type_)) {
     // column type for mv is changed after it is created
     ret = OB_NOT_SUPPORTED;
@@ -347,8 +346,7 @@ int ObMVProvider::get_major_refresh_operators(ObSQLSessionInfo *session_info,
 }
 
 // expand_view will used to generate plan, need use alloc to deep copy the query str
-int ObMVProvider::get_real_time_mv_expand_view(const uint64_t tenant_id,
-                                               const uint64_t mview_id,
+int ObMVProvider::get_real_time_mv_expand_view(const uint64_t mview_id,
                                                ObSQLSessionInfo *session_info,
                                                ObSchemaGetterGuard *schema_guard,
                                                ObIAllocator &alloc,
@@ -358,7 +356,7 @@ int ObMVProvider::get_real_time_mv_expand_view(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   expand_view.reset();
   is_major_refresh_mview = false;
-  ObMVProvider mv_provider(tenant_id, mview_id);
+  ObMVProvider mv_provider(mview_id);
   if (OB_FAIL(mv_provider.init_mv_provider(session_info, schema_guard, NULL, false))) {
     LOG_WARN("failed to init mv provider", K(ret));
   } else if (OB_UNLIKELY(ObMVRefreshableType::OB_MV_COMPLETE_REFRESH >= mv_provider.refreshable_type_)) {
@@ -608,7 +606,7 @@ int ObMVProvider::get_complete_refresh_mview_str(const ObTableSchema &mv_schema,
   int ret = OB_SUCCESS;
   mview_str.reset();
   lib::ContextParam param;
-  param.set_mem_attr(session_info.get_effective_tenant_id(), "MVProvider", ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr("MVProvider", ObCtxIds::DEFAULT_CTX_ID)
        .set_properties(lib::USE_TL_PAGE_OPTIONAL)
        .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE);
   CREATE_WITH_TEMP_CONTEXT(param) {

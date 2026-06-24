@@ -149,15 +149,15 @@ bool ObAiModelEndpointInfo::is_valid_ai_model_name(const ObString &ai_model_name
   int ret = OB_SUCCESS;
   schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   schema::ObSchemaGetterGuard guard;
-  uint64_t tenant_id = MTL_ID();
+  
   const ObAiModelSchema *ai_model_schema = nullptr;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(guard.get_ai_model_schema(tenant_id, ai_model_name, ai_model_schema))) {
-    LOG_WARN("fail to get ai model schema", KR(ret), K(tenant_id), K(ai_model_name));
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(guard.get_ai_model_schema( ai_model_name, ai_model_schema))) {
+    LOG_WARN("fail to get ai model schema", KR(ret), K(ai_model_name));
   } else if (OB_NOT_NULL(ai_model_schema)) {
     is_valid = true;
   } 

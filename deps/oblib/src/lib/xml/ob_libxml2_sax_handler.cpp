@@ -104,7 +104,7 @@ _xmlSAXHandler* get_synax_handler()
 
 void ObLibXml2SaxHandler::init()
 {
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "XmlGlobal"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("XmlGlobal"));
   xmlInitParser();
 #ifdef _WIN32
   LOG_INFO("saxhandler init");
@@ -123,7 +123,7 @@ void ObLibXml2SaxHandler::destroy()
 // not belong to tenant, so use observer tenant
 void ObLibXml2SaxHandler::reset_libxml_last_error()
 {
-  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "XmlGlobal"));
+  lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("XmlGlobal"));
   xmlResetLastError();
 }
 

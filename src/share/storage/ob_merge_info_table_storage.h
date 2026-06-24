@@ -38,7 +38,7 @@ public:
   int insert_or_update(const ObGlobalMergeInfo &global_merge_info);
 
   // Get global merge info
-  int get(const uint64_t tenant_id, ObGlobalMergeInfo &global_merge_info);
+  int get(ObGlobalMergeInfo &global_merge_info);
 
 private:
   int create_table_if_not_exists();

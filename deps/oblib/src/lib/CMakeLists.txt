@@ -312,7 +312,6 @@ ob_set_subtarget(oblib_lib lock
 
 ob_set_subtarget(oblib_lib mysqlclient
   mysqlclient/ob_isql_client.cpp
-  mysqlclient/ob_dblink_error_trans.cpp
   mysqlclient/ob_mysql_connection.cpp
   mysqlclient/ob_mysql_connection_pool.cpp
   mysqlclient/ob_mysql_prepared_param.cpp
@@ -357,7 +356,6 @@ ob_set_subtarget(oblib_lib thread
   thread/ob_reentrant_thread.cpp
   thread/ob_simple_thread_pool.ipp
   thread/ob_map_queue_thread_pool.cpp
-  thread/ob_work_queue.cpp
   thread/thread_mgr.cpp
   thread/thread_mgr_interface.cpp
   thread/protected_stack_allocator.cpp
@@ -466,12 +464,12 @@ endif()
 if(WIN32)
   set(VCPKG_LIB_DIR "${OB_VCPKG_DIR}/lib")
   target_link_libraries(oblib_lib
-    PUBLIC ob_malloc compress restore oblib_grpc
+    PUBLIC ob_malloc compress restore
     ${VCPKG_LIB_DIR}/libxml2.lib
   )
 else()
   target_link_libraries(oblib_lib
-    PUBLIC ob_malloc compress restore oblib_grpc
+    PUBLIC ob_malloc compress restore
     ${DEP_DIR}/lib/libxml2.a
     ${DEP_DIR}/lib/liblzma.a
   )

@@ -28,8 +28,7 @@ namespace compaction
 struct ObCompactionProgress
 {
   ObCompactionProgress()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      merge_type_(compaction::INVALID_MERGE_TYPE),
+    : merge_type_(compaction::INVALID_MERGE_TYPE),
       merge_version_(0),
       status_(share::ObIDag::DAG_STATUS_MAX),
       data_size_(0),
@@ -45,14 +44,14 @@ struct ObCompactionProgress
   bool is_valid() const;
   void reset();
 
-  TO_STRING_KV(K_(tenant_id), "merge_type", merge_type_to_str(merge_type_), K_(merge_version), K_(status), K_(data_size), K_(unfinished_data_size),
+  TO_STRING_KV("merge_type", merge_type_to_str(merge_type_), K_(merge_version), K_(status), K_(data_size), K_(unfinished_data_size),
       K_(original_size), K_(compressed_size), K_(start_time), K_(estimated_finish_time), 
       K_(start_cg_idx), K_(end_cg_idx));
 
   constexpr static double MERGE_SPEED = 1;  // almost 2 sec per macro_block
   constexpr static double EXTRA_TIME = 15 * 1000 * 1000; // 15 sec
 
-  int64_t tenant_id_;
+  
   compaction::ObMergeType merge_type_;
   int64_t merge_version_;
   share::ObIDag::ObDagStatus status_;
@@ -146,7 +145,7 @@ public:
   {
   }
   virtual ~ObTenantCompactionProgressIterator() { reset(); }
-  int open(const int64_t tenant_id);
+  int open();
   int get_next_info(ObTenantCompactionProgress &info);
   void reset();
 
@@ -217,7 +216,7 @@ public:
   {
   }
   virtual ~ObTabletCompactionProgressIterator() { reset(); }
-  int open(const int64_t tenant_id);
+  int open();
   int get_next_info(ObTabletCompactionProgress &info);
   void reset();
 

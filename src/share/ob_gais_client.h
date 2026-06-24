@@ -29,11 +29,11 @@ namespace share
 class ObGAISClient
 {
 public:
-  ObGAISClient() : is_inited_(false), self_(), gais_request_rpc_(nullptr), gais_cache_leader_map_()
+  ObGAISClient() : is_inited_(false), self_(), gais_request_rpc_(nullptr), gais_cache_leader_(), gais_cache_leader_valid_(false)
   { }
   ~ObGAISClient() { }
   int init(const common::ObAddr &self, share::ObGAISRequestRpc *gais_request_rpc);
-  TO_STRING_KV(K_(self), "map_size", gais_cache_leader_map_.size());
+  TO_STRING_KV(K_(self), K_(gais_cache_leader_valid));
 
 public:
   int get_value(const AutoincKey &key,
@@ -63,13 +63,14 @@ public:
   int get_sequence_next_value(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
 
 private:
-  int get_leader_(const uint64_t tenant_id, common::ObAddr &leader);
+  int get_leader_(common::ObAddr &leader);
 
 private:
   bool is_inited_;
   common::ObAddr self_;
   share::ObGAISRequestRpc *gais_request_rpc_;
-  common::hash::ObHashMap<uint64_t, common::ObAddr> gais_cache_leader_map_;
+  common::ObAddr gais_cache_leader_;
+  bool gais_cache_leader_valid_;
 };
 
 } // share

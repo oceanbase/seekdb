@@ -113,8 +113,7 @@ class ObGeoExprUtils
 public:
   ObGeoExprUtils();
   virtual ~ObGeoExprUtils() = default;
-  static int get_srs_item(uint64_t tenant_id,
-                          omt::ObSrsCacheGuard &srs_guard,
+  static int get_srs_item(omt::ObSrsCacheGuard &srs_guard,
                           const uint32_t srid,
                           const common::ObSrsItem *&srs);
   static int get_srs_item(ObEvalCtx &ctx,

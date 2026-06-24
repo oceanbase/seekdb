@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/dml/ob_dml_service.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_insert_op.h"
 #include "sql/das/ob_das_delete_op.h"
 #include "sql/das/ob_das_update_op.h"
@@ -181,7 +182,7 @@ int ObDMLService::check_column_type(const ExprFixedArray &dml_row,
 {
   int ret = OB_SUCCESS;
   CK(dml_row.count() >= column_infos.count());
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObUserLoggingCtx::Guard logging_ctx_guard(*dml_op.get_exec_ctx().get_user_logging_ctx());
   dml_op.get_exec_ctx().set_cur_rownum(row_num);
   for (int64_t i = 0; OB_SUCC(ret) && i < column_infos.count(); ++i) {
@@ -407,8 +408,7 @@ int ObDMLService::create_rowkey_check_hashset(int64_t estimate_row,
                               ObDMLBaseCtDef::MAX_ROWKEY_DISTINCT_BUCKET_NUM : match_rows;
       if (OB_FAIL(rowkey_dist_ctx->create(max_bucket_num,
                                       ObModIds::OB_DML_CHECK_ROWKEY_DISTINCT_BUCKET,
-                                      ObModIds::OB_DML_CHECK_ROWKEY_DISTINCT_NODE,
-                                      my_session->get_effective_tenant_id()))) {
+                                      ObModIds::OB_DML_CHECK_ROWKEY_DISTINCT_NODE))) {
         LOG_WARN("create rowkey distinct context failed", K(ret), "rows", estimate_row);
       }
     }
@@ -424,7 +424,7 @@ int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
             const ObExpr& new_expr, ObDatum& new_datum,
             int64_t& result) {
   INIT_SUCC(ret);
-  ObLobManager *lob_mngr = MTL(ObLobManager*);
+  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   int64_t timeout = 0;
   int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
   if (OB_ISNULL(lob_mngr)) {
@@ -839,7 +839,7 @@ int ObDMLService::check_geometry_column_batch(
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   batch_info_guard.set_batch_size(batch_rows.size_);
   batch_info_guard.set_batch_idx(0);
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   for (int64_t i = 0; OB_SUCC(ret) && (i < batch_rows.size_); ++i) {
     bool is_skipped = batch_rows.skip_->at(i);
     batch_info_guard.set_batch_idx(i);
@@ -2182,7 +2182,7 @@ int ObDMLService::check_agg_task_state(ObDMLRtCtx &dml_rtctx, ObIDASTaskOp *das_
   ObDasAggregatedTask *agg_task = nullptr;
   reach_mem_limit = false;
   int64_t simulate_buffer_size = - EVENT_CALL(EventTable::EN_DAS_SIMULATE_AGG_TASK_BUFF_LIMIT);
-  int64_t buffer_size_limit = is_meta_tenant(MTL_ID()) ? das::OB_DAS_MAX_META_TENANT_PACKET_SIZE : das::OB_DAS_MAX_PACKET_SIZE;
+  int64_t buffer_size_limit = das::OB_DAS_MAX_PACKET_SIZE;
   if (OB_UNLIKELY(simulate_buffer_size > 0)) {
     buffer_size_limit = simulate_buffer_size;
   }
@@ -2442,9 +2442,9 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
   if (upd_ctdef.is_table_without_pk_ && upd_ctdef.is_primary_index_) {
     ObExpr *auto_inc_expr = upd_ctdef.new_row_.at(0);
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
-    if (OB_FAIL(get_heap_table_hidden_pk(tenant_id, tablet_id, autoinc_seq))) {
-      LOG_WARN("fail to het hidden pk", K(ret), K(tablet_id), K(tenant_id));
+    
+    if (OB_FAIL(get_heap_table_hidden_pk(tablet_id, autoinc_seq))) {
+      LOG_WARN("fail to het hidden pk", K(ret), K(tablet_id));
     } else if (OB_ISNULL(auto_inc_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new_hidden_pk_expr is null", K(ret), K(upd_ctdef));
@@ -2460,18 +2460,17 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
   return ret;
 }
 
-int ObDMLService::get_heap_table_hidden_pk(uint64_t tenant_id,
-                                           const ObTabletID &tablet_id,
+int ObDMLService::get_heap_table_hidden_pk(const ObTabletID &tablet_id,
                                            uint64_t &pk)
 {
   int ret = OB_SUCCESS;
   uint64_t autoinc_seq = 0;
   ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
-  if (OB_FAIL(auto_inc.get_autoinc_seq(tenant_id, tablet_id, autoinc_seq))) {
-    LOG_WARN("get_autoinc_seq fail", K(ret), K(tenant_id), K(tablet_id));
+  if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, autoinc_seq))) {
+    LOG_WARN("get_autoinc_seq fail", K(ret), K(tablet_id));
   } else {
     pk = autoinc_seq;
-    LOG_TRACE("after get autoinc_seq", K(pk), K(tenant_id), K(tablet_id));
+    LOG_TRACE("after get autoinc_seq", K(pk), K(tablet_id));
   }
   return ret;
 }
@@ -2484,11 +2483,10 @@ int ObDMLService::set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
   uint64_t autoinc_seq = 0;
   if (ins_ctdef.is_table_without_pk_ && ins_ctdef.is_primary_index_) {
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-    uint64_t tenant_id = my_session->get_effective_tenant_id();
-    if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tenant_id,
-                                                       tablet_id,
+    
+    if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id,
                                                        autoinc_seq))) {
-      LOG_WARN("fail to het hidden pk", K(ret), K(tablet_id), K(tenant_id));
+      LOG_WARN("fail to het hidden pk", K(ret), K(tablet_id), K(1UL));
     } else {
       ObExpr *auto_inc_expr = ins_ctdef.new_row_.at(0);
       if (auto_inc_expr->type_ != T_TABLET_AUTOINC_NEXTVAL) {
@@ -2539,7 +2537,7 @@ int ObDMLService::create_anonymous_savepoint(ObTxDesc &tx_desc, transaction::ObT
 int ObDMLService::rollback_local_savepoint(ObTxDesc &tx_desc, const transaction::ObTxSEQ savepoint, int64_t expire_ts)
 {
   int ret = OB_SUCCESS;
-  ObTransService *tx = MTL(transaction::ObTransService*);
+  ObTransService *tx = share::g_mp->trans_service();
   if (OB_FAIL(tx->rollback_to_implicit_savepoint(tx_desc, savepoint, expire_ts, nullptr))) {
     LOG_WARN("rollback to implicit local savepoint failed", K(ret));
   }
@@ -2673,8 +2671,7 @@ int ObDMLService::check_dml_tablet_validity(ObDMLRtCtx &dml_rtctx,
         if (OB_ISNULL(schema_guard) || OB_ISNULL(session)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null", K(ret), K(schema_guard), K(session));
-        } else if (OB_FAIL(schema_guard->get_table_schema(
-            session->get_effective_tenant_id(), table_id, table_schema))) {
+        } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
           LOG_WARN("failed to get table schema", K(ret));
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_SCHEMA_ERROR;

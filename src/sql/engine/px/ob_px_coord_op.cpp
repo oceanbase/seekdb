@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_px_coord_op.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/ob_sql.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/join/ob_nested_loop_join_op.h"
@@ -134,8 +135,7 @@ int ObPxCoordOp::init_dfc(ObDfo &dfo, dtl::ObDtlChTotalInfo *ch_info)
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  if (OB_FAIL(dfc_.init(ctx_.get_my_session()->get_effective_tenant_id(),
-                        task_ch_set_.count()))) {
+  if (OB_FAIL(dfc_.init(task_ch_set_.count()))) {
     LOG_WARN("Fail to init dfc", K(ret));
   } else if (OB_INVALID_ID == dfo.get_qc_id() || OB_INVALID_ID == dfo.get_dfo_id()) {
     ret = OB_ERR_UNEXPECTED;
@@ -459,8 +459,8 @@ int ObPxCoordOp::try_clear_p2p_dh_info()
     ObSArray<int64_t> *p2p_ids = nullptr;
     void *ptr = nullptr;
     common::ObArenaAllocator allocator;
-    int64_t tenant_id = ctx_.get_my_session()->get_effective_tenant_id();
-    allocator.set_tenant_id(tenant_id);
+    
+    
     FOREACH_X(entry, coord_info_.p2p_dfo_map_, OB_SUCC(ret)) {
       for (int i = 0; OB_SUCC(ret) && i < entry->second.addrs_.count(); ++i) {
         ptr = nullptr;
@@ -892,7 +892,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
     }
     bool enable_audit = true;
     metric_.init(enable_audit);
-    msg_loop_.set_tenant_id(ctx.get_my_session()->get_effective_tenant_id());
+    
     msg_loop_.set_interm_result(enable_px_batch_rescan());
     msg_loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
     msg_loop_.set_query_timeout_ts(ctx_.get_physical_plan_ctx()->get_timeout_timestamp());
@@ -965,7 +965,7 @@ int ObPxCoordOp::receive_channel_root_dfo(
     }
     bool enable_audit = true;
     metric_.init(enable_audit);
-    msg_loop_.set_tenant_id(ctx.get_my_session()->get_effective_tenant_id());
+    
     msg_loop_.set_interm_result(enable_px_batch_rescan());
     msg_loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
     msg_loop_.set_query_timeout_ts(ctx_.get_physical_plan_ctx()->get_timeout_timestamp());
@@ -1080,7 +1080,7 @@ int ObPxCoordOp::erase_dtl_interm_result()
         key.channel_id_ = ci.chid_;
         for (int j = 0; j < last_px_batch_rescan_size_; ++j) {
           key.batch_id_ = j;
-          if (OB_FAIL(MTL(ObDTLIntermResultManager*)->erase_interm_result_info(key))) {
+          if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key))) {
             LOG_TRACE("fail to release receive internal result", K(ret));
           }
         }

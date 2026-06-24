@@ -77,7 +77,7 @@ public:
 
   static ObFixedClassAllocator<T> *get(const char* label = "ConcurObjPool")
   {
-    static ObFixedClassAllocator<T> instance(SET_USE_500(ObMemAttr(common::OB_SERVER_TENANT_ID, label)),
+    static ObFixedClassAllocator<T> instance(SET_USE_500(ObMemAttr(label)),
                                              common::get_cpu_count());
     return &instance;
   }

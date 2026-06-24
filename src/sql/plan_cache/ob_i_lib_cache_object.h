@@ -64,8 +64,8 @@ public:
   inline void set_added_lc(const bool added_to_lc) { added_to_lc_ = added_to_lc; }
   inline int64_t get_logical_del_time() const { return log_del_time_; }
   inline void set_logical_del_time(const int64_t timestamp) { log_del_time_ = timestamp; }
-  inline uint64_t get_tenant_id() const { return tenant_id_; }
-  inline void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
+  
+  
   inline CacheRefHandleID get_dynamic_ref_handle() const { return dynamic_ref_handle_; }
   inline bool should_release(const int64_t safe_timestamp) const
   {
@@ -91,8 +91,7 @@ public:
                        K_(object_id),
                        K_(log_del_time),
                        K_(added_to_lc),
-                       K_(ns),
-                       K_(tenant_id));
+                       K_(ns));
                        
 private:
   int64_t dec_ref_count(const CacheRefHandleID ref_handle);
@@ -104,7 +103,7 @@ protected:
   int64_t log_del_time_;
   bool added_to_lc_;
   ObLibCacheNameSpace ns_;
-  uint64_t tenant_id_;
+  
   CacheRefHandleID dynamic_ref_handle_;
   CacheObjStatus obj_status_;
 };

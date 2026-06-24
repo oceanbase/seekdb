@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_ref.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/das/ob_das_retry_ctrl.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
@@ -305,7 +306,7 @@ int ObDASRef::parallel_submit_agg_task(ObDasAggregatedTask *agg_task)
     LOG_WARN("unexpected null ptr", K(ret));
   } else if (OB_FAIL(get_das_parallel_ctx().refresh_tx_desc_bak(get_das_alloc(), session->get_tx_desc()))) {
     LOG_WARN("fail to check and refresh tx_desc", K(ret));
-  } else if (OB_FAIL(MTL(ObDataAccessService *)->parallel_submit_das_task(*this, *agg_task))) {
+  } else if (OB_FAIL(share::g_mp->data_access_service()->parallel_submit_das_task(*this, *agg_task))) {
     LOG_WARN("fail to execute parallel_das_task", K(ret));
   } else {
     LOG_TRACE("succeed submit parallel task", K(ret), K(agg_task));
@@ -348,7 +349,7 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
     if (!GCONF._enable_partition_level_retry || !failed_task->can_part_retry()) {
       ret = failed_task->errcode_;
       LOG_WARN("can't do task level retry", K(ret), KPC(failed_task));
-    } else if (OB_FAIL(MTL(ObDataAccessService *)->retry_das_task(*this, *failed_tasks.at(i)))) {
+    } else if (OB_FAIL(share::g_mp->data_access_service()->retry_das_task(*this, *failed_tasks.at(i)))) {
       LOG_WARN("Failed to retry das task", K(ret));
     }
   }
@@ -367,7 +368,7 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
       ObDasAggregatedTask* agg_task = curr->get_obj();
       if (agg_task->has_unstart_tasks() && !agg_task->has_parallel_submiitted()) {
         if (get_parallel_type() == DAS_SERIALIZATION) {
-          if (OB_FAIL(MTL(ObDataAccessService *)->execute_das_task(*this, *agg_task, async))) {
+          if (OB_FAIL(share::g_mp->data_access_service()->execute_das_task(*this, *agg_task, async))) {
             LOG_WARN("failed to execute aggregated das task", K(ret), KPC(agg_task), K(async));
           } else {
             LOG_DEBUG("successfully executing aggregated task", "server", agg_task->server_);
@@ -512,7 +513,7 @@ int ObDASRef::close_all_task()
     DASTaskIter task_iter = begin_task_iter();
     while (!task_iter.is_end()) {
       int end_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (end_ret = MTL(ObDataAccessService*)->end_das_task(*this, **task_iter))) {
+      if (OB_SUCCESS != (end_ret = share::g_mp->data_access_service()->end_das_task(*this, **task_iter))) {
         LOG_WARN("execute das task failed", K(end_ret));
       }
       ++task_iter;
@@ -561,7 +562,7 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
       && OB_NOT_NULL(plan = plan_ctx->get_phy_plan())) {
     need_das_id = !(plan->is_local_plan() && OB_PHY_PLAN_LOCAL == plan->get_location_type());
   }
-  if (need_das_id && OB_FAIL(MTL(ObDataAccessService*)->get_das_task_id(task_id))) {
+  if (need_das_id && OB_FAIL(share::g_mp->data_access_service()->get_das_task_id(task_id))) {
     LOG_WARN("get das task id failed", KR(ret));
   } else if (OB_FAIL(das_factory.create_das_task_op(op_type, task_op))) {
     LOG_WARN("create das task op failed", K(ret), KPC(task_op));
@@ -569,7 +570,7 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
     task_op->set_trans_desc(session->get_tx_desc());
     task_op->set_snapshot(&get_exec_ctx().get_das_ctx().get_snapshot());
     task_op->set_write_branch_id(get_exec_ctx().get_das_ctx().get_write_branch_id());
-    task_op->set_tenant_id(session->get_effective_tenant_id());
+    
     task_op->set_task_id(task_id);
     task_op->in_stmt_retry_ = session->get_is_in_retry();
     task_op->set_tablet_id(tablet_loc->tablet_id_);
@@ -666,7 +667,7 @@ bool ObDASRef::check_tasks_same_ls_and_is_local(share::ObLSID &ls_id)
   ObIDASTaskOp *first_das_op = nullptr;
   bool is_all_same = true;
   DASTaskIter task_iter = begin_task_iter();
-  const common::ObAddr &ctrl_addr = MTL(ObDataAccessService *)->get_ctrl_addr();
+  const common::ObAddr &ctrl_addr = share::g_mp->data_access_service()->get_ctrl_addr();
   if (!has_task()) {
     is_all_same = false;
   }
@@ -862,7 +863,7 @@ int DASParallelContext::deep_copy_tx_desc(ObIAllocator &alloc, transaction::ObTx
     LOG_WARN("alloca memory failed", K(ret));
   } else if (OB_FAIL(src_tx_desc->serialize(static_cast<char *>(buf), tx_desc_length, ser_pos))) {
     LOG_WARN("serialized tx_desc failed", K(ser_pos), K(tx_desc_length), K(ret));
-  } else if (OB_FAIL(MTL(transaction::ObTransService*)->acquire_tx(static_cast<const char *>(buf), ser_pos, des_pos, dst_tx_desc))) {
+  } else if (OB_FAIL(share::g_mp->trans_service()->acquire_tx(static_cast<const char *>(buf), ser_pos, des_pos, dst_tx_desc))) {
     LOG_WARN("acquire tx_desc by deserialized failed", K(ser_pos), K(des_pos), K(ret));
   } else if (OB_ISNULL(dst_tx_desc)) {
     ret = OB_ERR_UNEXPECTED;
@@ -880,7 +881,7 @@ int DASParallelContext::release_tx_desc()
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(tx_desc_bak_)) {
-    transaction::ObTransService *txs = MTL(transaction::ObTransService*);
+    transaction::ObTransService *txs = share::g_mp->trans_service();
     txs->release_tx(*tx_desc_bak_);
     tx_desc_bak_ = NULL;
   }

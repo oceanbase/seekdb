@@ -33,7 +33,7 @@ int mvt_agg_result::init_layer()
   vector_tile__tile__layer__init(&layer_);
   layer_.version = 2;
   layer_.name = lay_name_.ptr();
-  values_map_.create(DEFAULT_BUCKET_NUM, "MvtValues", "MvtValues", MTL_ID());
+  values_map_.create(DEFAULT_BUCKET_NUM, "MvtValues", "MvtValues");
   layer_.extent = extent_;
   return ret;
 }

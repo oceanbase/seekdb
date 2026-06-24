@@ -77,9 +77,9 @@ public:
     inner_allocator_("OptOSG"),
     allocator_(inner_allocator_)
   {
-    inner_min_allocator_.set_tenant_id(MTL_ID());
-    inner_max_allocator_.set_tenant_id(MTL_ID());
-    inner_allocator_.set_tenant_id(MTL_ID());
+    
+    
+    
   }
   ObOptOSGColumnStat(ObIAllocator &alloc):
     col_stat_(NULL),
@@ -90,9 +90,9 @@ public:
     inner_allocator_("OptOSG"),
     allocator_(alloc)
   {
-    inner_min_allocator_.set_tenant_id(MTL_ID());
-    inner_max_allocator_.set_tenant_id(MTL_ID());
-    inner_allocator_.set_tenant_id(MTL_ID());
+    
+    
+    
   }
   virtual ~ObOptOSGColumnStat() { reset(); }
   void reset();

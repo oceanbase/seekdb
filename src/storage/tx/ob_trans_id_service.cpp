@@ -44,14 +44,14 @@ int ObTransIDService::handle_request(const ObGtiRequest &request, obcall::ObGtiR
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(request));
   } else {
     TRANS_LOG(DEBUG, "handle gti request", K(request));
-    const uint64_t tenant_id = request.get_tenant_id();
+    
     const int64_t range = request.get_range();
     int64_t start_id = 0;
     int64_t end_id = 0;
     if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
       TRANS_LOG(WARN, "get trans id failed", KR(ret));
     }
-    if (OB_FAIL(result.init(tenant_id, ret, start_id, end_id))) {
+    if (OB_FAIL(result.init(ret, start_id, end_id))) {
       TRANS_LOG(WARN, "gti result init failed", KR(ret), K(request));
     }
   }

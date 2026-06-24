@@ -69,7 +69,7 @@ const char *ObMultiVersionSchemaService::print_refresh_schema_mode(const Refresh
 
 ObSchemaConstructTask::ObSchemaConstructTask()
 {
-  schema_tasks_.set_attr(SET_USE_500(ObMemAttr(OB_SERVER_TENANT_ID, "SchemaTasks", ObCtxIds::SCHEMA_SERVICE)));
+  schema_tasks_.set_attr(SET_USE_500(ObMemAttr("SchemaTasks", ObCtxIds::SCHEMA_SERVICE)));
   (void)pthread_mutex_init(&schema_mutex_, NULL);
   (void)pthread_cond_init(&schema_cond_, NULL);
 }
@@ -87,7 +87,7 @@ ObSchemaConstructTask& ObSchemaConstructTask::get_instance()
 }
 
 // FIXME: After the schema is split, the schema_version between tenants may be repeated,
-// but the probability is relatively small, and it can be changed to restrict concurrency by (tenant_id, version) later
+// but the probability is relatively small, and it can be changed to restrict concurrency by (tenant, version) later
 // blocked if existing same version, or over max parallel size
 void ObSchemaConstructTask::cc_before(const int64_t version)
 {
@@ -196,16 +196,16 @@ void ObSchemaConstructTask::remove(int64_t id)
 }
 
 int ObMultiVersionSchemaService::init_multi_version_schema_struct(
-    const uint64_t tenant_id)
+    )
 {
   int ret = OB_SUCCESS;
   const ObSchemaStore *schema_store = NULL;
-  if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
-    if (OB_FAIL(schema_store_map_.create(tenant_id, init_version_cnt_, init_version_cnt_for_liboblog_))) {
-      LOG_WARN("fail to create schema store", K(ret), K(tenant_id));
+  if (OB_ISNULL(schema_store = schema_store_)) {
+    if (OB_FAIL(create_schema_store_(init_version_cnt_, init_version_cnt_for_liboblog_))) {
+      LOG_WARN("fail to create schema store", K(ret));
     }
   } else {
-    LOG_INFO("schema store already exist", K(ret), K(tenant_id));
+    LOG_INFO("schema store already exist", K(ret));
   }
   return ret;
 }
@@ -223,7 +223,6 @@ int ObMultiVersionSchemaService::update_schema_cache(
     } else if (OB_FAIL(ObSysTableChecker::fill_sys_index_infos(*table))) {
       LOG_WARN("fail to fill sys indexes", KR(ret), "table_id", table->get_table_id());
     } else if (OB_FAIL(schema_cache_.put_schema(TABLE_SCHEMA,
-                                                table->get_tenant_id(),
                                                 table->get_table_id(),
                                                 table->get_schema_version(),
                                                 *table))) {
@@ -245,7 +244,6 @@ int ObMultiVersionSchemaService::update_schema_cache(
     if (OB_FAIL(ObSysTableChecker::fill_sys_index_infos(table))) {
       LOG_WARN("fail to fill sys indexes", KR(ret), "table_id", table.get_table_id());
     } else if (OB_FAIL(schema_cache_.put_schema(TABLE_SCHEMA,
-                                                table.get_tenant_id(),
                                                 table.get_table_id(),
                                                 table.get_schema_version(),
                                                 table))) {
@@ -265,8 +263,7 @@ int ObMultiVersionSchemaService::update_schema_cache(
   for (int64_t i = 0; OB_SUCC(ret) && i < schema_array.count(); ++i) {
     const ObTenantSchema &tenant = schema_array.at(i);
     if (OB_FAIL(schema_cache_.put_schema(TENANT_SCHEMA,
-                                         OB_SYS_TENANT_ID,
-                                         tenant.get_tenant_id(),
+                                         1UL,
                                          tenant.get_schema_version(),
                                          tenant))) {
       LOG_WARN("put schema failed", K(ret));
@@ -283,8 +280,7 @@ int ObMultiVersionSchemaService::update_schema_cache(
   int ret = OB_SUCCESS;
   LOG_TRACE("update schema cache", K(lbt()));
   if (OB_FAIL(schema_cache_.put_schema(SYS_VARIABLE_SCHEMA,
-                                       schema.get_tenant_id(),
-                                       schema.get_tenant_id(),
+                                       1UL,
                                        schema.get_schema_version(),
                                        schema))) {
     LOG_WARN("put schema failed", K(ret));
@@ -298,22 +294,21 @@ int ObMultiVersionSchemaService::update_schema_cache(
 int ObMultiVersionSchemaService::get_latest_schema(
     common::ObIAllocator &allocator,
     const ObSchemaType schema_type,
-    const uint64_t tenant_id,
     const uint64_t schema_id,
     const ObSchema *&schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(TENANT_SCHEMA == schema_type && !is_sys_tenant(tenant_id))) {
+  if (OB_UNLIKELY(TENANT_SCHEMA == schema_type && false)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id for TENANT_SCHEMA", KR(ret), K(tenant_id), K(schema_id));
-  } else if (OB_UNLIKELY(SYS_VARIABLE_SCHEMA == schema_type && tenant_id != schema_id)) {
+    LOG_WARN("invalid argument for TENANT_SCHEMA", KR(ret), K(schema_id));
+  } else if (OB_UNLIKELY(SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_id and schema_id not match for TENANT_SCHEMA",
-             KR(ret), K(tenant_id), K(schema_id));
+    LOG_WARN("schema_id not match for TENANT_SCHEMA",
+             KR(ret), K(schema_id));
   } else if (OB_UNLIKELY(!is_normal_schema(schema_type)
              || OB_INVALID_ID == schema_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(tenant_id), K(schema_id));
+    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(schema_id));
   } else if ((TABLE_SCHEMA == schema_type
               || TABLE_SIMPLE_SCHEMA == schema_type)
              && OB_ALL_CORE_TABLE_TID == schema_id) {
@@ -321,24 +316,24 @@ int ObMultiVersionSchemaService::get_latest_schema(
     if (OB_ISNULL(hard_code_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("all core table schema is null", KR(ret));
-    } else if (is_sys_tenant(tenant_id)) {
+    } else if (true) {
       schema = hard_code_schema;
     } else {
       ObTableSchema* new_table = NULL;
       if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, new_table))) {
         LOG_WARN("fail to alloc table schema", KR(ret));
       } else if (OB_FAIL(new_table->assign(*hard_code_schema))) {
-        LOG_WARN("fail to assign all core schema", KR(ret), K(tenant_id));
+        LOG_WARN("fail to assign all core schema", KR(ret));
       } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
-                tenant_id, *new_table))) {
-        LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret), K(tenant_id));
+                *new_table))) {
+        LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret));
       } else {
         schema = static_cast<const ObSchema*>(new_table);
       }
     }
   } else {
     ObRefreshSchemaStatus schema_status;
-    schema_status.tenant_id_ = tenant_id;
+    
     const int64_t schema_version = INT64_MAX;
     ObSchema *new_schema = NULL;
     if (OB_FAIL(schema_fetcher_.fetch_schema(schema_type,
@@ -348,7 +343,7 @@ int ObMultiVersionSchemaService::get_latest_schema(
                                              allocator,
                                              new_schema))) {
       LOG_WARN("fail to fetch schema", KR(ret), K(schema_type),
-               K(tenant_id), K(schema_id), K(schema_version));
+               K(schema_id), K(schema_version));
     } else if (OB_ISNULL(new_schema)) {
       // schema not exist or schema history is recycled.
     } else if (TABLE_SCHEMA != schema_type) {
@@ -361,11 +356,11 @@ int ObMultiVersionSchemaService::get_latest_schema(
         // do-nothing
       } else if (ObSysTableChecker::is_sys_table_has_index(schema_id)) {
         if (OB_FAIL(ObSysTableChecker::fill_sys_index_infos(*new_table))) {
-          LOG_WARN("fail to fill sys indexes", KR(ret), K(tenant_id), "table_id", schema_id);
+          LOG_WARN("fail to fill sys indexes", KR(ret), "table_id", schema_id);
         }
       } else if (OB_FAIL(construct_aux_infos_(*sql_proxy_,
-                 schema_status, tenant_id, *new_table))) {
-        LOG_WARN("fail to construct aux infos", KR(ret), K(tenant_id), "table_id", schema_id);
+                 schema_status, *new_table))) {
+        LOG_WARN("fail to construct aux infos", KR(ret), "table_id", schema_id);
       }
       if (OB_SUCC(ret)) {
         schema = static_cast<const ObSchema*>(new_table);
@@ -388,70 +383,67 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
 {
   int ret = OB_SUCCESS;
   const bool is_lazy = (NULL == mgr);
-  uint64_t tenant_id = schema_status.tenant_id_;
+  
   bool update_history_cache = false;
   schema = NULL;
-  if (TENANT_SCHEMA == schema_type && !is_sys_tenant(tenant_id)) {
+  if (TENANT_SCHEMA == schema_type && false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id for TENANT_SCHEMA", KR(ret), K(tenant_id), K(schema_id));
-  } else if (SYS_VARIABLE_SCHEMA == schema_type && tenant_id != schema_id) {
+    LOG_WARN("invalid argument for TENANT_SCHEMA", KR(ret), K(schema_id));
+  } else if (SYS_VARIABLE_SCHEMA == schema_type && 1UL != schema_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_id and schema_id not match for TENANT_SCHEMA",
-             KR(ret), K(tenant_id), K(schema_id));
+    LOG_WARN("schema_id not match for TENANT_SCHEMA",
+             KR(ret), K(schema_id));
   } else if (TABLE_SIMPLE_SCHEMA == schema_type && !ObSchemaService::g_liboblog_mode_) {
     // The simple table schema is currently only available for liboblog
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("fail to get simple table", K(ret),
-             KP(mgr), K(tenant_id), K(schema_id), K(schema_version));
+             KP(mgr), K(schema_id), K(schema_version));
   } else if ((TABLE_SCHEMA == schema_type || TABLE_SIMPLE_SCHEMA == schema_type)
              && OB_ALL_CORE_TABLE_TID == schema_id) {
     const ObTableSchema *hard_code_schema = schema_cache_.get_all_core_table();
     if (OB_ISNULL(hard_code_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("all core table schema is null", KR(ret));
-    } else if (is_sys_tenant(tenant_id)) {
+    } else if (true) {
       schema = hard_code_schema;
     } else {
       HEAP_VAR(ObTableSchema, new_schema) {
         if (OB_FAIL(schema_cache_.get_schema(TABLE_SCHEMA,
-                                             tenant_id,
                                              schema_id,
                                              OB_CORE_SCHEMA_VERSION ,
                                              handle,
                                              schema))) {
           if (ret != OB_ENTRY_NOT_EXIST) {
-            LOG_WARN("get schema from cache failed", KR(ret), K(tenant_id),
+            LOG_WARN("get schema from cache failed", KR(ret), K(1UL),
                      K(schema_type), K(schema_id), K(schema_version));
           } else if (OB_FAIL(new_schema.assign(*hard_code_schema))) { // overwrite ret
-            LOG_WARN("fail to assign all core schema", KR(ret), K(tenant_id));
+            LOG_WARN("fail to assign all core schema", KR(ret), K(1UL));
           } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
-                    tenant_id, new_schema))) {
-            LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret), K(tenant_id));
+                    new_schema))) {
+            LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret), K(1UL));
           } else if (OB_FAIL(schema_cache_.put_and_fetch_schema(schema_type,
-                                                                tenant_id,
                                                                 schema_id,
                                                                 OB_CORE_SCHEMA_VERSION,
                                                                 new_schema,
                                                                 handle,
                                                                 schema))) {
-            LOG_WARN("fail to push back tenant's __all_core_table schema", KR(ret), K(tenant_id));
+            LOG_WARN("fail to push back tenant's __all_core_table schema", KR(ret), K(1UL));
           }
         }
       }
     }
   } else if (OB_FAIL(schema_cache_.get_schema(schema_type,
-                                              tenant_id,
                                               schema_id,
                                               schema_version,
                                               handle,
                                               schema))) {
     if (ret != OB_ENTRY_NOT_EXIST) {
-      LOG_WARN("get schema from cache failed", K(tenant_id), K(schema_type), K(schema_id),
+      LOG_WARN("get schema from cache failed", K(1UL), K(schema_type), K(schema_id),
                K(schema_version), K(ret));
     } else {
       // fetch schema and renew cache
       ret = OB_SUCCESS;
-      LOG_TRACE("schema cache miss", K(tenant_id), K(schema_type), K(schema_id), K(schema_version));
+      LOG_TRACE("schema cache miss", K(1UL), K(schema_type), K(schema_id), K(schema_version));
 
       ObSchema *tmp_schema = NULL;
       ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
@@ -468,12 +460,12 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
                      || TABLEGROUP_SCHEMA == schema_type
                      || DATABASE_SCHEMA == schema_type)) {
         ObSchemaType fetch_schema_type = TABLE_SIMPLE_SCHEMA == schema_type ? TABLE_SCHEMA : schema_type;
-        VersionHisKey key(fetch_schema_type, tenant_id, schema_id);
+        VersionHisKey key(fetch_schema_type, schema_id);
         VersionHisVal val;
-        if (OB_FAIL(get_schema_version_history(schema_status, tenant_id, schema_version,
+        if (OB_FAIL(get_schema_version_history(schema_status, 1UL, schema_version,
                                                key, val, not_exist))) {
           LOG_WARN("fail to get schema version history", K(ret), K(schema_type),
-                   K(tenant_id),  K(schema_id), K(key), K(schema_version));
+                    K(schema_id), K(key), K(schema_version));
         }
         if (OB_SUCC(ret) && !not_exist) {
           int i = 0;
@@ -504,10 +496,10 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
             // i >= cnt && schema_version > val.min_version_
             // try use discrete schema version relationship
             if (OB_FAIL(schema_cache_.get_schema_history_cache(
-                schema_type, tenant_id, schema_id, schema_version, precise_version))) {
+                schema_type, schema_id, schema_version, precise_version))) {
               if (OB_ENTRY_NOT_EXIST != ret) {
                 LOG_WARN("get schema history cache failed",
-                         KR(ret), K(schema_type), K(tenant_id), K(schema_id), K(schema_version));
+                         KR(ret), K(schema_type), K(schema_id), K(schema_version));
               } else {
                 ret = OB_SUCCESS;
                 update_history_cache = true;
@@ -521,7 +513,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
           // try use precise_version
           if (OB_SUCC(ret) && precise_version > 0) {
             if (OB_FAIL(schema_cache_.get_schema(schema_type,
-                                                 tenant_id,
                                                  schema_id,
                                                  precise_version,
                                                  handle,
@@ -534,7 +525,7 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
               }
             } else {
               LOG_TRACE("precise version hit", K(key), K(schema_version), K(precise_version),
-                       K(tenant_id), K(schema_id), "schema_type", schema_type_str(schema_type));
+                       K(schema_id), "schema_type", schema_type_str(schema_type));
               has_hit = true;
             }
           }
@@ -549,11 +540,11 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
                                                  schema_version,
                                                  allocator,
                                                  tmp_schema))) {
-          LOG_WARN("fetch schema failed", K(tenant_id), K(schema_type),
+          LOG_WARN("fetch schema failed", K(schema_type),
                    K(schema_id), K(schema_version), K(ret));
         } else if (OB_ISNULL(tmp_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", K(tenant_id), K(schema_type), K(schema_id),
+          LOG_WARN("NULL ptr", K(schema_type), K(schema_id),
                    K(schema_version), KP(tmp_schema), K(ret));
         } else if (TABLE_SCHEMA == schema_type) {
           ObTableSchema *table_schema = static_cast<ObTableSchema *>(tmp_schema);
@@ -564,13 +555,13 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
             // do-nothing
           } else if (ObSysTableChecker::is_sys_table_has_index(schema_id)) {
             if (OB_FAIL(ObSysTableChecker::fill_sys_index_infos(*table_schema))) {
-              LOG_WARN("fail to fill sys indexes", KR(ret), K(tenant_id), "table_id", schema_id);
+              LOG_WARN("fail to fill sys indexes", KR(ret), "table_id", schema_id);
             }
           } else if (is_lazy) {
             if (OB_FAIL(construct_aux_infos_(
-                *sql_proxy_, schema_status, tenant_id, *table_schema))) {
+                *sql_proxy_, schema_status, *table_schema))) {
               LOG_WARN("fail to construct aux infos", KR(ret),
-                       K(schema_status), K(tenant_id), KPC(table_schema));
+                       K(schema_status), KPC(table_schema));
             }
           } else {
             if (OB_FAIL(add_aux_schema_from_mgr(*mgr, *table_schema, USER_INDEX))) {
@@ -592,7 +583,7 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
         if (OB_FAIL(ret)) {
         } else if (OB_ISNULL(tmp_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", K(tenant_id), K(schema_id), KP(tmp_schema), K(ret));
+          LOG_WARN("NULL ptr", K(schema_id), KP(tmp_schema), K(ret));
         } else if (TABLE_SCHEMA == schema_type) {
           ObTableSchema *table_schema = static_cast<ObTableSchema *>(tmp_schema);
           precise_version = table_schema->get_schema_version();
@@ -632,19 +623,18 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
         // 4. renew cache
         if (FAILEDx(schema_cache_.put_and_fetch_schema(
                     schema_type,
-                    tenant_id,
                     schema_id,
                     precise_version,
                     *tmp_schema,
                     handle,
                     schema))) {
-          LOG_WARN("put and fetch schema failed", K(tenant_id), K(schema_type),
+          LOG_WARN("put and fetch schema failed", K(1UL), K(schema_type),
                    K(schema_id), K(precise_version), K(schema_version), KR(ret));
         } else if (update_history_cache
                    && OB_FAIL(schema_cache_.put_schema_history_cache(
-                      schema_type, tenant_id, schema_id, schema_version, precise_version))) {
+                      schema_type, schema_id, schema_version, precise_version))) {
           LOG_WARN("fail to put schema history cache", KR(ret), K(schema_type),
-                   K(tenant_id), K(schema_id), K(schema_version), K(precise_version));
+                   K(1UL), K(schema_id), K(schema_version), K(precise_version));
         }
 
 #ifndef NDEBUG
@@ -679,7 +669,7 @@ int ObMultiVersionSchemaService::add_aux_schema_from_mgr(
 {
   int ret = OB_SUCCESS;
   ObSEArray<const ObSimpleTableSchemaV2 *, 8> simple_aux_tables;
-  if (OB_FAIL(mgr.get_aux_schemas(table_schema.get_tenant_id(),
+  if (OB_FAIL(mgr.get_aux_schemas(
               table_schema.get_table_id(), simple_aux_tables, table_type))) {
     LOG_WARN("get aux table schemas failed", K(ret), K(table_schema.get_table_id()));
   } else {
@@ -792,18 +782,17 @@ int ObMultiVersionSchemaService::fallback_schema_mgr_for_liboblog(
   ObSchemaMgrCache *schema_mgr_cache = NULL;
 //   add concurrency control for fallback
   ObSchemaConstructTask &task = ObSchemaConstructTask::get_instance();
-  uint64_t tenant_id = schema_status.tenant_id_;
+  
   task.cc_before(target_version);
-  // Determine whether the schema has been split according to whether the tenant_id is legal
+  // Determine whether the schema has been split according to whether the tenant is legal
   ObSchemaStore* schema_store = NULL;
-  if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
+  if (OB_ISNULL(schema_store = schema_store_)) {
     ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("fail to get schema_store", K(ret));
-  } else if (OB_FAIL(mem_mgr_for_liboblog_map_.get_refactored(tenant_id, mem_mgr_for_liboblog))) {
-    LOG_WARN("fail to get mem mgr", K(ret), K(tenant_id));
+  } else if (FALSE_IT(mem_mgr_for_liboblog = mem_mgr_for_liboblog_)) {
   } else if (OB_ISNULL(mem_mgr_for_liboblog)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem_mgr is null", K(ret), K(tenant_id));
+    LOG_WARN("mem_mgr is null", K(ret));
   } else {
     schema_mgr_cache = &schema_store->schema_mgr_cache_;
     schema_mgr_cache_for_liboblog = &schema_store->schema_mgr_cache_for_liboblog_;
@@ -816,7 +805,7 @@ int ObMultiVersionSchemaService::fallback_schema_mgr_for_liboblog(
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("get schema mgr failed", K(ret), K(target_version));
       schema_mgr_cache_for_liboblog->dump();
-    } else if (!is_tenant_full_schema(tenant_id)) {
+    } else if (!is_tenant_full_schema()) {
       ret = OB_SCHEMA_EAGAIN;
       LOG_WARN("full schema is not ready, cann't get fallback schema guard",
                 K(ret), K(schema_status), K(target_version));
@@ -953,9 +942,8 @@ int ObMultiVersionSchemaService::get_cluster_schema_guard(
   } else if (OB_FAIL(guard.init())) {
     LOG_WARN("fail to init guard", K(ret));
   } else {
-    ObSEArray<uint64_t, 1> tenant_ids;
     if (!ObSchemaService::g_liboblog_mode_// Avoid using schema_status_proxy for agentserver and liboblog
-        && OB_FAIL(check_restore_tenant_exist(tenant_ids, guard.restore_tenant_exist_))) {
+        && OB_FAIL(check_restore_tenant_exist(guard.restore_tenant_exist_))) {
       LOG_WARN("fail to check restore tenant exist", K(ret));
     }
   }
@@ -976,19 +964,18 @@ int ObMultiVersionSchemaService::get_cluster_schema_guard(
     const RefreshSchemaMode need_fallback = RefreshSchemaMode::NORMAL;
     int64_t sys_snapshot_version = OB_INVALID_VERSION;
     ObSchemaStore* sys_schema_store = NULL;
-    if (OB_FAIL(get_schema_status(schema_status_array, OB_SYS_TENANT_ID, schema_status))) {
+    if (OB_FAIL(get_schema_status(schema_status_array, schema_status))) {
       LOG_WARN("fail to get schema status", K(ret));
-    } else if (NULL == (sys_schema_store = schema_store_map_.get(OB_SYS_TENANT_ID))) {
+    } else if (NULL == (sys_schema_store = schema_store_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get sys schema store");
     } else if (OB_FAIL(get_tenant_refreshed_schema_version(
-               OB_SYS_TENANT_ID, sys_snapshot_version))) {
+               sys_snapshot_version))) {
       LOG_WARN("fail to get sys refreshed schema version", K(ret));
-    } else if (OB_FAIL(add_schema_mgr_info(guard, sys_schema_store, schema_status,
-               OB_SYS_TENANT_ID, sys_snapshot_version, sys_snapshot_version, need_fallback))) {
+    } else if (OB_FAIL(add_schema_mgr_info(guard, sys_schema_store, schema_status, sys_snapshot_version, sys_snapshot_version, need_fallback))) {
       LOG_WARN("fail to add schema mgr info", K(ret), K(sys_snapshot_version),
           "refresh_schema_mode", print_refresh_schema_mode(need_fallback));
-    } else if (OB_FAIL(guard.get_schema_mgr_info(OB_SYS_TENANT_ID, sys_schema_mgr_info))) {
+    } else if (OB_FAIL(guard.get_schema_mgr_info( sys_schema_mgr_info))) {
       LOG_WARN("fail to get sys schema mgr info", K(ret));
     } else if (OB_ISNULL(sys_schema_mgr_info->get_schema_mgr())) {
       ret = OB_SCHEMA_EAGAIN;
@@ -1000,36 +987,9 @@ int ObMultiVersionSchemaService::get_cluster_schema_guard(
         LOG_WARN("fail to get tenant_schemas", K(ret));
       } else {
         FOREACH_X(tenant, tenant_schemas, OB_SUCC(ret)) {
-          int64_t tenant_snapshot_version = OB_INVALID_VERSION;
-          ObSchemaStore* schema_store = NULL;
-          schema_status.reset();
-          uint64_t tenant_id = OB_INVALID_TENANT_ID;
           if (OB_ISNULL(tenant) || OB_ISNULL(*tenant)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("tenant schema is null", K(ret));
-          } else if (FALSE_IT(tenant_id = (*tenant)->get_tenant_id())) {
-          } else if (OB_SYS_TENANT_ID == tenant_id) {
-            //skip
-          } else if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
-            ret = OB_SCHEMA_EAGAIN;
-            LOG_WARN("get tenant schema store fail, maybe local schema is old",
-                     K(ret), KPC(*tenant));
-          } else if (FALSE_IT(tenant_snapshot_version = schema_store->get_refreshed_version())) {
-          } else {
-            // switchover/failover not clear schema_status, Cannot trust schema_status content unconditionally
-            // bugfix:
-            if ((*tenant)->is_restore()) {
-              if (OB_FAIL(get_schema_status(schema_status_array, tenant_id, schema_status))) {
-                LOG_WARN("fail to get schema status", K(ret), KPC(*tenant));
-              }
-            } else {
-              schema_status.tenant_id_ = tenant_id;
-            }
-            if (FAILEDx(add_schema_mgr_info(guard, schema_store, schema_status, tenant_id,
-                tenant_snapshot_version, tenant_snapshot_version, refresh_schema_mode))) {
-              LOG_WARN("fail to add schema mgr info", K(ret), KPC(*tenant), K(tenant_snapshot_version),
-                  "refresh_schema_mode", print_refresh_schema_mode(refresh_schema_mode));
-            }
           }
         }
       }
@@ -1050,7 +1010,6 @@ int ObMultiVersionSchemaService::get_cluster_schema_guard(
  *   - sys_schema_version: Indicates the version of the schema of the system tenant and the sys tables in user tenant.
  */
 int ObMultiVersionSchemaService::get_tenant_schema_guard(
-    const uint64_t tenant_id,
     ObSchemaGetterGuard &guard,
     int64_t tenant_schema_version/* = common::OB_INVALID_VERSION*/,
     int64_t sys_schema_version/* = common::OB_INVALID_VERSION*/,
@@ -1058,31 +1017,24 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard(
 {
   int ret = OB_SUCCESS;
   // For system tenants, tenant_schema_version and sys_schema_version are consistent
-  sys_schema_version = OB_SYS_TENANT_ID == tenant_id ? tenant_schema_version : sys_schema_version;
+  sys_schema_version = tenant_schema_version;
 
   // new schema refresh process
   int64_t sys_latest_local_version = OB_INVALID_VERSION;
-  int64_t tenant_latest_local_version = OB_INVALID_VERSION;
   int64_t sys_snapshot_version = OB_INVALID_VERSION;
-  int64_t tenant_snapshot_version = OB_INVALID_VERSION;
   int64_t baseline_schema_version = OB_INVALID_VERSION;
   ObRefreshSchemaStatus sys_schema_status;
-  ObRefreshSchemaStatus tenant_schema_status;
   ObSchemaStore* sys_schema_store = NULL;
-  ObSchemaStore* tenant_schema_store = NULL;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_FAIL(guard.fast_reset())) {
+  if (OB_FAIL(guard.fast_reset())) {
     LOG_WARN("fail to reset schema guard", K(ret));
   } else if (OB_FAIL(guard.init())) {
     LOG_WARN("fail to init guard", K(ret));
   }
-  sys_schema_status.tenant_id_ = OB_SYS_TENANT_ID;
+  
 
   // get system tenant schema_mgr_info
   if (OB_FAIL(ret)) {
-  } else if (NULL == (sys_schema_store = schema_store_map_.get(OB_SYS_TENANT_ID))) {
+  } else if (NULL == (sys_schema_store = schema_store_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get sys schema store fail", K(ret));
   } else if (OB_INVALID_VERSION == (sys_latest_local_version = sys_schema_store->get_refreshed_version())) {
@@ -1100,7 +1052,7 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard(
       // for max avaliablity, ignore tmp_ret
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = get_baseline_schema_version(
-          OB_SYS_TENANT_ID, false/*auto_update*/, baseline_schema_version))) {
+          false/*auto_update*/, baseline_schema_version))) {
         LOG_WARN("get sys tenant baseline schema version failed", KR(tmp_ret));
       }
     }
@@ -1113,61 +1065,50 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard(
       sys_snapshot_version = baseline_schema_version;
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(add_schema_mgr_info(guard, sys_schema_store, sys_schema_status,
-               OB_SYS_TENANT_ID, sys_snapshot_version, sys_latest_local_version,
+    } else if (OB_FAIL(add_schema_mgr_info(guard, sys_schema_store, sys_schema_status, sys_snapshot_version, sys_latest_local_version,
                refresh_schema_mode))) {
       LOG_WARN("fail to add schema mgr info", K(ret), K(sys_snapshot_version),
                "refresh_schema_mode", print_refresh_schema_mode(refresh_schema_mode));
     } else {
       // The guard will be used in subsequent check_tenant_is_restore, and some members will be set up here
       // to avoid reporting errors during subsequent consumption of guard
-      guard.tenant_id_ = OB_SYS_TENANT_ID;
+      
+      
       guard.schema_service_ = this;
       guard.schema_guard_type_ = ObSchemaGetterGuard::TENANT_SCHEMA_GUARD;
     }
   }
 
   if (OB_SUCC(ret)) {
-    guard.tenant_id_ = tenant_id;
-    LOG_DEBUG("get tenant schema guard", K(tenant_id), K(tenant_schema_version), K(sys_schema_version));
+  
+    
+    LOG_DEBUG("get tenant schema guard", K(tenant_schema_version), K(sys_schema_version));
   }
 
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_tenant_ids(ObIArray<uint64_t> &tenant_ids) {
-  int ret = OB_SUCCESS;
-  share::schema::ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-    LOG_WARN("get all tenants failed", K(ret));
-  }
-  return ret;
-}
 
 int ObMultiVersionSchemaService::get_tenant_full_schema_guard(
-    const uint64_t tenant_id,
     ObSchemaGetterGuard &guard,
     bool check_formal /*= true*/)
 {
   int ret = OB_SUCCESS;
 
-  if (!is_tenant_full_schema(tenant_id)) {
+  if (!is_tenant_full_schema()) {
     ret = OB_TENANT_SCHEMA_NOT_FULL;
     if (EXECUTE_COUNT_PER_SEC(1)) {
-      LOG_WARN("tenant schema not full", K(ret), K(tenant_id));
+      LOG_WARN("tenant schema not full", K(ret));
     }
-  } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, guard))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret), K(tenant_id));
+  } else if (OB_FAIL(get_tenant_schema_guard(guard))) {
+    LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (check_formal && OB_FAIL(guard.check_formal_guard())) {
-    LOG_WARN("schema_guard is not formal", K(ret), K(tenant_id));
+    LOG_WARN("schema_guard is not formal", K(ret));
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::get_tenant_schema_guard_with_version_in_inner_table(
-    const uint64_t tenant_id,
     ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
@@ -1175,47 +1116,41 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard_with_version_in_inner_t
   bool use_local = false;
   int64_t version_in_inner_table = OB_INVALID_VERSION;
   ObRefreshSchemaStatus schema_status;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy is null", K(ret));
-  } else if (OB_FAIL(check_tenant_is_restore(NULL, tenant_id, is_restore))) {
-    LOG_WARN("fail to check tenant is restore", KR(ret), K(tenant_id));
-  } else if (is_restore && OB_SYS_TENANT_ID != tenant_id) {
+  } else if (OB_FAIL(check_tenant_is_restore(NULL, is_restore))) {
+    LOG_WARN("fail to check tenant is restore", KR(ret));
+  } else if (is_restore && false) {
     ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
     if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_status_proxy is null", KR(ret));
-    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(tenant_id, schema_status))) {
-      LOG_WARN("failed to get tenant refresh schema status", KR(ret), K(tenant_id));
+    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
+      LOG_WARN("failed to get tenant refresh schema status", KR(ret));
     } else if (OB_INVALID_VERSION == schema_status.readable_schema_version_) {
       use_local = false;
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("tenant is still restoring, not supported", KR(ret), K(tenant_id), K(schema_status));
+      LOG_WARN("tenant is still restoring, not supported", KR(ret), K(schema_status));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (use_local) {
-    if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret), K(tenant_id));
+    if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("fail to get schema guard", K(ret));
     }
   } else {
-    schema_status.tenant_id_ = tenant_id;
+    
     if (OB_FAIL(get_schema_version_in_inner_table(*GCTX.sql_proxy_, schema_status, version_in_inner_table))) {
       LOG_WARN("fail to get latest schema version in inner table", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard, version_in_inner_table))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard, version_in_inner_table))) {
       if (OB_SCHEMA_EAGAIN == ret) {
         int t_ret = OB_SUCCESS;
-        ObArray<uint64_t> tenant_ids;
-        if (OB_SUCCESS != (t_ret = tenant_ids.push_back(tenant_id))) {
-          LOG_WARN("fail to push back tenant_id", K(t_ret), K(tenant_id));
-        } else if (OB_SUCCESS != (t_ret = refresh_and_add_schema(tenant_ids))) {
-          LOG_WARN("fail to refresh and add schema", K(t_ret), K(tenant_id));
-        } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard, version_in_inner_table))) {
-          LOG_WARN("fail to retry get schema guard", K(ret), K(tenant_id), K(version_in_inner_table));
+        if (OB_SUCCESS != (t_ret = refresh_and_add_schema())) {
+          LOG_WARN("fail to refresh and add schema", K(t_ret));
+        } else if (OB_FAIL(get_tenant_schema_guard(schema_guard, version_in_inner_table))) {
+          LOG_WARN("fail to retry get schema guard", K(ret), K(version_in_inner_table));
         }
       } else {
         LOG_WARN("get schema manager failed", K(ret));
@@ -1229,7 +1164,6 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
     ObSchemaGetterGuard &schema_guard,
     ObSchemaStore* schema_store,
     const ObRefreshSchemaStatus &schema_status,
-    const uint64_t tenant_id,
     const int64_t snapshot_version,
     const int64_t latest_local_version,
     const RefreshSchemaMode refresh_schema_mode /* = RefreshSchemaMode::NORMAL */)
@@ -1237,30 +1171,25 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
   int ret = OB_SUCCESS;
   const ObSchemaMgr *schema_mgr = NULL;
   ObSchemaMgrInfo* new_schema_mgr_info = NULL;
-  if (OB_INVALID_TENANT_ID == tenant_id
+  if (false
       || snapshot_version <= 0
       || latest_local_version <= 0
       || NULL == schema_store) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id or snapshot_version", K(ret), K(tenant_id), K(snapshot_version), KP(schema_store));
-  } else if (schema_status.tenant_id_ != tenant_id) {
+    LOG_WARN("invalid argument or snapshot_version", K(ret), K(snapshot_version), KP(schema_store));
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid schema_status or tenant_id", K(ret), K(tenant_id), K(snapshot_version), K(schema_status));
+    LOG_WARN("invalid schema_status or argument", K(ret), K(snapshot_version), K(schema_status));
   } else {
     ObSchemaMgrHandle handle(schema_guard.mod_);
-    ObSchemaMgrInfo schema_mgr_info(tenant_id,
-                                    snapshot_version,
+    ObSchemaMgrInfo schema_mgr_info(snapshot_version,
                                     schema_mgr,
                                     handle,
                                     schema_status);
     int64_t count = schema_guard.schema_mgr_infos_.count();
     // Guaranteed to be monotonically increasing when inserted
-    if (count > 0 && schema_guard.schema_mgr_infos_[count - 1].get_tenant_id() >= tenant_id) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tenant_id should greator than the last one", K(ret),
-               "pre_tenant_id", schema_guard.schema_mgr_infos_[count - 1].get_tenant_id(), K(tenant_id));
-    } else if (OB_FAIL(schema_guard.schema_mgr_infos_.push_back(schema_mgr_info))) {
-      LOG_WARN("fail to push back schema_mgr_info", K(ret), K(tenant_id));
+    if (OB_FAIL(schema_guard.schema_mgr_infos_.push_back(schema_mgr_info))) {
+      LOG_WARN("fail to push back schema_mgr_info", K(ret));
     } else {
       new_schema_mgr_info = &schema_guard.schema_mgr_infos_.at(count);
     }
@@ -1269,7 +1198,7 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(new_schema_mgr_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", KR(ret), K(tenant_id));
+    LOG_WARN("schema_mgr is null", KR(ret));
   } else {
     ObSchemaMgrHandle& handle = new_schema_mgr_info->get_schema_mgr_handle();
     bool need_fallback = false;
@@ -1345,9 +1274,7 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
  *
  * save_schema_version is schema_version or the corresponding orig_schema_version
  */
-int ObMultiVersionSchemaService::retry_get_schema_guard(
-    const uint64_t tenant_id,
-    const int64_t schema_version,
+int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_version,
     const uint64_t table_id,
     ObSchemaGetterGuard &schema_guard,
     int64_t &save_schema_version)
@@ -1375,14 +1302,14 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(
   if (OB_SUCC(ret)) {
     while (retry_time < MAX_RETRY_TIMES) {
       bool is_dropped = false;
-      if (OB_FAIL(check_if_tenant_has_been_dropped(tenant_id, is_dropped))) {
+      if (OB_FAIL(check_if_tenant_has_been_dropped(is_dropped))) {
         if (OB_NOT_INIT != ret) {
           LOG_WARN("check if tenant has been dropped failed", K(ret), K(table_id));
         }
       } else if (is_dropped) {
         ret = OB_TENANT_HAS_BEEN_DROPPED;
-        LOG_WARN("tenant has been deleted, just skip", K(ret), K(tenant_id));
-      } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard, schema_version))) {
+        LOG_WARN("tenant has been deleted, just skip", K(ret));
+      } else if (OB_FAIL(get_tenant_schema_guard(schema_guard, schema_version))) {
         if (OB_SCHEMA_EAGAIN != ret) {
           LOG_WARN("fail to get tenant schema guard", K(ret), K(table_id), K(schema_version));
         }
@@ -1401,64 +1328,63 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(
 
   if (OB_FAIL(ret)) {
     LOG_WARN("fail to get schema guard", K(ret), K(schema_version));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
+    LOG_WARN("failed to get table schema", K(ret), K(table_id));
   } else if (OB_NOT_NULL(table_schema)) {
     // success
   } else {
     // table not exist , return guard which can get original table schema
     ObRefreshSchemaStatus schema_status;
-    schema_status.tenant_id_ = tenant_id;
+    
 
     bool is_restore = false;
-    if (is_sys_tenant(tenant_id)
-        || is_meta_tenant(tenant_id)
+    if (true
         || ObSchemaService::g_liboblog_mode_) {
       // skip
-    } else if (OB_FAIL(check_tenant_is_restore(&schema_guard, tenant_id, is_restore))) {
-      LOG_WARN("fail to check restore tenant exist", K(ret), K(tenant_id));
+    } else if (OB_FAIL(check_tenant_is_restore(&schema_guard, is_restore))) {
+      LOG_WARN("fail to check restore tenant exist", K(ret));
     } else if (is_restore) {
       ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
       if (OB_ISNULL(schema_status_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_status_proxy is null", K(ret));
       } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(
-                         tenant_id, schema_status))) {
+                         schema_status))) {
         LOG_WARN("fail to get refresh schema status", K(ret));
       } else {}
     }
     if (OB_FAIL(ret)) {
     } else if (is_inner_table(table_id)) {
       int64_t baseline_schema_version = OB_INVALID_VERSION;
-      if (OB_FAIL(get_baseline_schema_version(tenant_id, false/*auto_update*/, baseline_schema_version))) {
-        LOG_WARN("fail to get baseline schema version", K(ret), K(tenant_id));
+      if (OB_FAIL(get_baseline_schema_version(false/*auto_update*/, baseline_schema_version))) {
+        LOG_WARN("fail to get baseline schema version", K(ret));
       } else if (baseline_schema_version <= 0) {
         ret = OB_SCHEMA_EAGAIN;
         LOG_WARN("baseline schema version is invalid, try later",
-                 K(ret), K(tenant_id), K(table_id), K(schema_version));
+                 K(ret), K(table_id), K(schema_version));
       } else {
         // try use version_his_map
-        VersionHisKey key(TABLE_SCHEMA, tenant_id, table_id);
+        VersionHisKey key(TABLE_SCHEMA, table_id);
         VersionHisVal val;
         int ret = version_his_map_.get_refactored(key, val);
         if (OB_SUCCESS != ret && OB_HASH_NOT_EXIST != ret) {
           LOG_WARN("fail to get table version history", K(ret), K(key), K(schema_version));
         } else if (OB_HASH_NOT_EXIST == ret) { // overwrite ret
           int64_t local_version = OB_INVALID_VERSION;
-          if (OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, local_version))) {
+          if (OB_FAIL(get_tenant_refreshed_schema_version(local_version))) {
             LOG_WARN("fail to get tenant refreshed schema_version",
-                     K(ret), K(tenant_id), K(key), K(schema_version));
+                     K(ret), K(key), K(schema_version));
           } else if (local_version <= OB_CORE_SCHEMA_VERSION) {
             ret = OB_SCHEMA_EAGAIN;
             LOG_WARN("local schema is old, try later",
-                     K(ret), K(tenant_id), K(key), K(schema_version), K(local_version));
+                     K(ret), K(key), K(schema_version), K(local_version));
           } else if (OB_FAIL(construct_schema_version_history(
                              schema_status, local_version, key, val))) {
             LOG_WARN("fail to load table schema version history",
                      K(ret), K(schema_status), K(key), K(schema_version), K(local_version));
           } else if (0 >= val.min_version_ || 0 == val.valid_cnt_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sys table not exist", K(ret), K(tenant_id),
+            LOG_WARN("sys table not exist", K(ret),
                      K(key), K(val), K(schema_version));
           } else {
             save_schema_version = max(val.min_version_, baseline_schema_version);
@@ -1474,7 +1400,7 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_service_ is null", K(ret));
       } else if (OB_FAIL(schema_service_->get_ori_schema_version(
-                         schema_status, tenant_id, table_id, save_schema_version))) {
+                         schema_status, table_id, save_schema_version))) {
         if (OB_ITER_END == ret) {
           // There are several situations where orig_schema_version cannot be obtained:
           // 1. The table built in 1.4.x does not have orig_schema_version,
@@ -1500,15 +1426,15 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(
     if (OB_SUCC(ret)) {
       while (retry_time < MAX_RETRY_TIMES) {
         bool is_dropped = false;
-        if (OB_FAIL(check_if_tenant_has_been_dropped(tenant_id, is_dropped))) {
+        if (OB_FAIL(check_if_tenant_has_been_dropped(is_dropped))) {
           if (OB_NOT_INIT != ret) {
             LOG_WARN("check if tenant has been dropped failed", K(ret), K(table_id));
           }
         } else if (is_dropped) {
           ret = OB_TENANT_HAS_BEEN_DROPPED;
-          LOG_WARN("tenant has been deleted, just skip", K(ret), K(tenant_id));
+          LOG_WARN("tenant has been deleted, just skip", K(ret));
         } else if (OB_FAIL(get_tenant_schema_guard(
-                           tenant_id, schema_guard, save_schema_version))) {
+                           schema_guard, save_schema_version))) {
           if (OB_SCHEMA_EAGAIN != ret) {
             LOG_WARN("fail to get tenant schema guard",
                      K(ret), K(table_id), K(schema_version), K(save_schema_version));
@@ -1528,9 +1454,9 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(
       if (OB_FAIL(ret)) {
         LOG_WARN("fail to get tenant schema guard",
                  K(ret), K(table_id), K(schema_version), K(save_schema_version));
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
+      } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
         LOG_WARN("failed to get table schema",
-                 K(ret), K(tenant_id), K(table_id), K(schema_version), K(save_schema_version));
+                 K(ret), K(table_id), K(schema_version), K(save_schema_version));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_SCHEMA_ERROR;
         LOG_WARN("table should exist",
@@ -1554,8 +1480,7 @@ ObMultiVersionSchemaService::ObMultiVersionSchemaService() :
     schema_info_rwlock_(common::ObLatchIds::REFRESHED_SCHEMA_CACHE_LOCK),
     last_refreshed_schema_info_(),
     init_version_cnt_(OB_INVALID_COUNT),
-    init_version_cnt_for_liboblog_(OB_INVALID_COUNT),
-    schema_store_map_()
+    init_version_cnt_for_liboblog_(OB_INVALID_COUNT)
 {
 }
 
@@ -1578,7 +1503,10 @@ void ObMultiVersionSchemaService::wait()
 int ObMultiVersionSchemaService::destroy()
 {
   int ret = OB_SUCCESS;
-  schema_store_map_.destroy();
+  if (NULL != schema_store_) {
+    schema_store_->~ObSchemaStore();
+    schema_store_ = NULL;
+  }
   ddl_trans_controller_.destroy();
   schema_cache_.destroy();
   return ret;
@@ -1621,9 +1549,7 @@ int ObMultiVersionSchemaService::init(
     // init sys schema struct
     init_version_cnt_ = init_version_count;
     init_version_cnt_for_liboblog_ = init_version_count_for_liboblog;
-    if (OB_FAIL(schema_store_map_.init(TENANT_MAP_BUCKET_NUM))) {
-      LOG_WARN("fail to init schema store map", K(ret));
-    } else if (OB_FAIL(init_multi_version_schema_struct(OB_SYS_TENANT_ID))) {
+    if (OB_FAIL(init_multi_version_schema_struct())) {
       LOG_WARN("fail to init multi version schema struct", K(ret));
     } else if (OB_FAIL(init_sys_tenant_user_schema())) {
       LOG_WARN("fail to init schema cache", K(ret));
@@ -1656,19 +1582,19 @@ int ObMultiVersionSchemaService::init_sys_tenant_user_schema()
   SMART_VAR(ObSysVariableSchema, sys_variable) {
     HEAP_VAR(ObUserInfo, sys_user) {
 
-      sys_tenant.set_tenant_id(OB_SYS_TENANT_ID);
+      
       sys_tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-      sys_user.set_tenant_id(OB_SYS_TENANT_ID);
+      
       sys_user.set_user_id(OB_SYS_USER_ID);
       sys_user.set_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT | OB_PRIV_BOOTSTRAP);
       sys_user.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
-      sys_variable.set_tenant_id(OB_SYS_TENANT_ID);
+      
       sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
       sys_variable.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
 
-      if (OB_FAIL(sys_variable.load_default_system_variable(true))) {
+      if (OB_FAIL(sys_variable.load_default_system_variable())) {
         LOG_WARN("load sys tenant default system variable failed", K(ret));
       } else if (OB_FAIL(sys_tenant.set_tenant_name(OB_SYS_TENANT_NAME))) {
         LOG_WARN("Set sys tenant name error", K(ret));
@@ -1677,20 +1603,17 @@ int ObMultiVersionSchemaService::init_sys_tenant_user_schema()
       } else if (OB_FAIL(sys_user.set_host(OB_SYS_HOST_NAME))){
         LOG_WARN("Set host name error", K(ret));
       } else if (OB_FAIL(schema_cache_.put_schema(TENANT_SCHEMA,
-                                                  OB_SYS_TENANT_ID,
-                                                  sys_tenant.get_tenant_id(),
+                                                  1UL,
                                                   sys_tenant.get_schema_version(),
                                                   sys_tenant))) {
         LOG_WARN("put schema failed", K(ret));
       } else if (OB_FAIL(schema_cache_.put_schema(USER_SCHEMA,
-                                                  OB_SYS_TENANT_ID,
                                                   sys_user.get_user_id(),
                                                   sys_user.get_schema_version(),
                                                   sys_user))) {
         LOG_WARN("put schema failed", K(ret));
       } else if (OB_FAIL(schema_cache_.put_schema(SYS_VARIABLE_SCHEMA,
-                                                  OB_SYS_TENANT_ID,
-                                                  sys_variable.get_tenant_id(),
+                                                  1UL,
                                                   sys_variable.get_schema_version(),
                                                   sys_variable))) {
         LOG_WARN("put schema failed", K(ret));
@@ -1701,9 +1624,7 @@ int ObMultiVersionSchemaService::init_sys_tenant_user_schema()
   return ret;
 }
 
-int ObMultiVersionSchemaService::broadcast_tenant_schema(
-    const uint64_t tenant_id,
-    const common::ObIArray<share::schema::ObTableSchema> &table_schemas)
+int ObMultiVersionSchemaService::broadcast_tenant_schema(const common::ObIArray<share::schema::ObTableSchema> &table_schemas)
 {
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(schema_refresh_mutex_);
@@ -1712,14 +1633,13 @@ int ObMultiVersionSchemaService::broadcast_tenant_schema(
       continue;
     } else if (OB_FAIL(schema_cache_.put_schema(
                 TABLE_SCHEMA,
-                tenant_id,
                 table_schema->get_table_id(),
                 table_schema->get_schema_version(),
                 *table_schema))) {
       LOG_WARN("put sys schema to schema cache failed",
-               KR(ret), K(tenant_id), KPC(table_schema));
+               KR(ret), KPC(table_schema));
     } else {
-      LOG_TRACE("add sys table schema", KR(ret), K(tenant_id), KPC(table_schema));
+      LOG_TRACE("add sys table schema", KR(ret), KPC(table_schema));
     }
   }
   auto attr = SET_USE_500("BroFullSchema", ObCtxIds::SCHEMA_SERVICE);
@@ -1730,21 +1650,19 @@ int ObMultiVersionSchemaService::broadcast_tenant_schema(
   ObSchemaMgr *schema_mgr_for_cache = NULL;
   const bool refresh_full_schema = true;
   if (FAILEDx(convert_to_simple_schema(allocator, table_schemas, simple_table_schemas))) {
-    LOG_WARN("failed to convert", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_mgr_for_cache_map_.get_refactored(
-             tenant_id, schema_mgr_for_cache))) {
-    LOG_WARN("fail to get schema mgr for cache", KR(ret), K(tenant_id));
+    LOG_WARN("failed to convert", KR(ret));
+  } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", KR(ret), K(tenant_id));
+    LOG_WARN("schema_mgr is null", KR(ret));
   } else if (OB_FAIL(schema_mgr_for_cache->add_tables(simple_table_schemas, refresh_full_schema))) {
-    LOG_WARN("failed to add tables", KR(ret), K(tenant_id));
+    LOG_WARN("failed to add tables", KR(ret));
   } else if (FALSE_IT(schema_mgr_for_cache->set_schema_version(
              OB_CORE_SCHEMA_VERSION + 1))) {
-  } else if (OB_FAIL(add_schema(tenant_id, false))) {
-    LOG_WARN("fail to publish initial schema", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(add_schema(false))) {
+    LOG_WARN("fail to publish initial schema", KR(ret));
   } else {
-    LOG_INFO("broadcast tenant schema", KR(ret), K(tenant_id));
+    LOG_INFO("broadcast tenant schema", KR(ret));
   }
   return ret;
 }
@@ -1763,7 +1681,6 @@ void ObMultiVersionSchemaService::clear_bootstrap_schema_cache()
 // 3) table_schema_version <= local refreshed schema_version: Indicates that the local schema is new enough,
 //  take the latest version of the local guard for judgment
 int ObMultiVersionSchemaService::check_table_exist(
-  const uint64_t tenant_id,
   const uint64_t database_id,
   const ObString &table_name,
   const bool is_index,
@@ -1780,19 +1697,18 @@ int ObMultiVersionSchemaService::check_table_exist(
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     int64_t local_version = OB_INVALID_VERSION;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited, ", K(ret), K(database_id), K(table_name));
-    } else if (table_schema_version >= 0 && OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, local_version))) {
-      LOG_WARN("fail to get local schema version", K(ret), K(tenant_id), K(table_name), K(table_schema_version));
+    } else if (table_schema_version >= 0 && OB_FAIL(get_tenant_refreshed_schema_version(local_version))) {
+      LOG_WARN("fail to get local schema version", K(ret), K(table_name), K(table_schema_version));
     } else if (table_schema_version > local_version) {
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("local schema is old, try again", K(ret), K(tenant_id), K(table_name), K(table_schema_version));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+      LOG_WARN("local schema is old, try again", K(ret), K(table_name), K(table_schema_version));
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret), K(database_id), K(table_name));
     } else if (OB_SUCCESS
-        != (ret = schema_guard.check_table_exist(tenant_id,
-            database_id,
+        != (ret = schema_guard.check_table_exist(database_id,
             table_name,
             is_index,
             ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
@@ -1811,7 +1727,6 @@ int ObMultiVersionSchemaService::check_table_exist(
 // 3) table_schema_version <= local refreshed schema_version: Indicates that the local schema is new enough,
 //  take the latest version of the local guard for judgment
 int ObMultiVersionSchemaService::check_table_exist(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const int64_t table_schema_version,
     bool &exist)
@@ -1826,26 +1741,24 @@ int ObMultiVersionSchemaService::check_table_exist(
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
     int64_t local_version = OB_INVALID_VERSION;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited,", K(ret), K(table_id));
-    } else if (table_schema_version >= 0 && OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, local_version))) {
-      LOG_WARN("fail to get local schema version", K(ret), K(tenant_id), K(table_id), K(table_schema_version));
+    } else if (table_schema_version >= 0 && OB_FAIL(get_tenant_refreshed_schema_version(local_version))) {
+      LOG_WARN("fail to get local schema version", K(ret), K(table_id), K(table_schema_version));
     } else if (table_schema_version > local_version) {
       ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("local schema is old, try again", K(ret), K(tenant_id), K(table_id), K(table_schema_version));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+      LOG_WARN("local schema is old, try again", K(ret), K(table_id), K(table_schema_version));
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret), K(table_id));
-    } else if (OB_FAIL(schema_guard.check_table_exist(tenant_id, table_id, exist))) {
-      LOG_WARN("failed to check table exist,", K(tenant_id), K(table_id), K(ret));
+    } else if (OB_FAIL(schema_guard.check_table_exist(table_id, exist))) {
+      LOG_WARN("failed to check table exist,", K(table_id), K(ret));
     }
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::check_database_exist(
-  const uint64_t tenant_id,
-  const ObString &database_name,
+int ObMultiVersionSchemaService::check_database_exist(const ObString &database_name,
   uint64_t &database_id,
   bool &exist)
 {
@@ -1858,19 +1771,17 @@ int ObMultiVersionSchemaService::check_database_exist(
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited, ", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_database_exist(tenant_id,
-                                                         database_name,
+    } else if (OB_FAIL(schema_guard.check_database_exist(database_name,
                                                          exist,
                                                          &database_id))) {
       ObCStringHelper helper;
       LOG_WARN(
           "failed to check database exist, ",
-          K(tenant_id),
           "tablegroup_name",
           helper.convert(database_name),
           K(ret));
@@ -1879,9 +1790,7 @@ int ObMultiVersionSchemaService::check_database_exist(
   return ret;
 }
 
-int ObMultiVersionSchemaService::check_tablegroup_exist(
-  const uint64_t tenant_id,
-  const ObString &tablegroup_name,
+int ObMultiVersionSchemaService::check_tablegroup_exist(const ObString &tablegroup_name,
   uint64_t &tablegroup_id,
   bool &exist)
 {
@@ -1894,19 +1803,17 @@ int ObMultiVersionSchemaService::check_tablegroup_exist(
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited,", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_tablegroup_exist(tenant_id,
-                                                           tablegroup_name,
+    } else if (OB_FAIL(schema_guard.check_tablegroup_exist(tablegroup_name,
                                                            exist,
                                                            &tablegroup_id))) {
       ObCStringHelper helper;
       LOG_WARN(
           "failed to check tablegroup exist, ",
-          K(tenant_id),
           "tablegroup_name",
           helper.convert(tablegroup_name),
           K(ret));
@@ -1915,9 +1822,7 @@ int ObMultiVersionSchemaService::check_tablegroup_exist(
   return ret;
 }
 
-int ObMultiVersionSchemaService::check_if_tenant_has_been_dropped(
-    const uint64_t tenant_id,
-    bool &is_dropped)
+int ObMultiVersionSchemaService::check_if_tenant_has_been_dropped(bool &is_dropped)
 {
   int ret = OB_SUCCESS;
   is_dropped = false;
@@ -1928,22 +1833,20 @@ int ObMultiVersionSchemaService::check_if_tenant_has_been_dropped(
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(OB_SYS_TENANT_ID)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("local schema not inited,", K(ret), K(tenant_id));
-    } else if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-      LOG_WARN("get schema guard failed ", K(ret), K(tenant_id));
-    } else if (OB_FAIL(schema_guard.check_if_tenant_has_been_dropped(tenant_id, is_dropped))) {
-      LOG_WARN("failed to check if tenant has been dropped", K(ret), K(tenant_id));
+      LOG_WARN("local schema not inited,", K(ret));
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get schema guard failed ", K(ret));
+    } else if (OB_FAIL(schema_guard.check_if_tenant_has_been_dropped(is_dropped))) {
+      LOG_WARN("failed to check if tenant has been dropped", K(ret));
     }
   }
   return ret;
 }
 
 
-int ObMultiVersionSchemaService::check_if_tenant_schema_has_been_refreshed(
-    const uint64_t tenant_id,
-    bool &is_refreshed)
+int ObMultiVersionSchemaService::check_if_tenant_schema_has_been_refreshed(bool &is_refreshed)
 {
   int ret = OB_SUCCESS;
   is_refreshed = false;
@@ -1953,14 +1856,16 @@ int ObMultiVersionSchemaService::check_if_tenant_schema_has_been_refreshed(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(refresh_full_schema_map_.get_refactored(OB_SYS_TENANT_ID, sys_schema_not_full))) {
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_UNLIKELY(!refresh_full_schema_present_)) {
+    ret = OB_HASH_NOT_EXIST;
+  } else if (FALSE_IT(sys_schema_not_full = refresh_full_schema_)) {
   } else if (sys_schema_not_full) {
     // observer may be not start service
     is_refreshed = false;
-  } else if (OB_FAIL(refresh_full_schema_map_.get_refactored(tenant_id, tenant_schema_not_full))) {
+  } else if (FALSE_IT(tenant_schema_not_full = refresh_full_schema_)) {
   } else if (tenant_schema_not_full) {
     is_refreshed = false;
   } else {
@@ -1968,7 +1873,7 @@ int ObMultiVersionSchemaService::check_if_tenant_schema_has_been_refreshed(
     is_refreshed = true;
   }
 
-  LOG_TRACE("check if tenant schema has been refreshed", KR(ret), K(sys_schema_not_full), K(tenant_schema_not_full), K(is_refreshed), K(tenant_id));
+  LOG_TRACE("check if tenant schema has been refreshed", KR(ret), K(sys_schema_not_full), K(tenant_schema_not_full), K(is_refreshed));
   return ret;
 }
 
@@ -1978,7 +1883,7 @@ int ObMultiVersionSchemaService::init_original_schema()
   int ret = OB_SUCCESS;
   SpinRLockGuard guard(schema_manager_rwlock_);
   const bool force_add = true;
-  if (OB_FAIL(add_schema(OB_SYS_TENANT_ID, force_add))) {
+  if (OB_FAIL(add_schema(force_add))) {
     LOG_WARN("fail to add schema_manager_for_cache into snapshot", K(ret));
   } else {
     init_ = true;
@@ -1988,7 +1893,6 @@ int ObMultiVersionSchemaService::init_original_schema()
 
 // schema version must incremental
 int ObMultiVersionSchemaService::add_schema(
-    const uint64_t tenant_id,
     const bool force_add)
 {
   int ret = OB_SUCCESS;
@@ -2004,42 +1908,40 @@ int ObMultiVersionSchemaService::add_schema(
   if (!force_add && !check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
+    LOG_WARN("invalid argument", K(ret));
+  } else if (OB_ISNULL(schema_store = schema_store_)) {
     ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("fail to get schema_store", K(ret));
-  } else if (OB_FAIL(schema_mgr_for_cache_map_.get_refactored(tenant_id, schema_mgr_for_cache))) {
-    LOG_WARN("fail to get schema mgr for cache", K(ret), K(ret));
+  } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", K(ret), K(tenant_id));
-  } else if (OB_FAIL(mem_mgr_map_.get_refactored(tenant_id, mem_mgr))) {
-    LOG_WARN("fail to get mem mgr", K(ret), K(tenant_id));
+    LOG_WARN("schema_mgr is null", K(ret));
+  } else if (FALSE_IT(mem_mgr = mem_mgr_)) {
   } else if (OB_ISNULL(mem_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem_mgr is null", K(ret), K(tenant_id));
+    LOG_WARN("mem_mgr is null", K(ret));
   } else {
     schema_mgr_cache = &schema_store->schema_mgr_cache_;
     new_schema_version = schema_mgr_for_cache->get_schema_version();
     refreshed_schema_version = schema_store->get_refreshed_version();
     if (OB_ISNULL(schema_mgr_cache)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_mgr_cache is null", K(ret), K(tenant_id));
+      LOG_WARN("schema_mgr_cache is null", K(ret));
     } else if (refreshed_schema_version > new_schema_version) {
       LOG_WARN("add schema is old",
                K(refreshed_schema_version),
                K(new_schema_version),
                K(received_broadcast_version));
     }
-    FLOG_INFO("add schema", K(tenant_id), K(refreshed_schema_version), K(new_schema_version));
+    FLOG_INFO("add schema", K(refreshed_schema_version), K(new_schema_version));
 
     bool is_exist = false;
     if (FAILEDx(schema_mgr_cache->check_schema_mgr_exist(new_schema_version, is_exist))) {
-      LOG_WARN("fail to check schema_mgr exist", K(ret), K(tenant_id), K(new_schema_version));
+      LOG_WARN("fail to check schema_mgr exist", K(ret), K(new_schema_version));
     } else if (is_exist) {
-      LOG_INFO("schema mgr already exist, just skip", K(ret), K(tenant_id), K(new_schema_version));
+      LOG_INFO("schema mgr already exist, just skip", K(ret), K(new_schema_version));
     } else if (OB_FAIL(alloc_and_put_schema_mgr_(*mem_mgr, *schema_mgr_for_cache, *schema_mgr_cache))) {
       LOG_WARN("fail to alloc and put schema mgr", KR(ret));
     }
@@ -2048,7 +1950,7 @@ int ObMultiVersionSchemaService::add_schema(
       bool can_switch = false;
       int64_t max_schema_slot_num = OB_MAX_VERSION_COUNT;
       if (!ObSchemaService::g_liboblog_mode_) {
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
         if (tenant_config.is_valid()) {
           max_schema_slot_num = tenant_config->_max_schema_slot_num;
         }
@@ -2061,7 +1963,7 @@ int ObMultiVersionSchemaService::add_schema(
       } else if (can_switch) {
         // Switch allocator && rewrite schema_mgr_for_cache_
         if (OB_FAIL(switch_allocator_(*mem_mgr, schema_mgr_for_cache))) {
-          LOG_WARN("fail to alloc schema mgr after switch allocator", KR(ret), K(tenant_id), K(new_schema_version));
+          LOG_WARN("fail to alloc schema mgr after switch allocator", KR(ret), K(new_schema_version));
         }
       }
     }
@@ -2072,14 +1974,14 @@ int ObMultiVersionSchemaService::add_schema(
       // The proxy will use the variable ob_latest_schema_version to ensure that
       // multiple observers are connected to the same schema version.
       schema_store->update_refreshed_version(new_schema_version);
-      FLOG_INFO("[REFRESH_SCHEMA] change refreshed_schema_version with new mode", K(tenant_id), K(new_schema_version));
+      FLOG_INFO("[REFRESH_SCHEMA] change refreshed_schema_version with new mode", K(new_schema_version));
       // To reduce allocator's memory more frequently
-      if (OB_FAIL(try_gc_allocator_when_add_schema_(tenant_id, mem_mgr, schema_mgr_cache))) {
-        LOG_WARN("fail to gc current allocator when add schema", KR(ret), K(tenant_id), K(new_schema_version));
+      if (OB_FAIL(try_gc_allocator_when_add_schema_(mem_mgr, schema_mgr_cache))) {
+        LOG_WARN("fail to gc current allocator when add schema", KR(ret), K(new_schema_version));
       }
     }
     int64_t end_time = ObTimeUtility::current_time();
-    LOG_INFO("finish add schema", KR(ret), K(tenant_id), K(new_schema_version), "cost_ts", end_time - start_time);
+    LOG_INFO("finish add schema", KR(ret), K(new_schema_version), "cost_ts", end_time - start_time);
   }
   return ret;
 }
@@ -2095,14 +1997,14 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
   ObSchemaMgr *new_mgr = NULL;
   bool alloc_for_liboblog = false;
   ObSchemaMgr *eli_schema_mgr = NULL;
-  const uint64_t tenant_id = latest_schema_mgr.get_tenant_id();
+  
   const int64_t schema_version = latest_schema_mgr.get_schema_version();
   if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr, alloc_for_liboblog))) {
     LOG_WARN("fail to alloc mem", KR(ret));
   } else {
     if (OB_ISNULL(new_mgr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new_mgr is NULL", KR(ret), K(tenant_id), K(schema_version));
+      LOG_WARN("new_mgr is NULL", KR(ret), K(schema_version));
     } else if (OB_FAIL(new_mgr->init())) {
       LOG_WARN("init schema mgr falied", KR(ret));
     } else if (OB_UNLIKELY(ERRSIM_ASSIGN_NEW_MGR)) {
@@ -2119,7 +2021,7 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
       LOG_INFO("put schema mgr succeed",
                 "schema_version", new_mgr->get_schema_version(),
                 "eliminated_schema_version", NULL != eli_schema_mgr ?
-                  eli_schema_mgr->get_schema_version() : OB_INVALID_VERSION, K(tenant_id));
+                  eli_schema_mgr->get_schema_version() : OB_INVALID_VERSION);
     }
     int tmp_ret = OB_SUCCESS;
     // whatever put success or put failed, we should try to free eli_schema_mgr
@@ -2129,7 +2031,7 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
     }
     // whatever assign/put/free schema mgr failed, new schema mgr will be useless, so free it
     if (OB_FAIL(ret)) {
-      LOG_WARN("handle new schema mgr failed", KR(ret), K(schema_version), K(tenant_id));
+      LOG_WARN("handle new schema mgr failed", KR(ret), K(schema_version));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(mem_mgr.free_schema_mgr(new_mgr))) {
         LOG_ERROR("fail to free new_mgr", KR(tmp_ret));
@@ -2154,21 +2056,20 @@ int ObMultiVersionSchemaService::switch_allocator_(
   } else if (OB_FAIL(mem_mgr.switch_allocator())) {
     LOG_WARN("switch allocator falied", KR(ret));
   } else {
-    bool overwrite = true;
     bool need_switch_back = true;
     bool alloc_for_liboblog = false;
     ObSchemaMgr *new_mgr = NULL;
     ObSchemaMgr *old_mgr = latest_schema_mgr;
-    const uint64_t tenant_id = latest_schema_mgr->get_tenant_id();
+    
     const int64_t schema_version = latest_schema_mgr->get_schema_version();
-    LOG_INFO("try to switch allocator", KR(ret), K(tenant_id), K(schema_version));
+    LOG_INFO("try to switch allocator", KR(ret), K(schema_version));
 
     if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr, alloc_for_liboblog))) {
       LOG_WARN("fail to alloc mem", KR(ret));
     } else {
       if (OB_ISNULL(new_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new mgr is NULL", KR(ret), K(tenant_id), K(schema_version));
+        LOG_WARN("new mgr is NULL", KR(ret), K(schema_version));
       } else if (OB_FAIL(new_mgr->init())) {
         LOG_WARN("init new schema mgr falied", K(ret));
       } else if (OB_FAIL(new_mgr->deep_copy(*old_mgr))) {
@@ -2176,9 +2077,14 @@ int ObMultiVersionSchemaService::switch_allocator_(
       } else if (OB_UNLIKELY(ERRSIM_SET_REFACTOR)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("turn on error injection ERRSIM_SET_REFACTOR", KR(ret));
-      } else if (OB_FAIL(schema_mgr_for_cache_map_.set_refactored(tenant_id, new_mgr, overwrite))) {
-        LOG_WARN("fail to set schema mgr for cache", K(ret));
       } else {
+        {
+          // serialize the swap against get_tenant_schema_version's locked load+deref (restores
+          // the collapsed 1-entry map's bucket lock); free_schema_mgr(old) stays outside the
+          // guard, exactly as the original freed after set_refactored.
+          SpinWLockGuard cache_guard(schema_mgr_for_cache_rwlock_);
+          ATOMIC_STORE(&schema_mgr_for_cache_, new_mgr);
+        }
         // handle new schema mgr success, no need to switch back allocator
         need_switch_back = false;
         latest_schema_mgr = new_mgr;
@@ -2195,7 +2101,7 @@ int ObMultiVersionSchemaService::switch_allocator_(
     // 1.alloc new schema mgr failed
     // 2.handle new schema failed, like deep copy
     if (need_switch_back) {
-      LOG_WARN("after switch allocator, handle schema mgr encounters something wrong", KR(ret), K(tenant_id), K(schema_version));
+      LOG_WARN("after switch allocator, handle schema mgr encounters something wrong", KR(ret), K(schema_version));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(mem_mgr.switch_back_allocator())) {
         LOG_ERROR("switch back allocator falied", KR(tmp_ret));
@@ -2204,14 +2110,12 @@ int ObMultiVersionSchemaService::switch_allocator_(
       }
     }
     int64_t end_time = ObTimeUtility::current_time();
-    LOG_INFO("finish switch allocator", KR(ret), K(tenant_id), K(schema_version), "cost_ts", end_time - start_time);
+    LOG_INFO("finish switch allocator", KR(ret), K(schema_version), "cost_ts", end_time - start_time);
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::async_refresh_schema(
-    const uint64_t tenant_id,
-    const int64_t schema_version)
+int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_version)
 {
   ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::WAIT_REFRESH_SCHEMA);
   int ret = OB_SUCCESS;
@@ -2220,14 +2124,10 @@ int ObMultiVersionSchemaService::async_refresh_schema(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-             || OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(schema_version));
   } else if (OB_FAIL(get_tenant_refreshed_schema_version(
-                     tenant_id, local_schema_version))) {
+                     local_schema_version))) {
     LOG_WARN("fail to get tenant refreshed schema version",
-             KR(ret), K(tenant_id), K(schema_version));
+             KR(ret), K(schema_version));
   } else if (local_schema_version >= schema_version
              && (!check_formal || ObSchemaService::is_formal_version(local_schema_version))) {
     // do nothing
@@ -2242,9 +2142,9 @@ int ObMultiVersionSchemaService::async_refresh_schema(
     const int64_t SUBMIT_TASK_FREQUENCE = 2 * 1000 * 1000L / RETRY_IDLE_TIME; // each 2s
     while (OB_SUCC(ret)) {
       if (OB_FAIL(get_tenant_refreshed_schema_version(
-                         tenant_id, local_schema_version))) {
+                         local_schema_version))) {
         LOG_WARN("fail to get tenant refreshed schema version",
-                 KR(ret), K(tenant_id), K(schema_version));
+                 KR(ret), K(schema_version));
       } else if (local_schema_version >= schema_version
                  && (!check_formal || ObSchemaService::is_formal_version(local_schema_version))) {
         // success
@@ -2252,32 +2152,25 @@ int ObMultiVersionSchemaService::async_refresh_schema(
       } else if (THIS_WORKER.is_timeout()
                 || (!THIS_WORKER.is_timeout_ts_valid() && retry_cnt >= MAX_RETRY_CNT)) {
         ret = OB_TIMEOUT;
-        LOG_WARN("already timeout", KR(ret), K(tenant_id), K(schema_version));
+        LOG_WARN("already timeout", KR(ret), K(schema_version));
       } else {
         if (0 == retry_cnt % SUBMIT_TASK_FREQUENCE) {
           {
-            bool is_dropped = false;
             ObSchemaGetterGuard guard;
-            if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+            if (OB_FAIL(get_tenant_schema_guard(guard))) {
               LOG_WARN("fail to get schema guard", KR(ret));
-            } else if (OB_FAIL(guard.check_if_tenant_has_been_dropped(tenant_id, is_dropped))) {
-              LOG_WARN("fail to check if tenant has been dropped", KR(ret), K(tenant_id));
-            } else if (is_dropped) {
-              ret = OB_TENANT_HAS_BEEN_DROPPED;
-              LOG_WARN("tenant has been dropped", KR(ret), K(tenant_id));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(GCTX.ob_service_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("observice is null", K(ret));
-          } else if (OB_FAIL(GCTX.ob_service_->submit_async_refresh_schema_task(
-                             tenant_id, schema_version))) {
+          } else if (OB_FAIL(GCTX.ob_service_->submit_async_refresh_schema_task(schema_version))) {
             if (OB_EAGAIN == ret || OB_SIZE_OVERFLOW == ret) {
               ret = OB_SUCCESS;
             } else {
               LOG_WARN("fail to submit async refresh schema task",
-                       KR(ret), K(tenant_id), K(schema_version));
+                       KR(ret), K(schema_version));
             }
           }
         }
@@ -2299,7 +2192,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(
 
 
 /*
- * 1. If tenant_id is OB_INVALID_TENANT_ID, it means refresh the schema of all tenants,
+ * 1. If the req is OB_INVALID_TENANT_ID, it means refresh the schema of all tenants,
  *  otherwise only the schema of the corresponding tenant will be refreshed.
  * 2. The new schema_version broadcast mechanism does not support the read-only zone scheme.
  * 3. When refreshing the schema, you must first obtain the schema_version version
@@ -2310,11 +2203,10 @@ int ObMultiVersionSchemaService::async_refresh_schema(
  *    the max_schema_version of the corresponding tenant from __all_core_table.
  * 4. If a tenant fails to update to the specified version, an error will be reported and the external logic will try again
  */
-int ObMultiVersionSchemaService::refresh_and_add_schema(const ObIArray<uint64_t> &tenant_ids,
-                                                        bool check_bootstrap/* = false*/,
+int ObMultiVersionSchemaService::refresh_and_add_schema(bool check_bootstrap/* = false*/,
                                                         common::ObIArray<share::schema::ObTableSchema> *table_schemas/* = nullptr*/)
 {
-  FLOG_INFO("[REFRESH_SCHEMA] start to refresh and add schema", K(tenant_ids));
+  FLOG_INFO("[REFRESH_SCHEMA] start to refresh and add schema");
   const int64_t start = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
@@ -2324,16 +2216,9 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(const ObIArray<uint64_t>
     lib::ObMutexGuard guard(schema_refresh_mutex_);
     auto func = [&]() {
       ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-      // This is just to reduce SQL calls, the error code can be ignored
-      int tmp_ret = OB_SUCCESS;
+      // List is pinned to [sys tenant]; sys tenant is never a restore tenant,
+      // which matches check_restore_tenant_exist([sys]) == false.
       bool restore_tenant_exist = false;
-      if (ObSchemaService::g_liboblog_mode_) {
-        // Avoid using schema_status_proxy for agentserver and liboblog
-        restore_tenant_exist = false;
-      } else if (OB_SUCCESS != (tmp_ret = check_restore_tenant_exist(tenant_ids, restore_tenant_exist))) {
-        LOG_WARN("fail to check restore tenant exist", K(ret), K(tmp_ret), K(tenant_ids));
-        restore_tenant_exist = true;
-      }
       if (restore_tenant_exist) {
         if (OB_ISNULL(schema_status_proxy)) {
           ret = OB_ERR_UNEXPECTED;
@@ -2349,7 +2234,7 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(const ObIArray<uint64_t>
         // and it needs to be judged in the schema_refresh_mutex_lock
         // 
         int64_t baseline_schema_version = OB_INVALID_VERSION;
-        if (OB_FAIL(get_baseline_schema_version(OB_SYS_TENANT_ID, true/*auto_update*/, baseline_schema_version))) {
+        if (OB_FAIL(get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
           LOG_WARN("fail to get baseline_schema_version", K(ret));
         } else if (baseline_schema_version < 0) {
           // still in bootstrap phase, refresh schema is not allowed
@@ -2359,11 +2244,11 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(const ObIArray<uint64_t>
       }
 
       // Ensure that the memory on the stack requested during the refresh schema process also uses the default 500 tenant
-      ObArenaAllocator allocator(ObModIds::OB_MODULE_PAGE_ALLOCATOR, OB_MALLOC_BIG_BLOCK_SIZE, OB_SERVER_TENANT_ID);
+      ObArenaAllocator allocator(ObModIds::OB_MODULE_PAGE_ALLOCATOR, OB_MALLOC_BIG_BLOCK_SIZE);
       ObSchemaStackAllocatorGuard guard(&allocator);
 
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(refresh_tenant_schema(OB_SYS_TENANT_ID, table_schemas))) {
+      } else if (OB_FAIL(refresh_tenant_schema(table_schemas))) {
         LOG_WARN("fail to refresh tenant schema", K(ret));
       }
     };
@@ -2376,7 +2261,7 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(const ObIArray<uint64_t>
       func();
     }
   }
-  FLOG_INFO("[REFRESH_SCHEMA] end refresh and add schema", KR(ret), K(tenant_ids),
+  FLOG_INFO("[REFRESH_SCHEMA] end refresh and add schema", KR(ret),
             "cost", ObTimeUtility::current_time() - start);
   return ret;
 }
@@ -2390,22 +2275,21 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(const ObIArray<uint64_t>
 //  Return the schema_version corresponding to the largest transaction boundary
 int ObMultiVersionSchemaService::get_schema_version_by_timestamp(
     const ObRefreshSchemaStatus &schema_status,
-    const uint64_t tenant_id,
     int64_t timestamp,
     int64_t &schema_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_TENANT_ID == tenant_id || timestamp <= 0) {
+  if (false || timestamp <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tenant_id), K(timestamp));
+    LOG_WARN("invalid arg", K(ret), K(timestamp));
   } else if (OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy or schema_service is null", K(ret), KP(sql_proxy_), KP(schema_service_));
   } else if (OB_FAIL(schema_service_->get_schema_version_by_timestamp(
-                     *sql_proxy_, schema_status, tenant_id, timestamp, schema_version))) {
-    LOG_WARN("fail to get schema_version by timestamp", K(ret), K(tenant_id), K(timestamp));
+                     *sql_proxy_, schema_status, timestamp, schema_version))) {
+    LOG_WARN("fail to get schema_version by timestamp", K(ret), K(timestamp));
   }
-  LOG_INFO("[REFRESH_SCHEMA] get_schema_version_by_timestamp", K(ret), K(tenant_id), K(timestamp), K(schema_version));
+  LOG_INFO("[REFRESH_SCHEMA] get_schema_version_by_timestamp", K(ret), K(timestamp), K(schema_version));
   return ret;
 }
 
@@ -2428,18 +2312,16 @@ int ObMultiVersionSchemaService::get_schema_version_by_timestamp(
 // In summary, this interface is only used in the 3.2) scenario, and the rest of the scenarios are handled by liboblog.
 
 // Only for liboblog, it will automatically switch the working mode of the schema module (old mode -> new mode)
-// tenant_id is OB_INVALID_TENANT_ID, which means refreshing the schema of all tenants
+// tenant is OB_INVALID_TENANT_ID, which means refreshing the schema of all tenants
 
 // refresh schema by tenant
 // 1. System tenants strengthen the consistency of reading and brushing schema
 // 2. user tenants of the primary cluster strengthened to read and refresh schema consistently
 // 3. user tenants of the standalone cluster are weakly consistent in reading and refresh schema,
 //  and they need to obtain the weakly consistent read version number and the visible schema version
-int ObMultiVersionSchemaService::refresh_tenant_schema(
-    const uint64_t tenant_id,
-    common::ObIArray<share::schema::ObTableSchema> *table_schemas)
+int ObMultiVersionSchemaService::refresh_tenant_schema(common::ObIArray<share::schema::ObTableSchema> *table_schemas)
 {
-  FLOG_INFO("[REFRESH_SCHEMA] start to refresh and add schema by tenant", K(tenant_id));
+  FLOG_INFO("[REFRESH_SCHEMA] start to refresh and add schema by tenant");
   const int64_t start = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
   bool refresh_full_schema = false;
@@ -2447,15 +2329,15 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
+    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is null", KR(ret));
   } else if (!ObSchemaService::g_liboblog_mode_
-             && OB_FAIL(check_tenant_is_restore(NULL, tenant_id, is_restore))) {
-    LOG_WARN("fail to check restore tenant exist", KR(ret), K(tenant_id));
+             && OB_FAIL(check_tenant_is_restore(NULL, is_restore))) {
+    LOG_WARN("fail to check restore tenant exist", KR(ret));
   } else {
     int64_t new_received_schema_version = OB_INVALID_VERSION;
     ObRefreshSchemaStatus refresh_schema_status;
@@ -2463,12 +2345,11 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(
 
     // read refresh_schema_status from inner table
     if (!is_restore
-         || is_sys_tenant(tenant_id)
-         || is_meta_tenant(tenant_id)) {
+         || true) {
       // 1. System tenants strengthen the consistency of reading and refresh schema
       // 2. user tenants of the primary cluster strengthened to read and refresh schema consistently
       refresh_schema_status.reset();
-      refresh_schema_status.tenant_id_ = tenant_id;
+      
       refresh_schema_status.snapshot_timestamp_ = OB_INVALID_TIMESTAMP;
       refresh_schema_status.readable_schema_version_ = OB_INVALID_VERSION;
     } else {
@@ -2478,30 +2359,29 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(
       if (OB_ISNULL(schema_status_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_status_proxy is null", KR(ret));
-      } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(tenant_id, refresh_schema_status))) {
-        LOG_WARN("fail to get refresh schema status", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(refresh_schema_status))) {
+        LOG_WARN("fail to get refresh schema status", KR(ret));
       } else if (refresh_schema_status.snapshot_timestamp_ == 0) {
         // The standalone cluster RS has not yet pushed the tenant's schema version (the standalone cluster RS
         // needs to change the internal table first, and then change the memory value),
         // and skip the tenant schema refresh at this time
         ret = OB_SCHEMA_EAGAIN;
-        LOG_INFO("[REFRESH_SCHEMA] tenant schema is not ready, just skip", KR(ret), K(tenant_id), K(refresh_schema_status));
+        LOG_INFO("[REFRESH_SCHEMA] tenant schema is not ready, just skip", KR(ret), K(refresh_schema_status));
       }
     }
 
     if (OB_SUCC(ret)) {
       bool need_refresh = true;
       int64_t baseline_schema_version = OB_INVALID_VERSION;
-      if (OB_FAIL(get_baseline_schema_version(tenant_id, true/*auto_update*/, baseline_schema_version))) {
-        LOG_WARN("fail to get baseline schema version", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(refresh_full_schema_map_.get_refactored(tenant_id, refresh_full_schema))) {
-        LOG_WARN("refresh full schema", KR(ret), K(tenant_id));
+      if (OB_FAIL(get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
+        LOG_WARN("fail to get baseline schema version", KR(ret));
+      } else if (FALSE_IT(refresh_full_schema = refresh_full_schema_)) {
       } else if (!refresh_full_schema) {
         if (OB_FAIL(get_schema_version_in_inner_table(
             sql_client, refresh_schema_status, new_received_schema_version))) {
           LOG_WARN("fail to get tenant schema version", KR(ret), K(refresh_schema_status));
         } else {
-          ObSchemaStore* schema_store = schema_store_map_.get(tenant_id);
+          ObSchemaStore* schema_store = schema_store_;
           if (NULL == schema_store) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("fail to get schema store", KR(ret));
@@ -2511,7 +2391,7 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(
             if (schema_store->get_refreshed_version() >= new_received_schema_version) {
               need_refresh = false;
               LOG_TRACE("[REFRESH_SCHEMA] local refreshed schema version is greater than received schema version, just skip",
-                        KR(ret), K(tenant_id), K(schema_store->received_version_), K(schema_store->refreshed_version_));
+                        KR(ret), K(schema_store->received_version_), K(schema_store->refreshed_version_));
             }
           }
         }
@@ -2524,30 +2404,27 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(
       }
       int tmp_ret = OB_SUCCESS;
       if (OB_INVALID_SCHEMA_VERSION != new_received_schema_version) {
-        if (OB_SUCCESS != (tmp_ret = set_tenant_received_broadcast_version(tenant_id, new_received_schema_version))) {
-          LOG_WARN("fail to set tenant received schema version", KR(tmp_ret), K(tenant_id), K(new_received_schema_version));
+        if (OB_SUCCESS != (tmp_ret = set_tenant_received_broadcast_version(new_received_schema_version))) {
+          LOG_WARN("fail to set tenant received schema version", KR(tmp_ret), K(new_received_schema_version));
           ret = OB_SUCC(ret) ? tmp_ret : ret;
         }
       }
     }
   }
-  FLOG_INFO("[REFRESH_SCHEMA] end refresh and add schema by tenant", KR(ret), K(tenant_id),
+  FLOG_INFO("[REFRESH_SCHEMA] end refresh and add schema by tenant", KR(ret),
             "cost", ObTimeUtility::current_time() - start);
   return ret;
 }
 
-int ObMultiVersionSchemaService::publish_schema(const uint64_t tenant_id)
+int ObMultiVersionSchemaService::publish_schema()
 {
   int ret = OB_SUCCESS;
   const bool force_add = false;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(add_schema(tenant_id, force_add))) {
-    LOG_WARN("fail to add schema", K(ret), K(tenant_id));
+  if (OB_FAIL(add_schema(force_add))) {
+    LOG_WARN("fail to add schema", K(ret));
   }
   ObTenantSwitchGuard guard = _make_tenant_switch_guard();
-  if (OB_SUCCESS == guard.switch_to(tenant_id)) {
+  if (OB_SUCCESS == guard.switch_to()) {
     MTL_CTX()->on_schema_publish();
   }
   return ret;
@@ -2555,8 +2432,7 @@ int ObMultiVersionSchemaService::publish_schema(const uint64_t tenant_id)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int ObMultiVersionSchemaService::check_outline_exist_with_name(const uint64_t tenant_id,
-                                                               const uint64_t database_id,
+int ObMultiVersionSchemaService::check_outline_exist_with_name(const uint64_t database_id,
                                                                const common::ObString &outline_name,
                                                                uint64_t &outline_id,
                                                                bool is_format,
@@ -2571,30 +2447,27 @@ int ObMultiVersionSchemaService::check_outline_exist_with_name(const uint64_t te
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited", K(ret));
-    } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || OB_INVALID_ID == database_id
+    } else if (OB_UNLIKELY(OB_INVALID_ID == database_id
                            || outline_name.empty())) {
-      LOG_WARN("invalid arguments", K(tenant_id), K(database_id), K(outline_name), K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+      LOG_WARN("invalid arguments", K(database_id), K(outline_name), K(ret));
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_outline_exist_with_name(
-                tenant_id,
-                database_id,
+    } else if (OB_FAIL(schema_guard.check_outline_exist_with_name(database_id,
                 outline_name,
                 is_format,
                 outline_id,
                 exist))) {
-      LOG_WARN("failed to check outline name exist", K(tenant_id), K(database_id), K(outline_name),
+      LOG_WARN("failed to check outline name exist", K(database_id), K(outline_name),
                K(ret));
     } else {/*do nothing*/}
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::check_outline_exist_with_sql(const uint64_t tenant_id,
-                                                              const uint64_t database_id,
+int ObMultiVersionSchemaService::check_outline_exist_with_sql(const uint64_t database_id,
                                                               const common::ObString &paramlized_sql,
                                                               bool is_format,
                                                               bool &exist)
@@ -2609,26 +2482,23 @@ int ObMultiVersionSchemaService::check_outline_exist_with_sql(const uint64_t ten
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_outline_exist_with_sql(
-                tenant_id,
-                database_id,
+    } else if (OB_FAIL(schema_guard.check_outline_exist_with_sql(database_id,
                 paramlized_sql,
                 is_format,
                 exist))) {
-      LOG_WARN("failed to check outline sql exist", K(tenant_id), K(database_id),
+      LOG_WARN("failed to check outline sql exist", K(database_id),
                K(paramlized_sql), K(ret));
     } else {/*do nothing*/}
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::check_udf_exist(const uint64_t tenant_id,
-                                                 const common::ObString &name,
+int ObMultiVersionSchemaService::check_udf_exist(const common::ObString &name,
                                                  bool &exist,
                                                  uint64_t &udf_id)
 {
@@ -2641,26 +2511,24 @@ int ObMultiVersionSchemaService::check_udf_exist(const uint64_t tenant_id,
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
     } else if (OB_FAIL(schema_guard.check_udf_exist_with_name(
-                tenant_id,
                 name,
                 exist,
                 udf_id))) {
       LOG_WARN("failed to check udf sql exist",
-          K(tenant_id), K(name), K(ret));
+          K(name), K(ret));
     } else {/*do nothing*/}
   }
   return ret;
 }
 
 
-int ObMultiVersionSchemaService::check_outline_exist_with_sql_id(const uint64_t tenant_id,
-                                                              const uint64_t database_id,
+int ObMultiVersionSchemaService::check_outline_exist_with_sql_id(const uint64_t database_id,
                                                               const common::ObString &sql_id,
                                                               bool is_format,
                                                               bool &exist)
@@ -2675,18 +2543,16 @@ int ObMultiVersionSchemaService::check_outline_exist_with_sql_id(const uint64_t 
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_outline_exist_with_sql_id(
-                tenant_id,
-                database_id,
+    } else if (OB_FAIL(schema_guard.check_outline_exist_with_sql_id(database_id,
                 sql_id,
                 is_format,
                 exist))) {
-      LOG_WARN("failed to check outline sql exist", K(tenant_id), K(database_id),
+      LOG_WARN("failed to check outline sql exist", K(database_id),
                K(sql_id), K(ret));
     } else {/*do nothing*/}
   }
@@ -2697,7 +2563,6 @@ int ObMultiVersionSchemaService::check_outline_exist_with_sql_id(const uint64_t 
 //-----------For managing privileges-----------
 
 int ObMultiVersionSchemaService::check_user_exist(
-    const uint64_t tenant_id,
     const common::ObString &user_name,
     const common::ObString &host_name,
     bool &exist)
@@ -2710,13 +2575,12 @@ int ObMultiVersionSchemaService::check_user_exist(
     LOG_WARN("inner stat error", K(ret));
   } else {
     uint64_t user_id = OB_INVALID_ID;
-    ret = check_user_exist(tenant_id, user_name, host_name, user_id, exist);
+    ret = check_user_exist(user_name, host_name, user_id, exist);
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::check_user_exist(
-    const uint64_t tenant_id,
     const common::ObString &user_name,
     const common::ObString &host_name,
     uint64_t &user_id,
@@ -2731,13 +2595,12 @@ int ObMultiVersionSchemaService::check_user_exist(
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_user_exist(tenant_id,
-                                                     user_name,
+    } else if (OB_FAIL(schema_guard.check_user_exist(user_name,
                                                      host_name,
                                                      exist,
                                                      &user_id))) {
@@ -2748,7 +2611,6 @@ int ObMultiVersionSchemaService::check_user_exist(
 }
 
 int ObMultiVersionSchemaService::check_user_exist(
-    const uint64_t tenant_id,
     const uint64_t user_id,
     bool &exist)
 {
@@ -2761,12 +2623,12 @@ int ObMultiVersionSchemaService::check_user_exist(
   } else {
     SpinRLockGuard guard(schema_manager_rwlock_);
     ObSchemaGetterGuard schema_guard;
-    if (!is_tenant_full_schema(tenant_id)) {
+    if (!is_tenant_full_schema()) {
       ret = OB_NOT_INIT;
       LOG_WARN("local schema not inited", K(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+    } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed ", K(ret));
-    } else if (OB_FAIL(schema_guard.check_user_exist(tenant_id, user_id, exist))) {
+    } else if (OB_FAIL(schema_guard.check_user_exist(user_id, exist))) {
       LOG_WARN("failed to check table exist", K(ret));
     }
   }
@@ -2782,58 +2644,51 @@ void ObMultiVersionSchemaService::dump_schema_statistics()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
   } else {
-    FOREACH(it, mem_mgr_map_) {
-      uint64_t tenant_id = (*it).first;
-      ObSchemaMemMgr *mem_mgr = (*it).second;
-      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for refresh start", K(ret), K(tenant_id));
+    {
+      ObSchemaMemMgr *mem_mgr = mem_mgr_;
+      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for refresh start", K(ret));
       if (OB_ISNULL(mem_mgr)) {
-        LOG_INFO("mem_mgr is null", K(ret), K(tenant_id));
+        LOG_INFO("mem_mgr is null", K(ret));
       } else {
         mem_mgr->dump();
 
-        ObSchemaMgr *schema_mgr_for_cache = NULL;
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp_ret = schema_mgr_for_cache_map_.get_refactored(tenant_id, schema_mgr_for_cache))) {
-          if (OB_HASH_NOT_EXIST != tmp_ret) {
-            LOG_WARN("fail to get schema_mgr", K(tmp_ret), K(tenant_id));
-          }
-        } else {
+        ObSchemaMgr *schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_);
+        if (OB_NOT_NULL(schema_mgr_for_cache)) {
           schema_mgr_for_cache->dump();
         }
 
         ObSchemaStore *schema_store = NULL;
         ObSchemaMgrCache *schema_mgr_cache = NULL;
-        if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
-          LOG_INFO("schema_store is null", K(ret), K(tenant_id));
+        if (OB_ISNULL(schema_store = schema_store_)) {
+          LOG_INFO("schema_store is null", K(ret));
         } else if (OB_ISNULL(schema_mgr_cache = &schema_store->schema_mgr_cache_)) {
-          LOG_INFO("schema_mgr_cache is null", K(ret), K(tenant_id));
+          LOG_INFO("schema_mgr_cache is null", K(ret));
         } else {
           schema_mgr_cache->dump();
         }
       }
-      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for refresh end", K(ret), K(tenant_id));
+      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for refresh end", K(ret));
     }
 
-    FOREACH(it, mem_mgr_for_liboblog_map_) {
-      uint64_t tenant_id = (*it).first;
-      ObSchemaMemMgr *mem_mgr = (*it).second;
-      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for fallback start", K(ret), K(tenant_id));
+    {
+      ObSchemaMemMgr *mem_mgr = mem_mgr_for_liboblog_;
+      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for fallback start", K(ret));
       if (OB_ISNULL(mem_mgr)) {
-        LOG_INFO("mem_mgr is null", K(ret), K(tenant_id));
+        LOG_INFO("mem_mgr is null", K(ret));
       } else {
         mem_mgr->dump();
 
         ObSchemaStore *schema_store = NULL;
         ObSchemaMgrCache *schema_mgr_cache = NULL;
-        if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
-          LOG_INFO("schema_store is null", K(ret), K(tenant_id));
+        if (OB_ISNULL(schema_store = schema_store_)) {
+          LOG_INFO("schema_store is null", K(ret));
         } else if (OB_ISNULL(schema_mgr_cache = &schema_store->schema_mgr_cache_for_liboblog_)) {
-          LOG_INFO("schema_mgr_cache is null", K(ret), K(tenant_id));
+          LOG_INFO("schema_mgr_cache is null", K(ret));
         } else {
           schema_mgr_cache->dump();
         }
       }
-      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for fallback end", K(ret), K(tenant_id));
+      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for fallback end", K(ret));
     }
   }
 }
@@ -2875,9 +2730,9 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr()
   } else {
     FOREACH_X(it, candidates, OB_SUCC(ret)) {
       if (OB_FAIL(try_gc_tenant_schema_mgr((*it).first))) {
-        LOG_WARN("fail to eliminate schema mgr", K(ret), "tenant_id", (*it).first);
+        LOG_WARN("fail to eliminate schema mgr", K(ret), "tid", (*it).first);
       } else {
-        LOG_INFO("try eliminate schema mgr", K(ret), "tenant_id", (*it).first);
+        LOG_INFO("try eliminate schema mgr", K(ret), "tid", (*it).first);
       }
     }
   }
@@ -2888,69 +2743,28 @@ int ObMultiVersionSchemaService::get_gc_candidates(ObHashSet<uint64_t> &candidat
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObArray<uint64_t> tenant_ids;
-  ObHashSet<uint64_t> tenant_id_set;
   // The purpose of locking here is to ensure that there are no new tenants in the GC phase,
   // and to prevent the new tenant schema from being considered as dropped tenants and being GC dropped
   // during the schema refresh process.
   lib::ObMutexGuard guard(schema_refresh_mutex_);
-  if (!is_tenant_refreshed(OB_SYS_TENANT_ID)) {
+  if (!is_tenant_refreshed()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("sys tenant's full schema is not ready, we cannot gc normal tenant schema now", KR(ret));
-  } else if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+  } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed ", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-    LOG_WARN("fail to get tenant ids", K(ret));
-  } else if (OB_FAIL(tenant_id_set.create(DEFAULT_TENANT_SET_SIZE))) {
-    LOG_WARN("fail to create hash set", K(ret));
   } else {
 
-    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); i++) {
-      if (OB_FAIL(tenant_id_set.set_refactored(tenant_ids.at(i)))) {
-        LOG_WARN("fail to push back tenant id", K(ret), K(tenant_ids.at(i)));
-      }
-    }
-
-# define GET_GC_TENANT_CANDIDATES(MEM_MGR_MAP) \
-      FOREACH_X(it, MEM_MGR_MAP, OB_SUCC(ret)) { \
-        bool can_release = false; \
-        bool is_dropped = false; \
-        uint64_t tenant_id = (*it).first; \
-        ObSchemaMemMgr *mem_mgr = (*it).second; \
-        ret = tenant_id_set.exist_refactored(tenant_id); \
-        if (OB_HASH_EXIST == ret) { \
-          ret = OB_SUCCESS; \
-        } else if (OB_HASH_NOT_EXIST != ret) { \
-          LOG_WARN("fail to check tenant exist", K(ret), K(tenant_id)); \
-        } else if (OB_ISNULL(mem_mgr)) { \
-          ret = OB_ERR_UNEXPECTED; \
-          LOG_WARN("mem_mgr is null", K(ret), K(tenant_id)); \
-        } else if (OB_FAIL(mem_mgr->check_can_release(can_release))) { \
-          LOG_WARN("fail to check if tenant can release", K(ret), K(tenant_id)); \
-        } else if (!can_release) { \
-          continue; \
-        } else if (OB_FAIL(check_if_tenant_has_been_dropped(tenant_id, is_dropped))) { \
-          LOG_WARN("fail to check tenant has been dropped", KR(ret), K(tenant_id)); \
-        } else if (is_dropped) { \
-          LOG_INFO("tenant has been dropped, we can release it's schema", K(tenant_id), K(tenant_id_set)); \
-          if (OB_FAIL(candidates.set_refactored(tenant_id))) { \
-            LOG_WARN("fail to set candidate", KR(ret), K(tenant_id)); \
-          } \
-        } \
-      }
-
-    GET_GC_TENANT_CANDIDATES(mem_mgr_map_);
-
-    if (OB_SUCC(ret)) {
-      // In order to prevent the tenant schema from being released by mistake in the fallback process,
-      // lock protection is required here
+    // Mem_mgr maps held exactly one entry (sys). The GC candidate
+    // scan only ever collects *dropped non-sys* tenants; sys is in tenant_set and is never
+    // dropped/GC'd, so the candidate set is always empty. Reduced to a no-op (UNUSED guards
+    // keep the lock acquisition's original side-effect contract).
+    {
       lib::ObMutexGuard guard(mem_mgr_for_liboblog_mutex_);
-      GET_GC_TENANT_CANDIDATES(mem_mgr_for_liboblog_map_);
+      UNUSED(guard);
     }
-# undef GET_GC_TENANT_CANDIDATES
 
     if (OB_SUCC(ret)) {
-      ret = candidates.exist_refactored(OB_SYS_TENANT_ID);
+      ret = candidates.exist_refactored(1UL);
       if (OB_HASH_NOT_EXIST != ret) {
         LOG_WARN("sys tenant should not exist in candidates", K(ret));
       } else {
@@ -2972,46 +2786,45 @@ int ObMultiVersionSchemaService::get_gc_candidates(ObHashSet<uint64_t> &candidat
  *   - reset refreshed_schema_version, received_broadcast_version and refresh_full_schema
  *
  */
-int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr(uint64_t tenant_id)
+int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr(uint64_t req_id)
 {
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-             || OB_SYS_TENANT_ID == tenant_id) {
+  } else if (OB_INVALID_TENANT_ID == req_id
+             || 1UL == req_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_refresh(tenant_id))) {
-    LOG_WARN("fail to gc tenant schema mgr for refresh", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_fallback(tenant_id))) {
-    LOG_WARN("fail to gc tenant schema mgr for fallback", KR(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
+  } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_refresh())) {
+    LOG_WARN("fail to gc tenant schema mgr for refresh", KR(ret));
+  } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_fallback())) {
+    LOG_WARN("fail to gc tenant schema mgr for fallback", KR(ret));
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_refresh(
-    uint64_t tenant_id)
+    )
 {
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-             || OB_SYS_TENANT_ID == tenant_id) {
+  } else if (false
+             || true) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
   } else {
     lib::ObMutexGuard guard(schema_refresh_mutex_);
     ObSchemaMemMgr *mem_mgr = NULL;
     ObSchemaMgrCache *schema_mgr_cache = NULL;
     ObSchemaStore* schema_store = NULL;
 
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("fail to get schema_store", K(ret));
-    } else if (OB_FAIL(mem_mgr_map_.get_refactored(tenant_id, mem_mgr))) {
-      LOG_WARN("fail to get mem mgr", K(ret), K(tenant_id));
+    } else if (FALSE_IT(mem_mgr = mem_mgr_)) {
     } else {
       schema_store->reset_version();
       schema_mgr_cache = &schema_store->schema_mgr_cache_;
@@ -3019,25 +2832,25 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_refresh(
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_gc_tenant_schema_mgr(mem_mgr, schema_mgr_cache))) {
-      LOG_WARN("fail to eliminate schema mgr", K(ret), K(tenant_id));
-    } else if (OB_FAIL(destroy_schema_struct(tenant_id))) {
-      LOG_WARN("fail to destroy schema struct", K(ret), K(tenant_id));
+      LOG_WARN("fail to eliminate schema mgr", K(ret));
+    } else if (OB_FAIL(destroy_schema_struct())) {
+      LOG_WARN("fail to destroy schema struct", K(ret));
     }
   }
-  LOG_INFO("try gc schema mgr for refresh", K(ret), K(tenant_id));
+  LOG_INFO("try gc schema mgr for refresh", K(ret));
   return ret;
 }
 
 int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_fallback(
-    uint64_t tenant_id)
+    )
 {
   int ret = OB_SUCCESS;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
+    LOG_WARN("invalid argument", K(ret));
   } else {
     lib::ObMutexGuard guard(mem_mgr_for_liboblog_mutex_);
     ObSchemaMemMgr *mem_mgr = NULL;
@@ -3045,19 +2858,18 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_fallback(
     ObSchemaStore* schema_store = NULL;
 
     // reset schema mgr for fallback in new mode
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("fail to get schema_store", K(ret));
-    } else if (OB_FAIL(mem_mgr_for_liboblog_map_.get_refactored(tenant_id, mem_mgr))) {
-      LOG_WARN("fail to get mem mgr", K(ret), K(tenant_id));
+    } else if (FALSE_IT(mem_mgr = mem_mgr_for_liboblog_)) {
     } else {
       schema_mgr_cache = &schema_store->schema_mgr_cache_for_liboblog_;
       if (OB_FAIL(try_gc_tenant_schema_mgr(mem_mgr, schema_mgr_cache))) {
-        LOG_WARN("fail to eliminate schema mgr", K(ret), K(tenant_id));
+        LOG_WARN("fail to eliminate schema mgr", K(ret));
       }
     }
   }
-  LOG_INFO("try gc schema mgr for fallback", K(ret), K(tenant_id));
+  LOG_INFO("try gc schema mgr for fallback", K(ret));
   return ret;
 }
 
@@ -3073,20 +2885,20 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr(ObSchemaMemMgr *&mem_m
     LOG_WARN("schema_mgr_cache is null", K(ret));
   } else {
     ObSchemaMgr *eli_schema_mgr = NULL;
-    uint64_t tenant_id = mem_mgr->get_tenant_id();
+    
     bool need_gc_schema_mgr = false;
     do {
       if (OB_FAIL(schema_mgr_cache->try_gc_tenant_schema_mgr(eli_schema_mgr))) {
-        LOG_WARN("fail to eliminate schema mgr", K(ret), K(tenant_id));
+        LOG_WARN("fail to eliminate schema mgr", K(ret));
       } else if (FALSE_IT(need_gc_schema_mgr = OB_NOT_NULL(eli_schema_mgr))) {
       } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
-        LOG_ERROR("free eli schema mgr falied", KR(ret), K(tenant_id));
+        LOG_ERROR("free eli schema mgr falied", KR(ret));
       }
     } while (OB_SUCC(ret) && need_gc_schema_mgr);
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(mem_mgr->try_reset_allocator())) {
-      LOG_WARN("fail to reset allocator", K(ret), K(tenant_id));
+      LOG_WARN("fail to reset allocator", K(ret));
     }
   }
   return ret;
@@ -3097,46 +2909,42 @@ int ObMultiVersionSchemaService::try_gc_existed_tenant_schema_mgr()
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObArray<uint64_t> tenant_ids;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
   } else if (!is_sys_full_schema()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("full schema is not ready, cann't get fallback schema guard", KR(ret));
-  } else if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+  } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed ", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-    LOG_WARN("fail to get tenant ids", KR(ret));
   } else {
     ObSchemaMemMgr *mem_mgr = NULL;
     ObSchemaMgrCache *schema_mgr_cache = NULL;
-    for (int64_t i = 0; i < tenant_ids.count(); i++) { // ignore ret
+    { // ignore ret
       ObSchemaStore* schema_store = NULL;
-      const uint64_t tenant_id = tenant_ids.at(i);
-      if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+      
+      if (NULL == (schema_store = schema_store_)) {
         ret = OB_ENTRY_NOT_EXIST;
         LOG_WARN("fail to get schema_store", KR(ret));
       } else if (FALSE_IT(schema_mgr_cache = &schema_store->schema_mgr_cache_)) {
-      } else if (OB_FAIL(mem_mgr_map_.get_refactored(tenant_id, mem_mgr))) {
-        LOG_WARN("fail to get mem mgr", KR(ret), K(tenant_id));
+      } else if (FALSE_IT(mem_mgr = mem_mgr_)) {
       } else {
         // ignore failure in eache scene
         // 1. another allocator for schema refresh
-        if (OB_FAIL(try_gc_another_allocator(tenant_id, mem_mgr, schema_mgr_cache))) {
-          LOG_WARN("fail to gc another allocator", KR(ret), K(tenant_id));
+        if (OB_FAIL(try_gc_another_allocator(mem_mgr, schema_mgr_cache))) {
+          LOG_WARN("fail to gc another allocator", KR(ret));
         }
         // 2. schema fallback
         if (ObSchemaService::g_liboblog_mode_) {
           // liboblog/agentserver do nothing
-        } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_fallback(tenant_id))) {
+        } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_fallback())) {
           // overwrite ret
-          LOG_WARN("fail to gc tenant schema mgr for fallback", KR(ret), K(tenant_id));
+          LOG_WARN("fail to gc tenant schema mgr for fallback", KR(ret));
         }
         // 3.let schema mgr to free slot's memory
-        if (OB_FAIL(try_gc_current_allocator(tenant_id, mem_mgr, schema_mgr_cache))) {
+        if (OB_FAIL(try_gc_current_allocator(mem_mgr, schema_mgr_cache))) {
           // overwrite ret
-          LOG_WARN("fail to gc current slot", KR(ret), K(tenant_id));
+          LOG_WARN("fail to gc current slot", KR(ret));
         }
       }
     }
@@ -3146,7 +2954,6 @@ int ObMultiVersionSchemaService::try_gc_existed_tenant_schema_mgr()
 
 // need protected by schema_refresh_mutex_
 int ObMultiVersionSchemaService::try_gc_another_allocator(
-    const uint64_t tenant_id,
     ObSchemaMemMgr *&mem_mgr,
     ObSchemaMgrCache *&schema_mgr_cache)
 {
@@ -3157,30 +2964,29 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
   } else if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("mem_mgr or schema_mgr_cahe is null",
-             K(ret), K(tenant_id), KP(mem_mgr), KP(schema_mgr_cache));
-  } else if (tenant_id != mem_mgr->get_tenant_id()) {
+             K(ret), KP(mem_mgr), KP(schema_mgr_cache));
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_id not match", K(ret), K(tenant_id),
-             "mem_tenant_id", mem_mgr->get_tenant_id());
+    LOG_WARN("argument not match", K(ret));
   } else {
     lib::ObMutexGuard guard(schema_refresh_mutex_);
     ObArray<void *> another_ptrs;
     int64_t local_version = OB_INVALID_VERSION;
     if (OB_FAIL(mem_mgr->get_another_ptrs(another_ptrs))) {
-      LOG_WARN("fail to get another ptrs", K(ret), K(tenant_id));
-    } else if (OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, local_version))) {
-      LOG_WARN("fail to get local refreshed schema version", K(ret), K(tenant_id));
+      LOG_WARN("fail to get another ptrs", K(ret));
+    } else if (OB_FAIL(get_tenant_refreshed_schema_version(local_version))) {
+      LOG_WARN("fail to get local refreshed schema version", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < another_ptrs.count(); i++) {
         ObSchemaMgr *tmp_mgr = NULL;
         if (OB_ISNULL(another_ptrs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptrs is null", K(ret), K(tenant_id), K(i));
+          LOG_WARN("ptrs is null", K(ret), K(i));
         } else if (FALSE_IT(tmp_mgr = static_cast<ObSchemaMgr *>(another_ptrs.at(i)))) {
         } else if (tmp_mgr->get_schema_version() >= local_version) {
           ret = OB_SCHEMA_EAGAIN;
           LOG_INFO("schema mgr is in used, try reset another allocator next round",
-                   K(ret), K(tenant_id), "version", tmp_mgr->get_schema_version(),
+                   K(ret), "version", tmp_mgr->get_schema_version(),
                    K(local_version));
         }
       }
@@ -3188,27 +2994,26 @@ int ObMultiVersionSchemaService::try_gc_another_allocator(
       for (int64_t i = 0; OB_SUCC(ret) && i < another_ptrs.count(); i++) {
         if (OB_ISNULL(another_ptrs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptrs is null", K(ret), K(tenant_id), K(i));
+          LOG_WARN("ptrs is null", K(ret), K(i));
         } else if (FALSE_IT(eli_schema_mgr = static_cast<ObSchemaMgr *>(another_ptrs.at(i)))) {
         } else if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
-          LOG_WARN("fail to eliminate schema_mgr", K(ret), K(tenant_id), K(eli_schema_mgr));
+          LOG_WARN("fail to eliminate schema_mgr", K(ret), K(eli_schema_mgr));
         } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
-          LOG_ERROR("free eli schema mgr falied", KR(ret), K(tenant_id));
+          LOG_ERROR("free eli schema mgr falied", KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(mem_mgr->try_reset_another_allocator())) {
-        LOG_WARN("fail to reset another allocator", K(ret), K(tenant_id));
+        LOG_WARN("fail to reset another allocator", K(ret));
       }
     }
   }
-  LOG_INFO("try gc another allocator", K(ret), K(tenant_id));
+  LOG_INFO("try gc another allocator", K(ret));
   return ret;
 }
 
 // try to gc current allocator's schema mgr, it can reduce the number of schema mgr in the background
 int ObMultiVersionSchemaService::try_gc_current_allocator(
-    const uint64_t tenant_id,
     ObSchemaMemMgr *&mem_mgr,
     ObSchemaMgrCache *&schema_mgr_cache)
 {
@@ -3220,13 +3025,13 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
   } else if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("mem_mgr or schema_mgr_cahe is null",
-             KR(ret), K(tenant_id), KP(mem_mgr), KP(schema_mgr_cache));
-  } else if (tenant_id != mem_mgr->get_tenant_id()) {
+             KR(ret), KP(mem_mgr), KP(schema_mgr_cache));
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_id not match", KR(ret), K(tenant_id), K(mem_mgr->get_tenant_id()));
+    LOG_WARN("argument not match", KR(ret));
   } else if (0 == recycle_interval) {
     // 0 means turn off gc current allocator
-    LOG_TRACE("_schema_memory_recycle_interval is zero, turn off gc current allocator", K(tenant_id));
+    LOG_TRACE("_schema_memory_recycle_interval is zero, turn off gc current allocator");
   } else {
     int64_t start_time = ObTimeUtility::current_time();
     ObArray<void *> current_ptrs;
@@ -3237,18 +3042,17 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
 
     ObSchemaMgr *latest_schema_mgr = NULL;
     if (OB_FAIL(mem_mgr->get_current_ptrs(current_ptrs))) {
-      LOG_WARN("fail to get another ptrs", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
-      LOG_WARN("fail to get local refreshed schema version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(schema_mgr_for_cache_map_.get_refactored(tenant_id, latest_schema_mgr))) {
-      LOG_WARN("fail to get schema mgr for cache", KR(ret), K(ret));
+      LOG_WARN("fail to get another ptrs", KR(ret));
+    } else if (OB_FAIL(get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+      LOG_WARN("fail to get local refreshed schema version", KR(ret));
+    } else if (FALSE_IT(latest_schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
     } else if (OB_ISNULL(latest_schema_mgr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_mgr is null", KR(ret), K(tenant_id));
+      LOG_WARN("schema_mgr is null", KR(ret));
     } else if (FALSE_IT(latest_schema_version = latest_schema_mgr->get_schema_version())) {
     } else if (FALSE_IT(local_version = min(refreshed_schema_version, latest_schema_version))) {
     } else if (!ObSchemaService::is_formal_version(local_version)) {
-      LOG_TRACE("ignore to free current allocator when refreshed version is not formal", K(tenant_id), K(local_version));
+      LOG_TRACE("ignore to free current allocator when refreshed version is not formal", K(local_version));
     } else {
       int64_t eli_timestamp = 0;
       ObSchemaMgr *eli_schema_mgr = NULL;
@@ -3256,20 +3060,20 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
       for (int64_t i = 0; OB_SUCC(ret) && i < current_ptrs.count(); i++) {
         if (OB_ISNULL(current_ptrs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ptrs is null", KR(ret), K(tenant_id), K(i));
+          LOG_WARN("ptrs is null", KR(ret), K(i));
         } else {
           eli_schema_mgr = static_cast<ObSchemaMgr *>(current_ptrs.at(i));
           eli_timestamp = eli_schema_mgr->get_timestamp_in_slot();
           eli_schema_version = eli_schema_mgr->get_schema_version();
           if (eli_schema_version >= local_version
               || (recycle_interval > ObClockGenerator::getClock() - eli_timestamp)) {
-            LOG_TRACE("no need to gc current allocator's schema mgr", K(tenant_id), K(eli_timestamp),
+            LOG_TRACE("no need to gc current allocator's schema mgr", K(eli_timestamp),
                       K(eli_schema_version), K(local_version), K(refreshed_schema_version),
                       K(latest_schema_version), K(recycle_interval));
           } else {
             //gc only those that have been put in the slot for more than recycle_interval
             LOG_INFO("try to gc current allocator's schema mgr which is in slot",
-                     K(tenant_id), K(eli_schema_version), K(local_version),
+                     K(eli_schema_version), K(local_version),
                      K(refreshed_schema_version), K(latest_schema_version),
                      K(eli_timestamp), K(recycle_interval));
             if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
@@ -3277,18 +3081,18 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
                 // schema mgr in use, just ignore
                 ret = OB_SUCCESS;
               } else {
-                LOG_WARN("fail to eliminate schema_mgr", KR(ret), K(tenant_id),
+                LOG_WARN("fail to eliminate schema_mgr", KR(ret),
                          K(eli_schema_version), K(eli_timestamp));
               }
             } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
-              LOG_ERROR("free eli schema mgr falied", KR(ret), K(tenant_id));
+              LOG_ERROR("free eli schema mgr falied", KR(ret));
             }
           }
         }
       }
     }
     int64_t end_time = ObTimeUtility::current_time();
-    LOG_INFO("finish gc current allocator's schema mgr which is in slot", KR(ret), K(tenant_id),
+    LOG_INFO("finish gc current allocator's schema mgr which is in slot", KR(ret),
              "cost_ts", end_time - start_time);
   }
   return ret;
@@ -3307,7 +3111,6 @@ bool ObMultiVersionSchemaService::compare_schema_mgr_info_(
 // 2.we can turn this off by set _schema_memory_recycle_interval to zero
 ERRSIM_POINT_DEF(ERRSIM_GC_ALLOCATOR_WHEN_REFRESH_SCHEMA);
 int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
-    const uint64_t tenant_id,
     ObSchemaMemMgr *&mem_mgr,
     ObSchemaMgrCache *&schema_mgr_cache)
 {
@@ -3323,7 +3126,7 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
   if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("mem_mgr or schema_mgr_cahe is null",
-             KR(ret), K(tenant_id), KP(mem_mgr), KP(schema_mgr_cache));
+             KR(ret), KP(mem_mgr), KP(schema_mgr_cache));
   } else if (0 > reserve_mgr_count) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("reserve_mgr_count is less than zero", KR(ret));
@@ -3333,18 +3136,17 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
   } else if (0 == GCONF._schema_memory_recycle_interval) {
     // ignore
   } else if (OB_FAIL(mem_mgr->get_all_ptrs(all_ptrs))) {
-    LOG_WARN("fail to get another ptrs", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("fail to get local refreshed schema version", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_mgr_for_cache_map_.get_refactored(tenant_id, latest_schema_mgr))) {
-    LOG_WARN("fail to get schema mgr for cache", KR(ret), K(ret));
+    LOG_WARN("fail to get another ptrs", KR(ret));
+  } else if (OB_FAIL(get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+    LOG_WARN("fail to get local refreshed schema version", KR(ret));
+  } else if (FALSE_IT(latest_schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(latest_schema_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr is null", KR(ret), K(tenant_id));
+    LOG_WARN("schema_mgr is null", KR(ret));
   } else if (FALSE_IT(latest_schema_version = latest_schema_mgr->get_schema_version())) {
   } else if (FALSE_IT(local_version = min(refreshed_schema_version, latest_schema_version))) {
   } else if (!ObSchemaService::is_formal_version(local_version)) {
-    LOG_TRACE("ignore to free current allocator when refreshed version is not formal", K(tenant_id), K(local_version));
+    LOG_TRACE("ignore to free current allocator when refreshed version is not formal", K(local_version));
   } else {
     SchemaMgrIterator iter;
     SchemaMgrInfos schema_mgr_infos;
@@ -3354,16 +3156,16 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
       eli_schema_mgr = static_cast<ObSchemaMgr *>(all_ptrs.at(i));
       if (OB_ISNULL(eli_schema_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("eli_schema_mgr is null", KR(ret), K(tenant_id), K(i));
+        LOG_WARN("eli_schema_mgr is null", KR(ret), K(i));
       } else if (OB_FAIL(schema_mgr_infos.insert(eli_schema_mgr, iter, compare_schema_mgr_info_))) {
-        LOG_WARN("fail to insert schema mgr info", KR(ret), K(tenant_id));
+        LOG_WARN("fail to insert schema mgr info", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
       // ignore
     } else if (all_ptrs.count() != schema_mgr_infos.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("all_ptrs and schema_mgr_infos count not equal", KR(ret), K(tenant_id),
+      LOG_WARN("all_ptrs and schema_mgr_infos count not equal", KR(ret),
                 K(all_ptrs.count()), K(schema_mgr_infos.count()));
     } else {
       int64_t schema_mgr_cnt = schema_mgr_infos.count();
@@ -3381,27 +3183,27 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
       eli_schema_mgr = static_cast<ObSchemaMgr *>(all_ptrs.at(i));
       if (OB_ISNULL(eli_schema_mgr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("eli_schema_mgr is null", KR(ret), K(tenant_id), K(i));
+        LOG_WARN("eli_schema_mgr is null", KR(ret), K(i));
       } else {
         eli_schema_version = eli_schema_mgr->get_schema_version();
         if (eli_schema_version >= local_version
             || eli_schema_version >= reserve_version) {
-          LOG_TRACE("no need to gc allocator's schema mgr", K(tenant_id),
+          LOG_TRACE("no need to gc allocator's schema mgr",
                     K(eli_schema_version), K(local_version), K(refreshed_schema_version),
                     K(latest_schema_version), K(reserve_version));
         } else {
           LOG_INFO("try to gc allocator's schema mgr which schema version is less than reserve_version",
-                   K(tenant_id), K(eli_schema_version), K(local_version), K(refreshed_schema_version),
+                   K(eli_schema_version), K(local_version), K(refreshed_schema_version),
                    K(latest_schema_version), K(reserve_version));
           if (OB_FAIL(schema_mgr_cache->try_eliminate_schema_mgr(eli_schema_mgr))) {
             if (OB_EAGAIN == ret) {
               // schema mgr in use, just ignore
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("fail to eliminate schema_mgr", KR(ret), K(tenant_id), K(eli_schema_version));
+              LOG_WARN("fail to eliminate schema_mgr", KR(ret), K(eli_schema_version));
             }
           } else if (OB_FAIL(mem_mgr->free_schema_mgr(eli_schema_mgr))) {
-            LOG_ERROR("free eli schema mgr falied", KR(ret), K(tenant_id));
+            LOG_ERROR("free eli schema mgr falied", KR(ret));
           } else {
             remain_schema_ptr_cnt--;
           }
@@ -3409,7 +3211,7 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
       }
     } // for
     int64_t end_time = ObTimeUtility::current_time();
-    LOG_INFO("finish gc allocator's schema mgr when add schema", KR(ret), K(tenant_id),
+    LOG_INFO("finish gc allocator's schema mgr when add schema", KR(ret),
               K(total_schema_ptr_cnt), K(remain_schema_ptr_cnt), K(reserve_version),
               "cost_ts", end_time - start_time);
   }
@@ -3418,49 +3220,51 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
 
 bool ObMultiVersionSchemaService::is_sys_full_schema() const
 {
-  return is_tenant_full_schema(OB_SYS_TENANT_ID);
+  return is_tenant_full_schema();
 }
 
-bool ObMultiVersionSchemaService::is_tenant_full_schema(const uint64_t tenant_id) const
+bool ObMultiVersionSchemaService::is_tenant_full_schema() const
 {
   bool bret = false;
   int64_t schema_version = OB_INVALID_VERSION;
-  int ret = get_tenant_refreshed_schema_version(tenant_id, schema_version);
+  int ret = get_tenant_refreshed_schema_version(schema_version);
   bret = OB_SUCC(ret) && schema_version > OB_CORE_SCHEMA_VERSION;
   return bret;
 }
 
 // factor of election priority
-bool ObMultiVersionSchemaService::is_tenant_not_refreshed(const uint64_t tenant_id)
+bool ObMultiVersionSchemaService::is_tenant_not_refreshed()
 {
   int ret = OB_SUCCESS;
   bool schema_not_refreshed = false;
-  if (OB_FAIL(refresh_full_schema_map_.get_refactored(tenant_id, schema_not_refreshed))) {
+  if (OB_UNLIKELY(!refresh_full_schema_present_)) {
     // 1. tenant not exist
     // 2. tenant schema not refreshed yet after create tenant or restart observer.
+    ret = OB_HASH_NOT_EXIST;
     schema_not_refreshed = true;
-    LOG_TRACE("fail to get refresh full schema flag from map", KR(ret), K(tenant_id));
+    LOG_TRACE("fail to get refresh full schema flag from map", KR(ret));
+  } else if (FALSE_IT(schema_not_refreshed = refresh_full_schema_)) {
   } else {
     // 1. when schema_not_refreshed = false, it means tenant refreshed full schema once.
     // 2. when schema_not_refreshed = true, it means tenant schema should be refreshed or tenant has been dropped.
     if (schema_not_refreshed) {
       ObSchemaGetterGuard guard;
       const ObSimpleTenantSchema *tenant_schema = NULL;
-      if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+      if (OB_FAIL(get_tenant_schema_guard(guard))) {
         schema_not_refreshed = false;
-        LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(guard.get_tenant_info(tenant_id, tenant_schema))) {
+        LOG_WARN("fail to get schema guard", KR(ret));
+      } else if (OB_FAIL(guard.get_tenant_info(tenant_schema))) {
         schema_not_refreshed = true;
-        LOG_WARN("failed to get tenant info", KR(ret), K(tenant_id));
+        LOG_WARN("failed to get tenant info", KR(ret));
       } else if (OB_ISNULL(tenant_schema)) {
         schema_not_refreshed = true;
-        LOG_TRACE("tenant should be refreshed or has been dropped", KR(ret), K(tenant_id));
+        LOG_TRACE("tenant should be refreshed or has been dropped", KR(ret));
       } else if (tenant_schema->is_normal()) {
         schema_not_refreshed = true;
       } else {
         // To make ls leader stable when tenant is in abnormal status.
         schema_not_refreshed = false;
-        LOG_TRACE("tenant is abnormal, treat schema as refreshed", KR(ret), K(tenant_id));
+        LOG_TRACE("tenant is abnormal, treat schema as refreshed", KR(ret));
       }
     }
   }
@@ -3468,12 +3272,15 @@ bool ObMultiVersionSchemaService::is_tenant_not_refreshed(const uint64_t tenant_
 }
 
 // for obmp_connect
-bool ObMultiVersionSchemaService::is_tenant_refreshed(const uint64_t tenant_id) const
+bool ObMultiVersionSchemaService::is_tenant_refreshed() const
 {
   bool bret = false;
   bool schema_not_refreshed = false;
-  int ret = refresh_full_schema_map_.get_refactored(tenant_id, schema_not_refreshed);
-  if (OB_SUCC(ret)) {
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!refresh_full_schema_present_)) {
+    ret = OB_HASH_NOT_EXIST;
+  } else {
+    schema_not_refreshed = refresh_full_schema_;
     bret = !schema_not_refreshed;
   }
   return bret;
@@ -3483,48 +3290,40 @@ int ObMultiVersionSchemaService::check_all_tenant_schema_refreshed(bool &all_ref
 {
   int ret = OB_SUCCESS;
   all_refreshed = true;
-  ObArray<uint64_t> tenant_ids;
-  if (OB_FAIL(get_tenant_ids(tenant_ids))) {
-    LOG_WARN("get tenant ids failed", KR(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); i++) {
-      if (!is_tenant_refreshed(tenant_ids.at(i))) {
-        all_refreshed = false;
-        break;
-      }
-    }
+  if (!is_tenant_refreshed()) {
+    all_refreshed = false;
   }
   return ret;
 }
 
 // sql should retry when tenant is normal but never refresh schema successfully.
 bool ObMultiVersionSchemaService::is_schema_error_need_retry(
-     ObSchemaGetterGuard *guard,
-     const uint64_t tenant_id)
+     ObSchemaGetterGuard *guard)
 {
   bool bret = false;
   int ret = OB_SUCCESS;
   bool schema_not_full = false;
   int64_t schema_version = OB_INVALID_VERSION;
-  if (OB_FAIL(refresh_full_schema_map_.get_refactored(OB_SYS_TENANT_ID, schema_not_full))) {
+  if (OB_UNLIKELY(!refresh_full_schema_present_)) {
+    ret = OB_HASH_NOT_EXIST;
     // skip
+  } else if (FALSE_IT(schema_not_full = refresh_full_schema_)) {
   } else if (schema_not_full) {
     // observer may be not start service, do not retry
-  } else if (OB_FAIL(refresh_full_schema_map_.get_refactored(tenant_id, schema_not_full))) {
-    // skip
+  } else if (FALSE_IT(schema_not_full = refresh_full_schema_)) {
   } else if (!schema_not_full) {
     // tenant's schema is full, do not retry
   } else {
     ObSchemaGetterGuard tmp_guard;
     const ObSimpleTenantSchema *tenant_schema = NULL;
     if (OB_ISNULL(guard)) {
-      if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, tmp_guard))) {
+      if (OB_FAIL(get_tenant_schema_guard(tmp_guard))) {
         LOG_WARN("fail to get sys tenant's guard", KR(ret));
-      } else if (OB_FAIL(tmp_guard.get_tenant_info(tenant_id, tenant_schema))) {
-        LOG_WARN("fail to get tenant schema", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(tmp_guard.get_tenant_info(tenant_schema))) {
+        LOG_WARN("fail to get tenant schema", KR(ret));
       }
-    } else if (OB_FAIL(guard->get_tenant_info(tenant_id, tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", KR(ret), K(tenant_id));
+    } else if (OB_FAIL(guard->get_tenant_info(tenant_schema))) {
+      LOG_WARN("fail to get tenant schema", KR(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(tenant_schema)) {
@@ -3543,19 +3342,15 @@ bool ObMultiVersionSchemaService::is_schema_error_need_retry(
 }
 
 int ObMultiVersionSchemaService::get_tenant_refreshed_schema_version(
-    const uint64_t tenant_id,
     int64_t &schema_version,
     const bool core_version) const
 {
   int ret = OB_SUCCESS;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id), K(core_version));
-  } else {
+  {
     // new schema refresh
     const ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_TRACE("fail to get schema_store", K(ret));
     } else {
@@ -3569,18 +3364,14 @@ int ObMultiVersionSchemaService::get_tenant_refreshed_schema_version(
 }
 
 int ObMultiVersionSchemaService::get_tenant_received_broadcast_version(
-    const uint64_t tenant_id,
     int64_t &schema_version,
     const bool core_schema_version) const
 {
   int ret = OB_SUCCESS;
   int64_t received_broadcast_version = OB_INVALID_VERSION;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id), K(core_schema_version));
-  } else {
+  {
     const ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("fail to get schema_store", K(ret));
     } else {
@@ -3593,17 +3384,12 @@ int ObMultiVersionSchemaService::get_tenant_received_broadcast_version(
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_tenant_broadcast_consensus_version(
-    const uint64_t tenant_id,
-    int64_t &consensus_version)
+int ObMultiVersionSchemaService::get_tenant_broadcast_consensus_version(int64_t &consensus_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else {
+  {
     const ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("fail to get schema_store", KR(ret));
     } else {
@@ -3613,43 +3399,34 @@ int ObMultiVersionSchemaService::get_tenant_broadcast_consensus_version(
   return ret;
 }
 
-int ObMultiVersionSchemaService::set_tenant_broadcast_consensus_version(
-    const uint64_t tenant_id,
-    const int64_t consensus_version)
+int ObMultiVersionSchemaService::set_tenant_broadcast_consensus_version(const int64_t consensus_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id), K(consensus_version));
-  } else {
+  {
     ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("fail to get schema_store", KR(ret));
     } else {
       schema_store->update_consensus_version(consensus_version);
-      LOG_INFO("try to set tenant broadcast consensus version", KR(ret), K(tenant_id), K(consensus_version));
+      LOG_INFO("try to set tenant broadcast consensus version", KR(ret), K(consensus_version));
     }
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::set_tenant_received_broadcast_version(
-    const uint64_t tenant_id,
     const int64_t version)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id), K(version));
-  } else if (version != OB_CORE_SCHEMA_VERSION) {
+  if (version != OB_CORE_SCHEMA_VERSION) {
     ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_map_.get(tenant_id))) {
+    if (NULL == (schema_store = schema_store_)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("fail to get schema_store", K(ret));
     } else {
       schema_store->update_received_version(version);
-      LOG_INFO("try to set tenant received_broadcast_version", K(ret), K(tenant_id), K(version));
+      LOG_INFO("try to set tenant received_broadcast_version", K(ret), K(version));
     }
   } else {
     ret = OB_OLD_SCHEMA_VERSION;
@@ -3684,156 +3461,154 @@ int ObMultiVersionSchemaService::set_last_refreshed_schema_info(const ObRefreshS
 }
 
 int ObMultiVersionSchemaService::gen_new_schema_version(
-    uint64_t tenant_id,
     int64_t &schema_version)
 {
   int ret = OB_SUCCESS;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   schema_version = OB_INVALID_VERSION;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("fail to get refreshed schema version", K(ret), K(tenant_id), K(refreshed_schema_version));
+  if (OB_FAIL(get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+    LOG_WARN("fail to get refreshed schema version", K(ret), K(refreshed_schema_version));
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_service_->gen_new_schema_version(tenant_id, refreshed_schema_version, schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id), K(refreshed_schema_version));
+    LOG_WARN("schema service is null", K(ret));
+  } else if (OB_FAIL(schema_service_->gen_new_schema_version(refreshed_schema_version, schema_version))) {
+    LOG_WARN("fail to gen new schema_version", K(ret), K(refreshed_schema_version));
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::gen_batch_new_schema_versions(
-    const uint64_t tenant_id,
-    const int64_t version_cnt,
+int ObMultiVersionSchemaService::gen_batch_new_schema_versions(const int64_t version_cnt,
     int64_t &schema_version)
 {
   int ret = OB_SUCCESS;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   schema_version = OB_INVALID_VERSION;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
+  if (OB_UNLIKELY(false
                  || version_cnt < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
-    LOG_WARN("fail to get refreshed schema version", KR(ret), K(tenant_id), K(refreshed_schema_version));
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_FAIL(get_tenant_refreshed_schema_version(refreshed_schema_version))) {
+    LOG_WARN("fail to get refreshed schema version", KR(ret), K(refreshed_schema_version));
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(
-             tenant_id, refreshed_schema_version, version_cnt, schema_version))) {
-    LOG_WARN("fail to gen new schema_version", KR(ret), K(tenant_id), K(version_cnt), K(refreshed_schema_version));
+    LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(refreshed_schema_version, version_cnt, schema_version))) {
+    LOG_WARN("fail to gen new schema_version", KR(ret), K(version_cnt), K(refreshed_schema_version));
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_new_schema_version(uint64_t tenant_id, int64_t &schema_version) {
+int ObMultiVersionSchemaService::get_new_schema_version(int64_t &schema_version) {
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret), K(tenant_id));
+    LOG_WARN("schema service is null", K(ret));
   } else {
-    ret = schema_service_->get_new_schema_version(tenant_id, schema_version);
+    ret = schema_service_->get_new_schema_version(schema_version);
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::get_tenant_mem_info(
-    const uint64_t &tenant_id,
+    const uint64_t &req_id,
     common::ObIArray<ObSchemaMemory> &tenant_mem_infos)
 {
   int ret = OB_SUCCESS;
   ObSchemaMemMgr *mem_mgr = NULL;
 
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(mem_mgr_map_.get_refactored(tenant_id, mem_mgr))) {
-    LOG_WARN("fail to get tenant mem_mgr", KR(ret), K(tenant_id));
+    LOG_WARN("schema service is null", KR(ret));
+  } else if (FALSE_IT(mem_mgr = (1UL == req_id) ? mem_mgr_ : NULL)) {
   } else if (OB_ISNULL(mem_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem_mgr is NULL", KR(ret), K(tenant_id));
+    LOG_WARN("mem_mgr is NULL", KR(ret));
   } else if (OB_FAIL(mem_mgr->get_all_alloc_info(tenant_mem_infos))) {
-    LOG_WARN("fail to get mem_mgr alloc info", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get mem_mgr alloc info", KR(ret));
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::get_tenant_slot_info(
     common::ObIAllocator &allocator,
-    const uint64_t &tenant_id,
+    const uint64_t &req_id,
     common::ObIArray<ObSchemaSlot> &tenant_slot_infos)
 {
   int ret = OB_SUCCESS;
   ObSchemaStore * schema_store = NULL;
 
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
+    LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_ISNULL(schema_store = schema_store_)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get schema_store", KR(ret));
   } else if (OB_FAIL((schema_store->schema_mgr_cache_).get_slot_info(allocator, tenant_slot_infos))) {
-    LOG_WARN("fail tp get slot info from schema_mgr_cache", KR(ret), K(tenant_id));
+    LOG_WARN("fail tp get slot info from schema_mgr_cache", KR(ret));
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_schema_store_tenants(common::ObIArray<uint64_t> &tenant_ids) {
+int ObMultiVersionSchemaService::create_schema_store_(const int64_t init_version_count,
+                                                    const int64_t init_version_count_for_liboblog)
+{
   int ret = OB_SUCCESS;
-  if (OB_FAIL(schema_store_map_.get_all_tenant(tenant_ids))) {
-    LOG_WARN("fail to get all_tenant from schema_store_map_", KR(ret));
+  ObSchemaStore *store = NULL;
+  common::ObMemAttr mattr(ObModIds::OB_SCHEMA_MGR_CACHE_MAP);
+  if (NULL == (store = (ObSchemaStore *)ob_malloc(sizeof(*store), mattr))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("fail to alloc memory for schema_store");
+  } else if (NULL == new(store)ObSchemaStore()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("construct schema_store fail");
+  } else if (OB_FAIL(store->init(init_version_count, init_version_count_for_liboblog))) {
+    LOG_WARN("fail to init schema store", K(ret));
+  } else {
+    schema_store_ = store;
+  }
+  if (OB_FAIL(ret) && NULL != store) {
+    store->~ObSchemaStore();
+    ob_free(store);
   }
   return ret;
 }
 
-bool ObMultiVersionSchemaService::check_schema_store_tenant_exist(const uint64_t &tenant_id) {
-  bool exist = true;
-  ObSchemaStore* schema_store = NULL;
-  if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
-    exist = false;
+int ObMultiVersionSchemaService::get_schema_store_tenants(common::ObIArray<uint64_t> &tenants) {
+  int ret = OB_SUCCESS;
+  tenants.reset();
+  if (OB_NOT_NULL(schema_store_)) {
+    // consumer only reads count(); element value unused
+    if (OB_FAIL(tenants.push_back(0))) {
+      LOG_WARN("fail to push slot marker", KR(ret));
+    }
   }
-  return exist;
+  return ret;
 }
 
 // If schema_status_array is empty, it means strong consistent reading
 int ObMultiVersionSchemaService::get_schema_status(
     const ObArray<ObRefreshSchemaStatus> &schema_status_array,
-    const uint64_t tenant_id,
     ObRefreshSchemaStatus &schema_status)
 {
   int ret = OB_SUCCESS;
   bool finded = false;
   schema_status.reset();
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (schema_status_array.empty()) {
-    schema_status.tenant_id_ = tenant_id;
+  if (schema_status_array.empty()) {
+    
   } else {
     FOREACH_X(schema_status_ptr, schema_status_array, !finded && OB_SUCC(ret)) {
       if (OB_ISNULL(schema_status_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_status is null", K(ret));
-      } else if (schema_status_ptr->tenant_id_ == tenant_id) {
+      } else if (true) {
         finded = true;
         schema_status = *schema_status_ptr;
       }
     }
     if (OB_SUCC(ret) && !finded) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("tenant schema status not finded", K(ret), K(tenant_id));
+      LOG_WARN("tenant schema status not finded", K(ret));
     }
   }
   return ret;
@@ -3841,7 +3616,7 @@ int ObMultiVersionSchemaService::get_schema_status(
 
 int ObMultiVersionSchemaService::get_schema_version_history(
     const ObRefreshSchemaStatus &fetch_schema_status,
-    const uint64_t fetch_tenant_id,
+    const uint64_t req_id,
     const int64_t schema_version,
     const VersionHisKey &key,
     VersionHisVal &val,
@@ -3852,15 +3627,15 @@ int ObMultiVersionSchemaService::get_schema_version_history(
   val.reset();
   if (!key.is_valid()
       || schema_version < 0
-      || OB_INVALID_TENANT_ID == fetch_tenant_id) {
+      || OB_INVALID_TENANT_ID == req_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(key), K(fetch_tenant_id), K(schema_version));
+    LOG_WARN("invalid arg", K(ret), K(key), K(schema_version));
   } else {
     int hash_ret = version_his_map_.get_refactored(key, val);
     if (hash_ret == OB_HASH_NOT_EXIST || schema_version > val.snapshot_version_) {
       int64_t snapshot_version = OB_INVALID_VERSION;
-      if (OB_FAIL(get_tenant_refreshed_schema_version(fetch_tenant_id, snapshot_version))) {
-        LOG_WARN("fail to get tenant refreshed schema_version", K(ret), K(fetch_tenant_id));
+      if (OB_FAIL(get_tenant_refreshed_schema_version(snapshot_version))) {
+        LOG_WARN("fail to get tenant refreshed schema_version", K(ret));
       } else if (OB_FAIL(construct_schema_version_history(fetch_schema_status, snapshot_version, key, val))) {
         LOG_WARN("construct failed", K(ret), K(snapshot_version), K(key));
       } else if (0 == val.valid_cnt_) {
@@ -3895,79 +3670,61 @@ int ObMultiVersionSchemaService::get_schema_version_history(
 // tenant_schema needs to be combined to determine whether schema_status needs to be used
 int ObMultiVersionSchemaService::check_tenant_is_restore(
     ObSchemaGetterGuard *schema_guard,
-    const uint64_t tenant_id,
     bool &is_restore)
 {
   int ret = OB_SUCCESS;
   is_restore = false;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (is_sys_tenant(tenant_id)
-             || is_meta_tenant(tenant_id)) {
+  if (true) {
     is_restore = false;
   } else if (OB_ISNULL(schema_guard)) {
     ObSchemaGetterGuard tmp_guard;
-    if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, tmp_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret), K(tenant_id));
-    } else if (OB_FAIL(tmp_guard.check_tenant_is_restore(tenant_id, is_restore))) {
-      LOG_WARN("fail to check tenant is restore", K(ret), K(tenant_id));
+    if (OB_FAIL(get_tenant_schema_guard(tmp_guard))) {
+      LOG_WARN("fail to get schema guard", K(ret));
+    } else if (OB_FAIL(tmp_guard.check_tenant_is_restore(is_restore))) {
+      LOG_WARN("fail to check tenant is restore", K(ret));
     }
-  } else if (OB_FAIL(schema_guard->check_tenant_is_restore(tenant_id, is_restore))) {
-    LOG_WARN("fail to check tenant is restore", K(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard->check_tenant_is_restore(is_restore))) {
+    LOG_WARN("fail to check tenant is restore", K(ret));
   }
   return ret;
 }
 
 int ObMultiVersionSchemaService::check_restore_tenant_exist(
-    const ObIArray<uint64_t> &tenant_ids,
     bool &exist)
 {
   int ret = OB_SUCCESS;
   exist  = false;
   ObSchemaGetterGuard schema_guard;
-  if (1 == tenant_ids.count() && OB_SYS_TENANT_ID == tenant_ids.at(0)) {
-    exist = false;
-  } else if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+  if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get sys schema_guard", K(ret));
   } else {
-    ObArray<uint64_t> tmp_tenant_ids;
-    if (tenant_ids.count() == 0 && OB_FAIL(schema_guard.get_tenant_ids(tmp_tenant_ids))) {
-      LOG_WARN("fail to get tenant ids", K(ret));
-    } else {
-      const ObIArray<uint64_t> &tenants = 0 == tenant_ids.count() ? tmp_tenant_ids : tenant_ids;
-      const ObSimpleTenantSchema *tenant = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && !exist && i < tenants.count(); i++) {
-        const uint64_t tenant_id = tenants.at(i);
-        if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant))) {
-          LOG_WARN("fail to get tenant schema", K(ret), K(tenant_id));
-        } else if (OB_ISNULL(tenant)) {
-          ret = OB_TENANT_NOT_EXIST;
-          LOG_WARN("tenant is null", K(ret));
-        } else if (tenant->is_restore()) {
-          exist = true;
-        }
-      }
+    // single-tenant: check the one tenant directly
+    const ObSimpleTenantSchema *tenant = NULL;
+    if (OB_FAIL(schema_guard.get_tenant_info(tenant))) {
+      LOG_WARN("fail to get tenant schema", K(ret));
+    } else if (OB_ISNULL(tenant)) {
+      ret = OB_TENANT_NOT_EXIST;
+      LOG_WARN("tenant is null", K(ret));
+    } else if (tenant->is_restore()) {
+      exist = true;
     }
   }
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_tenant_name_case_mode(
-    const uint64_t tenant_id,
-    ObNameCaseMode &name_case_mode)
+int ObMultiVersionSchemaService::get_tenant_name_case_mode(ObNameCaseMode &name_case_mode)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard guard;
   const ObSimpleSysVariableSchema *sys_variable = NULL;
   name_case_mode = OB_NAME_CASE_INVALID;
-  if (OB_FAIL(get_tenant_schema_guard(tenant_id, guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(guard.get_sys_variable_schema(tenant_id, sys_variable))) {
-    LOG_WARN("fail to get sys variable schema", KR(ret), K(tenant_id));
+  if (OB_FAIL(get_tenant_schema_guard(guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret));
+  } else if (OB_FAIL(guard.get_sys_variable_schema( sys_variable))) {
+    LOG_WARN("fail to get sys variable schema", KR(ret));
   } else if (OB_ISNULL(sys_variable)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("sys variable not exist", KR(ret), K(tenant_id));
+    LOG_WARN("sys variable not exist", KR(ret));
   } else {
     name_case_mode = sys_variable->get_name_case_mode();
   }
@@ -3976,19 +3733,14 @@ int ObMultiVersionSchemaService::get_tenant_name_case_mode(
 
 // Obtain the least referenced schema version of the observer for schema recycling
 int ObMultiVersionSchemaService::get_recycle_schema_version(
-    const uint64_t tenant_id,
     int64_t &schema_version)
 {
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
   const ObSchemaStore *schema_store = NULL;
-  if (OB_INVALID_TENANT_ID == tenant_id
-      || OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
+  if (OB_ISNULL(schema_store = schema_store_)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("schema store not exist", K(ret), K(tenant_id));
+    LOG_WARN("schema store not exist", K(ret));
   } else if (OB_FAIL(schema_store->schema_mgr_cache_.get_recycle_schema_version(schema_version))) {
     LOG_WARN("fail to get recycle schema version", K(ret), K(schema_version));
   }
@@ -3999,7 +3751,6 @@ int ObMultiVersionSchemaService::get_recycle_schema_version(
 }
 
 int ObMultiVersionSchemaService::update_baseline_schema_version(
-    const uint64_t tenant_id,
     const int64_t baseline_schema_version)
 {
   int ret = OB_SUCCESS;
@@ -4007,18 +3758,18 @@ int ObMultiVersionSchemaService::update_baseline_schema_version(
   ObSchemaStore* schema_store = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret), K(tenant_id));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+    LOG_WARN("inner stat error", KR(ret));
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_ISNULL(schema_store = schema_store_)) {
     ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get schema_store", KR(ret));
   } else {
     bl_schema_version = schema_store->get_baseline_schema_version();
     if (baseline_schema_version < bl_schema_version) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), K(tenant_id),
+      LOG_WARN("invalid argument", KR(ret),
                K(baseline_schema_version), K(bl_schema_version));
     } else {
       schema_store->update_baseline_schema_version(baseline_schema_version);
@@ -4028,7 +3779,6 @@ int ObMultiVersionSchemaService::update_baseline_schema_version(
 }
 
 int ObMultiVersionSchemaService::get_baseline_schema_version(
-    const uint64_t tenant_id,
     bool auto_update,
     int64_t &baseline_schema_version)
 {
@@ -4036,13 +3786,13 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
   ObSchemaStore* schema_store = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret), K(tenant_id));
-  } else if (OB_INVALID_TENANT_ID == tenant_id) {
+    LOG_WARN("inner stat error", KR(ret));
+  } else if (false) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_store = schema_store_map_.get(tenant_id))) {
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_ISNULL(schema_store = schema_store_)) {
     ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", KR(ret), K(tenant_id));
+    LOG_WARN("fail to get schema_store", KR(ret));
   } else {
     baseline_schema_version = schema_store->get_baseline_schema_version();
     if (OB_INVALID_VERSION == baseline_schema_version && auto_update) {
@@ -4050,7 +3800,7 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
       ObRefreshSchemaStatus schema_status;
       if (ObSchemaService::g_liboblog_mode_) {
         //FIXME:(yanmu.ztl) For now, liboblog won't fetch schema from standby cluster or restore tenant.
-        schema_status.tenant_id_ = tenant_id;
+        
         schema_status.snapshot_timestamp_ = OB_INVALID_VERSION;
         schema_status.readable_schema_version_ = OB_INVALID_VERSION;
       } else {
@@ -4058,7 +3808,7 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
         if (OB_ISNULL(schema_status_proxy)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("schema_status_proxy is null", K(ret));
-        } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(tenant_id, schema_status))) {
+        } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
           LOG_WARN("fail to get refresh schema status", KR(ret), K(schema_status));
         }
       }
@@ -4079,9 +3829,7 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_tablet_to_table_history(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     ObIArray<uint64_t> &table_ids)
 {
@@ -4091,10 +3839,10 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
+  } else if (OB_UNLIKELY(false
              || tablet_ids_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(tablet_ids_cnt));
+    LOG_WARN("invalid arg", KR(ret), K(tablet_ids_cnt));
   } else if (OB_FAIL(table_ids.reserve(tablet_ids_cnt))) {
     LOG_WARN("fail to reserve array", KR(ret), K(tablet_ids_cnt));
   } else {
@@ -4104,19 +3852,19 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
     uint64_t table_id = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       const ObTabletID &tablet_id = tablet_ids.at(i);
-      if (!tablet_id.is_valid_with_tenant(tenant_id)) {
+      if (!tablet_id.is_valid_with_tenant()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid tablet_id or tenant_id", KR(ret), K(tenant_id), K(tablet_id));
+        LOG_WARN("invalid tablet_id or argument", KR(ret), K(tablet_id));
       } else if (tablet_id.is_inner_tablet()) {
         // case 1: inner tablet_id is equal to its table_id
         table_id = tablet_id.id();
-      } else if (OB_FAIL(key.init(tenant_id, tablet_id, schema_version))) {
-        LOG_WARN("fail to init key", KR(ret), K(tenant_id), K(tablet_id), K(schema_version));
+      } else if (OB_FAIL(key.init(tablet_id, schema_version))) {
+        LOG_WARN("fail to init key", KR(ret), K(tablet_id), K(schema_version));
       } else if (OB_FAIL(schema_cache_.get_tablet_cache(key, table_id))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
           LOG_WARN("fail to get from cache", KR(ret), K(key));
         } else if (OB_FAIL(fetch_idxs.push_back(i))) { // overwrite ret
-          LOG_WARN("fail to push back fetch tablet_ids", KR(ret), K(tenant_id), K(tablet_id), K(i));
+          LOG_WARN("fail to push back fetch tablet_ids", KR(ret), K(tablet_id), K(i));
         } else {
           // case 2: cache miss, fetch later
           table_id = OB_INVALID_ID; // occupancy
@@ -4124,16 +3872,16 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
       } else {
         // case 3: cache hit
         LOG_TRACE("fetch tablet-table from cache",
-                  K(tenant_id), K(schema_version), K(tablet_id), K(table_id));
+                  K(schema_version), K(tablet_id), K(table_id));
       }
       if (FAILEDx(table_ids.push_back(table_id))) {
-        LOG_WARN("fail to push back table_id", KR(ret), K(tenant_id), K(tablet_id), K(table_id));
+        LOG_WARN("fail to push back table_id", KR(ret), K(tablet_id), K(table_id));
       }
     } // end for
 
     if (OB_SUCC(ret) && tablet_ids_cnt != table_ids.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("array cnt not match", KR(ret), K(tenant_id),
+      LOG_WARN("array cnt not match", KR(ret),
                K(tablet_ids_cnt), "table_ids_cnt", table_ids.count());
     }
 
@@ -4144,9 +3892,9 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
       if (OB_UNLIKELY(schema_version <= 0
           || !ObSchemaService::is_formal_version(schema_version))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(tablet_ids_cnt), K(schema_version));
+        LOG_WARN("invalid arg", KR(ret), K(tablet_ids_cnt), K(schema_version));
       } else if (OB_FAIL(tablet_map.create(BUCKET_NUM, "TbtTbPair", "TbtTbPair"))) {
-        LOG_WARN("fail to create hashmap", KR(ret), K(tenant_id));
+        LOG_WARN("fail to create hashmap", KR(ret));
       }
 
       // fetch result
@@ -4156,10 +3904,9 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
       while (OB_SUCC(ret)
              && end_idx <= fetch_idxs.count()
              && end_idx - start_idx > 0) {
-        if (OB_FAIL(batch_fetch_tablet_to_table_history_(
-            tenant_id, tablet_ids, schema_version,
+        if (OB_FAIL(batch_fetch_tablet_to_table_history_(tablet_ids, schema_version,
             fetch_idxs, start_idx, end_idx, tablet_map))) {
-          LOG_WARN("fail to fetch tablet-table history", KR(ret), K(tenant_id), K(schema_version));
+          LOG_WARN("fail to fetch tablet-table history", KR(ret), K(schema_version));
         } else {
           start_idx = end_idx;
           end_idx = min(fetch_idxs.count(), start_idx + EACH_BATCH_CNT);
@@ -4171,12 +3918,12 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
         int64_t idx = fetch_idxs.at(i);
         if (idx < 0 || idx >= tablet_ids_cnt) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("idx is invalid", KR(ret), K(tenant_id), K(idx), K(tablet_ids_cnt));
+          LOG_WARN("idx is invalid", KR(ret), K(idx), K(tablet_ids_cnt));
         } else {
           const ObTabletID &tablet_id = tablet_ids.at(idx);
           if (OB_FAIL(tablet_map.get_refactored(tablet_id, table_id))) {
             if (OB_HASH_NOT_EXIST != ret) {
-              LOG_WARN("fail to get from map", KR(ret), K(tenant_id), K(tablet_id));
+              LOG_WARN("fail to get from map", KR(ret), K(tablet_id));
             } else {
               // Can't fetch from inner table. tablet-table history may be recycled or never exists.
               table_ids.at(idx) = OB_INVALID_ID;
@@ -4185,7 +3932,7 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
           } else {
             table_ids.at(idx) = table_id;
             LOG_TRACE("fetch from tablet-table inner table",
-                      K(tenant_id), K(schema_version), K(tablet_id), K(table_id));
+                      K(schema_version), K(tablet_id), K(table_id));
           }
         }
       } // end for
@@ -4204,7 +3951,7 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
   int64_t total_purge_count = 0;
   ObArray<ObRecycleObject> recycle_objs;
   int64_t purge_num = purge_recyclebin_arg.purge_num_;
-  const uint64_t tenant_id = purge_recyclebin_arg.tenant_id_;
+  
   const int64_t expire_time = purge_recyclebin_arg.expire_time_;
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -4214,7 +3961,7 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
     LOG_WARN("sql proxy is NULL", KR(ret));
   } else {
     rootserver::ObDDLOperator ddl_operator(*this, *sql_proxy_);
-    if (OB_FAIL(ddl_operator.fetch_expire_recycle_objects(tenant_id, expire_time, recycle_objs))) {
+    if (OB_FAIL(ddl_operator.fetch_expire_recycle_objects(expire_time, recycle_objs))) {
       LOG_WARN("fail to get fetch expire recycle objects", KR(ret), K(purge_recyclebin_arg));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < recycle_objs.count() && total_purge_count < purge_num; i++) {
@@ -4224,8 +3971,8 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
           case ObRecycleObject::TABLE: {
             int64_t cal_table_timeout = 0;
             const uint64_t table_id = recycle_obj.get_table_id();
-            if (OB_FAIL(cal_purge_table_timeout_(tenant_id, table_id, cal_table_timeout, total_purge_count))) {
-              LOG_WARN("fail to cal purge table timeout", KR(ret), K(tenant_id), K(table_id));
+            if (OB_FAIL(cal_purge_table_timeout_(table_id, cal_table_timeout, total_purge_count))) {
+              LOG_WARN("fail to cal purge table timeout", KR(ret), K(table_id));
             } else {
               tmp_timeout += cal_table_timeout;
             }
@@ -4234,7 +3981,7 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
           case ObRecycleObject::DATABASE: {
             int64_t cal_database_timeout = 0;
             const int64_t database_id = recycle_obj.get_database_id();
-            if (OB_FAIL(cal_purge_database_timeout_(tenant_id, database_id, cal_database_timeout, total_purge_count))) {
+            if (OB_FAIL(cal_purge_database_timeout_(database_id, cal_database_timeout, total_purge_count))) {
               LOG_WARN("fail to cal purge database timeout", KR(ret));
             } else {
               tmp_timeout += cal_database_timeout;
@@ -4278,7 +4025,6 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
 }
 
 int ObMultiVersionSchemaService::cal_purge_table_timeout_(
-    const uint64_t &tenant_id,
     const uint64_t &table_id,
     int64_t &cal_table_timeout,
     int64_t &total_purge_count)
@@ -4294,14 +4040,13 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-            || OB_INVALID_ID == table_id) {
+  } else if (OB_INVALID_ID == table_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is not invalid", KR(ret), K(tenant_id), K(table_id));
-  } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema_gaurd", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, orig_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+    LOG_WARN("arg is not invalid", KR(ret), K(table_id));
+  } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema_gaurd", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, orig_table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(orig_table_schema)) {
     // ignore
   } else if (OB_FAIL(orig_table_schema->get_simple_index_infos(simple_index_infos))) {
@@ -4359,11 +4104,11 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
 
       for (int64_t i = 0; OB_SUCC(ret) && i < table_count; ++i) {
         int64_t table_id = table_ids.at(i);
-        if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, tmp_table_schema))) {
-          LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+        if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, tmp_table_schema))) {
+          LOG_WARN("fail to get table schema", KR(ret), K(table_id));
         } else if (OB_ISNULL(tmp_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table schema is NULL", KR(ret), K(tenant_id), K(table_id));
+          LOG_WARN("table schema is NULL", KR(ret), K(table_id));
         } else {
           part_num += tmp_table_schema->get_all_part_num();
         }
@@ -4380,7 +4125,7 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
         ObColumnSchemaV2 *column_schema = *iter;
         if (OB_ISNULL(column_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column schema is NULL", KR(ret), K(tenant_id), K(table_id));
+          LOG_WARN("column schema is NULL", KR(ret), K(table_id));
         } else if (column_schema->is_identity_column()) {
           cal_table_timeout += GCONF.rpc_timeout;
         }
@@ -4400,7 +4145,6 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
 }
 
 int ObMultiVersionSchemaService::cal_purge_database_timeout_(
-    const uint64_t &tenant_id,
     const uint64_t &database_id,
     int64_t &cal_database_timeout,
     int64_t &total_purge_count)
@@ -4414,16 +4158,15 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-            || OB_INVALID_ID == database_id) {
+  } else if (OB_INVALID_ID == database_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is not valid", KR(ret), K(tenant_id), K(database_id));
-  } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id), K(database_id));
+    LOG_WARN("arg is not valid", KR(ret), K(database_id));
+  } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", KR(ret), K(database_id));
   } else {
     const ObSimpleDatabaseSchema *database_schema = NULL;
-    if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_id, database_schema))) {
-      LOG_WARN("fail to get database schema", KR(ret), K(tenant_id), K(database_id));
+    if (OB_FAIL(schema_guard.get_database_schema( database_id, database_schema))) {
+      LOG_WARN("fail to get database schema", KR(ret), K(database_id));
     } else if (OB_ISNULL(database_schema)) {
       need_cal_timeout = false;
     }
@@ -4434,8 +4177,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // database itself
     cal_database_timeout += GCONF.rpc_timeout;
     // cal table which is already in recyclebin
-    if (OB_FAIL(schema_service_->fetch_recycle_objects_of_db(tenant_id,
-                                                            database_id,
+    if (OB_FAIL(schema_service_->fetch_recycle_objects_of_db(database_id,
                                                             *sql_proxy_,
                                                             recycle_objs))) {
       LOG_WARN("fetch recycle objects of db failed", KR(ret));
@@ -4445,8 +4187,8 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
         int64_t tmp_table_timeout = 0;
         const ObRecycleObject &recycle_obj = recycle_objs.at(i);
         const uint64_t table_id = recycle_obj.get_table_id();
-        if (OB_FAIL(cal_purge_table_timeout_(tenant_id, table_id, tmp_table_timeout, tmp_count))) {
-          LOG_WARN("fail to cal purge table timeout", KR(ret), K(tenant_id), K(table_id));
+        if (OB_FAIL(cal_purge_table_timeout_(table_id, tmp_table_timeout, tmp_count))) {
+          LOG_WARN("fail to cal purge table timeout", KR(ret), K(table_id));
         } else {
           cal_database_timeout += tmp_table_timeout;
         }
@@ -4456,18 +4198,18 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // cal delete tables in database
     if (OB_SUCC(ret)) {
       ObArray<uint64_t> table_ids;
-      if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_table_ids_in_database(tenant_id, database_id, table_ids))) {
-        LOG_WARN("get tables in database failed", KR(ret), K(tenant_id), K(database_id));
+      if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_table_ids_in_database(database_id, table_ids))) {
+        LOG_WARN("get tables in database failed", KR(ret), K(database_id));
       } else {
         schema_guard.reset();
         for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
           int64_t tmp_count = 0;
           int64_t tmp_table_timeout = 0;
           uint64_t table_id = table_ids.at(i);
-          if (OB_FAIL(cal_purge_table_timeout_(tenant_id, table_id, tmp_table_timeout, tmp_count))) {
-            LOG_WARN("fail to get purge table timeout", KR(ret), K(tenant_id), K(table_id));
+          if (OB_FAIL(cal_purge_table_timeout_(table_id, tmp_table_timeout, tmp_count))) {
+            LOG_WARN("fail to get purge table timeout", KR(ret), K(table_id));
           } else {
             cal_database_timeout += tmp_table_timeout;
           }
@@ -4477,10 +4219,10 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // cal outline
     if (OB_SUCC(ret)) {
       ObArray<const ObSimpleOutlineSchema *> outlines;
-      if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_simple_outline_schemas_in_database(tenant_id, database_id, outlines))) {
-        LOG_WARN("fail to get outlines in database failed", KR(ret), K(tenant_id), K(database_id));
+      if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_simple_outline_schemas_in_database(database_id, outlines))) {
+        LOG_WARN("fail to get outlines in database failed", KR(ret), K(database_id));
       } else {
         cal_database_timeout += outlines.count() * GCONF.rpc_timeout;
       }
@@ -4488,10 +4230,10 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // cal packags
     if (OB_SUCC(ret)) {
       ObArray<const ObSimplePackageSchema *> packages;
-      if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_simple_package_schemas_in_database(tenant_id, database_id, packages))) {
-        LOG_WARN("fail to get packages in database failed", KR(ret), K(tenant_id), K(database_id));
+      if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_simple_package_schemas_in_database(database_id, packages))) {
+        LOG_WARN("fail to get packages in database failed", KR(ret), K(database_id));
       } else {
         cal_database_timeout += packages.count() * GCONF.rpc_timeout;
       }
@@ -4499,10 +4241,10 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // cal routines
     if (OB_SUCC(ret)) {
       ObArray<const ObSimpleRoutineSchema *> routines;
-      if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_simple_routine_schemas_in_database(tenant_id, database_id, routines))) {
-        LOG_WARN("fail to get routines in database failed", KR(ret), K(tenant_id), K(database_id));
+      if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_simple_routine_schemas_in_database(database_id, routines))) {
+        LOG_WARN("fail to get routines in database failed", KR(ret), K(database_id));
       } else {
         cal_database_timeout += routines.count() * GCONF.rpc_timeout;
       }
@@ -4510,10 +4252,10 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // cal sequences
     if (OB_SUCC(ret)) {
       ObArray<const ObSequenceSchema*> sequence_schemas;
-      if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_sequence_schemas_in_database(tenant_id, database_id, sequence_schemas))) {
-        LOG_WARN("fail to get sequences in database failed", KR(ret), K(tenant_id), K(database_id));
+      if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_sequence_schemas_in_database(database_id, sequence_schemas))) {
+        LOG_WARN("fail to get sequences in database failed", KR(ret), K(database_id));
       } else {
         cal_database_timeout += sequence_schemas.count() * GCONF.rpc_timeout;
       }
@@ -4521,10 +4263,10 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     // cal mock_fk
     if (OB_SUCC(ret)) {
       ObArray<const ObSimpleMockFKParentTableSchema *> mock_fk_parent_table_schemas;
-      if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_simple_mock_fk_parent_table_schemas_in_database(tenant_id, database_id, mock_fk_parent_table_schemas))) {
-        LOG_WARN("fail to get mock_fk_parent_table_schemas in database failed", KR(ret), K(tenant_id), K(database_id));
+      if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
+        LOG_WARN("fail to get tenant schema guard", KR(ret));
+      } else if (OB_FAIL(schema_guard.get_simple_mock_fk_parent_table_schemas_in_database(database_id, mock_fk_parent_table_schemas))) {
+        LOG_WARN("fail to get mock_fk_parent_table_schemas in database failed", KR(ret), K(database_id));
       } else {
         cal_database_timeout += mock_fk_parent_table_schemas.count() * GCONF.rpc_timeout;
       }
@@ -4533,9 +4275,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
   return ret;
 }
 
-int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletID> &tablet_ids,
+int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const ObIArray<int64_t> &tablet_idxs,
     const int64_t start_idx,
@@ -4546,18 +4286,18 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
+  } else if (OB_UNLIKELY(false
              || start_idx < 0
              || end_idx - start_idx <= 0
              || end_idx > tablet_idxs.count()
              || tablet_ids.count() <= 0
              || tablet_idxs.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(start_idx), K(end_idx),
+    LOG_WARN("invalid arg", KR(ret), K(start_idx), K(end_idx),
              "tablet_ids_cnt", tablet_ids.count(), "tablet_idxs_cnt", tablet_idxs.count());
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy is null", KR(ret), K(tenant_id));
+    LOG_WARN("sql_proxy is null", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
@@ -4567,11 +4307,11 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
         int64_t idx = tablet_idxs.at(i);
         if (idx < 0 || idx >= tablet_ids.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("idx is invalid", KR(ret), K(tenant_id), K(idx),
+          LOG_WARN("idx is invalid", KR(ret), K(idx),
                    "tablet_ids_cnt", tablet_ids.count());
         } else if (OB_FAIL(tablet_ids_sql.append_fmt("%s%lu",
                    i == start_idx ? "" : ", ", tablet_ids.at(idx).id()))) {
-          LOG_WARN("fail to append sql", KR(ret), K(tenant_id), K(idx));
+          LOG_WARN("fail to append sql", KR(ret), K(idx));
         }
       } // end for
 
@@ -4584,12 +4324,12 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
           tablet_ids_sql.string().length(),
           tablet_ids_sql.string().ptr(),
           schema_version))) {
-        LOG_WARN("fail to assign fmt", KR(ret), K(tenant_id), K(schema_version));
-      } else if (OB_FAIL(sql_proxy_->read(res, tenant_id, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(tenant_id), K(sql));
+        LOG_WARN("fail to assign fmt", KR(ret), K(schema_version));
+      } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
+        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret), K(tenant_id), K(sql));
+        LOG_WARN("result is null", KR(ret), K(sql));
       } else {
         ObTabletID tablet_id;
         uint64_t id = OB_INVALID_ID;
@@ -4600,15 +4340,15 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
         while (OB_SUCC(ret) && OB_SUCC(result->next())) {
           EXTRACT_INT_FIELD_MYSQL(*result, "is_deleted", is_deleted, bool);
           EXTRACT_INT_FIELD_MYSQL(*result, "tablet_id", id, uint64_t);
-          EXTRACT_INT_FIELD_MYSQL_WITH_TENANT_ID(*result, "table_id", table_id, tenant_id);
+          EXTRACT_INT_FIELD_MYSQL(*result, "table_id", table_id, int64_t);
           if (OB_SUCC(ret) && is_deleted) { // tablet has been dropped
             table_id = OB_INVALID_ID;
           }
           tablet_id = id;
-          if (FAILEDx(key.init(tenant_id, tablet_id, schema_version))) {
-            LOG_WARN("fail to init key", KR(ret), K(tenant_id), K(tablet_id), K(schema_version));
+          if (FAILEDx(key.init(tablet_id, schema_version))) {
+            LOG_WARN("fail to init key", KR(ret), K(tablet_id), K(schema_version));
           } else if (OB_FAIL(tablet_map.set_refactored(tablet_id, table_id))) { // won't overwrite
-            LOG_WARN("fail to set tablet-table pair", KR(ret), K(tenant_id), K(tablet_id), K(table_id));
+            LOG_WARN("fail to set tablet-table pair", KR(ret), K(tablet_id), K(table_id));
           } else if (OB_FAIL(schema_cache_.put_tablet_cache(key, table_id))) {
             LOG_WARN("fail to put tablet cache", KR(ret), K(key), K(table_id));
           }
@@ -4618,7 +4358,7 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
           ret = OB_SUCCESS;
         } else {
           ret = OB_SUCC(ret) ? OB_ERR_UNEXPECTED : ret;
-          LOG_WARN("fail to get result", KR(ret), K(tenant_id), K(sql));
+          LOG_WARN("fail to get result", KR(ret), K(sql));
         }
       }
     } // end SMART_VAR
@@ -4626,28 +4366,6 @@ int ObMultiVersionSchemaService::batch_fetch_tablet_to_table_history_(
   return ret;
 }
 
-int ObMultiVersionSchemaService::get_dropped_tenant_ids(
-    common::ObIArray<uint64_t> &dropped_tenant_ids)
-{
-  int ret = OB_SUCCESS;
-  dropped_tenant_ids.reset();
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
-  } else {
-    SpinRLockGuard guard(schema_manager_rwlock_);
-    ObSchemaGetterGuard schema_guard;
-    if (OB_UNLIKELY(!is_tenant_full_schema(OB_SYS_TENANT_ID))) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("sys schema is not full", KR(ret));
-    } else if (OB_FAIL(get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-      LOG_WARN("get sys tenant schema guard failed", KR(ret));
-    } else if (OB_FAIL(schema_guard.get_dropped_tenant_ids(dropped_tenant_ids))) {
-      LOG_WARN("get dropped tenant ids failed", KR(ret));
-    }
-  }
-  return ret;
-}
 
 }//end of namespace schema
 }//end of namespace share

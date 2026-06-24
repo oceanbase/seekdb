@@ -109,10 +109,10 @@ void ObTableColumns::reset()
   min_data_version_ = OB_INVALID_VERSION;
 }
 
-int ObTableColumns::init(uint64_t tenant_id) {
+int ObTableColumns::init() {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, min_data_version_))) {
-    LOG_WARN("fail to get min data version", K(ret), K(tenant_id));
+  if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version_))) {
+    LOG_WARN("fail to get min data version", K(ret));
   }
   return ret;
 }
@@ -134,12 +134,12 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_table_id)) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
-      } else if (OB_FAIL(sql_schema_guard_.get_table_schema(effective_tenant_id_, show_table_id, table_schema))) {
-       LOG_WARN("fail to get table schema", K(ret), K(effective_tenant_id_));
+      } else if (OB_FAIL(sql_schema_guard_.get_table_schema( show_table_id, table_schema))) {
+       LOG_WARN("fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("fail to get table schema", K(ret), K(show_table_id));
-      } else if (OB_SYS_TENANT_ID != table_schema->get_tenant_id()
+      } else if (false
           && table_schema->is_vir_table()
           && is_restrict_access_virtual_table(table_schema->get_table_id())) {
         ret = OB_TABLE_NOT_EXIST;
@@ -153,11 +153,11 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
         const ObDatabaseSchema *db_schema = NULL;
         if (OB_UNLIKELY(!session_priv.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Session priv is invalid", "tenant_id", session_priv.tenant_id_,
+          LOG_WARN("Session priv is invalid", 
                     "user_id", session_priv.user_id_, K(ret));
         } else if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
           LOG_WARN("init failed", K(ret));
-        } else if (OB_FAIL(sql_schema_guard_.get_database_schema(table_schema->get_tenant_id(), table_schema->get_database_id(), db_schema))) {
+        } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema->get_database_id(), db_schema))) {
           LOG_WARN("get database schema failed", K(ret));
         } else if (OB_ISNULL(db_schema)) {
           ret = OB_ERR_UNEXPECTED;
@@ -386,7 +386,6 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
   int64_t pos = 0;
   ObSessionPrivInfo session_priv;
   const ObDatabaseSchema *db_schema = NULL;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
   if (OB_ISNULL(cur_row_.cells_) || OB_ISNULL(allocator_)|| OB_ISNULL(session_) ||
       OB_ISNULL(schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -406,15 +405,15 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
       LOG_WARN("fail to get session priv info", K(ret));
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Session priv is invalid", "tenant_id", session_priv.tenant_id_,
+      LOG_WARN("Session priv is invalid", 
                 "user_id", session_priv.user_id_, K(ret));
-    } else if (OB_FAIL(sql_schema_guard_.get_database_schema(tenant_id, table_schema.get_database_id(), db_schema))) {
+    } else if (OB_FAIL(sql_schema_guard_.get_database_schema( table_schema.get_database_id(), db_schema))) {
       LOG_WARN("failed to get database_schema", K(ret),
-         K(tenant_id), K(table_schema.get_database_id()));
+         K(table_schema.get_database_id()));
     } else if (OB_UNLIKELY(NULL == db_schema)) {
       ret = OB_ERR_BAD_DATABASE;
       LOG_WARN("db_schema is null", K(ret),
-        K(session_->get_effective_tenant_id()), K(table_schema.get_database_id()));
+        K(table_schema.get_database_id()));
     }
   }
   const common::ObIArray<uint64_t> &enable_role_id_array = session_->get_enable_role_array();
@@ -776,7 +775,7 @@ int ObTableColumns::fill_row_cells(
 {
   int ret = OB_SUCCESS;
   uint64_t cell_idx = 0;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const uint64_t table_id = table_schema.get_table_id();
   ColumnAttributes column_attributes;
   if (OB_ISNULL(cur_row_.cells_)) {
@@ -940,8 +939,7 @@ int ObTableColumns::deduce_column_attributes(
     }
     if (OB_FAIL(ret)) {
     } else if (ObRawExpr::EXPR_COLUMN_REF == expr->get_expr_class()) {
-      if (OB_FAIL(set_col_attrs_according_binary_expr(session->get_effective_tenant_id(),
-                                                      select_stmt, expr, schema_guard,
+      if (OB_FAIL(set_col_attrs_according_binary_expr(select_stmt, expr, schema_guard,
                                                       nullable, has_default, is_string_lob))) {
         LOG_WARN("fail to get null and default for binary expr", K(ret));
       }
@@ -960,8 +958,7 @@ int ObTableColumns::deduce_column_attributes(
         } else {
           switch (t_expr->get_expr_class()) {
           case ObRawExpr::EXPR_COLUMN_REF:
-            if (OB_FAIL(set_col_attrs_according_binary_expr(session->get_effective_tenant_id(),
-                                                            select_stmt, t_expr, schema_guard,
+            if (OB_FAIL(set_col_attrs_according_binary_expr(select_stmt, t_expr, schema_guard,
                                                             nullable, has_default, is_string_lob))) {
               LOG_WARN("fail to get null and default for binary expr", K(ret));
             }
@@ -1039,20 +1036,19 @@ int ObTableColumns::deduce_column_attributes(
       const ObColumnPriv *column_priv = NULL;
       if (OB_UNLIKELY(!session_priv.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Session priv is invalid", "tenant_id", session_priv.tenant_id_,
+        LOG_WARN("Session priv is invalid", 
                   "user_id", session_priv.user_id_, K(ret));
       } else if (table_schema.get_database_id() == OB_INVALID_ID) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("db name not found", K(ret));
-      } else if (OB_FAIL(schema_guard->get_database_schema(table_schema.get_tenant_id(), 
+      } else if (OB_FAIL(schema_guard->get_database_schema( 
                                                            table_schema.get_database_id(), 
                                                            db_schema))) {
         LOG_WARN("get database schema failed", K(ret));
       } else if (OB_ISNULL(db_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("db schema is null", K(ret));
-      } else if (OB_FAIL(schema_guard->get_column_priv(ObColumnPrivSortKey(session_priv.tenant_id_, 
-                                                                           session_priv.user_id_, 
+      } else if (OB_FAIL(schema_guard->get_column_priv(ObColumnPrivSortKey(session_priv.user_id_, 
                                                                            db_schema->get_database_name_str(), 
                                                                            table_schema.get_table_name_str(), 
                                                                            select_item.alias_name_), 
@@ -1131,9 +1127,7 @@ int ObTableColumns::deduce_column_attributes(
   return ret;
 }
 
-int ObTableColumns::set_col_attrs_according_binary_expr(
-    const uint64_t tenant_id,
-    const ObSelectStmt *select_stmt,
+int ObTableColumns::set_col_attrs_according_binary_expr(const ObSelectStmt *select_stmt,
     const ObRawExpr *expr,
     share::schema::ObSchemaGetterGuard *schema_guard,
     bool &nullable,
@@ -1157,13 +1151,13 @@ int ObTableColumns::set_col_attrs_according_binary_expr(
     if (OB_UNLIKELY(NULL == (tbl_item = select_stmt->get_table_item_by_id(bexpr->get_table_id())))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table item is NULL", K(ret), K(tbl_item));
-    } else if (OB_INVALID_ID == tbl_item->ref_id_ || tbl_item->is_link_table()) {
+    } else if (OB_INVALID_ID == tbl_item->ref_id_) {
       // do nothing
-    } else if (OB_FAIL(schema_guard->get_table_schema(tenant_id, tbl_item->ref_id_, table_schema))
+    } else if (OB_FAIL(schema_guard->get_table_schema( tbl_item->ref_id_, table_schema))
         || NULL == table_schema) {
       // reset return code to success: view_2.test
       ret = OB_SUCCESS;
-      LOG_WARN("fail to get table schema", K(ret), K(tenant_id), "table_id", tbl_item->ref_id_);
+      LOG_WARN("fail to get table schema", K(ret), "table_id", tbl_item->ref_id_);
     } else if (table_schema->is_table()) {
       if (OB_FAIL(sql::ObSQLMockSchemaUtils::try_mock_partid(table_schema, table_schema))) {
         LOG_WARN("failed to try mock rowid column", K(ret));
@@ -1202,7 +1196,7 @@ int ObTableColumns::resolve_view_definition(
     Now we are modifying it, constructing a select * from view statement, transferring the tenant switching logic to the resolver
   */
   const ObDatabaseSchema *db_schema = NULL;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   if (OB_UNLIKELY(!table_schema.is_view_table()
                   || NULL == allocator
                   || NULL == session
@@ -1210,15 +1204,15 @@ int ObTableColumns::resolve_view_definition(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parameter or data member", K(ret), K(table_schema.is_view_table()),
         K(allocator), K(session), K(schema_guard));
-  } else if (OB_FAIL(schema_guard->get_database_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard->get_database_schema(
                                                        table_schema.get_database_id(),
                                                        db_schema))) {
-    LOG_WARN("failed to get database_schema", K(ret), K(tenant_id),
-        K(session->get_effective_tenant_id()), K(table_schema.get_database_id()));
+    LOG_WARN("failed to get database_schema", K(ret),
+        K(table_schema.get_database_id()));
   } else if (OB_UNLIKELY(NULL == db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("db_schema is null", K(ret), K(tenant_id),
-        K(session->get_effective_tenant_id()), K(table_schema.get_database_id()));
+    LOG_WARN("db_schema is null", K(ret),
+        K(table_schema.get_database_id()));
   } else {
     // construct sql
     const ObString &db_name = db_schema->get_database_name_str();
@@ -1391,7 +1385,7 @@ int ObTableColumns::is_unique_key(const ObTableSchema &table_schema,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema = NULL;
-      if (OB_FAIL(schema_guard_->get_table_schema(table_schema.get_tenant_id(),
+      if (OB_FAIL(schema_guard_->get_table_schema(
                          simple_index_infos.at(i).table_id_, index_schema))) {
         LOG_WARN("fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == index_schema)) {
@@ -1434,7 +1428,7 @@ int ObTableColumns::is_multiple_key(const ObTableSchema &table_schema,
     // 3.spatial_index
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema =  NULL;
-      if (OB_FAIL(schema_guard_->get_table_schema(table_schema.get_tenant_id(),
+      if (OB_FAIL(schema_guard_->get_table_schema(
                  simple_index_infos.at(i).table_id_, index_schema))) {
         SERVER_LOG(WARN, "fail to get table schema", K(ret));
       } else if (OB_UNLIKELY(NULL == index_schema)) {

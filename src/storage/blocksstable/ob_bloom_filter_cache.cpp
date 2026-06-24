@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_bloom_filter_cache.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_index_tree_prefetcher.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
@@ -268,8 +269,8 @@ int64_t ObBloomFilter::get_serialize_size() const
  * ----------------------------------------------------ObBloomFilterCacheKey--------------------------------------------------
  */
 ObBloomFilterCacheKey::ObBloomFilterCacheKey(
-  const uint64_t tenant_id, const MacroBlockId &block_id, const int8_t prefix_rowkey_len)
-  : tenant_id_(tenant_id), macro_block_id_(block_id), prefix_rowkey_len_(prefix_rowkey_len)
+  const MacroBlockId &block_id, const int8_t prefix_rowkey_len)
+  : macro_block_id_(block_id), prefix_rowkey_len_(prefix_rowkey_len)
 {
 }
 
@@ -280,7 +281,7 @@ ObBloomFilterCacheKey::~ObBloomFilterCacheKey()
 uint64_t ObBloomFilterCacheKey::hash() const
 {
   uint64_t hash_val = macro_block_id_.hash();
-  const uint64_t sum = tenant_id_ + prefix_rowkey_len_;
+  const uint64_t sum = prefix_rowkey_len_;
   hash_val = murmurhash(&sum, sizeof(uint64_t), hash_val);
   return hash_val;
 }
@@ -288,15 +289,12 @@ uint64_t ObBloomFilterCacheKey::hash() const
 bool ObBloomFilterCacheKey::operator==(const common::ObIKVCacheKey &other) const
 {
   const ObBloomFilterCacheKey &other_bfkey = reinterpret_cast<const ObBloomFilterCacheKey&> (other);
-  return tenant_id_ == other_bfkey.tenant_id_
+  return true
       && macro_block_id_ == other_bfkey.macro_block_id_
       && prefix_rowkey_len_ == other_bfkey.prefix_rowkey_len_;
 }
 
-uint64_t ObBloomFilterCacheKey::get_tenant_id() const
-{
-  return tenant_id_;
-}
+
 
 int64_t ObBloomFilterCacheKey::size() const
 {
@@ -313,14 +311,14 @@ int ObBloomFilterCacheKey::deep_copy(char *buf, const int64_t buf_len, common::O
     ret = OB_INVALID_DATA;
     STORAGE_LOG(WARN, "The bloom filter cache key is invalid, ", K(*this), K(ret));
   } else {
-    key = new (buf) ObBloomFilterCacheKey(tenant_id_, macro_block_id_, prefix_rowkey_len_);
+    key = new (buf) ObBloomFilterCacheKey(macro_block_id_, prefix_rowkey_len_);
   }
   return ret;
 }
 
 bool ObBloomFilterCacheKey::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_
+  return true
       && macro_block_id_.is_valid()
       && 0 < prefix_rowkey_len_;
 }
@@ -587,14 +585,12 @@ ObBloomFilterCache::~ObBloomFilterCache()
 {
 }
 
-int ObBloomFilterCache::put_bloom_filter(
-    const uint64_t tenant_id,
-    const MacroBlockId& macro_block_id,
+int ObBloomFilterCache::put_bloom_filter(const MacroBlockId& macro_block_id,
     const ObBloomFilterCacheValue &bf_value,
     const bool adaptive)
 {
   int ret = OB_SUCCESS;
-  ObBloomFilterCacheKey bf_key(tenant_id, macro_block_id, static_cast<int8_t>(bf_value.get_prefix_len()) );
+  ObBloomFilterCacheKey bf_key(macro_block_id, static_cast<int8_t>(bf_value.get_prefix_len()) );
   bool overwrite = true;
   if (OB_UNLIKELY(!bf_key.is_valid() || !bf_value.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -605,10 +601,10 @@ int ObBloomFilterCache::put_bloom_filter(
 
   if (OB_SUCC(ret) && adaptive) {
     storage::ObEmptyReadCell *cell = NULL;
-    if (OB_UNLIKELY(tenant_id != MTL_ID())) {
+    if (OB_UNLIKELY(false)) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(ERROR, "mtl id not match, ", K(ret), K(tenant_id), K(MTL_ID()));
-    } else if (OB_FAIL(MTL(ObEmptyReadBucket *)->get_cell(bf_key.hash(), cell))) {
+      STORAGE_LOG(ERROR, "mtl id not match, ", K(ret));
+    } else if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(bf_key.hash(), cell))) {
       STORAGE_LOG(WARN, "get_bucket_cell fail, ", K(ret));
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
@@ -616,13 +612,12 @@ int ObBloomFilterCache::put_bloom_filter(
     } else {
       cell->reset();//ignore ret
     }
-    auto_bf_cache_miss_count_threshold(MTL(compaction::ObTenantTabletScheduler *)->get_bf_queue_size());
+    auto_bf_cache_miss_count_threshold(share::g_mp->tenant_tablet_scheduler()->get_bf_queue_size());
   }
   return ret;
 }
 
 int ObBloomFilterCache::may_contain(
-    const uint64_t tenant_id,
     const MacroBlockId &macro_block_id,
     const ObDatumRowkey &rowkey,
     const ObStorageDatumUtils &datum_utils,
@@ -630,7 +625,7 @@ int ObBloomFilterCache::may_contain(
 {
   int ret = OB_SUCCESS;
   is_contain = true;
-  ObBloomFilterCacheKey bf_key(tenant_id, macro_block_id, static_cast<int8_t>(rowkey.get_datum_cnt()) );
+  ObBloomFilterCacheKey bf_key(macro_block_id, static_cast<int8_t>(rowkey.get_datum_cnt()) );
   const ObBloomFilterCacheValue *bf_value = NULL;
   ObKVCacheHandle handle;
   uint64_t key_hash = 0;
@@ -667,7 +662,6 @@ int ObBloomFilterCache::may_contain(
 }
 
 int ObBloomFilterCache::may_contain(
-    const uint64_t tenant_id,
     const MacroBlockId &macro_block_id,
     const storage::ObRowsInfo *rows_info,
     const int64_t rowkey_begin_idx,
@@ -678,7 +672,7 @@ int ObBloomFilterCache::may_contain(
   int ret = OB_SUCCESS;
   is_contain = false;
   auto *my_rows_info = const_cast<storage::ObRowsInfo *>(rows_info);
-  ObBloomFilterCacheKey bf_key(tenant_id, macro_block_id, static_cast<int8_t>(my_rows_info->get_datum_cnt()));
+  ObBloomFilterCacheKey bf_key(macro_block_id, static_cast<int8_t>(my_rows_info->get_datum_cnt()));
   const ObBloomFilterCacheValue *bf_value = NULL;
   ObKVCacheHandle handle;
   uint64_t key_hash = 0;
@@ -726,7 +720,6 @@ int ObBloomFilterCache::may_contain(
 }
 
 int ObBloomFilterCache::may_contain(
-    const uint64_t tenant_id,
     const MacroBlockId &macro_block_id,
     const storage::ObRowKeysInfo *rowkeys_info,
     const int64_t rowkey_begin_idx,
@@ -737,7 +730,7 @@ int ObBloomFilterCache::may_contain(
   int ret = OB_SUCCESS;
   is_contain = false;
   storage::ObRowKeysInfo *my_rowkeys_info = const_cast<storage::ObRowKeysInfo *>(rowkeys_info);
-  ObBloomFilterCacheKey bf_key(tenant_id, macro_block_id, static_cast<int8_t>(my_rowkeys_info->get_rowkey(rowkey_begin_idx).get_datum_cnt()));
+  ObBloomFilterCacheKey bf_key(macro_block_id, static_cast<int8_t>(my_rowkeys_info->get_rowkey(rowkey_begin_idx).get_datum_cnt()));
   const ObBloomFilterCacheValue *bf_value = NULL;
   ObKVCacheHandle handle;
   uint64_t key_hash = 0;
@@ -785,7 +778,6 @@ int ObBloomFilterCache::may_contain(
 
 
 int ObBloomFilterCache::inc_empty_read(
-    const uint64_t tenant_id,
     const uint64_t table_id,
     const share::ObLSID &ls_id,
     const storage::ObITable::TableKey &sstable_key,
@@ -795,26 +787,26 @@ int ObBloomFilterCache::inc_empty_read(
     const int64_t empty_read_cnt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || !macro_id.is_valid()
+  if (OB_UNLIKELY(false || !macro_id.is_valid()
                   || (table_id == OB_INVALID_ID || table_id < 0)
                   || !(empty_read_prefix > 0
                        && empty_read_prefix <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER /* max rowkey column count */))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(tenant_id), K(macro_id), K(table_id), K(empty_read_prefix));
+    LOG_WARN("Invalid argument", K(ret), K(macro_id), K(table_id), K(empty_read_prefix));
   } else if (0 == bf_cache_miss_count_threshold_) {
     // bf cache is disabled, do nothing
   } else {
-    const ObBloomFilterCacheKey bfc_key(tenant_id, macro_id, empty_read_prefix);
+    const ObBloomFilterCacheKey bfc_key(macro_id, empty_read_prefix);
     uint64_t key_hash = bfc_key.hash();
     uint64_t cur_cnt = 1;
     storage::ObEmptyReadCell *cell = nullptr;
     if (OB_UNLIKELY(!bfc_key.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Invalid argument", K(bfc_key), K(ret));
-    } else if (OB_UNLIKELY(tenant_id != MTL_ID())) {
+    } else if (OB_UNLIKELY(false)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("mtl id not match", K(ret), K(tenant_id), K(MTL_ID()));
-    } else if (OB_FAIL(MTL(ObEmptyReadBucket *)->get_cell(key_hash, cell))) {
+      LOG_ERROR("mtl id not match", K(ret));
+    } else if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(key_hash, cell))) {
       LOG_WARN("get_bucket_cell fail", K(ret));
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
@@ -841,14 +833,14 @@ int ObBloomFilterCache::inc_empty_read(
           LOG_WARN("unexpected rowkey", K(ret), KP(rowkey), KPC(read_handle));
         } else if (cell->check_waiting()) {
           // bf is on the way, do nothing
-        } else if (OB_FAIL(MTL(storage::ObTenantMetaMemMgr *)
+        } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()
                         ->schedule_load_bloomfilter(sstable_key, ls_id, macro_id, *rowkey))) {
           LOG_WARN("fail to schedule load bf", K(ret), K(sstable_key), K(macro_id));
         } else {
           cell->set_waiting();
         }
       } else {
-        if (OB_FAIL(MTL(compaction::ObTenantTabletScheduler *)
+        if (OB_FAIL(share::g_mp->tenant_tablet_scheduler()
                         ->schedule_build_bloomfilter(table_id, macro_id, empty_read_prefix))) {
           LOG_WARN("fail to schedule build bf", K(ret), K(bfc_key), K(cur_cnt), K_(bf_cache_miss_count_threshold));
         } else {

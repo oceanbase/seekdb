@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_tenant_dag_scheduler.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/thread/thread_mgr.h"
 #include "storage/compaction/ob_tenant_compaction_progress.h"
 #include "storage/compaction/ob_compaction_dag_ranker.h"
@@ -1463,7 +1464,7 @@ int ObIDagNet::add_dag_into_dag_net(ObIDag &dag)
     ret = OB_CANCELED;
     LOG_WARN("dag net is cancel, do not allow to add new dag", K(ret), K(is_cancel_));
   } else {
-    if (!dag_record_map_.created() && OB_FAIL(dag_record_map_.create(DEFAULT_DAG_BUCKET, "DagRecordMap", "DagRecordNode", MTL_ID()))) {
+    if (!dag_record_map_.created() && OB_FAIL(dag_record_map_.create(DEFAULT_DAG_BUCKET, "DagRecordMap", "DagRecordNode"))) {
       COMMON_LOG(WARN, "failed to create dag record map", K(ret), K(dag));
     } else if (OB_HASH_NOT_EXIST != (hash_ret = dag_record_map_.get_refactored(&dag, dag_record))) {
       ret = OB_SUCCESS == hash_ret ? OB_ERR_UNEXPECTED : hash_ret;
@@ -1709,7 +1710,7 @@ void ObIDagNet::diagnose_dag(common::ObIArray<compaction::ObDiagnoseTabletCompPr
 void ObIDagNet::gene_dag_info(ObDagInfo &info, const char *list_info)
 {
   ObMutexGuard guard(lock_);
-  info.tenant_id_ = MTL_ID();
+  
   info.dag_net_type_ = type_;
   info.dag_id_ = dag_net_id_;
   info.dag_status_ = ObIDag::DAG_STATUS_NODE_RUNNING;
@@ -1743,7 +1744,7 @@ void ObIDagNet::gene_dag_info(ObDagInfo &info, const char *list_info)
 void ObIDag::gene_dag_info(ObDagInfo &info, const char *list_info)
 {
   ObMutexGuard guard(lock_);
-  info.tenant_id_ = MTL_ID();
+  
   info.dag_type_ = type_;
   info.dag_id_ = id_;
   info.dag_status_ = dag_status_;
@@ -1834,8 +1835,7 @@ const char *ObIDagNet::get_dag_net_type_str(ObDagNetType::ObDagNetTypeEnum type)
 }
 
 ObDagInfo::ObDagInfo()
-  : tenant_id_(0),
-    dag_type_(ObDagType::DAG_TYPE_MAX),
+  : dag_type_(ObDagType::DAG_TYPE_MAX),
     dag_net_type_(ObDagNetType::DAG_NET_TYPE_MAX),
     dag_key_(),
     dag_net_key_(),
@@ -1852,7 +1852,7 @@ ObDagInfo::ObDagInfo()
 
 ObDagInfo & ObDagInfo::operator = (const ObDagInfo &other)
 {
-  tenant_id_ = other.tenant_id_;
+  
   dag_type_ = other.dag_type_;
   dag_net_type_ = other.dag_net_type_;
   strncpy(dag_key_, other.dag_key_, strlen(other.dag_key_) + 1);
@@ -1869,8 +1869,7 @@ ObDagInfo & ObDagInfo::operator = (const ObDagInfo &other)
 
 bool ObDagInfo::is_valid() const
 {
-  return (tenant_id_ > 0
-      && dag_status_ >= share::ObIDag::DAG_STATUS_INITING
+  return (dag_status_ >= share::ObIDag::DAG_STATUS_INITING
       && dag_status_ < share::ObIDag::DAG_STATUS_MAX
       && running_task_cnt_ >= 0
       && add_time_ >= 0
@@ -1894,15 +1893,14 @@ const char *ObDagSchedulerInfo::ObValueTypeStr[VALUE_TYPE_MAX] =
 
 
 ObDagSchedulerInfo::ObDagSchedulerInfo()
-  : tenant_id_(0),
-    value_type_(VALUE_TYPE_MAX),
+  : value_type_(VALUE_TYPE_MAX),
     key_(),
     value_(0)
 {}
 
 ObDagSchedulerInfo & ObDagSchedulerInfo::operator = (const ObDagSchedulerInfo &other)
 {
-  tenant_id_ = other.tenant_id_;
+  
   value_type_ = other.value_type_;
   strncpy(key_, other.key_, strlen(other.key_) + 1);
   value_ = other.value_;
@@ -2106,7 +2104,7 @@ void ObTenantDagWorker::run1()
       cur_task = task_;
       task_ = NULL;
       reset_compaction_thread_locals();
-      if (OB_FAIL(MTL(ObTenantDagScheduler*)->deal_with_finish_task(cur_task, *this, ret/*task error_code*/))) {
+      if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->deal_with_finish_task(cur_task, *this, ret/*task error_code*/))) {
         COMMON_LOG(WARN, "failed to finish task", K(ret), KPC(cur_task));
       }
       ObCurTraceId::reset();
@@ -2133,7 +2131,7 @@ int ObTenantDagWorker::yield()
       if (get_force_cancel_flag()) {
         ret = OB_CANCELED;
         COMMON_LOG(INFO, "Cancel this worker since the whole dag is canceled", K(ret));
-      } else if (DWS_RUNNING == status_ && MTL(ObTenantDagScheduler*)->try_switch(*this)) {
+      } else if (DWS_RUNNING == status_ && share::g_mp->tenant_dag_scheduler()->try_switch(*this)) {
         status_ = DWS_WAITING;
         while (DWS_WAITING == status_) {
           cond_.wait(SLEEP_TIME_MS);
@@ -2211,7 +2209,6 @@ void ObDagPrioScheduler::destroy_workers()
 }
 
 int ObDagPrioScheduler::init(
-    const uint64_t tenant_id,
     const int64_t dag_limit,
     const int64_t priority,
     ObIAllocator &allocator,
@@ -2219,10 +2216,10 @@ int ObDagPrioScheduler::init(
     ObTenantDagScheduler &scheduler)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id || 0 >= dag_limit) {
+  if (0 >= dag_limit) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "init ObDagPrioScheduler with invalid arguments", K(ret), K(tenant_id), K(dag_limit));
-  } else if (OB_FAIL(dag_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagMap", "DagNode", tenant_id))) {
+    COMMON_LOG(WARN, "init ObDagPrioScheduler with invalid arguments", K(ret), K(dag_limit));
+  } else if (OB_FAIL(dag_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagMap", "DagNode"))) {
     COMMON_LOG(WARN, "failed to create dap map", K(ret), K(dag_limit));
   } else {
     allocator_ = &allocator;
@@ -2463,7 +2460,7 @@ int ObDagPrioScheduler::sys_task_start(ObIDag &dag)
     ObSysTaskStat sys_task_status;
     sys_task_status.start_time_ = ObTimeUtility::fast_current_time();
     sys_task_status.task_id_ = dag.get_dag_id();
-    sys_task_status.tenant_id_ = MTL_ID();
+    
     sys_task_status.task_type_ = OB_DAG_TYPES[dag.get_type()].sys_task_type_;
 
     // allow comment truncation, no need to set ret
@@ -2864,7 +2861,7 @@ int ObDagPrioScheduler::finish_dag_(
       STORAGE_LOG(WARN, "failed to del sys task", K(tmp_ret), K(dag->get_dag_id()));
     }
 
-    compaction::ObCompactionSuggestionMgr *suggestion_mgr = MTL(compaction::ObCompactionSuggestionMgr *);
+    compaction::ObCompactionSuggestionMgr *suggestion_mgr = share::g_mp->compaction_suggestion_mgr();
     if (OB_NOT_NULL(suggestion_mgr)
       && OB_TMP_FAIL(suggestion_mgr->update_finish_cnt(
         dag->get_type(),
@@ -2875,26 +2872,26 @@ int ObDagPrioScheduler::finish_dag_(
 
     // compaction dag success
     if (ObIDag::DAG_STATUS_FINISH == status && is_mini_compaction_dag(dag->get_type())) {
-      ObTenantCompactionMemPool *mem_pool = MTL(ObTenantCompactionMemPool *);
+      ObTenantCompactionMemPool *mem_pool = share::g_mp->tenant_compaction_mem_pool();
       if (OB_NOT_NULL(mem_pool)) {
         mem_pool->reset_memory_mode();
       }
     }
 
     if (need_add) {
-      if (OB_TMP_FAIL(MTL(ObDagWarningHistoryManager*)->add_dag_warning_info(dag))) {
+      if (OB_TMP_FAIL(share::g_mp->dag_warning_history_manager()->add_dag_warning_info(dag))) {
         COMMON_LOG(WARN, "failed to add dag warning info", K(tmp_ret), K(dag));
       } else if (is_batch_exec_dag(dag->get_type())) {
         // do nothing
       } else {
         compaction::ObTabletMergeDag &merge_dag = static_cast<compaction::ObTabletMergeDag &>(*dag);
         if (OB_SUCCESS != dag->get_dag_ret()) {
-          if (OB_TMP_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)->add_diagnose_tablet(
+          if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(
                 merge_dag.ls_id_, merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
             COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret), 
                 "ls_id", merge_dag.ls_id_, "tablet_id", merge_dag.tablet_id_);
           }
-        } else if (OB_TMP_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)->delete_diagnose_tablet(
+        } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->delete_diagnose_tablet(
               merge_dag.ls_id_, merge_dag.tablet_id_, ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
           if (OB_HASH_NOT_EXIST != tmp_ret) {
             COMMON_LOG(WARN, "failed to delete diagnose tablet", K(tmp_ret),
@@ -3145,7 +3142,6 @@ int ObDagPrioScheduler::inner_add_dag(
 
 #define ADD_DAG_SCHEDULER_INFO(value_type, key_str, value) \
   { \
-    info_list[idx].tenant_id_ = MTL_ID(); \
     info_list[idx].value_type_ = value_type; \
     strncpy(info_list[idx].key_, key_str, MIN(common::OB_DAG_KEY_LENGTH - 1, strlen(key_str))); \
     info_list[idx].value_ = value; \
@@ -3491,7 +3487,7 @@ int ObDagPrioScheduler::diagnose_compaction_dags()
         } else if (OB_ISNULL(merge_dag = static_cast<ObTabletMergeDag *>(dag))) {
           tmp_ret = OB_ERR_UNEXPECTED;
           COMMON_LOG(WARN, "get unexpected null stored dag", K(tmp_ret), KPC(dag));
-        } else if (OB_TMP_FAIL(MTL(ObDiagnoseTabletMgr *)->add_diagnose_tablet(merge_dag->ls_id_,
+        } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(merge_dag->ls_id_,
                                                                                merge_dag->tablet_id_,
                                                                                ObIDag::get_diagnose_tablet_type(dag->get_type())))) {
           COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret), "ls_id", merge_dag->ls_id_, "tablet_id", merge_dag->tablet_id_);
@@ -3533,7 +3529,7 @@ int ObDagPrioScheduler::deal_with_finish_task(
     bool retry_flag = false;
     if (dag->is_dag_failed()) { // dag can retry & this task is the last running task
       if (OB_ALLOCATE_MEMORY_FAILED == error_code && is_mini_compaction_dag(dag->get_type())) {
-        ObTenantCompactionMemPool *mem_pool = MTL(ObTenantCompactionMemPool *);
+        ObTenantCompactionMemPool *mem_pool = share::g_mp->tenant_compaction_mem_pool();
         if (OB_ISNULL(mem_pool)) {
           LOG_WARN_RET(OB_ERR_UNEXPECTED, "get unexpected null mem pool from mtl");
         } else {
@@ -3716,7 +3712,7 @@ bool ObDagPrioScheduler::check_need_load_shedding_(const bool for_schedule)
   if (OB_ISNULL(scheduler = ObBasicMergeScheduler::get_merge_scheduler())) {
     // may be during the start phase
   } else if (scheduler->enable_adaptive_merge_schedule()) {
-    ObTenantTabletStatMgr *stat_mgr = MTL(ObTenantTabletStatMgr *);
+    ObTenantTabletStatMgr *stat_mgr = share::g_mp->tenant_tablet_stat_mgr();
     int64_t load_shedding_factor = 1;
     const int64_t extra_limit = for_schedule ? 0 : 1;
     ObTenantCompactionMemPool::MemoryMode mem_mode;
@@ -3725,7 +3721,7 @@ bool ObDagPrioScheduler::check_need_load_shedding_(const bool for_schedule)
     } else if (FALSE_IT(load_shedding_factor = MAX(1, stat_mgr->get_load_shedding_factor()))) {
     } else if (load_shedding_factor <= 1 || !is_compaction_dag_prio()) {
       // no need to load shedding
-    } else if (FALSE_IT(mem_mode = MTL(ObTenantCompactionMemPool *)->get_memory_mode())) {
+    } else if (FALSE_IT(mem_mode = share::g_mp->tenant_compaction_mem_pool()->get_memory_mode())) {
     } else if (ObDagPrio::DAG_PRIO_COMPACTION_HIGH == priority_
             && ObTenantCompactionMemPool::CRITICAL_MODE == mem_mode) {
       need_shedding = true;
@@ -3778,19 +3774,18 @@ void ObDagNetScheduler::destroy()
 }
 
 int ObDagNetScheduler::init(
-    const uint64_t tenant_id,
     const int64_t dag_limit,
     ObIAllocator &allocator,
     ObIAllocator &ha_allocator,
     ObTenantDagScheduler &scheduler)
 {
   int ret = OB_SUCCESS;
-  if (OB_INVALID_ID == tenant_id || 0 >= dag_limit) {
+  if (0 >= dag_limit) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "init ObDagNetScheduler with invalid arguments", K(ret), K(tenant_id), K(dag_limit));
-  } else if (OB_FAIL(dag_net_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagNetMap", "DagNetNode", tenant_id))) {
+    COMMON_LOG(WARN, "init ObDagNetScheduler with invalid arguments", K(ret), K(dag_limit));
+  } else if (OB_FAIL(dag_net_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagNetMap", "DagNetNode"))) {
     COMMON_LOG(WARN, "failed to create running dap net map", K(ret), K(dag_limit));
-  } else if (OB_FAIL(dag_net_id_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagNetIdMap", "DagNetIdNode", tenant_id))) {
+  } else if (OB_FAIL(dag_net_id_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagNetIdMap", "DagNetIdNode"))) {
     COMMON_LOG(WARN, "failed to create dap net id map", K(ret), K(dag_limit));
   } else {
     allocator_ = &allocator;
@@ -4057,7 +4052,7 @@ int ObDagNetScheduler::loop_running_dag_net_list()
         && dag_net->get_start_time() + SLOW_COMPACTION_DAG_NET_THREASHOLD < ObTimeUtility::fast_current_time()) {
       ++slow_dag_net_cnt;
       compaction::ObCOMergeDagNet *co_dag_net = static_cast<compaction::ObCOMergeDagNet*>(dag_net);
-      if (nullptr != co_dag_net && OB_TMP_FAIL(MTL(compaction::ObDiagnoseTabletMgr *)->add_diagnose_tablet(
+      if (nullptr != co_dag_net && OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(
           co_dag_net->ls_id_, co_dag_net->tablet_id_, ObDiagnoseTabletType::TYPE_MEDIUM_MERGE))) {
         COMMON_LOG(WARN, "failed to add diagnose tablet", K(tmp_ret),
             "ls_id", co_dag_net->ls_id_, "tablet_id", co_dag_net->tablet_id_);
@@ -4279,10 +4274,10 @@ int ObDagNetScheduler::get_min_end_scn_from_major_dag(const ObLSID &ls_id, SCN &
 int ObTenantDagScheduler::mtl_init(ObTenantDagScheduler* &scheduler)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(scheduler->init(MTL_ID()))) {
-    COMMON_LOG(WARN, "failed to init ObTenantDagScheduler for tenant", K(ret), K(MTL_ID()));
+  if (OB_FAIL(scheduler->init())) {
+    COMMON_LOG(WARN, "failed to init ObTenantDagScheduler for tenant", K(ret));
   } else {
-    FLOG_INFO("success to init ObTenantDagScheduler for tenant", K(ret), K(MTL_ID()), KP(scheduler));
+    FLOG_INFO("success to init ObTenantDagScheduler for tenant", K(ret), KP(scheduler));
   }
   return ret;
 }
@@ -4324,7 +4319,7 @@ void ObTenantDagScheduler::wait()
 
 void ObTenantDagScheduler::reload_config()
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (tenant_config.is_valid()) {
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_HIGH, tenant_config->compaction_high_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, tenant_config->compaction_mid_thread_score);
@@ -4340,13 +4335,12 @@ void ObTenantDagScheduler::reload_config()
 }
 
 int ObTenantDagScheduler::init_allocator(
-    const uint64_t tenant_id,
     const lib::ObLabel &label,
     lib::MemoryContext &mem_context)
 {
   int ret = OB_SUCCESS;
   ContextParam param;
-  param.set_mem_attr(tenant_id, label, common::ObCtxIds::DEFAULT_CTX_ID)
+  param.set_mem_attr(label, common::ObCtxIds::DEFAULT_CTX_ID)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE)
       .set_properties(ALLOC_THREAD_SAFE)
       .set_parallel(8);
@@ -4360,7 +4354,6 @@ int ObTenantDagScheduler::init_allocator(
 }
 
 int ObTenantDagScheduler::init(
-    const uint64_t tenant_id,
     const int64_t check_period /* =DEFAULT_CHECK_PERIOD */,
     const int64_t loop_waiting_list_period /* = LOOP_WAITING_DAG_LIST_INTERVAL*/,
     const int64_t dag_limit /*= DEFAULT_MAX_DAG_NUM*/)
@@ -4369,21 +4362,21 @@ int ObTenantDagScheduler::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "scheduler init twice", K(ret));
-  } else if (OB_INVALID_ID == tenant_id || 0 >= dag_limit) {
+  } else if (0 >= dag_limit) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "init ObTenantDagScheduler with invalid arguments", K(ret), K(tenant_id), K(dag_limit));
+    COMMON_LOG(WARN, "init ObTenantDagScheduler with invalid arguments", K(ret), K(dag_limit));
   } else if (OB_FAIL(scheduler_sync_.init(ObWaitEventIds::SCHEDULER_COND_WAIT))) {
     COMMON_LOG(WARN, "failed to init scheduler sync", K(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::DagScheduler, tg_id_))) {
     COMMON_LOG(WARN, "TG create dag scheduler failed", K(ret));
-  } else if (OB_FAIL(init_allocator(tenant_id, ObModIds::OB_SCHEDULER, mem_context_))) {
+  } else if (OB_FAIL(init_allocator(ObModIds::OB_SCHEDULER, mem_context_))) {
     COMMON_LOG(WARN, "failed to init scheduler allocator", K(ret));
-  } else if (OB_FAIL(init_allocator(tenant_id, "HAScheduler", ha_mem_context_))) {
+  } else if (OB_FAIL(init_allocator("HAScheduler", ha_mem_context_))) {
     COMMON_LOG(WARN, "failed to init ha scheduler allocator", K(ret));
-  } else if (OB_FAIL(init_allocator(tenant_id, "Independent", independent_mem_context_))) {
+  } else if (OB_FAIL(init_allocator("Independent", independent_mem_context_))) {
     COMMON_LOG(WARN, "failed to init independent dag allocator", K(ret));
   } else if (OB_FAIL(dag_net_sche_.init(
-      tenant_id, dag_limit, get_allocator(false/*is_ha*/), get_allocator(true/*is_ha*/), *this))) {
+      dag_limit, get_allocator(false/*is_ha*/), get_allocator(true/*is_ha*/), *this))) {
     COMMON_LOG(WARN, "failed to init dag net scheduler", K(ret), K(dag_limit));
   } else {
     check_period_ = check_period;
@@ -4408,7 +4401,7 @@ int ObTenantDagScheduler::init(
   // primary or standby -- and the role is unknown at tenant-start time.
   for (int64_t i = 0; OB_SUCC(ret) && i < ObDagPrio::DAG_PRIO_MAX; ++i) {
     if (OB_FAIL(prio_sche_[i].init(
-        tenant_id, dag_limit, i, get_allocator(false/*is_ha*/), get_allocator(true/*is_ha*/), *this))) {
+        dag_limit, i, get_allocator(false/*is_ha*/), get_allocator(true/*is_ha*/), *this))) {
       COMMON_LOG(WARN, "failed to init prio_sche_", K(ret), K(dag_limit));
     } else {
       work_thread_num_ += prio_sche_[i].get_limit();
@@ -4645,7 +4638,7 @@ void ObTenantDagScheduler::diagnose_for_suggestion()
         LOG_WARN_RET(tmp_ret, "failed to push back reasons");
       }
     }
-    compaction::ObCompactionSuggestionMgr *suggestion_mgr = MTL(compaction::ObCompactionSuggestionMgr *);
+    compaction::ObCompactionSuggestionMgr *suggestion_mgr = share::g_mp->compaction_suggestion_mgr();
     if (OB_NOT_NULL(suggestion_mgr)
         && OB_TMP_FAIL(suggestion_mgr->diagnose_for_suggestion(
           reasons, running_cnts, thread_limits, dag_running_cnts))) {

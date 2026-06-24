@@ -62,8 +62,7 @@ private:
   int gen_sql(common::ObSqlString &sql,
               common::ObSqlString &values,
               const ObCatalogSchema &schema);
-  int gen_catalog_priv_dml(const uint64_t exec_tenant_id,
-                           const ObCatalogPrivSortKey &catalog_priv_key,
+  int gen_catalog_priv_dml(const ObCatalogPrivSortKey &catalog_priv_key,
                            const ObPrivSet &priv_set,
                            share::ObDMLSqlSplicer &dml);
 

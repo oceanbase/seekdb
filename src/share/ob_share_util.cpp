@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "logservice/ob_log_service.h" // ObLogService
+#include "share/rc/ob_module_provider.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_global_stat_proxy.h" // for ObGlobalStatProxy
 #include "share/schema/ob_schema_struct.h" // for ObTenantSchema
@@ -185,22 +186,15 @@ int ObShareUtil::get_ctx_timeout(const int64_t default_timeout, int64_t &timeout
 
 int ObShareUtil::fetch_current_data_version(
     common::ObISQLClient &client,
-    const uint64_t tenant_id,
     uint64_t &data_version)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_id is invalid", KR(ret), K(tenant_id));
-  } else {
-    data_version = DATA_CURRENT_VERSION;
-  }
+  data_version = DATA_CURRENT_VERSION;
   return ret;
 }
 
 int ObShareUtil::get_ora_rowscn(
     common::ObISQLClient &client,
-    const uint64_t tenant_id,
     const ObSqlString &sql,
     SCN &ora_rowscn)
 {
@@ -209,7 +203,7 @@ int ObShareUtil::get_ora_rowscn(
   ora_rowscn.set_invalid();
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
-    if (OB_FAIL(client.read(res, tenant_id, sql.ptr()))) {
+    if (OB_FAIL(client.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -234,61 +228,55 @@ int ObShareUtil::get_ora_rowscn(
   return ret;
 }
 
-int ObShareUtil::mtl_get_tenant_role(const uint64_t tenant_id, ObTenantRole::Role &tenant_role)
+int ObShareUtil::mtl_get_tenant_role(ObTenantRole::Role &tenant_role)
 {
   int ret = OB_SUCCESS;
   tenant_role = ObTenantRole::INVALID_TENANT;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
+  if (true) {
     tenant_role = ObTenantRole::PRIMARY_TENANT;
   } else {
-    MTL_SWITCH(tenant_id) {
+    MOD_SCOPE {
       tenant_role = MTL_GET_TENANT_ROLE_CACHE();
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(is_invalid_tenant(tenant_role))) {
     ret = OB_NEED_WAIT;
-    LOG_WARN("tenant role is not ready, need wait", KR(ret), K(tenant_id), K(tenant_role));
+    LOG_WARN("tenant role is not ready, need wait", KR(ret), K(tenant_role));
   }
   return ret;
 }
 
-int ObShareUtil::mtl_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary)
+int ObShareUtil::mtl_check_if_tenant_role_is_primary(bool &is_primary)
 {
   int ret = OB_SUCCESS;
   is_primary = false;
   ObTenantRole::Role tenant_role;
-  if (OB_FAIL(mtl_get_tenant_role(tenant_id, tenant_role))) {
-    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret), K(tenant_id));
+  if (OB_FAIL(mtl_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret));
   } else if (is_primary_tenant(tenant_role)) {
     is_primary = true;
   }
   return ret;
 }
 
-int ObShareUtil::mtl_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby)
+int ObShareUtil::mtl_check_if_tenant_role_is_standby(bool &is_standby)
 {
   int ret = OB_SUCCESS;
   is_standby = false;
   ObTenantRole::Role tenant_role;
-  if (OB_FAIL(mtl_get_tenant_role(tenant_id, tenant_role))) {
-    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret), K(tenant_id));
+  if (OB_FAIL(mtl_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret));
   } else if (is_standby_tenant(tenant_role)) {
     is_standby = true;
   }
   return ret;
 }
-int ObShareUtil::table_get_tenant_role(const uint64_t tenant_id, ObTenantRole &tenant_role)
+int ObShareUtil::table_get_tenant_role(ObTenantRole &tenant_role)
 {
   int ret = OB_SUCCESS;
   tenant_role.reset();
   bool is_primary = true;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
+  if (true) {
     if (OB_FAIL(is_primary_cluster(is_primary))) {
       LOG_WARN("fail to check whether is primary cluster", K(is_primary));
     } else if (is_primary) {
@@ -301,25 +289,25 @@ int ObShareUtil::table_get_tenant_role(const uint64_t tenant_id, ObTenantRole &t
   return ret;
 }
 
-int ObShareUtil::table_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary)
+int ObShareUtil::table_check_if_tenant_role_is_primary(bool &is_primary)
 {
   int ret = OB_SUCCESS;
   share::ObTenantRole tenant_role;
   is_primary = false;
-  if (OB_FAIL(table_get_tenant_role(tenant_id, tenant_role))) {
-    LOG_WARN("fail to execute table_get_tenant_role", KR(ret), K(tenant_id));
+  if (OB_FAIL(table_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute table_get_tenant_role", KR(ret));
   } else if (tenant_role.is_primary()) {
     is_primary = true;
   }
   return ret;
 }
-int ObShareUtil::table_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby)
+int ObShareUtil::table_check_if_tenant_role_is_standby(bool &is_standby)
 {
   int ret = OB_SUCCESS;
   share::ObTenantRole tenant_role;
   is_standby = false;
-  if (OB_FAIL(table_get_tenant_role(tenant_id, tenant_role))) {
-    LOG_WARN("fail to execute table_get_tenant_role", KR(ret), K(tenant_id));
+  if (OB_FAIL(table_get_tenant_role( tenant_role))) {
+    LOG_WARN("fail to execute table_get_tenant_role", KR(ret));
   } else if (tenant_role.is_standby()) {
     is_standby = true;
   }
@@ -400,7 +388,7 @@ ObReplicaType ObShareUtil::string_to_replica_type(const ObString &str)
 int ObShareUtil::get_sys_ls_readable_scn(SCN &readable_scn)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_svr = MTL(ObLSService*);
+  ObLSService *ls_svr = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   ObLS *ls = nullptr;
   share::SCN offline_scn;
@@ -428,7 +416,7 @@ int ObShareUtil::check_clog_disk_full_or_hang(
   int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
   const int64_t now = ObTimeUtility::current_time();
   bool is_disk_enough = true;
-  logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
+  logservice::ObLogService *log_service = share::g_mp->log_service();
   if (OB_ISNULL(log_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(log_service));
@@ -460,13 +448,10 @@ int ObShareUtil::check_data_disk_health_status(
   return ret;
 }
 
-int ObShareUtil::get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn)
+int ObShareUtil::get_tenant_gts(SCN &gts_scn)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
-  } else {
+  {
     ret = OB_EAGAIN;
     const transaction::MonotonicTs stc = transaction::MonotonicTs::current_time();
     transaction::MonotonicTs unused_ts(0);
@@ -476,10 +461,10 @@ int ObShareUtil::get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn)
       if (ObTimeUtility::fast_current_time() - start_time > TIMEOUT) {
         ret = OB_TIMEOUT;
         LOG_WARN("stmt is timeout", KR(ret), K(start_time), K(TIMEOUT));
-      } else if (OB_FAIL(OB_TS_MGR.get_gts(tenant_id, stc, NULL,
+      } else if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL,
                                            gts_scn, unused_ts))) {
         if (OB_EAGAIN != ret) {
-          LOG_WARN("failed to get gts", KR(ret), K(tenant_id));
+          LOG_WARN("failed to get gts", KR(ret));
         } else {
           // waiting 10ms
           ob_usleep(10L * 1000L);
@@ -487,7 +472,7 @@ int ObShareUtil::get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn)
       }
     }
   }
-  LOG_INFO("get tenant gts", KR(ret), K(tenant_id), K(gts_scn));
+  LOG_INFO("get tenant gts", KR(ret), K(gts_scn));
   return ret;
 }
 
@@ -527,7 +512,7 @@ int ObShareUtil::gen_sys_resource_pool(ObResourcePool &resource_pool)
     resource_pool.resource_pool_id_ = OB_SYS_RESOURCE_POOL_ID;
     resource_pool.unit_count_ = 1;
     resource_pool.unit_config_id_ = ObUnitConfig::SYS_UNIT_CONFIG_ID;
-    resource_pool.tenant_id_ = OB_SYS_TENANT_ID;
+    
     resource_pool.replica_type_ = REPLICA_TYPE_FULL;
   }
   return ret;
@@ -552,7 +537,7 @@ int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_sc
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
     } else {
-      ObGlobalStatProxy proxy(*GCTX.sql_proxy_, OB_SYS_TENANT_ID);
+      ObGlobalStatProxy proxy(*GCTX.sql_proxy_);
       if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
         LOG_WARN("get_baseline_schema_version failed", KR(ret));
       } else if (-1 == schema_version) {
@@ -563,7 +548,7 @@ int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_sc
     }
     if (OB_FAIL(ret)) {
     } else {
-      tenant_schema.set_tenant_id(OB_SYS_TENANT_ID);
+      
       tenant_schema.set_schema_version(schema_version);
       tenant_schema.set_locked(false);
       tenant_schema.set_read_only(false);

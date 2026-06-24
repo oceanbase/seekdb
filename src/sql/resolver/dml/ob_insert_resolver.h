@@ -113,7 +113,6 @@ private:
   ObSelectResolver *&get_sub_select_resolver() {
     return sub_select_resolver_;
   }
-  int check_insert_into_external_table();
   int add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
                                     ObSelectStmt *select_stmt,
                                     TableItem* table_item);

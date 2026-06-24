@@ -168,7 +168,7 @@ private:
   {
     int ret = OB_SUCCESS;
     if (nullptr == fork_ctx_) {
-      void *buf = ob_malloc(sizeof(ForkCtx), ObMemAttr(MTL_ID(), "ForkTblIter"));
+      void *buf = ob_malloc(sizeof(ForkCtx), ObMemAttr("ForkTblIter"));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {

@@ -15,6 +15,7 @@
  */
 
 #include "mds_factory.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
 
 namespace oceanbase
@@ -33,7 +34,7 @@ int deepcopy(const transaction::ObTransID &trans_id,
              const char *alloc_func,
              const int64_t line) {
   int ret = OB_SUCCESS;
-  ObTenantFreezer *tenant_freezer = MTL(ObTenantFreezer*);
+  ObTenantFreezer *tenant_freezer = share::g_mp->tenant_freezer();
   MDS_TG(1_ms);
   if (OB_ISNULL(tenant_freezer)) {
     ret = OB_ERR_UNEXPECTED;
@@ -53,8 +54,7 @@ int deepcopy(const transaction::ObTransID &trans_id,
       }
     } else if (CLICK() &&
         OB_ISNULL(p_impl = (ImplType *)allocator.alloc(sizeof(ImplType),
-                                                       ObMemAttr(MTL_ID(),
-                                                       "MDS_CTX_COPY",
+                                                       ObMemAttr("MDS_CTX_COPY",
                                                        ObCtxIds::MDS_CTX_ID)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       MDS_LOG(WARN, "alloc memory failed", KR(ret), K(IDX));
@@ -140,7 +140,7 @@ int MdsFactory::create_buffer_ctx(const transaction::ObTxDataSourceType &data_so
       int64_t type_id = TupleTypeIdx<BufferCtxTupleHelper, BUFFER_CTX_TYPE>::value;\
       BUFFER_CTX_TYPE *ctx_impl = (BUFFER_CTX_TYPE *)\
                                    allocator.alloc(sizeof(BUFFER_CTX_TYPE),\
-                                                   ObMemAttr(MTL_ID(),\
+                                                   ObMemAttr(\
                                                    "MDS_CTX_CREATE",\
                                                    ObCtxIds::MDS_CTX_ID));\
       if (OB_ISNULL(ctx_impl)) {\

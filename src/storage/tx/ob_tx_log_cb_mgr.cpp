@@ -22,19 +22,16 @@ namespace oceanbase
 namespace transaction
 {
 
-int ObTxLogCbPoolMgr::init(const int64_t tenant_id, const ObLSID ls_id)
+int ObTxLogCbPoolMgr::init(const ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
 
-  if (tenant_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(ret), K(tenant_id));
-  } else if (ATOMIC_LOAD(&is_inited_)) {
+  if (ATOMIC_LOAD(&is_inited_)) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "init twice", K(ret), KPC(this));
   } else {
     clear_sync_size_history_();
-    allocator_.set_tenant_id(tenant_id);
+    
     ls_id_ = ls_id;
     ATOMIC_STORE(&is_inited_, true);
   }
@@ -175,13 +172,12 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
 
   int64_t removed_cnt = 0;
 
-  const int64_t tenant_memory_limit = ::oceanbase::lib::get_tenant_memory_limit(MTL_ID());
+  const int64_t tenant_memory_limit = ::oceanbase::lib::get_tenant_memory_limit();
 
   common::ObLabelItem item;
   ObLabel mem_label("TxLogCbPool");
-  (void)::oceanbase::lib::get_tenant_label_memory(MTL_ID(), mem_label, item);
+  (void)::oceanbase::lib::get_tenant_label_memory(mem_label, item);
   const int64_t log_cb_pool_mem_used = item.hold_;
-  // ::oceanbase::lib::get_tenant_label_memory(MTL_ID(), ObLabel &label, common::ObLabelItem &item);
 
   if (OB_SUCC(ret)) {
     SpinRLockGuard guard(pool_list_rw_lock_);

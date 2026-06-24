@@ -33,8 +33,7 @@ public:
   //only used in deep copy
   ObRowCacheKey();
   //read / put should always use this constructor
-  ObRowCacheKey(const uint64_t tenant_id,
-                const ObTabletID &table_id,
+  ObRowCacheKey(const ObTabletID &table_id,
                 const ObDatumRowkey &row_key,
                 const ObStorageDatumUtils &datum_utils,
                 const int64_t data_version,
@@ -42,16 +41,16 @@ public:
   virtual ~ObRowCacheKey();
   virtual int equal(const ObIKVCacheKey &other, bool &equal) const override;
   virtual int hash(uint64_t &hash_value) const override;
-  virtual uint64_t get_tenant_id() const;
+  
   virtual int64_t size() const;
   virtual int deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey *&key) const;
   storage::ObITable::TableType get_table_type() const {return table_type_;}
   int64_t get_data_version() const {return data_version_;}
   bool is_valid() const;
-  TO_STRING_KV(K_(tenant_id), K_(tablet_id), K_(data_version), K_(table_type), K_(rowkey), KPC_(datum_utils));
+  TO_STRING_KV(K_(tablet_id), K_(data_version), K_(table_type), K_(rowkey), KPC_(datum_utils));
 private:
   int64_t rowkey_size_;
-  int64_t tenant_id_;
+  
   ObTabletID tablet_id_;
   int64_t data_version_;
   storage::ObITable::TableType table_type_;

@@ -126,7 +126,7 @@ class ObIOAllocator : public ObIAllocator
 public:
   ObIOAllocator();
   virtual ~ObIOAllocator();
-  int init(const uint64_t tenant_id, const int64_t memory_limit);
+  int init(const int64_t memory_limit);
   void destroy();
   int update_memory_limit(const int64_t memory_limit);
   int64_t get_allocated_size() const;
@@ -276,7 +276,7 @@ class ObIOUsage final
 public:
   ObIOUsage() : info_(), failed_req_info_(), group_throttled_time_us_(), lock_() {}
   ~ObIOUsage();
-  int init(const uint64_t tenant_id, const int64_t group_num);
+  int init(const int64_t group_num);
   int refresh_group_num (const int64_t group_num);
   void accumulate(ObIORequest &request);
   void calculate_io_usage();
@@ -465,7 +465,7 @@ class ObIOCallbackManager final : public ObLinkQueueThreadPool
 public:
   ObIOCallbackManager();
   ~ObIOCallbackManager();
-  int init(const int64_t tenant_id, int64_t thread_count,
+  int init(int64_t thread_count,
            const int32_t queue_depth);
   void destroy();
 
@@ -541,7 +541,7 @@ struct ObIOFuncUsages
 public:
   ObIOFuncUsages();
   ~ObIOFuncUsages() = default;
-  int init(const uint64_t tenant_id);
+  int init();
   int accumulate(ObIORequest &req);
   TO_STRING_KV(K(func_usages_));
   ObIOFuncUsageArr func_usages_;
@@ -581,7 +581,7 @@ private:
   // If executes the detect task in SS mode, checking if it's a read operation on the micro cache file.
   // In SN mode, always returns true.
   // In SS mode, returns true if fd == micro cache file fd.
-  bool is_supported_detect_read_(const uint64_t tenant_id, const ObIOFd &fd);
+  bool is_supported_detect_read_(const ObIOFd &fd);
 
 private:
   static const int64_t WRITE_FAILURE_DETECT_EVENT_COUNT = 100;
@@ -629,7 +629,7 @@ public:
   };
   ObIOTracer();
   ~ObIOTracer();
-  int init(const uint64_t tenant_id);
+  int init();
   void destroy();
   void reuse();
   int trace_request(const ObIORequest *req, const char *msg, const TraceType trace_type);
@@ -637,7 +637,6 @@ public:
   int64_t to_string(char *buf, const int64_t len) const;
 private:
   bool is_inited_;
-  uint64_t tenant_id_;
   hash::ObHashMap<int64_t /*request_ptr*/, TraceInfo> trace_map_;
 };
 

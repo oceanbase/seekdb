@@ -97,18 +97,14 @@ ObMySQLConnectionPool::ObMySQLConnectionPool()
     get_lock_(obsys::WRITE_PRIORITY),
     allocator_(ObModIds::OB_SQL_CONNECTION_POOL),
     server_list_(allocator_),
-    tenant_server_pool_map_(),
     server_pool_(),
     check_read_consistency_(true)
 {
-  int ret = OB_SUCCESS;
   set_db_param(DEFAULT_DB_USER, DEFAULT_DB_PASS, DEFAULT_DB_NAME);
   init_sql_[0] = '\0';
 
   if (OB_UNLIKELY(0 != mysql_library_init(0, NULL, NULL))) {
     LOG_WARN_RET(OB_ERROR, "could not initialize MySQL library");
-  } else if (OB_FAIL(tenant_server_pool_map_.init(ObModIds::LIB_OBSQL))) {
-    LOG_WARN("init tenant_server_pool_map_ failed", K(ret));
   }
 
   // set defult values
@@ -116,14 +112,14 @@ ObMySQLConnectionPool::ObMySQLConnectionPool()
   config_.long_query_timeout_ = 120*1000*1000;      // 120s
   config_.connection_refresh_interval_ = 200*1000;  // 200ms
   config_.connection_pool_warn_time_ = 1*1000*1000; // 1s
-  config_.sqlclient_per_observer_conn_limit_ = 256; // dblink connection limits is 256
+  config_.sqlclient_per_observer_conn_limit_ = 256;
 }
 
 ObMySQLConnectionPool::~ObMySQLConnectionPool()
 {
   ObServerConnectionPool *pool = NULL;
   obsys::ObWLockGuard lock(get_lock_);
-  tenant_server_pool_map_.destroy();
+  tenant_server_pool_.reset();
 
   for (ServerList::iterator iter = server_list_.begin();
       iter != server_list_.end(); iter++) {
@@ -359,15 +355,14 @@ int ObMySQLConnectionPool::purge_connection_pool()
 }
 
 // External caller lock
-int ObMySQLConnectionPool::get_pool(const uint64_t tenant_id, ObServerConnectionPool *&pool)
+int ObMySQLConnectionPool::get_pool(ObServerConnectionPool *&pool)
 {
   // Note: Round-Robin while getting server from server list.
   RLOCAL(int64_t, cursor);
   int ret = OB_SUCCESS;
   pool = NULL;
   if (server_list_.size() > 0) {
-    // get pool from server_list_ if tenant_id is invalid or tenant_server_pool_map_ is empty
-    // otherwise get pool from tenant_server_pool_map_
+    // get pool from server_list_ in SERVER_POOL mode, otherwise from the server connection pool
     if (MySQLConnectionPoolType::SERVER_POOL == pool_type_) {
       cursor = (cursor + 1) % server_list_.size();
       int64_t pos = cursor;
@@ -389,27 +384,24 @@ int ObMySQLConnectionPool::get_pool(const uint64_t tenant_id, ObServerConnection
     } else if (MySQLConnectionPoolType::TENANT_POOL == pool_type_) {
       ObTenantServerConnectionPool *tenant_server_pool = NULL;
 
-      if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+      if (OB_UNLIKELY(false)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_ERROR("tenant_id should be valid in TENANT_POOL mode", K(ret), K(tenant_id));
-      } else if (OB_FAIL(get_tenant_server_pool(tenant_id, tenant_server_pool))) {
-        LOG_ERROR("get_tenant_server_pool failed", K(ret), K(tenant_id));
+        LOG_ERROR("tenant should be valid in TENANT_POOL mode", K(ret));
+      } else if (OB_FAIL(get_tenant_server_pool(tenant_server_pool))) {
+        LOG_ERROR("get_tenant_server_pool failed", K(ret));
       } else if (OB_ISNULL(tenant_server_pool)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid tenant_server_pool", K(ret), K(tenant_id));
+        LOG_ERROR("invalid tenant_server_pool", K(ret));
       } else if (OB_FAIL(tenant_server_pool->get_server_pool(pool))) {
-        LOG_ERROR("get_server_pool from tenant_server_pool failed", K(ret), K(tenant_id));
+        LOG_ERROR("get_server_pool from tenant_server_pool failed", K(ret));
       } else if (OB_ISNULL(pool)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("server_pool must not be null", K(ret), K(tenant_id));
+        LOG_ERROR("server_pool must not be null", K(ret));
       }
 
-      if (OB_NOT_NULL(tenant_server_pool)) {
-        tenant_server_pool_map_.revert(tenant_server_pool);
-      }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("invalid connection_pool_type", K(ret), K(pool_type_), K(tenant_id));
+      LOG_ERROR("invalid connection_pool_type", K(ret), K(pool_type_));
     }
   } else {
     ret = OB_RESOURCE_OUT;
@@ -419,26 +411,22 @@ int ObMySQLConnectionPool::get_pool(const uint64_t tenant_id, ObServerConnection
   return ret;
 }
 
-int ObMySQLConnectionPool::get_tenant_server_pool(const uint64_t tenant_id, ObTenantServerConnectionPool *&tenant_server_pool)
+int ObMySQLConnectionPool::get_tenant_server_pool(ObTenantServerConnectionPool *&tenant_server_pool)
 {
   int ret = OB_SUCCESS;
   tenant_server_pool = NULL;
-  // use user_tenant_id for meta tenant.
-  uint64_t usr_tenant_id = gen_user_tenant_id(tenant_id);
+  // use user_tenant for meta tenant.
+  
 
-  if (OB_FAIL(tenant_server_pool_map_.get(usr_tenant_id, tenant_server_pool))) {
-    LOG_ERROR("get tenant_server_pool from tenant_server_pool_map_ failed", K(ret), K(tenant_id), K(usr_tenant_id));
-  } else if (OB_ISNULL(tenant_server_pool)) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_ERROR("tenant_server_pool is null", K(ret), K(tenant_id), K(usr_tenant_id));
-  } else {
-    LOG_TRACE("get tenant_server_pool succ", K(ret), K(this), K(tenant_id), K(usr_tenant_id), K(tenant_server_pool));
+  tenant_server_pool = &tenant_server_pool_;
+  {
+    LOG_TRACE("get tenant_server_pool succ", K(ret), K(this), K(tenant_server_pool));
   }
 
   return ret;
 }
 
-int ObMySQLConnectionPool::acquire(const uint64_t tenant_id, ObMySQLConnection *&connection)
+int ObMySQLConnectionPool::acquire(ObMySQLConnection *&connection)
 {
   int ret = OB_SUCCESS;
   const int64_t server_count = get_server_count();
@@ -446,10 +434,10 @@ int ObMySQLConnectionPool::acquire(const uint64_t tenant_id, ObMySQLConnection *
   connection = NULL;
   bool acquire_succ = false;
   for (int64_t i = 0; !acquire_succ && i < server_count; ++i) {
-    if (OB_FAIL(do_acquire(tenant_id, connection))) {
-      LOG_WARN("fail to get connection", K(ret), K(tenant_id));
+    if (OB_FAIL(do_acquire(connection))) {
+      LOG_WARN("fail to get connection", K(ret));
     } else if (OB_FAIL(try_connect(connection))) {
-      LOG_WARN("failed to try connection, will release connection", K(ret), K(tenant_id));
+      LOG_WARN("failed to try connection, will release connection", K(ret));
       const bool succ = false;
       if (OB_SUCCESS != release(connection, succ)) { // ignore ret
         LOG_WARN("failed to release connection, ignore ret");
@@ -466,7 +454,7 @@ int ObMySQLConnectionPool::acquire(const uint64_t tenant_id, ObMySQLConnection *
   if (OB_ISNULL(connection)) {
     ret = OB_SUCC(ret) ? OB_ERR_UNEXPECTED: ret;
     LOG_WARN("failed to acquire connection",
-             K(this), K(tenant_id), K(server_count), K(busy_conn_count_), K(ret));
+             K(this), K(server_count), K(busy_conn_count_), K(ret));
     obsys::ObRLockGuard lock(get_lock_);
     for (ServerList::iterator iter = server_list_.begin();
         iter != server_list_.end(); iter++) {
@@ -486,12 +474,12 @@ int64_t ObMySQLConnectionPool::get_server_count() const
   return server_list_.size();
 }
 
-int ObMySQLConnectionPool::do_acquire(const uint64_t tenant_id, ObMySQLConnection *&connection)
+int ObMySQLConnectionPool::do_acquire(ObMySQLConnection *&connection)
 {
   int ret = OB_SUCCESS;
   obsys::ObRLockGuard lock(get_lock_);
   ObServerConnectionPool *pool = NULL;
-  if (OB_FAIL(get_pool(tenant_id, pool))) {
+  if (OB_FAIL(get_pool(pool))) {
     LOG_WARN("failed to get pool", K(ret));
   } else if (OB_FAIL(pool->acquire(connection, 0))) {
     LOG_WARN("failed to get connection", K(ret));
@@ -505,7 +493,7 @@ int ObMySQLConnectionPool::do_acquire(const uint64_t tenant_id, ObMySQLConnectio
     ATOMIC_INC((uint64_t *)&busy_conn_count_);
     connection->set_busy(true);
     connection->set_timestamp(::oceanbase::common::ObTimeUtility::current_time());
-    LOG_TRACE("connection acquire", K(this), K(tenant_id), K(busy_conn_count_), K(connection), K(pool));
+    LOG_TRACE("connection acquire", K(this), K(busy_conn_count_), K(connection), K(pool));
   }
   return ret;
 }
@@ -696,14 +684,14 @@ void ObMySQLConnectionPool::runTimerTask()
   }
 }
 
-int ObMySQLConnectionPool::acquire(const uint64_t tenant_id, ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id)
+int ObMySQLConnectionPool::acquire(ObISQLConnection *&conn, ObISQLClient *client_addr, const int32_t group_id)
 {
   int ret = OB_SUCCESS;
   UNUSED(client_addr);
   UNUSED(group_id);
   ObMySQLConnection *mysql_conn = NULL;
   conn = NULL;
-  if (OB_FAIL(acquire(tenant_id, mysql_conn))) {
+  if (OB_FAIL(acquire(mysql_conn))) {
     LOG_WARN("acquire connection failed", K(ret));
   } else {
     conn = mysql_conn;
@@ -732,7 +720,7 @@ int ObMySQLConnectionPool::escape(const char *from, const int64_t from_size,
 {
   ObMySQLConnection *conn = NULL;
   int ret = OB_SUCCESS;
-  if (OB_FAIL(acquire(OB_SYS_TENANT_ID, conn))) {
+  if (OB_FAIL(acquire(conn))) {
     // use SYS_TENANT connection for escape
     LOG_WARN("acquire connection failed", K(ret));
   } else if (OB_ISNULL(conn)) {
@@ -752,7 +740,7 @@ int ObMySQLConnectionPool::escape(const char *from, const int64_t from_size,
 }
 
 // update tenant_server_conn_pool_map
-// - get_tenant_id_list
+// - get_tenants list
 // - get_tenant_server_addr_list
 // - get_tenant_server_pool_list
 // - renew tenant_server_pool_map
@@ -760,112 +748,61 @@ int ObMySQLConnectionPool::escape(const char *from, const int64_t from_size,
 int ObMySQLConnectionPool::renew_tenant_server_pool_map()
 {
   int ret = OB_SUCCESS;
-  ObSEArray<uint64_t, 16> tenant_array("OBMySQLConnPool", OB_MALLOC_NORMAL_BLOCK_SIZE);
-
   if (OB_ISNULL(server_provider_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("server_provider_ must be valid", K(ret));
-  } else if (OB_FAIL((server_provider_->get_tenant_ids(tenant_array)))) {
-    LOG_ERROR("get_tenant_ids by server_provider_ failed", K(ret));
-  } else {
-    // renew connection_pool for each tenant
-    // skip error in case of on tenant renew fail affect others
-    for (int64_t tenant_idx = 0; tenant_idx < tenant_array.count(); tenant_idx++) {
-      uint64_t tenant_id = OB_INVALID_TENANT_ID;
-
-      if (OB_FAIL(tenant_array.at(tenant_idx, tenant_id))) {
-        LOG_ERROR("get_tenant_id failed", K(ret), K(tenant_idx), K(tenant_array));
-      } else if (OB_FAIL(renew_tenant_server_pool_(tenant_id))) {
-        LOG_WARN("renew_tenant_server_pool_ failed", K(ret), K(tenant_id), K(tenant_idx), K(tenant_array));
-      }
-    } // end for tenant_array
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(purge_tenant_server_pool_map_(tenant_array))) {
-      LOG_WARN("purge_tenant_server_pool_map_ failed, skip this error", K(ret), K(tmp_ret), K(tenant_array));
-    } else {
-      LOG_TRACE("renew tenant_server_conn_pool_map succ");
-    }
+  } else if (OB_FAIL(renew_tenant_server_pool_())) {
+    LOG_WARN("renew_tenant_server_pool_ failed", K(ret));
   }
-
-
   return ret;
 }
 
-int ObMySQLConnectionPool::renew_tenant_server_pool_(const uint64_t tenant_id)
+int ObMySQLConnectionPool::renew_tenant_server_pool_()
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAddr, 16> server_array("OBMySQLConnPool", OB_MALLOC_NORMAL_BLOCK_SIZE);
   TenantServerConnArray tenant_server_list("OBMySQLConnPool", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+  if (OB_UNLIKELY(false)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("tenant_id to refresh tenant_server_conn_pool must be valid", K(tenant_id));
-  } else if (OB_FAIL(server_provider_->get_tenant_servers(tenant_id, server_array))) {
+    LOG_ERROR("tenant to refresh tenant_server_conn_pool must be valid");
+  } else if (OB_FAIL(server_provider_->get_tenant_servers(server_array))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      LOG_WARN("tenant may already been dropped, skip build this tenant conn pool", K(tenant_id));
+      LOG_WARN("tenant may already been dropped, skip build this tenant conn pool");
       ret = OB_SUCCESS;
     } else {
-      LOG_ERROR("get_tenant_servers by server_provider_ failed", K(ret), K(tenant_id));
+      LOG_ERROR("get_tenant_servers by server_provider_ failed", K(ret));
     }
   } else if (OB_UNLIKELY(server_array.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("unexpected can't find any server for tenant", K(ret), K(tenant_id));
+    LOG_ERROR("unexpected can't find any server for tenant", K(ret));
   } else {
     for (int server_idx = 0; OB_SUCC(ret) && server_idx < server_array.count(); server_idx++) {
       ObAddr server_addr;
       ObServerConnectionPool *pool = NULL;
 
       if (OB_FAIL(server_array.at(server_idx, server_addr))) {
-        LOG_ERROR("get server failed", K(ret), K(tenant_id), K(server_idx), K(server_array));
+        LOG_ERROR("get server failed", K(ret), K(server_idx), K(server_array));
       } else if (OB_FAIL(get_server_pool_(server_addr, pool))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
-          LOG_WARN("can't find server in server_pool_list_, skip this server", K(ret), K(tenant_id), K(server_addr));
+          LOG_WARN("can't find server in server_pool_list_, skip this server", K(ret), K(server_addr));
           ret = OB_SUCCESS;
         } else {
-          LOG_ERROR("get_server_pool_ for specified server failed", K(ret), K(tenant_id), K(server_addr));
+          LOG_ERROR("get_server_pool_ for specified server failed", K(ret), K(server_addr));
         }
       } else if (OB_ISNULL(pool)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("get invalid server_pool", K(ret), K(tenant_id), K(server_addr));
+        LOG_ERROR("get invalid server_pool", K(ret), K(server_addr));
       } else if (OB_FAIL(tenant_server_list.push_back(pool))) {
-        LOG_ERROR("push_back server_pool into tenant_server_list failed", K(ret),
-            K(tenant_id), K(server_addr));
+        LOG_ERROR("push_back server_pool into tenant_server_list failed", K(ret), K(server_addr));
       }
     } // end for server_array
 
     if (OB_SUCC(ret) && tenant_server_list.count() > 0) {
-      // try get TenantServerConnPoll from TenantServerConnMap by tenant_id
-      // create if not exist
-      ObTenantServerConnectionPool *tenant_server_conn_pool = NULL;
-
-      if (OB_FAIL(tenant_server_pool_map_.get(tenant_id, tenant_server_conn_pool))) {
-        if (OB_ENTRY_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-          if (OB_FAIL(tenant_server_pool_map_.alloc_value(tenant_server_conn_pool))) {
-            LOG_ERROR("alloc tenant_server_conn_pool failed", K(ret), K(tenant_id));
-          } else if (OB_FAIL(tenant_server_pool_map_.insert_and_get(tenant_id, tenant_server_conn_pool))) {
-            LOG_ERROR("insert tenant_server_conn_pool failed", K(ret), K(tenant_id));
-          } else {
-            LOG_INFO("[STAT][TENANT_CONN_POOL][ADD] alloc tenant_server_conn_pool succ", K(tenant_id));
-          }
-        } else {
-          LOG_ERROR("get_tenant_server_pool failed", K(ret), K(tenant_id));
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (OB_ISNULL(tenant_server_conn_pool)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("tenant_server_conn_pool is null", K(ret), K(tenant_id));
-      } else if (OB_FAIL(tenant_server_conn_pool->renew(tenant_server_list))) {
-        LOG_ERROR("refresh tenant_server_conn_pool failed", K(ret),
-            K(tenant_id), K(tenant_server_list));
+      if (OB_FAIL(tenant_server_pool_.renew(tenant_server_list))) {
+        LOG_ERROR("refresh tenant_server_conn_pool failed", K(ret), K(tenant_server_list));
       } else {
-        LOG_TRACE("[STAT][TENANT_CONN_POOL][RENEW_SVR]", K(tenant_id), K(tenant_server_list));
-      }
-
-      if (OB_NOT_NULL(tenant_server_conn_pool)) {
-        tenant_server_pool_map_.revert(tenant_server_conn_pool);
+        LOG_TRACE("[STAT][TENANT_CONN_POOL][RENEW_SVR]", K(tenant_server_list));
       }
     }
   }
@@ -900,62 +837,6 @@ int ObMySQLConnectionPool::get_server_pool_(const ObAddr &addr, ObServerConnecti
 
   return ret;
 }
-
-int ObMySQLConnectionPool::purge_tenant_server_pool_map_(const ObIArray<uint64_t> &tenant_array)
-{
-  int ret = OB_SUCCESS;
-  TenantServerConnPoolPurger purger(tenant_array, allocator_);
-  if (OB_FAIL(tenant_server_pool_map_.remove_if(purger))) {
-    LOG_ERROR("purge tenant_server_pool_map_ failed", K(ret), K(tenant_array));
-  } else {
-    _LOG_TRACE("[STAT][TENANT_CONN_POOL][PURGE] POOL=%p, PURGE_COUNT=%ld, CUR_TENANT_COUNT=%ld",
-        this, purger.purge_count_, tenant_server_pool_map_.count());
-  }
-
-  return ret;
-}
-
-bool ObMySQLConnectionPool::TenantServerConnPoolPurger::operator()(
-    const TenantMapKey &tenant_key,
-    const ObTenantServerConnectionPool *tenant_server_pool)
-{
-  bool need_purge = false;
-
-  if (OB_ISNULL(tenant_server_pool)) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "tenant_server_pool must not be null", K(tenant_key));
-  } else if (is_tenant_not_serve_(tenant_key.tenant_id_)) {
-    need_purge = true;
-    purge_count_++;
-    LOG_INFO("[STAT][TENANT_CONN_POOL][PURGE]", K(tenant_key));
-  }
-
-  return need_purge;
-}
-
-bool ObMySQLConnectionPool::TenantServerConnPoolPurger::is_tenant_not_serve_(const uint64_t tenant_id) const
-{
-  int ret = OB_SUCCESS;
-  const uint64_t user_tenant_count = tenant_array_.count();
-  bool is_serve = false;
-
-  if (0 >= user_tenant_count) {
-    is_serve = true;
-  } else {
-    for(int idx = 0; OB_SUCC(ret) && !is_serve && idx < user_tenant_count; idx++) {
-      uint64_t user_tenant_id = 0;
-
-      if (OB_FAIL(tenant_array_.at(idx, user_tenant_id))) {
-        LOG_WARN("get tenant_id from tenant_array failed", K(ret), K(idx), K(user_tenant_count), K_(tenant_array));
-        is_serve = true; // should not purge this tenant, retry in next refresh loop.
-      } else if (tenant_id == user_tenant_id) {
-        is_serve = true;
-      }
-    }
-  }
-
-  return ! is_serve;
-}
-
 
 } // end namespace sqlclient
 } // end namespace common

@@ -224,8 +224,8 @@ ObIEncodeBlockReader::ObIEncodeBlockReader()
     decoders_(nullptr),
     default_decoders_(),
     ctxs_(NULL),
-    decoder_allocator_(ObMemAttr(MTL_ID(), common::ObModIds::OB_DECODER_CTX), OB_MALLOC_NORMAL_BLOCK_SIZE),
-    buf_allocator_(ObMemAttr(MTL_ID(), "OB_IENB_READER"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    decoder_allocator_(ObMemAttr(common::ObModIds::OB_DECODER_CTX), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    buf_allocator_(ObMemAttr("OB_IENB_READER"), OB_MALLOC_NORMAL_BLOCK_SIZE),
     allocated_decoders_buf_(nullptr),
     allocated_decoders_buf_size_(0),
     store_id_array_(NULL), column_type_array_(NULL),
@@ -829,7 +829,7 @@ ObMicroBlockDecoder::ObMicroBlockDecoder()
     flat_row_reader_(),
     ctxs_(nullptr),
     decoder_allocator_(ObModIds::OB_DECODER_CTX),
-    buf_allocator_(ObMemAttr(MTL_ID(), "OB_MICB_DECODER"), OB_MALLOC_NORMAL_BLOCK_SIZE),
+    buf_allocator_(ObMemAttr("OB_MICB_DECODER"), OB_MALLOC_NORMAL_BLOCK_SIZE),
     allocated_decoders_buf_(nullptr),
     allocated_decoders_buf_size_(0)
 {

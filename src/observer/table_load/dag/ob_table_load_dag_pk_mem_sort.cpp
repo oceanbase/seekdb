@@ -87,7 +87,7 @@ int ObTableLoadPKMemSorter::init(ObTableLoadDag *dag, ObTableLoadMemSortOp *op)
       LOG_WARN("fail to init mem compact ctx", KR(ret));
     }
     // init loaders
-    else if (OB_FAIL(loader_allocator_.init("TLD_MSLoader", MTL_ID()))) {
+    else if (OB_FAIL(loader_allocator_.init("TLD_MSLoader"))) {
       LOG_WARN("fail to init loader allocator", KR(ret));
     } else if (OB_FAIL(construct_loaders())) {
       LOG_WARN("fail to construct loaders", KR(ret));

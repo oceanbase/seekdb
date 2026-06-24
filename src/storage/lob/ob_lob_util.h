@@ -162,8 +162,7 @@ public:
                                const ObLobStorageParam &lob_storage_param,
                                blocksstable::ObStorageDatum &datum,
                                const int64_t timeout_ts,
-                               const bool has_lob_header,
-                               const uint64_t src_tenant_id);
+                               const bool has_lob_header);
   static int delete_lob_column(ObIAllocator &allocator,
                                const share::ObLSID ls_id,
                                const common::ObTabletID tablet_id,
@@ -189,7 +188,6 @@ public:
                                blocksstable::ObStorageDatum &datum,
                                const int64_t timeout_ts,
                                const bool has_lob_header,
-                               const uint64_t src_tenant_id,
                                ObLobMetaWriteIter &iter);
 };
 

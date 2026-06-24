@@ -41,7 +41,7 @@ int ObFreezeInfoProxy::get_freeze_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K_(tenant_id), K(frozen_scn));
+    LOG_WARN("invalid argument", KR(ret), K(frozen_scn));
   } else {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -49,31 +49,31 @@ int ObFreezeInfoProxy::get_freeze_info(
       if (frozen_scn == SCN::min_scn()) {
         if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ORDER BY frozen_scn DESC LIMIT 1",
             OB_ALL_FREEZE_INFO_TNAME))) {
-          LOG_WARN("fail to append sql", KR(ret), K_(tenant_id), K(frozen_scn));
+          LOG_WARN("fail to append sql", KR(ret), K(frozen_scn));
         }
       } else {
         if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %lu",
             OB_ALL_FREEZE_INFO_TNAME, frozen_scn.get_val_for_inner_table_field()))) {
-          LOG_WARN("fail to append sql", KR(ret), K_(tenant_id), K(frozen_scn));
+          LOG_WARN("fail to append sql", KR(ret), K(frozen_scn));
         }
       }
 
       int tmp_ret = OB_SUCCESS;
-      if (FAILEDx(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+      if (FAILEDx(sql_proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to get sql result", KR(ret), K(sql));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get next", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to get next", KR(ret), K(sql));
       } else if (OB_FAIL(construct_frozen_status_(*result, frozen_status))) {
         LOG_WARN("fail to construct frozen_status", KR(ret));
       } else if (OB_ITER_END != (tmp_ret = result->next())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get more row than one", KR(ret), KR(tmp_ret), K_(tenant_id));
+        LOG_WARN("get more row than one", KR(ret), KR(tmp_ret));
       } else if (!frozen_status.is_valid()) {
         ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("fail to find freeze info", KR(ret), K(frozen_scn), K_(tenant_id));
+        LOG_WARN("fail to find freeze info", KR(ret), K(frozen_scn));
       }
     }
   }
@@ -90,26 +90,26 @@ int ObFreezeInfoProxy::get_all_freeze_info(
     ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn > 1 ORDER BY frozen_scn ASC",
         OB_ALL_FREEZE_INFO_TNAME))) {
-      LOG_WARN("fail to append sql", KR(ret), K_(tenant_id));
-    } else if (FAILEDx(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to append sql", KR(ret));
+    } else if (FAILEDx(sql_proxy.read(res, sql.ptr()))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sql result", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to get sql result", KR(ret), K(sql));
     } else {
       while (OB_SUCC(ret)) {
         ObFreezeInfo frozen_status;
         if (OB_FAIL(result->next())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next row", KR(ret), K_(tenant_id));
+            LOG_WARN("fail to get next row", KR(ret));
           }
         } else if (OB_FAIL(construct_frozen_status_(*result, frozen_status))) {
           LOG_WARN("fail to construct frozen_status", KR(ret));
         } else if (OB_UNLIKELY(!frozen_status.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid frozen status", KR(ret), K_(tenant_id), K(frozen_status), K(sql));
+          LOG_WARN("invalid frozen status", KR(ret), K(frozen_status), K(sql));
         } else if (OB_FAIL(frozen_statuses.push_back(frozen_status))) {
-          LOG_WARN("fail to push back", KR(ret), K(frozen_status), K_(tenant_id));
+          LOG_WARN("fail to push back", KR(ret), K(frozen_status));
         }
       }
       if (OB_ITER_END == ret) {
@@ -132,26 +132,26 @@ int ObFreezeInfoProxy::get_freeze_info_larger_or_equal_than(
     const uint64_t frozen_scn_val = frozen_scn.get_val_for_inner_table_field();
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn >= %lu ORDER BY frozen_scn",
         OB_ALL_FREEZE_INFO_TNAME, frozen_scn_val))) {
-      LOG_WARN("fail to append sql", KR(ret), K_(tenant_id), K(frozen_scn));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to append sql", KR(ret), K(frozen_scn));
+    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sql result", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to get sql result", KR(ret), K(sql));
     } else {
       while (OB_SUCC(ret)) {
         ObFreezeInfo frozen_status;
         if (OB_FAIL(result->next())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fail to get next row", KR(ret), K_(tenant_id));
+            LOG_WARN("fail to get next row", KR(ret));
           }
         } else if (OB_FAIL(construct_frozen_status_(*result, frozen_status))) {
           LOG_WARN("fail to construct frozen_status", KR(ret));
         } else if (OB_UNLIKELY(!frozen_status.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid frozen status", KR(ret), K(frozen_scn), K_(tenant_id), K(frozen_status), K(sql));
+          LOG_WARN("invalid frozen status", KR(ret), K(frozen_scn), K(frozen_status), K(sql));
         } else if (OB_FAIL(frozen_statuses.push_back(frozen_status))) {
-          LOG_WARN("fail to push back", KR(ret), K(frozen_status), K_(tenant_id));
+          LOG_WARN("fail to push back", KR(ret), K(frozen_status));
         }
       }
       if (OB_ITER_END == ret) {
@@ -159,7 +159,7 @@ int ObFreezeInfoProxy::get_freeze_info_larger_or_equal_than(
       }
     }
   }
-  LOG_INFO("finish load_freeze_info", KR(ret), K_(tenant_id), K(sql));
+  LOG_INFO("finish load_freeze_info", KR(ret), K(sql));
   return ret;
 }
 
@@ -179,14 +179,14 @@ int ObFreezeInfoProxy::get_max_frozen_scn_smaller_or_equal_than(
       const uint64_t compaction_scn_val = compaction_scn.get_val_for_inner_table_field();
       if (OB_FAIL(sql.assign_fmt("SELECT MAX(frozen_scn) as value FROM %s WHERE frozen_scn <= %lu",
           OB_ALL_FREEZE_INFO_TNAME, compaction_scn_val))) {
-        LOG_WARN("fail to append sql", KR(ret), K_(tenant_id), K(compaction_scn));
-      } else if (OB_FAIL(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to append sql", KR(ret), K(compaction_scn));
+      } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to get sql result", KR(ret), K(sql));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("get next result failed", KR(ret), K_(tenant_id), K(sql));
+        LOG_WARN("get next result failed", KR(ret), K(sql));
       } else {
         uint64_t max_frozen_scn_val = UINT64_MAX;
         EXTRACT_UINT_FIELD_MYSQL(*result, "value", max_frozen_scn_val, uint64_t);
@@ -196,7 +196,7 @@ int ObFreezeInfoProxy::get_max_frozen_scn_smaller_or_equal_than(
       }
     }
   }
-  LOG_INFO("finish to get freeze_info", KR(ret), K_(tenant_id), K(sql));
+  LOG_INFO("finish to get freeze_info", KR(ret), K(sql));
   return ret;
 }
 
@@ -207,20 +207,20 @@ int ObFreezeInfoProxy::set_freeze_info(
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
   int64_t affected_rows = 0;
-  ObDMLExecHelper exec(sql_proxy, tenant_id_);
+  ObDMLExecHelper exec(sql_proxy);
 
-  if (!frozen_status.is_valid() || !is_valid_tenant_id(tenant_id_)) {
+  if (!frozen_status.is_valid() || !true) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid argument", KR(ret), K(frozen_status), K_(tenant_id));
+    LOG_ERROR("invalid argument", KR(ret), K(frozen_status));
   } else if (OB_FAIL(dml.add_uint64_pk_column("frozen_scn", frozen_status.frozen_scn_.get_val_for_inner_table_field()))
             || OB_FAIL(dml.add_column("cluster_version", frozen_status.data_version_))
             || OB_FAIL(dml.add_column("schema_version", frozen_status.schema_version_))) {
-    LOG_WARN("fail to add column", KR(ret), K(frozen_status), K_(tenant_id));
+    LOG_WARN("fail to add column", KR(ret), K(frozen_status));
   } else if (OB_FAIL(exec.exec_insert(OB_ALL_FREEZE_INFO_TNAME, dml, affected_rows))) {
-    LOG_WARN("fail to exec_insert", KR(ret), K_(tenant_id), K(frozen_status));
+    LOG_WARN("fail to exec_insert", KR(ret), K(frozen_status));
   } else if (!(is_single_row(affected_rows) || is_zero_row(affected_rows))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("unexpected affected rows", KR(ret), K(affected_rows), K_(tenant_id), K(frozen_status));
+    LOG_ERROR("unexpected affected rows", KR(ret), K(affected_rows), K(frozen_status));
   }
   return ret;
 }
@@ -235,14 +235,14 @@ int ObFreezeInfoProxy::batch_delete(
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(!upper_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K_(tenant_id), K(upper_frozen_scn));
+    LOG_WARN("invalid argument", KR(ret), K(upper_frozen_scn));
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE frozen_scn <= %lu AND frozen_scn > 1",
              OB_ALL_FREEZE_INFO_TNAME, upper_frozen_scn.get_val_for_inner_table_field()))) {
-    LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K(upper_frozen_scn));
-  } else if (OB_FAIL(sql_proxy.write(tenant_id_, sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+    LOG_WARN("fail to assign sql", KR(ret), K(upper_frozen_scn));
+  } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
+    LOG_WARN("fail to execute sql", KR(ret), K(sql));
   } else {
-    LOG_INFO("succ to delete freeze_info", K_(tenant_id), K(upper_frozen_scn), K(affected_rows));
+    LOG_INFO("succ to delete freeze_info", K(upper_frozen_scn), K(affected_rows));
   }
   return ret;
 }
@@ -257,7 +257,7 @@ int ObFreezeInfoProxy::get_frozen_info_less_than(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K_(tenant_id), K(frozen_scn));
+    LOG_WARN("invalid argument", KR(ret), K(frozen_scn));
   } else {
     ObSqlString sql;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -266,26 +266,26 @@ int ObFreezeInfoProxy::get_frozen_info_less_than(
       const uint64_t frozen_scn_val = frozen_scn.get_val_for_inner_table_field();
       if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn <= %lu ORDER BY frozen_scn DESC %s",
                                  OB_ALL_FREEZE_INFO_TNAME, frozen_scn_val, (get_all ? "" : "LIMIT 1")))) {
-        LOG_WARN("fail to append sql", KR(ret), K_(tenant_id), K(frozen_scn), K(get_all));
-      } else if (OB_FAIL(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to append sql", KR(ret), K(frozen_scn), K(get_all));
+      } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to get sql result", KR(ret), K(sql));
       } else {
         while (OB_SUCC(ret)) {
           ObFreezeInfo frozen_status;
           if (OB_FAIL(result->next())) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("fail to get next row", KR(ret), K_(tenant_id));
+              LOG_WARN("fail to get next row", KR(ret));
             }
           } else if (OB_FAIL(construct_frozen_status_(*result, frozen_status))) {
             LOG_WARN("fail to construct frozen_status", KR(ret));
           } else if (OB_UNLIKELY(!frozen_status.is_valid())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid frozen status", KR(ret), K(frozen_scn), K_(tenant_id), K(frozen_status), K(sql));
+            LOG_WARN("invalid frozen status", KR(ret), K(frozen_scn), K(frozen_status), K(sql));
           } else if (OB_FAIL(frozen_status_arr.push_back(frozen_status))) {
-            LOG_WARN("fail to push back", KR(ret), K(frozen_status), K_(tenant_id));
+            LOG_WARN("fail to push back", KR(ret), K(frozen_status));
           }
         }
         if (OB_ITER_END == ret) {
@@ -308,22 +308,22 @@ int ObFreezeInfoProxy::get_max_freeze_info(
     int tmp_ret = OB_SUCCESS;
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ORDER BY frozen_scn DESC LIMIT 1",
         OB_ALL_FREEZE_INFO_TNAME))) {
-      LOG_WARN("fail to append sql", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to append sql", KR(ret));
+    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sql result", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to get sql result", KR(ret), K(sql));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next", KR(ret), K(sql), K_(tenant_id));
+      LOG_WARN("fail to get next", KR(ret), K(sql));
     } else if (OB_FAIL(construct_frozen_status_(*result, frozen_status))) {
       LOG_WARN("fail to construct frozen_status", KR(ret), K(sql));
     } else if (OB_ITER_END != (tmp_ret = result->next())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get more row than one", KR(ret), KR(tmp_ret), K_(tenant_id), K(sql));
+      LOG_WARN("get more row than one", KR(ret), KR(tmp_ret), K(sql));
     } else if (!frozen_status.is_valid()) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to find frozen status with max frozen_scn", KR(ret), K_(tenant_id), K(frozen_status));
+      LOG_WARN("fail to find frozen status with max frozen_scn", KR(ret), K(frozen_status));
     }
   }
   return ret;
@@ -338,25 +338,25 @@ int ObFreezeInfoProxy::get_min_major_available_and_larger_info_inner_(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K_(tenant_id), K(frozen_scn));
+    LOG_WARN("invalid argument", KR(ret), K(frozen_scn));
   } else {
     ObSqlString sql;
     min_frozen_scn.set_max();
     SMART_VAR(ObISQLClient::ReadResult, res) {
       sqlclient::ObMySQLResult *result = nullptr;
       if (OB_FAIL(sql.assign_fmt("SELECT *  FROM %s", OB_ALL_FREEZE_INFO_TNAME))) {
-        LOG_WARN("fail to append sql", KR(ret), K_(tenant_id));
-      } else if (OB_FAIL(sql_proxy.read(res, tenant_id_, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("fail to append sql", KR(ret));
+      } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, query result must not be NULL", KR(ret), K(sql), K_(tenant_id));
+        LOG_WARN("error unexpected, query result must not be NULL", KR(ret), K(sql));
       } else {
         while (OB_SUCC(ret)) {
           ObFreezeInfo frozen_status;
           if (OB_FAIL(result->next())) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("fail to get next row", KR(ret), K_(tenant_id));
+              LOG_WARN("fail to get next row", KR(ret));
             }
           } else if (OB_FAIL(construct_frozen_status_(*result, frozen_status))) {
             LOG_WARN("fail to construct frozen_status", KR(ret));
@@ -364,7 +364,7 @@ int ObFreezeInfoProxy::get_min_major_available_and_larger_info_inner_(
                                                 min_frozen_scn : frozen_status.frozen_scn_))) {
           } else if (frozen_status.frozen_scn_ > frozen_scn) {
             if (OB_FAIL(frozen_statuses.push_back(frozen_status))) {
-              LOG_WARN("fail to push back", KR(ret), K(frozen_status), K_(tenant_id));
+              LOG_WARN("fail to push back", KR(ret), K(frozen_status));
             }
           }
         }
@@ -396,29 +396,28 @@ int ObFreezeInfoProxy::construct_frozen_status_(
 
 int ObFreezeInfoProxy::get_freeze_schema_info(
     ObISQLClient &sql_proxy,
-    const uint64_t tenant_id,
     const SCN &frozen_scn,
     TenantIdAndSchemaVersion &schema_version_info)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
+  if (OB_UNLIKELY(false
       || (!frozen_scn.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(frozen_scn));
+    LOG_WARN("invalid arg", KR(ret), K(frozen_scn));
   } else if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
-    LOG_WARN("fail to get timeout ctx", KR(ret), K(tenant_id), K(ctx));
+    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
   } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %ld",
                                     OB_ALL_FREEZE_INFO_TNAME, frozen_scn.get_val_for_inner_table_field()))) {
-    LOG_WARN("fail to assign fmt", KR(ret), K(tenant_id), K(frozen_scn));
+    LOG_WARN("fail to assign fmt", KR(ret), K(frozen_scn));
   }
 
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
-      LOG_WARN("fail to read", KR(ret), K(tenant_id), K(sql));
+    } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
+      LOG_WARN("fail to read", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get result failed", K(ret));
@@ -426,9 +425,9 @@ int ObFreezeInfoProxy::get_freeze_schema_info(
       if (OB_ITER_END == ret) {
         ret = OB_ENTRY_NOT_EXIST;
       }
-      LOG_WARN("fail to get result", KR(ret), K(tenant_id), K(frozen_scn));
+      LOG_WARN("fail to get result", KR(ret), K(frozen_scn));
     } else {
-      schema_version_info.tenant_id_ = tenant_id;
+      
       EXTRACT_INT_FIELD_MYSQL(*result, "schema_version", schema_version_info.schema_version_, int64_t);
     }
   }

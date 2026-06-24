@@ -29,7 +29,7 @@ void *common::ob_easy_realloc(void *ptr, size_t size)
     // obcall RPC transport removed: the pcode->label table is gone. Use a fixed label.
     attr.label_ = "rpc";
     attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-    attr.tenant_id_ = OB_SERVER_TENANT_ID;
+    
     {
       TP_SWITCH_GUARD(true);
       ret = ob_realloc(ptr, size, attr);

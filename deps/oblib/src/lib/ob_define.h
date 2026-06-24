@@ -1093,8 +1093,7 @@ const double OB_DTL_CPU = 5.;
 const double OB_DATA_CPU = 2.5;
 
 const uint64_t OB_INVALID_TENANT_ID = 0;
-const uint64_t OB_SYS_TENANT_ID = 1;
-const uint64_t OB_SERVER_TENANT_ID = 500;
+const uint64_t OB_SERVER_TENANT_ID = 1;  // seekdb: process-level single execution context id
 const uint64_t OB_DTL_TENANT_ID = 508;
 const uint64_t OB_DATA_TENANT_ID = 509;
 const uint64_t OB_GTS_SOURCE_TENANT_ID = 511;
@@ -1667,38 +1666,18 @@ const char* const OB_LOG_ELLIPSIS = "...";
 
 const char *const DEFAULT_REGION_NAME = "default_region";
 
-// The connect attribute key value prefix that the obproxy transparently transmits to the observer
-const char *const OB_PROXY_TRANSPARENT_TRANSMIT_PREFIX__ = "__ob_client_";
-
-// The connect attribute key that the proxy transparently transmits to the observer,
-// in order to prevent the sql request thread from deadlocking (such as dblink sql request)
-const char *const OB_SQL_REQUEST_LEVEL = "__ob_client_sql_request_level";
-
-// The connect attribute value that the proxy transparently transmits to the observer,
-// in order to prevent the sql request thread from deadlocking (such as dblink sql request)
-const char *const OB_SQL_REQUEST_LEVEL0 = "__sql_request_L0";
-const char *const OB_SQL_REQUEST_LEVEL1 = "__sql_request_L1";
-const char *const OB_SQL_REQUEST_LEVEL2 = "__sql_request_L2";
-const char *const OB_SQL_REQUEST_LEVEL3 = "__sql_request_L3";
-
 // for obproxy
 const char *const OB_MYSQL_CLIENT_MODE = "__mysql_client_type";
-const char *const OB_MYSQL_CLIENT_OBPROXY_MODE_NAME = "__ob_proxy";
 const char *const OB_MYSQL_CONNECTION_ID = "__connection_id";
-const char *const OB_MYSQL_GLOBAL_VARS_VERSION = "__global_vars_version";
-const char *const OB_MYSQL_PROXY_CONNECTION_ID = "__proxy_connection_id";
 // add client_session_id, addr_port & client session create time us
 const char *const OB_MYSQL_CLIENT_SESSION_ID = "__client_session_id";
 const char *const OB_MYSQL_CLIENT_ADDR_PORT = "__client_addr_port";
 const char *const OB_MYSQL_CLIENT_CONNECT_TIME_US = "__client_connect_time";
-const char *const OB_MYSQL_PROXY_SESSION_CREATE_TIME_US = "__proxy_session_create_time_us";
 const char *const OB_MYSQL_CLUSTER_NAME = "__cluster_name";
 const char *const OB_MYSQL_CLUSTER_ID = "__cluster_id";
 const char *const OB_MYSQL_CLIENT_IP = "__client_ip";
 const char *const OB_MYSQL_CAPABILITY_FLAG = "__proxy_capability_flag";
 const char *const OB_MYSQL_PROXY_SESSION_VARS = "__proxy_session_vars";
-const char *const OB_MYSQL_SCRAMBLE = "__proxy_scramble";
-const char *const OB_MYSQL_PROXY_VEERSION = "__proxy_version";
 
 const char *const OB_MYSQL_CLIENT_VERSION = "__ob_client_version";
 const char *const OB_MYSQL_CLIENT_NAME = "__ob_client_name";
@@ -1764,93 +1743,31 @@ OB_INLINE uint64_t combine_sequence_id(int64_t rootservice_epoch, uint64_t pure_
   return (rootservice_epoch << OB_ROOTSERVICE_EPOCH_SHIFT | pure_sequence_id);
 }
 
-/*
- * In 4.x version, each user tenant(except sys tenant) has its own meta tenant.
- * User tenant's tenant_id and its meta tenant's tenant_id will be distinguished by 0th bit.
- * 1) If tenant_id = OB_SYS_TENANT_ID, it's sys tenant.
- * 2) If tenant_id is odd, it's meta tenant.
- * 3) If tenant_id is even, it't user tenant.
- * see more docs on yuque rootservice/cnxdv7#pIAUC
- */
-OB_INLINE bool is_sys_tenant(const uint64_t tenant_id)
+OB_INLINE bool is_sys_tenant()
 {
-  return OB_SYS_TENANT_ID == tenant_id;
+  return true;
 }
 
-OB_INLINE bool is_server_tenant(const uint64_t tenant_id)
+OB_INLINE bool is_server_tenant()
 {
-  return OB_SERVER_TENANT_ID == tenant_id;
+  return true;
 }
 
-//check whether an tenant_id is virtual
-OB_INLINE bool is_virtual_tenant_id(const uint64_t tenant_id)
-{
-  return (OB_SYS_TENANT_ID < tenant_id && tenant_id <= OB_MAX_RESERVED_TENANT_ID);
-}
-
-OB_INLINE bool is_not_virtual_tenant_id(const uint64_t tenant_id)
-{
-  return !is_virtual_tenant_id(tenant_id);
-}
-
-bool is_valid_tenant_id(const uint64_t tenant_id);
 const uint64_t META_TENANT_MASK = (uint64_t)0x1;
-OB_INLINE bool is_meta_tenant(const uint64_t tenant_id)
+OB_INLINE bool is_meta_tenant()
 {
-  return !is_sys_tenant(tenant_id)
-         && !is_virtual_tenant_id(tenant_id)
-         && 1 == (tenant_id & META_TENANT_MASK)
-         && is_valid_tenant_id(tenant_id);
+  return false;
 }
 
-OB_INLINE bool is_user_tenant(const uint64_t tenant_id)
+OB_INLINE bool is_user_tenant()
 {
-  return !is_sys_tenant(tenant_id)
-         && !is_virtual_tenant_id(tenant_id)
-         && 0 == (tenant_id & META_TENANT_MASK)
-         && is_valid_tenant_id(tenant_id);
+  return false;
 }
 
-OB_INLINE uint64_t gen_user_tenant_id(const uint64_t tenant_id)
-{
-  uint64_t new_tenant_id = OB_INVALID_TENANT_ID;
-  if (is_virtual_tenant_id(tenant_id)) {
-    new_tenant_id = OB_INVALID_TENANT_ID; //invalid
-  } else if (is_sys_tenant(tenant_id) || is_user_tenant(tenant_id)) {
-    new_tenant_id = tenant_id;
-  } else {
-    new_tenant_id = tenant_id + 1;
-  }
-  return new_tenant_id;
-}
 
-OB_INLINE uint64_t gen_meta_tenant_id(const uint64_t tenant_id)
-{
-  uint64_t new_tenant_id = OB_INVALID_TENANT_ID;
-  if (is_virtual_tenant_id(tenant_id)) {
-    new_tenant_id = OB_INVALID_TENANT_ID; //invalid
-  } else if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
-    new_tenant_id = tenant_id;
-  } else {
-    new_tenant_id = tenant_id - 1;
-  }
-  return new_tenant_id;
-}
 
 // Only work for private table which meta_record_in_sys = True.
-// For private table which meta_record_in_sys = False, gen_meta_tenant_id() should be called.
-OB_INLINE uint64_t get_private_table_exec_tenant_id(const uint64_t tenant_id)
-{
-  uint64_t ret_tenant_id = OB_INVALID_TENANT_ID;
-  if (is_sys_tenant(tenant_id)) {
-    ret_tenant_id = tenant_id;
-  } else if (is_meta_tenant(tenant_id)) {
-    ret_tenant_id = OB_SYS_TENANT_ID;
-  } else {
-    ret_tenant_id = gen_meta_tenant_id(tenant_id);
-  }
-  return ret_tenant_id;
-}
+// For private table which meta_record_in_sys = False, gen_meta_tenant() should be called.
 
 #define COMBINE_ID_HIGH_SHIFT 24
 #define COMBINE_ID_LOW_SHIFT 40
@@ -2250,18 +2167,6 @@ OB_INLINE bool is_valid_server_index(const uint64_t server_index)
   return (0 < server_index) && (server_index <= MAX_SERVER_COUNT);
 }
 
-//check whether an tenant_id is valid
-OB_INLINE bool is_valid_tenant_id(const uint64_t tenant_id)
-{
-  return (0 < tenant_id) && (OB_INVALID_ID != tenant_id) && (OB_INVALID_TENANT_ID != tenant_id);
-}
-
-//Tenants who can use gts, system tenants do not use gts, to avoid circular dependencies
-OB_INLINE bool is_valid_no_sys_tenant_id(const uint64_t tenant_id)
-{
-  return is_valid_tenant_id(tenant_id) && (OB_SYS_TENANT_ID != tenant_id);
-}
-
 OB_INLINE bool is_valid_gts_id(const uint64_t gts_id)
 {
   return OB_INVALID_ID != gts_id && 0 != gts_id;
@@ -2273,9 +2178,9 @@ OB_INLINE bool is_valid_cluster_id(const int64_t cluster_id)
   return (cluster_id >= OB_MIN_CLUSTER_ID && cluster_id <= OB_MAX_CLUSTER_ID);
 }
 
-OB_INLINE bool is_virtual_tenant_for_memory(const uint64_t tenant_id)
+OB_INLINE bool is_virtual_tenant_for_memory()
 {
-  return is_virtual_tenant_id(tenant_id);
+  return false;
 }
 
 OB_INLINE bool is_internal_catalog_id(const uint64_t catalog_id) { return catalog_id == OB_INTERNAL_CATALOG_ID; }
@@ -2785,10 +2690,6 @@ OB_INLINE int64_t ob_gettid()
   return tid;
 }
 
-OB_INLINE uint64_t ob_get_tenant_id()
-{
-  return oceanbase::OB_SYS_TENANT_ID;
-}
 
 OB_INLINE char* ob_get_tname()
 {
@@ -2834,28 +2735,12 @@ OB_INLINE int64_t &ob_get_cluster_id()
   return cluster_id;
 }
 
-OB_INLINE int64_t &ob_get_arb_tenant_id()
-{
-  RLOCAL(int64_t, arb_tenant_id);
-  return arb_tenant_id;
-}
-extern __thread uint64_t tl_thread_tenant_id;
-OB_INLINE uint64_t ob_thread_tenant_id()
-{
-  return tl_thread_tenant_id;
-}
-OB_INLINE uint64_t ob_set_thread_tenant_id(uint64_t tenant_id)
-{
-  return tl_thread_tenant_id = tenant_id;
-}
 
 #define GETTID() ob_gettid()
 #define GETTNAME() ob_get_tname()
 #define GETTNAME_V2() ob_get_tname_v2()
-#define GET_TENANT_ID() ob_get_tenant_id()
 #define gettid GETTID
 #define GET_CLUSTER_ID() ob_get_cluster_id()
-#define GET_ARB_TENANT_ID() ob_get_arb_tenant_id()
 
 //for explain
 #define LEFT_BRACKET "("

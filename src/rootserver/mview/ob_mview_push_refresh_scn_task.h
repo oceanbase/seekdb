@@ -85,21 +85,17 @@ public:
   // for TimerTask
   void runTimerTask() override;
 
-  static int check_major_mv_refresh_scn_safety(const uint64_t tenant_id);
+  static int check_major_mv_refresh_scn_safety();
   static const int64_t MVIEW_PUSH_REFRESH_SCN_INTERVAL = 30 * 1000 * 1000; // 30s
 private:
-  static int get_major_mv_merge_info_(const uint64_t tenant_id,
-                               ObISQLClient &sql_client,
+  static int get_major_mv_merge_info_(ObISQLClient &sql_client,
                                ObIArray<ObMajorMVMergeInfo> &merge_info_array);
-  static int update_major_refresh_mview_scn_(
-      const uint64_t tenant_id,
-      const share::SCN &major_refresh_mview_scn,
+  static int update_major_refresh_mview_scn_(const share::SCN &major_refresh_mview_scn,
       ObMySQLTransaction &trans);
 private:
   bool is_inited_;
   bool in_sched_;
   bool is_stop_;
-  uint64_t tenant_id_;
 };
 
 struct ObMajorRefreshMViewScnArg final

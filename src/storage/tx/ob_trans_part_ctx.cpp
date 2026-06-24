@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_trans_part_ctx.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_tx_redo_submitter.h"
 #include "storage/tx/ob_trans_service.h"
 #define NEED_MDS_REGISTER_DEFINE
@@ -57,8 +58,7 @@ static void statistics_for_standby()
   }
 }
 
-int ObPartTransCtx::init(const uint64_t tenant_id,
-                         const common::ObAddr &scheduler,
+int ObPartTransCtx::init(const common::ObAddr &scheduler,
                          const uint32_t session_id,
                          const uint32_t client_sid,
                          const uint32_t associated_session_id,
@@ -84,10 +84,10 @@ int ObPartTransCtx::init(const uint64_t tenant_id,
   if (OB_UNLIKELY(is_inited_)) {
     TRANS_LOG(WARN, "ObPartTransCtx inited twice");
     ret = OB_INIT_TWICE;
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) || OB_UNLIKELY(!trans_id.is_valid())
+  } else if (OB_UNLIKELY(!true) || OB_UNLIKELY(!trans_id.is_valid())
              || OB_UNLIKELY(trans_expired_time <= 0) || OB_UNLIKELY(cluster_version < 0)
              || OB_ISNULL(trans_service) || OB_UNLIKELY(!ls_id.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(tenant_id), K(trans_id), K(epoch), K(cluster_version),
+    TRANS_LOG(WARN, "invalid argument", K(trans_id), K(epoch), K(cluster_version),
               KP(trans_service), K(ls_id));
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -102,19 +102,19 @@ int ObPartTransCtx::init(const uint64_t tenant_id,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(timeout_task_.init(this))) {
       TRANS_LOG(WARN, "timeout task init error", KR(ret));
-    } else if (OB_FAIL(init_memtable_ctx_(tenant_id, ls_id))) {
+    } else if (OB_FAIL(init_memtable_ctx_(ls_id))) {
       TRANS_LOG(WARN, "ObPartTransCtx init memtable context error", KR(ret), K(trans_id), K(ls_id));
     } else if (OB_FAIL(init_log_cbs_(ls_id, trans_id))) {
       TRANS_LOG(WARN, "init log cbs failed", KR(ret), K(trans_id), K(ls_id));
     } else if (OB_FAIL(ctx_tx_data_.init(trans_expired_time, ls_ctx_mgr, trans_id))) {
       TRANS_LOG(WARN, "init ctx tx data failed",K(ret), K(trans_id), K(ls_id));
-    } else if (OB_FAIL(mds_cache_.init(tenant_id, ls_id, trans_id))) {
+    } else if (OB_FAIL(mds_cache_.init(ls_id, trans_id))) {
       TRANS_LOG(WARN, "init mds cache failed", K(ret), K(trans_id), K(ls_id));
     }
   }
 
   if (OB_SUCC(ret)) {
-    tenant_id_ = tenant_id;
+    
     session_id_ = session_id;
     client_sid_ = client_sid;
     associated_session_id_ = associated_session_id;
@@ -169,15 +169,15 @@ int ObPartTransCtx::init(const uint64_t tenant_id,
                        OB_ID(id), ls_id_.id(),
                        OB_ID(trans_id), trans_id,
                        OB_ID(ref), get_ref());
-  TRANS_LOG(TRACE, "part trans ctx init", K(ret), K(tenant_id), K(trans_id), K(trans_expired_time),
+  TRANS_LOG(TRACE, "part trans ctx init", K(ret), K(trans_id), K(trans_expired_time),
             K(ls_id), K(cluster_version), KP(trans_service), K(cluster_id), K(epoch));
   return ret;
 }
 
-int ObPartTransCtx::init_memtable_ctx_(const uint64_t tenant_id, const ObLSID &ls_id)
+int ObPartTransCtx::init_memtable_ctx_(const ObLSID &ls_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(mt_ctx_.init(tenant_id))) {
+  if (OB_FAIL(mt_ctx_.init())) {
     TRANS_LOG(WARN, "memtable context init fail", KR(ret));
   } else if (OB_FAIL(mt_ctx_.enable_lock_table(ls_tx_ctx_mgr_))) {
     TRANS_LOG(WARN, "enable_lock_table fail", K(ret), K(ls_id));
@@ -185,7 +185,7 @@ int ObPartTransCtx::init_memtable_ctx_(const uint64_t tenant_id, const ObLSID &l
     // the elr_handler.mt_ctx_ is used to notify the lock_wait_mgr for early lock release txn
     elr_handler_.set_memtable_ctx(&mt_ctx_);
   }
-  TRANS_LOG(DEBUG, "init memtable ctx", KR(ret), K(ls_id), K(tenant_id), K(trans_id_));
+  TRANS_LOG(DEBUG, "init memtable ctx", KR(ret), K(ls_id), K(trans_id_));
   return ret;
 }
 
@@ -902,7 +902,6 @@ int ObPartTransCtx::iterate_tx_lock_stat(ObTxLockStatIterator &iter)
     for (int i = 0; OB_SUCC(ret) && i < count; i++) {
       ObTxLockStat tx_lock_stat;
       if (OB_FAIL(tx_lock_stat.init(get_addr(),
-                                    get_tenant_id(),
                                     get_ls_id(),
                                     memtable_key_info_arr.at(i),
                                     get_session_id(),
@@ -1443,7 +1442,7 @@ int ObPartTransCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
           || ObTxState::CLEAR == exec_info_.state_) {
         ls_tx_ctx_mgr_->update_max_replay_commit_version(ctx_tx_data_.get_commit_version());
         //update max_commit_ts for dup table because of migrate or recover
-        MTL(ObTransService *)
+        share::g_mp->trans_service()
             ->get_tx_version_mgr()
             .update_max_commit_ts(ctx_tx_data_.get_commit_version(), false);
       }
@@ -1962,8 +1961,8 @@ int ObPartTransCtx::on_success(ObTxLogCb *log_cb)
     CtxLockGuard guard(lock_, is_committing_() ? CtxLockGuard::MODE::ALL : CtxLockGuard::MODE::CTX);
 
     log_sync_used_time = cur_ts - log_cb->get_submit_ts();
-    ObTransStatistic::get_instance().add_clog_sync_time(tenant_id_, log_sync_used_time);
-    ObTransStatistic::get_instance().add_clog_sync_count(tenant_id_, 1);
+    ObTransStatistic::get_instance().add_clog_sync_time( log_sync_used_time);
+    ObTransStatistic::get_instance().add_clog_sync_count( 1);
     ctx_lock_wait_time = guard.get_lock_acquire_used_time();
     if (log_sync_used_time + ctx_lock_wait_time >= ObServerConfig::get_instance().clog_sync_time_warn_threshold) {
       TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "transaction log sync use too much time", KPC(log_cb),
@@ -2214,7 +2213,7 @@ int ObPartTransCtx::insert_mds_to_tx_table_(ObTxLogCb &log_cb)
           wrapper.get_node().get_data_source_type() != mds_node.get_data_source_type()) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "mds not match", KR(ret), KPC(this));
-      } else if (OB_FAIL(wrapper.assign(trans_id_, mds_node, MTL(ObSharedMemAllocMgr*)->tx_data_op_allocator(), true))) {
+      } else if (OB_FAIL(wrapper.assign(trans_id_, mds_node, share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator(), true))) {
         TRANS_LOG(WARN, "assign mds failed", KR(ret), KPC(this));
       }
     }
@@ -2660,7 +2659,7 @@ int ObPartTransCtx::get_gts_(SCN &gts)
   if (sub_state_.is_gts_waiting()) {
     ret = OB_EAGAIN;
     TRANS_LOG(INFO, "gts is waiting", K(ret), K(*this));
-  } else if (OB_FAIL(ts_mgr->get_gts(tenant_id_, stc_ahead, this, gts, receive_gts_ts))) {
+  } else if (OB_FAIL(ts_mgr->get_gts(stc_ahead, this, gts, receive_gts_ts))) {
     if (OB_EAGAIN == ret) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = acquire_ctx_ref_())) {
@@ -2687,8 +2686,7 @@ int ObPartTransCtx::wait_gts_elapse_commit_version_(bool &need_wait)
 
   ObTsMgr *ts_mgr = trans_service_->get_ts_mgr();
 
-  if (OB_FAIL(ts_mgr->wait_gts_elapse(tenant_id_,
-                                      ctx_tx_data_.get_commit_version(),
+  if (OB_FAIL(ts_mgr->wait_gts_elapse(ctx_tx_data_.get_commit_version(),
                                       this,
                                       need_wait))) {
     TRANS_LOG(WARN, "wait gts elapse failed", KR(ret), K(*this));
@@ -4048,7 +4046,7 @@ int ObPartTransCtx::submit_log_impl_(const ObTxLogType log_type)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  MTL_SWITCH(tenant_id_)
+  MOD_SCOPE
   {
     if (big_segment_info_.segment_buf_.is_active()) {
       ret = OB_LOG_TOO_LARGE;
@@ -4083,7 +4081,7 @@ int ObPartTransCtx::submit_log_impl_(const ObTxLogType log_type)
       	    ret = generate_commit_version_();
       	  }
       	}
-        if (OB_SWITCHING_TO_FOLLOWER_GRACEFULLY == ERRSIM_DELAY_TX_SUBMIT_LOG && 1002 == MTL_ID() && 1001 == ls_id_.id()) {
+        if (OB_SWITCHING_TO_FOLLOWER_GRACEFULLY == ERRSIM_DELAY_TX_SUBMIT_LOG && 1001 == ls_id_.id()) {
           ret = ERRSIM_DELAY_TX_SUBMIT_LOG;
         } else if (ERRSIM_DELAY_TX_SUBMIT_LOG < int(-9999)) {
           // reject trans_id and tenant id to contorl trans sate
@@ -4810,8 +4808,8 @@ int ObPartTransCtx::replay_redo_in_ctx(const ObTxRedoLog &redo_log,
     }
   }
   if (OB_SUCC(ret)) {
-    ObTransStatistic::get_instance().add_redo_log_replay_count(tenant_id_, 1);
-    ObTransStatistic::get_instance().add_redo_log_replay_time(tenant_id_, timeguard.get_diff());
+    ObTransStatistic::get_instance().add_redo_log_replay_count( 1);
+    ObTransStatistic::get_instance().add_redo_log_replay_time( timeguard.get_diff());
 
     // for redo compound with Txn Log, go with old ways, this can also handle replay of old version
     if (is_tx_log_queue) {
@@ -4937,7 +4935,7 @@ int ObPartTransCtx::replay_rollback_to(const ObTxRollbackToLog &log,
         // if so, can decide that the current txn was replayed from middle, and mark it
         // replay incomplete
         share::SCN min_unreplayed_scn;
-        logservice::ObLogService *log_service = MTL(logservice::ObLogService*);
+        logservice::ObLogService *log_service = share::g_mp->log_service();
         if (OB_ISNULL(log_service)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "tenant logservice is null", K(ret), K(timestamp), K_(trans_id));
@@ -5203,8 +5201,8 @@ int ObPartTransCtx::replay_commit_info(const ObTxCommitInfoLog &commit_info_log,
       OB_ID(offset), offset.val_, OB_ID(t), timestamp,
       OB_ID(ref), get_ref());
   // TODO add commit_state_log statistics
-  // ObTransStatistic::get_instance().add_redo_log_replay_count(tenant_id_, 1);
-  // ObTransStatistic::get_instance().add_redo_log_replay_time(tenant_id_, end - start);
+  // ObTransStatistic::get_instance().add_redo_log_replay_count( 1);
+  // ObTransStatistic::get_instance().add_redo_log_replay_time( end - start);
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay commit info Failed", K(ret), K(used_time), K(timestamp), K(offset),
               K(commit_info_log), K(*this));
@@ -5265,8 +5263,8 @@ int ObPartTransCtx::replay_prepare(const ObTxPrepareLog &prepare_log,
   REC_TRANS_TRACE_EXT2(tlog_, replay_prepare, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
                        OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_prepare_log_replay_count(tenant_id_, 1);
-  ObTransStatistic::get_instance().add_prepare_log_replay_time(tenant_id_, used_time);
+  ObTransStatistic::get_instance().add_prepare_log_replay_count( 1);
+  ObTransStatistic::get_instance().add_prepare_log_replay_time( used_time);
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay prepare log failed", K(ret), K(used_time), K(timestamp),
               K(offset), K(prepare_log), K(*this));
@@ -5397,8 +5395,8 @@ int ObPartTransCtx::replay_commit(const ObTxCommitLog &commit_log,
   const int64_t used_time = timeguard.get_diff();
   REC_TRANS_TRACE_EXT2(tlog_, replay_commit, OB_ID(ret), ret, OB_ID(used), used_time, OB_ID(offset),
                        offset.val_, OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_commit_log_replay_count(tenant_id_, 1);
-  ObTransStatistic::get_instance().add_commit_log_replay_time(tenant_id_, used_time);
+  ObTransStatistic::get_instance().add_commit_log_replay_count( 1);
+  ObTransStatistic::get_instance().add_commit_log_replay_time( used_time);
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay commit log failed", K(ret), K(used_time), K(timestamp),
               K(offset), K(commit_log), K(*this));
@@ -5467,8 +5465,8 @@ int ObPartTransCtx::replay_clear(const ObTxClearLog &clear_log,
   REC_TRANS_TRACE_EXT2(tlog_, replay_clear, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
                        OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_clear_log_replay_count(tenant_id_, 1);
-  ObTransStatistic::get_instance().add_clear_log_replay_time(tenant_id_, used_time);
+  ObTransStatistic::get_instance().add_clear_log_replay_count( 1);
+  ObTransStatistic::get_instance().add_clear_log_replay_time( used_time);
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay clear log failed", K(ret), K(used_time), K(timestamp), K(offset),
               K(clear_log), K(*this));
@@ -5586,8 +5584,8 @@ int ObPartTransCtx::replay_abort(const ObTxAbortLog &abort_log,
   REC_TRANS_TRACE_EXT2(tlog_, replay_abort, OB_ID(ret), ret, OB_ID(used),
                        used_time, OB_ID(offset), offset.val_,
                        OB_ID(t), timestamp, OB_ID(ref), get_ref());
-  ObTransStatistic::get_instance().add_abort_log_replay_count(tenant_id_, 1);
-  ObTransStatistic::get_instance().add_abort_log_replay_time(tenant_id_, used_time);
+  ObTransStatistic::get_instance().add_abort_log_replay_count( 1);
+  ObTransStatistic::get_instance().add_abort_log_replay_time( used_time);
 
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "[Replay Tx] replay abort log failed", K(ret), K(used_time), K(timestamp),
@@ -6018,10 +6016,7 @@ int ObPartTransCtx::switch_to_follower_gracefully(ObTxCommitCallback *&cb_list_h
   CtxLockGuard guard(lock_);
   timeguard.click();
   TxCtxStateHelper state_helper(role_state_);
-  if (MTL_ID() != tenant_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "tenant not match", K(ret), K(*this));
-  } else if (is_exiting_) {
+  if (is_exiting_) {
     // do nothing
   } else if (is_force_abort_logging_()) {
     // is aborting, skip
@@ -6468,7 +6463,7 @@ int ObPartTransCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
-            MTL(mds::ObTenantMdsService*)->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "process_with_buffer_ctx failed", KR(ret), K(*this));
@@ -6476,7 +6471,7 @@ int ObPartTransCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
                                          node.seq_no_, new_ctx))) {
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
-            MTL(mds::ObTenantMdsService *)->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "init new node failed", KR(ret), K(*this));
@@ -6485,14 +6480,14 @@ int ObPartTransCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
-            MTL(mds::ObTenantMdsService *)->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "set mds register_no failed", KR(ret), K(*this));
         } else if (OB_FAIL(tmp_buf_arr.push_back(new_node))) {
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
-            MTL(mds::ObTenantMdsService *)->get_buffer_ctx_allocator().free(new_ctx);
+            share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "push multi source data failed", KR(ret), K(*this));
@@ -7077,7 +7072,7 @@ int ObPartTransCtx::register_multi_data_source(const ObTxDataSourceType data_sou
       if (OB_FAIL(ret)) {
         mds_cache_.free_mds_node(data, node.get_register_no());
         if (OB_NOT_NULL(buffer_ctx)) {
-          MTL(mds::ObTenantMdsService *)->get_buffer_ctx_allocator().free(buffer_ctx);
+          share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator().free(buffer_ctx);
         }
       } else if (OB_FAIL(notify_data_source_(NotifyType::REGISTER_SUCC, SCN(), false, tmp_array))) {
         if (OB_SUCCESS != (tmp_ret = mds_cache_.rollback_last_mds_node())) {
@@ -7415,7 +7410,7 @@ int ObPartTransCtx::check_pending_log_overflow(const int64_t stmt_timeout)
   const int64_t LOCAL_RETRY_INTERVAL_US = 50 * 1000;  // 50ms
 
   if (OB_SUCC(ret) && ATOMIC_LOAD(&has_extra_log_cb_group_)) {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     const int64_t trx_max_log_cb_limit =
         tenant_config.is_valid() ? tenant_config->_trx_max_log_cb_limit : 16;
     // smaller than 16  || no limit with tx_log_cb =>  disable the check of pending logs
@@ -7674,7 +7669,7 @@ int ObPartTransCtx::submit_rollback_to_log_(const ObTxSEQ from_scn,
     TRANS_LOG(WARN, "alloc_tx_data failed", KR(ret), KPC(this));
     return_log_cb_(log_cb);
     log_cb = NULL;
-  } else if (OB_ISNULL(undo_node = (ObUndoStatusNode*)MTL(ObSharedMemAllocMgr*)->tx_data_allocator().alloc(true, INT64_MAX))) {
+  } else if (OB_ISNULL(undo_node = (ObUndoStatusNode*)share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator().alloc(true, INT64_MAX))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc_undo_status_node failed", KR(ret), KPC(this));
     return_log_cb_(log_cb);
@@ -8190,7 +8185,7 @@ void ObPartTransCtx::post_keepalive_msg_(const int status)
 {
   ObTxKeepaliveMsg msg;
   msg.cluster_version_ = cluster_version_;
-  msg.tenant_id_ = tenant_id_;
+  
   msg.cluster_id_ = cluster_id_;
   msg.request_id_ = ObClockGenerator::getClock();
   msg.tx_id_ = trans_id_;
@@ -8519,7 +8514,6 @@ void ObPartTransCtx::build_tx_common_msg_(const ObLSID &receiver,
 {
   build_tx_common_msg_(receiver,
                        cluster_version_,
-                       tenant_id_,
                        trans_id_,
                        addr_,
                        ls_id_,
@@ -8540,7 +8534,6 @@ void ObPartTransCtx::build_tx_common_msg_(const ObTxMsg &recv_msg,
 {
     build_tx_common_msg_(recv_msg.get_sender(),
                          recv_msg.get_cluster_version(),
-                         recv_msg.get_tenant_id(),
                          recv_msg.get_trans_id(),
                          self_addr,
                          recv_msg.get_receiver(),
@@ -8550,7 +8543,6 @@ void ObPartTransCtx::build_tx_common_msg_(const ObTxMsg &recv_msg,
 
 void ObPartTransCtx::build_tx_common_msg_(const ObLSID &receiver,
                                           const int64_t cluster_version,
-                                          const int64_t tenant_id,
                                           const int64_t tx_id,
                                           const common::ObAddr& self_addr,
                                           const ObLSID &self_ls_id,
@@ -8559,7 +8551,7 @@ void ObPartTransCtx::build_tx_common_msg_(const ObLSID &receiver,
 {
   msg.receiver_ = receiver;
   msg.cluster_version_ = cluster_version;
-  msg.tenant_id_ = tenant_id;
+  
   msg.tx_id_ = tx_id;
   msg.sender_addr_ = self_addr;
   msg.sender_ = self_ls_id;

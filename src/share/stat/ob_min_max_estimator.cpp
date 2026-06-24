@@ -133,7 +133,7 @@ int ObMinMaxEstimator::estimate(const ObOptStatGatherParam &param,
                                 ObOptStat &opt_stat)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator("ObMinMaxEst", OB_MALLOC_NORMAL_BLOCK_SIZE, param.tenant_id_);
+  ObArenaAllocator allocator("ObMinMaxEst", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObString no_rewrite("NO_REWRITE DBMS_STATS OPT_PARAM('ROWSETS_MAX_ROWS', 256)");
   ObSqlString raw_sql;
   int64_t duration_time = -1;

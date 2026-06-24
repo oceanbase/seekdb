@@ -173,10 +173,6 @@ select collation(bin(uc)) from coll_test;
 select collation(bin(pk))  from coll_test;
 select collation(bin(b))  from coll_test;
 
-# effective_tenant
-select collation(effective_tenant());
-select coercibility(effective_tenant());
-
 # like
 select collation(uc like b) from coll_test;
 select cmp_meta(uc like b) from coll_test;

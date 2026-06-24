@@ -59,7 +59,6 @@ ObPDMLOpBatchRowCache::ObPDMLOpBatchRowCache(ObEvalCtx *eval_ctx, ObMonitorNode 
       cached_rows_num_(0),
       cached_rows_size_(0),
       cached_in_mem_rows_num_(0),
-      tenant_id_(OB_INVALID_TENANT_ID),
       with_barrier_(false),
       mem_context_(nullptr),
       profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
@@ -77,16 +76,15 @@ bool ObPDMLOpBatchRowCache::empty() const
   return cached_rows_num_ == 0;
 }
 
-int ObPDMLOpBatchRowCache::init(uint64_t tenant_id, int64_t part_cnt, bool with_barrier, const ObTableModifySpec &spec)
+int ObPDMLOpBatchRowCache::init(int64_t part_cnt, bool with_barrier, const ObTableModifySpec &spec)
 {
   int ret = OB_SUCCESS;
-  row_allocator_.set_tenant_id(tenant_id);
-  tenant_id_ = tenant_id;
+  
   with_barrier_ = with_barrier;
 
   if (OB_ISNULL(mem_context_)) {
     lib::ContextParam param;
-    param.set_mem_attr(tenant_id, "PdmlCacheRows", ObCtxIds::WORK_AREA)
+    param.set_mem_attr("PdmlCacheRows", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
       LOG_WARN("create entity failed", K(ret));
@@ -104,7 +102,6 @@ int ObPDMLOpBatchRowCache::init(uint64_t tenant_id, int64_t part_cnt, bool with_
       LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
                 &mem_context_->get_malloc_allocator(),
-                tenant_id,
                 row_count * spec.width_, spec.type_, spec.id_, &ctx))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
     }
@@ -117,8 +114,8 @@ int ObPDMLOpBatchRowCache::init(uint64_t tenant_id, int64_t part_cnt, bool with_
   }
 
   if (OB_SUCC(ret)) {
-    ObMemAttr bucket_attr(tenant_id, "PDMLRowBucket");
-    ObMemAttr node_attr(tenant_id, "PDMLRowNode");
+    ObMemAttr bucket_attr("PDMLRowBucket");
+    ObMemAttr node_attr("PDMLRowNode");
     if (OB_FAIL(pstore_map_.create(part_cnt * 2, bucket_attr, node_attr))) {
       LOG_WARN("fail create part store map", K(ret), K(part_cnt));
     }
@@ -139,8 +136,7 @@ int ObPDMLOpBatchRowCache::init_row_store(ObChunkDatumStore *&chunk_row_store)
     // 1. If there is no barrier, do not perform the dump
     // 2. If there is a barrier, a dump needs to be performed
     chunk_row_store = new(buf) ObChunkDatumStore("PDML_ROW_CACHE", &allocator);
-    if (OB_FAIL(chunk_row_store->init(INT64_MAX, // let auto mem mgr take care of mem limit
-                                      tenant_id_,
+    if (OB_FAIL(chunk_row_store->init(INT64_MAX,
                                       ObCtxIds::WORK_AREA,
                                       "PDML_ROW_CACHE", // module label, no more than 15 characters
                                       with_barrier_))) { // barrier case, need to support dump capability;
@@ -275,7 +271,6 @@ void ObPDMLOpBatchRowCache::destroy()
   cached_rows_num_ = 0;
   cached_rows_size_ = 0;
   cached_in_mem_rows_num_ = 0;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   with_barrier_ = false;
 
   if (nullptr != mem_context_) {

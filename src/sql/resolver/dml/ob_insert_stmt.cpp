@@ -228,8 +228,7 @@ int ObInsertStmt::part_key_is_updated(bool &is_updated) const
 {
   int ret = OB_SUCCESS;
   is_updated = false;
-  if (!table_info_.is_link_table_ &&
-      OB_FAIL(check_part_key_is_updated(table_info_.assignments_, is_updated))) {
+  if (OB_FAIL(check_part_key_is_updated(table_info_.assignments_, is_updated))) {
     LOG_WARN("failed to check part key is updated", K(ret));
   } else { /*do nothing*/ }
   return ret;

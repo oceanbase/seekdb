@@ -56,7 +56,7 @@ int ObDbmsStatsPreferences::reset_global_pref_defaults(ObExecContext &ctx)
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session));
   } else if (OB_FAIL(gen_init_global_prefs_sql(raw_sql, true))) {
     LOG_WARN("failed gen init global prefs sql", K(ret), K(raw_sql));
-  } else if (OB_FAIL(mysql_proxy->write(session->get_effective_tenant_id(),
+  } else if (OB_FAIL(mysql_proxy->write(
                                         raw_sql.ptr(),
                                         affected_rows))) {
     LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
@@ -68,7 +68,6 @@ int ObDbmsStatsPreferences::reset_global_pref_defaults(ObExecContext &ctx)
 
 int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
                                       ObIAllocator &allocator,
-                                      const uint64_t tenant_id,
                                       const uint64_t table_id,
                                       const ObString &opt_name,
                                       ObObj &result)
@@ -83,10 +82,10 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
                                         opt_name.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret), K(get_global_sql));
   } else if (is_user_prefs) {
-    uint64_t exec_tenant_id = share::schema::ObSchemaUtils::get_exec_tenant_id(tenant_id);
+    
     if (OB_FAIL(get_user_sql.append_fmt(FETCH_USER_PREFS,
                                         share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
-                                        share::schema::ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
+                                        share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                         opt_name.length(),
                                         opt_name.ptr()))) {
       LOG_WARN("failed to append fmt", K(ret), K(get_user_sql));
@@ -94,11 +93,11 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
   } else {/*do nothing*/}
   if (OB_SUCC(ret)) {
     bool got_result = false;
-    if (is_user_prefs && OB_FAIL(do_get_prefs(mysql_proxy, allocator, tenant_id, get_user_sql, got_result, result))) {
+    if (is_user_prefs && OB_FAIL(do_get_prefs(mysql_proxy, allocator, get_user_sql, got_result, result))) {
       LOG_WARN("failed to do get prefs", K(ret));
     } else if (got_result) {
       /*do nothing*/
-    } else if OB_FAIL(do_get_prefs(mysql_proxy, allocator, tenant_id, get_global_sql, got_result, result)) {
+    } else if OB_FAIL(do_get_prefs(mysql_proxy, allocator, get_global_sql, got_result, result)) {
       LOG_WARN("failed to do get prefs", K(ret));
     } else if (got_result) {
       /*do nothing*/
@@ -131,7 +130,7 @@ int ObDbmsStatsPreferences::set_prefs(ObExecContext &ctx,
       ObSqlString val_sql;
       for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
         val_sql.reset();
-        if (OB_FAIL(get_user_prefs_sql(session->get_effective_tenant_id(),
+        if (OB_FAIL(get_user_prefs_sql(
                                        table_ids.at(i), opt_name, opt_value,
                                        current_time, val_sql))) {
           LOG_WARN("failed to get user prefs sql", K(ret), K(val_sql));
@@ -141,7 +140,7 @@ int ObDbmsStatsPreferences::set_prefs(ObExecContext &ctx,
         } else {/*do nothing*/}
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(mysql_proxy->write(session->get_effective_tenant_id(),
+        if (OB_FAIL(mysql_proxy->write(
                                        raw_sql.ptr(),
                                        affected_rows))) {
           LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
@@ -159,7 +158,7 @@ int ObDbmsStatsPreferences::set_prefs(ObExecContext &ctx,
                                    opt_name.length(),
                                    opt_name.ptr()))) {
       LOG_WARN("failed to append", K(ret), K(raw_sql));
-    } else if (OB_FAIL(mysql_proxy->write(session->get_effective_tenant_id(),
+    } else if (OB_FAIL(mysql_proxy->write(
                                           raw_sql.ptr(),
                                           affected_rows))) {
       LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
@@ -185,9 +184,9 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session));
   } else if (!table_ids.empty()) {
     ObSqlString tbl_list_str;
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
-      uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_ids.at(i));
+      uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_ids.at(i));
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == table_ids.count() - 1 ? ')' : ',');
       if (OB_FAIL(tbl_list_str.append_fmt("%c%lu%c", prefix, pure_table_id, suffix))) {
@@ -204,7 +203,7 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
                                             condition_str.string().length(),
                                             condition_str.string().ptr()))) {
         LOG_WARN("failed to append", K(ret), K(raw_sql));
-      } else if (OB_FAIL(mysql_proxy->write(tenant_id,
+      } else if (OB_FAIL(mysql_proxy->write(
                                             raw_sql.ptr(),
                                             affected_rows))) {
         LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
@@ -218,7 +217,6 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
 
 int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
                                          ObIAllocator &allocator,
-                                         const uint64_t tenant_id,
                                          const ObSqlString &raw_sql,
                                          bool &get_result,
                                          ObObj &result)
@@ -232,7 +230,7 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, raw_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -273,8 +271,7 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
   return ret;
 }
 
-int ObDbmsStatsPreferences::get_user_prefs_sql(const uint64_t tenant_id,
-                                               const uint64_t table_id,
+int ObDbmsStatsPreferences::get_user_prefs_sql(const uint64_t table_id,
                                                const ObString &opt_name,
                                                const ObString &opt_value,
                                                const int64_t current_time,
@@ -282,8 +279,8 @@ int ObDbmsStatsPreferences::get_user_prefs_sql(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id);
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
   if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("pname", opt_name)) ||
       OB_FAIL(dml_splicer.add_column("valnum", NULL)) ||
@@ -303,9 +300,9 @@ int ObDbmsStatsPreferences::get_sys_default_stat_options(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
   ObSqlString sname_list;
-  uint64_t tenant_id = param.tenant_id_;
-  uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
+  
+  
+  uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(param.table_id_);
   ObSEArray<ObStatPrefs*, 4> no_acquired_prefs;
   if (stat_prefs.empty()) {
     /*do nothing*/
@@ -469,11 +466,11 @@ int ObDbmsStatsPreferences::do_get_sys_perfs(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session), K(raw_sql.empty()));
   } else {
-    uint64_t tenant_id = session->get_effective_tenant_id();
+    
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
-      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, tenant_id, raw_sql.ptr()))) {
+      if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;

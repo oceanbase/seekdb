@@ -70,7 +70,7 @@ int ObDeadLockInnerTableService::insert(const ObDetectorInnerReportInfo &inner_i
     DETECT_LOG(WARN, "storage not init", KR(ret));
   } else {
     ObDeadlockEventHistoryEntry entry;
-    entry.tenant_id_ = inner_info.get_tenant_id();
+    
     entry.event_id_ = inner_info.get_event_id();
     entry.svr_addr_ = inner_info.get_addr();
     entry.detector_id_ = inner_info.get_detector_id();
@@ -134,7 +134,7 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
       const ObIArray<ObString> &extra_values = user_info.get_extra_columns_values();
       
       ObDeadlockEventHistoryEntry entry;
-      entry.tenant_id_ = info.get_tenant_id();
+      
       entry.event_id_ = info.get_event_id();
       entry.svr_addr_ = info.get_addr();
       entry.detector_id_ = info.get_detector_id();

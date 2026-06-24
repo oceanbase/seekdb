@@ -23,10 +23,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
-#include "election/interface/election_priority.h"
-#include "election/interface/election_msg_handler.h"
-#include "election/message/election_message.h"
-#include "election/algorithm/election_impl.h"
+#include "election_self.h"
 #include "share/scn.h"
 #include "palf_callback_wrapper.h"
 #include "log_engine.h"                      // LogEngine
@@ -584,11 +581,6 @@ public:
                                       const LSN &last_lsn,
                                       const LSN &committed_end_lsn,
                                       const LogModeMeta &log_mode_meta) = 0;
-  virtual int handle_election_message(const election::ElectionPrepareRequestMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionPrepareResponseMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionAcceptRequestMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionAcceptResponseMsg &msg) = 0;
-  virtual int handle_election_message(const election::ElectionChangeLeaderMsg &msg) = 0;
   virtual int receive_log(const common::ObAddr &server,
                           const PushLogType push_log_type,
                           const int64_t &proposal_id,
@@ -995,11 +987,6 @@ public:
                               const LSN &last_lsn,
                               const LSN &committed_end_lsn,
                               const LogModeMeta &log_mode_meta) override final;
-  int handle_election_message(const election::ElectionPrepareRequestMsg &msg) override final;
-  int handle_election_message(const election::ElectionPrepareResponseMsg &msg) override final;
-  int handle_election_message(const election::ElectionAcceptRequestMsg &msg) override final;
-  int handle_election_message(const election::ElectionAcceptResponseMsg &msg) override final;
-  int handle_election_message(const election::ElectionChangeLeaderMsg &msg) override final;
   int receive_log(const common::ObAddr &server,
                   const PushLogType push_log_type,
                   const int64_t &msg_proposal_id,
@@ -1252,85 +1239,6 @@ private:
   template<typename LogEntryType>
   int alloc_iterator_from_scn_(const SCN &scn,
                                PalfIterator<LogEntryType> &iterator);
-private:
-  class ElectionMsgSender : public election::ElectionMsgSender
-  {
-  public:
-    ElectionMsgSender(LogNetService &net_service) : net_service_(net_service), is_in_silent_(false), palf_id_(INVALID_PALF_ID) {};
-    ~ElectionMsgSender() {
-      is_in_silent_ = false;
-      palf_id_ = INVALID_PALF_ID;
-    }
-    virtual int broadcast(const election::ElectionPrepareRequestMsg &msg,
-                          const ObIArray<ObAddr> &list) const override final
-    {
-      if (false == is_allowed_broadcast_()) {
-      } else {
-        int tmp_ret = common::OB_SUCCESS;
-        for (int64_t idx = 0; idx < list.count(); ++idx) {
-          const_cast<election::ElectionPrepareRequestMsg *>(&msg)->set_receiver(list.at(idx));
-          if (OB_SUCCESS != (tmp_ret = net_service_.post_request_to_server_(list.at(idx), msg))) {
-            PALF_LOG(INFO, "post prepare request msg failed", K(tmp_ret), "server", list.at(idx),
-                K(msg));
-          }
-        }
-      }
-      return common::OB_SUCCESS;
-    }
-    virtual int broadcast(const election::ElectionAcceptRequestMsg &msg,
-                          const ObIArray<ObAddr> &list) const override final
-    {
-      if (false == is_allowed_broadcast_()) {
-      } else {
-        int tmp_ret = common::OB_SUCCESS;
-        for (int64_t idx = 0; idx < list.count(); ++idx) {
-          const_cast<election::ElectionAcceptRequestMsg *>(&msg)->set_receiver(list.at(idx));
-          if (OB_SUCCESS != (tmp_ret = net_service_.post_request_to_server_(list.at(idx), msg))) {
-            PALF_LOG(INFO, "post accept request msg failed", K(tmp_ret), "server", list.at(idx),
-                K(msg));
-          }
-        }
-      }
-      return common::OB_SUCCESS;
-    }
-    virtual int send(const election::ElectionPrepareResponseMsg &msg) const override final
-    {
-      return net_service_.post_request_to_server_(msg.get_receiver(), msg);
-    }
-    virtual int send(const election::ElectionAcceptResponseMsg &msg) const override final
-    {
-      return net_service_.post_request_to_server_(msg.get_receiver(), msg);
-    }
-    virtual int send(const election::ElectionChangeLeaderMsg &msg) const override final
-    {
-      return net_service_.post_request_to_server_(msg.get_receiver(), msg);
-    }
-    void set_silent_flag(const bool &silent_flag)
-    {
-      is_in_silent_ = silent_flag;
-    }
-    bool get_silent_flag() const
-    {
-      return is_in_silent_;
-    }
-    void set_palf_id(const int64_t palf_id) {
-      palf_id_ = palf_id;
-    }
-  private:
-    bool is_allowed_broadcast_() const
-    {
-      bool bool_ret = (true == is_in_silent_) ? false : true;
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        PALF_LOG(INFO, "keep in silent because of disconnected with RS, do not solicit votes.",
-                 K_(is_in_silent), K_(palf_id), "is_allowed_broadcast", bool_ret);
-      }
-      return bool_ret;
-    }
-  private:
-    LogNetService &net_service_;
-    bool is_in_silent_;  // false by default. True means that this replica is not allowed to solicit votes
-    int64_t palf_id_;
-  };
 private:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;

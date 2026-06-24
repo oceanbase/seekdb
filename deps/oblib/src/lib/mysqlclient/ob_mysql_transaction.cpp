@@ -51,51 +51,48 @@ ObMySQLTransaction::~ObMySQLTransaction()
 }
 
 int ObMySQLTransaction::start_transaction(
-    const uint64_t &tenant_id,
     bool with_snapshot)
 {
   int ret = OB_SUCCESS;
   if (NULL == get_connection()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("conn_ is NULL", K(ret));
-  } else if (OB_FAIL(get_connection()->start_transaction(tenant_id, with_snapshot))) {
-    LOG_WARN("fail to start transaction", K(ret), K(tenant_id), K(with_snapshot));
+  } else if (OB_FAIL(get_connection()->start_transaction(with_snapshot))) {
+    LOG_WARN("fail to start transaction", K(ret), K(with_snapshot));
   }
   return ret;
 }
 
 int ObMySQLTransaction::start(
     ObISQLClient *sql_client,
-    const uint64_t tenant_id,
     bool with_snapshot/* = false*/,
     const int32_t group_id /* = 0*/)
 {
   int ret = OB_SUCCESS;
   start_time_ = ::oceanbase::common::ObTimeUtility::current_time();
-  if (OB_FAIL(connect(tenant_id, group_id, sql_client))) {
-    LOG_WARN("failed to init", K(ret), K(tenant_id));
+  if (OB_FAIL(connect(group_id, sql_client))) {
+    LOG_WARN("failed to init", K(ret));
   } else if (enable_query_stash_ && OB_FAIL(query_stash_desc_.create(1024, "BucketQueryS", "NodeQueryS"))) {
-    LOG_WARN("failed to init map", K(ret), K(tenant_id));
+    LOG_WARN("failed to init map", K(ret));
   } else {
-    if (OB_FAIL(start_transaction(tenant_id, with_snapshot))) {
+    if (OB_FAIL(start_transaction(with_snapshot))) {
       set_errno(ret);
       close();
-      LOG_WARN("failed to start transaction", K(ret), K(tenant_id), K(with_snapshot));
+      LOG_WARN("failed to start transaction", K(ret), K(with_snapshot));
     } else {
       in_trans_ = true;
-      LOG_DEBUG("start transaction success", K(tenant_id), K(with_snapshot));
+      LOG_DEBUG("start transaction success", K(with_snapshot));
     }
   }
   return ret;
 }
 
 int ObMySQLTransaction::start(ObISQLClient *proxy,
-                              const uint64_t &tenant_id,
                               const int64_t &tenant_refreshed_schema_version,
                               bool with_snapshot)
 {
   int ret = OB_NOT_SUPPORTED;
-  UNUSEDx(proxy, tenant_id, tenant_refreshed_schema_version, with_snapshot);
+  UNUSEDx(proxy, tenant_refreshed_schema_version, with_snapshot);
   return ret;
 }
 
@@ -125,11 +122,8 @@ int ObMySQLTransaction::do_stash_query(int min_batch_cnt)
       continue;
     }
     const uint64_t start_time = ObTimeUtility::current_time();
-    if (it->second->get_tenant_id() == OB_INVALID_TENANT_ID) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("do_stash_query", K(ret));
-    } else if (OB_FAIL(write(it->second->get_tenant_id(), it->second->get_stash_query().ptr(), affected_rows))) {
-      LOG_ERROR("query_write", "tenant_id", it->second->get_tenant_id(), "query", it->second->get_stash_query(), K(ret));
+    if (OB_FAIL(write(it->second->get_stash_query().ptr(), affected_rows))) {
+      LOG_ERROR("query_write",  "query", it->second->get_stash_query(), K(ret));
     } else if (affected_rows != it->second->get_row_cnt()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("query_write", K(ret), K(affected_rows), "row_cnt", it->second->get_row_cnt(), "query", it->second->get_stash_query());
@@ -159,7 +153,7 @@ int ObMySQLTransaction::handle_trans_in_the_end(const int err_no)
   return ret;
 }
 
-int ObMySQLTransaction::get_stash_query(uint64_t tenant_id, const char *table_name, ObSqlTransQueryStashDesc *&desc)
+int ObMySQLTransaction::get_stash_query(const char *table_name, ObSqlTransQueryStashDesc *&desc)
 {
   int ret = OB_SUCCESS;
   ret = query_stash_desc_.get_refactored(table_name, desc);
@@ -180,12 +174,9 @@ int ObMySQLTransaction::get_stash_query(uint64_t tenant_id, const char *table_na
   }
   if (OB_SUCC(ret)) {
     if (desc->get_stash_query().empty()) {
-      desc->set_tenant_id(tenant_id);
+      
     } else {
-      if (desc->get_tenant_id() == OB_INVALID_TENANT_ID || desc->get_tenant_id() != tenant_id) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get_stash_query", K(ret), KPC(desc), K(tenant_id));
-      }
+      
     }
   }
   return ret;

@@ -115,8 +115,7 @@ protected:
                              const ObPartitionExchangeType &part_exchange_type,
                              const common::ObIArray<common::ObTabletID> &base_tablet_ids,
                              const common::ObIArray<common::ObTabletID> &inc_tablet_ids);
-  int lock_exchange_data_table_and_partitions_(const uint64_t tenant_id,
-                                               const ObTableSchema &partitioned_table_schema,
+  int lock_exchange_data_table_and_partitions_(const ObTableSchema &partitioned_table_schema,
                                                const ObTableSchema &non_partitioned_table_schema,
                                                const common::ObIArray<common::ObTabletID> &tablet_ids,
                                                ObDDLSQLTransaction &trans);
@@ -157,8 +156,7 @@ protected:
                                    ObColumnSchemaV2 *&base_table_col_schema,
                                    ObColumnSchemaV2 *&inc_table_col_schema);
   int get_next_need_check_column_(ObTableSchema::const_column_iterator &iter_begin, ObTableSchema::const_column_iterator &iter_end, ObColumnSchemaV2 *&table_col_schema);
-  int set_global_storage_index_unusable_(const uint64_t tenant_id,
-                                         const ObTableSchema &partitioned_data_table_schema,
+  int set_global_storage_index_unusable_(const ObTableSchema &partitioned_data_table_schema,
                                          const ObTableSchema &non_partitioned_data_table_schema,
                                          ObDDLOperator &ddl_operator,
                                          ObDDLSQLTransaction &trans,
@@ -170,8 +168,7 @@ protected:
                                               const ObString &data_subpart_name,
                                               const ObPartition *&data_part,
                                               const ObSubPartition *&data_subpart);
-  int exchange_partition_map_relationship_(const uint64_t tenant_id,
-                                           const ObTableSchema &base_table_schema,
+  int exchange_partition_map_relationship_(const ObTableSchema &base_table_schema,
                                            const ObTableSchema &inc_table_schema,
                                            const ObIArray<common::ObTabletID> &base_tablet_ids,
                                            const ObIArray<common::ObTabletID> &inc_tablet_id,
@@ -179,8 +176,7 @@ protected:
                                            ObDDLOperator &ddl_operator,
                                            ObDDLSQLTransaction &trans,
                                            ObSchemaGetterGuard &schema_guard);
-  int update_exchange_table_non_schema_attributes_(const uint64_t tenant_id,
-                                                   const ObTableSchema &old_table_schema,
+  int update_exchange_table_non_schema_attributes_(const ObTableSchema &old_table_schema,
                                                    const ObIArray<ObTabletID> &old_tablet_ids,
                                                    const ObIArray<int64_t> &old_partition_ids,
                                                    const ObIArray<int64_t> &new_partition_ids,
@@ -189,21 +185,18 @@ protected:
                                                    ObDDLOperator &ddl_operator,
                                                    ObDDLSQLTransaction &trans,
                                                    ObSchemaGetterGuard &schema_guard);
-  int update_exchange_table_level_attributes_(const uint64_t tenant_id,
-                                              const ObIArray<ObTabletID> &base_tablet_ids,
+  int update_exchange_table_level_attributes_(const ObIArray<ObTabletID> &base_tablet_ids,
                                               const ObIArray<ObTabletID> &inc_tablet_ids,
                                               ObTableSchema &partitioned_table_schema,
                                               ObTableSchema &non_partitioned_table_schema,
                                               ObDDLSQLTransaction &trans);
-  int update_table_to_tablet_ids_mapping_(const uint64_t tenant_id,
-                                         const uint64_t table_id,
+  int update_table_to_tablet_ids_mapping_(const uint64_t table_id,
                                          const ObIArray<ObTabletID> &tablet_ids,
                                          ObDDLSQLTransaction &trans);
-  int refresh_table_schema_version_(const uint64_t tenant_id, ObTableSchema &table_schema);
+  int refresh_table_schema_version_(ObTableSchema &table_schema);
   int update_table_attribute_(const ObTableSchema &table_schema,
                               ObDDLSQLTransaction &trans);
-  int push_data_table_schema_version_(const uint64_t tenant_id,
-                                      const ObTableSchema &table_schema,
+  int push_data_table_schema_version_(const ObTableSchema &table_schema,
                                       const common::ObString *ddl_stmt_str,
                                       const uint64_t exchange_data_table_id,
                                       int64_t &new_schema_version,
@@ -233,48 +226,41 @@ protected:
                                   ObIArray<const ObTableSchema*> &inc_table_schemas,
                                   ObIArray<bool> &used_nt_schema_flag,
                                   bool &find_related_nt_schema);
-  int update_index_status_(const uint64_t tenant_id,
-                           const uint64_t table_id,
+  int update_index_status_(const uint64_t table_id,
                            const share::schema::ObIndexStatus status,
                            const bool in_offline_ddl_white_list,
                            ObDDLOperator &ddl_operator,
                            ObDDLSQLTransaction &trans,
                            ObSchemaGetterGuard &schema_guard);
   // Register MDS for read and write defense verification after single table ddl
-  int build_single_table_rw_defensive_(const uint64_t tenant_id,
-                                       const ObIArray<common::ObTabletID> &tablet_ids,
+  int build_single_table_rw_defensive_(const ObIArray<common::ObTabletID> &tablet_ids,
                                        const int64_t schema_version,
                                        ObDDLSQLTransaction &trans);
-  int build_modify_tablet_binding_args_v1_(const uint64_t tenant_id,
-                                           const ObIArray<ObTabletID> &tablet_ids,
+  int build_modify_tablet_binding_args_v1_(const ObIArray<ObTabletID> &tablet_ids,
                                            const int64_t schema_version,
                                            ObIArray<ObBatchUnbindTabletArg> &modify_args,
                                            ObDDLSQLTransaction &trans);
-  int get_tablets_(const uint64_t tenant_id,
-                   const ObIArray<common::ObTabletID> &tablet_ids,
+  int get_tablets_(const ObIArray<common::ObTabletID> &tablet_ids,
                    ObIArray<LSTabletID> &tablets,
                    ObDDLSQLTransaction &trans);
-  int adapting_cdc_changes_in_exchange_partition_(const uint64_t tenant_id,
-                                                  const uint64_t partitioned_table_id,
+  int adapting_cdc_changes_in_exchange_partition_(const uint64_t partitioned_table_id,
                                                   const uint64_t non_partitioned_table_id,
                                                   ObDDLSQLTransaction &trans);
-  int sync_exchange_partition_stats_info_(const uint64_t tenant_id,
-                                          const uint64_t new_table_id,
+  int sync_exchange_partition_stats_info_(const uint64_t new_table_id,
                                           const uint64_t new_stat_level,
                                           const int64_t old_partition_id,
                                           const int64_t new_partition_id,
                                           const ObTabletID &tablet_id,
                                           const ObTableSchema &orig_table_schema,
                                           ObDDLSQLTransaction &trans);
-  int update_table_all_monitor_modified_(const uint64_t tenant_id, const uint64_t new_table_id, const ObTabletID &tablet_id, const ObTableSchema &orig_table_schema, ObDDLSQLTransaction &trans);
+  int update_table_all_monitor_modified_(const uint64_t new_table_id, const ObTabletID &tablet_id, const ObTableSchema &orig_table_schema, ObDDLSQLTransaction &trans);
   int get_object_id_from_partition_schema_(ObPartitionSchema &partition_schema, const bool get_subpart_only, int64_t &object_id);
 
 protected:
   int inner_init(const ObTableSchema &base_table_schema,
                  const ObTableSchema &inc_table_schema,
                  ObSchemaGetterGuard &schema_guard);
-  int exchange_data_table_partitions(const uint64_t tenant_id,
-                                     const ObTableSchema &base_table_schema,
+  int exchange_data_table_partitions(const ObTableSchema &base_table_schema,
                                      const ObTableSchema &inc_table_schema,
                                      const ObIArray<ObTabletID> &base_tablet_ids,
                                      const ObIArray<ObTabletID> &inc_tablet_ids,
@@ -282,8 +268,7 @@ protected:
                                      ObDDLOperator &ddl_operator,
                                      ObDDLSQLTransaction &trans,
                                      ObSchemaGetterGuard &schema_guard);
-  int exchange_auxiliary_table_partitions(const uint64_t tenant_id,
-                                          const ObTableSchema &base_data_table_schema,
+  int exchange_auxiliary_table_partitions(const ObTableSchema &base_data_table_schema,
                                           const ObTableSchema &inc_data_table_schema,
                                           const ObIArray<common::ObTabletID> &data_tablet_ids,
                                           const ObIArray<common::ObTabletID> &inc_data_tablet_ids,
@@ -368,9 +353,8 @@ struct ObChangeTabletToTableArg final
 {
   OB_UNIS_VERSION_V(1);
 public:
-  ObChangeTabletToTableArg() : tenant_id_(OB_INVALID_TENANT_ID), ls_id_(), base_table_id_(OB_INVALID_ID), inc_table_id_(OB_INVALID_ID), tablet_ids_(), table_ids_() {}
+  ObChangeTabletToTableArg() : ls_id_(), base_table_id_(OB_INVALID_ID), inc_table_id_(OB_INVALID_ID), tablet_ids_(), table_ids_() {}
   ~ObChangeTabletToTableArg() {}
-  uint64_t tenant_id_;
   share::ObLSID ls_id_;
   uint64_t base_table_id_; // PT table, always with the large amount of data.
   uint64_t inc_table_id_; // NT table, with the incremental data.
@@ -378,7 +362,7 @@ public:
   common::ObSArray<ObTabletID> tablet_ids_; 
   // the table ids corresponding to the tablet ids.
   common::ObSArray<uint64_t> table_ids_;
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(base_table_id), K_(inc_table_id), K_(tablet_ids), K_(table_ids));
+  TO_STRING_KV(K_(ls_id), K_(base_table_id), K_(inc_table_id), K_(tablet_ids), K_(table_ids));
 };
 
 }//end namespace rootserver

@@ -36,7 +36,7 @@ public:
 
   obcall::ObDropDirectoryArg &get_drop_directory_arg() { return arg_; }
   
-  void set_tenant_id(const uint64_t id) { arg_.tenant_id_ = id; }
+  
   void set_directory_name(const common::ObString &name) { arg_.directory_name_ = name; }
 
   TO_STRING_KV(K_(arg));

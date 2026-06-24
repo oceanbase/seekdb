@@ -19,7 +19,7 @@
 
 #include "ob_id_service.h"
 #include "ob_gts_rpc.h"
-#include "logservice/palf/election/utils/election_common_define.h"
+#include "logservice/palf/election_self.h"
 
 namespace oceanbase
 {

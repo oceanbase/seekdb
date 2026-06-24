@@ -126,7 +126,7 @@ struct DefaultFunctionAllocator : public ObIAllocator {
 #ifdef UNITTEST_DEBUG
     total_alive_num++;
 #endif
-    static lib::ObMemAttr attr(OB_SERVER_TENANT_ID, "ObFunction");
+    static lib::ObMemAttr attr("ObFunction");
     SET_USE_500(attr);
     return ob_malloc(size, attr);
   }

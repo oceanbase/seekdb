@@ -98,14 +98,14 @@ int ObColumnClusteredDag::update_tablet_range_count()
     } else {
       ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
       bool use_idempotent_mode = false;
-      ObArenaAllocator arena(ObMemAttr(MTL_ID(), "ddl_slice_info"));
+      ObArenaAllocator arena(ObMemAttr("ddl_slice_info"));
       rootserver::ObDDLSliceInfo ddl_slice_info;
       if (OB_ISNULL(sql_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql proxy is null", K(ret));
       } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
-                     *sql_proxy, MTL_ID(), ddl_task_param_.ddl_task_id_, arena, false/*is_for_update*/, ddl_slice_info, use_idempotent_mode))) {
-        LOG_WARN("fail to get schedule info", K(ret), K(MTL_ID()), K(ddl_task_param_));
+                     *sql_proxy, ddl_task_param_.ddl_task_id_, arena, false/*is_for_update*/, ddl_slice_info, use_idempotent_mode))) {
+        LOG_WARN("fail to get schedule info", K(ret), K(ddl_task_param_));
       } else if (!use_idempotent_mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ddl dag always use idempotent mode", K(ret), K(use_idempotent_mode), K(ddl_task_param_));
