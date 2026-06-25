@@ -1,0 +1,162 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_RESV
+#include "sql/resolver/cmd/ob_module_data_resolver.h"
+#include "sql/resolver/cmd/ob_cmd_resolver.h"
+#include "sql/resolver/ob_resolver_utils.h"
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_service.h"
+#include "sql/resolver/cmd/ob_alter_system_resolver.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+using namespace share::schema;
+using namespace obcall;
+using namespace table;
+namespace sql
+{
+typedef ObAlterSystemResolverUtil Util;
+
+int ObModuleDataResolver::resolve_module(const ParseNode *node, table::ObModuleDataArg::ObExecModule &mod)
+{
+  int ret = OB_SUCCESS;
+  ObString module_name;
+  if (OB_ISNULL(node) || OB_ISNULL(node->children_) || OB_ISNULL(node->children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children should not be null", K(ret), KP(node));
+  } else if (node->type_ != T_MODULE_NAME) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_MODULE_NAME", "type", get_type_name(node->type_));
+  } else {
+    node = node->children_[0];
+    if (node->str_len_ <= 0) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("empty module name");
+    } else {
+      module_name = ObString(node->str_len_, node->str_value_);
+      if (module_name.case_compare("gis") == 0) {
+        mod = ObModuleDataArg::GIS;
+      } else if (module_name.case_compare("timezone") == 0) {
+        mod = ObModuleDataArg::TIMEZONE;
+      } else {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid module str", K(ret), K(module_name));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObModuleDataResolver::resolve_target_tenant_id(const ParseNode *node,
+                                                   const table::ObModuleDataArg::ObExecModule mod,
+                                                   uint64_t &target_tenant_id)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t login_tenant_id = session_info_->get_login_tenant_id();
+  target_tenant_id = OB_INVALID_ID;
+  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> tenant_name;
+  ObSchemaGetterGuard schema_guard;
+  ObString tenant_name_str;
+  lib::Worker::CompatMode mode;
+  if (login_tenant_id != OB_SYS_TENANT_ID) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation from regular user tenant");
+    LOG_WARN("non-sys tenant change tenant not allowed", 
+      K(ret), K(target_tenant_id), K(login_tenant_id));
+  } else if (OB_FAIL(ObAlterSystemResolverUtil::resolve_tenant(node, tenant_name))) {
+    LOG_WARN("resolve tenant_id failed", K(ret));
+  } else if (FALSE_IT(tenant_name_str.assign(tenant_name.ptr(), tenant_name.size()))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+    LOG_WARN("failed to get_tenant_schema_guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_tenant_id(tenant_name_str, target_tenant_id))) {
+    LOG_WARN("failed to get tenant id from schema guard", KR(ret), K(tenant_name_str));
+  } else if (OB_FAIL(is_meta_tenant(target_tenant_id))) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation from meta tenant");
+    LOG_WARN("operation from meta tenant not allowed", K(ret), K(target_tenant_id), K(login_tenant_id));
+  } else if (FALSE_IT(mode = lib::Worker::CompatMode::MYSQL)) {
+  }
+  return ret;
+}
+
+int ObModuleDataResolver::resolve_file_path(const ParseNode *node, table::ObModuleDataArg &arg)
+{
+  int ret = OB_SUCCESS;
+  // reference ObLoadDataResolver::resolve_filename
+  if (OB_ISNULL(node)) {
+    arg.file_path_.reset();
+    if (ObModuleDataArg::GIS == arg.module_ || ObModuleDataArg::TIMEZONE == arg.module_) {
+      // default path of GIS and TIMEZONE is etc/
+      arg.file_path_ = ObString::make_string("etc/");
+    }
+  } else if (OB_FAIL(ObResolverUtils::resolve_string(node, arg.file_path_))) {
+    LOG_WARN("resolve string failed", K(ret));
+  }
+  return ret;
+}
+
+int ObModuleDataResolver::resolve_exec_type(const ParseNode *node, table::ObModuleDataArg::ObInfoOpType &type)
+{
+  int ret = OB_SUCCESS;
+  if (node->value_ <= table::ObModuleDataArg::INVALID_OP || node->value_ >= table::ObModuleDataArg::MAX_OP) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid exec type", K(ret), K(node->value_));
+  } else {
+    type = static_cast<table::ObModuleDataArg::ObInfoOpType>(node->value_);
+  }
+  return ret;
+}
+
+int ObModuleDataResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  ObModuleDataStmt *stmt = create_stmt<ObModuleDataStmt>();
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("create ObModuleDataStmt failed");
+  } else if (OB_UNLIKELY(T_MODULE_DATA != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_MODULE_DATA", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(parse_tree.children_) ||
+            parse_tree.num_child_ != CHILD_NUM) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid parse node", K(ret), K(parse_tree.num_child_), KP(parse_tree.children_));
+  } else if (OB_ISNULL(session_info_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session info should not be null", K(ret));
+  } else {
+    table::ObModuleDataArg &arg = stmt->get_arg();
+    if (OB_FAIL(resolve_exec_type(parse_tree.children_[TYPE_IDX], arg.op_))) {
+      LOG_WARN("fail to resolve exec type", K(ret));
+    } else if (OB_FAIL(resolve_module(parse_tree.children_[MODULE_IDX], arg.module_))) {
+      LOG_WARN("fail to resolve module", K(ret));
+    } else if (OB_FAIL(resolve_target_tenant_id(parse_tree.children_[TENANT_IDX], arg.module_,
+                arg.target_tenant_id_))) {
+      LOG_WARN("fail to resolve target tenant id", K(ret));
+    } else if (OB_FAIL(resolve_file_path(parse_tree.children_[FILE_IDX], arg))) {
+      LOG_WARN("fail to resolve file path", K(ret));
+    } else {
+      stmt_ = stmt;
+    }
+  }
+  return ret;
+}
+
+} //namespace sql
+} //namespace oceanbase

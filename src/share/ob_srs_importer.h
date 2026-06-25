@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_TABLE_OB_SRS_IMPORTER_H_
 
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "share/table/ob_redis_importer.h"
+#include "share/ob_module_data_arg.h"
 
 namespace oceanbase
 {
@@ -28,17 +28,18 @@ namespace table
 class ObSRSImporter
 {
 public:
-  explicit ObSRSImporter(sql::ObExecContext& exec_ctx)
-      : exec_ctx_(exec_ctx), affected_rows_(0)
+  explicit ObSRSImporter(uint64_t tenant_id, sql::ObExecContext& exec_ctx)
+      : tenant_id_(tenant_id), exec_ctx_(exec_ctx), affected_rows_(0)
   {}
   virtual ~ObSRSImporter() {}
   int exec_op(table::ObModuleDataArg op_arg);
   OB_INLINE int64_t get_affected_rows() { return affected_rows_; }
-  static int get_srs_cnt(ObCommonSqlProxy *sql_proxy, int64_t &srs_cnt);
+  static int get_srs_cnt(ObCommonSqlProxy *sql_proxy, uint64_t tenant_id, int64_t &srs_cnt);
 
 private:
   int import_srs_info(const ObString &file_path);
 
+  uint64_t tenant_id_;
   sql::ObExecContext& exec_ctx_;
   int64_t affected_rows_;
 };

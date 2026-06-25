@@ -20,7 +20,7 @@
 #include "lib/function/ob_function.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "logservice/ob_log_base_type.h"
-#include "share/table/ob_redis_importer.h"
+#include "share/ob_module_data_arg.h"
 
 namespace oceanbase
 {
@@ -30,7 +30,7 @@ namespace share
 class ObInternalTableChangeNotifier : public logservice::ObIRoleChangeSubHandler
 {
 public:
-  using ModuleCallback = common::ObFunction<int()>;
+  using ModuleCallback = common::ObFunction<int(uint64_t tenant_id)>;
 
   static ObInternalTableChangeNotifier &get_instance();
 
@@ -42,7 +42,8 @@ public:
 
   // Schedule refresh for one module. Called by import executor and
   // switch_to_leader. Returns immediately — the actual work is async.
-  int notify(table::ObModuleDataArg::ObExecModule module);
+  int notify(table::ObModuleDataArg::ObExecModule module,
+             uint64_t tenant_id);
 
   // ObIRoleChangeSubHandler — called by ObRoleChangeHandler when LS switches role.
   void switch_to_follower_forcedly() override;

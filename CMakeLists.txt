@@ -129,6 +129,7 @@ if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
 endif()
 
 add_subdirectory(deps/oblib)
+add_subdirectory(src/objit)
 add_subdirectory(src)
 add_subdirectory(sqlite-benchmark)
 
@@ -159,9 +160,9 @@ cmake_dependent_option(
   "NOT OB_BUILD_PACKAGE" ON
 )
 
-# OB_BUILD_PACKAGE => build OB_BUILD_LIBOBTABLE
+# OB_BUILD_PACKAGE => build OB_BUILD_OBADMIN
 cmake_dependent_option(
-  OB_BUILD_LIBOBTABLE "Build liboblog" OFF
+  OB_BUILD_OBADMIN "Build ob_admin" OFF
   "NOT OB_BUILD_PACKAGE" ON
 )
 

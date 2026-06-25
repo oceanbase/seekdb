@@ -19,7 +19,6 @@
 #include "share/table/ob_ttl_util.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/location_cache/ob_location_service.h"
-#include "share/table/ob_table_config_util.h"
 #include "share/schema/ob_dependency_info.h"
 #include "share/ob_server_struct.h"  // GCTX
 
@@ -47,21 +46,6 @@ bool ObTTLTime::is_same_day(int64_t ttl_time1, int64_t ttl_time2)
 
   return (tm1.tm_yday == tm2.tm_yday);
 }
-
-bool ObKVAttr::is_ttl_table() const
-{
-  bool is_ttl = false;
-  if (type_ == ObTTLTableType::REDIS) {
-    // redis ttl table has attr "isTTL: true"
-    is_ttl = is_redis_ttl_;
-  } else if (type_ == ObTTLTableType::HBASE) {
-    // htable ttl table should have at least one of max_version and time_to_live
-    is_ttl = (ttl_ > 0 || max_version_ > 0);
-  }
-  return is_ttl;
-}
-
-const char* ObTTLUtil::HBASE_KV_ATTR_FORMAT_STR = "{\"Hbase\": {%s\"State\": \"%s\"}}";
 
 bool ObTTLUtil::extract_val(const char* ptr, uint64_t len, int& val)
 {
@@ -552,309 +536,6 @@ bool ObTTLUtil::check_can_process_tenant_tasks(uint64_t tenant_id)
   return bret;
 }
 
-int ObTTLUtil::move_task_to_history_table(uint64_t tenant_id, uint64_t task_id,
-                                          common::ObMySQLTransaction& proxy,
-                                          int64_t batch_size, int64_t &move_rows)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
-// only one record left in this situation
-int ObTTLUtil::move_tenant_task_to_history_table(const ObTTLStatusKey &key,
-                                                 common::ObMySQLTransaction& proxy)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-
-}
-
-
-// for now Table attribute only supports kv_attributes = {"Table" : {}}
-int ObTTLUtil::parse_kv_attributes_table(json::Value *ast)
-{
-  int ret = OB_SUCCESS;
-  if (NULL == ast) {
-    // do nothing
-  } else if (ast->get_type() == json::JT_OBJECT) {
-    if (ast->get_object().get_size() != 0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported kv attribute", K(ret), K(ast->get_object().get_size()));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-    }
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported kv attribute", K(ret), K(ast->get_type()));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-  }
-  return ret;
-}
-
-// example: kv_attributes = {hbase: {maxversions: 3}}
-int ObTTLUtil::parse_kv_attributes_hbase(json::Value *ast, ObKVAttr &kv_attr)
-{
-  int ret = OB_SUCCESS;
-  bool time_to_live_appeared = false;
-  bool max_versions_appeared = false;
-  if (NULL == ast) {
-    // do nothing
-  } else if (ast->get_type() == json::JT_OBJECT) {
-    DLIST_FOREACH(elem, ast->get_object()) {
-      if (elem->name_.case_compare("TimeToLive") == 0) {
-        if (!time_to_live_appeared) {
-          time_to_live_appeared = true;
-          json::Value *ttl_val = elem->value_;
-          if (NULL == ttl_val) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("TimeToLive value node is null", K(ret), KP(ttl_val));
-          } else {
-            if (ttl_val->get_type() == json::JT_NUMBER) {
-              if (ttl_val->get_number() <= 0) {
-                ret = OB_TTL_INVALID_HBASE_TTL; 
-                LOG_WARN("TimeToLive should greater than 0", K(ret), K(ttl_val->get_number()));
-                LOG_USER_ERROR(OB_TTL_INVALID_HBASE_TTL);
-              } else {
-                kv_attr.ttl_ = static_cast<int32_t>(ttl_val->get_number());
-              }
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("TimeToLive value must be number", K(ret), K(ttl_val->get_type()));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "TimeToLive value not number");
-            }
-          }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("repeatedly setting TimeToLive not supported", K(ret), K(time_to_live_appeared));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "repeatedly setting TimeToLive");
-        }
-      } else if (elem->name_.case_compare("MaxVersions") == 0) {
-        if (!max_versions_appeared) {
-          max_versions_appeared = true;
-          json::Value *max_versions_val = elem->value_;
-          if (NULL == max_versions_val) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("MaxVersions value node is null", K(ret), KP(max_versions_val));
-          } else {
-            if (max_versions_val->get_type() == json::JT_NUMBER) {
-              if (max_versions_val->get_number() <= 0) {
-                ret = OB_TTL_INVALID_HBASE_MAXVERSIONS; 
-                LOG_WARN("MaxVersions should greater than 0", K(ret), K(max_versions_val->get_number()));
-                LOG_USER_ERROR(OB_TTL_INVALID_HBASE_MAXVERSIONS);
-              } else {
-                kv_attr.max_version_ = static_cast<int32_t>(max_versions_val->get_number());
-              }
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("MaxVersions value must be number", K(ret), K(max_versions_val->get_type()));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "MaxVersions value not number");
-            }
-          }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("repeatedly setting MaxVersions not supported", K(ret), K(max_versions_appeared));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "repeatedly setting MaxVersions");
-        }
-      } else if (elem->name_.case_compare("State") == 0) {
-        json::Value *state_val = elem->value_;
-        if (NULL != state_val && state_val->get_type() == json::JT_STRING) {
-          ObString state_str = state_val->get_string();
-          if (state_str.case_compare("disable") == 0) {
-            kv_attr.is_disable_ = true;
-          } else if (state_str.case_compare("enable") == 0) {
-            kv_attr.is_disable_ = false;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not supported kv attribute", K(ret), K(state_str));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "States other than 'disable' and 'enable'");
-          }
-        }
-      } else if (elem->name_.case_compare("CreatedBy") == 0) {
-        json::Value *created_by_val = elem->value_;
-        if (NULL != created_by_val && created_by_val->get_type() == json::JT_STRING) {
-          ObString created_by_str = created_by_val->get_string();
-          if (created_by_str.case_compare("Admin") == 0) {
-            kv_attr.created_by_admin_ = true;
-          } else {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not supported kv attribute", K(ret), K(created_by_str));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "CREATED BY other than 'ADMIN'");
-          }
-        }
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported kv attribute", K(ret), K(elem->name_));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-      }
-    }  // end foreach
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported kv attribute", K(ret), K(ast->get_type()));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-  }
-  return ret;
-}
-
-// "Redis": {"is_ttl": true, "model": "hash"}
-int ObTTLUtil::parse_kv_attributes_redis(json::Value *ast, ObKVAttr &kv_attr)
-{
-  int ret = OB_SUCCESS;
-  bool is_ttl_appeared = false;
-  bool model_appeared = false;
-  if (NULL == ast) {
-    // do nothing
-  } else if (ast->get_type() == json::JT_OBJECT) {
-    DLIST_FOREACH(elem, ast->get_object()) {
-      if (elem->name_.case_compare("IsTTL") == 0) {
-        if (!is_ttl_appeared) {
-          is_ttl_appeared = true;
-          json::Value *ttl_val = elem->value_;
-          if (NULL == ttl_val) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("isTTL value node is null", K(ret), KP(ttl_val));
-          } else {
-            if (ttl_val->get_type() == json::JT_TRUE || ttl_val->get_type() == json::JT_FALSE) {
-              kv_attr.is_redis_ttl_ = (ttl_val->get_type() == json::JT_TRUE);
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("isTTL value must be true or false", K(ret), K(ttl_val->get_type()));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "isTTL value not true or false");
-            }
-          }
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("repeatedly setting isTTL not supported", K(ret), K(is_ttl_appeared));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "repeatedly setting isTTL");
-        }
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported kv attribute", K(ret), K(elem->name_));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-      }
-    }  // end foreach
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported kv attribute", K(ret), K(ast->get_type()));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-  }
-  return ret;
-}
-
-int ObTTLUtil::parse_kv_attributes(const ObString &kv_attributes, ObKVAttr &kv_attr)
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator allocator;
-  json::Parser json_parser;
-  json::Value *ast = nullptr;
-  if (kv_attributes.empty()) {
-    // skip
-  } else if (OB_FAIL(json_parser.init(&allocator))) {
-    LOG_WARN("failed to init json parser", K(ret));
-  } else if (OB_FAIL(json_parser.parse(kv_attributes.ptr(), kv_attributes.length(), ast))) {
-    LOG_WARN("failed to parse kv attributes", K(ret), K(kv_attributes));
-  } else if (NULL != ast
-             && ast->get_type() == json::JT_OBJECT
-             && ast->get_object().get_size() == 1) {
-    json::Pair *kv = ast->get_object().get_first();
-    if (NULL != kv && kv != ast->get_object().get_header()) {
-      if (kv->name_.case_compare("HBASE") == 0) {
-        if (OB_FAIL(parse_kv_attributes_hbase(kv->value_, kv_attr))) {
-          LOG_WARN("fail to parse hbase kv attributes", K(ret), K(kv_attributes));
-        } else {
-          kv_attr.type_ = ObKVAttr::HBASE;
-        }
-      } else if (kv->name_.case_compare("REDIS") == 0) {
-        if (OB_FAIL(parse_kv_attributes_redis(kv->value_, kv_attr))) {
-          LOG_WARN("fail to parse redis kv attributes", K(ret), K(kv_attributes));
-        } else {
-          kv_attr.type_ = ObKVAttr::REDIS;
-        }
-      } else if (kv->name_.case_compare("TABLE") == 0) {
-        if (OB_FAIL(parse_kv_attributes_table(kv->value_))) {
-          LOG_WARN("failed to parse table kv attributes", K(ret), K(kv_attributes));
-        } else {
-          kv_attr.type_ = ObKVAttr::TABLE;
-        }
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported kv attribute", K(ret), K(kv->name_));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-      }
-    }
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported kv attribute", K(ret), K(kv_attributes), KPC(ast));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
-  }
-  return ret;
-}
-
-int ObTTLUtil::format_kv_attributes_to_json_str(ObIAllocator &allocator, const ObKVAttr &kv_attr, ObString &json_str)
-{
-  int ret = OB_SUCCESS;
-  char ttl_version_buf[64] = "";
-  int64_t buf_len = 64;
-  char *ttl_version_part = ttl_version_buf;
-  int64_t pos = 0;
-  if (kv_attr.ttl_ > 0) {
-    if (OB_FAIL(databuff_printf(ttl_version_part, buf_len, pos, allocator, "\"TimeToLive\": %d, ",
-              kv_attr.ttl_))) {
-      LOG_WARN("fail to print kv_attribute to json str", K(ret), K(kv_attr));
-    } 
-  }
-  if (OB_FAIL(ret)) {
-  } else if (kv_attr.max_version_ > 0) {
-    if (OB_FAIL(databuff_printf(ttl_version_part, buf_len, pos, allocator, "\"MaxVersions\": %d, ",
-              kv_attr.max_version_))) {
-      LOG_WARN("fail to print kv_attribute to json str", K(ret), K(kv_attr));
-    } 
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (kv_attr.is_created_by_admin()) {
-    if (OB_FAIL(databuff_printf(ttl_version_part, buf_len, pos, allocator, "\"CreatedBy\": \"Admin\", "))) {
-      LOG_WARN("fail to print kv_attribute to json str", K(ret), K(kv_attr));
-    } 
-  }
-
-  if (OB_SUCC(ret)) {
-    int64_t json_buf_len = 128; 
-    char json_buf[128] = "";
-    char* json_buf_ptr = json_buf;
-    const char* state_str = kv_attr.is_disable_ ? "disable" : "enable";
-    int64_t json_pos = 0;
-    if (OB_FAIL(databuff_printf(json_buf_ptr, json_buf_len, json_pos, allocator, HBASE_KV_ATTR_FORMAT_STR,
-            ttl_version_part, state_str))) {
-      LOG_WARN("fail to print kv_attribute to json str", K(ret), K(kv_attr));
-    } else if (OB_FAIL(ob_write_string(allocator, ObString(json_pos, json_buf_ptr), json_str))) {
-      LOG_WARN("fail to print kv_attribute to json str", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObTTLUtil::dispatch_ttl_cmd(const ObTTLParam &param)
-{
-  int ret = OB_SUCCESS;
-  int final_ret = OB_SUCCESS;
-  ObSEArray<ObSimpleTTLInfo, 32> ttl_info_array;
-  if (OB_UNLIKELY(!param.is_valid()
-                  || (!param.ttl_all_ && param.ttl_info_array_.empty()))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(param), KR(ret));
-  } else if (OB_FAIL(get_ttl_info(param, ttl_info_array))) {
-    LOG_WARN("fail to get tenant id", KR(ret), K(param));
-  } else if (!ttl_info_array.empty()) {
-    const int64_t ttl_info_count = ttl_info_array.count();
-    for (int i = 0; i < ttl_info_count && OB_SUCC(ret); ++i) {
-      const uint64_t tenant_id = ttl_info_array.at(i).tenant_id_;
-      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, ttl_info_array.at(i)))) {
-        LOG_WARN("fail dispatch one tenant ttl", KR(ret), K(ttl_info_count), "ttl_info", ttl_info_array.at(i));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_full_column_order)
 {
   int ret = OB_SUCCESS;
@@ -866,13 +547,9 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
   } else {
     tenant_id_ = tenant_id;
     ObString ttl_definition = table_schema.get_ttl_definition();
-    if (ttl_definition.empty()) {
-      // do nothing
-    } else {
-      ObString right = ttl_definition; 
+    if (!ttl_definition.empty()) {
+      ObString right = ttl_definition;
       bool is_end = false;
-      int64_t i = 0;
-      // example: "c +  INTERVAL 40 MINUTE"
       while (OB_SUCC(ret) && !is_end) {
         ObString left = right.split_on(',');
         if (left.empty()) {
@@ -880,18 +557,14 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
           is_end = true;
         }
         ObTableTTLExpr ttl_expr;
-        // example: "`column` INTERVAL 40 MINUTE" or "column INTERVAL 40 MINUTE"
         ObString column_str = left.split_on('+').trim();
         if (column_str.length() > 2 && column_str[column_str.length() - 1] == '`' && column_str[0] == '`') {
           ++column_str;
           column_str.assign(column_str.ptr(), column_str.length() - 1);
         }
-        // example: "  INTERVAL 40 MINUTE"
         left = left.trim();
-        // example: "INTERVAL 40 MINUTE"
-        left += strlen("INTERVAL"); 
+        left += strlen("INTERVAL");
         left = left.trim();
-        // example: "40  MINUTE"
         ObString interval_str = left.split_on(' ');
         ObString time_unit_str = left.trim();
 
@@ -911,10 +584,9 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
           ttl_expr.time_unit_ = ObTableTTLTimeUnit::YEAR;
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unepxected time unit", K(ret), K(time_unit_str));
+          LOG_WARN("unexpected time unit", K(ret), K(time_unit_str));
         }
 
-        // 2. get delta second and month
         int64_t nsecond = 0;
         int64_t nmonth = 0;
         if (OB_SUCC(ret)) {
@@ -978,7 +650,7 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
             }
             if (OB_SUCC(ret) && row_cell_ids_.count() != ttl_definition_.count()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("row cell ids count not match ttl definition count", K(ret), K(row_cell_ids_), K(ttl_definition_));
+              LOG_WARN("row cell ids count not match", K(ret), K(row_cell_ids_), K(ttl_definition_));
             }
           }
         }
@@ -988,7 +660,6 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
 
   if (OB_SUCC(ret) && has_datetime_col) {
     ObSchemaGetterGuard schema_guard;
-    ObTimeZoneInfoWrap tz_info_wrap;
     const ObSysVariableSchema *sys_variable_schema = nullptr;
     const ObSysVarSchema *system_timezone = nullptr;
     ObTZMapWrap tz_map_wrap;
@@ -996,14 +667,16 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
       LOG_WARN("get schema guard failed", K(ret), K(tenant_id));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
       LOG_WARN("get sys variable schema failed", K(ret), K(tenant_id));
-    } else if (NULL == sys_variable_schema) {
+    } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sys variable schema is NULL", K(ret));
     } else if (OB_FAIL(sys_variable_schema->get_sysvar_schema(SYS_VAR_TIME_ZONE, system_timezone))) {
       LOG_WARN("fail to get system timezone", K(ret));
     } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_map_wrap))) {
       LOG_WARN("get tenant timezone map failed", K(ret), K(tenant_id));
-    } else if (OB_FAIL(tz_info_wrap_.init_time_zone(system_timezone->get_value(), OB_INVALID_VERSION, const_cast<ObTZInfoMap &>(*tz_map_wrap.get_tz_map())))) {
+    } else if (OB_FAIL(tz_info_wrap_.init_time_zone(system_timezone->get_value(),
+                                                    OB_INVALID_VERSION,
+                                                    const_cast<ObTZInfoMap &>(*tz_map_wrap.get_tz_map())))) {
       LOG_WARN("fail to init time zone info wrap", K(ret), K(system_timezone->get_value()));
     }
   }
@@ -1022,7 +695,6 @@ int ObTableTTLChecker::check_row_expired(const common::ObNewRow &row, bool &is_e
     if (column.is_null()) {
       continue;
     } else if (column.get_type() == ObDateTimeType) {
-      // todo: get tz info from system var
       const ObTimeZoneInfo *tz_info = tz_info_wrap_.get_time_zone_info();
       if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(column_ts, tz_info, column_ts))) {
         LOG_WARN("fail to convert datetime to utc ts", K(ret));
@@ -1052,91 +724,6 @@ void ObTableTTLChecker::reset()
   tz_info_wrap_.reset();
 }
 
-int ObTTLParam::add_ttl_info(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  ObSimpleTTLInfo info(tenant_id);
-  if (OB_FAIL(ttl_info_array_.push_back(info))) {
-    LOG_WARN("fail to push_back", K(ret), K(info));
-  }
-  return ret;
-}
-
-int ObTTLUtil::get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &ttl_info_array)
-{
-  int ret = OB_SUCCESS;
-
-  ObArray<ObSimpleTTLInfo> tmp_info_array;
-  if (param.ttl_all_) {
-    if (OB_FAIL(get_all_user_tenant_ttl(tmp_info_array))) {
-      LOG_WARN("fail to get all tenant ttl info", KR(ret));
-    }
-  } else {
-    if (OB_FAIL(tmp_info_array.assign(param.ttl_info_array_))) {
-      LOG_WARN("fail to assign", K(param), KR(ret));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (tmp_info_array.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ttl info array should not be empty", KR(ret), K(param));
-  } else {
-    const int64_t info_cnt = tmp_info_array.count();
-    bool is_primary_cluster = true;
-    for (int64_t i = 0; OB_SUCC(ret) && (i < info_cnt); ++i) {
-      bool is_restore = false;
-      const uint64_t tenant_id = tmp_info_array.at(i).tenant_id_;
-      if (OB_FAIL(share::schema::ObMultiVersionSchemaService::get_instance().
-                  check_tenant_is_restore(NULL, tenant_id, is_restore))) {
-        LOG_WARN("fail to check tenant is restore", KR(ret), K(i), "ttl_info", tmp_info_array.at(i));
-      } else if (is_restore) {
-        LOG_INFO("skip restoring tenant to do ttl task", K(tenant_id));
-      } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-        LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
-      } else if (!is_primary_cluster) {
-        LOG_INFO("skip do ttl task for standby tenant");
-      } else if (OB_FAIL(ttl_info_array.push_back(tmp_info_array.at(i)))) {
-        LOG_WARN("fail to push back ttl info", KR(ret), K(i), "ttl_info", tmp_info_array.at(i));
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObTTLUtil::dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
-                                       const ObSimpleTTLInfo &ttl_info)
-{
-  // Table-API TTL service removed (feature decommissioned); no backend to dispatch to.
-  int ret = OB_NOT_SUPPORTED;
-  UNUSEDx(type, ttl_info);
-  LOG_WARN("tenant ttl is not supported", KR(ret), K(ttl_info));
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant ttl");
-  return ret;
-}
-
-int ObTTLUtil::get_all_user_tenant_ttl(ObIArray<ObSimpleTTLInfo> &ttl_info_array)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<uint64_t, 32> tenant_ids;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid GCTX", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_ids(tenant_ids))) {
-    LOG_WARN("fail to get tenant ids", KR(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); ++i) {
-    if (is_user_tenant(tenant_ids[i])) {
-      ObSimpleTTLInfo info(tenant_ids[i]);
-      if(OB_FAIL(ttl_info_array.push_back(info))) {
-        LOG_WARN("fail to push back", KR(ret), "tenant_id", tenant_ids[i]);
-      }
-    }
-  }
-  return ret;
-}
-
 int ObTTLUtil::get_tenant_table_ids(const uint64_t tenant_id, ObIArray<uint64_t> &table_id_array)
 {
   int ret = OB_SUCCESS;
@@ -1155,45 +742,17 @@ int ObTTLUtil::get_tenant_table_ids(const uint64_t tenant_id, ObIArray<uint64_t>
 
 int ObTTLUtil::check_is_normal_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table)
 {
-  int ret = OB_SUCCESS;
-  is_ttl_table = false;
-  if (table_schema.is_user_table() && !table_schema.is_in_recyclebin()) {
-    if (!table_schema.get_ttl_definition().empty()) {
-      is_ttl_table = true;
-    } else if (!is_ttl_table && !table_schema.get_kv_attributes().empty()) {
-      ObKVAttr kv_attr;  // for check validity
-      if (OB_FAIL(parse_kv_attributes(table_schema.get_kv_attributes(), kv_attr))) {
-        LOG_WARN("fail to parse kv attributes", KR(ret), "kv_attributes", table_schema.get_kv_attributes());
-      } else if (kv_attr.is_ttl_table()) {
-        is_ttl_table = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTTLUtil::check_is_rowkey_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table)
-{
-  UNUSED(table_schema);
-  is_ttl_table = false;
+  is_ttl_table = table_schema.is_user_table()
+                 && !table_schema.is_in_recyclebin()
+                 && !table_schema.get_ttl_definition().empty();
   return OB_SUCCESS;
 }
-
-int ObTTLUtil::check_task_status_from_sys_table(uint64_t tenant_id, common::ObISQLClient& proxy,
-                                                const uint64_t& task_id, const uint64_t& table_id,
-                                                ObTabletID& tablet_id, bool &is_exists, bool &is_end_state)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 
 bool ObTTLUtil::is_enable_ttl(uint64_t tenant_id)
 {
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
   return tenant_config.is_valid() &&
-         tenant_config->enable_kv_ttl &&
-         ObKVFeatureModeUitl::is_ttl_enable();
+         tenant_config->enable_kv_ttl;
 }
 
 const char * ObTTLUtil::get_ttl_tenant_status_cstr(const ObTTLTaskStatus &status)
@@ -1217,7 +776,7 @@ const char * ObTTLUtil::get_ttl_tenant_status_cstr(const ObTTLTaskStatus &status
       status_cstr = "MOVING";
       break;
     }
-    case OB_TTL_TASK_FINISH: { // wait
+    case OB_TTL_TASK_FINISH: {
       status_cstr = "FINISHED";
       break;
     }

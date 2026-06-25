@@ -52,7 +52,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CHARSET, err_stmt_type_priv, 46)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_COLLATION, err_stmt_type_priv, 47)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_TABLEGROUPS, err_stmt_type_priv, 48)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_STATUS, err_stmt_type_priv, 49)
-// 50: T_SHOW_TENANT abandoned, id reserved
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_TENANT, err_stmt_type_priv, 50)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_TENANT, err_stmt_type_priv, 51)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_TRACE, err_stmt_type_priv, 52)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_ENGINES, err_stmt_type_priv, 53)
@@ -143,6 +143,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_PACKAGE, no_priv_needed, 148)
 OB_STMT_TYPE_DEF(T_DROP_PACKAGE, no_priv_needed, 149, ACTION_TYPE_DROP_PACKAGE)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOAD_TIME_ZONE_INFO, get_sys_tenant_alter_system_priv, 150)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CANCEL_TASK, get_sys_tenant_alter_system_priv, 151)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SET_DISK_VALID, get_sys_tenant_alter_system_priv, 154)
 OB_STMT_TYPE_DEF(T_CREATE_SYNONYM, get_create_synonym_priv, 155, ACTION_TYPE_OB_CREATE_SYNONYM)
 OB_STMT_TYPE_DEF(T_DROP_SYNONYM, get_drop_synonym_priv, 156, ACTION_TYPE_OB_DROP_SYNONYM)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_BUILD_INDEX_SSTABLE, get_sys_tenant_super_priv, 158)
@@ -252,7 +253,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECOVER, get_sys_tenant_alter_system_priv, 279)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_SEQUENCES, err_stmt_type_priv, 283)
 // 284: T_BACKUP_KEY abandoned, id reserved
 // 286: T_CANCEL_RESTORE abandoned, id reserved
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_TABLE_TTL, get_sys_tenant_alter_system_priv, 287)
+// 287 is reserved for a removed statement type.
 // 288: T_RECOVER_TABLE abandoned, id reserved
 // 289: T_CANCEL_RECOVER_TABLE abandoned, id reserved
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ACTIVATE_STANDBY, get_sys_tenant_alter_system_priv, 290)
@@ -309,17 +310,7 @@ OB_STMT_TYPE_DEF(T_EVENT_JOB_CREATE, get_event_stmt_need_privs, 343, ACTION_TYPE
 OB_STMT_TYPE_DEF(T_EVENT_JOB_ALTER, get_event_stmt_need_privs, 344, ACTION_TYPE_EXECUTE_PROCEDURE)
 OB_STMT_TYPE_DEF(T_EVENT_JOB_DROP, get_event_stmt_need_privs, 345, ACTION_TYPE_EXECUTE_PROCEDURE)
 // 346: T_BACKUP_CLUSTER_PARAMETERS abandoned, id reserved
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_KV_QUERY_AND_MUTATE, err_stmt_type_priv, 347)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_KV_OTHER, err_stmt_type_priv, 348)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_SCAN, err_stmt_type_priv, 349)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_PUT, err_stmt_type_priv, 350)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_DELETE, err_stmt_type_priv, 351)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_APPEND, err_stmt_type_priv, 352)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_INCREMENT, err_stmt_type_priv, 353)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_CHECK_AND_PUT, err_stmt_type_priv, 354)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_CHECK_AND_DELETE, err_stmt_type_priv, 355)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_HYBRID_BATCH, err_stmt_type_priv, 356)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_OTHER, err_stmt_type_priv, 357)
+// 347-357 are reserved for removed statement types.
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CACHE_INDEX, no_priv_needed, 358)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOAD_INDEX_INTO_CACHE, no_priv_needed, 359)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CHECK_TABLE, err_stmt_type_priv, 360)
@@ -327,9 +318,9 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_OLAP_ASYNC_JOB_SUBMIT, no_priv_needed, 361)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_OLAP_ASYNC_JOB_CANCEL, no_priv_needed, 362)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_OLAP_ASYNC_JOB_STATUS, no_priv_needed, 363)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_SS_MICRO_CACHE, get_sys_tenant_alter_system_priv, 364)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_HBASE_CHECK_AND_MUTATE, err_stmt_type_priv, 365)
+// 365 is reserved for a removed statement type.
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MODULE_DATA, get_sys_tenant_alter_system_priv, 366)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REDIS, err_stmt_type_priv, 367)
+// 367 is reserved for a removed statement type.
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_GRANT_PROXY, no_priv_needed, 368)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_REVOKE_PROXY, no_priv_needed, 369)
 //370 for admin_alter_ls
@@ -355,7 +346,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_LOCATION, get_location_privs, 387)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_LOCATIONS, no_priv_needed, 388)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_LOCATION, no_priv_needed, 389)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOCATION_UTILS_LIST, no_priv_needed, 390)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOCATION_UTILS, no_priv_needed, 391)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOCATION_UTILS, get_location_util_privs, 391)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DIFF_TABLE, get_dml_stmt_need_privs, 392)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MERGE_TABLE, get_merge_table_stmt_need_privs, 393)
 

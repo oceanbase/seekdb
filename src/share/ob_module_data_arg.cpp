@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_CONFIG_OB_CONFIG_MODE_NAME_DEF_H_
-#define OCEANBASE_SHARE_CONFIG_OB_CONFIG_MODE_NAME_DEF_H_
-// _obkv_feature_mode
-#define MODE_NAME_TTL "ttl"
-#define MODE_NAME_REROUTING "rerouting"
-#define MODE_NAME_HOTKEY "hotkey"
+#define USING_LOG_PREFIX SHARE
 
-#define MODE_DEFAULT_VAL_TTL true
-#define MODE_DEFAULT_VAL_REROUTING false
-#define MODE_DEFAULT_VAL_HOTKEY false
-#define MODE_DEFAULT_VAL_SECONDARY_PARTITION false
-#define MODE_DEFAULT_VAL_TIME_SERIES false
+#include "share/ob_module_data_arg.h"
 
-// mode value
-#define MODE_VAL_ON "on"
-#define MODE_VAL_OFF "off"
+namespace oceanbase
+{
+namespace table
+{
 
-#endif //
+bool ObModuleDataArg::is_valid() const
+{
+  return op_ > ObModuleDataArg::INVALID_OP
+      && op_ < ObModuleDataArg::MAX_OP
+      && target_tenant_id_ != OB_INVALID_TENANT_ID
+      && module_ > ObModuleDataArg::INVALID_MOD
+      && module_ < ObModuleDataArg::MAX_MOD;
+}
+
+}  // namespace table
+}  // namespace oceanbase

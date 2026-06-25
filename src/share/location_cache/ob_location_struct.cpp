@@ -758,7 +758,6 @@ bool ObTabletLSKey::operator ==(const ObTabletLSKey &other) const
       && tablet_id_ == other.tablet_id_;
 }
 
-//TODO: Reserved for tableapi. Need remove.
 bool ObTabletLSCacheKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObTabletLSCacheKey &other_key

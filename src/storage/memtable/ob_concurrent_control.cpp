@@ -107,11 +107,7 @@ int check_sequence_set_violation(const concurrent_control::ObWriteFlag write_fla
                   || blocksstable::ObDmlFlag::DF_DELETE == writer_dml_flag)
                  && blocksstable::ObDmlFlag::DF_INSERT == locker_dml_flag) {
         // bypass the case
-      // Case 5: For the case of table api, it inserts rows under the same stmt,
-      // and so fail to pass the check. We must bypass the case.
-      } else if (write_flag.is_table_api()) {
-        // bypass the case
-      // Case 6: For the case of batch dml operation, it may operate the same row
+      // Case 5: For the case of batch dml operation, it may operate the same row
       // concurrently if the first operation has no effects.(SQL layer will check
       // the modification of the row before the second operation, and report the
       // error if the row has been modified while the first row may have no effect
@@ -122,7 +118,7 @@ int check_sequence_set_violation(const concurrent_control::ObWriteFlag write_fla
         TRANS_LOG(WARN, "batch multi stmt rollback found", K(ret),
                   K(writer_tx_id), K(writer_dml_flag), K(writer_seq_no),
                   K(locker_tx_id), K(locker_dml_flag), K(locker_seq_no));
-      // Case 7: For the case of deleting rows during building the unique index
+      // Case 6: For the case of deleting rows during building the unique index
       // concurrently, it may exist that two rows of the main table point to one
       // row of the newly created index, which means the unique index will abort
       // itself during consistency check. While because of the feature of the

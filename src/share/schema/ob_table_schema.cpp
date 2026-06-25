@@ -179,6 +179,7 @@ int ObSimpleTableSchemaV2::assign(const ObSimpleTableSchemaV2 &other)
     ObSimpleTableSchemaV2::reset();
     ObPartitionSchema::operator=(other);
     if (OB_SUCCESS == error_ret_) {
+      tenant_id_ = other.tenant_id_;
       table_id_ = other.table_id_;
       association_table_id_ = other.association_table_id_;
       tablet_id_ = other.get_tablet_id();
@@ -240,6 +241,7 @@ void ObSimpleTableSchemaV2::reset_partition_schema()
 
 void ObSimpleTableSchemaV2::reset()
 {
+  tenant_id_ = OB_INVALID_ID;
   table_id_ = OB_INVALID_ID;
   association_table_id_ = OB_INVALID_ID;
   tablet_id_.reset();
@@ -308,14 +310,14 @@ int ObSimpleTableSchemaV2::get_zone_list(
     common::ObIArray<common::ObZone> &zone_list) const
 {
   int ret = OB_SUCCESS;
-  
+  const uint64_t tenant_id = get_tenant_id();
   zone_list.reset();
   const ObTenantSchema *tenant_schema = NULL;
-  if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(database_id_));
+  if (OB_FAIL(schema_guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
+    LOG_WARN("fail to get tenant schema", K(ret), K(database_id_), K(tenant_id_));
   } else if (OB_UNLIKELY(NULL == tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(database_id_), KP(tenant_schema));
+    LOG_WARN("tenant schema null", K(ret), K(database_id_), K(tenant_id_), KP(tenant_schema));
   } else if (OB_FAIL(tenant_schema->get_zone_list(zone_list))) {
     LOG_WARN("fail to get zone list", K(ret));
   } else {} // no more to do
@@ -332,7 +334,8 @@ int ObSimpleTableSchemaV2::set_simple_foreign_key_info_array(const common::ObIAr
     LOG_WARN("fail to reserve array", K(ret), K(count));
   }
   FOREACH_CNT_X(simple_fk_info_iter, simple_fk_info_array, OB_SUCC(ret)) {
-    ret = add_simple_foreign_key_info(simple_fk_info_iter->database_id_,
+    ret = add_simple_foreign_key_info(simple_fk_info_iter->tenant_id_,
+                                      simple_fk_info_iter->database_id_,
                                       simple_fk_info_iter->table_id_,
                                       simple_fk_info_iter->foreign_key_id_,
                                       simple_fk_info_iter->foreign_key_name_);
@@ -341,13 +344,15 @@ int ObSimpleTableSchemaV2::set_simple_foreign_key_info_array(const common::ObIAr
   return ret;
 }
 
-int ObSimpleTableSchemaV2::add_simple_foreign_key_info(const uint64_t database_id,
+int ObSimpleTableSchemaV2::add_simple_foreign_key_info(const uint64_t tenant_id,
+                                                       const uint64_t database_id,
                                                        const uint64_t table_id,
                                                        const int64_t foreign_key_id,
                                                        const ObString &foreign_key_name)
 {
   int ret = OB_SUCCESS;
-  ObSimpleForeignKeyInfo simple_fk_info(database_id,
+  ObSimpleForeignKeyInfo simple_fk_info(tenant_id,
+                                        database_id,
                                         table_id,
                                         foreign_key_name,
                                         foreign_key_id);
@@ -371,7 +376,7 @@ int ObSimpleTableSchemaV2::set_simple_constraint_info_array(const common::ObIArr
     LOG_WARN("fail to reserve array", K(ret), K(count));
   }
   FOREACH_CNT_X(simple_cst_info_iter, simple_cst_info_array, OB_SUCC(ret)) {
-    ret = add_simple_constraint_info(
+    ret = add_simple_constraint_info(simple_cst_info_iter->tenant_id_,
                                      simple_cst_info_iter->database_id_,
                                      simple_cst_info_iter->table_id_,
                                      simple_cst_info_iter->constraint_id_,
@@ -381,13 +386,15 @@ int ObSimpleTableSchemaV2::set_simple_constraint_info_array(const common::ObIArr
   return ret;
 }
 
-int ObSimpleTableSchemaV2::add_simple_constraint_info(const uint64_t database_id,
+int ObSimpleTableSchemaV2::add_simple_constraint_info(const uint64_t tenant_id,
+                                                      const uint64_t database_id,
                                                       const uint64_t table_id,
                                                       const int64_t constraint_id,
                                                       const common::ObString &constraint_name)
 {
   int ret = OB_SUCCESS;
-  ObSimpleConstraintInfo simple_cst_info(database_id,
+  ObSimpleConstraintInfo simple_cst_info(tenant_id,
+                                         database_id,
                                          table_id,
                                          constraint_name,
                                          constraint_id);
@@ -409,14 +416,15 @@ bool ObSimpleTableSchemaV2::is_valid() const
     LOG_WARN("ob_schema is unvalid", K(ret));
   }
   if (ret) {
-    if (OB_INVALID_ID == table_id_ ||
+    if (OB_INVALID_ID == tenant_id_ ||
+        OB_INVALID_ID == table_id_ ||
         schema_version_ < 0 ||
         OB_INVALID_ID == database_id_ ||
         table_name_.empty()) {
       if (!is_link_valid()) {
         ret = false;
         LOG_WARN("invalid argument",
-                 K(table_id_), K(schema_version_), K(database_id_), K(table_name_),
+                 K(tenant_id_), K(table_id_), K(schema_version_), K(database_id_), K(table_name_),
                  K(dblink_id_), K(link_table_id_), K(link_schema_version_), K(link_database_name_));
       }
     } else if (is_index_table()
@@ -667,7 +675,8 @@ int64_t ObSimpleTableSchemaV2::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_OBJ_START();
-  J_KV(K_(database_id),
+  J_KV(K_(tenant_id),
+      K_(database_id),
       K_(tablegroup_id),
       K_(table_id),
       K_(association_table_id),
@@ -1616,10 +1625,6 @@ int ObTableSchema::assign(const ObTableSchema &src_schema)
 
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.ttl_definition_, ttl_definition_))) {
     LOG_WARN("deep copy ttl definition failed", K(ret));
-  }
-
-  if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.kv_attributes_, kv_attributes_))) {
-    LOG_WARN("deep copy kv attributes failed", K(ret));
   }
 
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
@@ -2662,6 +2667,7 @@ int ObTableSchema::create_cons_name_automatically_with_dup_check(ObString &cst_n
                                                   common::ObIAllocator &allocator,
                                                   ObConstraintType cst_type,
                                                   share::schema::ObSchemaGetterGuard &schema_guard,
+                                                  const uint64_t tenant_id,
                                                   const uint64_t database_id,
                                                   const int64_t retry_times,
                                                   bool &cst_name_generated)
@@ -2672,7 +2678,7 @@ int ObTableSchema::create_cons_name_automatically_with_dup_check(ObString &cst_n
   for (int64_t i = 0; OB_SUCC(ret) && i <= retry_times && !cst_name_generated; i++) {
     if (OB_FAIL(create_cons_name_automatically(cst_name, table_name, allocator, cst_type))) {
       LOG_WARN("create constraint name failed", K(ret));
-    } else if (OB_FAIL(schema_guard.get_constraint_id(database_id,
+    } else if (OB_FAIL(schema_guard.get_constraint_id(tenant_id, database_id,
                         cst_name, constraint_id))) {
       LOG_WARN("get constraint id failed", K(ret));
     } else {
@@ -2721,7 +2727,7 @@ int ObTableSchema::create_new_idx_name_after_flashback(
                                               temp_idx_name,
                                               new_idx_name))) {
       LOG_WARN("build_index_table_name failed", K(ret), K(new_table_schema.get_data_table_id()));
-    } else if (OB_FAIL(guard.get_simple_table_schema(
+    } else if (OB_FAIL(guard.get_simple_table_schema(new_table_schema.get_tenant_id(),
                                                      new_table_schema.get_database_id(),
                                                      new_idx_name,
                                                      true,
@@ -3263,7 +3269,6 @@ int64_t ObTableSchema::get_convert_size() const
   convert_size += external_file_location_access_info_.length() + 1;
   convert_size += external_file_pattern_.length() + 1;
   convert_size += ttl_definition_.length() + 1;
-  convert_size += kv_attributes_.length() + 1;
   convert_size += index_params_.length() + 1;
 
   convert_size += get_hash_array_mem_size<CgIdHashArray>(column_group_cnt_);
@@ -3362,7 +3367,6 @@ void ObTableSchema::reset()
   external_file_pattern_.reset();
   external_properties_.reset();
   ttl_definition_.reset();
-  kv_attributes_.reset();
   index_params_.reset();
   exec_env_.reset();
   name_generated_type_ = GENERATED_TYPE_UNKNOWN;
@@ -3792,7 +3796,7 @@ int ObTableSchema::is_unique_key_column(ObSchemaGetterGuard &schema_guard,
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema = NULL;
-      if (OB_FAIL(schema_guard.get_table_schema(
+      if (OB_FAIL(schema_guard.get_table_schema(get_tenant_id(),
                                                 simple_index_infos.at(i).table_id_,
                                                 index_schema))) {
         LOG_WARN("fail to get table schema", K(ret));
@@ -3830,7 +3834,7 @@ int ObTableSchema::is_unique_key_column(ObSchemaGetterGuard &schema_guard,
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema = NULL;
       const ObColumnSchemaV2 *tmp_column = NULL;
-      if (OB_FAIL(schema_guard.get_table_schema(
+      if (OB_FAIL(schema_guard.get_table_schema(get_tenant_id(),
                                                 simple_index_infos.at(i).table_id_,
                                                 index_schema))) {
         LOG_WARN("fail to get table schema", K(ret));
@@ -3883,7 +3887,7 @@ int ObTableSchema::is_multiple_key_column(ObSchemaGetterGuard &schema_guard,
      // 2. When there are multiple columns in the unique index, the first column
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema =  NULL;
-      if (OB_FAIL(schema_guard.get_table_schema(
+      if (OB_FAIL(schema_guard.get_table_schema(get_tenant_id(),
                                                 simple_index_infos.at(i).table_id_,
                                                 index_schema))) {
         SERVER_LOG(WARN, "fail to get table schema", K(ret));
@@ -4484,9 +4488,9 @@ int ObTableSchema::check_has_trigger_on_table(
   int ret = OB_SUCCESS;
   is_enable = false;
   const ObTriggerInfo *trigger_info = NULL;
-  
+  const uint64_t tenant_id = get_tenant_id();
   for (int i = 0; OB_SUCC(ret) && !is_enable && i < trigger_list_.count(); i++) {
-    OZ (schema_guard.get_trigger_info( trigger_list_.at(i), trigger_info));
+    OZ (schema_guard.get_trigger_info(tenant_id, trigger_list_.at(i), trigger_info));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list_.at(i));
     if (OB_SUCC(ret) &&
         trigger_info->is_enable() &&
@@ -4657,7 +4661,7 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
   int ret = OB_SUCCESS;
   ObArray<ObColDesc> column_ids;
   const uint64_t column_id = src_column.get_column_id();
-  
+  const uint64_t tenant_id = get_tenant_id();
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
 
   // Vector index dependency validation: （start）
@@ -4698,9 +4702,9 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
 
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const ObTableSchema *index_table_schema = NULL;
-    if (OB_FAIL(schema_guard.get_table_schema(
+    if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
         simple_index_infos.at(i).table_id_, index_table_schema))) {
-      LOG_WARN("fail to get table schema",
+      LOG_WARN("fail to get table schema", K(tenant_id),
                K(simple_index_infos.at(i).table_id_), K(ret));
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
@@ -5835,7 +5839,7 @@ int ObTableSchema::is_real_unique_index_column(ObSchemaGetterGuard &schema_guard
     for (int64_t i = 0; !is_uni && OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObSimpleTableSchemaV2 *simple_index_schema = NULL;
       const ObTableSchema *index_schema = NULL;
-      if (OB_FAIL(schema_guard.get_simple_table_schema(
+      if (OB_FAIL(schema_guard.get_simple_table_schema(get_tenant_id(),
                         simple_index_infos.at(i).table_id_,
                         simple_index_schema))) {
         LOG_WARN("fail to get simple table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
@@ -5844,7 +5848,7 @@ int ObTableSchema::is_real_unique_index_column(ObSchemaGetterGuard &schema_guard
         LOG_WARN("simple index schema from schema guard is NULL", K(ret), K(simple_index_schema));
       } else if (!simple_index_schema->is_unique_index()) {
         // This is not an unique index, skip.
-      } else if (OB_FAIL(schema_guard.get_table_schema(
+      } else if (OB_FAIL(schema_guard.get_table_schema(get_tenant_id(),
                                                 simple_index_infos.at(i).table_id_,
                                                 index_schema))) {
         LOG_WARN("fail to get table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
@@ -5882,11 +5886,11 @@ int ObTableSchema::has_not_null_unique_key(ObSchemaGetterGuard &schema_guard, bo
   } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("get simple_index_infos failed", K(ret));
   } else {
-    
+    const uint64_t tenant_id = get_tenant_id();
     for (int64_t i = 0; !bool_result && OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = NULL;
       const ObSimpleTableSchemaV2 *simple_index_schema = NULL;
-      if (OB_FAIL(schema_guard.get_simple_table_schema(
+      if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id,
           simple_index_infos.at(i).table_id_, simple_index_schema))) {
         LOG_WARN("fail to get simple table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_UNLIKELY(NULL == simple_index_schema)) {
@@ -5894,9 +5898,9 @@ int ObTableSchema::has_not_null_unique_key(ObSchemaGetterGuard &schema_guard, bo
         LOG_WARN("simple index schema from schema guard is NULL", K(ret), K(simple_index_schema));
       } else if (!simple_index_schema->is_unique_index()) {
         // This is not an unique index, skip.
-      } else if (OB_FAIL(schema_guard.get_table_schema(
+      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
           simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get table schema",
+        LOG_WARN("fail to get table schema", K(tenant_id),
                 K(simple_index_infos.at(i).table_id_), K(ret));
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
@@ -5941,11 +5945,11 @@ int ObTableSchema::is_table_with_logic_pk(ObSchemaGetterGuard &schema_guard, boo
   } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("get simple_index_infos failed", K(ret));
   } else {
-    
+    const uint64_t tenant_id = get_tenant_id();
     for (int64_t i = 0; !bool_result && OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = NULL;
       const ObSimpleTableSchemaV2 *simple_index_schema = NULL;
-      if (OB_FAIL(schema_guard.get_simple_table_schema(
+      if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id,
         simple_index_infos.at(i).table_id_, simple_index_schema))) {
         LOG_WARN("fail to get simple table schema", K(ret), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_UNLIKELY(NULL == simple_index_schema)) {
@@ -5989,11 +5993,11 @@ int ObTableSchema::get_heap_table_pk(ObSchemaGetterGuard *schema_guard, ObIArray
     LOG_WARN("invalid argument", K(ret), K(schema_guard));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos_.count(); ++i) {
-    if (OB_FAIL(schema_guard->get_table_schema( simple_index_infos_.at(i).table_id_, index_schema))) {
+    if (OB_FAIL(schema_guard->get_table_schema(tenant_id_, simple_index_infos_.at(i).table_id_, index_schema))) {
       LOG_WARN("fail to get index schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("index table not exist", K(ret), "table_id", simple_index_infos_.at(i).table_id_);
+      LOG_WARN("index table not exist", K(ret), K(tenant_id_), "table_id", simple_index_infos_.at(i).table_id_);
     } else if (ObIndexType::INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_schema->get_index_type()) {
       has_pk = true;
       break;
@@ -6048,7 +6052,7 @@ int ObTableSchema::check_column_has_multivalue_index_depend(
 {
   int ret = OB_SUCCESS;
   has_func_idx_col_deps = false;
-  
+  const uint64_t tenant_id = get_tenant_id();
 
   if (data_column_schema.has_generated_column_deps()) {
     for (ObTableSchema::const_column_iterator iter = column_begin();
@@ -6076,7 +6080,7 @@ int ObTableSchema::check_functional_index_columns_depend(
 {
   int ret = OB_SUCCESS;
   has_func_idx_col_deps = false;
-  
+  const uint64_t tenant_id = get_tenant_id();
   ObHashSet<ObString> deps_gen_columns; // generated columns depend on the data column.
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   if (!data_column_schema.has_generated_column_deps()) {
@@ -6101,11 +6105,11 @@ int ObTableSchema::check_functional_index_columns_depend(
     }
     for (int64_t i = 0; OB_SUCC(ret) && !has_func_idx_col_deps && i < simple_index_infos.count(); i++) {
       const ObTableSchema *index_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_schema))) {
-        LOG_WARN("get table schema failed", K(ret), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("index table not exist", K(ret), "table_id", simple_index_infos.at(i).table_id_);
+        LOG_WARN("index table not exist", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
       } else {
         const ObIndexInfo &index_info = index_schema->get_index_info();
         for (int j = 0; OB_SUCC(ret) && !has_func_idx_col_deps && j < index_info.get_size(); j++) {
@@ -6144,7 +6148,7 @@ int ObTableSchema::check_prefix_index_columns_depend(
   } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("get simple index infos failed", K(ret));
   } else {
-    
+    const uint64_t tenant_id = get_tenant_id();
     for (ObTableSchema::const_column_iterator iter = column_begin();
         OB_SUCC(ret) && iter != column_end(); iter++) {
       const ObColumnSchemaV2 *column = *iter;
@@ -6162,11 +6166,11 @@ int ObTableSchema::check_prefix_index_columns_depend(
 
     for (int64_t i = 0; OB_SUCC(ret) && !has_prefix_idx_col_deps && i < simple_index_infos.count(); i++) {
       const ObTableSchema *index_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(i).table_id_, index_schema))) {
-        LOG_WARN("get table schema failed", K(ret), "table_id", simple_index_infos.at(i).table_id_);
+      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_schema))) {
+        LOG_WARN("get table schema failed", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("index table not exist", K(ret), "table_id", simple_index_infos.at(i).table_id_);
+        LOG_WARN("index table not exist", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
       } else {
         const ObIndexInfo &index_info = index_schema->get_index_info();
         for (int j = 0; OB_SUCC(ret) && !has_prefix_idx_col_deps && j < index_info.get_size(); j++) {
@@ -6451,6 +6455,7 @@ OB_DEF_SERIALIZE(ObTableSchema)
   int64_t aux_vp_tid_array_count = aux_vp_tid_array_.count();
 
   // !!! begin static check
+  OB_UNIS_ENCODE(tenant_id_);
   OB_UNIS_ENCODE(database_id_);
   OB_UNIS_ENCODE(tablegroup_id_);
   OB_UNIS_ENCODE(table_id_);
@@ -6540,7 +6545,6 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(external_file_format_);
   OB_UNIS_ENCODE(external_file_pattern_);
   OB_UNIS_ENCODE(ttl_definition_);
-  OB_UNIS_ENCODE(kv_attributes_);
   OB_UNIS_ENCODE(name_generated_type_);
   OB_UNIS_ENCODE(lob_inrow_threshold_);
   OB_UNIS_ENCODE_ARRAY_POINTER(column_group_arr_, column_group_cnt_);
@@ -6667,6 +6671,7 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   ObSArray<int64_t> mv_table_ids;
   int64_t aux_vp_tid_array_count = 0;
   // !!! begin static check
+  OB_UNIS_DECODE(tenant_id_);
   OB_UNIS_DECODE(database_id_);
   OB_UNIS_DECODE(tablegroup_id_);
   OB_UNIS_DECODE(table_id_);
@@ -6782,7 +6787,6 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE_AND_FUNC(external_file_format_, deep_copy_str);
   OB_UNIS_DECODE_AND_FUNC(external_file_pattern_, deep_copy_str);
   OB_UNIS_DECODE_AND_FUNC(ttl_definition_, deep_copy_str);
-  OB_UNIS_DECODE_AND_FUNC(kv_attributes_, deep_copy_str);
   OB_UNIS_DECODE(name_generated_type_);
   OB_UNIS_DECODE(lob_inrow_threshold_);
   OB_UNIS_DECODE_ARRAY_POINTER(column_group_arr_, column_group_cnt_, do_add_column_group);
@@ -6841,6 +6845,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   int64_t aux_vp_tid_array_count = aux_vp_tid_array_.count();
 
   // !!! begin static check
+  OB_UNIS_ADD_LEN(tenant_id_);
   OB_UNIS_ADD_LEN(database_id_);
   OB_UNIS_ADD_LEN(tablegroup_id_);
   OB_UNIS_ADD_LEN(table_id_);
@@ -6924,7 +6929,6 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(external_file_format_);
   OB_UNIS_ADD_LEN(external_file_pattern_);
   OB_UNIS_ADD_LEN(ttl_definition_);
-  OB_UNIS_ADD_LEN(kv_attributes_);
   OB_UNIS_ADD_LEN(name_generated_type_);
   OB_UNIS_ADD_LEN(lob_inrow_threshold_);
   OB_UNIS_ADD_LEN_ARRAY_POINTER(column_group_arr_, column_group_cnt_);
@@ -7297,50 +7301,15 @@ int ObTableSchema::get_presetting_partition_keys(common::ObIArray<uint64_t> &par
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid table type", KR(ret), KPC(this));
   } else if (ori_part_func_str.empty()) {
-    bool is_h_t = false;
-    if (OB_FAIL(is_hbase_table(is_h_t))) {
-      LOG_WARN("failed to check if it is hbase_table", K(ret), K(*this));
-    } else if (!is_h_t) {
-      const ObRowkeyInfo &partition_keys = is_global_index_table() ? get_index_info() : get_rowkey_info();
-      for (int64_t i = 0; OB_SUCC(ret) && i < partition_keys.get_size(); ++i) {
-        const ObRowkeyColumn *partition_column = partition_keys.get_column(i);
-        if (OB_ISNULL(partition_column)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the partition key is NULL, ", KR(ret), K(i), K(partition_keys), KPC(this));
-        } else if (!is_shadow_column(partition_column->column_id_) &&
-            OB_FAIL(partition_key_ids.push_back(partition_column->column_id_))) {
-          LOG_WARN("failed to push back rowkey column id", KR(ret), KPC(this));
-        }
-      }
-    } else {
-      const ObRowkeyInfo &rowkey_info = get_rowkey_info();
-      const char* K_COLULMN = "K";
-      ObColumnIterByPrevNextID pre_next_id_iter(*this);
-      const ObColumnSchemaV2 *column_schema = NULL;
-      ObCompareNameWithTenantID name_cmp;
-      if (OB_FAIL(pre_next_id_iter.next(column_schema))) {
-        LOG_ERROR("pre_next_id_iter next fail", KR(ret), KPC(column_schema));
-      } else if (OB_ISNULL(column_schema)) {
+    const ObRowkeyInfo &partition_keys = is_global_index_table() ? get_index_info() : get_rowkey_info();
+    for (int64_t i = 0; OB_SUCC(ret) && i < partition_keys.get_size(); ++i) {
+      const ObRowkeyColumn *partition_column = partition_keys.get_column(i);
+      if (OB_ISNULL(partition_column)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column schema should not be null", K(ret), K(*this));
-      } else {
-        ObString col_name;
-        col_name.reset();
-        bool is_col_existed = false;
-        uint64_t col_id = column_schema->get_column_id();
-        get_column_name_by_column_id(col_id, col_name, is_col_existed);
-        if (!is_col_existed) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the col should exist", K(ret), K(col_id));
-        } else if (OB_ISNULL(col_name.ptr())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("col_name ptr should not be null", K(ret));
-        } else if (OB_UNLIKELY(0 != strcmp(col_name.ptr(), K_COLULMN))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the first column of a hbase table should be column K", K(ret));
-        } else if (OB_FAIL(partition_key_ids.push_back(col_id))) {
-          LOG_WARN("failed to push back", K(ret));
-        }
+        LOG_WARN("the partition key is NULL, ", KR(ret), K(i), K(partition_keys), KPC(this));
+      } else if (!is_shadow_column(partition_column->column_id_) &&
+          OB_FAIL(partition_key_ids.push_back(partition_column->column_id_))) {
+        LOG_WARN("failed to push back rowkey column id", KR(ret), KPC(this));
       }
     }
   } else if (!is_user_table()) {
@@ -7360,6 +7329,7 @@ int ObTableSchema::get_partition_keys_by_part_func_expr(const common::ObString &
   ObArenaAllocator allocator;
   ObArray<ObString> partkey_strs;
   const int64_t table_id = get_table_id();
+  const uint64_t tenant_id = get_tenant_id();
   if (OB_FAIL(ObDDLResolver::get_partition_keys_by_part_func_expr(part_func_expr_str, allocator, partkey_strs))) {
     LOG_WARN("failed to get part keys", K(ret), K(part_func_expr_str), K(false));
   } else {
@@ -8142,7 +8112,7 @@ int ObTableSchema::get_fk_check_index_tid(ObSchemaGetterGuard &schema_guard, con
       const ObTableSchema *index_schema = NULL;
       if (!is_unique_index(index_info.index_type_)) {
         // do nothing
-      } else if (OB_FAIL(schema_guard.get_table_schema(
+      } else if (OB_FAIL(schema_guard.get_table_schema(get_tenant_id(),
                                                 index_tid,
                                                 index_schema))) {
         LOG_WARN("fail to get table schema", K(ret));
@@ -8182,70 +8152,6 @@ int ObTableSchema::check_rowkey_column(const common::ObIArray<uint64_t> &parent_
   }
   return ret;
 }
-
-int ObTableSchema::is_hbase_table(bool &is_h_table) const
-{
-  int ret = OB_SUCCESS;
-  const int64_t HBASE_TABLE_COLUMN_COUNT = 4;
-  is_h_table = false;
-  ObKVAttr kv_attr;
-  if (OB_FAIL(common::ObTTLUtil::parse_kv_attributes(get_kv_attributes(), kv_attr))) {
-    LOG_WARN("fail to parse kv attributes", KR(ret), K(get_kv_attributes()));
-  } else if (kv_attr.type_ == common::ObKVAttr::ObTTLTableType::HBASE) {
-    is_h_table = true;
-  } else {
-    const char* K_COLULMN = "K";
-    const char* Q_COLULMN = "Q";
-    const char* T_COLULMN = "T";
-    const char* V_COLULMN = "V";
-    ObSEArray<bool, HBASE_TABLE_COLUMN_COUNT> col_flags;
-    for (int64_t i = 0; OB_SUCC(ret) && i < HBASE_TABLE_COLUMN_COUNT; ++i) {
-      if (OB_FAIL(col_flags.push_back(false))) {
-        LOG_WARN("failed to push back into col_falgs", K(ret));
-      }
-    }
-    // Mark column T as bigint or not
-    bool is_T_column_bigint_type = false;
-    ObColumnIterByPrevNextID pre_next_id_iter(*this);
-    while (OB_SUCC(ret)) {
-      const ObColumnSchemaV2 *column_schema = NULL;
-      if (OB_FAIL(pre_next_id_iter.next(column_schema))) {
-        if (OB_ITER_END != ret) {
-          LOG_ERROR("pre_next_id_iter next fail", KR(ret), KPC(column_schema));
-        }
-      } else if (OB_ISNULL(column_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("column_schema is null", K(ret), KPC(column_schema));
-      } else {
-        const char *column_name_ptr = column_schema->get_column_name();
-        if (OB_ISNULL(column_name_ptr)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("column_name should not be null", K(ret), K(column_name_ptr));
-        } else if (0 == strcmp(column_name_ptr, K_COLULMN)) {
-            col_flags.at(0) = true;
-        } else if (0 == strcmp(column_name_ptr, Q_COLULMN)) {
-            col_flags.at(1) = true;
-        } else if (0 == strcmp(column_name_ptr, T_COLULMN)) {
-          col_flags.at(2) = true;
-          /*The T column must be int type for mysql mode*/
-          if (ObIntType == column_schema->get_data_type()) {
-            is_h_table = true;
-          }
-        } else if (0 == strcmp(column_name_ptr, V_COLULMN)) {
-          col_flags.at(3) = true;
-        }
-      }
-    }
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    }
-    for (int64_t i = 0; is_h_table && OB_SUCC(ret) && i < col_flags.count(); ++i) {
-      is_h_table &= col_flags.at(i);
-    }
-  }
-  return ret;
-}
-
 
 int ObTableSchema::add_simple_index_info(const ObAuxTableMetaInfo &simple_index_info)
 {
@@ -8299,9 +8205,9 @@ int ObTableSchema::has_before_insert_row_trigger(ObSchemaGetterGuard &schema_gua
   int ret = OB_SUCCESS;
   const ObTriggerInfo *trigger_info = NULL;
   trigger_exist = false;
-  
+  const uint64_t tenant_id = get_tenant_id();
   for (int i = 0; OB_SUCC(ret) && !trigger_exist && i < trigger_list_.count(); i++) {
-    OZ (schema_guard.get_trigger_info( trigger_list_.at(i), trigger_info), trigger_list_.at(i));
+    OZ (schema_guard.get_trigger_info(tenant_id, trigger_list_.at(i), trigger_info), trigger_list_.at(i));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list_.at(i));
     OX (trigger_exist = trigger_info->has_insert_event() &&
                         trigger_info->has_before_row_point());
@@ -8315,9 +8221,9 @@ int ObTableSchema::has_before_update_row_trigger(ObSchemaGetterGuard &schema_gua
   int ret = OB_SUCCESS;
   const ObTriggerInfo *trigger_info = NULL;
   trigger_exist = false;
-  
+  const uint64_t tenant_id = get_tenant_id();
   for (int i = 0; OB_SUCC(ret) && !trigger_exist && i < trigger_list_.count(); i++) {
-    OZ (schema_guard.get_trigger_info( trigger_list_.at(i), trigger_info), trigger_list_.at(i));
+    OZ (schema_guard.get_trigger_info(tenant_id, trigger_list_.at(i), trigger_info), trigger_list_.at(i));
     OV (OB_NOT_NULL(trigger_info), OB_ERR_UNEXPECTED, trigger_list_.at(i));
     OX (trigger_exist = trigger_info->has_update_event() &&
                         trigger_info->has_before_row_point());
@@ -8838,13 +8744,14 @@ int ObTableSchema::check_has_##index_type(ObSchemaGetterGuard &schema_guard, boo
   int ret = OB_SUCCESS;                                                                                               \
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;                                                               \
   const ObSimpleTableSchemaV2 *index_schema = NULL;                                                                   \
+  const uint64_t tenant_id = get_tenant_id();                                                                         \
   found = false;                                                                                                      \
   if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {                                                          \
     LOG_WARN("get simple_index_infos failed", K(ret));                                                                \
   }                                                                                                                   \
   for (int64_t i = 0; !found && OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {                                \
-    if (OB_FAIL(schema_guard.get_simple_table_schema( simple_index_infos.at(i).table_id_, index_schema))) { \
-      LOG_WARN("failed to get table schema", K(ret), K(simple_index_infos.at(i).table_id_));            \
+    if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_schema))) { \
+      LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(simple_index_infos.at(i).table_id_));            \
     } else if (OB_ISNULL(index_schema)) {                                                                             \
       ret = OB_ERR_UNEXPECTED;                                                                                        \
       LOG_WARN("cannot get index table schema for table ", K(simple_index_infos.at(i).table_id_));                    \
@@ -9668,7 +9575,8 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
   J_OBJ_START();
   J_NAME("simple_table_schema");
   J_COLON();
-  J_KV(K_(database_id),
+  J_KV(K_(tenant_id),
+      K_(database_id),
       K_(tablegroup_id),
       K_(table_id),
       K_(table_name),

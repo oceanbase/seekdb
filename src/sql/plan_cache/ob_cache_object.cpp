@@ -316,7 +316,7 @@ int ObPlanCacheObject::type_to_name(const ObLibCacheNameSpace ns,
                                     common::ObString &type_name)
 {
   int ret = OB_SUCCESS;
-  const char* type_strs[] = {"NS_INVALID", "SQL_PLAN", "PROCEDURE", "FUNCTION", "ANONYMOUS", "TRIGGER", "PACKAGE", "TABLEAPI", "CALLSTMT", "NS_MAX"};
+  const char* type_strs[] = {"NS_INVALID", "SQL_PLAN", "PROCEDURE", "FUNCTION", "ANONYMOUS", "TRIGGER", "PACKAGE", "CALLSTMT", "SQLSTAT", "NS_MAX"};
   char *buf = NULL;
   if (ns <= NS_INVALID || ns >= NS_MAX) {
     ret = OB_INVALID_ARGUMENT;
@@ -357,6 +357,7 @@ void ObPlanCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true 
   if (is_debug_log) {
     SQL_PC_LOG(DEBUG, "Dumping Cache Deleted Info",
                K(object_id_),
+               K(tenant_id_),
                K(added_to_lc_),
                K(ns_),
                K(get_ref_count()),
@@ -366,6 +367,7 @@ void ObPlanCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true 
   } else {
     SQL_PC_LOG(INFO, "Dumping Cache Deleted Info",
                K(object_id_),
+               K(tenant_id_),
                K(added_to_lc_),
                K(ns_),
                K(get_ref_count()),

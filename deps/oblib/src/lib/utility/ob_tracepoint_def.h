@@ -646,13 +646,12 @@ GLOBAL_ERRSIM_POINT_DEF(2550, EN_SPI_SQL_EXEC, "Used to check spi sql");
 GLOBAL_ERRSIM_POINT_DEF(2551, EN_SPI_GET_NEXT_ROW, "Used to check cursor fetch");
 // PL end
 
-// HTable Parallel DDL begin 2621 - 2650
-GLOBAL_ERRSIM_POINT_DEF(2621, EN_CREATE_HTABLE_TG_FINISH_ERR, "create htable tablegroup finish error");
-GLOBAL_ERRSIM_POINT_DEF(2622, EN_CREATE_HTABLE_CF_FINISH_ERR, "create htable table finish error");
-GLOBAL_ERRSIM_POINT_DEF(2623, EN_DISABLE_HTABLE_CF_FINISH_ERR, "disable htable table finish error");
-GLOBAL_ERRSIM_POINT_DEF(2624, EN_DELETE_HTABLE_CF_FINISH_ERR, "delete htable table finish error");
-GLOBAL_ERRSIM_POINT_DEF(2625, EN_DELETE_HTABLE_SKIP_CF_ERR, "delete htable table without delete cf");
-// HTable Parallel DDL end
+// Removed feature tracepoints begin 2621 - 2650
+GLOBAL_ERRSIM_POINT_DEF(2621, EN_RESERVED_TRACEPOINT_2621, "reserved tracepoint 2621");
+GLOBAL_ERRSIM_POINT_DEF(2622, EN_RESERVED_TRACEPOINT_2622, "reserved tracepoint 2622");
+GLOBAL_ERRSIM_POINT_DEF(2623, EN_RESERVED_TRACEPOINT_2623, "reserved tracepoint 2623");
+GLOBAL_ERRSIM_POINT_DEF(2624, EN_RESERVED_TRACEPOINT_2624, "reserved tracepoint 2624");
+GLOBAL_ERRSIM_POINT_DEF(2625, EN_RESERVED_TRACEPOINT_2625, "reserved tracepoint 2625");
+// Removed feature tracepoints end
 
 #endif /*GLOBAL_ERRSIM_POINT_DEF*/
-

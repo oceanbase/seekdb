@@ -476,9 +476,9 @@ constexpr int OB_ERR_SQL_END = -5999;
 #ifndef __ERROR_CODE_PARSER_
   int get_ob_errno_from_oracle_errno(const int error_no, const char *error_msg, int &ob_errno);
 #endif
-  int ob_errpkt_errno(const int oberr, const bool is_oracle_mode);
-  const char *ob_errpkt_strerror(const int oberr, const bool is_oracle_mode);
-  const char *ob_errpkt_str_user_error(const int oberr, const bool is_oracle_mode);
+  int ob_errpkt_errno(const int oberr);
+  const char *ob_errpkt_strerror(const int oberr);
+  const char *ob_errpkt_str_user_error(const int oberr);
 
 
 } // end namespace common
@@ -814,20 +814,19 @@ print $fh_cpp '
     }
     return ret;
   }
-  int ob_errpkt_errno(const int err, const bool is_oracle_mode)
+  int ob_errpkt_errno(const int err)
   {
-    return (is_oracle_mode ? ob_oracle_errno_with_check(err) : ob_mysql_errno_with_check(err));
+    return ob_mysql_errno_with_check(err);
   }
-  const char *ob_errpkt_strerror(const int err, const bool is_oracle_mode)
+  const char *ob_errpkt_strerror(const int err)
   {
-    return (is_oracle_mode ? ob_oracle_strerror(err) : ob_strerror(err));
+    return ob_strerror(err);
   }
-  const char *ob_errpkt_str_user_error(const int err, const bool is_oracle_mode)
+  const char *ob_errpkt_str_user_error(const int err)
   {
-    return (is_oracle_mode ? ob_oracle_str_user_error(err) : ob_str_user_error(err));
+    return ob_str_user_error(err);
   }
 
 } // end namespace common
 } // end namespace oceanbase
 ';
-

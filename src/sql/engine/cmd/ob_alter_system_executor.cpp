@@ -35,7 +35,7 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 
 #include "rootserver/ob_tenant_event_def.h"
-#include "share/table/ob_redis_importer.h"
+#include "share/ob_module_data_arg.h"
 #include "share/ob_timezone_importer.h"
 #include "share/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
@@ -1060,37 +1060,6 @@ int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)
   return ret;
 }
 
-int ObTableTTLExecutor::execute(ObExecContext& ctx, ObTableTTLStmt& stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx* task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else {
-    FLOG_INFO("ObTableTTLExecutor::execute", K(stmt), K(ctx));
-    common::ObTTLParam param;
-    ObSEArray<common::ObSimpleTTLInfo, 32> ttl_info_array;
-    param.ttl_all_ = stmt.is_ttl_all();
-    param.type_ = stmt.get_type();
-    for (int64_t i = 0; (i < stmt.get_tenant_ids().count()) && OB_SUCC(ret); i++) {
-      uint64_t tenant_id = stmt.get_tenant_ids().at(i);
-      if (OB_FAIL(param.add_ttl_info(tenant_id))) {
-        LOG_WARN("fail to assign ttl info", KR(ret), K(tenant_id));
-      }
-    }
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (OB_UNLIKELY(!param.ttl_all_ && param.ttl_info_array_.empty())) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(param), KR(ret));
-    } else if (OB_FAIL(ObTTLUtil::dispatch_ttl_cmd(param))) {
-      LOG_WARN("fail to dispatch ttl cmd", K(ret), K(param));
-    }
-  }
-  return ret;
-}
-
 int ObResetConfigExecutor::execute(ObExecContext &ctx, ObResetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -1120,16 +1089,6 @@ int ObModuleDataExecutor::execute(ObExecContext &ctx, ObModuleDataStmt &stmt)
     LOG_WARN("failed to set default timeout ctx", K(ret), K(INNER_SQL_TIMEOUT));
   } else {
     switch (arg.module_) {
-      case table::ObModuleDataArg::REDIS: {
-        table::ObRedisImporter importer(arg.target_tenant_id_, ctx);
-        if (OB_FAIL(importer.exec_op(arg.op_))) {
-          LOG_WARN("fail to exec op", K(ret), K(arg.op_));
-        } else {
-          share::ObInternalTableChangeNotifier::get_instance().notify(
-              table::ObModuleDataArg::REDIS, arg.target_tenant_id_);
-        }
-         break;
-      }
       case table::ObModuleDataArg::GIS: {
         table::ObSRSImporter importer(arg.target_tenant_id_, ctx);
         if (OB_FAIL(importer.exec_op(arg))) {
@@ -1154,7 +1113,7 @@ int ObModuleDataExecutor::execute(ObExecContext &ctx, ObModuleDataStmt &stmt)
       default: {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "specified module");
-        LOG_WARN("modules except 'redis'/'gis'/'timezone' are not supported yet", K(ret), K(arg.module_));
+        LOG_WARN("modules except 'gis'/'timezone' are not supported yet", K(ret), K(arg.module_));
       }
     }
   }

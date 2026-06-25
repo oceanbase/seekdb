@@ -28,7 +28,7 @@
 #include "sql/resolver/ob_schema_checker.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
-#include "sql/parser/ob_item_type.h"
+#include "objit/common/ob_item_type.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
 
 namespace oceanbase
@@ -333,6 +333,7 @@ struct ObResolverParams
        force_trace_log_(false),
        expr_factory_(NULL),
        stmt_factory_(NULL),
+       show_tenant_id_(common::OB_INVALID_ID),
        show_seed_(false),
        is_from_show_resolver_(false),
        is_restore_(false),
@@ -377,8 +378,7 @@ struct ObResolverParams
        is_for_rt_mv_(false),
        is_resolve_fake_cte_table_(false),
        is_returning_(false),
-       is_in_view_(false),
-       is_htable_(false)
+       is_in_view_(false)
   {}
   bool is_force_trace_log() { return force_trace_log_; }
 
@@ -399,7 +399,7 @@ public:
   bool force_trace_log_;
   ObRawExprFactory *expr_factory_;
   ObStmtFactory *stmt_factory_;
-  
+  uint64_t show_tenant_id_;
   bool show_seed_;
   bool is_from_show_resolver_;
   bool is_restore_;
@@ -452,7 +452,6 @@ public:
   bool is_resolve_fake_cte_table_;
   bool is_returning_;
   bool is_in_view_;
-  bool is_htable_;
 };
 } // end namespace sql
 } // end namespace oceanbase

@@ -20,10 +20,7 @@
 #include "share/ob_resource_limit.h"
 #include "share/table/ob_ttl_util.h"
 #include "src/observer/ob_server.h"
-#include "share/config/ob_config_mode_name_def.h"
-#include "share/io/ob_backup_storage_info.h"
 #include "plugin/sys/ob_plugin_load_param.h"
-#include "share/table/ob_table_config_util.h"
 
 namespace oceanbase
 {
@@ -68,11 +65,12 @@ bool ObConfigEvenIntChecker::check(const ObConfigItem &t) const
   return is_valid;
 }
 
-bool ObConfigFreezeTriggerIntChecker::check(const ObAdminSetConfigItem &t)
+bool ObConfigFreezeTriggerIntChecker::check(const uint64_t tenant_id,
+                                            const ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  int64_t write_throttle_trigger = get_write_throttle_trigger_percentage_();
+  int64_t write_throttle_trigger = get_write_throttle_trigger_percentage_(tenant_id);
   if (is_valid) {
     is_valid = value > 0 && value < 100;
   }
@@ -85,16 +83,17 @@ bool ObConfigFreezeTriggerIntChecker::check(const ObAdminSetConfigItem &t)
   return is_valid;
 }
 
-int64_t ObConfigFreezeTriggerIntChecker::get_write_throttle_trigger_percentage_()
+int64_t ObConfigFreezeTriggerIntChecker::get_write_throttle_trigger_percentage_(const uint64_t tenant_id)
 {
   int64_t percent = 0;
-
-  percent = GCONF.writing_throttling_trigger_percentage;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  if (tenant_config.is_valid()) {
+    percent = tenant_config->writing_throttling_trigger_percentage;
+  }
   return percent;
 }
 
-bool ObConfigTxShareMemoryLimitChecker::check(const ObAdminSetConfigItem &t)
+bool ObConfigTxShareMemoryLimitChecker::check(const uint64_t tenant_id, const ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
@@ -103,9 +102,15 @@ bool ObConfigTxShareMemoryLimitChecker::check(const ObAdminSetConfigItem &t)
   int64_t tx_data_limit = 0;
   int64_t mds_limit = 0;
 
-  memstore_limit = GCONF._memstore_limit_percentage;
-  tx_data_limit = GCONF._tx_data_memory_limit_percentage;
-  mds_limit = GCONF._mds_memory_limit_percentage;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  if (tenant_config.is_valid()) {
+    memstore_limit = tenant_config->_memstore_limit_percentage;
+    tx_data_limit = tenant_config->_tx_data_memory_limit_percentage;
+    mds_limit = tenant_config->_mds_memory_limit_percentage;
+  } else {
+    is_valid = false;
+    OB_LOG_RET(ERROR, OB_INVALID_CONFIG, "tenant config is invalid", K(tenant_id));
+  }
 
   if (0 == memstore_limit) {
     memstore_limit = cluster_memstore_limit;
@@ -136,30 +141,36 @@ bool ObConfigTxShareMemoryLimitChecker::check(const ObAdminSetConfigItem &t)
   return is_valid;
 }
 
-bool less_or_equal_tx_share_limit(const int64_t value)
+bool less_or_equal_tx_share_limit(const uint64_t tenant_id, const int64_t value)
 {
   bool bool_ret = true;
   int64_t tx_share_limit = 0;
-  tx_share_limit = GCONF._tx_share_memory_limit_percentage;
-  if (0 == value) {
-    // 0 is default value, which means memstore limit percentage will adjust itself.
-    bool_ret = true;
-  } else if (0 == tx_share_limit) {
-    // 0 is default value, which means (_tx_share_memory_limit_percentage = memstore_limit_percentage + 10)
-    bool_ret = true;
-  } else if (value > 0 && value < 100 && value <= tx_share_limit) {
-    bool_ret = true;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  if (tenant_config.is_valid()) {
+    tx_share_limit = tenant_config->_tx_share_memory_limit_percentage;
+    if (0 == value) {
+      // 0 is default value, which means memstore limit percentage will adjust itself.
+      bool_ret = true;
+    } else if (0 == tx_share_limit) {
+      // 0 is default value, which means (_tx_share_memory_limit_percentage = memstore_limit_percentage + 10)
+      bool_ret = true;
+    } else if (value > 0 && value < 100 && value <= tx_share_limit) {
+      bool_ret = true;
+    } else {
+      bool_ret = false;
+    }
   } else {
     bool_ret = false;
+    OB_LOG_RET(ERROR, OB_INVALID_CONFIG, "tenant config is invalid", K(tenant_id));
   }
   return bool_ret;
 }
 
-bool ObConfigMemstoreLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
+bool ObConfigMemstoreLimitChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
+  if (less_or_equal_tx_share_limit(tenant_id, value)) {
     is_valid = true;
   } else {
     is_valid = false;
@@ -167,11 +178,11 @@ bool ObConfigMemstoreLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
   return is_valid;
 }
 
-bool ObConfigTxDataLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
+bool ObConfigTxDataLimitChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
+  if (less_or_equal_tx_share_limit(tenant_id, value)) {
     is_valid = true;
   } else {
     is_valid = false;
@@ -179,11 +190,11 @@ bool ObConfigTxDataLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
   return is_valid;
 }
 
-bool ObConfigMdsLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
+bool ObConfigMdsLimitChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
+  if (less_or_equal_tx_share_limit(tenant_id, value)) {
     is_valid = true;
   } else {
     is_valid = false;
@@ -191,11 +202,12 @@ bool ObConfigMdsLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
   return is_valid;
 }
 
-bool ObConfigWriteThrottleTriggerIntChecker::check(const ObAdminSetConfigItem &t)
+bool ObConfigWriteThrottleTriggerIntChecker::check(const uint64_t tenant_id,
+                                                   const ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  int64_t freeze_trigger = get_freeze_trigger_percentage_();
+  int64_t freeze_trigger = get_freeze_trigger_percentage_(tenant_id);
   if (is_valid) {
     is_valid = value > 0 && value <= 100;
   }
@@ -208,20 +220,22 @@ bool ObConfigWriteThrottleTriggerIntChecker::check(const ObAdminSetConfigItem &t
   return is_valid;
 }
 
-int64_t ObConfigWriteThrottleTriggerIntChecker::get_freeze_trigger_percentage_()
+int64_t ObConfigWriteThrottleTriggerIntChecker::get_freeze_trigger_percentage_(const uint64_t tenant_id)
 {
   int64_t percent = 0;
-
-  percent = GCONF.freeze_trigger_percentage;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  if (tenant_config.is_valid()) {
+    percent = tenant_config->freeze_trigger_percentage;
+  }
   return percent;
 }
 
-bool ObConfigLogDiskLimitThresholdIntChecker::check(const ObAdminSetConfigItem &t)
+bool ObConfigLogDiskLimitThresholdIntChecker::check(const uint64_t tenant_id,
+                                                               const ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   const int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  const int64_t throttling_percentage = get_log_disk_throttling_percentage_();
+  const int64_t throttling_percentage = get_log_disk_throttling_percentage_(tenant_id);
   if (is_valid) {
     is_valid = (throttling_percentage != 0);
   }
@@ -231,20 +245,21 @@ bool ObConfigLogDiskLimitThresholdIntChecker::check(const ObAdminSetConfigItem &
   return is_valid;
 }
 
-int64_t ObConfigLogDiskLimitThresholdIntChecker::get_log_disk_throttling_percentage_()
+int64_t ObConfigLogDiskLimitThresholdIntChecker::get_log_disk_throttling_percentage_(const uint64_t tenant_id)
 {
   int64_t percent = 0;
-
-  percent = GCONF.log_disk_throttling_percentage;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  if (tenant_config.is_valid()) {
+    percent = tenant_config->log_disk_throttling_percentage;
+  }
   return percent;
 }
 
-bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const obcall::ObAdminSetConfigItem &t)
+bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   const int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  const int64_t limit_threshold = get_log_disk_utilization_limit_threshold_();
+  const int64_t limit_threshold = get_log_disk_utilization_limit_threshold_(tenant_id);
   if (is_valid) {
     is_valid = (limit_threshold != 0);
   }
@@ -254,12 +269,13 @@ bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const obcall::ObAdminS
   return is_valid;
 }
 
-int64_t ObConfigLogDiskThrottlingPercentageIntChecker::get_log_disk_utilization_limit_threshold_()
+int64_t ObConfigLogDiskThrottlingPercentageIntChecker::get_log_disk_utilization_limit_threshold_(const uint64_t tenant_id)
 {
   int64_t threshold = 0;
-
-  threshold = GCONF.log_disk_utilization_limit_threshold;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  if (tenant_config.is_valid()) {
+    threshold = tenant_config->log_disk_utilization_limit_threshold;
+  }
   return threshold;
 }
 
@@ -485,9 +501,84 @@ bool ObConfigWorkAreaPolicyChecker::check(const ObConfigItem &t) const
 
 bool ObConfigLogArchiveOptionsChecker::check(const ObConfigItem &t) const
 {
-  // Log archive removed; parameter retained for compatibility
-  UNUSED(t);
-  return true;
+  bool bret = true;
+  int ret = OB_SUCCESS;
+  SMART_VAR(char[OB_MAX_CONFIG_VALUE_LEN], tmp_str) {
+    const size_t str_len = STRLEN(t.str());
+    MEMCPY(tmp_str, t.str(), str_len);
+    tmp_str[str_len] = 0;
+    const int64_t FORMAT_BUF_LEN = str_len * 3;// '=' will be replaced with ' = '
+    char format_str_buf[FORMAT_BUF_LEN];
+    int ret = OB_SUCCESS;
+    //first replace '=' with ' = '
+    if (OB_FAIL(ObConfigLogArchiveOptionsItem::format_option_str(tmp_str,
+                                                                 str_len,
+                                                                 format_str_buf,
+                                                                 FORMAT_BUF_LEN))) {
+      bret = false;
+      OB_LOG(WARN, "failed to format_option_str", KR(bret), K(tmp_str));
+    } else {
+      char *saveptr = NULL;
+      char *s = STRTOK_R(format_str_buf, " ", &saveptr);
+      bool is_equal_sign_demanded = false;
+      int64_t key_idx = -1;
+      if (OB_LIKELY(NULL != s)) {
+        do {
+          if (is_equal_sign_demanded) {
+            if (0 == ObString::make_string("=").case_compare(s)) {
+              is_equal_sign_demanded = false;
+            } else {
+              OB_LOG(WARN, " '=' is expected", K(s));
+              bret = false;
+            }
+          } else if (key_idx < 0) {
+            int64_t idx = ObConfigLogArchiveOptionsItem::get_keywords_idx(s, is_equal_sign_demanded);
+            if (idx < 0) {
+              bret = false;
+              OB_LOG(WARN, " not expected isolate option", K(s));
+            } else if (is_equal_sign_demanded) {
+              key_idx = idx;
+            } else {
+              key_idx = -1;
+              bret = ObConfigLogArchiveOptionsItem::is_valid_isolate_option(idx);
+            }
+          } else if (LOG_ARCHIVE_COMPRESSION_IDX == key_idx) {
+            if (-1 == ObConfigLogArchiveOptionsItem::get_compression_option_idx(s)) {
+              OB_LOG(WARN, "failed to get_compression_option_idx", K(key_idx), K(s));
+              bret = false;
+            }
+            key_idx = -1;
+          } else if (LOG_ARCHIVE_ENCRYPTION_MODE_IDX == key_idx) {
+            ObBackupEncryptionMode::EncryptionMode mode = ObBackupEncryptionMode::parse_str(s);
+            if (!ObBackupEncryptionMode::is_valid_for_log_archive(mode)) {
+              OB_LOG(WARN, "invalid encrytion mode", K(mode));
+              bret = false;
+            }
+            key_idx = -1;
+          } else if (LOG_ARCHIVE_ENCRYPTION_ALGORITHM_IDX == key_idx) {
+            share::ObCipherOpMode encryption_algorithm;
+            if (OB_FAIL(ObEncryptionUtil::parse_encryption_algorithm(s, encryption_algorithm))) {
+              bret = false;
+              OB_LOG(WARN, "invalid encrytion algorithm", K(s));
+            }
+            key_idx = -1;
+          } else {
+            OB_LOG(WARN, "invalid key_idx", K(key_idx), K(s));
+            bret = false;
+          }
+        } while (OB_LIKELY(NULL != (s = STRTOK_R(NULL, " ", &saveptr))) && bret);
+
+        if (key_idx >= 0) {
+          bret = false;
+          OB_LOG(WARN, "kv option is not compelte", K(tmp_str));
+        }
+      } else {
+        bret = false;
+        OB_LOG(WARN, "invalid config value", K(tmp_str));
+      }
+    }
+  }
+  return bret;
 }
 
 bool ObConfigRpcChecksumChecker::check(const ObConfigItem &t) const
@@ -550,11 +641,11 @@ bool ObConfigTenantDataDiskChecker::check(const ObConfigItem &t) const
   return is_valid;
 }
 
-bool ObConfigVectorMemoryChecker::check(const obcall::ObAdminSetConfigItem &t)
+bool ObConfigVectorMemoryChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
+  if (less_or_equal_tx_share_limit(tenant_id, value)) {
     is_valid = true;
   } else {
     is_valid = false;
@@ -570,6 +661,45 @@ bool ObConfigQueryRateLimitChecker::check(const ObConfigItem &t) const
     is_valid = (-1 == value ||
                 (value >= MIN_QUERY_RATE_LIMIT &&
                  value <= MAX_QUERY_RATE_LIMIT));
+  }
+  return is_valid;
+}
+
+const char *ObConfigPartitionBalanceStrategyFuncChecker::balance_strategy[
+      ObConfigPartitionBalanceStrategyFuncChecker::PARTITION_BALANCE_STRATEGY_MAX] = {
+  "auto",
+  "standard",
+  "disk_utilization_only",
+};
+
+bool ObConfigPartitionBalanceStrategyFuncChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  for (int64_t i = 0; i < ARRAYSIZEOF(balance_strategy) && !is_valid; ++i) {
+    if (0 == ObString::make_string(balance_strategy[i]).case_compare(t.str())) {
+      is_valid = true;
+    }
+  }
+  return is_valid;
+}
+
+bool ObDataStorageErrorToleranceTimeChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  int64_t value = ObConfigTimeParser::get(t.str(), is_valid);
+  if (is_valid) {
+    const int64_t warning_value = GCONF.data_storage_warning_tolerance_time;
+    is_valid = value >= warning_value;
+  }
+  return is_valid;
+}
+
+bool ObConfigOfsBlockVerifyIntervalChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = true;
+  int64_t value = ObConfigTimeParser::get(t.str(), is_valid);
+  if (is_valid) {
+    is_valid = (0 == value) || (value >= MIN_VALID_INTVL && value <= MAX_VALID_INTVL);
   }
   return is_valid;
 }
@@ -1107,63 +1237,6 @@ int ObModeConfigParserUitl::get_kv_list(char *str, ObIArray<std::pair<ObString, 
   return ret;
 }
 
-bool ObKvFeatureModeParser::parse(const char *str, uint8_t *arr, int64_t len)
-{
-  bool bret = true;
-  if (str ==  NULL || arr == NULL) {
-    bret = false;
-    OB_LOG_RET(WARN, OB_ERR_UNEXPECTED, "Get mode config item fail, str or value arr is NULL!");
-  } else if (strlen(str) == 0) {
-    bret = true;
-    OB_LOG_RET(DEBUG, OB_SUCCESS, "strlen is 0");
-  } else {
-    int tmp_ret = OB_SUCCESS;
-    ObSEArray<std::pair<ObString, ObString>, 8> kv_list;
-    int64_t str_len = strlen(str);
-    const int64_t buf_len = 3 * str_len; // need replace ',' to ' , '
-    char buf[buf_len];
-    MEMSET(buf, 0, sizeof(buf));
-    MEMCPY(buf, str, str_len);
-    if (OB_SUCCESS != (tmp_ret = ObModeConfigParserUitl::format_mode_str(str, str_len, buf, buf_len))) {
-      bret = false;
-      OB_LOG_RET(WARN, tmp_ret, "fail to format mode str", K(str));
-    } else if (OB_SUCCESS != (tmp_ret = ObModeConfigParserUitl::get_kv_list(buf, kv_list))) {
-      bret = false;
-      OB_LOG_RET(WARN, tmp_ret, "fail to get kv list", K(str));
-    } else {
-      ObKVFeatureMode kv_mode;
-      for (int64_t i = 0; i < kv_list.count() && bret; i++) {
-        uint16_t mode = MODE_DEFAULT;
-        if (kv_list.at(i).second.case_compare(MODE_VAL_ON) == 0) {
-          mode = MODE_ON;
-        } else if (kv_list.at(i).second.case_compare(MODE_VAL_OFF) == 0) {
-          mode = MODE_OFF;
-        } else {
-          bret = false;
-          OB_LOG_RET(WARN, OB_INVALID_CONFIG, "unknown mode type", K(kv_list.at(i).second));
-        }
-        if (!bret) {
-        } else if (kv_list.at(i).first.case_compare(MODE_NAME_TTL) == 0) {
-          kv_mode.set_ttl_mode(mode);
-        } else if (kv_list.at(i).first.case_compare(MODE_NAME_REROUTING) == 0) {
-          kv_mode.set_rerouting_mode(mode);
-        } else if (kv_list.at(i).first.case_compare(MODE_NAME_HOTKEY) == 0) {
-          kv_mode.set_hotkey_mode(mode);
-        } else {
-          bret = false;
-          OB_LOG_RET(WARN, OB_INVALID_CONFIG, "unknown mode name", K(kv_list.at(i).first));
-        }
-      } // end for
-      if (bret) {
-        int16_t mode_value = kv_mode.get_value();
-        arr[0] = (mode_value & 0xFF);
-        arr[1] = ((mode_value >> 8) & 0xFF);
-      }
-    }
-  }
-  return bret;
-}
-
 bool ObConfigIndexStatsModeChecker::check(const ObConfigItem &t) const {
   const ObString tmp_str(t.str());
   return 0 == tmp_str.case_compare("SAMPLED") || 0 == tmp_str.case_compare("ALL");
@@ -1178,7 +1251,7 @@ bool ObConfigTableStoreFormatChecker::check(const ObConfigItem &t) const {
   return bret;
 }
 
-bool ObConfigDDLNoLoggingChecker::check(const obcall::ObAdminSetConfigItem &t) {
+bool ObConfigDDLNoLoggingChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t) {
   int ret = OB_SUCCESS;
   bool is_valid = true;
   const bool value = ObConfigBoolParser::get(t.value_.ptr(), is_valid);
@@ -1189,18 +1262,21 @@ bool ObConfigDDLNoLoggingChecker::check(const obcall::ObAdminSetConfigItem &t) {
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "it's not allowded to set no logging in shared nothing mode");
   }
 
+  if (OB_SYS_TENANT_ID == tenant_id) {
+    /* sys tenant not no allow archive */
+  }
+
   if (OB_FAIL(ret)) {
     is_valid = false;
   }
   return is_valid;
 }
 
-bool ObConfigArchiveLagTargetChecker::check(const ObAdminSetConfigItem &t)
+bool ObConfigMigrationChooseSourceChecker::check(const ObConfigItem &t) const
 {
-  // Log archive removed, log_archive_dest can never be set
-  UNUSED(t);
-  LOG_USER_ERROR(OB_OP_NOT_ALLOW, "log_archive_dest has not been set, set archive_lag_target is");
-  return false;
+  ObString v_str(t.str());
+  return 0 == v_str.case_compare("idc")
+      || 0 == v_str.case_compare("region");
 }
 
 bool ObConfigSQLSpillCompressionCodecChecker::check(const ObConfigItem &t) const
@@ -1267,14 +1343,6 @@ bool ObParallelDDLControlParser::parse(const char *str, uint8_t *arr, int64_t le
     }
   }
   return bret;
-}
-
-bool ObConfigKvGroupCommitRWModeChecker::check(const ObConfigItem &t) const
-{
-  ObString v_str(t.str());
-  return 0 == v_str.case_compare("all")
-    || 0 == v_str.case_compare("read")
-    || 0 == v_str.case_compare("write");
 }
 
 bool ObConfigDegradationPolicyChecker::check(const ObConfigItem &t) const
@@ -1350,7 +1418,7 @@ bool ObConfigPluginsLoadChecker::check(const ObConfigItem& t) const
   bool bret = false;
   ObString plugins_load(t.str());
   ObArray<ObPluginLoadParam> plugin_load_params;
-  ObMemAttr mem_attr("Config");
+  ObMemAttr mem_attr(OB_SYS_TENANT_ID, "Config");
   plugin_load_params.set_attr(mem_attr);
   int ret = ObPluginLoadParamParser::parse(plugins_load, plugin_load_params);
   if (OB_FAIL(ret)) {

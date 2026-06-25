@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_TABLE_OB_REDIS_IMPORTER_H_
-#define OCEANBASE_SHARE_TABLE_OB_REDIS_IMPORTER_H_
+#ifndef OCEANBASE_SHARE_OB_MODULE_DATA_ARG_H_
+#define OCEANBASE_SHARE_OB_MODULE_DATA_ARG_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "share/ob_rpc_struct.h"
+#include "lib/ob_define.h"
+#include "lib/string/ob_string.h"
+#include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
 {
@@ -35,41 +36,25 @@ public:
   };
   enum ObExecModule {
     INVALID_MOD = -1,
-    REDIS,
-    TIMEZONE,
-    GIS,
+    // 0 is reserved for a removed module-data path.
+    TIMEZONE = 1,
+    GIS = 2,
     MAX_MOD
   };
-  ObModuleDataArg() : 
-    op_(ObInfoOpType::INVALID_OP),
-    module_(ObExecModule::INVALID_MOD),
-    file_path_()
+  ObModuleDataArg()
+      : op_(ObInfoOpType::INVALID_OP),
+        target_tenant_id_(OB_INVALID_TENANT_ID),
+        module_(ObExecModule::INVALID_MOD),
+        file_path_()
   {}
   virtual ~ObModuleDataArg() {}
   bool is_valid() const;
-  TO_STRING_KV(K_(op), K_(module), K_(file_path));
+  TO_STRING_KV(K_(op), K_(target_tenant_id), K_(module), K_(file_path));
 
-  ObInfoOpType op_; // enum ObInfoOpType
-  
-  ObExecModule module_; // ObExecModule
+  ObInfoOpType op_;
+  uint64_t target_tenant_id_;
+  ObExecModule module_;
   ObString file_path_;
-};
-
-class ObRedisImporter
-{
-public:
-  explicit ObRedisImporter(sql::ObExecContext& exec_ctx)
-      : exec_ctx_(exec_ctx), affected_rows_(0)
-  {}
-  virtual ~ObRedisImporter() {}
-  int exec_op(table::ObModuleDataArg::ObInfoOpType op);
-  OB_INLINE int64_t get_affected_rows() { return affected_rows_; }
-
-private:
-  int get_sql_uint_result(const char *sql, const char *col_name, uint64_t &sql_res);
-
-  sql::ObExecContext& exec_ctx_;
-  int64_t affected_rows_;
 };
 
 }  // namespace table

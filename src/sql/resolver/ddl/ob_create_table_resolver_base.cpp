@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver_base.h"
+#include "share/external_table/ob_external_table_utils.h"
 
 namespace oceanbase
 {
@@ -23,6 +24,7 @@ using namespace common;
 using namespace obcall;
 using namespace share;
 using namespace share::schema;
+using namespace omt;
 namespace sql
 {
 ObCreateTableResolverBase::ObCreateTableResolverBase(ObResolverParams &params)
@@ -68,6 +70,10 @@ int ObCreateTableResolverBase::resolve_partition_option(
         ret = OB_INVALID_ARGUMENT;
         SQL_RESV_LOG(WARN, "node type is invalid.", KR(ret), K(node->type_));
       }
+    } else if (table_schema.is_external_table() && table_schema.is_user_specified_partition_for_external_table()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "USER SPECIFIED PARTITION TYPE for non partitioned external table");
+      LOG_WARN("USER SPECIFIED PARTITION TYPE for non partitioned external table not supported");
     }
   }
   return ret;
@@ -80,7 +86,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     ret = OB_NOT_INIT;
     SQL_RESV_LOG(WARN, "session_info is null.", K(ret));
   } else {
-    
+    const uint64_t tenant_id = session_info_->get_effective_tenant_id();
     table_schema.set_block_size(block_size_);
     int64_t progressive_merge_round = 0;
     int64_t tablet_size = tablet_size_;
@@ -93,7 +99,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_charset_type(charset_type_);
     table_schema.set_is_use_bloomfilter(use_bloom_filter_);
     table_schema.set_auto_increment(auto_increment_);
-    
+    table_schema.set_tenant_id(tenant_id);
     table_schema.set_tablegroup_id(OB_INVALID_ID);
     table_schema.set_table_id(table_id_);
     table_schema.set_read_only(read_only_);
@@ -102,7 +108,8 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_table_mode_struct(table_mode_);
     table_schema.set_dop(table_dop_);
     if (0 == progressive_merge_num_) {
-      table_schema.set_progressive_merge_num(GCONF.default_progressive_merge_num);
+      ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+      table_schema.set_progressive_merge_num(tenant_config.is_valid() ? tenant_config->default_progressive_merge_num : 0);
     } else {
       table_schema.set_progressive_merge_num(progressive_merge_num_);
     }
@@ -122,12 +129,12 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
         } else if (!ObStoreFormat::is_store_format_valid(store_format_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected store format type", K_(store_format), K(ret));
-        } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
-          LOG_WARN("fail to get_row_store_type", K(ret), K(store_format_));
+        } else if (OB_FAIL(ObDDLResolver::get_row_store_type(tenant_id, store_format_, row_store_type_))) {
+          LOG_WARN("fail to get_row_store_type", K(ret), K(tenant_id), K(store_format_));
         }
       }
-    } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
-      LOG_WARN("fail to get_row_store_type", K(ret),  K(store_format_));
+    } else if (OB_FAIL(ObDDLResolver::get_row_store_type(tenant_id, store_format_, row_store_type_))) {
+      LOG_WARN("fail to get_row_store_type", K(ret),  K(tenant_id), K(store_format_));
     }
 
     if (OB_SUCC(ret)) {
@@ -180,7 +187,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
           OB_FAIL(table_schema.set_comment(comment_)) ||
           OB_FAIL(table_schema.set_tablegroup_name(tablegroup_name_)) ||
           OB_FAIL(table_schema.set_ttl_definition(ttl_definition_)) ||
-          OB_FAIL(table_schema.set_kv_attributes(kv_attributes_)) ||
           OB_FAIL(table_schema.set_storage_cache_policy(storage_cache_policy_)) ||
           OB_FAIL(table_schema.set_dynamic_partition_policy(dynamic_partition_policy_))) {
         SQL_RESV_LOG(WARN, "set table_options failed", K(ret));
@@ -201,6 +207,18 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "invalid inrow threshold"); 
       } else {
         table_schema.set_lob_inrow_threshold(lob_inrow_threshold_);
+      }
+    }
+    if (OB_SUCC(ret) && table_schema.is_external_table()) {
+      ObString file_location;
+      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+      CK (OB_NOT_NULL(schema_guard));
+      OZ (ObExternalTableUtils::get_external_file_location(table_schema, *schema_guard, *allocator_, file_location));
+      if ((table_schema.get_external_file_format().empty()
+          || file_location.empty()) &&
+           table_schema.get_external_properties().empty()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "Default properties or format or location option for external table");
       }
     }
     if (OB_SUCC(ret) && auto_increment_cache_size_ != 0) {
@@ -274,7 +292,7 @@ int ObCreateTableResolverBase::resolve_column_group_helper(const ParseNode *cg_n
   int ret = OB_SUCCESS;
   ObArray<uint64_t> column_ids; // not include virtual column
   ObTableStoreType table_store_type = OB_TABLE_STORE_INVALID;
-  
+  const uint64_t tenant_id = table_schema.get_tenant_id();
   const int64_t column_cnt = table_schema.get_column_count();
   if (OB_FAIL(column_ids.reserve(column_cnt))) {
       LOG_WARN("fail to reserve", KR(ret), K(column_cnt));
@@ -288,12 +306,13 @@ int ObCreateTableResolverBase::resolve_column_group_helper(const ParseNode *cg_n
     }
 
     /* build column group when cg node is null && tenant cg valid*/
+    ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
     if (OB_FAIL(ret)) {
-    } else if (nullptr == cg_node) {
+    } else if ( OB_LIKELY(tenant_config.is_valid()) && nullptr == cg_node) {
       /* force to build each cg*/
       if (!ObSchemaUtils::can_add_column_group(table_schema)) {
       } else if (OB_FAIL(ObTableStoreFormat::find_table_store_type(
-                  GCONF.default_table_store_format.get_value_string(),
+                  tenant_config->default_table_store_format.get_value_string(),
                   table_store_type))) {
         LOG_WARN("fail to get table store format", K(ret), K(table_store_type));
       } else if (ObTableStoreFormat::is_with_column(table_store_type)) {
@@ -307,7 +326,7 @@ int ObCreateTableResolverBase::resolve_column_group_helper(const ParseNode *cg_n
       if (OB_FAIL(ret)) {
       } else if (!ObSchemaUtils::can_add_column_group(table_schema)) {
       } else if (ObTableStoreFormat::is_row_with_column_store(table_store_type)) {
-        if (OB_FAIL(ObSchemaUtils::build_all_column_group(table_schema, 
+        if (OB_FAIL(ObSchemaUtils::build_all_column_group(table_schema, table_schema.get_tenant_id(), 
                                                           ALL_COLUMN_GROUP_ID, all_cg))) {
           LOG_WARN("fail to add all column group", K(ret));
         } else if (OB_FAIL(table_schema.add_column_group(all_cg))) {
@@ -360,11 +379,11 @@ int ObCreateTableResolverBase::resolve_column_group(const ParseNode *cg_node)
   return ret;
 }
 
-int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node)
+int ObCreateTableResolverBase::resolve_table_organization(omt::ObTenantConfigGuard &tenant_config, ParseNode *node)
 {
   int ret = OB_SUCCESS;
   // get the table organization from the tenant config
-  {
+  if (OB_LIKELY(tenant_config.is_valid())) {
     const char *ptr = NULL;
     if (OB_ISNULL(ptr = tenant_config->default_table_organization.get_value())) {
       ret = OB_ERR_UNEXPECTED;

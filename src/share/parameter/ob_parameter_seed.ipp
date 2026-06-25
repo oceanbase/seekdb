@@ -259,13 +259,6 @@ DEF_PARAM(enable_sql_operator_dump, BOOL, OB_CLUSTER_PARAMETER, "True", "specifi
 DEF_PARAM(_chunk_row_store_mem_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,]",
         "the maximum size of memory used by ChunkRowStore, 0 means follow operator's setting. Range: [0, +∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(kv_transport_compress_func, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "none", common::ObConfigCompressFuncChecker,
-                     "compressor used for tableAPI query result. Values: none, lz4_1.0, snappy_1.0, zlib_1.0, zstd_1.0 zstd 1.3.8",
-                     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-                     "none, lz4_1.0, snappy_1.0, zlib_1.0, zstd_1.0, zstd_1.3.8");
-DEF_PARAM(kv_transport_compress_threshold, CAP, OB_CLUSTER_PARAMETER, "10K","[0B,]",
-        "Together with the configuration item kv_transport_compress_func, it is used to specify the minimum threshold size of the OBKV query result set that needs to be compressed. Range: [0, +∞)",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_sort_area_size, CAP, OB_CLUSTER_PARAMETER, "32M", "[2M,]",
         "size of maximum memory that could be used by SORT. Range: [2M,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -764,6 +757,12 @@ DEF_PARAM(_ls_gc_wait_readonly_tx_time, TIME, OB_CLUSTER_PARAMETER, "24h",
         "The maximum waiting time for residual read-only transaction before executing log stream garbage collecting。The default value is 24h. Range: [0s,  +∞)."
         "Log stream garbage collecting will no longer wait for readonly transaction when the tenant is dropped. ",
         ObParameterAttr(Section::LOGSERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(standby_db_preferred_upstream_log_region, STR, OB_CLUSTER_PARAMETER, "",
+       "The preferred upstream log region for Standby db. "
+       "The Standby db will give priority to the preferred upstream log region to fetch log. "
+       "For high availability，the Standby db will also switch to the other region "
+       "when the preferred upstream log region can not fetch log because of exception etc.",
+        ObParameterAttr(Section::LOGSERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_enable_log_cache, BOOL, OB_CLUSTER_PARAMETER, "True",
          "specifies whether allow to fill log kv cache. "
@@ -788,6 +787,46 @@ DEF_PARAM(arbitration_degradation_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER
 DEF_PARAM(resource_hard_limit, INT, OB_CLUSTER_PARAMETER, "100", "[100, 10000]",
         "system utilization should not be large than resource_hard_limit",
         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(enable_rereplication, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "specifies whether the auto-replication is turned on. "
+         "Value:  True:turned on  False: turned off",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(enable_rebalance, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "specifies whether the tenant load-balancing is turned on. "
+         "Value:  True:turned on  False: turned off",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(enable_transfer, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "controls whether transfers are allowed in the tenant. "
+         "This config does not take effect when enable_rebalance is disabled. "
+         "Value:  True:turned on  False:turned off",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(balancer_idle_time, TIME, OB_CLUSTER_PARAMETER, "10s", "[10s,]",
+         "the time interval between the schedules of the tenant load-balancing task. "
+         "Range: [10s, +∞)",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(partition_balance_schedule_interval, TIME, OB_CLUSTER_PARAMETER, "2h", "[0s,]",
+         "the time interval between generate partition balance task. "
+         "The value should be no less than balancer_idle_time to enable partition balance. "
+         "Default value 2h and the value 0s means disable partition balance. "
+         "Range: [0s, +∞)",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(balancer_tolerance_percentage, INT, OB_CLUSTER_PARAMETER, "10", "[1, 100)",
+        "specifies the tolerance (in percentage) of the unbalance of the disk space utilization "
+        "among all units. The average disk space utilization is calculated by dividing "
+        "the total space by the number of units. For example, say balancer_tolerance_percentage "
+        "is set to 10 and a tenant has two units in the system, "
+        "the average disk use for each unit should be about the same, "
+        "thus 50% of the total value. Therefore, the system will start a rebalancing task "
+        "when any unit\\'s disk space goes beyond +-10% of the average usage. "
+        "Range: [1, 100) in percentage",
+        ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(balancer_task_timeout, TIME, OB_CLUSTER_PARAMETER, "20m", "[1s,)",
+         "the time to execute the load-balancing task before it is terminated. Range: [1s, +∞)",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(balancer_log_interval, TIME, OB_CLUSTER_PARAMETER, "1m", "[1s,)",
+         "the time interval between logging the load-balancing task\\'s statistics. "
+         "Range: [1s, +∞)",
+         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // abandoned in 4.x
 //DEF_PARAM(__balance_controller, OB_CLUSTER_PARAMETER, "",
 //        "specifies whether the balance events are turned on or turned off.",
@@ -1000,6 +1039,9 @@ DEF_PARAM(_object_storage_io_timeout, TIME, OB_CLUSTER_PARAMETER, "20s", "[1s,12
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(data_storage_warning_tolerance_time, TIME, OB_CLUSTER_PARAMETER, "5s", "[1s,300s]",
         "time to tolerate disk read failure, after that, the disk status will be set warning. Range [1s,300s]. The default value is 5s",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(data_storage_error_tolerance_time, TIME_WITH_CHECKER, OB_CLUSTER_PARAMETER, "300s", common::ObDataStorageErrorToleranceTimeChecker, "[10s,7200s]",
+        "time to tolerate disk read failure, after that, the disk status will be set error. Range [10s,7200s]. The default value is 300s",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(data_disk_usage_limit_percentage, INT, OB_CLUSTER_PARAMETER, "90", "[50,100]",
         "the safe use percentage of data disk"
@@ -1341,10 +1383,10 @@ DEF_PARAM(_enable_easy_keepalive, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable keepalive for each TCP connection.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_ob_ratelimit, BOOL, OB_CLUSTER_PARAMETER, "False",
-         "enable ratelimit for RPC connection.",
+         "enable ratelimit between regions for RPC connection.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(ob_ratelimit_stat_period, TIME, OB_CLUSTER_PARAMETER, "1s", "[100ms,]",
-         "the time interval to update observer's maximum bandwidth. ",
+         "the time interval to update observer's maximum bandwidth to a certain region. ",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(open_cursors, INT, OB_CLUSTER_PARAMETER, "50", "[0,65535]",
         "specifies the maximum number of open cursors a session can have at once."
@@ -1667,6 +1709,17 @@ DEF_PARAM(observer_id, INT, OB_CLUSTER_PARAMETER, "0", "[1, 18446744073709551615
 DEF_PARAM(_pipelined_table_function_memory_limit, INT, OB_CLUSTER_PARAMETER, "524288000", "[1024,18446744073709551615]",
         "pipeline table function result set memory size limit. default 524288000 (500M), Range: [1024,18446744073709551615]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_enable_balance_kill_transaction, BOOL, OB_CLUSTER_PARAMETER, "False",
+        "Specifies whether balance should actively kill transaction",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_balance_kill_transaction_threshold, TIME, OB_CLUSTER_PARAMETER, "100ms", "[1ms, 60s]",
+         "the time given to the transaction to execute when do balance"
+         "before it will be killed. Range: [1ms, 60s]",
+         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_balance_wait_killing_transaction_end_threshold, TIME, OB_CLUSTER_PARAMETER, "100ms", "[10ms, 60s]",
+         "the threshold for waiting time after killing transactions until they end."
+         "Range: [10ms, 60s]",
+         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_hgby_skew_detection, BOOL, OB_CLUSTER_PARAMETER, "True",
          "specifies whether hgby skew detection is enabled",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1885,24 +1938,11 @@ DEF_PARAM(sql_protocol_min_tls_version, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, 
 DEF_PARAM(shared_log_retention, TIME, OB_CLUSTER_PARAMETER, "1d", "[0s,7d]",
         "Retention time of log files on shared storage",
         ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-// obkv
-DEF_PARAM(_obkv_feature_mode, MODE_WITH_PARSER, OB_CLUSTER_PARAMETER, "", common::ObKvFeatureModeParser,
-    "_obkv_feature_mode is a option list to control specified OBKV features on/off.",
-    ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
 DEF_PARAM(_standby_max_replay_gap_time, TIME, OB_CLUSTER_PARAMETER, "900s", "[10s,)",
         "The difference in replayable_scn between log streams on standby tenants is not greater than "
         "_standby_max_replay_gap_time, and the gap between sync_scn and replayable_scn of each log stream "
         "is kept reasonably small. Range: [10s, )",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
-DEF_PARAM(kv_hbase_client_scanner_timeout_period, INT, OB_CLUSTER_PARAMETER, "60000", "(0,)",
-    "OBKV Hbase client scanner query timeout, which unit is milliseconds. Range: (0, +∞) in integer. Especially, 60000 means default value",
-    ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
-DEF_PARAM(_enable_kv_hbase_admin_ddl, BOOL, OB_CLUSTER_PARAMETER, "False",
-    "Whether to allow the execution of the DDL function provided by the OBKV-HBase Admin interface. The default value is false.",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_enable_optimizer_qualify_filter, BOOL, OB_CLUSTER_PARAMETER, "True",
         "Enable extracting qualify filters for window function",
@@ -1966,6 +2006,11 @@ DEF_PARAM(_faststack_min_interval, TIME, OB_CLUSTER_PARAMETER, "30m", "[1s,)",
         "Minimum interval for OBServer to automatically collect the obstack. "
         "Default: 30min. Range: [1s,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(choose_migration_source_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "region", common::ObConfigMigrationChooseSourceChecker,
+        "the policy of choose source in migration and add replica. 'idc' means firstly choose follower replica of the same idc as source, "
+        "'region' means firstly choose follower replica of the same region as source",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
+        "idc, region");
 DEF_PARAM(_query_record_size_limit, INT, OB_CLUSTER_PARAMETER, "65536", "[0, 67108864] in integer",
         "set sql_audit and plan stat query sql size. Range: [0,67108864] in integer in integer.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2036,10 +2081,6 @@ DEF_PARAM(_ss_local_cache_expiration_time, TIME, OB_CLUSTER_PARAMETER, "0s", "[0
          "Range: [0s, )",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-// obkv feature switch
-DEF_PARAM(_enable_kv_feature, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "Enable or disable OBKV feature.",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(lob_enable_block_cache_threshold, CAP, OB_CLUSTER_PARAMETER, "256K", "[0B, 512M]",
         "For outrow-stored LOBs, if the length is less than or equal to that threshold, "
         "they can be admitted into the block cache to speed up the next query.",
@@ -2090,22 +2131,6 @@ DEF_PARAM(unit_gc_wait_time, TIME, OB_CLUSTER_PARAMETER, "1m", "[0, 30d]",
 DEF_PARAM(_enable_unit_gc_wait, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Used to control enable or disable the unit smooth gc feature, enabled by default.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
-// obkv group commit
-DEF_PARAM(kv_group_commit_batch_size, INT, OB_CLUSTER_PARAMETER, "10", "(0,)",
-        "Used to specify the batch size of each group commit batch in OBKV."
-        " Values: 1 means sinlge operaion in each batch, equally to disable group commit."
-        " When batch size is greater than 1, it means group commit is enable and used as its batch size. ",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(kv_group_commit_rw_mode, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ALL", common::ObConfigKvGroupCommitRWModeChecker,
-        "Used to specify the read/write operation types when group commit is enable. "
-        "Values: 'ALL' means enable all operations, 'READ' mean only enable read operation in group commit, 'WRITE'  means only write operations in group commit.",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-        "all, read, write");
-
-DEF_PARAM(_enable_kv_group_commit_ops, INT, OB_CLUSTER_PARAMETER, "10000", "[0,)",
-    "Used to control the minimum OPS threshold that triggers the group commit execution when this feature is enabled in OBKV;. Range: [0, +∞) in integer. Especially, 10000 means default value",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0",
         "[0,100)",
@@ -2297,10 +2322,6 @@ DEF_PARAM(_enable_drop_column_instant, BOOL, OB_CLUSTER_PARAMETER, "True", "Whet
 DEF_PARAM(_enable_numa_aware, BOOL, OB_CLUSTER_PARAMETER, "False",
          "NUMA awareness switch, which, when enabled, allows threads to bind cores with NUMA affinity.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
-
-DEF_PARAM(_obkv_enable_distributed_execution, BOOL, OB_CLUSTER_PARAMETER, "False",
-    "Specifies whether to enable distributed execution in OBKV. The default value is false.",
-    ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_ob_enable_pl_dynamic_stack_check, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Enable or disable dynamic stack check when executing PL.",

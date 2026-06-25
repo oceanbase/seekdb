@@ -15,7 +15,6 @@
  */
 
 #include "ob_mvcc_row.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/memtable/ob_row_compactor.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_trans_part_ctx.h"
@@ -725,9 +724,9 @@ int ObMvccRow::elr(const ObTransID &tx_id,
     // TODO shanyan.g
     if (NULL != key) {
       wakeup_waiter(tablet_id, *key);
-      share::g_mp->lock_wait_mgr()->reset_hash_holder(tablet_id, *key, tx_id);
+      MTL(ObLockWaitMgr*)->reset_hash_holder(tablet_id, *key, tx_id);
     } else {
-      share::g_mp->lock_wait_mgr()->wakeup(tx_id);
+      MTL(ObLockWaitMgr*)->wakeup(tx_id);
     }
   }
   return ret;
@@ -811,7 +810,7 @@ int ObMvccRow::remove_callback(ObMvccRowCallback &cb)
   ObMvccTransNode *node = cb.get_trans_node();
   if (OB_NOT_NULL(node)) {
     node->remove_callback();
-    if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
+    if (OB_ISNULL(MTL(ObLockWaitMgr*))) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
     } else {
@@ -823,11 +822,11 @@ int ObMvccRow::remove_callback(ObMvccRowCallback &cb)
       } else {
         tx_scheduler = static_cast<transaction::ObPartTransCtx*>(tx_ctx)->get_scheduler();
       }
-      share::g_mp->lock_wait_mgr()->transform_row_lock_to_tx_lock(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_), tx_scheduler);
+      MTL(ObLockWaitMgr*)->transform_row_lock_to_tx_lock(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_), tx_scheduler);
       if (cb.is_non_unique_local_index_cb()) {
         // row lock holder is no need to set for non-unique local index, so the reset can be skipped
       } else {
-        share::g_mp->lock_wait_mgr()->reset_hash_holder(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
+        MTL(ObLockWaitMgr*)->reset_hash_holder(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
       }
     }
   }
@@ -843,7 +842,7 @@ int ObMvccRow::wakeup_waiter(const ObTabletID &tablet_id,
 {
   int ret = OB_SUCCESS;
   ObLockWaitMgr *lwm = NULL;
-  if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
+  if (OB_ISNULL(lwm = MTL(ObLockWaitMgr*))) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "MTL(LockWaitMgr) is null", K(ret), KPC(this));
   } else {
@@ -1008,7 +1007,7 @@ int ObMvccRow::mvcc_write_(ObStoreCtx &ctx,
       if (NULL != writer_node.prev_
           && writer_node.prev_->is_elr()) {
         if (NULL != ctx.mvcc_acc_ctx_.tx_ctx_) {
-          TX_STAT_READ_ELR_ROW_COUNT_INC;
+          TX_STAT_READ_ELR_ROW_COUNT_INC(ctx.mvcc_acc_ctx_.tx_ctx_->get_tenant_id());
         }
       }
     }
@@ -1025,7 +1024,7 @@ int ObMvccRow::mvcc_sanity_check_(const SCN snapshot_version,
 {
   int ret = OB_SUCCESS;
 
-  const bool compliant_with_sql_semantic = !write_flag.is_table_api();
+  const bool compliant_with_sql_semantic = true;
 
   if (NULL != prev) {
     if (blocksstable::ObDmlFlag::DF_INSERT == node.get_dml_flag()

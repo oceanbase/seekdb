@@ -24,7 +24,7 @@ namespace oceanbase
 {
 namespace table
 {
-  const ObString ObTableUtils::KV_NORMAL_TRACE_INFO = ObString::make_string("OBKV Operation");
+  const ObString ObTableUtils::KV_NORMAL_TRACE_INFO = ObString::make_string("KV Operation");
   const ObString ObTableUtils::KV_TTL_TRACE_INFO = ObString::make_string("TTL Delete");
 
   bool ObTableUtils::has_exist_in_columns(const ObIArray<ObString> &columns, const ObString &name)
@@ -45,9 +45,9 @@ namespace table
   {
     int ret = OB_SUCCESS;
     const ObSimpleTableSchemaV2 *table_schema = NULL;
-    
-    if (OB_FAIL(schema_guard.get_simple_table_schema( arg_table_id, table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret), K(arg_table_id));
+    const uint64_t tenant_id = MTL_ID();
+    if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, arg_table_id, table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(arg_table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
     } else if (OB_FAIL(get_part_idx_by_tablet_id(*table_schema, arg_table_id, arg_tablet_id, part_idx, subpart_idx))) {
@@ -76,13 +76,13 @@ namespace table
                                               ObTabletID &tablet_id)
   {
     int ret = OB_SUCCESS;
-    
+    const uint64_t tenant_id = MTL_ID();
     const ObSimpleTableSchemaV2 *table_schema = NULL;
-    if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret), K(table_id));
+    if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("get table schema failed", K(ret), K(table_id));
+      LOG_WARN("get table schema failed", K(ret), K(tenant_id), K(table_id));
     } else if (OB_FAIL(get_tablet_id_by_part_idx(*table_schema, part_idx, subpart_idx, tablet_id))) {
       LOG_WARN("fail to get tablet id by part idx", K(ret), K(table_id), K(part_idx), K(subpart_idx));
     }
@@ -97,7 +97,7 @@ namespace table
     int ret = OB_SUCCESS;
     ObObjectID tmp_object_id = OB_INVALID_ID;
     ObObjectID tmp_first_level_part_id = OB_INVALID_ID;
-    
+    const uint64_t tenant_id = MTL_ID();
     if (!table_schema.is_partitioned_table()) {
       tablet_id = table_schema.get_tablet_id();
     } else if (OB_FAIL(table_schema.get_part_id_and_tablet_id_by_idx(part_idx,
@@ -111,7 +111,6 @@ namespace table
   }
 }
 }
-
 
 
 

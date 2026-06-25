@@ -19,8 +19,8 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
+#include "share/ob_module_data_arg.h"
 #include "share/scheduler/ob_sys_task_stat.h"
-#include "share/table/ob_redis_importer.h"
 
 namespace oceanbase
 {
@@ -40,7 +40,7 @@ public:
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
-      opt_tenant_count_(0),
+      opt_tenant_ids_(),
       opt_tablet_id_(),
       opt_ls_id_(share::ObLSID::INVALID_LS_ID),
       rebuild_column_group_(false) {}
@@ -49,7 +49,7 @@ public:
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
-      opt_tenant_count_(0),
+      opt_tenant_ids_(),
       opt_tablet_id_(),
       opt_ls_id_(share::ObLSID::INVALID_LS_ID),
       rebuild_column_group_(false) {}
@@ -67,10 +67,7 @@ public:
   void set_rebuild_column_group(bool rebuild_column_group) { rebuild_column_group_ = rebuild_column_group; }
   inline obcall::ObServerList &get_ignore_server_list() { return opt_server_list_; }
   inline obcall::ObServerList &get_server_list() { return opt_server_list_; }
-  inline int64_t get_tenant_count() const { return opt_tenant_count_; }
-  inline int64_t &tenant_count_ref() { return opt_tenant_count_; }
-  inline void inc_tenant_count() { ++opt_tenant_count_; }
-  inline void reset_tenant_count() { opt_tenant_count_ = 0; }
+  inline common::ObSArray<uint64_t> &get_tenant_ids() { return opt_tenant_ids_; }
   inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
   inline int64_t &get_ls_id() { return opt_ls_id_; }
@@ -79,7 +76,7 @@ public:
   }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_), 
-               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_), K(opt_ls_id_));
+               K(opt_server_list_), K(opt_tenant_ids_), K(opt_tablet_id_), K(opt_ls_id_));
 private:
   bool major_freeze_;
   // for major_freeze, it is ignore server list
@@ -88,7 +85,7 @@ private:
   // for major_freeze only
   obcall::ObServerList opt_server_list_;
   // for minor_freeze only,
-  int64_t opt_tenant_count_;
+  common::ObSArray<uint64_t> opt_tenant_ids_;
   // for minor_freeze only
   common::ObZone opt_zone_;
   
@@ -135,6 +132,15 @@ public:
   int32_t file_id_;
 };
 
+class ObFlushSSMicroCacheStmt : public ObSystemCmdStmt
+{
+public:
+  ObFlushSSMicroCacheStmt() : ObSystemCmdStmt(stmt::T_FLUSH_SS_MICRO_CACHE) {}
+  virtual ~ObFlushSSMicroCacheStmt() {}
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_name));
+  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> tenant_name_;
+};
 
 class ObFlushDagWarningsStmt : public ObSystemCmdStmt
 {
@@ -144,6 +150,31 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
 };
 
+class ObAdminServerStmt : public ObSystemCmdStmt
+{
+public:
+  ObAdminServerStmt()
+      : ObSystemCmdStmt(stmt::T_ADMIN_SERVER), op_(obcall::ObAdminServerArg::ADD)
+  {
+  }
+
+  ObAdminServerStmt(common::ObIAllocator *name_pool)
+      : ObSystemCmdStmt(name_pool, stmt::T_ADMIN_SERVER)
+  {
+  }
+
+  virtual ~ObAdminServerStmt() {}
+
+  inline obcall::ObServerList &get_server_list() { return server_list_; }
+  inline const common::ObZone &get_zone() const { return zone_; }
+  inline void set_zone(const common::ObZone &zone) { zone_ = zone; }
+  inline obcall::ObAdminServerArg::AdminServerOp get_op() const { return op_; }
+  inline void set_op(const obcall::ObAdminServerArg::AdminServerOp op) { op_ = op; }
+private:
+  obcall::ObAdminServerArg::AdminServerOp op_;
+  obcall::ObServerList server_list_;
+  common::ObZone zone_;
+};
 
 class ObAdminMergeStmt: public ObSystemCmdStmt
 {
@@ -158,8 +189,44 @@ private:
   obcall::ObAdminMergeArg rpc_arg_;
 };
 
+class ObAdminRecoveryStmt: public ObSystemCmdStmt
+{
+public:
+  ObAdminRecoveryStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RECOVERY) {}
+  virtual ~ObAdminRecoveryStmt() {}
 
+  obcall::ObAdminRecoveryArg &get_rpc_arg() { return rpc_arg_; }
 
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
+private:
+  obcall::ObAdminRecoveryArg rpc_arg_;
+};
+
+class ObClearRoottableStmt : public ObSystemCmdStmt
+{
+public:
+  ObClearRoottableStmt() : ObSystemCmdStmt(stmt::T_CLEAR_ROOT_TABLE) {}
+  virtual ~ObClearRoottableStmt() {}
+
+  obcall::ObAdminClearRoottableArg &get_rpc_arg() { return rpc_arg_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
+private:
+  obcall::ObAdminClearRoottableArg rpc_arg_;
+};
+
+class ObRefreshSchemaStmt : public ObSystemCmdStmt
+{
+public:
+  ObRefreshSchemaStmt() : ObSystemCmdStmt(stmt::T_REFRESH_SCHEMA) {}
+  virtual ~ObRefreshSchemaStmt() {}
+
+  obcall::ObAdminRefreshSchemaArg &get_rpc_arg() { return rpc_arg_; }
+
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
+private:
+  obcall::ObAdminRefreshSchemaArg rpc_arg_;
+};
 
 class ObRefreshMemStatStmt : public ObSystemCmdStmt
 {
@@ -246,9 +313,61 @@ public:
   virtual ~ObUpgradeVirtualSchemaStmt() {}
 };
 
+class ObAdminUpgradeCmdStmt : public ObSystemCmdStmt
+{
+public:
+  enum AdminUpgradeOp
+  {
+    BEGIN = 1,
+    END = 2,
+  };
+  ObAdminUpgradeCmdStmt() : ObSystemCmdStmt(stmt::T_ADMIN_UPGRADE_CMD), op_(BEGIN) {}
+  virtual ~ObAdminUpgradeCmdStmt() {}
 
+  inline const AdminUpgradeOp &get_op() const { return op_; }
+  inline void set_op(const AdminUpgradeOp op) { op_ = op; }
+private:
+  AdminUpgradeOp op_;
+};
 
+class ObAdminRollingUpgradeCmdStmt : public ObSystemCmdStmt
+{
+public:
+  enum AdminUpgradeOp
+  {
+    BEGIN = 1,
+    END = 2,
+  };
+  ObAdminRollingUpgradeCmdStmt() : ObSystemCmdStmt(stmt::T_ADMIN_ROLLING_UPGRADE_CMD), op_(BEGIN) {}
+  virtual ~ObAdminRollingUpgradeCmdStmt() {}
 
+  inline const AdminUpgradeOp &get_op() const { return op_; }
+  inline void set_op(const AdminUpgradeOp op) { op_ = op; }
+private:
+  AdminUpgradeOp op_;
+};
+
+class ObRunUpgradeJobStmt : public ObSystemCmdStmt
+{
+public:
+  ObRunUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RUN_UPGRADE_JOB) {}
+  virtual ~ObRunUpgradeJobStmt() {}
+
+  obcall::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
+private:
+  obcall::ObUpgradeJobArg rpc_arg_;
+};
+
+class ObStopUpgradeJobStmt : public ObSystemCmdStmt
+{
+public:
+  ObStopUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_STOP_UPGRADE_JOB) {}
+  virtual ~ObStopUpgradeJobStmt() {}
+
+  obcall::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
+private:
+  obcall::ObUpgradeJobArg rpc_arg_;
+};
 
 class ObCancelTaskStmt : public ObSystemCmdStmt
 {
@@ -279,6 +398,19 @@ public:
 private:
   share::ObSysTaskType task_type_;
   common::ObString task_id_;
+};
+
+class ObSetDiskValidStmt : public ObSystemCmdStmt
+{
+public:
+  ObSetDiskValidStmt():
+    ObSystemCmdStmt(stmt::T_SET_DISK_VALID),
+    server_()
+  {}
+  virtual ~ObSetDiskValidStmt() {}
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(server));
+
+  common::ObAddr server_;
 };
 
 class ObAddDiskStmt : public ObSystemCmdStmt
@@ -364,6 +496,20 @@ public:
     {}
 };
 
+class ObCheckpointSlogStmt : public ObSystemCmdStmt
+{
+public:
+  ObCheckpointSlogStmt()
+    : ObSystemCmdStmt(stmt::T_CHECKPOINT_SLOG),
+      tenant_id_(common::OB_INVALID_TENANT_ID),
+      server_()
+  {}
+  virtual ~ObCheckpointSlogStmt() {}
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(server));
+
+  uint64_t tenant_id_;
+  common::ObAddr server_;
+};
 
 
 
@@ -378,6 +524,19 @@ private:
   obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
+class ObModuleDataStmt : public ObSystemCmdStmt
+{
+public:
+  ObModuleDataStmt() : ObSystemCmdStmt(stmt::T_MODULE_DATA), arg_() {}
+  virtual ~ObModuleDataStmt() {}
+
+  OB_INLINE table::ObModuleDataArg &get_arg() { return arg_; }
+  OB_INLINE const table::ObModuleDataArg &get_arg() const { return arg_; }
+  
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
+private:
+  table::ObModuleDataArg arg_;
+};
 
 } // end namespace sql
 } // end namespace oceanbase
