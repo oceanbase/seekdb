@@ -24,8 +24,6 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
-#ifndef OB_BUILD_EMBED_MODE
-#endif
 namespace oceanbase
 {
 namespace sql
