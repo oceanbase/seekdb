@@ -479,14 +479,7 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     arg.compaction_scn_ = replica_build_ctx.compaction_scn_;
     arg.can_reuse_macro_block_ = replica_build_ctx.can_reuse_macro_block_;
     arg.min_split_start_scn_   = min_split_start_scn_;
-    /** handle OB_SESSION_NOT_FOUND(-4067) may lead to infinite retry of table recovery task.
-      * Due to the number limit(100) of blocked thread stream rpc receiver
-      * reduce table recovery retry parallelism. */
-    if (ObDDLType::DDL_TABLE_RESTORE == ddl_type_ && replica_build_ctx.sess_not_found_times_ > 0) {
-      arg.parallelism_ = MAX(1, parallelism_ >> replica_build_ctx.sess_not_found_times_);
-    } else {
-      arg.parallelism_ = parallelism_;
-    }
+    arg.parallelism_ = parallelism_;
     arg.is_no_logging_ = is_no_logging_;
     if (OB_FAIL(arg.lob_col_idxs_.assign(lob_col_idxs_))) {
       LOG_WARN("failed to assign to lob col idxs", K(ret));
@@ -634,8 +627,7 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
                 param.dest_tenant_id_, dest_tablet_id, rpc_timeout, unused_ls_id,
                 dest_leader_addr))) {
           LOG_WARN("failed to get dest leader addr", K(ret), K(dest_tablet_id));
-        } else if (ObDDLType::DDL_TABLE_RESTORE != ddl_type_ &&
-            orig_leader_addr != dest_leader_addr) {
+        } else if (orig_leader_addr != dest_leader_addr) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("orig leader addr not equal dest leader addr", K(ret), K(orig_leader_addr),
               K(dest_leader_addr));
@@ -705,8 +697,7 @@ int ObDDLReplicaBuildExecutor::get_refreshed_replica_addrs(
               dest_tenant_id_, dest_tablet_id, rpc_timeout, ls_id,
               dest_leader_addr))) {
         LOG_WARN("failed to get dest leader addr", K(ret), K(dest_tablet_id));
-      } else if (ObDDLType::DDL_TABLE_RESTORE != ddl_type_ &&
-          orig_leader_addr != dest_leader_addr) {
+      } else if (orig_leader_addr != dest_leader_addr) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("orig leader addr not equal dest leader addr", K(ret),
             K(orig_leader_addr), K(dest_leader_addr));

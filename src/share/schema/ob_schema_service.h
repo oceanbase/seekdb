@@ -251,7 +251,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_REFRESH_SCHEMA_VERSION,)                            \
   ACT(OB_DDL_FINISH_BOOTSTRAP,)                                  \
   ACT(OB_DDL_FINISH_SCHEMA_SPLIT_V2,)                            \
-  ACT(OB_DDL_FINISH_PHYSICAL_RESTORE_MODIFY_SCHEMA,)             \
   ACT(OB_DDL_ONLY_SIGNAL_OPERATION_END, = 1600)                  \
   ACT(OB_DDL_STANDBY_FINISH_REPLAY_SCHEMA_SNAPSHOT, = 1601)      \
   ACT(OB_DDL_KEYSTORE_OPERATION_BEGIN, = 1650)                   \
@@ -309,6 +308,10 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_OBJ_PRIV_GRANT_REVOKE,)                             \
   ACT(OB_DDL_OBJ_PRIV_DELETE,)                                   \
   ACT(OB_DDL_OBJ_PRIV_OPERATION_END, = 1990)                     \
+  ACT(OB_DDL_DBLINK_OPERATION_BEGIN, = 1991)                     \
+  ACT(OB_DDL_CREATE_DBLINK,)                                     \
+  ACT(OB_DDL_DROP_DBLINK,)                                       \
+  ACT(OB_DDL_DBLINK_OPERATION_END, = 2000)                       \
   ACT(OB_DDL_DIRECTORY_OPERATION_BEGIN, = 2001)                  \
   ACT(OB_DDL_CREATE_DIRECTORY,)                                  \
   ACT(OB_DDL_ALTER_DIRECTORY,)                                   \
@@ -421,6 +424,7 @@ public:
   ObSchemaOperation();
   virtual ~ObSchemaOperation() = default;
   int64_t  schema_version_;
+  uint64_t tenant_id_;
   union {
     uint64_t user_id_;
     uint64_t grantee_id_;
@@ -439,6 +443,7 @@ public:
     uint64_t udt_id_;
     uint64_t sequence_id_;
     uint64_t trigger_id_;
+    uint64_t dblink_id_;
     uint64_t directory_id_;
     uint64_t context_id_;
     uint64_t mock_fk_parent_table_id_;
@@ -734,6 +739,7 @@ class ObSchemaService
 public:
   //default false, only use for liboblog to control compatable
   static bool g_ignore_column_retrieve_error_;
+  static bool g_liboblog_mode_;
   typedef common::ObSEArrayImpl<ObSchemaOperation, 0>  ObSchemaOperationSet;
   class SchemaOperationSetWithAlloc: public ObSchemaOperationSet
   {
@@ -839,6 +845,7 @@ public:
 
   virtual int get_batch_tenants(common::ObISQLClient &client,
                                 const int64_t schema_version,
+                                common::ObArray<uint64_t> &tenant_ids,
                                 common::ObIArray<ObTenantSchema> &schema_array) = 0;
 
   virtual int get_tablegroup_schema(const ObRefreshSchemaStatus &schema_status,
@@ -850,6 +857,7 @@ public:
 
   virtual int get_sys_variable_schema(common::ObISQLClient &sql_client,
                                       const ObRefreshSchemaStatus &schema_status,
+                                      const uint64_t tenant_id,
                                       const int64_t schema_version,
                                       share::schema::ObSysVariableSchema &sys_variable_schema) = 0;
 
@@ -858,6 +866,7 @@ public:
                                common::ObIArray<ObSimpleTenantSchema> &tenant_schema_array) = 0;
   virtual int get_sys_variable(common::ObISQLClient &client,
                                const ObRefreshSchemaStatus &schema_status,
+                               const uint64_t tenant_id,
                                const int64_t schema_version,
                                ObSimpleSysVariableSchema &schema) = 0;
   #define GET_ALL_SCHEMA_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(SCHEMA, SCHEMA_TYPE)    \
@@ -865,6 +874,7 @@ public:
                                     common::ObIAllocator &allocator,  \
                                     const ObRefreshSchemaStatus &schema_status,\
                                     const int64_t schema_version,      \
+                                    const uint64_t tenant_id,           \
                                     common::ObIArray<SCHEMA_TYPE *> &schema_array) = 0;
   GET_ALL_SCHEMA_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(table, ObSimpleTableSchemaV2);
 
@@ -872,6 +882,7 @@ public:
     virtual int get_all_##SCHEMA##s(common::ObISQLClient &sql_client, \
                                     const ObRefreshSchemaStatus &schema_status,\
                                     const int64_t schema_version,      \
+                                    const uint64_t tenant_id,           \
                                     common::ObIArray<SCHEMA_TYPE> &schema_array) = 0;
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(user, ObSimpleUserSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(database, ObSimpleDatabaseSchema);
@@ -924,40 +935,48 @@ public:
                                const ObRefreshSchemaStatus &schema_status,
                                int64_t &core_schema_version) = 0;
   virtual int get_core_and_sys_version(common::ObISQLClient &sql_client,
+                               const uint64_t &tenant_id,
                                int64_t &core_schema_version,
                                int64_t &sys_schema_version) = 0;
   virtual int get_baseline_schema_version(common::ObISQLClient &sql_client,
                                           const ObRefreshSchemaStatus &schema_status,
                                           int64_t &baseline_schema_version) = 0;
 
-  virtual int fetch_new_object_ids(const int64_t object_cnt,
+  virtual int fetch_new_object_ids(
+              const uint64_t tenant_id,
+              const int64_t object_cnt,
               uint64_t &max_object_id) = 0;
-  virtual int fetch_new_partition_ids(const int64_t partition_num,
+  virtual int fetch_new_partition_ids(
+              const uint64_t tenant_id,
+              const int64_t partition_num,
               uint64_t &max_partition_id) = 0;
-  virtual int fetch_new_tablet_ids(const bool gen_normal_tablet,
+  virtual int fetch_new_tablet_ids(
+              const uint64_t tenant_id,
+              const bool gen_normal_tablet,
               const uint64_t size,
               uint64_t &min_tablet_id) = 0;
-  virtual int fetch_new_table_id(uint64_t &new_table_id) = 0;
-  virtual int fetch_new_database_id(uint64_t &new_database_id) = 0;
-  virtual int fetch_new_tablegroup_id(uint64_t &new_tablegroup_id) = 0;
-  virtual int fetch_new_user_id(uint64_t &new_user_id) = 0;
-  virtual int fetch_new_outline_id(uint64_t &new_outline_id) = 0;
-  virtual int fetch_new_udf_id(uint64_t &new_udf_id) = 0;
-  virtual int fetch_new_constraint_id(uint64_t &new_constraint_id) = 0;
-  virtual int fetch_new_sequence_id(uint64_t &new_sequence_id) = 0;
-  virtual int fetch_new_udt_id(uint64_t &new_udt_id) = 0;
-  virtual int fetch_new_routine_id(uint64_t &new_routine_id) = 0;
-  virtual int fetch_new_package_id(uint64_t &new_package_id) = 0;
-  virtual int fetch_new_sys_pl_object_id(uint64_t &new_object_id) = 0;
-  virtual int fetch_new_trigger_id(uint64_t &new_trigger_id) = 0;
+  virtual int fetch_new_table_id(const uint64_t tenant_id, uint64_t &new_table_id) = 0;
+  virtual int fetch_new_tenant_id(uint64_t &new_tenant_id) = 0;
+  virtual int fetch_new_database_id(const uint64_t tenant_id, uint64_t &new_database_id) = 0;
+  virtual int fetch_new_tablegroup_id(const uint64_t tenant_id, uint64_t &new_tablegroup_id) = 0;
+  virtual int fetch_new_user_id(const uint64_t tenant_id, uint64_t &new_user_id) = 0;
+  virtual int fetch_new_outline_id(const uint64_t tenant_id, uint64_t &new_outline_id) = 0;
+  virtual int fetch_new_udf_id(const uint64_t tenant_id, uint64_t &new_udf_id) = 0;
+  virtual int fetch_new_constraint_id(const uint64_t tenant_id, uint64_t &new_constraint_id) = 0;
+  virtual int fetch_new_sequence_id(const uint64_t tenant_id, uint64_t &new_sequence_id) = 0;
+  virtual int fetch_new_udt_id(const uint64_t tenant_id, uint64_t &new_udt_id) = 0;
+  virtual int fetch_new_routine_id(const uint64_t tenant_id, uint64_t &new_routine_id) = 0;
+  virtual int fetch_new_package_id(const uint64_t tenant_id, uint64_t &new_package_id) = 0;
+  virtual int fetch_new_sys_pl_object_id(const uint64_t tenant_id, uint64_t &new_object_id) = 0;
+  virtual int fetch_new_trigger_id(const uint64_t tenant_id, uint64_t &new_trigger_id) = 0;
 
-  virtual int fetch_new_directory_id(uint64_t &new_directory_id) = 0;
-  virtual int fetch_new_location_id(uint64_t &new_location_id) = 0; 
-  virtual int fetch_new_context_id(uint64_t &new_context_id) = 0;
-  virtual int fetch_new_priv_id(uint64_t &new_priv_id) = 0;
-  virtual int fetch_new_catalog_id(uint64_t &new_catalog_id) = 0;
-  virtual int fetch_new_ccl_rule_id(uint64_t &new_ccl_rule_id) = 0;
-  virtual int fetch_new_ai_model_id(uint64_t &new_ai_model_id) = 0;
+  virtual int fetch_new_directory_id(const uint64_t tenant_id, uint64_t &new_directory_id) = 0;
+  virtual int fetch_new_location_id(const uint64_t tenant_id, uint64_t &new_location_id) = 0; 
+  virtual int fetch_new_context_id(const uint64_t tenant_id, uint64_t &new_context_id) = 0;
+  virtual int fetch_new_priv_id(const uint64_t tenant_id, uint64_t &new_priv_id) = 0;
+  virtual int fetch_new_catalog_id(const uint64_t tenant_id, uint64_t &new_catalog_id) = 0;
+  virtual int fetch_new_ccl_rule_id(const uint64_t tenant_id, uint64_t &new_ccl_rule_id) = 0;
+  virtual int fetch_new_ai_model_id(const uint64_t tenant_id, uint64_t &new_ai_model_id) = 0;
 
 //------------------For managing privileges-----------------------------//
   #define GET_BATCH_SCHEMAS_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(SCHEMA, SCHEMA_TYPE)  \
@@ -975,6 +994,7 @@ public:
                                       common::ObIArray<SCHEMA_TYPE> &schema_array) = 0;
   virtual int get_batch_tenants(common::ObISQLClient &client,
                                 const int64_t schema_version,
+                                common::ObArray<SchemaKey> &schema_keys,
                                 common::ObIArray<ObSimpleTenantSchema> &schema_array) = 0;
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(user, ObSimpleUserSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(database, ObSimpleDatabaseSchema);
@@ -1008,16 +1028,24 @@ public:
   virtual int insert_recyclebin_object(
       const ObRecycleObject &recycle_obj,
       common::ObISQLClient &sql_client) = 0;
-  virtual int fetch_recycle_object(const common::ObString &object_name,
+  virtual int fetch_recycle_object(
+      const uint64_t tenant_id,
+      const common::ObString &object_name,
       const ObRecycleObject::RecycleObjType recycle_obj_type,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObRecycleObject> &recycle_objs) = 0;
-  virtual int delete_recycle_object(const ObRecycleObject &recycle_object,
+  virtual int delete_recycle_object(
+      const uint64_t tenant_id,
+      const ObRecycleObject &recycle_object,
       common::ObISQLClient &sql_client) = 0;
-  virtual int fetch_expire_recycle_objects(const int64_t expire_time,
+  virtual int fetch_expire_recycle_objects(
+      const uint64_t tenant_id,
+      const int64_t expire_time,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObRecycleObject> &recycle_objs) = 0;
-  virtual int fetch_recycle_objects_of_db(const uint64_t database_id,
+  virtual int fetch_recycle_objects_of_db(
+      const uint64_t tenant_id,
+      const uint64_t database_id,
       common::ObISQLClient &sql_client,
       common::ObIArray<ObRecycleObject> &recycle_objs) = 0;
 
@@ -1033,6 +1061,7 @@ public:
       ObRecycleObject &recycle_object) = 0;
 
   virtual int fetch_aux_tables(const ObRefreshSchemaStatus &schema_status,
+      const uint64_t tenant_id,
       const uint64_t table_id,
       const int64_t schema_version,
       common::ObISQLClient &sql_client,
@@ -1071,23 +1100,28 @@ public:
       common::ObISQLClient &sql_client,
       ObMockFKParentTableSchema &mock_fk_parent_table_schema) = 0;
   virtual void set_refreshed_schema_version(const int64_t schema_version) = 0;
-  virtual int gen_new_schema_version(const int64_t refreshed_schema_version,
+  virtual int gen_new_schema_version(const uint64_t tenant_id,
+                                     const int64_t refreshed_schema_version,
                                      int64_t &schema_version) = 0;
 
   // gen schema versions in [start_version, end_version] with specified schema version cnt.
   // @param[out]:
   // - schema_version: end_version
-  virtual int gen_batch_new_schema_versions(const int64_t refreshed_schema_version,
+  virtual int gen_batch_new_schema_versions(
+              const uint64_t tenant_id,
+              const int64_t refreshed_schema_version,
               const int64_t version_cnt,
               int64_t &schema_version) = 0;
-  virtual int get_new_schema_version(int64_t &schema_version) = 0;
+  virtual int get_new_schema_version(uint64_t tenant_id, int64_t &schema_version) = 0;
 
   virtual int get_ori_schema_version(const ObRefreshSchemaStatus &schema_status,
+                                     const uint64_t tenant_id,
                                      const uint64_t table_id,
                                      int64_t &last_schema_version) = 0;
 
   virtual int get_table_latest_schema_versions(
       common::ObISQLClient &sql_client,
+      const uint64_t tenant_id,
       const common::ObIArray<uint64_t> &table_ids,
       common::ObIArray<ObTableLatestSchemaVersion> &table_schema_versions) = 0;
 
@@ -1100,11 +1134,21 @@ public:
     return common::OB_SUCCESS;
   }
 
+  virtual int get_drop_tenant_infos(
+      common::ObISQLClient &sql_client,
+      int64_t schema_version,
+      common::ObIArray<ObDropTenantInfo> &drop_tenant_infos) = 0;
+
   // for liboblog used
   virtual int get_schema_version_by_timestamp(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
+      const uint64_t tenant_id,
       int64_t timestamp,
+      int64_t &schema_version) = 0;
+  virtual int get_first_trans_end_schema_version(
+      common::ObISQLClient &sql_client,
+      const uint64_t tenant_id,
       int64_t &schema_version) = 0;
   static bool is_formal_version(const int64_t schema_version);
   static int gen_core_temp_version(const int64_t schema_version,
@@ -1117,16 +1161,19 @@ public:
   /*----------- interfaces for latest schema start -----------*/
   virtual int get_tablegroup_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const ObString &tablegroup_name,
               uint64_t &tablegroup_id) = 0;
 
   virtual int get_database_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const ObString &database_name,
               uint64_t &database_id) = 0;
 
   virtual int get_table_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const uint64_t session_id,
               const ObString &table_name,
@@ -1136,30 +1183,35 @@ public:
 
   virtual int get_index_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &index_name,
               uint64_t &index_id) = 0;
 
   virtual int get_mock_fk_parent_table_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &table_name,
               uint64_t &mock_fk_parent_table_id) = 0;
 
   virtual int get_constraint_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &constraint_name,
               uint64_t &constraint_id) = 0;
 
   virtual int get_foreign_key_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &foreign_key_name,
               uint64_t &foreign_key_id) = 0;
 
   virtual int get_sequence_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &sequence_name,
               uint64_t &sequence_id,
@@ -1167,6 +1219,7 @@ public:
 
   virtual int get_package_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const ObString &package_name,
               const ObPackageType package_type,
@@ -1175,6 +1228,7 @@ public:
 
   virtual int get_routine_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const uint64_t package_id,
               const uint64_t overload,
@@ -1183,17 +1237,20 @@ public:
 
   virtual int get_table_schema_versions(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const common::ObIArray<uint64_t> &table_ids,
               common::ObIArray<ObSchemaIdVersion> &versions) = 0;
 
   virtual int get_mock_fk_parent_table_schema_versions(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const common::ObIArray<uint64_t> &table_ids,
               common::ObIArray<ObSchemaIdVersion> &versions) = 0;
 
   virtual int get_table_index_infos(
               common::ObIAllocator &allocator,
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t database_id,
               const uint64_t data_table_id,
               common::ObIArray<ObIndexSchemaInfo> &index_infos) = 0;
@@ -1205,6 +1262,7 @@ public:
 
   virtual int get_obj_priv_with_obj_id(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t obj_id,
               const uint64_t obj_type,
               ObIArray<ObObjPriv> &obj_privs) = 0;
@@ -1212,17 +1270,20 @@ public:
   virtual int get_table_schemas_in_tablegroup(
               common::ObIAllocator &allocator,
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t tablegroup_id,
               common::ObIArray<const ObTableSchema *> &table_schemas) = 0;
 
   virtual int check_database_exists_in_tablegroup(
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t tablegroup_id,
               bool &exists) = 0;
   
   virtual int get_table_id_and_table_name_in_tablegroup(
               common::ObIAllocator &allocator,
               common::ObISQLClient &sql_client,
+              const uint64_t tenant_id,
               const uint64_t tablegroup_id,
               common::ObIArray<ObString> &table_names,
               common::ObIArray<uint64_t> &table_ids) = 0;

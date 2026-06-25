@@ -67,7 +67,6 @@ DEFINE_LOG_SUB_MOD(STORAGETEST)          // storagetest
 DEFINE_LOG_SUB_MOD(LOGTOOL)              // logtool
 DEFINE_LOG_SUB_MOD(WRS)                  // weak read service
 DEFINE_LOG_SUB_MOD(ARCHIVE)              // archive log
-DEFINE_LOG_SUB_MOD(PHYSICAL_RESTORE_ARCHIVE)      // physical restore log
 DEFINE_LOG_SUB_MOD(EASY)                 // libeasy
 DEFINE_LOG_SUB_MOD(DETECT)               // dead lock
 DEFINE_LOG_SUB_MOD(PALF)                 // palf
@@ -395,8 +394,6 @@ LOG_MOD_END(PL)
 #define _WRS_LOG(level, _fmt_, args...) _OB_MOD_LOG(WRS, level, _fmt_, ##args)
 #define ARCHIVE_LOG(level, info_string, args...) OB_MOD_LOG(ARCHIVE, level, info_string, ##args)
 #define _ARCHIVE_LOG(level, _fmt_, args...) _OB_MOD_LOG(ARCHIVE, level, _fmt_, ##args)
-#define PHYSICAL_RESTORE_ARCHIVE_LOG(level, info_string, args...) OB_MOD_LOG(PHYSICAL_RESTORE_ARCHIVE, level, info_string, ##args)
-#define _PHYSICAL_RESTORE_ARCHIVE_LOG(level, _fmt_, args...) _OB_MOD_LOG(PHYSICAL_RESTORE_ARCHIVE, level, _fmt_, ##args)
 #define LIB_LOG(level, info_string, args...) OB_MOD_LOG(LIB, level, info_string, ##args)
 #define _LIB_LOG(level, _fmt_, args...) _OB_MOD_LOG(LIB, level, _fmt_, ##args)
 #define MEMT_LOG(level, info_string, args...) OB_MOD_LOG(MEMT, level, info_string, ##args)
@@ -908,8 +905,6 @@ LOG_MOD_END(PL)
 #define _WRS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _WRS_LOG(level, ##args); }
 #define ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; ARCHIVE_LOG(level, ##args); }
 #define _ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _ARCHIVE_LOG(level, ##args); }
-#define PHYSICAL_RESTORE_ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; PHYSICAL_RESTORE_ARCHIVE_LOG(level, ##args); }
-#define _PHYSICAL_RESTORE_ARCHIVE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PHYSICAL_RESTORE_ARCHIVE_LOG(level, ##args); }
 #define LIB_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LIB_LOG(level, ##args); }
 #define _LIB_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LIB_LOG(level, ##args); }
 #define MEMT_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; MEMT_LOG(level, ##args); }

@@ -19284,6 +19284,7 @@ alter_with_opt_hint DISKGROUP relation_name DROP DISK STRING_VALUE ip_port opt_z
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_DISKGROUP_DROP_DISK, 4, $3, $6, $7, $8);
 }
+|
 alter_with_opt_hint SYSTEM info_type MODULE DATA module_name tenant_name opt_infile
 {
   (void)($1);

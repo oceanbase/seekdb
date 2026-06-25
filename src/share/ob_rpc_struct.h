@@ -36,7 +36,6 @@
 #include "share/ob_tenant_id_schema_version.h"
 #include "share/ob_cluster_role.h"            // ObClusterRole PRIMARY_CLUSTER
 #include "share/ob_cluster_version.h"
-#include "share/restore/ob_physical_restore_info.h"
 #include "share/schema/ob_error_info.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_schema_service.h"
@@ -1394,37 +1393,6 @@ public:
 public:
   int64_t task_id_;
   uint64_t tenant_id_;
-};
-
-struct ObRecoverRestoreTableDDLArg : public ObDDLArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObRecoverRestoreTableDDLArg() :
-     ObDDLArg(),
-     target_schema_(),
-     src_tenant_id_(common::OB_INVALID_ID),
-     src_table_id_(common::OB_INVALID_ID),
-     ddl_task_id_(common::OB_INVALID_ID),
-     tz_info_wrap_(),
-     nls_formats_{},
-     allocator_("RestorTableDDL")
-  {
-  }
-  virtual ~ObRecoverRestoreTableDDLArg();
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(K_(target_schema), K_(src_tenant_id), K_(src_table_id), K_(tz_info_wrap),
-               "nls_formats", common::ObArrayWrap<common::ObString>(nls_formats_, common::ObNLSFormatEnum::NLS_MAX));
-public:
-  share::schema::ObTableSchema target_schema_; // with dest tenant_id, database_id, and table name.
-  uint64_t src_tenant_id_;
-  int64_t src_table_id_;
-  int64_t ddl_task_id_;
-  common::ObTimeZoneInfo tz_info_;
-  common::ObTimeZoneInfoWrap tz_info_wrap_;
-  common::ObString nls_formats_[common::ObNLSFormatEnum::NLS_MAX];
-  common::ObArenaAllocator allocator_;
 };
 
 struct ObCreateHiddenTableArg : public ObDDLArg
@@ -4564,48 +4532,6 @@ public:
   bool is_valid() const { return true; }
   TO_STRING_KV(K_(force_cmd));
   bool force_cmd_;
-};
-
-struct ObPhysicalRestoreTenantArg : public ObCmdArg
-{
-  OB_UNIS_VERSION(1);
-
-public:
-  ObPhysicalRestoreTenantArg();
-  virtual ~ObPhysicalRestoreTenantArg() {}
-  bool is_valid() const;
-  int assign(const ObPhysicalRestoreTenantArg &other);
-  TO_STRING_KV(K_(tenant_name),
-               K_(restore_option),
-               K_(restore_scn),
-               K_(passwd_array),
-               K_(kms_info),
-               K_(table_items),
-               K_(with_restore_scn),
-               K_(encrypt_key),
-               K_(kms_uri),
-               K_(kms_encrypt_key),
-               K_(restore_timestamp),
-               K_(initiator_job_id),
-               K_(initiator_tenant_id));
-
-  common::ObString tenant_name_;
-  common::ObString uri_;
-  common::ObString restore_option_;
-  share::SCN restore_scn_;
-  common::ObString kms_info_;  //Encryption use
-  common::ObString passwd_array_; // Password verification
-  common::ObSArray<ObTableItem> table_items_;
-  common::ObString multi_uri_; // backup split use
-  common::ObString description_;
-  bool with_restore_scn_;
-  common::ObString encrypt_key_;
-  common::ObString kms_uri_;
-  common::ObString kms_encrypt_key_;
-  common::ObString restore_timestamp_;
-  uint64_t initiator_job_id_;
-  uint64_t initiator_tenant_id_;
-  common::ObString sts_credential_;
 };
 
 struct ObServerZoneArg

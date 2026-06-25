@@ -114,26 +114,17 @@ ob_set_subtarget(ob_share backup
   backup/ob_archive_compatible.cpp
   backup/ob_archive_mode.cpp
   backup/ob_archive_persist_helper.cpp
-  backup/ob_backup_clean_operator.cpp
-  backup/ob_backup_clean_struct.cpp
-  backup/ob_backup_clean_util.cpp
-  backup/ob_backup_connectivity.cpp
   backup/ob_backup_io_adapter.cpp
   backup/ob_backup_path.cpp
   backup/ob_backup_struct.cpp
   backup/ob_tenant_archive_mgr.cpp
   backup/ob_tenant_archive_round.cpp
-  backup/ob_backup_data_table_operator.cpp
-  backup/ob_backup_tablet_reorganize_helper.cpp
-  backup/ob_backup_helper.cpp
   backup/ob_archive_persist_helper.cpp
   backup/ob_backup_serialize_provider.cpp
   backup/ob_backup_store.cpp
   backup/ob_archive_store.cpp
   backup/ob_archive_checkpoint.cpp
   backup/ob_archive_path.cpp
-  backup/ob_backup_config.cpp
-  backup/ob_log_restore_config.cpp
   backup/ob_log_restore_struct.cpp
   backup/ob_archive_checkpoint_mgr.cpp
 )
@@ -288,11 +279,8 @@ ob_set_subtarget(ob_share common_mixed
   rc/ob_tenant_base.cpp
   restore/ob_import_table_struct.cpp
   restore/ob_import_util.cpp
-  restore/ob_restore_uri_parser.cpp
   restore/ob_ls_restore_status.cpp
   restore/ob_restore_type.cpp
-  restore/ob_physical_restore_info.cpp
-  restore/ob_physical_restore_table_operator.cpp
   restore/ob_log_restore_source.cpp
   restore/ob_log_restore_source_mgr.cpp
   restore/ob_recover_table_persist_helper.cpp

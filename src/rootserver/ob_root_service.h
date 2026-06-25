@@ -200,14 +200,6 @@ public:
   int create_hidden_table(const obcall::ObCreateHiddenTableArg &arg, obcall::ObCreateHiddenTableRes &res);
   int send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg, obcall::ObAutoSplitTabletBatchRes &res);
   int split_global_index_tablet(const obcall::ObAlterTableArg &arg);
-  /**
-   * For recover restore table ddl, data insert into the target table is selected from another tenant.
-   * The function is used to create a hidden target table without any change on the source table,
-   * and then register a recover task into ddl task queue to finish the all procedures.
-   * The format about the command is,
-   * alter system recover table test.t1 to tenant backup_oracle_tenant from '$ARCHIVE_FILES_PATH' with 'pool_list=small_pool_0&primary_zone=z1' remap table test.t1:recover_test.t3;
-  */
-  int recover_restore_table_ddl(const obcall::ObRecoverRestoreTableDDLArg &arg);
   int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);
@@ -375,7 +367,6 @@ public:
   int admin_upgrade_cmd(const obcall::Bool &arg);
   int admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgradeArg &arg);
   int admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg);
-  int admin_set_backup_config(const obcall::ObAdminSetConfigArg &arg);
   /* physical restore */
   int rebuild_index_in_restore(const obcall::ObRebuildIndexInRestoreArg &arg);
   /*-----------------*/
@@ -413,7 +404,6 @@ public:
       const obcall::ObGetRecycleSchemaVersionsArg &arg,
       obcall::ObGetRecycleSchemaVersionsResult &result);
   int standby_upgrade_virtual_schema(const obcall::ObDDLNopOpreatorArg &arg);
-  int check_backup_scheduler_working(obcall::Bool &is_working);
   int purge_recyclebin_objects(int64_t purge_each_time);
   int flush_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg);
   int recompile_all_views_batch(const obcall::ObRecompileAllViewsBatchArg &arg);

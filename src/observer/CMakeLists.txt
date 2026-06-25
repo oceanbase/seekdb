@@ -284,7 +284,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_px_p2p_datahub.cpp
   virtual_table/ob_all_virtual_dtl_interm_result_monitor.cpp
   virtual_table/ob_all_virtual_raid_stat.cpp
-  virtual_table/ob_all_virtual_ls_archive_stat.cpp
   virtual_table/ob_all_virtual_server_compaction_progress.cpp
   virtual_table/ob_all_virtual_tablet_stat.cpp
   virtual_table/ob_all_virtual_server_object_pool.cpp
@@ -384,7 +383,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_virtual_sql_plan_statistics.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp
   virtual_table/ob_all_virtual_dml_stats.cpp
-  virtual_table/ob_all_virtual_archive_dest_status.cpp
   virtual_table/ob_all_virtual_ls_log_restore_status.cpp
   virtual_table/ob_virtual_span_info.cpp
   virtual_table/ob_virtual_show_trace.cpp

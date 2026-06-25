@@ -1488,12 +1488,6 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
         }
         break;
       }
-      case share::MAKE_RECOVER_RESTORE_TABLE_TASK_TAKE_EFFECT: {
-        if (OB_FAIL(ddl_service_.make_recover_restore_tables_visible(const_cast<ObAlterTableArg &>(arg)))) {
-          LOG_WARN("make recovert restore task visible failed", K(ret), K(arg));
-        }
-        break;
-      }
       case share::PARTITION_SPLIT_RECOVERY_TASK: {
         if (OB_FAIL(ddl_service_.restore_the_table_to_split_completed_state(const_cast<ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to restore the table to split completed state", K(ret));
@@ -1812,22 +1806,6 @@ int ObRootService::start_redef_table(const obcall::ObStartRedefTableArg &arg, ob
                         "table_id", table_id_buffer,
                         "schema_version", res.schema_version_);
   LOG_INFO("finish redef table ddl", K(arg), K(ret), K(res), "ddl_event_info", ObDDLEventInfo());
-  return ret;
-}
-
-int ObRootService::recover_restore_table_ddl(const obcall::ObRecoverRestoreTableDDLArg &arg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(ddl_service_.recover_restore_table_ddl_task(arg))) {
-    LOG_WARN("recover restore table ddl task failed", K(ret), K(arg));
-  }
-  LOG_INFO("recover restore table ddl finish", K(ret), K(arg));
   return ret;
 }
 

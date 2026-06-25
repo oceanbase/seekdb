@@ -476,15 +476,6 @@ def check_tenant_status(query_cur):
     fail_list.append('has deleted tenant with unit not freed')
   else:
     logging.info('check deleted tenant unit gc success')
-# 6. Check for no recovery tasks
-def check_restore_job_exist(query_cur):
-  (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_RESTORE_PROGRESS""")
-  if len(results) != 1 or len(results[0]) != 1:
-    fail_list.append('failed to restore job cnt')
-  elif results[0][0] != 0:
-      fail_list.append("""still has restore job, upgrade is not allowed temporarily""")
-  logging.info('check restore job success')
-
 def check_is_primary_zone_distributed(primary_zone_str):
   semicolon_pos = len(primary_zone_str)
   for i in range(len(primary_zone_str)):
@@ -527,78 +518,6 @@ def check_ddl_task_execute(query_cur):
   if 0 != results[0][0]:
     fail_list.append("There are DDL task in progress")
   logging.info('check ddl task execut status success')
-# 10. Check tasks without backup
-def check_backup_job_exist(query_cur):
-  # Backup jobs cannot be in-progress during upgrade.
-  (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_BACKUP_JOBS""")
-  if len(results) != 1 or len(results[0]) != 1:
-    fail_list.append('failed to backup job cnt')
-  elif results[0][0] != 0:
-    fail_list.append("""still has backup job, upgrade is not allowed temporarily""")
-  else:
-    logging.info('check backup job success')
-# 11. Check for unarchived tasks
-def check_archive_job_exist(query_cur):
-  min_cluster_version = 0
-  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
-  (desc, results) = query_cur.exec_query(sql)
-  if len(results) != 1:
-    fail_list.append('min_observer_version is not sync')
-  elif len(results[0]) != 1:
-    fail_list.append('column cnt not match')
-  else:
-    min_cluster_version = get_version(results[0][0])
-
-    # Archive jobs cannot be in-progress before upgrade from 4.0.
-    if min_cluster_version < get_version("4.1.0.0"):
-      (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_ARCHIVELOG where status!='STOP'""")
-      if len(results) != 1 or len(results[0]) != 1:
-        fail_list.append('failed to archive job cnt')
-      elif results[0][0] != 0:
-        fail_list.append("""still has archive job, upgrade is not allowed temporarily""")
-      else:
-        logging.info('check archive job success')
-# 12. Check if the archive path is cleared
-def check_archive_dest_exist(query_cur):
-  min_cluster_version = 0
-  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
-  (desc, results) = query_cur.exec_query(sql)
-  if len(results) != 1:
-    fail_list.append('min_observer_version is not sync')
-  elif len(results[0]) != 1:
-    fail_list.append('column cnt not match')
-  else:
-    min_cluster_version = get_version(results[0][0])
-    # archive dest need to be cleaned before upgrade from 4.0.
-    if min_cluster_version < get_version("4.1.0.0"):
-      (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_ARCHIVE_DEST""")
-      if len(results) != 1 or len(results[0]) != 1:
-        fail_list.append('failed to archive dest cnt')
-      elif results[0][0] != 0:
-        fail_list.append("""still has archive destination, upgrade is not allowed temporarily""")
-      else:
-        logging.info('check archive destination success')
-# 13. Check if the backup path is cleared
-def check_backup_dest_exist(query_cur):
-  min_cluster_version = 0
-  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
-  (desc, results) = query_cur.exec_query(sql)
-  if len(results) != 1:
-    fail_list.append('min_observer_version is not sync')
-  elif len(results[0]) != 1:
-    fail_list.append('column cnt not match')
-  else:
-    min_cluster_version = get_version(results[0][0])
-    # backup dest need to be cleaned before upgrade from 4.0.
-    if min_cluster_version < get_version("4.1.0.0"):
-      (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_BACKUP_PARAMETER where name='data_backup_dest' and (value!=NULL or value!='')""")
-      if len(results) != 1 or len(results[0]) != 1:
-        fail_list.append('failed to data backup dest cnt')
-      elif results[0][0] != 0:
-        fail_list.append("""still has backup destination, upgrade is not allowed temporarily""")
-      else:
-        logging.info('check backup destination success')
-
 def check_server_version(query_cur):
     sql = """select distinct(substring_index(build_version, '_', 1)) from __all_server""";
     (desc, results) = query_cur.exec_query(sql);
@@ -977,13 +896,8 @@ def do_check(my_host, my_port, my_user, my_passwd, timeout, upgrade_params, cpu_
       check_rebalance_task(query_cur)
       check_cluster_status(query_cur)
       check_tenant_status(query_cur)
-      check_restore_job_exist(query_cur)
       check_tenant_primary_zone(query_cur)
       check_ddl_task_execute(query_cur)
-      check_backup_job_exist(query_cur)
-      check_archive_job_exist(query_cur)
-      check_archive_dest_exist(query_cur)
-      check_backup_dest_exist(query_cur)
       check_observer_status(query_cur)
       check_schema_status(query_cur)
       check_server_version(query_cur)

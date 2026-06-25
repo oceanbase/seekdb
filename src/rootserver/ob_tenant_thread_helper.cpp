@@ -154,19 +154,20 @@ int ObTenantThreadHelper::switch_to_leader()
   return ret;
 }
 
-int ObTenantThreadHelper::wait_tenant_schema_ready_()
+int ObTenantThreadHelper::wait_tenant_schema_ready_(
+    const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   bool is_ready = false;
   share::schema::ObTenantSchema tenant_schema;
-  if (OB_UNLIKELY(!true)) {
+  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
   } else {
     while (!is_ready && !has_set_stop()) {
       ret = OB_SUCCESS;
-      if (OB_FAIL(get_tenant_schema( tenant_schema))) {
-        LOG_WARN("failed to get tenant schema", KR(ret));
+      if (OB_FAIL(get_tenant_schema(tenant_id, tenant_schema))) {
+        LOG_WARN("failed to get tenant schema", KR(ret), K(tenant_id));
       } else if (tenant_schema.is_creating()) {
         ret = OB_NEED_WAIT;
         LOG_WARN("tenant schema not ready, no need tenant balance", KR(ret), K(tenant_schema));
@@ -178,21 +179,21 @@ int ObTenantThreadHelper::wait_tenant_schema_ready_()
       }
     }
     if (has_set_stop()) {
-      LOG_WARN("thread has been stopped", K(is_ready));
+      LOG_WARN("thread has been stopped", K(is_ready), K(tenant_id));
       ret = OB_IN_STOP_STATE;
     }
   }
   return ret;
 }
 
-int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_()
+int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!true)) {
+  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_FAIL(wait_tenant_schema_ready_())) {
-    LOG_WARN("failed to wait tenant schema ready", KR(ret));
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(wait_tenant_schema_ready_(tenant_id))) {
+    LOG_WARN("failed to wait tenant schema ready", KR(ret), K(tenant_id));
   }
   return ret;
 }
@@ -214,23 +215,27 @@ void ObTenantThreadHelper::idle(const int64_t idle_time_us)
   thread_cond_.wait_us(idle_time_us);
 }
 
-int ObTenantThreadHelper::get_tenant_schema( 
+int ObTenantThreadHelper::get_tenant_schema(const uint64_t tenant_id, 
   share::schema::ObTenantSchema &tenant_schema)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTenantSchema *cur_tenant_schema = NULL;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (!is_valid_tenant_id(tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
+  } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-          schema_guard))) {
+          OB_SYS_TENANT_ID, schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(cur_tenant_schema))) {
-    LOG_WARN("failed to get tenant ids", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id,
+          cur_tenant_schema))) {
+    LOG_WARN("failed to get tenant ids", KR(ret), K(tenant_id));
   } else if (OB_ISNULL(cur_tenant_schema)) {
     ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("tenant not exist", KR(ret));
+    LOG_WARN("tenant not exist", KR(ret), K(tenant_id));
   } else if (OB_FAIL(tenant_schema.assign(*cur_tenant_schema))) {
     LOG_WARN("failed to get cur tenant schema", KR(ret), KP(cur_tenant_schema));
   }
@@ -238,12 +243,25 @@ int ObTenantThreadHelper::get_tenant_schema(
 }
 
 //TODO meta tenant and user tenant maybe not in same observer
-int ObTenantThreadHelper::check_can_do_recovery_()
+int ObTenantThreadHelper::check_can_do_recovery_(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  // lite: recovery is user-tenant-only; sys tenant is never a user tenant
-  ret = OB_INVALID_ARGUMENT;
-  LOG_WARN("only user tenant need check recovery", KR(ret));
+  if (!is_user_tenant(tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("only user tenant need check recovery", KR(ret), K(tenant_id));
+  } else {
+    MTL_SWITCH(tenant_id) {
+      share::ObTenantRole::Role tenant_role = MTL_GET_TENANT_ROLE_CACHE();
+      if (is_primary_tenant(tenant_role) || is_standby_tenant(tenant_role)) {
+      } else if (is_invalid_tenant(tenant_role)) {
+        ret = OB_NEED_WAIT;
+        LOG_WARN("tenant role not ready, need wait", KR(ret), K(tenant_role));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected tenant role", KR(ret), K(tenant_role));
+      }
+    }
+  }
   return ret;
 }
 
@@ -261,4 +279,3 @@ void ObTenantThreadHelper::wakeup()
 
 }//end of rootserver
 }
-

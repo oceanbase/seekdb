@@ -8481,24 +8481,7 @@ def_table_schema(
 
 # 12364: __all_ls_arb_replica_task (abandoned)
 # 12365: __all_ls_arb_replica_task_history (abandoned)
-
-def_table_schema(
-  owner = 'zhaoyongheng.zyh',
-  table_name = '__all_virtual_archive_dest_status',
-  table_id = '12366',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns = [],
-  rowkey_columns = [],
-  in_tenant_space = True,
-  normal_columns = [
-    ('dest_id', 'int'),
-    ('path', 'varchar:4096'),
-    ('status', 'varchar:64'),
-    ('checkpoint_scn', 'uint'),
-    ('synchronized', 'varchar:32'),
-    ('comment', 'varchar:262144')
-  ]
-  )
+# 12366: __all_virtual_archive_dest_status (abandoned)
 
 # 12367: __all_virtual_kv_hotkey_stat
 # 12368: __all_virtual_backup_transferring_tablets
@@ -20761,26 +20744,7 @@ WHERE T.TABLE_TYPE IN (3,6,8,9,14,15)
 # 21360: CDB_OB_LS_ARB_REPLICA_TASK_HISTORY (abandoned)
 # 21361: DBA_OB_LS_ARB_REPLICA_TASK_HISTORY (abandoned)
 
-def_table_schema(
-  owner           = 'zhaoyongheng.zyh',
-  table_name      = 'V$OB_ARCHIVE_DEST_STATUS',
-  table_id        = '21362',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition =
-  """
-  SELECT DEST_ID,
-         PATH,
-         STATUS,
-         CHECKPOINT_SCN,
-         SYNCHRONIZED,
-         COMMENT
-  FROM OCEANBASE.__all_virtual_archive_dest_status;
-  """.replace("\n", " ")
-)
+# 21362: V$OB_ARCHIVE_DEST_STATUS (abandoned)
 # 21363: DBA_OB_LS_LOG_ARCHIVE_PROGRESS # abandoned
 # 21364: CDB_OB_LS_LOG_ARCHIVE_PROGRESS # abandoned
 # 21365: DBA_OB_LS_LOG_RESTORE_STAT

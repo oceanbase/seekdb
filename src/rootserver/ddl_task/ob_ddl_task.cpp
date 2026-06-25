@@ -836,9 +836,6 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_DIRECT_LOAD_INSERT:
       ddl_type_str = "direct load insert";
       break;
-    case DDL_TABLE_RESTORE:
-      ddl_type_str = "recover table restore ddl";
-      break;
     case DDL_MODIFY_AUTO_INCREMENT:
       ddl_type_str = "modify auto increment";
       break;
