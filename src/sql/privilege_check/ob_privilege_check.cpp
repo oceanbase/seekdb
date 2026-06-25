@@ -55,6 +55,7 @@
 #include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/resolver/cmd/ob_location_utils_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
+#include "sql/resolver/cmd/ob_diff_table_stmt.h"
 
 namespace oceanbase {
 using namespace share;
@@ -2365,6 +2366,35 @@ int get_drop_ccl_priv(
     need_priv.priv_set_ = OB_PRIV_DROP;
     need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
     ADD_NEED_PRIV(need_priv);
+  }
+  return ret;
+}
+
+int get_diff_table_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv,
+    const ObStmt *basic_stmt,
+    ObIArray<ObNeedPriv> &need_privs)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(session_priv);
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (stmt::T_DIFF_TABLE != basic_stmt->get_stmt_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const ObDiffTableStmt *diff_stmt = static_cast<const ObDiffTableStmt *>(basic_stmt);
+    ObNeedPriv need_priv;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    need_priv.is_sys_table_ = false;
+    need_priv.priv_set_ = OB_PRIV_SELECT;
+    need_priv.db_ = diff_stmt->get_cur_db();
+    need_priv.table_ = diff_stmt->get_cur_table();
+    ADD_NEED_PRIV(need_priv);
+    if (OB_SUCC(ret)) {
+      need_priv.db_ = diff_stmt->get_inc_db();
+      need_priv.table_ = diff_stmt->get_inc_table();
+      ADD_NEED_PRIV(need_priv);
+    }
   }
   return ret;
 }

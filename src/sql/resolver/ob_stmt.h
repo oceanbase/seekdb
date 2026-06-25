@@ -127,6 +127,7 @@ public:
   inline bool is_delete_stmt() const { return stmt::T_DELETE == stmt_type_; }
   inline bool is_explain_stmt() const { return stmt::T_EXPLAIN == stmt_type_; }
   inline bool is_help_stmt() const { return stmt::T_HELP == stmt_type_; }
+  inline bool is_diff_table_stmt() const { return stmt::T_DIFF_TABLE == stmt_type_; }
   bool is_dml_stmt() const;
   bool is_pdml_supported_stmt() const;
   bool is_px_dml_supported_stmt() const;
