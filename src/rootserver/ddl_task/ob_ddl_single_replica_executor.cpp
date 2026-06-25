@@ -19,6 +19,7 @@
 #include "observer/ob_ex_rpc.h"
 #include "ob_ddl_single_replica_executor.h"
 #include "rootserver/ob_root_service.h"
+#include "observer/ob_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/location_cache/ob_location_service.h"
 
@@ -151,11 +152,12 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (OB_FAIL(DDL_SIM(param.task_id_, SINGLE_REPLICA_EXECUTOR_BUILD_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(param.task_id_));
+  } else if (OB_FAIL(DDL_SIM(param.tenant_id_, param.task_id_, SINGLE_REPLICA_EXECUTOR_BUILD_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(param.tenant_id_), K(param.task_id_));
   } else { // lock scope, keep construct_replica_build_ctxs() out of scope
     ObSpinLockGuard guard(lock_);
-    
+    tenant_id_ = param.tenant_id_;
+    dest_tenant_id_ = param.dest_tenant_id_;
     ddl_type_ = param.ddl_type_;
     ddl_task_id_ = param.task_id_;
     snapshot_version_ = param.snapshot_version_;
@@ -188,7 +190,7 @@ int ObDDLReplicaBuildExecutor::build(const ObDDLReplicaBuildExecutorParam &param
   // char table_id_buffer[256];
   // snprintf(table_id_buffer, sizeof(table_id_buffer), "dest_table_id:%ld, source_table_id:%ld", dest_table_id_, source_table_id_);
   // ROOTSERVICE_EVENT_ADD("ddl scheduler", "build single replica",
-  //   "tenant",sys tenant,
+  //   "tenant_id",tenant_id_,
   //   "ret", ret,
   //   "trace_id", *ObCurTraceId::get_trace_id(),
   //   K_(task_id),
@@ -215,8 +217,8 @@ int ObDDLReplicaBuildExecutor::schedule_task()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("replica build executor not init", K(ret));
-  } else if (OB_FAIL(DDL_SIM(ddl_task_id_, SINGLE_REPLICA_EXECUTOR_SCHEDULE_TASK_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(ddl_task_id_));
+  } else if (OB_FAIL(DDL_SIM(dest_tenant_id_, ddl_task_id_, SINGLE_REPLICA_EXECUTOR_SCHEDULE_TASK_FAILED))) {
+    LOG_WARN("ddl sim failure", K(ret), K(dest_tenant_id_), K(ddl_task_id_));
   } else {
     ObArray<obcall::ObDDLBuildSingleReplicaRequestArg> args;
     ObArray<ObAddr> addrs;
@@ -355,9 +357,10 @@ int ObDDLReplicaBuildExecutor::check_build_end(const bool need_checksum, bool &i
     ret_code = ret;
     LOG_INFO("all replica build finished", K(succ_cnt), K(total_cnt));
     if (!share::is_tablet_split(ddl_type_) && need_checksum) {
-      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id, execution_id_, ddl_task_id_))) {
+      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
+              dest_tenant_id_, dest_table_id, execution_id_, ddl_task_id_))) {
         LOG_WARN("fail to check sstable checksum_report_finish", 
-            K(ret), K(dest_table_id), K(execution_id_), K(ddl_task_id_));
+            K(ret), K(dest_tenant_id_), K(dest_table_id), K(execution_id_), K(ddl_task_id_));
       }
     }
   }
@@ -458,8 +461,8 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(replica_build_ctx));
   } else {
-    
-    
+    arg.tenant_id_ = tenant_id_;
+    arg.dest_tenant_id_ = dest_tenant_id_;
     arg.source_tablet_id_ = replica_build_ctx.src_tablet_id_;
     arg.dest_tablet_id_ = replica_build_ctx.dest_tablet_id_;
     arg.source_table_id_ = replica_build_ctx.src_table_id_;
@@ -492,10 +495,10 @@ int ObDDLReplicaBuildExecutor::construct_rpc_arg(
     } else if (OB_ISNULL(location_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("location service is nullptr", K(ret));
-    } else if (OB_FAIL(location_service->get(arg.source_tablet_id_,
+    } else if (OB_FAIL(location_service->get(tenant_id_, arg.source_tablet_id_,
             expire_renew_time, is_cache_hit, ls_id))) {
       LOG_WARN("get ls failed", K(ret), K(arg.source_tablet_id_));
-    } else if (OB_FAIL(location_service->get(arg.dest_tablet_id_,
+    } else if (OB_FAIL(location_service->get(dest_tenant_id_, arg.dest_tablet_id_,
             expire_renew_time, is_cache_hit, dest_ls_id))) {
       LOG_WARN("get dest ls failed", K(ret), K(arg));
     } else {
@@ -586,10 +589,10 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
     ObAddr unused_addr;
     const ObTabletID &any_tablet_id = param.source_tablet_ids_.at(0);
     if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(
-          GCTX.location_service_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
-      LOG_WARN("get ls id failed", K(ret), K(any_tablet_id));
-    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(ls_id, split_replica_addrs))) {
-      LOG_WARN("get split replica addrs failed", K(ret), K(ls_id));
+          GCTX.location_service_, param.tenant_id_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
+      LOG_WARN("get ls id failed", K(ret), K(param.tenant_id_), K(any_tablet_id));
+    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(param.tenant_id_, ls_id, split_replica_addrs))) {
+      LOG_WARN("get split replica addrs failed", K(ret), K(param.tenant_id_), K(ls_id));
     }
   }
   if (OB_SUCC(ret)) {
@@ -624,9 +627,11 @@ int ObDDLReplicaBuildExecutor::construct_replica_build_ctxs(
         ObAddr dest_leader_addr;
         const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
         ObSingleReplicaBuildCtx replica_build_ctx;
-        if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_, src_tablet_id, rpc_timeout, unused_ls_id, orig_leader_addr))) {
+        if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
+                param.tenant_id_, src_tablet_id, rpc_timeout, unused_ls_id, orig_leader_addr))) {
           LOG_WARN("failed to get orig leader addr", K(ret), K(src_tablet_id));
-        } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_, dest_tablet_id, rpc_timeout, unused_ls_id,
+        } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
+                param.dest_tenant_id_, dest_tablet_id, rpc_timeout, unused_ls_id,
                 dest_leader_addr))) {
           LOG_WARN("failed to get dest leader addr", K(ret), K(dest_tablet_id));
         } else if (ObDDLType::DDL_TABLE_RESTORE != ddl_type_ &&
@@ -669,10 +674,10 @@ int ObDDLReplicaBuildExecutor::get_refreshed_replica_addrs(
     ObArray<ObAddr> split_replica_addrs;
     const ObTabletID &any_tablet_id = src_tablet_ids_.at(0);
     if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(
-          GCTX.location_service_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
-      LOG_WARN("get ls id failed", K(ret), K(any_tablet_id));
-    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(ls_id, split_replica_addrs))) {
-      LOG_WARN("get split replica addrs failed", K(ret), K(ls_id));
+          GCTX.location_service_, tenant_id_, any_tablet_id, rpc_timeout, ls_id, unused_addr))) {
+      LOG_WARN("get ls id failed", K(ret), K(tenant_id_), K(any_tablet_id));
+    } else if (OB_FAIL(ObDDLUtil::get_split_replicas_addrs(tenant_id_, ls_id, split_replica_addrs))) {
+      LOG_WARN("get split replica addrs failed", K(ret), K(tenant_id_), K(ls_id));
     } else { // send to all replicas.
       for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
         const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
@@ -693,9 +698,11 @@ int ObDDLReplicaBuildExecutor::get_refreshed_replica_addrs(
       ObAddr dest_leader_addr;
       const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
       const ObTabletID &dest_tablet_id = dest_tablet_ids_.at(i);
-      if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_, src_tablet_id, rpc_timeout, ls_id, orig_leader_addr))) {
+      if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
+              tenant_id_, src_tablet_id, rpc_timeout, ls_id, orig_leader_addr))) {
         LOG_WARN("failed to get orig leader addr", K(ret), K(src_tablet_id));
-      } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_, dest_tablet_id, rpc_timeout, ls_id,
+      } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(GCTX.location_service_,
+              dest_tenant_id_, dest_tablet_id, rpc_timeout, ls_id,
               dest_leader_addr))) {
         LOG_WARN("failed to get dest leader addr", K(ret), K(dest_tablet_id));
       } else if (ObDDLType::DDL_TABLE_RESTORE != ddl_type_ &&

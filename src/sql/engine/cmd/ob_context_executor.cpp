@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_context_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/resolver/ddl/ob_context_stmt.h"
 
 namespace oceanbase

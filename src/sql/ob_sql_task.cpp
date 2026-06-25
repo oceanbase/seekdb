@@ -23,6 +23,9 @@ using namespace oceanbase::observer;
 using namespace oceanbase::common;
 using namespace oceanbase::obcall;
 
+namespace oceanbase {
+namespace sql {
+
 void ObSqlTaskHandler::reset()
 {
   task_ = NULL;
@@ -102,9 +105,9 @@ void ObSqlTaskFactory::destroy()
 {
 }
 
-ObSqlTask *ObSqlTaskFactory::alloc()
+ObSqlTask *ObSqlTaskFactory::alloc(const uint64_t tenant_id)
 {
-  return alloc_();
+  return alloc_(tenant_id);
 }
 
 void ObSqlTaskFactory::free(ObSqlTask *task)
@@ -118,9 +121,9 @@ ObSqlTaskFactory &ObSqlTaskFactory::get_instance()
   return instance;
 }
 
-ObSqlTask *ObSqlTaskFactory::alloc_()
+ObSqlTask *ObSqlTaskFactory::alloc_(const uint64_t tenant_id)
 {
-  ObMemAttr memattr("OB_SQL_TASK");
+  ObMemAttr memattr(tenant_id, "OB_SQL_TASK");
   void *ptr = NULL;
   ObSqlTask *task = NULL;
   if (NULL != (ptr = ob_malloc(sizeof(ObSqlTask), memattr))) {
@@ -137,3 +140,6 @@ void ObSqlTaskFactory::free_(ObSqlTask *task)
     task = NULL;
   }
 }
+
+} // namespace sql
+} // namespace oceanbase

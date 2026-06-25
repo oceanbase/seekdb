@@ -20,6 +20,7 @@
 #include "rootserver/ob_rs_event_history_table_operator.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "share/ob_global_merge_table_operator.h"
+#include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 namespace oceanbase
 {
@@ -30,10 +31,14 @@ using namespace oceanbase::share;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-int ObMajorMergeIdling::init()
+int ObMajorMergeIdling::init(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  {
+  if (!is_valid_tenant_id(tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
+  } else {
+    tenant_id_ = tenant_id;
   }
   return ret;
 }
@@ -41,16 +46,17 @@ int ObMajorMergeIdling::init()
 int64_t ObMajorMergeIdling::get_idle_interval_us()
 {
   int64_t interval_us = DEFAULT_SCHEDULE_IDLE_US;
-  if (OB_LIKELY(true)) {
-    interval_us = GCONF.merger_check_interval;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  if (OB_LIKELY(tenant_config.is_valid())) {
+    interval_us = tenant_config->merger_check_interval;
   }
   return interval_us;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-ObMajorMergeScheduler::ObMajorMergeScheduler()
-  : ObFreezeReentrantThread{},
+ObMajorMergeScheduler::ObMajorMergeScheduler(const uint64_t tenant_id)
+  : ObFreezeReentrantThread(tenant_id),
     is_inited_(false),
     is_primary_service_(true),
     fail_count_(0),
@@ -83,15 +89,18 @@ int ObMajorMergeScheduler::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(merge_strategy_.init(&merge_info_mgr.get_zone_merge_mgr()))) {
-    LOG_WARN("fail to init tenant zone merge strategy", KR(ret));
+    LOG_WARN("init twice", KR(ret), K_(tenant_id));
+  } else if (OB_INVALID_ID == tenant_id_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid tenant id", KR(ret), K_(tenant_id));
+  } else if (OB_FAIL(merge_strategy_.init(tenant_id_, &merge_info_mgr.get_zone_merge_mgr()))) {
+    LOG_WARN("fail to init tenant zone merge strategy", KR(ret), K_(tenant_id));
   } else {
-    if (OB_ISNULL(buf = common::ob_malloc(sizeof(ObMajorMergeProgressChecker), ObMemAttr("mrg_prog_cker")))) {
+    if (OB_ISNULL(buf = common::ob_malloc(sizeof(ObMajorMergeProgressChecker), ObMemAttr(tenant_id_, "mrg_prog_cker")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", KR(ret));
+      LOG_WARN("fail to alloc memory", KR(ret), K_(tenant_id));
     } else {
-      progress_checker_ = new(buf) ObMajorMergeProgressChecker(stop_);
+      progress_checker_ = new(buf) ObMajorMergeProgressChecker(tenant_id_, stop_);
     }
   }
 
@@ -100,8 +109,8 @@ int ObMajorMergeScheduler::init(
                                       schema_service,
                                       merge_info_mgr))) {
     LOG_WARN("fail to init progress_checker", KR(ret));
-  } else if (OB_FAIL(idling_.init())) {
-    LOG_WARN("fail to init idling", KR(ret));
+  } else if (OB_FAIL(idling_.init(tenant_id_))) {
+    LOG_WARN("fail to init idling", KR(ret), K_(tenant_id));
   } else {
     first_check_merge_us_ = 0;
     is_primary_service_ = is_primary_service;
@@ -121,18 +130,18 @@ int ObMajorMergeScheduler::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObMajorMergeScheduler not init", KR(ret));
   } else if (OB_FAIL(create(MAJOR_MERGE_SCHEDULER_THREAD_CNT, "MergeScheduler"))) {
-    LOG_WARN("fail to create thread", KR(ret));
+    LOG_WARN("fail to create thread", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(ObRsReentrantThread::start())) {
-    LOG_WARN("fail to start thread", KR(ret));
+    LOG_WARN("fail to start thread", KR(ret), K_(tenant_id));
   } else {
-    LOG_INFO("succ to start ObMajorMergeScheduler");
+    LOG_INFO("succ to start ObMajorMergeScheduler", K_(tenant_id));
   }
   return ret;
 }
 
 void ObMajorMergeScheduler::run3()
 {
-  LOG_INFO("major merge scheduler will run");
+  LOG_INFO("major merge scheduler will run", K_(tenant_id));
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -143,7 +152,7 @@ void ObMajorMergeScheduler::run3()
     while (!stop_) {
       update_last_run_timestamp();
       if (OB_FAIL(do_work())) {
-        LOG_WARN("fail to do major scheduler work", KR(ret), "cur_epoch", get_epoch());
+        LOG_WARN("fail to do major scheduler work", KR(ret), K_(tenant_id), "cur_epoch", get_epoch());
       }
       // out of do_work, there must be no major merge on this server. therefore, here, clear
       // compcation diagnose infos that stored in memory of this server.
@@ -157,7 +166,7 @@ void ObMajorMergeScheduler::run3()
     }
   }
 
-  LOG_INFO("major merge scheduler will exit");
+  LOG_INFO("major merge scheduler will exit", K_(tenant_id));
 }
 
 int ObMajorMergeScheduler::try_idle(
@@ -184,7 +193,7 @@ int ObMajorMergeScheduler::try_idle(
     if (idle_time_us > merger_check_interval) {
       idle_time_us = merger_check_interval;
     }
-    LOG_WARN("fail to major merge, will immediate retry",
+    LOG_WARN("fail to major merge, will immediate retry", K_(tenant_id),
              K_(fail_count), LITERAL_K(IMMEDIATE_RETRY_CNT), K(idle_time_us));
   } else {
     idle_time_us = merger_check_interval;
@@ -195,7 +204,7 @@ int ObMajorMergeScheduler::try_idle(
   if (is_paused()) {
     const uint64_t start_ts = ObTimeUtility::fast_current_time();
     while (OB_SUCC(ret) && is_paused() && !stop_) {
-      LOG_INFO("major_merge_scheduler is paused", K(idle_time_us),
+      LOG_INFO("major_merge_scheduler is paused", K_(tenant_id), K(idle_time_us),
                "epoch", get_epoch());
       if (OB_FAIL(idling_.idle(idle_time_us))) {
         LOG_WARN("fail to idle", KR(ret), K(idle_time_us));
@@ -205,7 +214,7 @@ int ObMajorMergeScheduler::try_idle(
         LOG_INFO("clear cached info when idling", KR(ret), K(start_ts));
       }
     }
-    LOG_INFO("major_merge_scheduler is not idling", KR(ret), K(idle_time_us),
+    LOG_INFO("major_merge_scheduler is not idling", KR(ret), K_(tenant_id), K(idle_time_us),
              K_(stop), "epoch", get_epoch());
   } else if (OB_FAIL(idling_.idle(idle_time_us))) {
     LOG_WARN("fail to idle", KR(ret), K(idle_time_us));
@@ -227,10 +236,10 @@ int ObMajorMergeScheduler::get_uncompacted_tablets(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
+    LOG_WARN("not init", KR(ret), K_(tenant_id));
   } else {
     if (OB_FAIL(progress_checker_->get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
-      LOG_WARN("fail to get uncompacted tablets", KR(ret));
+      LOG_WARN("fail to get uncompacted tablets", KR(ret), K_(tenant_id));
     }
   }
   return ret;
@@ -243,15 +252,15 @@ int ObMajorMergeScheduler::do_work()
   HEAP_VARS_2((ObZoneMergeInfoArray, info_array), (ObGlobalMergeInfo, global_info)) {
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", KR(ret));
+      LOG_WARN("not init", KR(ret), K_(tenant_id));
     } else {
       FREEZE_TIME_GUARD;
       if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().try_reload())) {
-        LOG_WARN("fail to try reload", KR(ret));
+        LOG_WARN("fail to try reload", KR(ret), K_(tenant_id));
       }
     }
     if (FAILEDx(merge_info_mgr_->get_zone_merge_mgr().get_snapshot(global_info, info_array))) {
-      LOG_WARN("fail to get merge info", KR(ret));
+      LOG_WARN("fail to get merge info", KR(ret), K_(tenant_id));
     } else {
       bool need_merge = true;
       if (global_info.is_merge_error()) {
@@ -297,14 +306,14 @@ int ObMajorMergeScheduler::do_before_major_merge(const bool start_merge)
   global_broadcast_scn.set_min();
   FREEZE_TIME_GUARD;
   if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().get_global_broadcast_scn(global_broadcast_scn))) {
-    LOG_WARN("fail to get global broadcast scn", KR(ret));
+    LOG_WARN("fail to get global broadcast scn", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(merge_info_mgr_->get_freeze_info_mgr().get_freeze_info(global_broadcast_scn, freeze_info))) {
-    LOG_WARN("fail to get freeze info", KR(ret));
+    LOG_WARN("fail to get freeze info", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(progress_checker_->set_basic_info(freeze_info))) {
     LOG_WARN("failed to set basic info of progress checker", KR(ret), K(global_broadcast_scn));
   } else if (start_merge) {
     if (OB_FAIL(ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
-        *sql_proxy_, global_broadcast_scn))) {
+        *sql_proxy_, tenant_id_, global_broadcast_scn))) {
       LOG_WARN("fail to delete column checksum error info", KR(ret), K(global_broadcast_scn));
     }
   }
@@ -336,7 +345,7 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
         LOG_WARN("fail to get next merge zones", KR(ret));
       } else if (to_merge_zone.empty()) {
         // no new zone to merge
-        LOG_INFO("no more zone need to merge", K(global_info));
+        LOG_INFO("no more zone need to merge", K_(tenant_id), K(global_info));
       } else if (OB_FAIL(schedule_zones_to_merge(to_merge_zone))) {
         LOG_WARN("fail to schedule zones to merge", KR(ret), K(to_merge_zone));
       }
@@ -346,7 +355,7 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
       if (FAILEDx(update_merge_status(global_info.global_broadcast_scn()))) {
         LOG_WARN("fail to update merge status", KR(ret));
         if (TC_REACH_TIME_INTERVAL(ADD_EVENT_INTERVAL)) {
-          ROOTSERVICE_EVENT_ADD("daily_merge", "merge_process",
+          ROOTSERVICE_EVENT_ADD("daily_merge", "merge_process", K_(tenant_id),
                             "check merge progress fail", ret,
                             "global_broadcast_scn", global_info.global_broadcast_scn_,
                             "service_addr", GCONF.self_addr_);
@@ -377,8 +386,8 @@ int ObMajorMergeScheduler::generate_next_global_broadcast_scn()
   if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().generate_next_global_broadcast_scn(new_global_broadcast_scn))) {
     LOG_WARN("fail to generate next broadcast scn", KR(ret));
   } else {
-    LOG_INFO("start to schedule new round merge", K(new_global_broadcast_scn));
-    ROOTSERVICE_EVENT_ADD("daily_merge", "merging", "global_broadcast_scn",
+    LOG_INFO("start to schedule new round merge", K(new_global_broadcast_scn), K_(tenant_id));
+    ROOTSERVICE_EVENT_ADD("daily_merge", "merging", K_(tenant_id), "global_broadcast_scn",
                           new_global_broadcast_scn.get_val_for_inner_table_field(),
                           "zone", "global_zone");
   }
@@ -391,9 +400,9 @@ int ObMajorMergeScheduler::get_next_merge_zones(ObZoneArray &to_merge)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret), K_(is_inited));
+    LOG_WARN("not init", KR(ret), K_(is_inited), K_(tenant_id));
   } else if (OB_FAIL(merge_strategy_.get_next_zone(to_merge))) {
-    LOG_WARN("fail to get mext merge zones", KR(ret));
+    LOG_WARN("fail to get mext merge zones", KR(ret), K_(tenant_id));
   }
 
   return ret;
@@ -417,7 +426,7 @@ int ObMajorMergeScheduler::schedule_zones_to_merge(
       HEAP_VAR(ObZoneMergeInfo, tmp_info) {
         FOREACH_CNT_X(zone, to_merge, (OB_SUCCESS == ret) && !stop_) {
           tmp_info.reset();
-          
+          tmp_info.tenant_id_ = tenant_id_;
           if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().get_zone_merge_info(tmp_info))) {
             LOG_WARN("fail to get zone", KR(ret), K(*zone));
           } else if (0 == tmp_info.is_merging_.get_value()) {
@@ -455,7 +464,7 @@ int ObMajorMergeScheduler::start_zones_merge(const ObZoneArray &to_merge)
   } else {
     for (int64_t i = 0; !stop_ && OB_SUCC(ret) && (i < to_merge.count()); ++i) {
       HEAP_VAR(ObZoneMergeInfo, tmp_info) {
-        
+        tmp_info.tenant_id_ = tenant_id_;
         if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().get_zone_merge_info(tmp_info))) {
           LOG_WARN("fail to get zone", KR(ret));
         } else if (0 == tmp_info.is_merging_.get_value()) {
@@ -464,7 +473,7 @@ int ObMajorMergeScheduler::start_zones_merge(const ObZoneArray &to_merge)
         } else if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().start_zone_merge(to_merge.at(i)))) {
           LOG_WARN("fail to start zone merge", KR(ret), "zone", to_merge.at(i));
         } else {
-          ROOTSERVICE_EVENT_ADD("daily_merge", "start_merge", "zone", to_merge.at(i),
+          ROOTSERVICE_EVENT_ADD("daily_merge", "start_merge", K_(tenant_id), "zone", to_merge.at(i),
               "global_broadcast_scn", global_broadcast_scn.get_val_for_inner_table_field()) ;
         }
       }
@@ -484,10 +493,10 @@ int ObMajorMergeScheduler::update_merge_status(
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", KR(ret));
   } else if (OB_FAIL(progress_checker_->check_progress())) {
-    LOG_WARN("fail to check merge status", KR(ret));
+    LOG_WARN("fail to check merge status", KR(ret), K_(tenant_id));
     if (OB_CHECKSUM_ERROR == ret) {
       if (OB_TMP_FAIL(merge_info_mgr_->get_zone_merge_mgr().set_merge_status(ObZoneMergeInfo::CHECKSUM_ERROR))) {
-        LOG_WARN("fail to set merge error", KR(ret), KR(tmp_ret));
+        LOG_WARN("fail to set merge error", KR(ret), KR(tmp_ret), K_(tenant_id));
       }
     }
   } else {
@@ -513,7 +522,7 @@ int ObMajorMergeScheduler::handle_merge_progress(
       LOG_INFO("merge completed", K(global_broadcast_scn), K(progress));
     }
     if (OB_FAIL(try_update_global_merged_scn())) { // MERGE_STATUS: change to IDLE
-      LOG_WARN("fail to update global_merged_scn", KR(ret));
+      LOG_WARN("fail to update global_merged_scn", KR(ret), K_(tenant_id));
     }
   } else {
     LOG_INFO("this round of traversal is completed, but there are still tablets/tables that have not been merged",
@@ -544,12 +553,12 @@ int ObMajorMergeScheduler::try_update_global_merged_scn()
       } else if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().finish_all_zone_merge(global_broadcast_scn_val))) {
         LOG_WARN("failed to finish all zone merge", KR(ret));
       } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(
-            *GCTX.sql_proxy_, global_info, true/*print_sql*/))) {
+            *GCTX.sql_proxy_, tenant_id_, global_info, true/*print_sql*/))) {
         LOG_WARN("failed to load global merge info", KR(ret), K(global_info));
       } else if (global_info.is_last_merge_complete() && OB_FAIL(progress_checker_->clear_cached_info())) { // clear only when merge finished
         LOG_WARN("fail to do prepare handle of progress checker", KR(ret));
       } else {
-        ROOTSERVICE_EVENT_ADD("daily_merge", "global_merged",
+        ROOTSERVICE_EVENT_ADD("daily_merge", "global_merged", K_(tenant_id),
                               "global_broadcast_scn", global_broadcast_scn_val);
       }
     }
@@ -561,10 +570,10 @@ int ObMajorMergeScheduler::set_zone_merging(const ObZone &zone)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().set_zone_merging(zone))) {
-    LOG_WARN("fail to set zone merging flag", KR(ret), K(zone));
+    LOG_WARN("fail to set zone merging flag", KR(ret), K_(tenant_id), K(zone));
   } else {
-    ROOTSERVICE_EVENT_ADD("daily_merge", "set_zone_merging", K(zone));
-    LOG_INFO("set zone merging success", K(zone));
+    ROOTSERVICE_EVENT_ADD("daily_merge", "set_zone_merging", K_(tenant_id), K(zone));
+    LOG_INFO("set zone merging success", K_(tenant_id), K(zone));
   }
 
   return ret;
@@ -576,10 +585,11 @@ int ObMajorMergeScheduler::update_all_tablets_report_scn(
   int ret = OB_SUCCESS;
   FREEZE_TIME_GUARD;
   if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(
+          tenant_id_,
           global_braodcast_scn_val,
           ObTabletReplica::ScnStatus::SCN_STATUS_ERROR,
           stop_))) {
-    LOG_WARN("fail to batch update report_scn", KR(ret), K(global_braodcast_scn_val));
+    LOG_WARN("fail to batch update report_scn", KR(ret), K_(tenant_id), K(global_braodcast_scn_val));
   }
   return ret;
 }
@@ -592,18 +602,18 @@ void ObMajorMergeScheduler::check_merge_interval_time(const bool is_merging)
   int64_t global_merge_start_time = -1;
   if (OB_ISNULL(merge_info_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge info mgr is unexpected nullptr", KR(ret));
+    LOG_WARN("merge info mgr is unexpected nullptr", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().get_global_last_merged_time(global_last_merged_time))) {
-    LOG_WARN("fail to get global last merged time", KR(ret));
+    LOG_WARN("fail to get global last merged time", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(merge_info_mgr_->get_zone_merge_mgr().get_global_merge_start_time(global_merge_start_time))) {
-    LOG_WARN("fail to get global merge start time", KR(ret));
+    LOG_WARN("fail to get global merge start time", KR(ret), K_(tenant_id));
   } else {
     const int64_t MAX_NO_MERGE_INTERVAL = 36 * 3600 * 1000 * 1000L;  // 36 hours
     const int64_t MAX_REFRESH_EPOCH_IN_MERGE_INTERVAL = 6 * 3600 * 1000 * 1000L; // 6 hours
     if ((global_last_merged_time < 0) || (global_merge_start_time < 0)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected global_last_merged_time and global_merge_start_time", KR(ret),
-               K(global_last_merged_time), K(global_merge_start_time));
+               K(global_last_merged_time), K(global_merge_start_time), K_(tenant_id));
     } else if ((0 == global_last_merged_time) && (0 == global_merge_start_time)) {
       if (0 == first_check_merge_us_) {
         first_check_merge_us_ = now;

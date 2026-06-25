@@ -22,6 +22,8 @@
 #include "observer/ob_srv_task.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/ob_server_struct.h"
+#include "observer/omt/ob_tenant.h"
+#include "observer/ob_service.h"
 #include "lib/worker.h"
 #include "lib/lock/ob_futex.h"
 #include "common/ob_clock_generator.h"
@@ -75,9 +77,11 @@ public:
 static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_ctx)
 {
   int ret = OB_SUCCESS;
-  
-  
-  ExRpcTask *task = OB_NEW(ExRpcTask, ObMemAttr("ExRpcTask"));
+  uint64_t tenant_id = MTL_ID();
+  if (!is_valid_tenant_id(tenant_id)) {
+    tenant_id = OB_SYS_TENANT_ID;
+  }
+  ExRpcTask *task = OB_NEW(ExRpcTask, ObMemAttr(tenant_id, "ExRpcTask"));
   if (OB_ISNULL(task)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
@@ -91,11 +95,11 @@ static int dispatch_(int64_t timeout_us, std::function<int()> fn, SyncCtx *sync_
       ret = OB_ERR_UNEXPECTED;
       ob_delete(task);
     } else {
-      // ObMultiTenant::recv_request only accepts sys tenant and rejects
+      // ObMultiTenant::recv_request only accepts OB_SYS_TENANT_ID and rejects
       // every other tenant. Route to the specific tenant directly so that
       // sync_call / async_call work for user tenants too.
-      ObTenant *tenant = nullptr;
-      if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
+      omt::ObTenant *tenant = nullptr;
+      if (OB_FAIL(GCTX.omt_->get_tenant(tenant_id, tenant))) {
         ob_delete(task);
       } else if (OB_ISNULL(tenant)) {
         ret = OB_ERR_UNEXPECTED;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_dcl_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/engine/ob_exec_context.h"
@@ -36,7 +37,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   ObSQLSessionInfo *session_info = NULL;
-  
+  const uint64_t tenant_id = stmt.get_tenant_id();
   const ObStrings &users = stmt.get_users();
   ObIAllocator &allocator = ctx.get_allocator();
   obcall::ObGrantArg &arg = static_cast<obcall::ObGrantArg &>(stmt.get_ddl_arg());
@@ -114,7 +115,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query ctx is null", K(ret));
   } else {
-    
+    arg.tenant_id_ = tenant_id;
     arg.db_ = stmt.get_database_name();
     arg.table_ = stmt.get_table_name();
     arg.priv_set_ = stmt.get_priv_set();
@@ -146,9 +147,10 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(tenant_id,
+                                                  session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -237,7 +239,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeUserArg &arg = static_cast<obcall::ObRevokeUserArg &>(stmt.get_ddl_arg());
-  
+  arg.tenant_id_ = stmt.get_tenant_id();
   const ObIArray<uint64_t> &user_ids = stmt.get_users();
   const bool is_role = arg.role_ids_.count() > 0;
   if (is_role) {
@@ -267,7 +269,7 @@ int ObRevokeExecutor::revoke_catalog(ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeCatalogArg &arg = static_cast<obcall::ObRevokeCatalogArg &>(stmt.get_ddl_arg());
-  
+  arg.tenant_id_ = stmt.get_tenant_id();
   arg.priv_set_ = stmt.get_priv_set();
   // arg.catalog_ has been set in resolve phase
   const ObIArray<uint64_t> &user_ids = stmt.get_users();
@@ -289,7 +291,7 @@ int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeDBArg &arg = static_cast<obcall::ObRevokeDBArg &>(stmt.get_ddl_arg());
-  
+  arg.tenant_id_ = stmt.get_tenant_id();
   arg.priv_set_ = stmt.get_priv_set();
   arg.db_ = stmt.get_database_name();
   const ObIArray<uint64_t> &user_ids = stmt.get_users();
@@ -322,7 +324,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     LOG_WARN("Get my session error");
   } else {
     obcall::ObRevokeTableArg &arg = static_cast<obcall::ObRevokeTableArg &>(stmt.get_ddl_arg());
-    
+    arg.tenant_id_ = stmt.get_tenant_id();
     arg.priv_set_ = stmt.get_priv_set();
     arg.db_ = stmt.get_database_name();
     arg.table_ = stmt.get_table_name();
@@ -348,9 +350,10 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
       //todo: pl routine and others
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.tenant_id_, schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(arg.tenant_id_,
+                                                  session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -397,7 +400,7 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     LOG_WARN("Get my session error");
   } else {
     obcall::ObRevokeRoutineArg &arg = static_cast<obcall::ObRevokeRoutineArg &>(stmt.get_ddl_arg());
-    
+    arg.tenant_id_ = stmt.get_tenant_id();
     arg.priv_set_ = stmt.get_priv_set();
     arg.db_ = stmt.get_database_name();
     arg.routine_ = stmt.get_table_name();
@@ -406,9 +409,10 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     arg.grantor_id_ = stmt.get_grantor_id();
     arg.revoke_all_ora_ = stmt.get_revoke_all_ora();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.tenant_id_, schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(arg.tenant_id_,
+                                                  session_info->get_priv_user_id(),
                                                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
@@ -455,14 +459,15 @@ int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
     LOG_WARN("Get my session error");
   } else {
     obcall::ObRevokeObjMysqlArg &arg = static_cast<obcall::ObRevokeObjMysqlArg &>(stmt.get_ddl_arg());
-    
+    arg.tenant_id_ = stmt.get_tenant_id();
     arg.priv_set_ = stmt.get_priv_set();
     arg.obj_name_ = stmt.get_table_name();
     arg.obj_type_ = static_cast<uint64_t>(stmt.get_object_type());
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.tenant_id_, schema_guard))) {
       LOG_WARN("failed to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
+    } else if (OB_FAIL(schema_guard.get_user_info(arg.tenant_id_,
+                  session_info->get_priv_user_id(),
                   user_info))) {
       LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {

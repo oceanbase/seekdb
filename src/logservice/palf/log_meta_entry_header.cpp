@@ -16,6 +16,7 @@
 
 #include "log_meta_entry_header.h"
 #include "lib/utility/utility.h"          // FALSE_IT
+#include "lib/checksum/ob_crc64.h"         // ob_crc64
 
 namespace oceanbase
 {

@@ -21,6 +21,7 @@
 #include "lib/string/ob_sql_string.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "src/share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -31,13 +32,17 @@ namespace share
 
 
 int ObTenantMemstoreInfoOperator::get(
+    const uint64_t tenant_id,
     const common::ObIArray<common::ObAddr> &unit_servers,
     ObIArray<TenantServerMemInfo> &mem_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObSqlString unit_servers_str;
-  {
+  if (OB_INVALID_ID == tenant_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_ids is empty", K(tenant_id), K(ret));
+  } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < unit_servers.count(); ++i) {
       char svr_ip_str[common::MAX_IP_ADDR_LENGTH] = "";
       const common::ObAddr &unit_server = unit_servers.at(i);
@@ -54,7 +59,7 @@ int ObTenantMemstoreInfoOperator::get(
     } else if (OB_FAIL(sql.assign_fmt("SELECT active_span, "
         "memstore_used, freeze_trigger, memstore_limit FROM %s "
         "WHERE (%s)",
-        OB_ALL_VIRTUAL_MEMSTORE_INFO_TNAME, unit_servers_str.ptr()))) {
+        OB_ALL_VIRTUAL_TENANT_MEMSTORE_INFO_TNAME, unit_servers_str.ptr()))) {
       LOG_WARN("assign_fmt failed", K(ret));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -75,7 +80,7 @@ int ObTenantMemstoreInfoOperator::get(
                 break;
               }
             } else {
-              
+              mem_info.tenant_id_ = OB_SYS_TENANT_ID;
               EXTRACT_INT_FIELD_MYSQL(*result, "active_span",
                   mem_info.active_memstore_used_, int64_t);
               EXTRACT_INT_FIELD_MYSQL(*result, "memstore_used",
@@ -101,4 +106,3 @@ int ObTenantMemstoreInfoOperator::get(
 
 }//end namespace share
 }//end namespace oceanbase
-

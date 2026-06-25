@@ -27,6 +27,8 @@
 #endif
 #ifdef __linux__
 #include <sys/epoll.h>
+#include <time.h>
+#include <pthread.h>
 #endif
 
 extern "C" {

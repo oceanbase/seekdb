@@ -24,6 +24,7 @@
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/parser/ob_parser_utils.h"
@@ -1143,8 +1144,8 @@ int ObSelectResolver::resolve(const ParseNode &parse_tree)
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else {
-    {
-      
+    if (OB_INVALID_TENANT_ID != params_.show_tenant_id_) {
+      select_stmt->set_tenant_id(params_.show_tenant_id_);
     }
     select_stmt->set_show_seed(params_.show_seed_);
     /* -----------------------------------------------------------------
@@ -1300,6 +1301,9 @@ int ObSelectResolver::set_for_update_mysql(ObSelectStmt &stmt, const int64_t wai
       table_item->for_update_ = true;
       table_item->for_update_wait_us_ = wait_us;
       table_item->skip_locked_ = skip_locked;
+    } else if (table_item->is_link_table()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("mysql dblink not support select for update", K(ret));
     }
   }
   return ret;
@@ -1670,7 +1674,10 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
               break;
             }
           } while (true);
-          {
+          if (T_REMOTE_SEQUENCE == project_node->type_) {
+            ret = OB_NOT_IMPLEMENT;
+            LOG_WARN("remote sequence not support", K(ret));
+          } else {
             // mysql mode
             if (T_COLUMN_REF != project_node->type_ || project_node->num_child_ < 3) {
               ret = OB_ERR_UNEXPECTED;
@@ -1901,6 +1908,7 @@ int ObSelectResolver::transfer_rb_iterate_items()
     OZ( column_namespace_checker_.add_reference_table(table_item), table_item );
     OZ( select_stmt->add_from_item(table_item->table_id_, table_item->is_joined_table()) );
     OZ( add_from_items_order(table_item), table_item );
+    OX( select_stmt->set_has_reverse_link(table_item->is_reverse_link_) );
   }
 
   return ret;
@@ -1950,7 +1958,7 @@ int ObSelectResolver::expand_target_list(
 {
   int ret = OB_SUCCESS;
   ObArray<ColumnItem> column_items;
-  if (table_item.is_basic_table()) {
+  if (table_item.is_basic_table() || table_item.is_link_table()) {
     if (OB_FAIL(resolve_all_basic_table_columns(table_item, false, &column_items))) {
       LOG_WARN("resolve all basic table columns failed", K(ret), K(table_item));
     }
@@ -2383,7 +2391,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
         } else if (OB_FAIL(expand_target_list(*tab_item, target_list))) {
           LOG_WARN("resolve table columns failed", K(ret), K(tab_item), K(i));
         } else if (is_json_wildcard_column) {
-          if (OB_FAIL(schema_checker_->get_table_schema( tab_item->ref_id_, table_schema))) {
+          if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), tab_item->ref_id_, table_schema))) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("get table schema failed", K_(tab_item->table_name), K(tab_item->ref_id_), K(ret));
           } else if (OB_ISNULL(table_schema)) {
@@ -2676,6 +2684,7 @@ int ObSelectResolver::resolve_from_clause(const ParseNode *node)
       // oracle outer join will change from items
       OZ( add_from_items_order(table_item), table_item );
       if (OB_SUCC(ret)) {
+        select_stmt->set_has_reverse_link(table_item->is_reverse_link_);
       }
     }
     OZ( check_recursive_cte_usage(*select_stmt) );
@@ -2706,9 +2715,10 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
         LOG_WARN("failed to push back to order items.", K(ret));
       } else {/* do nothing. */}
     }
-    bool enable_hash_rollup = true
-                              && (GCONF._use_hash_rollup.case_compare("auto") == 0
-                                  || GCONF._use_hash_rollup.case_compare("forced") == 0);
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
+    bool enable_hash_rollup = tenant_config.is_valid()
+                              && (tenant_config->_use_hash_rollup.case_compare("auto") == 0
+                                  || tenant_config->_use_hash_rollup.case_compare("forced") == 0);
     if (OB_SUCC(ret) && enable_hash_rollup) {
       if (OB_FAIL(append(select_stmt->get_order_items(), order_items))) {
         LOG_WARN("append order items failed", K(ret));
@@ -4544,6 +4554,26 @@ int ObSelectResolver::check_column_ref_in_group_by_or_field_list(const ObRawExpr
   }
   return ret;
 }
+// use_sys_tenant flag indicates whether to obtain schema as a system tenant
+int ObSelectResolver::check_need_use_sys_tenant(bool &use_sys_tenant) const
+{
+  int ret = OB_SUCCESS;
+  if (params_.is_from_show_resolver_) {
+    // If the current tenant is already the system tenant, then ignore
+    if (OB_ISNULL(session_info_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("session info is null");
+    } else if (OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()) {
+      use_sys_tenant = false;
+    } else {
+      use_sys_tenant = true;
+    }
+  } else {
+    use_sys_tenant = false;
+  }
+  return ret;
+}
+
 int ObSelectResolver::check_in_sysview(bool &in_sysview) const
 {
   int ret = OB_SUCCESS;

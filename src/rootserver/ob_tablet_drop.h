@@ -17,12 +17,29 @@
 #ifndef OB_TABLE_DROP_H
 #define OB_TABLE_DROP_H
 
+#include "lib/container/ob_array.h"
+#include "lib/container/ob_iarray.h"
+#include "lib/allocator/ob_malloc.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "share/ob_define.h"
+#include "common/ob_tablet_id.h"
+#include "share/ob_ls_id.h"
 
 namespace oceanbase
 {
+namespace share
+{
+namespace schema
+{
+class ObTableSchema;
+}
+
+class ObLSID;
+}
+
 namespace rpc
 {
-  class ObBatchRemoveTabletArg;
+class ObBatchRemoveTabletArg;
 }
 namespace rootserver
 {
@@ -31,9 +48,11 @@ class ObTabletDrop
 {
 public:
   ObTabletDrop(
+      const uint64_t tenant_id,
       ObMySQLTransaction &trans,
       int64_t schema_version)
-                : trans_(trans),
+                : tenant_id_(tenant_id),
+                  trans_(trans),
                   allocator_("TbtDrop"),
                   schema_version_(schema_version),
                   inited_(false) {}
@@ -60,6 +79,7 @@ private:
       const int64_t j,
       const bool is_hidden);
 private:
+  const uint64_t tenant_id_;
   ObMySQLTransaction &trans_;
   ObArenaAllocator allocator_;
   common::hash::ObHashMap<share::ObLSID, common::ObIArray<ObTabletID>*> args_map_;

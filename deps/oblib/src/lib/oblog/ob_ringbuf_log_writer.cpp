@@ -16,6 +16,7 @@
 
 #include "ob_ringbuf_log_writer.h"
 #include "lib/lock/ob_scond.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
 
 using namespace oceanbase::lib;
@@ -180,7 +181,7 @@ ObRingBufLogWriter::~ObRingBufLogWriter()
 int ObRingBufLogWriter::init(int64_t group_commit_max_wait_us, const char *thread_name)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr("RingBufLogWr");
+  ObMemAttr attr(OB_SERVER_TENANT_ID, "RingBufLogWr");
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -196,7 +197,7 @@ int ObRingBufLogWriter::init(int64_t group_commit_max_wait_us, const char *threa
     } else if (OB_FAIL(ringbuf_.init(ringbuf_buf, RINGBUF_SIZE))) {
       LOG_STDERR("Fail to init ObRingBuf, ret=%d.\n", ret);
       ob_free(ringbuf_buf);
-    } else if (OB_ISNULL(flush_cond_ = OB_NEW(SimpleCond, attr))) {
+  } else if (OB_ISNULL(flush_cond_ = OB_NEW(SimpleCond, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_STDERR("Fail to allocate flush_cond_.\n");
       ob_free(ringbuf_buf);

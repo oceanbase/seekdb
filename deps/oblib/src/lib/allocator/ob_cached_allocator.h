@@ -19,6 +19,7 @@
 
 #include "lib/objectpool/ob_pool.h"
 #include "lib/lock/ob_spin_lock.h"
+#include "lib/container/ob_array.h"
 
 namespace oceanbase
 {

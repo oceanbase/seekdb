@@ -18,6 +18,7 @@
 #define OCEANBASE_RPC_OB_SQL_REQUEST_OPERATOR_H_
 
 #include <stdint.h>
+#include <openssl/ssl.h>
 #include "lib/net/ob_addr.h"
 
 namespace oceanbase
@@ -188,4 +189,3 @@ extern ObSqlRequestOperator global_sql_req_operator;
 } // end of namespace oceanbase
 
 #endif /* OCEANBASE_RPC_OB_SQL_REQUEST_OPERATOR_H_ */
-

@@ -18,6 +18,7 @@
 #include "ob_dbms_xplan.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 #include "sql/ob_spi.h"
+#include "sql/resolver/ddl/ob_explain_stmt.h" // ObExplainDisplayOpt
 
 namespace oceanbase
 {
@@ -227,7 +228,7 @@ int ObDbmsXplan::display_cursor(sql::ObExecContext &ctx,
   ObString svr_ip;
   ObString format;
   int64_t plan_id;
-  
+  int64_t tenant_id = OB_SYS_TENANT_ID;
   int64_t svr_port = 0;
   number::ObNumber num_val;
   ObString plan_name;
@@ -254,6 +255,7 @@ int ObDbmsXplan::display_cursor(sql::ObExecContext &ctx,
     LOG_WARN("failed to get number value", K(ret));
   } else if (OB_FAIL(num_val.cast_to_int64(svr_port))) {
     LOG_WARN("failed to cast int", K(ret));
+  } else if (FALSE_IT(idx++)) { // ignore tenant_id
   } else if (OB_FAIL(params.at(idx++).get_varchar(sql_handle))) {
     LOG_WARN("failed to get sql string", K(ret));
   } else if (OB_FAIL(params.at(idx++).get_varchar(plan_name))) {
@@ -289,6 +291,7 @@ int ObDbmsXplan::display_cursor(sql::ObExecContext &ctx,
         OB_FAIL(get_server_ip_port(ctx, svr_ip, svr_port))) {
       LOG_WARN("failed to get svr ip and port", K(ret));
     } else if (OB_FAIL(get_plan_info_by_id(ctx, 
+                                           tenant_id, 
                                            svr_ip, 
                                            svr_port, 
                                            plan_id,
@@ -320,7 +323,7 @@ int ObDbmsXplan::display_sql_plan_baseline(sql::ObExecContext &ctx,
   number::ObNumber num_val;
   uint64_t plan_hash = 0;
   ObString format;
-  
+  int64_t tenant_id = OB_SYS_TENANT_ID;
   ObString svr_ip;
   int64_t svr_port;
   ObSQLSessionInfo *session = ctx.get_my_session();
@@ -366,6 +369,7 @@ int ObDbmsXplan::display_sql_plan_baseline(sql::ObExecContext &ctx,
         OB_FAIL(get_server_ip_port(ctx, svr_ip, svr_port))) {
       LOG_WARN("failed to get svr ip and port", K(ret));
     } else if (OB_FAIL(get_baseline_plan_info(ctx, 
+                                              tenant_id, 
                                               svr_ip, 
                                               svr_port, 
                                               sql_handle,
@@ -383,7 +387,8 @@ int ObDbmsXplan::display_sql_plan_baseline(sql::ObExecContext &ctx,
       } else if (EXPLAIN_EXTENDED == type &&
                  OB_FAIL(get_baseline_plan_detail(ctx, 
                                                   sql_handle, 
-                                                  plan_name,
+                                                  plan_name, 
+                                                  tenant_id,
                                                   plan_text, 
                                                   true))) {
         LOG_WARN("failed to get baseline plan detail", K(ret));
@@ -439,6 +444,7 @@ int ObDbmsXplan::display_active_session_plan(sql::ObExecContext &ctx,
                                                   session_id, 
                                                   svr_ip, 
                                                   svr_port,
+                                                  session->get_effective_tenant_id(),
                                                   plan_infos))) {
       LOG_WARN("failed to get plan info", K(ret));
     } else if (OB_FAIL(get_plan_format(format, type, option))) {
@@ -646,6 +652,7 @@ int ObDbmsXplan::get_plan_info_by_plan_table(sql::ObExecContext &ctx,
 }
 
 int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
+                                      int64_t tenant_id,
                                       const ObString &svr_ip,
                                       int64_t svr_port,
                                       uint64_t plan_id,
@@ -797,6 +804,7 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
 }
 
 int ObDbmsXplan::get_baseline_plan_info(sql::ObExecContext &ctx,
+                                        int64_t tenant_id,
                                         const ObString &svr_ip,
                                         int64_t svr_port,
                                         const ObString &sql_handle,
@@ -936,7 +944,8 @@ int ObDbmsXplan::get_baseline_plan_info(sql::ObExecContext &ctx,
 
 int ObDbmsXplan::get_baseline_plan_detail(sql::ObExecContext &ctx,
                                           const ObString& sql_handle, 
-                                          const ObString& plan_name,
+                                          const ObString& plan_name, 
+                                          int64_t tenant_id,
                                           PlanText &plan_text,
                                           bool from_plan_cache)
 {
@@ -947,10 +956,10 @@ int ObDbmsXplan::get_baseline_plan_detail(sql::ObExecContext &ctx,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null session", K(ret));
-  } else if (true && 
-      OB_FAIL(baseline_filter.assign_fmt("__all_virtual_plan_baseline_item"))) {
+  } else if (is_sys_tenant(session->get_effective_tenant_id()) && 
+      OB_FAIL(baseline_filter.assign_fmt("__all_virtual_plan_baseline_item where tenant_id=%ld", tenant_id))) {
     LOG_WARN("failed to assign string", K(ret));
-  } else if (false && 
+  } else if (!is_sys_tenant(session->get_effective_tenant_id()) && 
              OB_FAIL(baseline_filter.assign_fmt("__all_plan_baseline_item"))) {
     LOG_WARN("failed to assign string", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select * from (select ORIGIN_SQL sql_text,\
@@ -1002,11 +1011,13 @@ int ObDbmsXplan::inner_get_baseline_plan_detail(sql::ObExecContext &ctx,
       if (OB_ISNULL(my_session)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is null", K(ret), K(my_session));
-      } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(res, 
+                                         my_session->get_effective_tenant_id(), 
+                                         sql.ptr()))) {
         LOG_WARN("failed to execute recover sql", K(ret), K(sql));
       } else if (OB_ISNULL(mysql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execute sql fail", K(ret), K(sql));
+        LOG_WARN("execute sql fail", K(ret), K(my_session->get_effective_tenant_id()), K(sql));
       }
       if (OB_SUCC(ret) && OB_SUCC(mysql_result->next())) {
         if (OB_FAIL(format_baseline_plan_detail(ctx, 
@@ -1124,12 +1135,13 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                                             int64_t session_id,
                                             const ObString &svr_ip,
                                             int64_t svr_port,
+                                            int64_t tenant_id,
                                             ObIArray<ObSqlPlanItem*> &plan_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObSqlString tenant_filter;
-  {
+  if (is_sys_tenant(tenant_id)) {
     if (OB_FAIL(tenant_filter.assign_fmt("1 = 1"))) {
       LOG_WARN("failed to assign string", K(ret));
     }
@@ -1227,11 +1239,13 @@ int ObDbmsXplan::inner_get_plan_info(sql::ObExecContext &ctx,
       if (OB_ISNULL(my_session)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is null", K(ret), K(my_session));
-      } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
+      } else if (OB_FAIL(sql_proxy->read(res, 
+                                         my_session->get_effective_tenant_id(), 
+                                         sql.ptr()))) {
         LOG_WARN("failed to execute recover sql", K(ret), K(sql));
       } else if (OB_ISNULL(mysql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("execute sql fail", K(ret), K(sql));
+        LOG_WARN("execute sql fail", K(ret), K(my_session->get_effective_tenant_id()), K(sql));
       }
       while (OB_SUCC(ret) && OB_SUCC(mysql_result->next())) {
         void *buf = NULL;
@@ -1277,7 +1291,7 @@ int ObDbmsXplan::inner_get_plan_info_use_current_session(sql::ObExecContext &ctx
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *mysql_result = NULL;
-      if (OB_FAIL(conn->execute_read(sql.ptr(), res))) {
+      if (OB_FAIL(conn->execute_read(session->get_effective_tenant_id(), sql.ptr(), res))) {
         LOG_WARN("failed to execute recover sql", K(ret), K(sql));
       } else if (OB_ISNULL(mysql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;

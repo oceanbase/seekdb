@@ -17,22 +17,24 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_fuse_row_cache.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::storage;
 
 ObFuseRowCacheKeyBase::ObFuseRowCacheKeyBase()
-  : rowkey_size_(0), rowkey_(), schema_column_count_(0), datum_utils_(nullptr)
+  : tenant_id_(0), rowkey_size_(0), rowkey_(), schema_column_count_(0), datum_utils_(nullptr)
 {
 }
 
 ObFuseRowCacheKeyBase::ObFuseRowCacheKeyBase(
+    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     const ObDatumRowkey &rowkey,
     const int64_t schema_column_count,
     const ObStorageDatumUtils &datum_utils)
 {
-  
+  tenant_id_ = tenant_id;
   tablet_id_ = tablet_id;
   rowkey_ = rowkey;
   rowkey_size_ = rowkey.get_deep_copy_size();
@@ -43,6 +45,7 @@ ObFuseRowCacheKeyBase::ObFuseRowCacheKeyBase(
 int ObFuseRowCacheKeyBase::hash(uint64_t &hash_val) const
 {
   int ret = OB_SUCCESS;
+  hash_val = common::murmurhash(&tenant_id_, sizeof(tenant_id_), 0);
   hash_val = common::murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
   hash_val = common::murmurhash(&schema_column_count_, sizeof(schema_column_count_), hash_val);
   if (rowkey_.is_valid()) {
@@ -59,7 +62,7 @@ int ObFuseRowCacheKeyBase::hash(uint64_t &hash_val) const
 int ObFuseRowCacheKeyBase::equal(const ObFuseRowCacheKeyBase &other, bool &equal) const
 {
   int ret = OB_SUCCESS;
-  equal = true;
+  equal = tenant_id_ == other.tenant_id_;
   equal &= tablet_id_ == other.tablet_id_;
   equal &= rowkey_size_ == other.rowkey_size_;
   equal &= schema_column_count_ == other.schema_column_count_;
@@ -85,7 +88,7 @@ int ObFuseRowCacheKeyBase::deep_copy(char *buf, const int64_t buf_len, ObFuseRow
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid fuse row cache key", K(ret), K(*this));
   } else {
-    
+    dest.tenant_id_ = tenant_id_;
     dest.tablet_id_ = tablet_id_;
     dest.schema_column_count_ = schema_column_count_;
     if (rowkey_.is_valid() && rowkey_size_ > 0) {
@@ -107,12 +110,13 @@ ObFuseRowCacheKey::ObFuseRowCacheKey()
 }
 
 ObFuseRowCacheKey::ObFuseRowCacheKey(
+    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     const ObDatumRowkey &rowkey,
     const int64_t tablet_snapshot_version,
     const int64_t schema_column_count,
     const ObStorageDatumUtils &datum_utils)
-  : base_(tablet_id, rowkey, schema_column_count, datum_utils),
+  : base_(tenant_id, tablet_id, rowkey, schema_column_count, datum_utils),
     tablet_snapshot_version_(tablet_snapshot_version)
 {
 }
@@ -135,7 +139,10 @@ int ObFuseRowCacheKey::hash(uint64_t &hash_value) const
   return ret;
 }
 
-
+uint64_t ObFuseRowCacheKey::get_tenant_id() const
+{
+  return base_.get_tenant_id();
+}
 
 int64_t ObFuseRowCacheKey::size() const
 {
@@ -285,11 +292,12 @@ ObMultiVersionFuseRowCacheKey::ObMultiVersionFuseRowCacheKey()
 ObMultiVersionFuseRowCacheKey::ObMultiVersionFuseRowCacheKey(
     const int64_t begin_version,
     const int64_t end_version,
+    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     const ObDatumRowkey &rowkey,
     const int64_t schema_column_count,
     const ObStorageDatumUtils &datum_utils)
-  : base_(tablet_id, rowkey, schema_column_count, datum_utils),
+  : base_(tenant_id, tablet_id, rowkey, schema_column_count, datum_utils),
     begin_version_(begin_version),
     end_version_(end_version)
 {
@@ -319,7 +327,10 @@ int ObMultiVersionFuseRowCacheKey::hash(uint64_t &hash_value) const
   return ret;
 }
 
-
+uint64_t ObMultiVersionFuseRowCacheKey::get_tenant_id() const
+{
+  return base_.get_tenant_id();
+}
 
 int64_t ObMultiVersionFuseRowCacheKey::size() const
 {

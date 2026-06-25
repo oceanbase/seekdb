@@ -26,6 +26,7 @@
 #include "logservice/ob_log_base_header.h"
 #include "logservice/ob_log_handler.h"
 #include "share/scn.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
 {

@@ -17,6 +17,11 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_debug_sync.h"
+#include "share/config/ob_server_config.h"
+#include "share/ob_server_struct.h"
+#include "share/ob_rpc_struct.h"
+#include "lib/thread_local/ob_tsi_factory.h"
+#include "rootserver/ob_root_service.h"
 
 namespace oceanbase
 {

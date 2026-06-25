@@ -20,6 +20,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/time/ob_time_utility.h"
+#include "lib/guard/ob_unique_guard.h"
 #include "share/config/ob_system_config.h"
 #include "share/config/ob_config.h"
 #include "share/storage/ob_sqlite_connection_pool.h"

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_io_schedule_v2.h"
+#include "share/io/ob_io_manager.h"
 #include "share/io/ob_io_struct.h"
 namespace oceanbase
 {

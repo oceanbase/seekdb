@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/net/ob_addr.h"
-#include "lib/thread/thread_mgr_interface.h"
+#include "lib/thread/thread_mgr.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -37,7 +37,7 @@ class ObMajorMergeInfoManager;
 class ObDailyMajorFreezeLauncher : public common::ObTimerTask
 {
 public:
-  ObDailyMajorFreezeLauncher();
+  ObDailyMajorFreezeLauncher(const uint64_t tenant_id);
   virtual ~ObDailyMajorFreezeLauncher();
   int init(common::ObServerConfig &config,
            common::ObMySQLProxy &proxy,
@@ -72,6 +72,7 @@ private:
   bool is_inited_;
   bool is_paused_;
   bool already_launch_;
+  uint64_t tenant_id_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObServerConfig *config_;
   int64_t gc_freeze_info_last_timestamp_;

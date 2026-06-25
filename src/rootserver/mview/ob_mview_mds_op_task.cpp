@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/mview/ob_mview_mds_op_task.h"
-#include "share/rc/ob_module_provider.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase {
 namespace rootserver {
@@ -27,6 +28,7 @@ ObMViewMdsOpTask::ObMViewMdsOpTask()
   : is_inited_(false),
     in_sched_(false),
     is_stop_(true),
+    tenant_id_(OB_INVALID_TENANT_ID),
     last_sched_ts_(0)
 {
 }
@@ -40,6 +42,7 @@ int ObMViewMdsOpTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObMViewMdsOpTask init twice", KR(ret), KP(this));
   } else {
+    tenant_id_ = MTL_ID();
     is_inited_ = true;
   }
   return ret;
@@ -67,7 +70,7 @@ void ObMViewMdsOpTask::stop()
   is_stop_ = true;
   in_sched_ = false;
   cancel_task();
-  (void)share::g_mp->m_view_maintenance_service()->get_mview_mds_op().clear();
+  (void)MTL(ObMViewMaintenanceService*)->get_mview_mds_op().clear();
 }
 
 void ObMViewMdsOpTask::destroy()
@@ -77,6 +80,7 @@ void ObMViewMdsOpTask::destroy()
   in_sched_ = false;
   cancel_task();
   wait_task();
+  tenant_id_ = OB_INVALID_TENANT_ID;
   last_sched_ts_ = 0;
 }
 
@@ -108,12 +112,12 @@ int ObMViewMdsOpTask::update_mview_mds_op()
   share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
   ObLSHandle ls_handle;
   transaction::ObLSTxCtxIterator ls_tx_ctx_iter;
-  ObMViewMaintenanceService::MViewMdsOpMap &mview_mds_map = share::g_mp->m_view_maintenance_service()->get_mview_mds_op();
+  ObMViewMaintenanceService::MViewMdsOpMap &mview_mds_map = MTL(ObMViewMaintenanceService*)->get_mview_mds_op();
   hash::ObHashSet<transaction::ObTransID> tx_set;
   int64_t start_ts = ObTimeUtil::current_time();
   if (OB_FAIL(tx_set.create(32))) {
     LOG_WARN("create tx set failed", KR(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
+  } else if (OB_FAIL(MTL(ObLSService*)->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     LOG_WARN("get_ls failed", KR(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->iterate_tx_ctx(ls_tx_ctx_iter))) {
     LOG_WARN("construt tx_ctx iter failed", KR(ret));
@@ -168,7 +172,7 @@ void ObMViewMdsOpTask::runTimerTask()
   int ret = OB_SUCCESS;
   bool need_sched = false;
   int64_t curr_ts = ObTimeUtil::current_time();
-  if (last_sched_ts_ <= share::g_mp->m_view_maintenance_service()->get_mview_mds_ts()) {
+  if (last_sched_ts_ <= MTL(ObMViewMaintenanceService*)->get_mview_mds_ts()) {
     need_sched = true;
   } else if (curr_ts - last_sched_ts_ > 60 * 1000 * 1000) {
     need_sched = true;

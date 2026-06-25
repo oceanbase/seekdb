@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"  // ObExprRegexpSessionVariables (unity regroup)
 #include "sql/engine/cmd/ob_index_executor.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
@@ -35,6 +36,7 @@
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "observer/ob_server_event_history_table_operator.h"
+#include "share/external_table/ob_external_table_utils.h"
 #include "storage/mview/cmd/ob_mview_executor_util.h"
 #include "storage/ob_partition_pre_split.h"
 
@@ -86,13 +88,13 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
   const ObSelectStmt *select_stmt = NULL;
   int64_t pos1 = 0;
   uint64_t insert_mode = 0;
-  
+  const uint64_t tenant_id = MTL_ID();
   uint64_t data_version = 0;
   if (OB_ISNULL(stmt_) || OB_ISNULL(select_stmt= stmt_->get_sub_select())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null stmt", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
+  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
+    LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
   } else {
     const char *insert_str = NULL;
     const int64_t parallel_str_max_len = 256;
@@ -263,7 +265,7 @@ int ObCreateTableExecutor::prepare_alter_arg(ObCreateTableStmt &stmt,
   //compat for old server
   alter_table_arg.tz_info_ = my_session->get_tz_info_wrap().get_tz_info_offset();
   alter_table_arg.is_inner_ = my_session->is_inner();
-  
+  alter_table_arg.exec_tenant_id_ = my_session->get_effective_tenant_id();
   if (OB_FAIL(alter_table_arg.tz_info_wrap_.deep_copy(my_session->get_tz_info_wrap()))) {
     LOG_WARN("failed to deep_copy tz info wrap", "tz_info_wrap", my_session->get_tz_info_wrap(), K(ret));
   } else if (OB_FAIL(alter_table_arg.set_nls_formats(
@@ -303,11 +305,11 @@ int ObCreateTableExecutor::prepare_drop_arg(const ObCreateTableStmt &stmt,
   const ObString &db_name = stmt.get_database_name();
   const ObString &tab_name = stmt.get_table_name();
   drop_table_arg.if_exist_ = true;
-  
+  drop_table_arg.tenant_id_ = my_session->get_login_tenant_id();
   drop_table_arg.to_recyclebin_ = false;
   drop_table_arg.table_type_ = USER_TABLE;
   drop_table_arg.session_id_ = my_session->get_sessid_for_table();
-  
+  drop_table_arg.exec_tenant_id_ = my_session->get_effective_tenant_id();
   int64_t foreign_key_checks = 0;
   my_session->get_foreign_key_checks(foreign_key_checks);
   drop_table_arg.foreign_key_checks_ = foreign_key_checks;
@@ -353,7 +355,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         LOG_WARN("failed to write string to session", K(ret));
       }
     }
-    
+    uint64_t tenant_id = create_table_arg.schema_.get_tenant_id();
     if (OB_SUCC(ret)) {
       ObInnerSQLConnectionPool *pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool());
       if (OB_ISNULL(pool)) {
@@ -377,7 +379,8 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
         create_table_arg.is_parallel_ = false;
         if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(my_session, "[parallel create table]",
-                                                            create_table_arg, create_table_res))) {
+                                                            create_table_arg, create_table_res,
+                                                            tenant_id))) {
           LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(create_table_res));
         }
       }
@@ -396,8 +399,9 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected schema version", K(ret), K(create_table_res));
         } else {
-          
-          if (OB_FAIL(gctx.schema_service_->async_refresh_schema(create_table_res.schema_version_))) {
+          uint64_t tenant_id = my_session->get_effective_tenant_id();
+          if (OB_FAIL(gctx.schema_service_->async_refresh_schema(tenant_id,
+                                                                create_table_res.schema_version_))) {
             LOG_WARN("failed to async refresh schema", K(ret));
           }
         }
@@ -420,7 +424,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           bool original_autocommit = false;
           ObBasicSessionInfo::UserScopeGuard user_scope_guard(my_session->get_sql_scope_flags());
           common::sqlclient::ObISQLConnection *conn = NULL;
-          
+          const uint64_t tenant_id = my_session->get_effective_tenant_id();
           user_sql_proxy = sql_proxy;
           if (OB_FAIL(my_session->get_autocommit(original_autocommit))) {
             LOG_WARN("failed to get autocommit", K(ret));
@@ -434,8 +438,8 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
               ret = OB_INNER_STAT_ERROR;
               LOG_WARN("connection can not be NULL", K(ret));
             } else if (OB_FAIL(
-                           conn->execute_write(ins_sql.ptr(), affected_rows, true))) {
-              LOG_WARN("failed to exec sql", K(ins_sql), K(ret));
+                           conn->execute_write(tenant_id, ins_sql.ptr(), affected_rows, true))) {
+              LOG_WARN("failed to exec sql", K(tenant_id), K(ins_sql), K(ret));
             }
 
             if (need_set_autocommit && !original_autocommit) {
@@ -503,6 +507,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
       snprintf(table_info_buffer, sizeof(table_info_buffer), "table_id:%ld, hidden_table_id:%ld",
                 alter_table_arg.table_id_, alter_table_arg.hidden_table_id_);
       SERVER_EVENT_ADD("ddl", "create table as select execute finish",
+        "tenant_id", MTL_ID(),
         "ret", ret,
         "trace_id", *ObCurTraceId::get_trace_id(),
         "rpc_dst", GCTX.self_addr(),
@@ -525,21 +530,50 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
   ObSelectStmt *select_stmt = stmt.get_sub_select();
   const ObTableSchema &table_schema = create_table_arg.schema_;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
-  
+  uint64_t tenant_id = table_schema.get_tenant_id();
   if (OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("get first statement failed", K(ret));
   } else if (table_schema.is_duplicate_table()) {
-
-  // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
-    LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
-
+   if (is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id)) {
+    // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
+      LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
+    }
   }
 
+  ObArray<ObString> file_urls;
+  ObArray<int64_t> file_sizes;
+  if (OB_FAIL(ret)) {
+  } else if (table_schema.is_external_table() && !table_schema.is_user_specified_partition_for_external_table()) {
+    ObExprRegexpSessionVariables regexp_vars;
+    ObString file_location;
+    ObString access_info;
+    CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
+    OZ (ObExternalTableUtils::get_external_file_location(table_schema, *(ctx.get_sql_ctx()->schema_guard_), ctx.get_allocator(), file_location));
+    OZ (ObExternalTableUtils::get_external_file_location_access_info(table_schema, *(ctx.get_sql_ctx()->schema_guard_), access_info));
+    if (ObSQLUtils::is_external_files_on_local_disk(file_location)) {
+      OZ (ObSQLUtils::check_location_access_priv(file_location, my_session));
+    }
+    ObSqlString tmp;
+    OZ (my_session->get_regexp_session_vars(regexp_vars));
+    OZ (ObExternalTableUtils::collect_external_file_list(
+              ctx.get_my_session(),
+              table_schema.get_tenant_id(), -1 /*table id(UNUSED)*/,
+              file_location,
+              access_info,
+              table_schema.get_external_file_pattern(),
+              table_schema.get_external_properties(),
+              table_schema.is_partitioned_table(),
+              regexp_vars,
+              ctx.get_allocator(),
+              tmp,
+              file_urls,
+              file_sizes));
+  }
   if (OB_FAIL(ret)) {
   } else {
     create_table_arg.is_inner_ = my_session->is_inner();
@@ -547,8 +581,9 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     const_cast<obcall::ObCreateTableArg&>(create_table_arg).ddl_stmt_str_ = first_stmt;
     bool enable_parallel_create_table = false;
     {
-      enable_parallel_create_table = true
-                                     && GCONF._enable_parallel_table_creation;
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+      enable_parallel_create_table = tenant_config.is_valid()
+                                     && tenant_config->_enable_parallel_table_creation;
 
     }
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -565,15 +600,17 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       } else if (table_schema.is_view_table()) {
         is_parallel_create = false;
       } else {
-        is_parallel_create = true
-                             && GCONF._enable_parallel_table_creation;
+        omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+        is_parallel_create = tenant_config.is_valid()
+                             && tenant_config->_enable_parallel_table_creation;
       }
       if (OB_FAIL(ret)) {
         // do nothing
       } else {
         DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
         if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(my_session, "[parallel create table]",
-                                                          create_table_arg, res))) {
+                                                          create_table_arg, res,
+                                                          tenant_id))) {
           LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(res));
         }
       }
@@ -583,23 +620,50 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
           if (session_info == nullptr) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("session_info should not be nullptr", KR(ret));
-          } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, false/*do not retry at executor*/, session_info, true))) {
+          } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+                       tenant_id, res.task_id_, false/*do not retry at executor*/, session_info, true))) {
             if (storage::ObMViewExecutorUtil::is_mview_refresh_retry_ret_code(ret)) {
-              LOG_WARN("retry create mview", KR(ret), "task_id", res.task_id_);
+              LOG_WARN("retry create mview", KR(ret), K(tenant_id), "task_id", res.task_id_);
               ret = OB_EAGAIN;
             } else {
-              LOG_WARN("fail to create mview", KR(ret), "task_id", res.task_id_);
+              LOG_WARN("fail to create mview", KR(ret), K(tenant_id), "task_id", res.task_id_);
             }
           }
         }
       }
       
+      if (OB_SUCC(ret) && table_schema.is_external_table() && !table_schema.is_user_specified_partition_for_external_table()) {
+        //auto refresh after create external table
+        ObArray<uint64_t> updated_part_ids; //not used
+        bool has_partition_changed = false; //not used 
+        const uint64_t part_id = -1;
+        bool collect_statistics_on_create = false;
+        bool is_odps_external_table = false;
+        if (OB_FAIL(ObSQLUtils::is_odps_external_table(&table_schema, is_odps_external_table))) {
+          LOG_WARN("failed to check is odps external table or not", K(ret));
+        } else if (is_odps_external_table) {
+          sql::ObExternalFileFormat ex_format;
+          ex_format.format_type_ = sql::ObExternalFileFormat::ODPS_FORMAT;
+          ObArenaAllocator allocator("CreateTableExec");
+          if (OB_FAIL(ex_format.load_from_string(table_schema.get_external_properties(), allocator))) {
+            LOG_WARN("failed to load from string", K(ret));
+          } else {
+            collect_statistics_on_create = ex_format.odps_format_.collect_statistics_on_create_;
+          }
+        }
+        OZ (ObExternalTableFileManager::get_instance().update_inner_table_file_list(ctx, tenant_id, res.table_id_, file_urls, file_sizes, updated_part_ids, has_partition_changed,
+                                                                                    part_id, collect_statistics_on_create));
+      }
     } else {
-      if (OB_FAIL(execute_ctas(ctx, stmt))){  // Processing of query-based table creation
+      if (table_schema.is_external_table()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "create external table as select");
+      } else if (OB_FAIL(execute_ctas(ctx, stmt))){  // Processing of query-based table creation
         LOG_WARN("execute create table as select failed", KR(ret));
       }
     }
     SERVER_EVENT_ADD("ddl", "create table execute finish",
+      "tenant_id", MTL_ID(),
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "rpc_dst", GCTX.self_addr(),
@@ -654,7 +718,8 @@ ObAlterTableExecutor::~ObAlterTableExecutor()
 {
 }
 
-int ObAlterTableExecutor::refresh_schema_for_table()
+int ObAlterTableExecutor::refresh_schema_for_table(
+    const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
@@ -667,15 +732,18 @@ int ObAlterTableExecutor::refresh_schema_for_table()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
   } else if (OB_FAIL(schema_service->get_tenant_refreshed_schema_version(
-          local_version))) {
-    LOG_WARN("fail to get local version", K(ret));
+          tenant_id, local_version))) {
+    LOG_WARN("fail to get local version", K(ret), "tenant_id", tenant_id);
   } else if (OB_FAIL(schema_service->get_tenant_received_broadcast_version(
-          global_version))) {
-    LOG_WARN("fail to get global version", K(ret));
+          tenant_id, global_version))) {
+    LOG_WARN("fail to get global version", K(ret), "tenant_id", tenant_id);
   } else if (local_version < global_version) {
     LOG_INFO("try to refresh schema", K(local_version), K(global_version));
     // force refresh schema latest version
-    if (OB_FAIL(schema_service->refresh_and_add_schema())) {
+    ObSEArray<uint64_t, 1> tenant_ids;
+    if (OB_FAIL(tenant_ids.push_back(tenant_id))) {
+      LOG_WARN("fail to push back tenant_id", K(ret), "tenant_id", tenant_id);
+    } else if (OB_FAIL(schema_service->refresh_and_add_schema(tenant_ids))) {
       LOG_WARN("failed to refresh schema", K(ret));
     }
   }
@@ -700,7 +768,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
   ObSArray<obcall::ObIndexArg *> add_index_arg_list;
   ObSArray<obcall::ObIndexArg *> drop_index_args;
   alter_table_arg.index_arg_list_.reset();
-  
+  uint64_t tenant_id = alter_table_arg.exec_tenant_id_;
   if (OB_ISNULL(my_session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
@@ -747,15 +815,16 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     AlterTableSchema &alter_table_schema = const_cast<AlterTableSchema &>(alter_table_arg.alter_table_schema_);
     if (OB_FAIL(populate_based_schema_obj_info_(alter_table_arg))) {
       LOG_WARN("fail to populate based schema obj info", KR(ret));
-    } else if (OB_FAIL(pre_split.get_global_index_pre_split_schema_if_need(alter_table_arg.session_id_,
+    } else if (OB_FAIL(pre_split.get_global_index_pre_split_schema_if_need(alter_table_schema.get_tenant_id(),
+                                                            alter_table_arg.session_id_,
                                                             alter_table_schema.get_origin_database_name(), 
                                                             alter_table_schema.get_origin_table_name(), 
                                                             alter_table_arg.index_arg_list_))) {
       LOG_WARN("fail to get global index pre split schema if need", K(ret), K(alter_table_arg));
       //overwrite ret code
       ret = OB_SUCCESS;
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(alter_table_arg.data_version_))) {
-      LOG_WARN("fail to get data version", KR(ret));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, alter_table_arg.data_version_))) {
+      LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
     }
     DEBUG_SYNC(BEFORE_SEND_ALTER_TABLE);
 
@@ -772,7 +841,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     ObIArray<obcall::ObDDLRes> &ddl_ress = res.ddl_res_array_;
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_ress.count(); ++i) {
       ObDDLRes &ddl_res = ddl_ress.at(i);
-      if (!alter_table_arg.is_update_global_indexes_ && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(ddl_res.task_id_, res.ddl_need_retry_at_executor_, my_session, is_support_cancel))) {
+      if (!alter_table_arg.is_update_global_indexes_ && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(ddl_res.tenant_id_, ddl_res.task_id_, res.ddl_need_retry_at_executor_, my_session, is_support_cancel))) {
         LOG_WARN("wait drop index finish", K(ret));
       }
     }
@@ -832,7 +901,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
       // Rollback all established index
       if (OB_FAIL(ret)) {
         int tmp_ret = OB_SUCCESS;
-        
+        uint64_t tenant_id = OB_INVALID_ID;
         for (int64_t i = 0; (OB_SUCCESS == tmp_ret) && (i < add_index_arg_list.size()); ++i) {
           if (failed_index_no == i) {
             // Synchronization index building logic has already deleted this failure
@@ -841,8 +910,8 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
             obcall::ObDropIndexArg drop_index_arg;
             obcall::ObDropIndexRes drop_index_res;
             obcall::ObCreateIndexArg *create_index_arg = static_cast<obcall::ObCreateIndexArg *>(add_index_arg_list.at(i));
-            
-            
+            drop_index_arg.tenant_id_ = create_index_arg->tenant_id_;
+            drop_index_arg.exec_tenant_id_ = create_index_arg->tenant_id_;
             drop_index_arg.index_table_id_ = res.res_arg_array_.at(i).schema_id_;
             drop_index_arg.session_id_ = create_index_arg->session_id_;
             drop_index_arg.index_name_ = create_index_arg->index_name_;
@@ -850,6 +919,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
             drop_index_arg.database_name_ = create_index_arg->database_name_;
             drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;
             drop_index_arg.is_add_to_scheduler_ = false;
+            tenant_id = drop_index_arg.tenant_id_;
             if (OB_SUCCESS != (tmp_ret = create_index_executor.set_drop_index_stmt_str(drop_index_arg, allocator))) {
               LOG_WARN("fail to set drop index ddl_stmt_str", K(tmp_ret));
             } else if (OB_SUCCESS != (tmp_ret = rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
@@ -864,8 +934,8 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
           uint64_t index_table_id = res.res_arg_array_.at(failed_index_no).schema_id_;
           int64_t schema_version = res.res_arg_array_.at(failed_index_no).schema_version_;
           bool is_finish = false;
-          if (OB_SUCCESS != (tmp_ret = ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish))) {
-            LOG_WARN("wait build index finish failed", K(tmp_ret), K(res.task_id_));
+          if (OB_SUCCESS != (tmp_ret = ObDDLExecutorUtil::wait_build_index_finish(tenant_id, res.task_id_, is_finish))) {
+            LOG_WARN("wait build index finish failed", K(tmp_ret), K(tenant_id), K(res.task_id_));
           }
         }
         LOG_INFO("added indexes failed, we rolled back all indexes added in this same alter table sql. But we didn't roll back other actions in this same alter table sql");
@@ -893,6 +963,73 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obcall::ObExchangeP
   return ret;
 }
 
+int ObAlterTableExecutor::execute_alter_external_table(ObExecContext &ctx, ObAlterTableStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  obcall::ObAlterTableArg &arg = stmt.get_alter_table_arg();
+  int64_t option = stmt.get_alter_external_table_type();
+  switch (option) {
+    case T_ALTER_REFRESH_EXTERNAL_TABLE: {
+      ObArray<ObString> file_urls;
+      ObArray<int64_t> file_sizes;
+      ObExprRegexpSessionVariables regexp_vars;
+      CK (ctx.get_my_session());
+      // 此处的ctx.get_sql_ctx()->schema_guard_没初始化
+      ObSchemaGetterGuard schema_guard;
+      if (OB_ISNULL(GCTX.schema_service_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("pointer is null", K(ret), KP(GCTX.schema_service_));
+      } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(arg.alter_table_schema_.get_tenant_id(), schema_guard))) {
+        LOG_WARN("get schema guard failed", K(ret));
+      } 
+      ObString file_location;
+      ObString access_info;
+      OZ (ObExternalTableUtils::get_external_file_location(arg.alter_table_schema_, schema_guard, ctx.get_allocator(), file_location));
+      OZ (ObExternalTableUtils::get_external_file_location_access_info(arg.alter_table_schema_, schema_guard, access_info));
+      if (OB_SUCC(ret) && ObSQLUtils::is_external_files_on_local_disk(file_location)) {
+        OZ (ObSQLUtils::check_location_access_priv(access_info, ctx.get_my_session()));
+      }
+      ObSqlString full_path;
+      CK (GCTX.location_service_);
+      OZ (ctx.get_my_session()->get_regexp_session_vars(regexp_vars));
+      OZ (ObExternalTableUtils::collect_external_file_list(
+                  ctx.get_my_session(),
+                  stmt.get_tenant_id(),
+                  arg.alter_table_schema_.get_table_id(),
+                  file_location,
+                  access_info,
+                  arg.alter_table_schema_.get_external_file_pattern(), 
+                  arg.alter_table_schema_.get_external_properties(),
+                  arg.alter_table_schema_.is_partitioned_table(),
+                  regexp_vars, ctx.get_allocator(),
+                  full_path,
+                  file_urls, file_sizes));
+
+      //TODO [External Table] opt performance
+      ObSEArray<ObAddr, 8> all_servers;
+      ObSEArray<uint64_t, 64> updated_part_ids;
+      bool has_partition_changed = false;
+      OZ (GCTX.location_service_->external_table_get(stmt.get_tenant_id(), arg.alter_table_schema_.get_table_id(), all_servers));
+      OZ (ObExternalTableFileManager::get_instance().update_inner_table_file_list(ctx, stmt.get_tenant_id(),
+                  arg.alter_table_schema_.get_table_id(), file_urls, file_sizes, updated_part_ids, has_partition_changed));
+      for (int64_t i = 0; OB_SUCC(ret) && i < updated_part_ids.count(); i++) {
+        OZ (ObExternalTableFileManager::get_instance().flush_external_file_cache(stmt.get_tenant_id(),
+                  arg.alter_table_schema_.get_table_id(), updated_part_ids.at(i), all_servers));
+      }
+      break;
+    }
+    case T_ALTER_EXTERNAL_PARTITION_OPTION: {
+
+    }
+    default: {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected option", K(ret), K(option));
+    }
+
+  }
+  return ret;
+}
+
 int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
@@ -907,10 +1044,17 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     // do nothing
   } else if (stmt.is_alter_triggers()) {
     if (stmt.get_tg_arg().trigger_infos_.count() > 0) {
-      
+      stmt.get_tg_arg().exec_tenant_id_ = alter_table_arg.exec_tenant_id_;
       stmt.get_tg_arg().ddl_id_str_ = alter_table_arg.ddl_id_str_;
       stmt.get_tg_arg().ddl_stmt_str_ = first_stmt;
       OZ (rootserver::serial_call([&]{ return GCTX.root_service_->alter_trigger(stmt.get_tg_arg()); }), GCTX.self_addr());
+    }
+  } else if (T_ALTER_REFRESH_EXTERNAL_TABLE == stmt.get_alter_external_table_type()) {
+    if (alter_table_arg.alter_table_schema_.is_external_table()) {
+      OZ (execute_alter_external_table(ctx, stmt));
+    } else {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error", K(ret));
     }
   } else {
     ObSQLSessionInfo *my_session = NULL;
@@ -919,6 +1063,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     bool need_modify_fk_validate = false;
     bool need_check = false;
     bool need_modify_notnull_validate = false;
+    const int64_t tenant_id = alter_table_arg.alter_table_schema_.get_tenant_id();
     ObArenaAllocator allocator(ObModIds::OB_SQL_EXECUTOR);
     if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
       LOG_WARN("get first statement failed", K(ret));
@@ -965,6 +1110,58 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
             need_modify_fk_validate = true;
           }
         }
+        ObArray<ObString> file_urls;
+        ObArray<int64_t> file_sizes;
+        if (OB_FAIL(ret)) {
+        } else if (alter_table_arg.alter_part_type_ == ObAlterTableArg::ADD_PARTITION && alter_table_arg.alter_table_schema_.is_external_table()) {
+          ObExprRegexpSessionVariables regexp_vars;
+          ObSqlString full_path;
+          CK (alter_table_arg.alter_table_schema_.get_part_array());
+          CK (alter_table_arg.alter_table_schema_.get_partition_num() > 0);
+          OZ (full_path.append(alter_table_arg.alter_table_schema_.get_part_array()[0]->get_external_location()));
+          ObString file_location;
+          ObString access_info;
+          // 此处的ctx.get_sql_ctx()->schema_guard_没初始化
+          ObSchemaGetterGuard schema_guard;
+          if (OB_ISNULL(GCTX.schema_service_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("pointer is null", K(ret), KP(GCTX.schema_service_));
+          } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(alter_table_arg.alter_table_schema_.get_tenant_id(), schema_guard))) {
+            LOG_WARN("get schema guard failed", K(ret));
+          } 
+          OZ (ObExternalTableUtils::get_external_file_location(alter_table_arg.alter_table_schema_, schema_guard, ctx.get_allocator(), file_location));
+          ObSqlString full_file_location;
+          full_file_location.append(file_location);
+          if (OB_SUCC(ret)) {
+            if (full_file_location.length() == 0) {
+              ret = OB_INVALID_ARGUMENT;
+              LOG_WARN("full path length should not be zero", K(ret));
+            } else if (*(full_file_location.ptr() + full_file_location.length() - 1) != '/') {
+              OZ (full_file_location.append("/"));
+            }
+          }
+          OZ (full_file_location.append(full_path.string()));
+
+          OZ (ObExternalTableUtils::get_external_file_location_access_info(alter_table_arg.alter_table_schema_, schema_guard, access_info));
+          if (ObSQLUtils::is_external_files_on_local_disk(file_location)) {
+            OZ (ObSQLUtils::check_location_access_priv(file_location, ctx.get_my_session()));
+          }
+          OZ (my_session->get_regexp_session_vars(regexp_vars));
+          OZ (ObExternalTableUtils::collect_external_file_list(
+                    ctx.get_my_session(),
+                    alter_table_arg.alter_table_schema_.get_tenant_id(), alter_table_arg.alter_table_schema_.get_table_id(),
+                    full_file_location.string(),
+                    access_info,
+                    alter_table_arg.alter_table_schema_.get_external_file_pattern(),
+                    alter_table_arg.alter_table_schema_.get_external_properties(),
+                    alter_table_arg.alter_table_schema_.is_partitioned_table(),
+                    regexp_vars,
+                    ctx.get_allocator(),
+                    full_path,
+                    file_urls,
+                    file_sizes));
+
+        }
         if (OB_SUCC(ret)) {
           if ((obcall::ObAlterTableArg::EXCHANGE_PARTITION == alter_table_arg.alter_part_type_)
               || (obcall::ObAlterTableArg::EXCHANGE_SUBPARTITION == alter_table_arg.alter_part_type_)) {
@@ -979,6 +1176,36 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
                                                 my_session,
                                                 is_sync_ddl_user))) {
             LOG_WARN("Failed to alter table rpc v2", K(ret));
+          } else if (alter_table_arg.alter_table_schema_.is_external_table()) {
+            ObSEArray<uint64_t, 1> updated_part_ids;
+            bool has_partition_changed = false;
+            if (alter_table_arg.alter_part_type_ == ObAlterTableArg::ADD_PARTITION) {
+              if (res.res_arg_array_.size() > 0) {
+                int64_t part_id = res.res_arg_array_.at(0).part_object_id_;
+                OZ (ObExternalTableFileManager::get_instance().update_inner_table_file_list(
+                  ctx, tenant_id, alter_table_arg.alter_table_schema_.get_table_id(),
+                  file_urls, file_sizes, updated_part_ids, has_partition_changed, part_id));
+              } else {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("unexpected error", K(ret));
+              }
+            } else if (alter_table_arg.alter_part_type_ == ObAlterTableArg::DROP_PARTITION) { 
+              if (res.res_arg_array_.size() > 0) {
+                int64_t part_id = res.res_arg_array_.at(0).part_object_id_;
+                ObSEArray<ObAddr, 8> all_servers;
+                OZ (ObExternalTableFileManager::get_instance().update_inner_table_file_list(
+                  ctx, tenant_id, alter_table_arg.alter_table_schema_.get_table_id(),
+                  file_urls, file_sizes, updated_part_ids, has_partition_changed, part_id));
+                OZ (GCTX.location_service_->external_table_get(tenant_id, alter_table_arg.alter_table_schema_.get_table_id(), all_servers));
+                OZ (ObExternalTableFileManager::get_instance().flush_external_file_cache(tenant_id, alter_table_arg.alter_table_schema_.get_table_id(), part_id, all_servers));
+              } else {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("unexpected error", K(ret));
+              }
+            } else {
+              // ret = OB_ERR_UNEXPECTED;
+              // LOG_WARN("unknown alter external table type", K(ret), K(alter_table_arg.alter_part_type_), K(stmt.get_alter_external_table_type()));
+            }
           }
         }
       }
@@ -986,9 +1213,9 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     if (OB_SUCC(ret)) {
       if (!need_check) {
         // do nothing, don't check if data is valid
-      } else if (OB_FAIL(refresh_schema_for_table())) {
+      } else if (OB_FAIL(refresh_schema_for_table(tenant_id))) {
         LOG_WARN("refresh_schema_for_table failed", K(ret));
-      } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
+      } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(tenant_id, res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
         LOG_WARN("wait check constraint finish", K(ret));
       }
     }
@@ -997,9 +1224,9 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       if (!need_modify_fk_validate) {
         // do nothing, don't check if data is valid
       } else {
-        if (OB_FAIL(refresh_schema_for_table())) {
+        if (OB_FAIL(refresh_schema_for_table(tenant_id))) {
           LOG_WARN("refresh_schema_for_table failed", K(ret));
-        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
+        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(tenant_id, res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
           LOG_WARN("wait fk constraint finish", K(ret));
         }
       }
@@ -1017,10 +1244,10 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
                                      || (ObDDLType::DDL_DROP_COLUMN_INSTANT == res.ddl_type_ && res.task_id_ > 0 /* with drop lob*/);
       if (OB_SUCC(ret) && need_wait_ddl_finish) {
         int64_t affected_rows = 0;
-        if (OB_FAIL(refresh_schema_for_table())) {
+        if (OB_FAIL(refresh_schema_for_table(alter_table_arg.exec_tenant_id_))) {
           LOG_WARN("refresh_schema_for_table failed", K(ret));
-        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session, is_support_cancel))) {
-          LOG_WARN("fail to wait ddl finish", K(ret), K(res));
+        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(tenant_id, res.task_id_, res.ddl_need_retry_at_executor_, my_session, is_support_cancel))) {
+          LOG_WARN("fail to wait ddl finish", K(ret), K(tenant_id), K(res));
         }
       }
     }
@@ -1029,12 +1256,13 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
               alter_table_arg.table_id_, alter_table_arg.hidden_table_id_);
 
     SERVER_EVENT_ADD("ddl", "alter table execute finish",
+      "tenant_id", MTL_ID(),
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", res.task_id_,
       "table_info", table_info_buffer,
       "schema_version", res.schema_version_,
-      "info", alter_table_arg.inner_sql_exec_addr_);
+      alter_table_arg.inner_sql_exec_addr_);
     SQL_ENG_LOG(INFO, "finish alter table execute.", K(ret), "ddl_event_info", ObDDLEventInfo(), K(first_stmt));
   }
   return ret;
@@ -1451,7 +1679,7 @@ int ObAlterTableExecutor::check_alter_part_key(ObExecContext &ctx,
     AlterTableSchema &table_schema = const_cast<AlterTableSchema &>(arg.alter_table_schema_);
     share::schema::ObTableSchema::const_column_iterator it_begin = table_schema.column_begin();
     share::schema::ObTableSchema::const_column_iterator it_end = table_schema.column_end();
-    
+    const uint64_t tenant_id = table_schema.get_tenant_id();
     schema_guard.set_session_id(arg.session_id_);
     const ObString &origin_database_name = table_schema.get_origin_database_name();
     const ObString &origin_table_name = table_schema.get_origin_table_name();
@@ -1462,16 +1690,16 @@ int ObAlterTableExecutor::check_alter_part_key(ObExecContext &ctx,
     CK (!origin_database_name.empty() && !origin_table_name.empty());
     CK (OB_NOT_NULL(my_session));
     OZ (ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-    schema_guard));
-    if (FAILEDx(schema_guard.get_table_schema(
+    tenant_id, schema_guard));
+    if (FAILEDx(schema_guard.get_table_schema(tenant_id,
                                               origin_database_name,
                                               origin_table_name,
                                               false/*is_index*/,
                                               orig_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(origin_database_name), K(origin_table_name));
+      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(origin_database_name), K(origin_table_name));
     } else if (OB_ISNULL(orig_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table is not exist", KR(ret), K(origin_database_name), K(origin_table_name));
+      LOG_WARN("table is not exist", KR(ret), K(tenant_id), K(origin_database_name), K(origin_table_name));
     } else {
       OZ (table_schema.assign_partition_schema(*orig_table_schema));
       for(;OB_SUCC(ret) && it_begin != it_end; it_begin++) {
@@ -1720,7 +1948,7 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     ObSQLSessionInfo *my_session = nullptr;
     obcall::ObSetCommentArg set_comment_arg;
     obcall::ObParallelDDLRes set_comment_res;
-    
+    const int64_t tenant_id = alter_table_arg.alter_table_schema_.get_tenant_id();
     alter_table_arg.ddl_stmt_str_ = first_stmt;
     alter_table_arg.is_parallel_ = true;
     my_session = ctx.get_my_session();
@@ -1742,11 +1970,12 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     } else {
       int64_t refresh_time = ObTimeUtility::current_time();
       if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-          tctx, my_session, set_comment_res.schema_version_, false /*skip_consensus*/))) {
+          tctx, my_session, tenant_id, set_comment_res.schema_version_, false /*skip_consensus*/))) {
         LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(set_comment_res));
       }
       int64_t end_time = ObTimeUtility::current_time();
       LOG_INFO("[parallel_comment_table]", KR(ret),
+               "tenant_id", tenant_id,
                "cost", end_time - start_time,
                "execute_time", refresh_time - start_time,
                "wait_schema", end_time - refresh_time,
@@ -1808,7 +2037,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
   ObString first_stmt;
   ObSQLSessionInfo *my_session = NULL;
   int64_t foreign_key_checks = 0;
-  
+  const uint64_t tenant_id = drop_table_arg.tenant_id_;
   const ObTableType table_type = drop_table_arg.table_type_;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("get first statement failed", KR(ret));
@@ -1833,8 +2062,8 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
       bool is_parallel_drop = false;
       if (!ObSchemaUtils::is_support_parallel_drop(table_type)) {
         is_parallel_drop = false;
-      } else if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(ObParallelDDLControlMode::DROP_TABLE, is_parallel_drop))) {
-        LOG_WARN("fail to check whether parallel drop table enable", KR(ret));
+      } else if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(ObParallelDDLControlMode::DROP_TABLE, tenant_id, is_parallel_drop))) {
+        LOG_WARN("fail to check whether parallel drop table enable", KR(ret), K(tenant_id));
       }
 
       if (OB_SUCC(ret)) {
@@ -1850,7 +2079,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           } else {
             int64_t refresh_time = ObTimeUtility::current_time();
             if (!res.do_nothing_ && OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-                                            ctx, my_session, res.schema_version_, false/*skip_consensus*/))) {
+                                            ctx, my_session, drop_table_arg.tenant_id_, res.schema_version_, false/*skip_consensus*/))) {
               LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
             }
             int64_t end_time = ObTimeUtility::current_time();
@@ -1860,6 +2089,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
                       "wait_schema", end_time - refresh_time);
 
             SERVER_EVENT_ADD("ddl", "drop table execute finish",
+              "tenant_id", MTL_ID(),
               "ret", ret,
               "trace_id", *ObCurTraceId::get_trace_id(),
               "rpc_dst", GCTX.self_addr(),
@@ -1870,13 +2100,14 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           obcall::ObDDLRes res;
           if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(drop_table_arg, res); }))) {
             LOG_WARN("rpc proxy drop table failed", KR(ret), "dst", GCTX.self_addr());
-          } else if (res.is_valid() && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(res.task_id_, *my_session, affected_rows))) {
-            LOG_WARN("wait ddl finish failed", KR(ret), K(res.task_id_));
+          } else if (res.is_valid() && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(res.tenant_id_, res.task_id_, *my_session, affected_rows))) {
+            LOG_WARN("wait ddl finish failed", KR(ret), K(res.tenant_id_), K(res.task_id_));
           } else {
             //do nothing
           }
 
           SERVER_EVENT_ADD("ddl", "drop table execute finish",
+          "tenant_id", res.tenant_id_,
           "ret", ret,
           "trace_id", *ObCurTraceId::get_trace_id(),
           "task_id", res.task_id_,
@@ -1933,19 +2164,19 @@ int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncat
   uint64_t compat_version = 0;
   use_parallel_truncate = false;
   const ObTableSchema *table_schema = NULL;
-  
+  const uint64_t tenant_id = arg.tenant_id_;
   const ObString table_name = arg.table_name_;
   const ObString database_name = arg.database_name_;
   share::schema::ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("get min data_version failed", K(ret));
+  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
+    LOG_WARN("get min data_version failed", K(ret), K(tenant_id));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("GCTX schema_service not init", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id));
   } else if (FALSE_IT(schema_guard.set_session_id(arg.session_id_))) {
-  } else if (OB_FAIL(schema_guard.get_table_schema( database_name, table_name, false, table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, database_name, table_name, false, table_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(database_name), K(table_name));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -1957,8 +2188,9 @@ int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncat
     // do nothing
   } else if (use_parallel_truncate
              && OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
-                        ObParallelDDLControlMode::TRUNCATE_TABLE, use_parallel_truncate))) {
-    LOG_WARN("fail to check whether is parallel truncate table", KR(ret), K(1UL));
+                        ObParallelDDLControlMode::TRUNCATE_TABLE,
+                        tenant_id, use_parallel_truncate))) {
+    LOG_WARN("fail to check whether is parallel truncate table", KR(ret), K(tenant_id));
   }
   return ret;
 }
@@ -1994,14 +2226,14 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
       tmp_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
       int64_t affected_rows = 0;
       bool use_parallel_truncate = false;
-      
+      const uint64_t tenant_id = truncate_table_arg.tenant_id_;
       if (OB_FAIL(check_use_parallel_truncate(truncate_table_arg, use_parallel_truncate))) {
         LOG_WARN("fail to check use parallel truncate", KR(ret), K(truncate_table_arg));
       } else if (!use_parallel_truncate) {
         if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->truncate_table(truncate_table_arg, res); }))) {
           LOG_WARN("rpc proxy alter table failed", K(ret));
         } else if (res.is_valid()
-          && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(res.task_id_, *my_session, affected_rows))) {
+          && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(tenant_id, res.task_id_, *my_session, affected_rows))) {
           LOG_WARN("wait ddl finish failed", K(ret));
         }
       } else {
@@ -2034,7 +2266,7 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("truncate invalid ddl_res", KR(ret), K(res));
           } else if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-                     ctx, my_session, res.task_id_, false /*skip_consensus*/))) {
+                     ctx, my_session, tenant_id, res.task_id_, false /*skip_consensus*/))) {
             LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K(res));
           }
           int64_t end_time = ObTimeUtility::current_time();
@@ -2047,6 +2279,7 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
       }
     }
     SERVER_EVENT_ADD("ddl", "truncate table execute finish",
+      "tenant_id", MTL_ID(),
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", res.task_id_,
@@ -2270,35 +2503,42 @@ int ObOptimizeTenantExecutor::execute(ObExecContext &ctx, ObOptimizeTenantStmt &
     arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     ObTaskExecutorCtx *task_exec_ctx = nullptr;
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
-    
+    const int64_t effective_tenant_id = my_session->get_effective_tenant_id();
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, task executor must not be NULL", K(ret));
     } else if (OB_ISNULL(gctx.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
-    } else if (OB_FAIL(optimize_tenant(arg, *gctx.schema_service_))) {
+    } else if (OB_FAIL(optimize_tenant(arg, effective_tenant_id, *gctx.schema_service_))) {
       LOG_WARN("fail to optimize tenant", K(ret));
     }
   }
   return ret;
 }
 
-int ObOptimizeTenantExecutor::optimize_tenant(const obcall::ObOptimizeTenantArg &arg, ObMultiVersionSchemaService &schema_service)
+int ObOptimizeTenantExecutor::optimize_tenant(const obcall::ObOptimizeTenantArg &arg,
+    const uint64_t effective_tenant_id, ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
+  uint64_t tenant_id = OB_INVALID_ID;
   ObSchemaGetterGuard schema_guard;
   LOG_INFO("receive optimize tenant request", K(arg));
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
+  } else if (OB_FAIL(schema_guard.get_tenant_id(arg.tenant_name_, tenant_id))) {
+    LOG_WARN("fail to get tenant id", K(ret));
+  } else if (OB_SYS_TENANT_ID != effective_tenant_id && tenant_id != effective_tenant_id) {
+    ret = OB_OP_NOT_ALLOW;
+    LOG_WARN("tenant id mismatch", K(tenant_id), K(effective_tenant_id));
   } else {
     ObSEArray<const ObSimpleTableSchemaV2 *, 512> table_schemas;
-    if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard))) {
       LOG_WARN("fail to get tenant schema guard", K(ret));
-    } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
+    } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(tenant_id, table_schemas))) {
       LOG_WARN("fail to get table schemas in tenant", K(ret));
     } else {
       LOG_INFO("optimize tenant, table schema count", K(table_schemas.count()));
@@ -2311,12 +2551,12 @@ int ObOptimizeTenantExecutor::optimize_tenant(const obcall::ObOptimizeTenantArg 
           LOG_WARN("error unexpected, table schema must not be NULL", K(ret));
         } else if (table_schema->is_index_table() || table_schema->is_vir_table() || table_schema->is_view_table()) {
           // do nothing
-        } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
-          LOG_WARN("fail to get database schema", K(ret));
+        } else if (OB_FAIL(schema_guard.get_database_schema(tenant_id, table_schema->get_database_id(), database_schema))) {
+          LOG_WARN("fail to get database schema", K(ret), K(tenant_id));
         } else {
           obcall::ObTableItem table_item;
-          
-          
+          optimize_table_arg.tenant_id_ = tenant_id;
+          optimize_table_arg.exec_tenant_id_ = tenant_id;
           table_item.database_name_ = database_schema->get_database_name();
           table_item.table_name_ = table_schema->get_table_name();
           if (OB_FAIL(optimize_table_arg.tables_.push_back(table_item))) {
@@ -2343,6 +2583,7 @@ int ObOptimizeAllExecutor::execute(ObExecContext &ctx, ObOptimizeAllStmt &stmt)
     arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     ObTaskExecutorCtx *task_exec_ctx = nullptr;
     ObSchemaGetterGuard schema_guard;
+    ObArray<uint64_t> tenant_ids;
     const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
     ObSQLSessionInfo *my_session = ctx.get_my_session();
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2354,17 +2595,21 @@ int ObOptimizeAllExecutor::execute(ObExecContext &ctx, ObOptimizeAllStmt &stmt)
     } else if (OB_ISNULL(gctx.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
-    } else if (OB_FAIL(gctx.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(gctx.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
       LOG_WARN("fail to get tenant schema guard", K(ret));
+    } else if (OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
+      LOG_WARN("fail to get tenant ids", K(ret));
     } else {
-      obcall::ObOptimizeTenantArg tenant_arg;
-      const ObTenantSchema *tenant_schema = nullptr;
-      if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-        LOG_WARN("fail to get tenant name", K(ret));
-      } else {
-        tenant_arg.tenant_name_ = tenant_schema->get_tenant_name();
-        if (OB_FAIL(ObOptimizeTenantExecutor::optimize_tenant(tenant_arg, *gctx.schema_service_))) {
-          LOG_WARN("fail to optimize tenant", K(ret));
+      for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); ++i) {
+        obcall::ObOptimizeTenantArg tenant_arg;
+        const ObTenantSchema *tenant_schema = nullptr;
+        if (OB_FAIL(schema_guard.get_tenant_info(tenant_ids.at(i), tenant_schema))) {
+          LOG_WARN("fail to get tenant name", K(ret));
+        } else {
+          tenant_arg.tenant_name_ = tenant_schema->get_tenant_name();
+          if (OB_FAIL(ObOptimizeTenantExecutor::optimize_tenant(tenant_arg, my_session->get_effective_tenant_id(), *gctx.schema_service_))) {
+            LOG_WARN("fail to optimize tenant", K(ret));
+          }
         }
       }
     }
@@ -2376,14 +2621,14 @@ int ObAlterTableExecutor::populate_based_schema_obj_info_(obcall::ObAlterTableAr
   int ret = OB_SUCCESS;
   const uint64_t table_id = alter_table_arg.alter_table_schema_.get_table_id();
   if (OB_INVALID_ID != table_id) {
-    
+    const uint64_t tenant_id = alter_table_arg.alter_table_schema_.get_tenant_id();
     SMART_VAR(ObSchemaGetterGuard, guard) {
     const ObTableSchema *orig_table = nullptr;
     if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
-                guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret));
-    } else if (OB_FAIL(guard.get_table_schema( table_id, orig_table))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
+                tenant_id, guard))) {
+      LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
+    } else if (OB_FAIL(guard.get_table_schema(tenant_id, table_id, orig_table))) {
+      LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
     } else if (OB_ISNULL(orig_table)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exits", KR(ret), K(table_id));
