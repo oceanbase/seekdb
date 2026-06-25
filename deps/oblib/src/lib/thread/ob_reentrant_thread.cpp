@@ -126,7 +126,6 @@ void ObReentrantThread::logical_wait()
       LOG_WARN("inner status error", K(ret), K_(running_cnt));
     } else {
       while (running_cnt_ > 0) {
-        ObBKGDSessInActiveGuard inactive_guard;
         cond_.wait();
       }
     }
@@ -185,7 +184,6 @@ int ObReentrantThread::blocking_run()
         if (ThreadPool::has_set_stop()) {
           break;
         }
-        ObBKGDSessInActiveGuard inactive_guard;
         cond_.wait(WAIT_TIME_MS);
       } else {
         need_run = true;
@@ -212,7 +210,6 @@ void ObReentrantThread::nothing()
 int ObReentrantThread::idle_wait(const int64_t idle_time_ms)
 {
   int ret = OB_SUCCESS;
-  ObBKGDSessInActiveGuard inactive_guard;
   ret = get_cond().wait(idle_time_ms);
   return ret;
 }
@@ -220,7 +217,6 @@ int ObReentrantThread::idle_wait(const int64_t idle_time_ms)
 int ObReentrantThread::idle_wait_us(const int64_t idle_time_us)
 {
   int ret = OB_SUCCESS;
-  ObBKGDSessInActiveGuard inactive_guard;
   ret = get_cond().wait_us(idle_time_us);
   return ret;
 }
