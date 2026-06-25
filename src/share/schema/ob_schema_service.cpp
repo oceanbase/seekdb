@@ -33,7 +33,6 @@ bool ObSchemaService::g_liboblog_mode_ = false;
 
 ObSchemaOperation::ObSchemaOperation()
     : schema_version_(OB_INVALID_VERSION),
-      tenant_id_(OB_INVALID_TENANT_ID),
       user_id_(0),
       database_id_(0),
       database_name_(""),
@@ -54,7 +53,6 @@ uint64_t ObSchemaOperation::get_obj_type() const
 void ObSchemaOperation::reset()
 {
   schema_version_ = OB_INVALID_VERSION;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   user_id_ = 0;
   database_id_ = 0;
   database_name_.reset();
@@ -70,7 +68,6 @@ ObSchemaOperation& ObSchemaOperation::operator=(const ObSchemaOperation &other)
   if (this != &other) {
     reset();
     schema_version_ = other.schema_version_;
-    tenant_id_ = other.tenant_id_;
     user_id_ = other.user_id_;
     database_id_ = other.database_id_;
     database_name_ = other.database_name_;
@@ -85,7 +82,6 @@ ObSchemaOperation& ObSchemaOperation::operator=(const ObSchemaOperation &other)
 // Not all content is serialized, obstring is not serialized
 OB_SERIALIZE_MEMBER(ObSchemaOperation,
                     schema_version_,
-                    tenant_id_,
                     user_id_,
                     table_id_,
                     database_id_,
@@ -95,7 +91,6 @@ OB_SERIALIZE_MEMBER(ObSchemaOperation,
                     sequence_id_,               // for compat
                     grantee_id_,                // for compat
                     grantor_id_,                // for compat
-                    dblink_id_,                 // for compat
                     directory_id_);             // for compat
 
 bool ObSchemaOperation::is_valid() const
@@ -112,11 +107,11 @@ const char *ObSchemaOperation::type_str(ObSchemaOperationType op_type)
 int64_t ObSchemaOperation::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
-  J_KV(K_(schema_version), K_(tenant_id), K_(database_id), K_(user_id), K_(database_name),
+  J_KV(K_(schema_version), K_(database_id), K_(user_id), K_(database_name),
        K_(tablegroup_id), K_(table_id), "operation_type", type_str(op_type_),
        K_(outline_id), K_(udf_name), K_(sequence_id),
        K_(grantee_id), K_(grantor_id),
-       K_(ddl_stmt_str), K_(dblink_id), K_(directory_id), K_(catalog_id), K_(catalog_name));
+       K_(ddl_stmt_str), K_(directory_id), K_(catalog_id), K_(catalog_name));
   return pos;
 }
 

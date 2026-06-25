@@ -195,6 +195,7 @@ const int64_t OB_MAX_UUID_STR_LENGTH = 36;
 const int64_t OB_MAX_CON_INFO_STR_LENGTH = 512;
 const int64_t MAX_LOAD_DATA_MESSAGE_LENGTH = 4096;
 const int64_t MAX_ZONE_LENGTH = 128;
+const int64_t MAX_REGION_LENGTH = 128;
 const int64_t MAX_GTS_NAME_LENGTH = 128;
 const int32_t MAX_ZONE_NUM = 64;
 const int32_t DEFAULT_ZONE_COUNT = 5;
@@ -1662,6 +1663,9 @@ const int64_t OB_LOG_KEEP_SIZE = 512;
 const int64_t OB_ASYNC_LOG_KEEP_SIZE = 0;
 const char* const OB_LOG_ELLIPSIS = "...";
 
+
+const char *const DEFAULT_REGION_NAME = "default_region";
+
 // for obproxy
 const char *const OB_MYSQL_CLIENT_MODE = "__mysql_client_type";
 const char *const OB_MYSQL_CONNECTION_ID = "__connection_id";
@@ -1709,6 +1713,7 @@ enum ObClientMode
 #define OBPROXY_DEBUG 0
 const char *const OB_SYS_TENANT_LOCALITY_STRATEGY = "sys_tenant_locality_strategy";
 const char *const OB_AUTO_LOCALITY_STRATEGY = "auto_locality_strategy";
+const char *const OB_3ZONES_IN_2REGIONS_LOCALITY_STRATEGY = "3zone3-in-2regions";
 
 #if OBPROXY_DEBUG
 const char* const OB_MYSQL_PROXY_SESSION_ID = "session_id";

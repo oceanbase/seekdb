@@ -40,6 +40,25 @@ ObAllVirtualDagWarningHistory::~ObAllVirtualDagWarningHistory()
 int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    if (ret != OB_ITER_END) {
+      SERVER_LOG(WARN, "execute fail", K(ret));
+    }
+  }
+  return ret;
+}
+
+bool ObAllVirtualDagWarningHistory::is_need_process()
+{
+  if (true || true) {
+    return true;
+  }
+  return false;
+}
+
+int ObAllVirtualDagWarningHistory::process_curr_tenant(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
@@ -132,7 +151,7 @@ int ObAllVirtualDagWarningHistory::inner_get_next_row(common::ObNewRow *&row)
 }
 void ObAllVirtualDagWarningHistory::reset()
 {
-  dag_warning_info_iter_.reset();
+  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
   memset(ip_buf_, 0, sizeof(ip_buf_));
   memset(task_id_buf_, 0, sizeof(task_id_buf_));

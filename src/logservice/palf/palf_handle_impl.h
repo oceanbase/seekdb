@@ -706,6 +706,8 @@ public:
   virtual int reset_location_cache_cb() = 0;
   virtual int set_election_priority(election::ElectionPriority *priority) = 0;
   virtual int reset_election_priority() = 0;
+  virtual int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb) = 0;
+  virtual int reset_locality_cb() = 0;
   // ==================== Callback end ========================
   virtual int advance_election_epoch_and_downgrade_priority(const int64_t proposal_id, 
                                                             const int64_t downgrade_priority_time_us,
@@ -900,6 +902,8 @@ public:
   int reset_monitor_cb();
   int set_election_priority(election::ElectionPriority *priority) override final;
   int reset_election_priority() override final;
+  int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb) override final;
+  int reset_locality_cb() override final;
   // ==================== Callback end ========================
 public:
   int get_begin_lsn(LSN &lsn) const override final;
@@ -1188,6 +1192,7 @@ private:
                                     const LogInfo &base_prev_log_info,
                                     const bool is_rebuild);
   int get_election_leader_without_lock_(ObAddr &addr) const;
+  int update_self_region_();
   int force_set_member_list_(const common::ObMemberList &new_member_list, const int64_t new_replica_num);
   // ========================= flashback ==============================
   int can_do_flashback_(const int64_t mode_version,
@@ -1311,6 +1316,7 @@ private:
   int64_t chaning_config_warn_time_;
   bool cached_is_in_sync_;
   bool has_higher_prio_config_change_;
+  int64_t last_update_region_time_us_;
   bool is_inited_;
 };
 } // end namespace palf

@@ -32,7 +32,7 @@ namespace sql
 int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = session.get_effective_tenant_id();
+  
   bool is_standby = false;
   if (OB_UNLIKELY(session.is_query_killed())) {
     ret = OB_ERR_QUERY_INTERRUPTED;
@@ -40,8 +40,8 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
   } else if (OB_UNLIKELY(session.is_zombie())) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", K(ret));
-  } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_standby(tenant_id, is_standby))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_standby( is_standby))) {
+    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret));
   } else if (is_standby) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", KR(ret));
@@ -49,9 +49,7 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
   return ret;
 }
 
-int ObDDLExecutorUtil::wait_ddl_finish(
-    const uint64_t tenant_id,
-    const int64_t task_id,
+int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
     const bool ddl_need_retry_at_executor,
     ObSQLSessionInfo *session,
     const bool is_support_cancel)
@@ -63,12 +61,11 @@ int ObDDLExecutorUtil::wait_ddl_finish(
   int64_t unused_user_msg_len = 0;
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id));
+    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
     SERVER_EVENT_ADD("ddl", "start wait ddl finish",
-      "tenant_id", tenant_id,
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
@@ -79,8 +76,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(
     bool is_tenant_dropped = false;
     bool is_tenant_standby = false;
     while (OB_SUCC(ret)) {
-      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(
-          tenant_id, task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
+      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
         if (OB_SUCCESS != ret) {
           if (ddl_need_retry_at_executor) {
@@ -92,7 +88,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(
         } else if (error_message.consensus_schema_version_ != OB_INVALID_VERSION) {
           ObTimeoutCtx ctx;
           int64_t consensus_timeout =  30 * 1000 * 1000L; // 30s;
-          omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+          omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
           if (tenant_config.is_valid()) {
             consensus_timeout = tenant_config->_wait_interval_after_parallel_ddl;
           }
@@ -103,32 +99,23 @@ int ObDDLExecutorUtil::wait_ddl_finish(
           if (OB_FAIL(ctx.set_timeout(consensus_timeout))) {
             LOG_WARN("fail to set timeout ctx", KR(ret));
           } else if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-                      ctx, session, tenant_id, error_message.consensus_schema_version_, false /*skip_consensus*/))) {
+                      ctx, session, error_message.consensus_schema_version_, false /*skip_consensus*/))) {
             LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K_(error_message.consensus_schema_version));
           } else {
             int64_t refresh_time = ObTimeUtility::current_time() - start_time;
-            LOG_INFO("parallel ddl wait schema", KR(ret), K(tenant_id), K(refresh_time),
+            LOG_INFO("parallel ddl wait schema", KR(ret), K(refresh_time),
                                                  K_(error_message.consensus_schema_version));
           }
         }
         break;
       } else {
         if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(ObDDLUtil::check_tenant_status_normal(GCTX.sql_proxy_, tenant_id))) {
-          if (OB_TENANT_HAS_BEEN_DROPPED == tmp_ret) {
-            ret = OB_TENANT_HAS_BEEN_DROPPED;
-            LOG_WARN("tenant has been dropped", K(ret), K(tenant_id));
-          } else if (OB_STANDBY_READ_ONLY == tmp_ret) {
-            ret = OB_STANDBY_READ_ONLY;
-            FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-            LOG_WARN("tenant is standby now, stop wait", K(ret), K(tenant_id));
-          }
         }
 
         if (OB_FAIL(ret)) {
         } else if (nullptr != session && OB_FAIL(handle_session_exception(*session))) {
           LOG_WARN("session exeception happened", K(ret), K(is_support_cancel));
-          if (is_support_cancel && OB_TMP_FAIL(cancel_ddl_task(tenant_id))) {
+          if (is_support_cancel && OB_TMP_FAIL(cancel_ddl_task())) {
             LOG_WARN("cancel ddl task failed", K(tmp_ret));
             ret = OB_SUCCESS;
           } else {
@@ -140,7 +127,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(
         } else if (is_server_stopped()) {
           ret = OB_TIMEOUT;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-          LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(tenant_id), K(task_id));
+          LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
         } else {
           ob_usleep(retry_interval);
         }
@@ -148,7 +135,6 @@ int ObDDLExecutorUtil::wait_ddl_finish(
     }
 
     SERVER_EVENT_ADD("ddl", "end wait ddl finish",
-      "tenant_id", tenant_id,
       "ret", error_message.ret_code_,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
@@ -158,7 +144,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(
   return ret;
 }
 
-int ObDDLExecutorUtil::wait_build_index_finish(const uint64_t tenant_id, const int64_t task_id, bool &is_finish)
+int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_finish)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -170,18 +156,16 @@ int ObDDLExecutorUtil::wait_build_index_finish(const uint64_t tenant_id, const i
   share::ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
   is_finish = false;
   SERVER_EVENT_ADD("ddl", "start wait build index finish",
-    "tenant_id", tenant_id,
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", task_id,
     "is_tenant_standby", is_tenant_standby);
   LOG_INFO("start wait build index finish", K(task_id), "ddl_event_info", ObDDLEventInfo());
 
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(
-      tenant_id, task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
+    LOG_WARN("invalid arguments", K(ret), K(task_id));
+  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
     ret = error_message.ret_code_;
     if (OB_SUCCESS != ret) {
       FORWARD_USER_ERROR(ret, error_message.user_message_);
@@ -189,27 +173,17 @@ int ObDDLExecutorUtil::wait_build_index_finish(const uint64_t tenant_id, const i
     is_finish = true;
   } else {
     if (OB_FAIL(ret)) {
-    } else if (OB_TMP_FAIL(ObDDLUtil::check_tenant_status_normal(GCTX.sql_proxy_, tenant_id))) {
-      if (OB_TENANT_HAS_BEEN_DROPPED == tmp_ret) {
-        ret = OB_TENANT_HAS_BEEN_DROPPED;
-        LOG_WARN("tenant has been dropped", K(ret), K(tenant_id));
-      } else if (OB_STANDBY_READ_ONLY == tmp_ret) {
-        ret = OB_STANDBY_READ_ONLY;
-        FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-        LOG_WARN("tenant is standby now, stop wait", K(ret), K(tenant_id));
-      }
     }
 
     if (OB_FAIL(ret)) {
     } else if (is_server_stopped()) {
       ret = OB_TIMEOUT;
       FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-      LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(tenant_id), K(task_id));
+      LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
     }
   }
 
   SERVER_EVENT_ADD("ddl", "end wait build index finish",
-    "tenant_id", tenant_id,
     "ret", error_message.ret_code_,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", task_id,
@@ -218,9 +192,7 @@ int ObDDLExecutorUtil::wait_build_index_finish(const uint64_t tenant_id, const i
   return ret;
 }
 
-int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
-    const uint64_t tenant_id,
-    const int64_t task_id,
+int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
     ObSQLSessionInfo &session,
     int64_t &affected_rows)
 {
@@ -232,24 +204,21 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
   int64_t forward_user_msg_len = 0;
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id));
+    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
     SERVER_EVENT_ADD("ddl", "start wait ddl retry task finish",
-      "tenant_id", tenant_id,
       "ret", ret,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
       "rpc_dest", GCTX.self_addr());
     LOG_INFO("start wait ddl retry task finish", K(task_id), "ddl_event_info", ObDDLEventInfo(), K(error_message));
 
-    bool is_tenant_dropped = false;
     bool is_primary_cluster = true;
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
-      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(
-          tenant_id, task_id, -1 /* target_object_id */, unused_addr, true /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, forward_user_msg_len)) {
+      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, true /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, forward_user_msg_len)) {
         // Here, `forward_user_msg_len` is the length of serialized hex user message.
         // Forward_user_msg_len is not 0, which means rpc::frame::ObResultCode is not empty. Thus, we need to
         // forward_user_error/ forward_user_warn/ forward_user_note.
@@ -283,27 +252,18 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
         break;
       } else {
         if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(
-                      tenant_id, is_tenant_dropped))) {
-          LOG_WARN("check if tenant has been dropped failed", K(tmp_ret), K(tenant_id));
-        } else if (is_tenant_dropped) {
-          ret = OB_TENANT_HAS_BEEN_DROPPED;
-          LOG_WARN("tenant has been dropped", K(ret), K(tenant_id));
-        }
-
-        if (OB_FAIL(ret)) {
         } else if (OB_TMP_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
           LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
         } else if (!is_primary_cluster) {
           ret = OB_STANDBY_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-          LOG_WARN("tenant is standby now, stop wait", K(ret), K(tenant_id));
+          LOG_WARN("tenant is standby now, stop wait", K(ret));
           break;
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(handle_session_exception(session))) {
           LOG_WARN("session exception happened", K(ret));
-          if (OB_TMP_FAIL(cancel_ddl_task(tenant_id))) {
+          if (OB_TMP_FAIL(cancel_ddl_task())) {
             LOG_WARN("cancel ddl task failed", K(tmp_ret));
             ret = OB_SUCCESS;
           } else {
@@ -315,7 +275,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
         } else if (is_server_stopped()) {
           ret = OB_TIMEOUT;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-          LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(tenant_id), K(task_id));
+          LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
         } else {
           ob_usleep(retry_interval);
         }
@@ -324,7 +284,6 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
     affected_rows = error_message.affected_rows_;
 
     SERVER_EVENT_ADD("ddl", "end wait ddl retry task finish",
-      "tenant_id", tenant_id,
       "ret", error_message.ret_code_,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
@@ -334,7 +293,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
   return ret;
 }
 
-int ObDDLExecutorUtil::cancel_ddl_task(const int64_t tenant_id)
+int ObDDLExecutorUtil::cancel_ddl_task()
 {
   int ret = OB_SUCCESS;
   obcall::ObCancelTaskArg rpc_arg;
@@ -351,7 +310,6 @@ int ObDDLExecutorUtil::cancel_ddl_task(const int64_t tenant_id)
     }
   }
   SERVER_EVENT_ADD("ddl", "finish cancel ddl task",
-    "tenant_id", tenant_id,
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dest", GCTX.self_addr());
@@ -360,8 +318,7 @@ int ObDDLExecutorUtil::cancel_ddl_task(const int64_t tenant_id)
 }
 
 int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const char* parallel_ddl_type,
-                                            const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res,
-                                            const uint64_t tenant_id)
+                                            const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res)
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
@@ -373,12 +330,11 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
     if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-        ctx, my_session, tenant_id, res.schema_version_, res.do_nothing_))) {
+        ctx, my_session, res.schema_version_, res.do_nothing_))) {
       LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
     }
     int64_t end_time = ObTimeUtility::current_time();
     LOG_INFO(parallel_ddl_type, KR(ret),
-            "tenant_id", tenant_id,
             "cost", end_time - start_time,
             "execute_time", refresh_time - start_time,
             "wait_schema", end_time - refresh_time);

@@ -19,13 +19,15 @@
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "lib/container/ob_array.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObAllVirtualDagWarningHistory : public common::ObVirtualTableScannerIterator
+class ObAllVirtualDagWarningHistory : public common::ObVirtualTableScannerIterator,
+                                      public omt::ObMultiTenantOperator
 {
 public:
   enum COLUMN_ID_LIST
@@ -47,6 +49,12 @@ public:
 protected:
   int fill_cells(share::ObDagWarningInfo &dag_warning_info);
 private:
+  virtual bool is_need_process() override;
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual void release_last_tenant() override
+  {
+    dag_warning_info_iter_.reset();
+  }
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   char task_id_buf_[common::OB_TRACE_STAT_BUFFER_SIZE];

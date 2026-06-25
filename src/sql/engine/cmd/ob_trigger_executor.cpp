@@ -36,27 +36,26 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   ObCreateTriggerArg &arg = stmt.get_trigger_arg();
-  uint64_t tenant_id = arg.trigger_info_.get_tenant_id();
+  
   bool has_error = false;
   ObString first_stmt;
   obcall::ObCreateTriggerRes res;
   pl::ObPL *pl_engine = nullptr;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   CK (OB_NOT_NULL(pl_engine = ctx.get_my_session()->get_pl_engine()));
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
   OZ (rootserver::serial_call([&]{ return GCTX.root_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
-  OZ (ObSPIService::force_refresh_schema(tenant_id));
+  OZ (ObSPIService::force_refresh_schema());
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   CK (OB_NOT_NULL(ctx.get_my_session()));
   CK (OB_NOT_NULL(ctx.get_sql_proxy()));
   CK (OB_NOT_NULL(ctx.get_task_exec_ctx().schema_service_));
   OZ (ctx.get_task_exec_ctx().schema_service_->
-      get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(),
-                              *ctx.get_sql_ctx()->schema_guard_));
+      get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
   OZ (analyze_dependencies(*ctx.get_sql_ctx()->schema_guard_,
                            ctx.get_my_session(),
                            ctx.get_sql_proxy(),
@@ -83,11 +82,10 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
       && !has_error
       && tenant_config.is_valid()
       && tenant_config->plsql_v2_compatibility) {
-    OZ (ObSPIService::force_refresh_schema(arg.trigger_info_.get_tenant_id(), res.trigger_schema_version_));
+    OZ (ObSPIService::force_refresh_schema(res.trigger_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
-          get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(), *ctx.get_sql_ctx()->schema_guard_));
+          get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
     OZ (pl::ObPLCompilerUtils::compile(ctx,
-                                       arg.trigger_info_.get_tenant_id(),
                                        arg.trigger_info_.get_database_id(),
                                        arg.trigger_info_.get_trigger_name(),
                                        pl::ObPLCompilerUtils::COMPILE_TRIGGER,
@@ -129,14 +127,14 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
     const ObTriggerInfo& trigger_info = arg.trigger_infos_.at(0);
     int64_t latest_schema_version = OB_INVALID_VERSION;
     arg.ddl_stmt_str_ = first_stmt;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else if (!arg.is_alter_compile_) {
       obcall::ObRoutineDDLRes res;
       OZ (rootserver::serial_call([&]{ return GCTX.root_service_->alter_trigger_with_res(arg, res); }), GCTX.self_addr());
       if (OB_SUCC(ret)) {
-        OZ (ObSPIService::force_refresh_schema(trigger_info.get_tenant_id(), res.store_routine_schema_version_));
+        OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
         OX (latest_schema_version = res.store_routine_schema_version_);
       }
     } else {
@@ -146,9 +144,8 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
         && tenant_config.is_valid()
         && tenant_config->plsql_v2_compatibility) {
       OZ (ctx.get_task_exec_ctx().schema_service_->
-          get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(), *ctx.get_sql_ctx()->schema_guard_));
+          get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
       OZ (pl::ObPLCompilerUtils::compile(ctx,
-                                         trigger_info.get_tenant_id(),
                                          trigger_info.get_database_id(),
                                          trigger_info.get_trigger_name(),
                                          pl::ObPLCompilerUtils::COMPILE_TRIGGER,
@@ -165,11 +162,11 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
                                                   ObCreateTriggerArg &arg)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg.trigger_info_.get_tenant_id();
+  
   const ObString &trigger_name = arg.trigger_info_.get_trigger_name();
   const ObString &db_name = arg.trigger_database_;
   const ObTriggerInfo *trigger_info = NULL;
-  if (OB_FAIL(schema_guard.get_trigger_info(tenant_id, arg.trigger_info_.get_database_id(),
+  if (OB_FAIL(schema_guard.get_trigger_info( arg.trigger_info_.get_database_id(),
                                             trigger_name, trigger_info))) {
     LOG_WARN("failed to get trigger info", K(ret));
   } else if (NULL == trigger_info) {

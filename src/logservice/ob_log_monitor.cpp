@@ -283,6 +283,7 @@ int ObLogMonitor::record_parent_child_change_event(const int64_t palf_id,
                                                    const bool is_register, /* true: register; false; retire; */
                                                    const bool is_parent,   /* true: parent; false: child; */
                                                    const common::ObAddr &server,
+                                                   const common::ObRegion &region,
                                                    const int64_t register_time_us,
                                                    const char *extra_info)
 {
@@ -301,12 +302,14 @@ int ObLogMonitor::record_parent_child_change_event(const int64_t palf_id,
     if (OB_NOT_NULL(extra_info)) {
       SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_STR_FMT_PREFIX,
           object_str, server,
+          "REGION", region,
           "REGISTER_TIME_US", register_time_us,
           "", NULL,
           "info", extra_info);
     } else {
       SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_STR_FMT_PREFIX,
           object_str, server,
+          "REGION", region,
           "REGISTER_TIME_US", register_time_us,
           "", NULL);
     }

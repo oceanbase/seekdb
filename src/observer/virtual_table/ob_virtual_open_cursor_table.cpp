@@ -133,7 +133,8 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
   } else {
     ObServer &server = ObServer::get_instance();
     uint64_t cell_idx = 0;
-    bool display_non_session_cursor = true ? GCONF._display_non_session_cursor : false;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    bool display_non_session_cursor = tenant_config.is_valid() ? tenant_config->_display_non_session_cursor : false;
     char ip_buf[common::OB_IP_STR_BUFF];
     char peer_buf[common::OB_IP_PORT_STR_BUFF];
     char sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];

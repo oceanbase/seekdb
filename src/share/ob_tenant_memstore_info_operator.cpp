@@ -32,17 +32,13 @@ namespace share
 
 
 int ObTenantMemstoreInfoOperator::get(
-    const uint64_t tenant_id,
     const common::ObIArray<common::ObAddr> &unit_servers,
     ObIArray<TenantServerMemInfo> &mem_infos)
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObSqlString unit_servers_str;
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant_ids is empty", K(tenant_id), K(ret));
-  } else {
+  {
     for (int64_t i = 0; OB_SUCC(ret) && i < unit_servers.count(); ++i) {
       char svr_ip_str[common::MAX_IP_ADDR_LENGTH] = "";
       const common::ObAddr &unit_server = unit_servers.at(i);
@@ -80,7 +76,7 @@ int ObTenantMemstoreInfoOperator::get(
                 break;
               }
             } else {
-              mem_info.tenant_id_ = OB_SYS_TENANT_ID;
+              
               EXTRACT_INT_FIELD_MYSQL(*result, "active_span",
                   mem_info.active_memstore_used_, int64_t);
               EXTRACT_INT_FIELD_MYSQL(*result, "memstore_used",

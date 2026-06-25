@@ -40,6 +40,8 @@ ObAllVirtualTmpFileInfo::~ObAllVirtualTmpFileInfo()
 
 void ObAllVirtualTmpFileInfo::reset()
 {
+  // release tenant resources first
+  omt::ObMultiTenantOperator::reset();
   ip_buffer_[0] = '\0';
   trace_id_buffer_[0] = '\0';
   file_ptr_buffer_[0] = '\0';
@@ -48,6 +50,24 @@ void ObAllVirtualTmpFileInfo::reset()
   is_ready_ = false;
   fd_idx_ = -1;
   ObVirtualTableScannerIterator::reset();
+}
+
+void ObAllVirtualTmpFileInfo::release_last_tenant()
+{
+  // resources related with tenant must be released by this function
+  fd_arr_.reset();
+  is_ready_ = false;
+  fd_idx_ = -1;
+}
+
+bool ObAllVirtualTmpFileInfo::is_need_process()
+{
+  bool bool_ret = false;
+  if (true || true) {
+    bool_ret = true;
+  }
+
+  return bool_ret;
 }
 
 int ObAllVirtualTmpFileInfo::get_next_tmp_file_info_(tmp_file::ObTmpFileInfo *tmp_file_info)
@@ -271,7 +291,7 @@ int ObAllVirtualTmpFileInfo::fill_sn_column_(const uint64_t col_index, tmp_file:
   return ret;
 }
 
-int ObAllVirtualTmpFileInfo::inner_get_next_row(common::ObNewRow *&row)
+int ObAllVirtualTmpFileInfo::process_curr_tenant(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
 

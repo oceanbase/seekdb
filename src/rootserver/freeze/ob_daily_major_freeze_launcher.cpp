@@ -32,11 +32,10 @@ using namespace obcall;
 using namespace share::schema;
 namespace rootserver
 {
-ObDailyMajorFreezeLauncher::ObDailyMajorFreezeLauncher(const uint64_t tenant_id)
+ObDailyMajorFreezeLauncher::ObDailyMajorFreezeLauncher()
   : is_inited_(false),
     is_paused_(false),
     already_launch_(false),
-    tenant_id_(tenant_id),
     sql_proxy_(nullptr),
     config_(nullptr),
     gc_freeze_info_last_timestamp_(0),
@@ -82,12 +81,12 @@ int ObDailyMajorFreezeLauncher::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDailyMajorFreezeLauncher not init", KR(ret));
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::MFLaunchTimer))) {
-    LOG_WARN("start MFLaunch timer failed", K_(tenant_id), KR(ret));
+    LOG_WARN("start MFLaunch timer failed", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::MFLaunchTimer, *this, LAUNCHER_INTERVAL_US, true/*is_repeat*/))) {
-    LOG_WARN("schedule MFLaunch timer failed", K_(tenant_id), KR(ret));
+    LOG_WARN("schedule MFLaunch timer failed", KR(ret));
   } else {
     stop_ = false;
-    LOG_INFO("ObDailyMajorFreezeLauncher start succ", K_(tenant_id));
+    LOG_INFO("ObDailyMajorFreezeLauncher start succ");
   }
   return ret;
 }
@@ -101,20 +100,20 @@ void ObDailyMajorFreezeLauncher::runTimerTask()
     LOG_WARN("fail to run, not init", KR(ret));
   } else if (stop_ || is_paused()) {
   } else {
-    MTL_SWITCH(tenant_id_) {
-      LOG_INFO("start daily major_freeze_launcher", K_(tenant_id));
-      LOG_TRACE("run daily major freeze launcher", K_(tenant_id));
+    MOD_SCOPE {
+      LOG_INFO("start daily major_freeze_launcher");
+      LOG_TRACE("run daily major freeze launcher");
 
       if (OB_FAIL(try_launch_major_freeze())) {
-        LOG_WARN("fail to try_launch_major_freeze", KR(ret), K_(tenant_id));
+        LOG_WARN("fail to try_launch_major_freeze", KR(ret));
       }
       if (OB_TMP_FAIL(try_gc_freeze_info())) {
-        LOG_WARN("fail to try_gc_freeze_info", KR(tmp_ret), K_(tenant_id));
+        LOG_WARN("fail to try_gc_freeze_info", KR(tmp_ret));
       }
       if (OB_TMP_FAIL(try_gc_tablet_checksum())) {
-        LOG_WARN("fail to try_gc_tablet_checksum", KR(tmp_ret), K_(tenant_id));
+        LOG_WARN("fail to try_gc_tablet_checksum", KR(tmp_ret));
       }
-      LOG_INFO("daily major_freeze_launcher stopped", K_(tenant_id));
+      LOG_INFO("daily major_freeze_launcher stopped");
     }
   }
 }
@@ -154,15 +153,15 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
 {
   int ret = OB_SUCCESS;
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(!tenant_config.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant config is not valid", KR(ret), K_(tenant_id));
+    LOG_WARN("tenant config is not valid", KR(ret));
   } else if (tenant_config->major_freeze_duty_time.disable()) {
-    LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty", K_(tenant_id));
+    LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty");
   } else {
     const int hour = tenant_config->major_freeze_duty_time.hour();
     const int minute = tenant_config->major_freeze_duty_time.minute();
@@ -185,8 +184,8 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
         do {
           ObMajorFreezeParam param;
           param.freeze_reason_ = MF_DAILY_MERGE;
-          if (OB_FAIL(param.add_freeze_info(tenant_id_))) {
-            LOG_WARN("fail to push_back", KR(ret), K_(tenant_id));
+          if (OB_FAIL(param.add_freeze_info())) {
+            LOG_WARN("fail to push_back", KR(ret));
           } else if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
               ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
@@ -197,7 +196,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
             }
           } else {
             already_launch_ = true;
-            LOG_INFO("launch major freeze by duty time", K_(tenant_id),
+            LOG_INFO("launch major freeze by duty time",
                      "duty_time", tenant_config->major_freeze_duty_time);
           }
 
@@ -219,7 +218,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
                     "time limit", KR(ret), K(start_us), "now", ObTimeUtility::current_time());
         }
       } else {
-        LOG_INFO("major_freeze has been already launched, no need to do again", K_(tenant_id));
+        LOG_INFO("major_freeze has been already launched, no need to do again");
       }
     } else {
       already_launch_ = false;
@@ -238,7 +237,7 @@ int ObDailyMajorFreezeLauncher::try_gc_freeze_info()
   } else if ((now - gc_freeze_info_last_timestamp_) < MODIFY_GC_INTERVAL) {
     // nothing
   } else if (OB_FAIL(merge_info_mgr_->try_gc_freeze_info())) {
-    LOG_WARN("fail to gc_freeze_info", KR(ret), K_(tenant_id));
+    LOG_WARN("fail to gc_freeze_info", KR(ret));
   } else {
     gc_freeze_info_last_timestamp_ = now;
   }
@@ -265,9 +264,8 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
       if (((now - last_check_tablet_ckm_us_) < TABLET_CKM_CHECK_INTERVAL_US)
           || tablet_ckm_gc_compaction_scn_.is_valid()) {
         // do nothing, so as to decrease the frequency of load all distinct compaction_scn
-      } else if (OB_FAIL(ObTabletChecksumOperator::load_all_compaction_scn(*sql_proxy_,
-                        tenant_id_, all_compaction_scn))) {
-        LOG_WARN("fail to load all compaction scn", KR(ret), K_(tenant_id));
+      } else if (OB_FAIL(ObTabletChecksumOperator::load_all_compaction_scn(*sql_proxy_, all_compaction_scn))) {
+        LOG_WARN("fail to load all compaction scn", KR(ret));
       } else {
         last_check_tablet_ckm_us_ = now;
         // 2. check if need gc tablet_checksum
@@ -275,13 +273,12 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
           const int64_t compaction_scn_cnt = all_compaction_scn.count();
           tablet_ckm_gc_compaction_scn_ = all_compaction_scn.at(compaction_scn_cnt - MIN_RESERVED_COUNT - 1);
           if (OB_FAIL(merge_info_mgr_->get_gts(cur_gts_scn))) {
-            LOG_WARN("fail to get_gts", KR(ret), K_(tenant_id));
+            LOG_WARN("fail to get_gts", KR(ret));
           } else {
             min_keep_compaction_scn = SCN::minus(cur_gts_scn, MAX_KEEP_INTERVAL_NS);
             const SCN special_tablet_ckm_gc_compaction_scn = MIN(min_keep_compaction_scn, tablet_ckm_gc_compaction_scn_);
-            if (OB_FAIL(ObTabletChecksumOperator::delete_special_tablet_checksum_items(*sql_proxy_,
-                        tenant_id_, special_tablet_ckm_gc_compaction_scn))) {
-              LOG_WARN("fail to delete special tablet checksum items", KR(ret), K_(tenant_id),
+            if (OB_FAIL(ObTabletChecksumOperator::delete_special_tablet_checksum_items(*sql_proxy_, special_tablet_ckm_gc_compaction_scn))) {
+              LOG_WARN("fail to delete special tablet checksum items", KR(ret),
                        K(special_tablet_ckm_gc_compaction_scn));
             }
           }
@@ -291,9 +288,9 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
       // 3. gc tablet_checksum if need
       if (OB_SUCC(ret) && tablet_ckm_gc_compaction_scn_.is_valid()) {
         int64_t affected_rows = 0;
-        if (OB_FAIL(ObTabletChecksumOperator::delete_tablet_checksum_items(*sql_proxy_, tenant_id_,
+        if (OB_FAIL(ObTabletChecksumOperator::delete_tablet_checksum_items(*sql_proxy_,
                     tablet_ckm_gc_compaction_scn_, BATCH_DELETE_CNT, affected_rows))) {
-          LOG_WARN("fail to delete tablet checksum items", KR(ret), K_(tenant_id), K_(tablet_ckm_gc_compaction_scn));
+          LOG_WARN("fail to delete tablet checksum items", KR(ret), K_(tablet_ckm_gc_compaction_scn));
         } else if (0 == affected_rows) {
           // already delete all tablet_checksum with comapction_scn <= tablet_ckm_gc_compaction_scn_
           tablet_ckm_gc_compaction_scn_.set_invalid();

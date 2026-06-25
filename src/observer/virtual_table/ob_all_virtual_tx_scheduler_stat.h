@@ -21,6 +21,7 @@
 #include "storage/tx/ob_trans_define_v4.h"
 #include "storage/tx/ob_tx_stat.h"
 #include "common/ob_clock_generator.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
@@ -31,17 +32,21 @@ namespace transaction
 namespace observer
 {
 
-class ObGVTxSchedulerStat: public common::ObVirtualTableScannerIterator
+class ObGVTxSchedulerStat: public common::ObVirtualTableScannerIterator,
+                           public omt::ObMultiTenantOperator
 {
 public:
   ObGVTxSchedulerStat();
   ~ObGVTxSchedulerStat();
 
 public:
-  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual int inner_get_next_row(common::ObNewRow *&row) { return execute(row);}
   virtual void reset();
 
 private:
+  virtual bool is_need_process() override;
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual void release_last_tenant() override;
   int get_next_tx_info_(transaction::ObTxSchedulerStat &tx_scheduler_stat);
   bool is_valid_timestamp_(const int64_t timestamp) const;
 

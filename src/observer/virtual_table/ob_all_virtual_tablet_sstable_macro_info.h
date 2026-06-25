@@ -29,6 +29,7 @@
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
@@ -40,7 +41,8 @@ class ObTabletMeta;
 namespace observer
 {
 
-class ObAllVirtualTabletSSTableMacroInfo : public common::ObVirtualTableScannerIterator
+class ObAllVirtualTabletSSTableMacroInfo : public common::ObVirtualTableScannerIterator,
+                                           public omt::ObMultiTenantOperator
 {
   enum COLUMN_ID_LIST
   {
@@ -107,6 +109,10 @@ private:
     ObRowStoreType row_store_type_;
   };
 private:
+  virtual bool is_need_process() override;
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual void release_last_tenant() override;
+
   int set_key_ranges(const common::ObIArray<common::ObNewRange> &key_ranges);
   int gen_row(const MacroInfo &macro_info, common::ObNewRow *&row);
   int next_tenant();

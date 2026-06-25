@@ -34,6 +34,7 @@ namespace observer
 
 ObAllVirtualChangeStreamRefreshStat::ObAllVirtualChangeStreamRefreshStat()
   : ObVirtualTableScannerIterator(),
+    ObMultiTenantOperator(),
     row_produced_(false)
 {
 }
@@ -46,10 +47,34 @@ ObAllVirtualChangeStreamRefreshStat::~ObAllVirtualChangeStreamRefreshStat()
 void ObAllVirtualChangeStreamRefreshStat::reset()
 {
   row_produced_ = false;
+  ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
+}
+
+bool ObAllVirtualChangeStreamRefreshStat::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
+}
+
+void ObAllVirtualChangeStreamRefreshStat::release_last_tenant()
+{
+  row_produced_ = false;
+}
+
+int ObAllVirtualChangeStreamRefreshStat::process_curr_tenant(ObNewRow *&row)
 {
   LOG_INFO("select from dba_ob_change_stream_refresh_stat");
   int ret = OB_SUCCESS;

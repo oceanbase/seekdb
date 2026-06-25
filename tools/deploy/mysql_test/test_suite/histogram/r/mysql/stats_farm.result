@@ -252,7 +252,7 @@ select TABLE_OWNER,TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,INSERTS,UPDATES,D
 | test        | t_subpart  | NULL           | p2sp1             |       0 |       0 |       0 |
 | test        | t_subpart  | NULL           | p2sp2             |       0 |       0 |       0 |
 +-------------+------------+----------------+-------------------+---------+---------+---------+
-select DATEDIFF(next_date, start_date) from oceanbase.__all_scheduler_job where (this_date is not null or last_date is not null) and JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW');
+select DATEDIFF(next_date, start_date) from oceanbase.__all_tenant_scheduler_job where (this_date is not null or last_date is not null) and JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW');
 +---------------------------------+
 | DATEDIFF(next_date, start_date) |
 +---------------------------------+

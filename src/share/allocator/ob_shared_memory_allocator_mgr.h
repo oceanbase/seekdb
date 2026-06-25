@@ -26,7 +26,6 @@
 #include "share/rc/ob_tenant_base.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/ls/ob_ls.h"
-#include "share/config/ob_server_config.h"
 
 namespace oceanbase {
 namespace share {
@@ -82,10 +81,10 @@ public:
   ObTenantVectorAllocator &vector_allocator() { return vector_allocator_; }
 
 private:
-  void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_memstore_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_tx_data_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
-  void update_mds_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
+  void update_share_throttle_config_(const int64_t total_memory, omt::ObTenantConfigGuard &config);
+  void update_memstore_throttle_config_(const int64_t total_memory, omt::ObTenantConfigGuard &config);
+  void update_tx_data_throttle_config_(const int64_t total_memory, omt::ObTenantConfigGuard &config);
+  void update_mds_throttle_config_(const int64_t total_memory, omt::ObTenantConfigGuard &config);
 
 private:
   

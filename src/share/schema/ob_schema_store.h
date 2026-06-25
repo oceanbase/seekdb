@@ -30,6 +30,7 @@ class ObSchemaStore
 {
 public:
   static const int64_t MAX_VERSION_COUNT = 64;
+  static const int64_t MAX_VERSION_COUNT_FOR_LIBOBLOG = 6;
   ObSchemaStore()
     : refreshed_version_(0),
       received_version_(0),
@@ -37,7 +38,8 @@ public:
       baseline_schema_version_(common::OB_INVALID_VERSION),
       consensus_version_(0) {}
   ~ObSchemaStore() {}
-  int init(const int64_t init_version_count);
+  int init(const int64_t init_version_count,
+           const int64_t init_version_count_for_liboblog);
   void reset_version();
   void update_refreshed_version(int64_t version);
   void update_received_version(int64_t version);
@@ -57,6 +59,7 @@ public:
   int64_t baseline_schema_version_;
   int64_t consensus_version_;
   ObSchemaMgrCache schema_mgr_cache_;
+  ObSchemaMgrCache schema_mgr_cache_for_liboblog_;
 };
 
 

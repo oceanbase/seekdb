@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SHARE_OBJECT_STORAGE_OB_OBJECT_STORAGE_STRUCT_H_
 #define OCEANBASE_SHARE_OBJECT_STORAGE_OB_OBJECT_STORAGE_STRUCT_H_
 
+#include "common/ob_region.h"
 #include "common/ob_role.h"
 #include "common/ob_timeout_ctx.h"
 #include "lib/compress/ob_compressor_pool.h"

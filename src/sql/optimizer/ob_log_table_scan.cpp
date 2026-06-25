@@ -168,8 +168,9 @@ int ObLogTableScan::check_is_delete_insert_scan(bool &is_delete_insert_scan) con
     // may be fake table, skip
     LOG_DEBUG("get nullptr table schema", K(ret), K_(table_id), K_(ref_table_id), K(get_stmt()));
   } else if (table_schema->is_delete_insert_merge_engine()) {
-    if (OB_LIKELY(true)) {
-      is_delete_insert_scan = GCONF._enable_delete_insert_scan;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_LIKELY(tenant_config.is_valid())) {
+      is_delete_insert_scan = tenant_config->_enable_delete_insert_scan;
     }
   }
   return ret;

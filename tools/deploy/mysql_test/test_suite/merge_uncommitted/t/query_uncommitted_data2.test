@@ -52,7 +52,7 @@ while ($i > 0)
 {
  sleep 1;
  dec $i;
- let $memtable_count = query_get_value(select count(1) as c from oceanbase.__all_virtual_tablet_memstore_info where tablet_id in (select tablet_id from __all_tablet_to_ls where table_id = $__table_id__) and is_active = 'NO', c, 1);
+ let $memtable_count = query_get_value(select count(1) as c from oceanbase.__all_virtual_memstore_info where tablet_id in (select tablet_id from __all_tablet_to_ls where table_id = $__table_id__) and is_active = 'NO', c, 1);
  if ($memtable_count == 0) 
  {
    let $i = -5;
@@ -90,7 +90,7 @@ while ($i > 0)
 {
  sleep 1;
  dec $i;
- let $memtable_count = query_get_value(select count(1) as c from oceanbase.__all_virtual_tablet_memstore_info where tablet_id in (select tablet_id from __all_tablet_to_ls where table_id = $__table_id__) and is_active = 'NO', c, 1);
+ let $memtable_count = query_get_value(select count(1) as c from oceanbase.__all_virtual_memstore_info where tablet_id in (select tablet_id from __all_tablet_to_ls where table_id = $__table_id__) and is_active = 'NO', c, 1);
  if ($memtable_count == 0) 
  {
    let $i = -5;

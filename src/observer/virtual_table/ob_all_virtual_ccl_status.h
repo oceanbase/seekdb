@@ -18,6 +18,7 @@
 #define OCEANBASE_OBSERVER_OB_ALL_VIRTUAL_CCL_STATUS_H
 
 #include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
@@ -50,7 +51,8 @@ private:
 };
 
 
-class ObAllVirtualCCLStatus : public common::ObVirtualTableScannerIterator
+class ObAllVirtualCCLStatus : public common::ObVirtualTableScannerIterator,
+                                 public omt::ObMultiTenantOperator
 {
 public:
 ObAllVirtualCCLStatus()
@@ -65,6 +67,9 @@ ObAllVirtualCCLStatus()
   virtual void reset();
   int set_svr_addr(common::ObAddr &addr);
 private:
+  virtual bool is_need_process() override;
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual void release_last_tenant() override;
 private:
   enum COLUMN_ID
   {

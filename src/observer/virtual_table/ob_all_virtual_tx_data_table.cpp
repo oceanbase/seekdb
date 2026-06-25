@@ -44,13 +44,31 @@ ObAllVirtualTxDataTable::~ObAllVirtualTxDataTable()
 
 void ObAllVirtualTxDataTable::reset()
 {
+  // release tenant resources first
   mgr_handle_.reset();
-  ls_iter_guard_.reset();
+  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualTxDataTable::inner_get_next_row(common::ObNewRow *&row)
+void ObAllVirtualTxDataTable::release_last_tenant()
+{
+  // resources related with tenant must be released by this function
+  mgr_handle_.reset();
+  ls_iter_guard_.reset();
+}
+
+bool ObAllVirtualTxDataTable::is_need_process()
+{
+  bool bool_ret = false;
+  if (true || true) {
+    bool_ret = true;
+  }
+
+  return bool_ret;
+}
+
+int ObAllVirtualTxDataTable::process_curr_tenant(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
 

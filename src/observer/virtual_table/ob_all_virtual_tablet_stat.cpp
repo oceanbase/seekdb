@@ -37,16 +37,43 @@ ObAllVirtualTabletStat::~ObAllVirtualTabletStat()
   reset();
 }
 
+int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    if (ret != OB_ITER_END) {
+      SERVER_LOG(WARN, "execute fail", K(ret));
+    }
+  }
+  return ret;
+}
+
 void ObAllVirtualTabletStat::reset()
 {
+  omt::ObMultiTenantOperator::reset();
   MEMSET(ip_buf_, 0, sizeof(ip_buf_));
   tablet_stats_.reset();
   cur_idx_ = 0;
-  need_collect_stats_ = true;
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
+bool ObAllVirtualTabletStat::is_need_process()
+{
+  bool bret = false;
+  if (true || true) {
+    bret = true;
+  }
+  return bret;
+}
+
+void ObAllVirtualTabletStat::release_last_tenant()
+{
+  tablet_stats_.reset();
+  cur_idx_ = 0;
+  need_collect_stats_ = true;
+}
+
+int ObAllVirtualTabletStat::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;

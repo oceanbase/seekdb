@@ -218,9 +218,10 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
 {
   int ret = OB_SUCCESS;
   
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   bool exist_deadlock_condition = false;
   if (!ENABLE_PX_TASK_REBALANCE) {
-  } else if (!true || !GCONF._enable_px_task_rebalance) {
+  } else if (!tenant_config.is_valid() || !tenant_config->_enable_px_task_rebalance) {
   } else if (!ObGranuleUtil::can_resplit_gi_task(gi_attri_flag_)) {
   } else if (is_rescanable()) {
     // for rescanable gi, we can not handle the rescan process among all workers since gi task

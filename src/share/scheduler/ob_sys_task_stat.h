@@ -76,11 +76,11 @@ struct ObSysTaskStat
   ObTaskId task_id_;
   ObSysTaskType task_type_;
   common::ObAddr svr_ip_;
-  int64_t tenant_id_;
+  
   char comment_[common::OB_MAX_TASK_COMMENT_LENGTH];
   bool is_cancel_;
 
-  TO_STRING_KV(K_(start_time), K_(task_id), K_(task_type), K_(svr_ip), K_(tenant_id), K_(is_cancel), K_(comment));
+  TO_STRING_KV(K_(start_time), K_(task_id), K_(task_type), K_(svr_ip), K_(is_cancel), K_(comment));
 };
 
 class ObSysTaskStatMgr

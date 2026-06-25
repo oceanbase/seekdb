@@ -187,11 +187,12 @@ int ObDBMSJobUtils::check_job_can_running(bool &can_running)
   uint64_t job_queue_processor = 0;
   uint64_t job_running_cnt = 0;
   ObSqlString sql;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   share::schema::ObSchemaGetterGuard guard;
   bool is_restore = false;
   OX (can_running = false);
-  CK (true);
-  OX (job_queue_processor = GCONF.job_queue_processes);
+  CK (tenant_config.is_valid());
+  OX (job_queue_processor = tenant_config->job_queue_processes);
   // found current running job count
   OZ (sql.append("select count(*) from __all_job where this_date is not null"));
 

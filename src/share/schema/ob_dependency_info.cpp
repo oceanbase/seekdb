@@ -177,10 +177,10 @@ int ObDependencyInfo::delete_schema_object_dependency(common::ObISQLClient &tran
                                               K(dep_obj_id), K(dep_obj_type));
   } else if (sql.assign_fmt("delete FROM %s WHERE dep_obj_id = %ld \
                                                   AND dep_obj_type = %ld",
-            OB_ALL_DEPENDENCY_TNAME,
+            OB_ALL_TENANT_DEPENDENCY_TNAME,
             extract_obj_id(dep_obj_id),
             static_cast<uint64_t>(dep_obj_type))) {
-    LOG_WARN("delete from __all_dependency table failed.", K(ret),
+    LOG_WARN("delete from __all_tenant_dependency table failed.", K(ret),
                                                                   K(dep_obj_id),
                                                                   K(dep_obj_type));
   } else {
@@ -222,11 +222,11 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
     if (!only_history) {
       ObDMLExecHelper exec(trans);
       if (is_replace) {
-        if (OB_FAIL(exec.exec_insert_update(OB_ALL_DEPENDENCY_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_insert_update(OB_ALL_TENANT_DEPENDENCY_TNAME, dml, affected_rows))) {
           LOG_WARN("execute update failed", K(ret));
         }
       } else {
-        if (OB_FAIL(exec.exec_insert(OB_ALL_DEPENDENCY_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_insert(OB_ALL_TENANT_DEPENDENCY_TNAME, dml, affected_rows))) {
           LOG_WARN("execute insert failed", K(ret));
         }
       }
@@ -434,7 +434,7 @@ int ObDependencyInfo::collect_ref_infos(uint64_t dep_obj_id,
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE dep_obj_id = %lu ORDER BY dep_order",
-                               OB_ALL_DEPENDENCY_TNAME,
+                               OB_ALL_TENANT_DEPENDENCY_TNAME,
                                dep_obj_id))) {
       LOG_WARN("failed to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -477,7 +477,7 @@ int ObDependencyInfo::collect_dep_infos(uint64_t ref_obj_id,
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE ref_obj_id = %lu",
-                               OB_ALL_DEPENDENCY_TNAME,
+                               OB_ALL_TENANT_DEPENDENCY_TNAME,
                                ref_obj_id))) {
       LOG_WARN("failed to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -528,7 +528,7 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
     HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %lu",
-                                        OB_ALL_DEPENDENCY_TNAME,
+                                        OB_ALL_TENANT_DEPENDENCY_TNAME,
                                         ref_obj_id))) {
         LOG_WARN("failed to assign sql", K(ret));
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -608,7 +608,7 @@ int ObDependencyInfo::collect_all_dep_objs(
       } else if (OB_FAIL(sql.assign_fmt(
           "SELECT dep_obj_id, dep_obj_type, schema_version FROM %s "
           "WHERE (ref_obj_id, ref_obj_type) IN (",
-          OB_ALL_DEPENDENCY_TNAME))) {
+          OB_ALL_TENANT_DEPENDENCY_TNAME))) {
         LOG_WARN("failed to assign sql", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < ref_obj_infos.count(); i++) {
@@ -713,12 +713,12 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
     int64_t affected_rows = 0;
     ObSqlString sql;
     if (OB_FAIL(ret) || dml.get_row_count() <= 0) {
-    } else if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_ERROR_TNAME, sql))) {
-      LOG_WARN("splice batch insert update sql for __all_error failed", K(ret), K(objs));
+    } else if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_TENANT_ERROR_TNAME, sql))) {
+      LOG_WARN("splice batch insert update sql for __all_tenant_error failed", K(ret), K(objs));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("insert or update __all_error failed", K(ret), K(objs));
+      LOG_WARN("insert or update __all_tenant_error failed", K(ret), K(objs));
     } else {
-      // insert or update __all_error succeed!
+      // insert or update __all_tenant_error succeed!
     }
   }
   return ret;
@@ -1196,7 +1196,7 @@ int ObReferenceObjTable::batch_execute_insert_or_update_obj_dependency(const int
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_DEPENDENCY_TNAME, sql))) {
+    } else if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_TENANT_DEPENDENCY_TNAME, sql))) {
       LOG_WARN("splice sql failed", K(ret));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql failed", K(sql), K(ret));
@@ -1227,7 +1227,7 @@ int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceOb
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(dml.splice_batch_delete_sql(OB_ALL_DEPENDENCY_TNAME, sql))) {
+    } else if (OB_FAIL(dml.splice_batch_delete_sql(OB_ALL_TENANT_DEPENDENCY_TNAME, sql))) {
       LOG_WARN("splice sql failed", K(ret));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql failed", K(sql), K(ret));

@@ -37,7 +37,6 @@ ObLocationService::ObLocationService()
 
 int ObLocationService::get(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     const int64_t expire_renew_time,
     bool &is_cache_hit,
@@ -45,12 +44,11 @@ int ObLocationService::get(
 {
   is_cache_hit = true;
   location.reset();
-  return nonblock_get(cluster_id, tenant_id, ls_id, location);
+  return nonblock_get(cluster_id, ls_id, location);
 }
 
 int ObLocationService::get_leader(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     const bool force_renew,
     common::ObAddr &leader)
@@ -67,7 +65,6 @@ int ObLocationService::get_leader(
 
 int ObLocationService::get_leader_with_retry_until_timeout(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     common::ObAddr &leader,
     const int64_t abs_retry_timeout,
@@ -85,7 +82,6 @@ int ObLocationService::get_leader_with_retry_until_timeout(
 
 int ObLocationService::nonblock_get(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     ObLSLocation &location)
 {
@@ -96,8 +92,8 @@ int ObLocationService::nonblock_get(
   } else if (OB_ISNULL(GCTX.config_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
-  } else if (OB_FAIL(location.init(cluster_id, tenant_id, ls_id, ObTimeUtility::current_time()))) {
-    LOG_WARN("location init error", KR(ret), K(cluster_id), K(tenant_id), K(ls_id));
+  } else if (OB_FAIL(location.init(cluster_id, ls_id, ObTimeUtility::current_time()))) {
+    LOG_WARN("location init error", KR(ret), K(cluster_id), K(ls_id));
   } else {
     ObLSReplicaLocation replica_location;
     common::ObReplicaProperty property;
@@ -115,7 +111,6 @@ int ObLocationService::nonblock_get(
 
 int ObLocationService::nonblock_get_leader(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     common::ObAddr &leader)
 {
@@ -130,7 +125,6 @@ int ObLocationService::nonblock_get_leader(
 }
 
 int ObLocationService::get(
-    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     const int64_t expire_renew_time,
     bool &is_cache_hit,
@@ -148,7 +142,6 @@ int ObLocationService::get(
 }
 
 int ObLocationService::nonblock_get(
-    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     ObLSID &ls_id)
 {
@@ -162,9 +155,7 @@ int ObLocationService::nonblock_get(
   return ret;
 }
 
-int ObLocationService::vtable_get(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObLocationService::vtable_get(const uint64_t table_id,
     const int64_t expire_renew_time,
     bool &is_cache_hit,
     ObIArray<common::ObAddr> &locations)
@@ -177,35 +168,6 @@ int ObLocationService::vtable_get(
   }
   return ret;
 }
-
-int ObLocationService::external_table_get(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
-    ObIArray<ObAddr> &locations)
-{
-  UNUSED(table_id);
-  int ret = OB_SUCCESS;
-  bool is_cache_hit = false;
-  //using the locations from any distributed virtual table
-  ObSEArray<ObAddr, 16> all_active_locations;
-  if (OB_FAIL(vtable_get(tenant_id, OB_ALL_VIRTUAL_PROCESSLIST_TID, 0, is_cache_hit, all_active_locations))) {
-    LOG_WARN("failed to get active server", K(ret), K(tenant_id));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < all_active_locations.count(); ++i) {
-      if (OB_FAIL(locations.push_back(all_active_locations.at(i)))) {
-        LOG_WARN("failed to push back", K(ret), K(i), K(tenant_id));
-      }
-    }
-    if (OB_FAIL(ret)) {
-      // do nothing
-    } else if (0 == locations.count() && OB_FAIL(locations.assign(all_active_locations))) {
-      LOG_WARN("failed to assign locations", K(ret));
-    }
-    LOG_TRACE("locations for external table", K(locations), K(ret));
-  }
-  return ret;
-}
-
 
 int ObLocationService::init(
     schema::ObMultiVersionSchemaService &schema_service,
@@ -250,30 +212,29 @@ int ObLocationService::destroy()
 ERRSIM_POINT_DEF(EN_CHECK_LS_EXIST_WITH_TENANT_NOT_NORMAL);
 
 int ObLocationService::check_ls_exist(
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     ObLSExistState &state)
 {
   int ret = OB_SUCCESS;
   state.reset();
   ObSqlString sql;
-  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant(tenant_id))) {
+  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(ls_id));
+    LOG_WARN("invalid args", KR(ret), K(ls_id));
   } else if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("GCTX has null ptr", KR(ret), KP(GCTX.schema_service_), KP(GCTX.sql_proxy_));
   } else {
     schema::ObSchemaGetterGuard schema_guard;
     const ObSimpleTenantSchema *tenant_schema = NULL;
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("fail to get tenant schema guard", KR(ret));
-    } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", KR(ret), K(tenant_id));
+    } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+      LOG_WARN("fail to get tenant schema", KR(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
-      LOG_WARN("tenant does not exist", KR(ret), K(tenant_id));
-    } else if ((is_sys_tenant(tenant_id) || is_meta_tenant(tenant_id))
+      LOG_WARN("tenant does not exist", KR(ret));
+    } else if ((true)
         && (tenant_schema->is_normal() || tenant_schema->is_dropping())) {
       // sys and meta tenants only have sys ls. If tenant is in normal or dropping status, sys ls exists.
       state.set_existing();

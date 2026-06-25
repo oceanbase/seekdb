@@ -206,11 +206,17 @@ int ObHashJoinVecOp::inner_open()
     LOG_WARN("fail to init hash table", K(ret));
   } else {
     
-    force_hash_join_spill_ = GCONF._force_hash_join_spill;
-    hash_join_processor_ = GCONF._enable_hash_join_processor;
-    if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
+    ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (tenant_config.is_valid()) {
+      force_hash_join_spill_ = tenant_config->_force_hash_join_spill;
+      hash_join_processor_ = tenant_config->_enable_hash_join_processor;
+      if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
+      }
+    } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
+      LOG_WARN("invalid tenant config", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

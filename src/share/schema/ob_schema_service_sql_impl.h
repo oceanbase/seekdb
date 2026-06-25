@@ -540,6 +540,10 @@ public:
       const ObRefreshSchemaStatus &schema_status,
       int64_t timestamp,
       int64_t &schema_version);
+  virtual int get_first_trans_end_schema_version(
+      common::ObISQLClient &sql_client,
+      int64_t &schema_version);
+
   static int sort_table_partition_info_v2(ObTableSchema &table_schema);
 
   // Get latest schema version from inner table for each table_id.

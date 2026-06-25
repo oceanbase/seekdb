@@ -41,17 +41,32 @@ ObGVTxLockStat::~ObGVTxLockStat() { reset(); }
 
 void ObGVTxLockStat::reset()
 {
+  omt::ObMultiTenantOperator::reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+bool ObGVTxLockStat::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
+}
+
+void ObGVTxLockStat::release_last_tenant()
+{
   ip_buffer_[0] = '\0';
   tx_id_buffer_[0] = '\0';
   proxy_session_id_buffer_[0] = '\0';
   memtable_key_buffer_[0] = '\0';
+
   ls_iter_guard_.reset();
   ls_id_ = share::ObLSID::INVALID_LS_ID;
   ls_ = nullptr;
   ls_tx_ctx_iter_.reset();
   tx_lock_stat_iter_.reset();
   start_to_read_ = false;
-  ObVirtualTableScannerIterator::reset();
 }
 
 int ObGVTxLockStat::get_next_ls_(ObLS *&ls)
@@ -158,6 +173,15 @@ int ObGVTxLockStat::get_next_tx_lock_stat_(ObTxLockStat &tx_lock_stat)
   return ret;
 }
 
+int ObGVTxLockStat::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
+}
+
 int ObGVTxLockStat::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
@@ -177,7 +201,7 @@ int ObGVTxLockStat::prepare_start_to_read_()
   return ret;
 }
 
-int ObGVTxLockStat::inner_get_next_row(ObNewRow *&row)
+int ObGVTxLockStat::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTxLockStat tx_lock_stat;

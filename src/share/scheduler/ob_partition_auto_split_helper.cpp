@@ -523,11 +523,12 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(inc_tablet_cnt), K(safe_ratio), K(split_size));
   } else {
-    if (OB_UNLIKELY(!true)) {
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_UNLIKELY(!tenant_config.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get invalid tenant config", K(ret));
     } else {
-      tablet_cnt_per_gb = GCONF._max_tablet_cnt_per_gb;
+      tablet_cnt_per_gb = tenant_config->_max_tablet_cnt_per_gb;
     }
   }
 

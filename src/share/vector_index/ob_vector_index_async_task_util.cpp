@@ -185,11 +185,12 @@ int ObVecIndexAsyncTaskUtil::in_active_time(
   int ret = OB_SUCCESS;
   is_active_time = false;
   ObTTLDutyDuration duration;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
-  if (!true) {
+  if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail get tenant_config", KR(ret));
-  } else if (OB_FAIL(ObTTLUtil::parse(GCONF.vector_index_optimize_duty_time, duration))) {
+  } else if (OB_FAIL(ObTTLUtil::parse(tenant_config->vector_index_optimize_duty_time, duration))) {
     LOG_WARN("fail parse vector time duty time", KR(ret));
   } else if (ObTTLUtil::current_in_duration(duration)) {
     is_active_time = true;

@@ -40,14 +40,14 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   obcall::UInt64 table_id;
   obcall::ObCreateRoutineArg &crt_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
-  uint64_t tenant_id = crt_routine_arg.routine_info_.get_tenant_id();
+  
   uint64_t database_id = crt_routine_arg.routine_info_.get_database_id();
   ObString db_name = crt_routine_arg.db_name_;
   ObString routine_name = crt_routine_arg.routine_info_.get_routine_name();
   ObRoutineType type = crt_routine_arg.routine_info_.get_routine_type();
   obcall::ObRoutineDDLRes res;
   bool has_error = ERROR_STATUS_HAS_ERROR == crt_routine_arg.error_info_.get_error_status();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -65,11 +65,10 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
       && tenant_config.is_valid()
       && tenant_config->plsql_v2_compatibility) {
     CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-    OZ (ObSPIService::force_refresh_schema(tenant_id, res.store_routine_schema_version_));
+    OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
-      get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(), *ctx.get_sql_ctx()->schema_guard_));
+      get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
     OZ (pl::ObPLCompilerUtils::compile(ctx,
-                                       tenant_id,
                                        database_id,
                                        routine_name,
                                        pl::ObPLCompilerUtils::get_compile_type(type),
@@ -206,13 +205,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       ObArray<int64_t> nocopy_params;
       ObObj result;
       int64_t pkg_id = package_id;
-      const ObRoutineInfo *dblink_routine_info = NULL;
-      uint64_t dblink_id = OB_INVALID_ID;
-      if (OB_NOT_NULL(stmt.get_dblink_routine_info())) {
-        dblink_routine_info = stmt.get_dblink_routine_info();
-        pkg_id = dblink_routine_info->get_package_id();
-        routine_id = dblink_routine_info->get_routine_id();
-      }
       if (OB_FAIL(ctx.get_pl_engine()->execute(ctx,
                                               ctx.get_allocator(),
                                               pkg_id,
@@ -220,15 +212,8 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                                               path,
                                               params,
                                               nocopy_params,
-                                              result,
-                                              NULL,
-                                              false,
-                                              false,
-                                              0,
-                                              false,
-                                              dblink_id,
-                                              dblink_routine_info))) {
-        LOG_WARN("failed to execute pl",  K(ret), K(package_id), K(routine_id), K(pkg_id), K(dblink_id));
+                                              result))) {
+        LOG_WARN("failed to execute pl",  K(ret), K(package_id), K(routine_id), K(pkg_id));
       }
       if (OB_FAIL(ret)) {
       } else if (call_proc_info->get_output_count() > 0) {
@@ -338,7 +323,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obcall::ObCreateRoutineArg &alter_routine_arg = stmt.get_routine_arg();
-  uint64_t tenant_id = alter_routine_arg.routine_info_.get_tenant_id();
+  
   uint64_t database_id = alter_routine_arg.routine_info_.get_database_id();
   ObString db_name = alter_routine_arg.db_name_;
   ObString routine_name = alter_routine_arg.routine_info_.get_routine_name();
@@ -346,7 +331,7 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   bool has_error = ERROR_STATUS_HAS_ERROR == alter_routine_arg.error_info_.get_error_status();
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(ctx.get_my_session()->get_effective_tenant_id()));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (need_create_routine) {
     obcall::ObRoutineDDLRes res;
     if (OB_ISNULL(ctx.get_pl_engine())) {
@@ -369,11 +354,10 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
         && tenant_config.is_valid()
         && tenant_config->plsql_v2_compatibility) {
       CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
-      OZ (ObSPIService::force_refresh_schema(tenant_id, res.store_routine_schema_version_));
+      OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
-        get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(), *ctx.get_sql_ctx()->schema_guard_));
+        get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
       OZ (pl::ObPLCompilerUtils::compile(ctx,
-                                         tenant_id,
                                          database_id,
                                          routine_name,
                                          pl::ObPLCompilerUtils::get_compile_type(type),
@@ -387,16 +371,16 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     ObSArray<ObDependencyInfo> &dep_infos =
                       const_cast<ObSArray<ObDependencyInfo> &>(alter_routine_arg.dependency_infos_);
     OZ (ctx.get_task_exec_ctx().schema_service_->
-        get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(), schema_guard));
-    OZ(schema_guard.get_routine_info(tenant_id, alter_routine_arg.routine_info_.get_routine_id(), routine_info));
+        get_tenant_schema_guard(schema_guard));
+    OZ(schema_guard.get_routine_info( alter_routine_arg.routine_info_.get_routine_id(), routine_info));
     CK (OB_NOT_NULL(routine_info));
-    OZ (trans.start(GCTX.sql_proxy_, tenant_id, true));
+    OZ (trans.start(GCTX.sql_proxy_, true));
     OZ (alter_routine_arg.error_info_.handle_error_info(trans, routine_info));
-    OZ (ObDependencyInfo::delete_schema_object_dependency(trans, tenant_id,
+    OZ (ObDependencyInfo::delete_schema_object_dependency(trans,
                                     routine_info->get_routine_id(),
                                     new_schema_version,
                                     routine_info->get_object_type()));
-    OZ (ObDependencyInfo::insert_dependency_infos(trans, dep_infos, tenant_id, 
+    OZ (ObDependencyInfo::insert_dependency_infos(trans, dep_infos, 
                               routine_info->get_routine_id(),
                               routine_info->get_schema_version(),
                               routine_info->get_owner_id()));                     
@@ -413,9 +397,8 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
         && tenant_config->plsql_v2_compatibility) {
       CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
-        get_tenant_schema_guard(ctx.get_my_session()->get_effective_tenant_id(), *ctx.get_sql_ctx()->schema_guard_));
+        get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
       OZ (pl::ObPLCompilerUtils::compile(ctx,
-                                         tenant_id,
                                          database_id,
                                          routine_name,
                                          pl::ObPLCompilerUtils::get_compile_type(type),

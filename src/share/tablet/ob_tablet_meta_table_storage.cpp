@@ -52,7 +52,6 @@ int ObTabletReplicaConstructor::operator()(share::ObSQLiteRowReader &reader, ObT
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid status", K(ret), K(status));
   } else if (OB_FAIL(replica.init(
-      OB_SYS_TENANT_ID,
       ObTabletID(tablet_id),
       ObLSID(ObLSID::SYS_LS_ID),
       server,
@@ -112,7 +111,6 @@ int ObTabletMetaTableStorage::create_table_if_not_exists()
 }
 
 int ObTabletMetaTableStorage::get(
-    const uint64_t tenant_id,
     const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     const common::ObAddr &addr,
@@ -153,7 +151,6 @@ int ObTabletMetaTableStorage::get(
 }
 
 int ObTabletMetaTableStorage::get(
-    const uint64_t tenant_id,
     const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     ObTabletInfo &tablet_info)
@@ -198,7 +195,7 @@ int ObTabletMetaTableStorage::get(
         ret = OB_SUCCESS; // No rows is acceptable
       }
     } else if (replicas.count() > 0) {
-      if (OB_FAIL(tablet_info.init(OB_SYS_TENANT_ID, tablet_id, ObLSID(ObLSID::SYS_LS_ID), replicas))) {
+      if (OB_FAIL(tablet_info.init(tablet_id, ObLSID(ObLSID::SYS_LS_ID), replicas))) {
         LOG_WARN("failed to init tablet info", K(ret));
       }
     }
@@ -207,7 +204,6 @@ int ObTabletMetaTableStorage::get(
 }
 
 int ObTabletMetaTableStorage::batch_get(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
     ObIArray<ObTabletInfo> &tablet_infos)
 {
@@ -226,8 +222,7 @@ int ObTabletMetaTableStorage::batch_get(
         "SELECT tablet_id, "
         "       compaction_scn, data_size, required_size, report_scn, status "
         "FROM __all_tablet_meta_table "
-        "WHERE tablet_id IN (",
-        tenant_id))) {
+        "WHERE tablet_id IN ("))) {
       LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ls_pairs.count(); ++i) {
@@ -277,9 +272,7 @@ int ObTabletMetaTableStorage::batch_get(
   return ret;
 }
 
-int ObTabletMetaTableStorage::range_get(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletMetaTableStorage::range_get(const common::ObTabletID &start_tablet_id,
     const int64_t range_size,
     ObIArray<ObTabletInfo> &tablet_infos)
 {
@@ -336,7 +329,6 @@ int ObTabletMetaTableStorage::range_get(
 }
 
 int ObTabletMetaTableStorage::batch_update(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
@@ -355,7 +347,7 @@ int ObTabletMetaTableStorage::batch_update(
       LOG_WARN("failed to begin transaction", K(ret));
     } else {
       // Use the overload with connection parameter
-      ret = batch_update(guard.get_connection(), tenant_id, replicas);
+      ret = batch_update(guard.get_connection(), replicas);
 
       // Commit or rollback transaction
       if (OB_FAIL(ret)) {
@@ -375,7 +367,6 @@ int ObTabletMetaTableStorage::batch_update(
 
 int ObTabletMetaTableStorage::batch_update(
     ObSQLiteConnection *conn,
-    const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
@@ -429,7 +420,6 @@ int ObTabletMetaTableStorage::batch_update(
 }
 
 int ObTabletMetaTableStorage::batch_remove(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
@@ -448,7 +438,7 @@ int ObTabletMetaTableStorage::batch_remove(
       LOG_WARN("failed to begin transaction", K(ret));
     } else {
       // Use the overload with connection parameter
-      ret = batch_remove(guard.get_connection(), tenant_id, replicas);
+      ret = batch_remove(guard.get_connection(), replicas);
 
       // Commit or rollback transaction
       if (OB_FAIL(ret)) {
@@ -468,7 +458,6 @@ int ObTabletMetaTableStorage::batch_remove(
 
 int ObTabletMetaTableStorage::batch_remove(
     ObSQLiteConnection *conn,
-    const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
@@ -511,7 +500,6 @@ int ObTabletMetaTableStorage::batch_remove(
 }
 
 int ObTabletMetaTableStorage::remove_residual_tablet(
-    const uint64_t tenant_id,
     const common::ObAddr &server,
     const int64_t limit,
     int64_t &affected_rows)
@@ -538,15 +526,13 @@ int ObTabletMetaTableStorage::remove_residual_tablet(
     } else if (OB_FAIL(guard->execute(delete_sql, binder, &affected_rows))) {
       LOG_WARN("failed to execute delete", K(ret));
     } else {
-      LOG_INFO("finish to remove residual tablet", K(ret), K(tenant_id), K(affected_rows));
+      LOG_INFO("finish to remove residual tablet", K(ret), K(affected_rows));
     }
   }
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_max_data_size(
-    const uint64_t tenant_id,
-    const common::ObTabletID &tablet_id,
+int ObTabletMetaTableStorage::get_max_data_size(const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     int64_t &data_size)
 {
@@ -589,9 +575,7 @@ int ObTabletMetaTableStorage::get_max_data_size(
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_max_report_scn_and_status(
-    const uint64_t tenant_id,
-    const common::ObTabletID &tablet_id,
+int ObTabletMetaTableStorage::get_max_report_scn_and_status(const common::ObTabletID &tablet_id,
     const ObLSID &ls_id,
     int64_t &report_scn,
     int64_t &status)
@@ -634,9 +618,7 @@ int ObTabletMetaTableStorage::get_max_report_scn_and_status(
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_min_compaction_scn(
-    const uint64_t tenant_id,
-    uint64_t &min_compaction_scn)
+int ObTabletMetaTableStorage::get_min_compaction_scn(uint64_t &min_compaction_scn)
 {
   int ret = OB_SUCCESS;
   min_compaction_scn = UINT64_MAX;
@@ -673,9 +655,7 @@ int ObTabletMetaTableStorage::get_min_compaction_scn(
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_tablet_replica_cnt(
-    const uint64_t tenant_id,
-    int64_t &tablet_replica_cnt)
+int ObTabletMetaTableStorage::get_tablet_replica_cnt(int64_t &tablet_replica_cnt)
 {
   int ret = OB_SUCCESS;
   tablet_replica_cnt = 0;
@@ -708,9 +688,7 @@ int ObTabletMetaTableStorage::get_tablet_replica_cnt(
   return ret;
 }
 
-int ObTabletMetaTableStorage::batch_update_status(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
+int ObTabletMetaTableStorage::batch_update_status(const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
     const ObIArray<int64_t> &compaction_scns,
     const int64_t status,
     int64_t &affected_rows)
@@ -768,7 +746,6 @@ int ObTabletMetaTableStorage::batch_update_status(
 }
 
 int ObTabletMetaTableStorage::batch_update_report_scn(
-    const uint64_t tenant_id,
     const ObIArray<ObTabletLSPair> &tablet_ls_pairs,
     const uint64_t report_scn,
     const uint64_t compaction_scn_min,
@@ -835,9 +812,7 @@ int ObTabletMetaTableStorage::batch_update_report_scn(
   return ret;
 }
 
-int ObTabletMetaTableStorage::batch_update_report_scn_unequal(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletMetaTableStorage::batch_update_report_scn_unequal(const ObLSID &ls_id,
     const ObIArray<common::ObTabletID> &tablet_ids,
     const uint64_t major_frozen_scn,
     int64_t &affected_rows)
@@ -888,9 +863,7 @@ int ObTabletMetaTableStorage::batch_update_report_scn_unequal(
   return ret;
 }
 
-int ObTabletMetaTableStorage::batch_update_report_scn_range(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletMetaTableStorage::batch_update_report_scn_range(const common::ObTabletID &start_tablet_id,
     const common::ObTabletID &end_tablet_id,
     const uint64_t report_scn,
     const uint64_t compaction_scn_min,
@@ -929,9 +902,7 @@ int ObTabletMetaTableStorage::batch_update_report_scn_range(
   return ret;
 }
 
-int ObTabletMetaTableStorage::batch_update_status_range(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletMetaTableStorage::batch_update_status_range(const common::ObTabletID &start_tablet_id,
     const common::ObTabletID &end_tablet_id,
     const int64_t from_status,
     const int64_t to_status,
@@ -966,9 +937,7 @@ int ObTabletMetaTableStorage::batch_update_status_range(
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_distinct_tablet_ids(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletMetaTableStorage::get_distinct_tablet_ids(const common::ObTabletID &start_tablet_id,
     const int64_t limit,
     ObIArray<common::ObTabletID> &tablet_ids)
 {
@@ -1014,9 +983,7 @@ int ObTabletMetaTableStorage::get_distinct_tablet_ids(
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_distinct_tablet_ids_with_conditions(
-    const uint64_t tenant_id,
-    const ObLSID &ls_id,
+int ObTabletMetaTableStorage::get_distinct_tablet_ids_with_conditions(const ObLSID &ls_id,
     const ObIArray<common::ObTabletID> &tablet_ids,
     const uint64_t report_scn_max,
     ObIArray<common::ObTabletID> &result_tablet_ids)
@@ -1034,8 +1001,7 @@ int ObTabletMetaTableStorage::get_distinct_tablet_ids_with_conditions(
     if (OB_FAIL(sql.append_fmt(
         "SELECT DISTINCT tablet_id "
         "FROM __all_tablet_meta_table "
-        "WHERE tablet_id IN (",
-        tenant_id))) {
+        "WHERE tablet_id IN ("))) {
       LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
@@ -1078,9 +1044,7 @@ int ObTabletMetaTableStorage::get_distinct_tablet_ids_with_conditions(
   return ret;
 }
 
-int ObTabletMetaTableStorage::get_max_tablet_id_in_range(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletMetaTableStorage::get_max_tablet_id_in_range(const common::ObTabletID &start_tablet_id,
     const int64_t offset,
     common::ObTabletID &max_tablet_id)
 {
@@ -1124,9 +1088,7 @@ int ObTabletMetaTableStorage::get_max_tablet_id_in_range(
   return ret;
 }
 
-int ObTabletMetaTableStorage::range_scan_for_compaction(
-    const uint64_t tenant_id,
-    const common::ObTabletID &start_tablet_id,
+int ObTabletMetaTableStorage::range_scan_for_compaction(const common::ObTabletID &start_tablet_id,
     const common::ObTabletID &end_tablet_id,
     const int64_t compaction_scn,
     const bool add_report_scn_filter,
@@ -1203,7 +1165,6 @@ int ObTabletMetaTableStorage::group_replicas_to_tablet_infos(
         if (OB_FAIL(current_replicas.push_back(replica))) {
           LOG_WARN("failed to push back replica", K(ret));
         } else if (OB_FAIL(current_tablet_info.init(
-            replica.get_tenant_id(),
             replica.get_tablet_id(),
             replica.get_ls_id(),
             current_replicas))) {
@@ -1226,7 +1187,6 @@ int ObTabletMetaTableStorage::group_replicas_to_tablet_infos(
           if (OB_FAIL(current_replicas.push_back(replica))) {
             LOG_WARN("failed to push back replica", K(ret));
           } else if (OB_FAIL(current_tablet_info.init(
-              replica.get_tenant_id(),
               replica.get_tablet_id(),
               replica.get_ls_id(),
               current_replicas))) {

@@ -181,11 +181,11 @@ int ObErrorInfo::add_error(common::ObISQLClient & sql_client,
     if (!only_history) {
       ObDMLExecHelper exec(sql_client);
       if (is_replace) {
-        if (OB_FAIL(exec.exec_update(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_update(OB_ALL_TENANT_ERROR_TNAME, dml, affected_rows))) {
           LOG_WARN("execute update failed", K(ret));
         }
       } else {
-        if (OB_FAIL(exec.exec_insert(OB_ALL_ERROR_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_insert(OB_ALL_TENANT_ERROR_TNAME, dml, affected_rows))) {
           LOG_WARN("execute insert failed", K(ret));
         }
       }
@@ -282,7 +282,7 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
   } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
                                                   AND obj_seq = %ld \
                                                   AND obj_type = %ld", 
-             OB_ALL_ERROR_TNAME, 
+             OB_ALL_TENANT_ERROR_TNAME, 
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
@@ -309,7 +309,7 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
   } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
                                                                   AND obj_seq = %ld\
                                                                   AND obj_type = %ld",
-             OB_ALL_ERROR_TNAME,
+             OB_ALL_TENANT_ERROR_TNAME,
              error_info.extract_obj_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {

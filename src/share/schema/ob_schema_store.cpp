@@ -24,12 +24,17 @@ namespace share
 {
 namespace schema
 {
-int ObSchemaStore::init(const int64_t init_version_count)
+int ObSchemaStore::init(const int64_t init_version_count,
+                        const int64_t init_version_count_for_liboblog)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(schema_mgr_cache_.init(init_version_count, ObSchemaMgrCache::REFRESH))) {
     LOG_WARN("init schema_mgr_cache fail", K(ret));
+  } else if (OB_FAIL(schema_mgr_cache_for_liboblog_.init(init_version_count_for_liboblog,
+                                                         ObSchemaMgrCache::FALLBACK))) {
+    LOG_WARN("init schema_mgr_cache fail", K(ret));
   } else {
+    
     refreshed_version_ = OB_CORE_SCHEMA_VERSION;
     received_version_ = OB_CORE_SCHEMA_VERSION;
     checked_sys_version_ = OB_INVALID_VERSION;

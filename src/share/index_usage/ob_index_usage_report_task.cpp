@@ -362,10 +362,11 @@ void ObIndexUsageRefreshConfTask::runTimerTask()
   } else if (!is_inited_) {
     // skip
   } else {
-    if (OB_LIKELY(true)) {
-      mgr_->set_max_entries(GCONF._iut_max_entries.get());
-      mgr_->set_is_enabled(GCONF._iut_enable);
-      mgr_->set_is_sample_mode(GCONF._iut_stat_collection_type.get_value_string().case_compare("SAMPLED") == 0);
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_LIKELY(tenant_config.is_valid())) {
+      mgr_->set_max_entries(tenant_config->_iut_max_entries.get());
+      mgr_->set_is_enabled(tenant_config->_iut_enable);
+      mgr_->set_is_sample_mode(tenant_config->_iut_stat_collection_type.get_value_string().case_compare("SAMPLED") == 0);
       LOG_TRACE("success to refresh index usage config.", 
         K(mgr_->get_max_entries()), K(mgr_->get_is_enabled()), K(mgr_->get_is_sample_mode()));
     }

@@ -24,25 +24,44 @@ namespace share
 {
 void ObLocalityZone::reset()
 {
+  region_priority_ = UINT64_MAX;
+}
+
+int ObLocalityZone::init(const uint64_t region_priority)
+{
+  region_priority_ = region_priority;
+
+  return OB_SUCCESS;
 }
 
 ObLocalityZone &ObLocalityZone::operator = (const ObLocalityZone &item)
 {
-  UNUSED(item);
+  region_priority_ = item.region_priority_;
   return *this;
+}
+
+void ObLocalityRegion::reset()
+{
+  region_.reset();
+  region_priority_ = UINT64_MAX;
+  zone_array_.reset();
 }
 
 void ObLocalityInfo::reset()
 {
   version_ = 0;
+  local_region_.reset();
   local_zone_.reset();
+  local_idc_.reset();
   local_zone_type_ = ObZoneType::ZONE_TYPE_INVALID;
   local_zone_status_ = ObZoneStatus::UNKNOWN;
+  locality_region_array_.reset();
   locality_zone_array_.reset();
 }
 
 void ObLocalityInfo::destroy()
 {
+  locality_region_array_.destroy();
   locality_zone_array_.destroy();
   STORAGE_LOG(INFO, "ObLocalityInfo destroy finished");
 }
@@ -103,16 +122,23 @@ int ObLocalityInfo::get_locality_zone(ObLocalityZone &item)
 bool ObLocalityInfo::is_valid()
 {
   return !local_zone_.is_empty()
+         && !local_region_.is_empty()
          && ObZoneType::ZONE_TYPE_INVALID != local_zone_type_;
 }
 
 int ObLocalityInfo::copy_to(ObLocalityInfo &locality_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(locality_info.local_zone_.assign(local_zone_))) {
+  if (OB_FAIL(locality_info.local_region_.assign(local_region_))) {
+    LOG_WARN("copy local region fail", K(ret), K_(local_region));
+  } else if (OB_FAIL(locality_info.local_zone_.assign(local_zone_))) {
     LOG_WARN("copy local zone fail", K(ret), K_(local_zone));
+  } else if (OB_FAIL(locality_info.local_idc_.assign(local_idc_))) {
+    LOG_WARN("copy local idc fail", K(ret), K_(local_idc));
   } else if (OB_FAIL(locality_info.locality_zone_array_.assign(locality_zone_array_))) {
     LOG_WARN("copy locality_zone_array fail", K(ret), K_(locality_zone_array));
+  } else if (OB_FAIL(locality_info.locality_region_array_.assign(locality_region_array_))) {
+    LOG_WARN("copy locality_region_array fail", K(ret), K_(locality_region_array));
   } else {
     locality_info.local_zone_type_ = local_zone_type_;
     locality_info.local_zone_status_ = local_zone_status_;

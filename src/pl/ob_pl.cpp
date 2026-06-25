@@ -3108,9 +3108,10 @@ int ObPLExecState::defend_stored_routine_change(const ObObjParam &actual_param, 
 {
   int ret = OB_SUCCESS;
   bool enable_defend = true;
-
-  enable_defend = GCONF._enable_routine_call_param_defend;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    enable_defend = tenant_config->_enable_routine_call_param_defend;
+  }
 
   if (!enable_defend) {
     LOG_TRACE("defend_stored_routine_change is disabled, skip check",

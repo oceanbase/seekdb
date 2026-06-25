@@ -17,6 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_OB_TENANT_RESOURCE_LIMIT_H_
 #define OB_ALL_VIRTUAL_OB_TENANT_RESOURCE_LIMIT_H_
 
+#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 
@@ -29,7 +30,8 @@ class ObResourceInfo;
 
 namespace observer
 {
-class ObResourceLimitTable : public common::ObVirtualTableScannerIterator
+class ObResourceLimitTable : public common::ObVirtualTableScannerIterator,
+                             public omt::ObMultiTenantOperator
 {
 public:
   ObResourceLimitTable();
@@ -48,6 +50,9 @@ public:
     EFFECTIVE_LIMIT_TYPE
   };
 private:
+  virtual bool is_need_process() override;
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual void release_last_tenant() override;
   int get_next_resource_info_(share::ObResourceInfo &info);
 private:
   common::ObAddr addr_;

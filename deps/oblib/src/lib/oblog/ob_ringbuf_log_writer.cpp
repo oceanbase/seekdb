@@ -181,7 +181,7 @@ ObRingBufLogWriter::~ObRingBufLogWriter()
 int ObRingBufLogWriter::init(int64_t group_commit_max_wait_us, const char *thread_name)
 {
   int ret = OB_SUCCESS;
-  ObMemAttr attr(OB_SERVER_TENANT_ID, "RingBufLogWr");
+  ObMemAttr attr("RingBufLogWr");
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;

@@ -43,7 +43,33 @@ void ObAllVirtualActivityMetric::reset()
   length_ = 0;
   addr_.reset();
   ip_buffer_[0] = '\0';
+  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
+}
+
+bool ObAllVirtualActivityMetric::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
+}
+
+void ObAllVirtualActivityMetric::release_last_tenant()
+{
+  current_pos_ = 0;
+  length_ = 0;
+  ip_buffer_[0] = '\0';
+}
+
+int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
 }
 
 int ObAllVirtualActivityMetric::get_next_freezer_stat_(ObTenantFreezerStat& stat)
@@ -73,7 +99,7 @@ int ObAllVirtualActivityMetric::prepare_start_to_read_()
   return ret;
 }
 
-int ObAllVirtualActivityMetric::inner_get_next_row(ObNewRow *&row)
+int ObAllVirtualActivityMetric::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTenantFreezerStat stat;

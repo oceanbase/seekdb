@@ -1103,9 +1103,10 @@ int ObJoinFilterOp::calc_each_bf_group_size(int64_t &each_group_size)
   if (0 == each_group_size) { // only need calc once
     
     int64_t peer_target_cnt = 0;
-    if (OB_LIKELY(true)) {
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_LIKELY(tenant_config.is_valid())) {
       const char *ptr = NULL;
-      if (OB_ISNULL(ptr = GCONF._px_bloom_filter_group_size.get_value())) {
+      if (OB_ISNULL(ptr = tenant_config->_px_bloom_filter_group_size.get_value())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("each group size ptr is null", K(ret));
       } else if (0 == ObString::make_string("auto").case_compare(ptr)) {
@@ -1269,10 +1270,11 @@ int ObJoinFilterOp::init_material_parameters()
   lib::ContextParam param;
   param.set_mem_attr("ArenaJoinFilter", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
-  if (!true) {
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tenant config", K(ret));
-  } else if (FALSE_IT(force_dump_ = GCONF._force_hash_join_spill)) {
+  } else if (FALSE_IT(force_dump_ = tenant_config->_force_hash_join_spill)) {
   } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create memory context failed");
   } else if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(

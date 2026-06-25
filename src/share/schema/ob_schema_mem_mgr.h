@@ -84,7 +84,7 @@ public:
   int get_current_ptrs(common::ObArray<void *> &ptrs);
   int get_all_ptrs(common::ObArray<void *> &ptrs);
   int get_all_alloc_info(common::ObIArray<ObSchemaMemory> &tenant_mem_infos);
-  int alloc_schema_mgr(ObSchemaMgr *&schema_mgr);
+  int alloc_schema_mgr(ObSchemaMgr *&schema_mgr, bool alloc_for_liboblog);
   int free_schema_mgr(ObSchemaMgr *&schema_mgr);
 private:
   bool check_inner_stat() const;

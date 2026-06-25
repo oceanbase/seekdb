@@ -7202,12 +7202,12 @@ static const _error _error_OB_TENANT_RESOURCE_UNIT_EXIST = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "tenant already has resource unit configured",
-      .str_user_error        = "tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'",
+      .str_user_error        = "tenant already has resource unit configured, id: %ld, seekdb: \'%s\'",
       .oracle_errno          = 600,
       .oracle_str_error      = "ORA-00600: internal error code, arguments: -4712, tenant already has resource unit configured",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4712, tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4712, tenant already has resource unit configured, id: %ld, seekdb: \'%s\'",
       .ob_str_error          = "OBE-00600: internal error code, arguments: -4712, tenant already has resource unit configured",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4712, tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'"
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4712, tenant already has resource unit configured, id: %ld, seekdb: \'%s\'"
 };
 static const _error _error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = {
       .error_name            = "OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX",

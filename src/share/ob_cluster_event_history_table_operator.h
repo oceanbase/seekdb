@@ -47,8 +47,8 @@ private:
 #define CLUSTER_EVENT_SYNC_ADD(args...) \
   if (OB_SUCC(ret)) { \
     uint64_t data_version = 0; \
-    if (OB_FAIL(GET_MIN_DATA_VERSION(OB_SYS_TENANT_ID, data_version))) { \
-      SHARE_LOG(WARN, "fail to get data version", KR(ret), "tenant_id", OB_SYS_TENANT_ID); \
+    if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) { \
+      SHARE_LOG(WARN, "fail to get data version", KR(ret)); \
     } else if (OB_FAIL(CLUSTER_EVENT_INSTANCE.sync_add_event(args))) { \
       SHARE_LOG(WARN, "fail to sync add event", KR(ret)); \
     } \

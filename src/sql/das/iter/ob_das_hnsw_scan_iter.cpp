@@ -2464,7 +2464,8 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
   }
   LOG_TRACE("vector index show post-filter query info", K(vec_index_type_), K(vec_idx_try_path_), K(simple_cmp_info_.inited_), KPC(simple_cmp_info_.filter_expr_),
   K(extra_column_count_), K(query_cond_.query_limit_), K(query_cond_.ef_search_));
-  int64_t hnsw_max_iter_scan_nums = GCONF._hnsw_max_scan_vectors;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  int64_t hnsw_max_iter_scan_nums = tenant_config->_hnsw_max_scan_vectors;
   while (OB_SUCC(ret) && !end_search) {
     ++adaptive_ctx_.iter_times_;
     if (first_search && OB_FAIL(process_adaptor_state_post_filter_once(ada_ctx, adaptor))) {

@@ -104,10 +104,15 @@ OB_INLINE int ObResultSet::open_plan()
     LOG_ERROR("invalid physical plan", K(physical_plan_));
   } else {
     has_top_limit_ = physical_plan_->has_top_limit();
-    // PX admission is done in do_open_plan (right before execute_plan), not here: admitting now
-    // holds PX idle across open-phase work like direct-load's create_hidden_table -> deadlock.
     if (OB_SUCC(ret)) {
-      if (THIS_WORKER.is_timeout()) {
+      if (OB_FAIL(ObPxAdmission::enter_query_admission(my_session_,
+                                                       get_exec_context(),
+                                                       get_stmt_type(),
+                                                       *get_physical_plan()))) {
+        // query is not admitted to run
+        // Note: explain statement's phy plan is target query's plan, don't enable admission test
+        LOG_DEBUG("Query is not admitted to run, try again", K(ret));
+      } else if (THIS_WORKER.is_timeout()) {
         // packet may have stayed in the queue for too long, by here it has already timed out,
         // If here is not checked, it will continue to run, likely entering other modules,
         // Other modules detect a timeout, causing confusion in other modules, therefore adding a timeout check here.
@@ -527,14 +532,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
      * whether it is a local, remote, or distributed plan, all except RootJob will be completed before the execute_plan function returns
      * exec_result_ is responsible for executing the last Job: RootJob
      **/
-    // Admit PX here -- after open-phase work (create_hidden_table etc.), just before execute_plan --
-    // so it is never held idle across pre-execution. Guard makes it idempotent across the open_plan
-    // transaction_set_violation retry; no-ops for non-PX / dop==1 / EXPLAIN.
     if OB_FAIL(ret) {
-    } else if (!ctx.get_admission_acquired()
-               && OB_FAIL(ObPxAdmission::enter_query_admission(my_session_, ctx,
-                                                               get_stmt_type(), *physical_plan_))) {
-      LOG_WARN("fail to enter px admission", KR(ret));
     } else if (OB_FAIL(executor_.init(physical_plan_))) {
       SQL_LOG(WARN, "fail to init executor", K(ret), K(physical_plan_));
     } else if (OB_FAIL(executor_.execute_plan(ctx))) {

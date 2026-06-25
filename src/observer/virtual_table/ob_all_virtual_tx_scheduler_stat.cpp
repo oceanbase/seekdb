@@ -40,12 +40,29 @@ ObGVTxSchedulerStat::~ObGVTxSchedulerStat()
 
 void ObGVTxSchedulerStat::reset()
 {
-  tx_scheduler_stat_iter_.reset();
+  // release tenant resources first
+  omt::ObMultiTenantOperator::reset();
   parts_buffer_[0] = '\0';
   tx_desc_addr_buffer_[0] = '\0';
   savepoints_buffer_[0] = '\0';
   xid_.reset();
   ObVirtualTableScannerIterator::reset();
+}
+
+void ObGVTxSchedulerStat::release_last_tenant()
+{
+  // resources related with tenant must be released by this function
+  tx_scheduler_stat_iter_.reset();
+}
+
+bool ObGVTxSchedulerStat::is_need_process()
+{
+  bool bool_ret = false;
+  if (true || true) {
+    bool_ret = true;
+  }
+
+  return bool_ret;
 }
 
 int ObGVTxSchedulerStat::get_next_tx_info_(ObTxSchedulerStat &tx_scheduler_stat)
@@ -62,7 +79,7 @@ int ObGVTxSchedulerStat::get_next_tx_info_(ObTxSchedulerStat &tx_scheduler_stat)
 
 }
 
-int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
+int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTxSchedulerStat tx_scheduler_stat;

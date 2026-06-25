@@ -20,6 +20,7 @@
 #include "lib/container/ob_tuple.h"
 #include "ob_tablet_id.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "ob_mds_event_buffer.h"
 

@@ -186,15 +186,18 @@ ERRSIM_POINT_DEF(ERRSIM_SET_MERGE_ENGINE_DELETE_INSERT);
 int ObCreateTableResolver::set_default_merge_engine_type_(share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (ERRSIM_SET_MERGE_ENGINE_DELETE_INSERT) {
     table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT);
-  } else {
+  } else if (OB_LIKELY(tenant_config.is_valid())) {
     const char *delete_insert = ObMergeEngineStoreFormat::get_merge_engine_type_name(ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT);
-    if (0 == GCONF.default_table_merge_engine.case_compare(delete_insert)) {
+    if (0 == tenant_config->default_table_merge_engine.case_compare(delete_insert)) {
       table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_DELETE_INSERT);
     } else {
       table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE);
     }
+  } else {
+    table_schema.set_merge_engine_type(ObMergeEngineType::OB_MERGE_ENGINE_PARTIAL_UPDATE);
   }
   return ret;
 }
@@ -331,11 +334,13 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           SQL_RESV_LOG(WARN, "resolve_table_id_pre failed", K(ret));
         }
 
+        ObTenantConfigGuard tenant_config(TENANT_CONF());
+
         // resolve table organizations before resolve table elements
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (!is_inner_table(table_id_) &&
-                    OB_FAIL(resolve_table_organization(&GCONF, create_table_node->children_[4]))) {
+                    OB_FAIL(resolve_table_organization(tenant_config, create_table_node->children_[4]))) {
           SQL_RESV_LOG(WARN, "resolve table organization failed", K(ret));
         }
 
@@ -371,16 +376,16 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               table_mode_.pk_exists_ = 0 == get_primary_key_size() ? TOM_TABLE_WITHOUT_PK : TOM_TABLE_WITH_PK;
               table_mode_.pk_mode_ = TPKM_TABLET_SEQ_PK;
             }
-            if (OB_SUCC(ret)) {
+            if (OB_SUCC(ret) && OB_LIKELY(tenant_config.is_valid())) {
               const char *ptr = NULL;
-              if (OB_ISNULL(ptr = GCONF.default_auto_increment_mode.get_value())) {
+              if (OB_ISNULL(ptr = tenant_config->default_auto_increment_mode.get_value())) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("default auto increment mode ptr is null", K(ret));
               } else {
                 table_mode_.auto_increment_mode_ =
                   (0 == ObString::make_string("order").case_compare(ptr)) ?
                     ObTableAutoIncrementMode::ORDER : ObTableAutoIncrementMode::NOORDER;
-                table_mode_.rowid_mode_ = GCONF.default_enable_extended_rowid ?
+                table_mode_.rowid_mode_ = tenant_config->default_enable_extended_rowid ?
                     ObTableRowidMode::ROWID_EXTENDED : ObTableRowidMode::ROWID_NORMAL;
               }
             }

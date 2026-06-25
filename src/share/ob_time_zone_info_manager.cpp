@@ -56,7 +56,7 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "  USE_HASH(@\"SEL$0208448F\" \"oceanbase\".\"t3\"@\"SEL$2\") "
     "  USE_HASH(@\"SEL$0208448F\" \"oceanbase\".\"t2\"@\"SEL$2\") "
     "  PQ_DISTRIBUTE_WINDOW(@\"SEL$3\"  (0) NONE) "
-    "  FULL(@\"SEL$3\" \"oceanbase\".\"__all_time_zone_name\"@\"SEL$3\") "
+    "  FULL(@\"SEL$3\" \"oceanbase\".\"__all_tenant_time_zone_name\"@\"SEL$3\") "
     "  FULL(@\"SEL$0208448F\" \"t2\"@\"SEL$2\") "
     "  FULL(@\"SEL$0208448F\" \"t3\"@\"SEL$2\") "
     "  PRED_DEDUCE(@\"SEL$2\") "
@@ -68,12 +68,12 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "t2.transition_type_id, t2.abbreviation, "
     "row_number() over (partition by t1.inner_tz_id, t3.transition_time order by t2.transition_type_id) as tran_row_number "
     "FROM (SELECT time_zone_id, row_number() over (order by time_zone_id) as inner_tz_id, name "
-    "      FROM oceanbase.__all_time_zone_name "
+    "      FROM oceanbase.__all_tenant_time_zone_name "
     "      ORDER BY time_zone_id "
     ") t1 "
-    "JOIN oceanbase.__all_time_zone_transition_type t2 "
+    "JOIN oceanbase.__all_tenant_time_zone_transition_type t2 "
     "ON t1.time_zone_id = t2.time_zone_id "
-    "LEFT JOIN oceanbase.__all_time_zone_transition t3 "
+    "LEFT JOIN oceanbase.__all_tenant_time_zone_transition t3 "
     "ON t2.time_zone_id = t3.time_zone_id "
     "  AND t2.transition_type_id=t3.transition_type_id "
     ") tz_info WHERE tz_info.tran_row_number = 1 "
@@ -199,7 +199,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t 
     LOG_ERROR("current timezone version lower than local tz map version, wierd",
       K(current_tz_version), K(last_version_));
   } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, false, OB_ALL_TIME_ZONE_NAME_TID);
+    ObSQLClientRetryWeak sql_client_retry_weak(&sql_proxy_, false, OB_ALL_TENANT_TIME_ZONE_NAME_TID);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_client_retry_weak.read(res, FETCH_TENANT_TZ_INFO_SQL))){

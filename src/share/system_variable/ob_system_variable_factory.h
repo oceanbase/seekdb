@@ -6049,7 +6049,7 @@ public:
 class ObSysVarFactory
 {
 public:
-  ObSysVarFactory(const int64_t tenant_id = OB_SERVER_TENANT_ID);
+  ObSysVarFactory();
   virtual ~ObSysVarFactory();
   void destroy();
   int create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx = -1);

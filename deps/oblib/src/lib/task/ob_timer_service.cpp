@@ -202,18 +202,17 @@ void ObTimerTaskThreadPool::clear_ext_tname()
   }
 }
 
-ObTimerService::ObTimerService(uint64_t tenant_id /* = OB_SERVER_TENANT_ID */)
+ObTimerService::ObTimerService( /* = OB_SERVER_TENANT_ID */)
   : is_never_started_(true),
     is_stopped_(true),
     is_destroyed_(false),
-    tenant_id_(tenant_id),
     token_alloc_(),
-    priority_task_queue_(64L, nullptr, ObMemAttr(tenant_id_, "ts_queue")),
-    running_task_set_(64L, nullptr, ObMemAttr(tenant_id_, "ts_run_set")),
-    uncanceled_task_set_(64L, nullptr, ObMemAttr(tenant_id_, "ts_cancel_set")),
+    priority_task_queue_(64L, nullptr, ObMemAttr("ts_queue")),
+    running_task_set_(64L, nullptr, ObMemAttr("ts_run_set")),
+    uncanceled_task_set_(64L, nullptr, ObMemAttr("ts_cancel_set")),
     worker_thread_pool_(*this)
 {
-  token_alloc_.set_attr(ObMemAttr(tenant_id, "ts_token"));
+  token_alloc_.set_attr(ObMemAttr("ts_token"));
 }
 
 ObTimerService::~ObTimerService()
@@ -234,24 +233,24 @@ int ObTimerService::start()
     is_destroyed_ = false;
     const int64_t reserve_size = INITIAL_ELEMENT_NUM * sizeof(TaskToken *);
     if (OB_FAIL(priority_task_queue_.reserve(reserve_size))) {
-      OB_LOG(WARN, "reserve priority_task_queue failed", K(reserve_size), K_(tenant_id), K(ret));
+      OB_LOG(WARN, "reserve priority_task_queue failed", K(reserve_size), K(ret));
     } else if (OB_FAIL(running_task_set_.reserve(reserve_size))) {
-      OB_LOG(WARN, "reserve running_task_set failed", K(reserve_size), K_(tenant_id), K(ret));
+      OB_LOG(WARN, "reserve running_task_set failed", K(reserve_size), K(ret));
     } else if (OB_FAIL(uncanceled_task_set_.reserve(reserve_size))) {
-      OB_LOG(WARN, "reserve uncanceled_task_set failed", K(reserve_size), K_(tenant_id), K(ret));
+      OB_LOG(WARN, "reserve uncanceled_task_set failed", K(reserve_size), K(ret));
     } else if (OB_FAIL(token_alloc_.reserve(INITIAL_ELEMENT_NUM))) {
-      OB_LOG(WARN, "reserve token_alloc failed", K_(tenant_id), K(ret));
+      OB_LOG(WARN, "reserve token_alloc failed", K(ret));
     } else if (OB_FAIL(worker_thread_pool_.init(
-        MIN_WORKER_THREAD_NUM, TASK_NUM_LIMIT, "TimerWK", tenant_id_))) {
-      OB_LOG(WARN, "init ObTimerTaskThreadPool failed", K_(tenant_id), K(ret));
+        MIN_WORKER_THREAD_NUM, TASK_NUM_LIMIT, "TimerWK"))) {
+      OB_LOG(WARN, "init ObTimerTaskThreadPool failed", K(ret));
     } else if (OB_FAIL(worker_thread_pool_.set_thread_count(MAX_WORKER_THREAD_NUM))) {
-      OB_LOG(WARN, "set adaptive thread failed", K_(tenant_id), K(ret));
+      OB_LOG(WARN, "set adaptive thread failed", K(ret));
     } else if (OB_FAIL(ThreadPool::start())) {
       OB_LOG(WARN, "failed to start ObTimerService thread", K(ret));
     } else {
       is_never_started_ = false;
       monitor_.notify_all();
-      OB_LOG(INFO, "ObTimerService start success", K_(tenant_id), KP(this), KCSTRING(lbt()));
+      OB_LOG(INFO, "ObTimerService start success", KP(this), KCSTRING(lbt()));
     }
     if (OB_FAIL(ret)) {
       is_stopped_ = true;
@@ -283,7 +282,7 @@ void ObTimerService::stop()
       if (OB_SUCCESS != (ret_tmp = uncanceled_task_set_.insert_unique(
           token, it, CompareForSet{}, token_unique))) {
         OB_LOG_RET(WARN, ret_tmp, "insert TaskToken into uncanceled_task_set failed",
-            KP(token), KPC(token), K_(tenant_id));
+            KP(token), KPC(token));
         // the token cannot be deleted because the corresponding task is running
       }
     }
@@ -300,14 +299,14 @@ void ObTimerService::stop()
   // STEP6: stop worker threads and the scheduling thread
   worker_thread_pool_.stop();
   ThreadPool::stop();
-  OB_LOG(INFO, "ObTimerService stop success", K_(tenant_id), KP(this));
+  OB_LOG(INFO, "ObTimerService stop success", KP(this));
 }
 
 void ObTimerService::wait()
 {
   worker_thread_pool_.wait();
   ThreadPool::wait();
-  OB_LOG(INFO, "ObTimerService wait success", K_(tenant_id), KP(this));
+  OB_LOG(INFO, "ObTimerService wait success", KP(this));
 }
 
 void ObTimerService::destroy()
@@ -320,7 +319,7 @@ void ObTimerService::destroy()
   wait();
   worker_thread_pool_.destroy();
   ThreadPool::destroy();
-  OB_LOG(INFO, "ObTimerService destroyed", K_(tenant_id), KP(this));
+  OB_LOG(INFO, "ObTimerService destroyed", KP(this));
 }
 
 int ObTimerService::schedule_task(
@@ -334,10 +333,10 @@ int ObTimerService::schedule_task(
   ObMonitor<Mutex>::Lock guard(monitor_);
   if (nullptr == timer) {
     ret = OB_ERR_NULL_VALUE;
-    OB_LOG(WARN, "timer is NULL", K_(tenant_id), K(ret));
+    OB_LOG(WARN, "timer is NULL", K(ret));
   } else if (delay < 0) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(delay), K_(tenant_id), K(ret));
+    OB_LOG(WARN, "invalid argument", K(delay), K(ret));
   } else {
     int64_t time = ObSysTime::now().toMicroSeconds();
     TaskToken *token = nullptr;
@@ -347,11 +346,11 @@ int ObTimerService::schedule_task(
         &task,
         immediately ? time : time + delay,
         repeate ? delay : 0))) {
-      OB_LOG(WARN, "new token failed", K_(tenant_id), K(ret));
+      OB_LOG(WARN, "new token failed", K(ret));
     } else {
       if (OB_FAIL(priority_task_queue_.push_back(token))) {
         delete_token(token);
-        OB_LOG(WARN, "push TaskToken failed", K(task), K_(tenant_id), K(ret));
+        OB_LOG(WARN, "push TaskToken failed", K(task), K(ret));
       } else {
         monitor_.notify();
       }
@@ -367,7 +366,7 @@ int ObTimerService::cancel_task(const ObTimer *timer, const ObTimerTask *task)
 
   if (nullptr == timer) {
     ret = OB_ERR_NULL_VALUE;
-    OB_LOG(WARN, "timer is NULL", K_(tenant_id), K(ret));
+    OB_LOG(WARN, "timer is NULL", K(ret));
   }
 
   // remove TaskToken from priority_task_queue_
@@ -401,10 +400,10 @@ int ObTimerService::cancel_task(const ObTimer *timer, const ObTimerTask *task)
     while(it != running_task_set_.end() && found && OB_SUCC(ret)) {
       if (has_same_task_and_timer(*it, timer, task)) {
         if (OB_FAIL(uncanceled_task_set_.insert_unique(*it, pos, CompareForSet{}, token_unique))) {
-          OB_LOG(WARN, "insert TaskToken failed", KPC(task), K_(tenant_id), K(ret));
+          OB_LOG(WARN, "insert TaskToken failed", KPC(task), K(ret));
         } else if (OB_FAIL(running_task_set_.remove(it))) {
           OB_LOG(WARN, "remove TaskToken from running_task_set failed",
-              K(task), K_(tenant_id), K(ret));
+              K(task), K(ret));
         } else {}
       } else {
         found = false;
@@ -421,7 +420,7 @@ int ObTimerService::wait_task(const ObTimer *timer, const ObTimerTask *task)
   ObMonitor<Mutex>::Lock guard(monitor_);
   if (nullptr == timer) {
     ret = OB_ERR_NULL_VALUE;
-    OB_LOG(WARN, "timer is NULL", K_(tenant_id), K(ret));
+    OB_LOG(WARN, "timer is NULL", K(ret));
   } else {
     do {
       bool exist = false;
@@ -459,11 +458,11 @@ int ObTimerService::schedule_task(TaskToken *token)
     if (OB_SUCCESS != cancel_ret && OB_ENTRY_NOT_EXIST != cancel_ret) { // unexpected
       ret = cancel_ret;
       OB_LOG(WARN, "check if TaskToken exist in uncanceled_task_set failed",
-          KP(token), KPC(token), K_(tenant_id), K(ret));
+          KP(token), KPC(token), K(ret));
     } else if (OB_SUCCESS == cancel_ret) { // has canceled
       if (OB_FAIL(uncanceled_task_set_.remove(it))) {
         OB_LOG(WARN, "remove TaskToken from uncanceled_task_set failed",
-            KP(token), KPC(token), K_(tenant_id), K(ret));
+            KP(token), KPC(token), K(ret));
       } else {
         delete_token(token);
       }
@@ -473,15 +472,15 @@ int ObTimerService::schedule_task(TaskToken *token)
       if (OB_SUCCESS != run_ret && OB_ENTRY_NOT_EXIST != run_ret) {
         ret = run_ret;
         OB_LOG(WARN, "check if Taskoken exist in running_task_set failed",
-            KP(token), KPC(token), K_(tenant_id), K(ret));
+            KP(token), KPC(token), K(ret));
       } else if (OB_ENTRY_NOT_EXIST == run_ret) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "not find TaskToken both in uncanceled_task_set and running_task_set",
-            KP(token), KPC(token), K_(tenant_id), K(ret));
+            KP(token), KPC(token), K(ret));
       } else if (OB_SUCCESS == run_ret) {
         if (OB_FAIL(running_task_set_.remove(it))) {
           OB_LOG(WARN, "erase TaskToken from running_task_set failed",
-              KP(token), KPC(token), K_(tenant_id), K(ret));
+              KP(token), KPC(token), K(ret));
         } else if (0 == token->delay_ || is_stopped_) {
           // non-repeat or stopping: remove from queue and delete
           VecIter qit = priority_task_queue_.begin();
@@ -540,10 +539,10 @@ int ObTimerService::pop_task(int64_t now, TaskToken *&task_token, int64_t &st)
     TaskToken *token = *it;
     if (nullptr == token) {
       ret = OB_ERR_NULL_VALUE;
-      OB_LOG(WARN, "TaskToken is NULL", K_(tenant_id), K(ret));
+      OB_LOG(WARN, "TaskToken is NULL", K(ret));
     } else if (nullptr == token->timer_) {
       ret = OB_ERR_NULL_VALUE;
-      OB_LOG(WARN, "ObTimer is NULL", KP(token), KPC(token), K_(tenant_id), K(ret));
+      OB_LOG(WARN, "ObTimer is NULL", KP(token), KPC(token), K(ret));
     } else {
       if (TOKEN_DISPATCHED == token->scheduled_time_) {
         // already dispatched, stays in queue as placeholder
@@ -568,7 +567,7 @@ int ObTimerService::pop_task(int64_t now, TaskToken *&task_token, int64_t &st)
             const int64_t threashold = DELAY_IN_PRI_QUEUE_THREASHOLD;
             OB_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME,
                 "timer task too much delay because the same timer has another running task",
-                KPC(token), KPC(running_task_token), K(total_delay), K(threashold), K_(tenant_id));
+                KPC(token), KPC(running_task_token), K(total_delay), K(threashold));
             token->last_try_pop_time_ = now2;
           }
           ++it;
@@ -590,7 +589,7 @@ void ObTimerService::run1()
   int64_t thread_id = GETTID();
   set_thread_name("TimerSvr");
   OB_LOG(INFO, "TimerService thread started",
-      KP(this), K(thread_id), K_(tenant_id), KCSTRING(lbt()));
+      KP(this), K(thread_id), KCSTRING(lbt()));
 
   while(true) {
     IGNORE_RETURN lib::Thread::update_loop_ts();
@@ -612,7 +611,7 @@ void ObTimerService::run1()
         TaskToken *token = nullptr;
         int64_t st = 0L;
         if (OB_FAIL(pop_task(now, token, st))) {
-          OB_LOG(WARN, "pop TaskToken from priority_task_queue failed", K_(tenant_id), K(ret));
+          OB_LOG(WARN, "pop TaskToken from priority_task_queue failed", K(ret));
         } else if (nullptr == token) {
           int64_t wait_time = st - now;
           wait_time = MIN(wait_time, MAX_WAIT_INTERVAL);
@@ -623,14 +622,14 @@ void ObTimerService::run1()
           token->pushed_time_ = ObSysTime::now().toMicroSeconds();
           if (OB_FAIL(running_task_set_.insert_unique(token, it, CompareForSet{}, token_unique))) {
             OB_LOG(WARN, "push TaskToken into running_task_set failed",
-                KP(token), KPC(token), K_(tenant_id), K(ret));
+                KP(token), KPC(token), K(ret));
             delete_token(token);
           } else if (OB_FAIL(worker_thread_pool_.push(reinterpret_cast<void *>(token)))) {
             OB_LOG(WARN, "push TaskToken into thread pool failed",
-                KP(token), KPC(token), K_(tenant_id), K(ret));
+                KP(token), KPC(token), K(ret));
             if (OB_FAIL(running_task_set_.remove(it))) {
               OB_LOG(WARN, "erase TaskToken from running_task_set failed",
-                  KP(token), KPC(token), K_(tenant_id), K(ret));
+                  KP(token), KPC(token), K(ret));
             } else {
               delete_token(token);
             }
@@ -639,7 +638,7 @@ void ObTimerService::run1()
       }
     }  // unlock
   }
-  OB_LOG(INFO, "TimerService thread exit", KP(this), K(thread_id), K_(tenant_id));
+  OB_LOG(INFO, "TimerService thread exit", KP(this), K(thread_id));
 }
 
 bool ObTimerService::has_same_task_and_timer(
@@ -693,7 +692,7 @@ int ObTimerService::new_token(
   if (nullptr == token)
   {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "alloc TaskToken failed", K_(tenant_id), K(ret));
+    OB_LOG(WARN, "alloc TaskToken failed", K(ret));
   }
   return ret;
 }

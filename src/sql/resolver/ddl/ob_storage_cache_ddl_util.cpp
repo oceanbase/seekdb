@@ -114,10 +114,11 @@ int ObDDLResolver::set_default_storage_cache_policy(const bool is_alter_add_inde
   }
   if (OB_SUCC(ret) && use_default_storage_cache_policy) {
     ObString default_storage_cache_policy;
-    if (OB_UNLIKELY(!true)) {
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_UNLIKELY(!tenant_config.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "tenant config is invalid", K(ret));
-    } else if (FALSE_IT(default_storage_cache_policy = GCONF.default_storage_cache_policy.str())) {
+    } else if (FALSE_IT(default_storage_cache_policy = tenant_config->default_storage_cache_policy.str())) {
     } else if (default_storage_cache_policy.empty()) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "tenant config is invalid", K(ret), K(default_storage_cache_policy));

@@ -28,6 +28,7 @@ namespace observer
 
 ObAllVirtualMinorFreezeInfo::ObAllVirtualMinorFreezeInfo()
   : ObVirtualTableScannerIterator(),
+    ObMultiTenantOperator(),
     addr_(),
     ls_iter_guard_(),
     diagnose_info_(),
@@ -42,6 +43,7 @@ ObAllVirtualMinorFreezeInfo::~ObAllVirtualMinorFreezeInfo()
 
 void ObAllVirtualMinorFreezeInfo::reset()
 {
+  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_iter_guard_.reset();
   diagnose_info_.reset();
@@ -49,6 +51,32 @@ void ObAllVirtualMinorFreezeInfo::reset()
   memset(ip_buf_, 0, common::OB_IP_STR_BUFF);
   memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
   ObVirtualTableScannerIterator::reset();
+}
+
+void ObAllVirtualMinorFreezeInfo::release_last_tenant()
+{
+  ls_iter_guard_.reset();
+  diagnose_info_.reset();
+  memtables_info_.reset();
+  memset(memtables_info_string_, 0, OB_MAX_CHAR_LENGTH);
+}
+
+int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
+}
+
+bool ObAllVirtualMinorFreezeInfo::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
 }
 
 int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
@@ -74,7 +102,7 @@ int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
   return ret;
 }
 
-int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
+int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObFreezerStat freeze_stat;

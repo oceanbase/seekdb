@@ -23,6 +23,7 @@
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/ob_fd_item.h"
+#include "observer/omt/ob_tenant_config_mgr.h"
 #include "sql/optimizer/ob_sharding_info.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/engine/expr/ob_expr_join_filter.h"
@@ -456,7 +457,11 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   double enable_px_batch_rescan()
   {
     if (-1 == enable_px_batch_rescan_) {
-      if (GCONF._enable_px_batch_rescan) {
+      omt::ObTenantConfigGuard tenant_config(
+            TENANT_CONF());
+      if (OB_UNLIKELY(!tenant_config.is_valid())) {
+        enable_px_batch_rescan_ = 0;
+      } else if (tenant_config->_enable_px_batch_rescan) {
         enable_px_batch_rescan_ = 1;
       } else {
         enable_px_batch_rescan_ = 0;
@@ -540,7 +545,13 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
   int get_px_object_sample_rate()
   {
     if (-1 == px_object_sample_rate_) {
-      px_object_sample_rate_ = GCONF._px_object_sampling;
+      omt::ObTenantConfigGuard tenant_config(
+            TENANT_CONF());
+      if (OB_UNLIKELY(!tenant_config.is_valid())) {
+        px_object_sample_rate_ = 10;
+      } else {
+        px_object_sample_rate_ = tenant_config->_px_object_sampling;
+      }
     }
     return px_object_sample_rate_;
   }

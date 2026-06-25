@@ -72,7 +72,6 @@ int ObCreateCCLRuleExecutor::execute(ObExecContext &ctx, ObCreateCCLRuleStmt &st
     }
   }
   SERVER_EVENT_ADD("ddl", "create ccl rule execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),
@@ -117,7 +116,6 @@ int ObDropCCLRuleExecutor::execute(ObExecContext &ctx, ObDropCCLRuleStmt &stmt)
     }
   }
   SERVER_EVENT_ADD("ddl", "drop ccl rule execute finish",
-    "tenant_id", MTL_ID(),
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr());

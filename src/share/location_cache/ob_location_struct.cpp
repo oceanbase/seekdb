@@ -39,7 +39,6 @@ OB_SERIALIZE_MEMBER(ObLSReplicaLocation,
 
 OB_SERIALIZE_MEMBER(ObLSLocationCacheKey,
     cluster_id_,
-    tenant_id_,
     ls_id_);
 
 OB_SERIALIZE_MEMBER(ObLSLocation,
@@ -48,13 +47,13 @@ OB_SERIALIZE_MEMBER(ObLSLocation,
     renew_time_);
 
 OB_SERIALIZE_MEMBER(ObTabletLocation,
-    tenant_id_,
+    
     tablet_id_,
     replica_locations_,
     renew_time_);
 
 OB_SERIALIZE_MEMBER(ObTabletLSKey,
-    tenant_id_,
+    
     tablet_id_);
 
 ObLSReplicaLocation::ObLSReplicaLocation()
@@ -210,16 +209,15 @@ int ObLSLocation::deep_copy(const ObLSLocation &ls_location)
 
 int ObLSLocation::init(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID &ls_id,
     const int64_t renew_time)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant(tenant_id) || renew_time <= 0)) {
+  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant() || renew_time <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(tenant_id), K(ls_id), K(renew_time));
-  } else if (OB_FAIL(cache_key_.init(cluster_id, tenant_id, ls_id))) {
-    LOG_WARN("cache key init error", K(ret), K(tenant_id), K(ls_id));
+    LOG_WARN("invalid arguments", KR(ret), K(ls_id), K(renew_time));
+  } else if (OB_FAIL(cache_key_.init(cluster_id, ls_id))) {
+    LOG_WARN("cache key init error", K(ret), K(ls_id));
   } else {
     renew_time_ = renew_time;
     last_access_ts_ = 0;
@@ -441,16 +439,14 @@ int ObLSLocation::merge_leader_from(const ObLSLocation &new_location)
 }
 
 ObTabletLocation::ObTabletLocation()
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      tablet_id_(),
+    : tablet_id_(),
       renew_time_(0),
       replica_locations_()
 {
 }
 
 ObTabletLocation::ObTabletLocation(common::ObIAllocator &allocator)
-    : tenant_id_(OB_INVALID_TENANT_ID),
-      tablet_id_(),
+    : tablet_id_(),
       renew_time_(0),
       replica_locations_(
         common::OB_MALLOC_NORMAL_BLOCK_SIZE,
@@ -470,7 +466,7 @@ int64_t ObTabletLocation::size() const
 
 void ObTabletLocation::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   renew_time_ = 0;
   tablet_id_.reset();
   replica_locations_.reset();
@@ -480,7 +476,7 @@ int ObTabletLocation::assign(const ObTabletLocation &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    tenant_id_ = other.tenant_id_;
+    
     renew_time_ = other.renew_time_;
     tablet_id_ = other.tablet_id_;
     if (OB_FAIL(replica_locations_.assign(other.replica_locations_))) {
@@ -492,7 +488,7 @@ int ObTabletLocation::assign(const ObTabletLocation &other)
 
 bool ObTabletLocation::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_
+  return true
       && tablet_id_.is_valid()
       && renew_time_ > 0;
 }
@@ -513,7 +509,7 @@ bool ObTabletLocation::operator==(const ObTabletLocation &other) const
       }
     }
     equal = equal
-        && (tenant_id_ == other.tenant_id_)
+        && (true)
         && (tablet_id_ == other.tablet_id_)
         && (renew_time_ == other.renew_time_);
   }
@@ -622,15 +618,14 @@ bool ObTabletLSCache::operator==(const ObTabletLSCache &other) const
 
 
 int ObTabletLSCache::init(
-    const uint64_t tenant_id,
     const ObTabletID &tablet_id,
     const ObLSID &ls_id,
     const int64_t renew_time,
     const int64_t transfer_seq)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cache_key_.init(tenant_id, tablet_id))) {
-    LOG_WARN("fail to init ObTabletLSCache", KR(ret), K(tenant_id), K(tablet_id));
+  if (OB_FAIL(cache_key_.init(tablet_id))) {
+    LOG_WARN("fail to init ObTabletLSCache", KR(ret), K(tablet_id));
   } else {
     ls_id_ = ls_id;
     renew_time_ = renew_time;
@@ -642,34 +637,30 @@ int ObTabletLSCache::init(
 
 ObLSLocationCacheKey::ObLSLocationCacheKey()
     : cluster_id_(OB_INVALID_CLUSTER_ID),
-      tenant_id_(OB_INVALID_TENANT_ID),
       ls_id_()
 {
 }
 
 ObLSLocationCacheKey::ObLSLocationCacheKey(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID ls_id)
-    : cluster_id_(cluster_id), tenant_id_(tenant_id), ls_id_(ls_id)
+    : cluster_id_(cluster_id), ls_id_(ls_id)
 {
 }
 
 int ObLSLocationCacheKey::init(
     const int64_t cluster_id,
-    const uint64_t tenant_id,
     const ObLSID ls_id)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant(tenant_id)
+  if (OB_UNLIKELY(!ls_id.is_valid_with_tenant()
       || cluster_id == OB_INVALID_CLUSTER_ID
       || !ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ls location cache key init error", K(ret), K(cluster_id), K(tenant_id), K(ls_id));
+    LOG_WARN("ls location cache key init error", K(ret), K(cluster_id), K(ls_id));
   } else {
     cluster_id_ = cluster_id;
-    tenant_id_ = tenant_id;
     ls_id_ = ls_id;
   }
   return ret;
@@ -679,7 +670,6 @@ int ObLSLocationCacheKey::assign(const ObLSLocationCacheKey &other)
 {
   int ret = OB_SUCCESS;
   cluster_id_ = other.cluster_id_;
-  tenant_id_ = other.tenant_id_;
   ls_id_ = other.ls_id_;
   return ret;
 }
@@ -687,14 +677,12 @@ int ObLSLocationCacheKey::assign(const ObLSLocationCacheKey &other)
 void ObLSLocationCacheKey::reset()
 {
   cluster_id_ = OB_INVALID_CLUSTER_ID;
-  tenant_id_ = OB_INVALID_TENANT_ID;
   ls_id_.reset();
 }
 
 bool ObLSLocationCacheKey::operator ==(const ObLSLocationCacheKey &other) const
 {
   return cluster_id_ == other.cluster_id_
-      && tenant_id_ == other.tenant_id_
       && ls_id_ == other.ls_id_;
 }
 
@@ -706,7 +694,7 @@ bool ObLSLocationCacheKey::operator !=(const ObLSLocationCacheKey &other) const
 bool ObLSLocationCacheKey::is_valid() const
 {
   return OB_INVALID_CLUSTER_ID != cluster_id_
-      && OB_INVALID_TENANT_ID != tenant_id_
+      && true
       && ls_id_.is_valid();
 }
 
@@ -714,19 +702,18 @@ uint64_t ObLSLocationCacheKey::hash() const
 {
   uint64_t hash_val = 0;
   hash_val = murmurhash(&cluster_id_, sizeof(cluster_id_), hash_val);
-  hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
   hash_val = murmurhash(&ls_id_, sizeof(ls_id_), hash_val);
   return hash_val;
 }
 
-int ObTabletLSKey::init(const uint64_t tenant_id, const ObTabletID &tablet_id)
+int ObTabletLSKey::init(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant(tenant_id))) {
+  if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet_id with tenant_id", KR(ret), K(tenant_id), K(tablet_id));
+    LOG_WARN("invalid tablet_id", KR(ret), K(tablet_id));
   } else {
-    tenant_id_ = tenant_id;
+    
     tablet_id_ = tablet_id;
   }
   return ret;
@@ -734,35 +721,33 @@ int ObTabletLSKey::init(const uint64_t tenant_id, const ObTabletID &tablet_id)
 
 void ObTabletLSKey::reset()
 {
-  tenant_id_ = OB_INVALID_TENANT_ID;
+  
   tablet_id_.reset();
 }
 
 bool ObTabletLSKey::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_
+  return true
       && tablet_id_.is_valid();
 }
 
 uint64_t ObTabletLSKey::hash() const
 {
   uint64_t hash_val = 0;
-  hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
   hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
   return hash_val;
 }
 
 bool ObTabletLSKey::operator ==(const ObTabletLSKey &other) const
 {
-  return tenant_id_ == other.tenant_id_
-      && tablet_id_ == other.tablet_id_;
+  return tablet_id_ == other.tablet_id_;
 }
 
 bool ObTabletLSCacheKey::operator ==(const ObIKVCacheKey &other) const
 {
   const ObTabletLSCacheKey &other_key
       = reinterpret_cast<const ObTabletLSCacheKey &>(other);
-  return tenant_id_ == other_key.tenant_id_
+  return true
       && tablet_id_ == other_key.tablet_id_;
 }
 
@@ -773,15 +758,14 @@ bool ObTabletLSCacheKey::operator !=(const ObIKVCacheKey &other) const
 
 bool ObTabletLSCacheKey::is_valid() const
 {
-  return OB_INVALID_TENANT_ID != tenant_id_
+  return true
       && tablet_id_.is_valid();
 }
 
 uint64_t ObTabletLSCacheKey::hash() const
 {
   uint64_t hash_val = 0;
-  hash_val = murmurhash(&tenant_id_, sizeof(tenant_id_), hash_val);
-  hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
+  hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), 0);
   return hash_val;
 }
 

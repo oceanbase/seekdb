@@ -286,7 +286,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       ObString program_action;
       uint64_t number_of_argument = 0;
       OZ (sql.assign_fmt("select program_action, number_of_argument from %s where program_name = \'%.*s\'",
-        OB_ALL_SCHEDULER_PROGRAM_TNAME,
+        OB_ALL_TENANT_SCHEDULER_PROGRAM_TNAME,
         job_info.get_program_name().length(),
         job_info.get_program_name().ptr()));
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
@@ -315,7 +315,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
         for (int i = 1; OB_SUCC(ret) && i <= number_of_argument; i++) {
           argument_value.reset();
           OZ (sql.assign_fmt("select default_value from %s where program_name = \'%.*s\' and job_name = \'%.*s\' and argument_position = %d and is_for_default = 0",
-            OB_ALL_SCHEDULER_PROGRAM_ARGUMENT_TNAME,
+            OB_ALL_TENANT_SCHEDULER_PROGRAM_ARGUMENT_TNAME,
             job_info.get_program_name().length(),
             job_info.get_program_name().ptr(),
             job_info.get_job_name().length(),
@@ -335,7 +335,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
                 LOG_INFO("job argument not exists, use default");
                 ret = OB_SUCCESS;
                 OZ (sql.assign_fmt("select default_value from %s where program_name = \'%.*s\' and job_name = \'%s\' and argument_position = %d and is_for_default = 1",
-                  OB_ALL_SCHEDULER_PROGRAM_ARGUMENT_TNAME,
+                  OB_ALL_TENANT_SCHEDULER_PROGRAM_ARGUMENT_TNAME,
                   job_info.get_program_name().length(),
                   job_info.get_program_name().ptr(),
                   "default",

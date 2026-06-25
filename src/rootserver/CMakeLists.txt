@@ -27,7 +27,6 @@ ob_set_subtarget(ob_rootserver common
   ob_tablet_drop.cpp
   ob_table_creator.cpp
   ob_thread_idling.cpp
-  ob_upgrade_executor.cpp
   ob_vertical_partition_builder.cpp
   ob_tenant_thread_helper.cpp
   ob_system_admin_util.cpp
@@ -146,11 +145,6 @@ ob_set_subtarget(ob_rootserver fork_table
   fork_table/ob_fork_table_task.cpp
 )
 
-ob_set_subtarget(ob_rootserver standby
-  standby/ob_service_grpc.cpp
-  standby/ob_standby_service.cpp
-  standby/ob_tenant_role_transition_service.cpp
-)
 
 ob_set_subtarget(ob_rootserver truncate_info
   truncate_info/ob_truncate_info_service.cpp

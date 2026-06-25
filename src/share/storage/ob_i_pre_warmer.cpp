@@ -17,6 +17,7 @@
 #include "share/storage/ob_i_pre_warmer.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
+#include "src/observer/omt/ob_tenant_config_mgr.h"
 namespace oceanbase
 {
 namespace share
@@ -29,9 +30,10 @@ int ObPreWarmerParam::init(const share::ObLSID &ls_id, const common::ObTabletID 
   ObPreWarmerType tmp_type = PRE_WARM_TYPE_NONE;
   if (tablet_id.is_user_tablet()) {
     if (use_fixed_percentage) {
-
-      fixed_percentage_ = GCONF._compaction_prewarm_percentage;
-
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+      if (tenant_config.is_valid()) {
+        fixed_percentage_ = tenant_config->_compaction_prewarm_percentage;
+      }
       if (fixed_percentage_ > 0) {
         tmp_type = MEM_PRE_WARM;
         LOG_INFO("use fixed percentage for prewarm", K(ls_id), K(tablet_id), K_(fixed_percentage), K(tmp_type));

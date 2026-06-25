@@ -29,6 +29,7 @@ namespace observer
 /* --------------------------- ObAllVirtualTableLSTabletIter --------------------------- */
 ObAllVirtualTableLSTabletIter::ObAllVirtualTableLSTabletIter()
   : ObVirtualTableScannerIterator(),
+    ObMultiTenantOperator(),
     addr_(),
     ls_iter_guard_(),
     ls_tablet_iter_(ObMDSGetTabletMode::READ_WITHOUT_CHECK)
@@ -42,6 +43,7 @@ ObAllVirtualTableLSTabletIter::~ObAllVirtualTableLSTabletIter()
 
 void ObAllVirtualTableLSTabletIter::reset()
 {
+  omt::ObMultiTenantOperator::reset();
   inner_reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
@@ -62,6 +64,24 @@ int ObAllVirtualTableLSTabletIter::init(common::ObIAllocator *allocator, common:
     start_to_read_ = true;
   }
   return ret;
+}
+
+int ObAllVirtualTableLSTabletIter::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
+}
+
+bool ObAllVirtualTableLSTabletIter::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
 }
 
 void ObAllVirtualTableLSTabletIter::inner_reset()
@@ -183,7 +203,7 @@ int ObAllVirtualCSReplicaTabletStats::check_need_iterate_ls(const ObLS &ls, bool
   return ret;
 }
 
-int ObAllVirtualCSReplicaTabletStats::inner_get_next_row(common::ObNewRow *&row)
+int ObAllVirtualCSReplicaTabletStats::process_curr_tenant(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;

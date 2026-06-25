@@ -31,14 +31,40 @@ namespace observer
 
 void ObAllVirtualLockWaitStat::reset()
 {
-  rowkey_[0] = '\0';
-  lock_mode_[0] = '\0';
-  start_to_read_ = false;
-  node_iter_ = nullptr;
+  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
 }
 
+bool ObAllVirtualLockWaitStat::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
+}
+
+void ObAllVirtualLockWaitStat::release_last_tenant()
+{
+  rowkey_[0] = '\0';
+  lock_mode_[0] = '\0';
+
+  // let next tenant to init init txs_,
+  // ls_id_iter_ and tx_lock_stat_iter_
+  start_to_read_ = false;
+  node_iter_ = nullptr;
+}
+
 int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
+}
+
+int ObAllVirtualLockWaitStat::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;

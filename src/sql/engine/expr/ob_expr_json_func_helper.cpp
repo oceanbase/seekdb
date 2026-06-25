@@ -2244,12 +2244,13 @@ int ObJsonExprHelper::pre_default_value_check(ObObjType dst_type, ObString val_s
 int ObJsonExprHelper::get_json_max_depth_config()
 {
   uint32_t json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
-
-  json_max_depth = GCONF.json_document_max_depth;
-  if (json_max_depth < JSON_DOCUMENT_MAX_DEPTH || json_max_depth > 1024) {
-    json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    json_max_depth = tenant_config->json_document_max_depth;
+    if (json_max_depth < JSON_DOCUMENT_MAX_DEPTH || json_max_depth > 1024) {
+      json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
+    }
   }
-
   return json_max_depth;
 }
 

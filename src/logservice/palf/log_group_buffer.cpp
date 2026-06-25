@@ -53,7 +53,7 @@ int LogGroupBuffer::init(const LSN &start_lsn)
     PALF_LOG(WARN, "invalid arguments", K(ret), K(start_lsn));
   } else {
     int64_t group_buffer_size = FOLLOWER_DEFAULT_GROUP_BUFFER_SIZE;
-    // omt::ObTenantConfigGuard tenant_config(&GCONF);
+    // omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     // if (!tenant_config.is_valid()) {
     //  PALF_LOG(WARN, "get tenant config failed", K(ret));
     //  // TODO: add tenant config

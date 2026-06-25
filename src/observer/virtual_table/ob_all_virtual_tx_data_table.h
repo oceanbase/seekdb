@@ -19,12 +19,13 @@
 
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
-class ObAllVirtualTxDataTable : public common::ObVirtualTableScannerIterator {
+class ObAllVirtualTxDataTable : public common::ObVirtualTableScannerIterator, public omt::ObMultiTenantOperator {
 private:
   struct RowData {
     const char *state_;
@@ -49,7 +50,7 @@ public:
 
   TO_STRING_KV(K_(memtable_array_pos), K_(sstable_array_pos));
 public:
-  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual int inner_get_next_row(common::ObNewRow *&row) { return execute(row);}
   virtual void reset();
   inline void set_addr(common::ObAddr &addr)
   {
@@ -61,10 +62,17 @@ private:
 
   int prepare_row_data_(ObITable *tx_data_table, RowData &row_data);
 
+  virtual bool is_need_process() override;
+
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+
+  virtual void release_last_tenant() override;
+
 private:
   common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];
 
+  /****************   NOTE : These resources must be released in their own tenant    *****************/
   int64_t memtable_array_pos_;
   int64_t sstable_array_pos_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
@@ -73,6 +81,7 @@ private:
   ObMemtableMgrHandle mgr_handle_;
   common::ObSEArray<ObTableHandleV2, 1> memtable_handles_;
   common::ObSEArray<ObITable *, 8> sstable_handles_;
+  /****************   NOTE : These resources must be released in their own tenant    *****************/
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTxDataTable);

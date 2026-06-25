@@ -309,8 +309,7 @@ ObDiagnoseSessionInfo::ObDiagnoseSessionInfo()
       total_wait_(NULL),
       event_history_(),
       event_stats_(),
-      stat_add_stats_(),
-      tenant_id_(0)
+      stat_add_stats_()
 {
 }
 
@@ -329,7 +328,7 @@ void ObDiagnoseSessionInfo::reset()
   stat_add_stats_.reset();
   max_wait_ = NULL;
   total_wait_ = NULL;
-  tenant_id_ = 0;
+  
 }
 
 ObWaitEventDesc &ObDiagnoseSessionInfo::get_curr_wait()
@@ -344,16 +343,6 @@ ObWaitEventDesc &ObDiagnoseSessionInfo::get_curr_wait()
 
 
 
-int ObDiagnoseSessionInfo::set_tenant_id(uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (0 < tenant_id && tenant_id < UINT32_MAX) {
-    tenant_id_ = tenant_id;
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  return ret;
-}
 
 } /* namespace common */
 } /* namespace oceanbase */

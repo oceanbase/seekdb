@@ -221,8 +221,9 @@ int64_t get_max_rpc_packet_size()
 int64_t get_stream_rpc_max_wait_timeout()
 {
   int64_t stream_rpc_max_wait_timeout = 30 * 1000 * 1000L;  // was ObCallProcessorBase::DEFAULT_WAIT_NEXT_PACKET_TIMEOUT
-  if (OB_LIKELY(true)) {
-    stream_rpc_max_wait_timeout = GCONF._stream_rpc_max_wait_timeout;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (OB_LIKELY(tenant_config.is_valid())) {
+    stream_rpc_max_wait_timeout = tenant_config->_stream_rpc_max_wait_timeout;
   }
   return stream_rpc_max_wait_timeout;
 }

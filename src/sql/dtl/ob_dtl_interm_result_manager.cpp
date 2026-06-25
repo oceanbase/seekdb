@@ -135,7 +135,8 @@ int ObDTLIntermResultManager::init()
   int64_t bucket_num = common::calculate_scaled_value_by_memory(BUCKET_NUM_LOWER_LIMIT, DEFAULT_BUCKET_NUM);
   ObMemAttr interm_res_hash_buck_attr("HashBuckDTLINT");
   ObMemAttr mem_profile_hash_buck_attr("IRMMemHashBuck");
-  int64_t cpu_quota_concurrency = GCONF.cpu_quota_concurrency;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  int64_t cpu_quota_concurrency = tenant_config->cpu_quota_concurrency;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(interm_res_map_.create(bucket_num,

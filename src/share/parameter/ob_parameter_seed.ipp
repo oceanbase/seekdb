@@ -1040,9 +1040,6 @@ DEF_PARAM(_object_storage_io_timeout, TIME, OB_CLUSTER_PARAMETER, "20s", "[1s,12
 DEF_PARAM(data_storage_warning_tolerance_time, TIME, OB_CLUSTER_PARAMETER, "5s", "[1s,300s]",
         "time to tolerate disk read failure, after that, the disk status will be set warning. Range [1s,300s]. The default value is 5s",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(data_storage_error_tolerance_time, TIME_WITH_CHECKER, OB_CLUSTER_PARAMETER, "300s", common::ObDataStorageErrorToleranceTimeChecker, "[10s,7200s]",
-        "time to tolerate disk read failure, after that, the disk status will be set error. Range [10s,7200s]. The default value is 300s",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(data_disk_usage_limit_percentage, INT, OB_CLUSTER_PARAMETER, "90", "[50,100]",
         "the safe use percentage of data disk"
         "Range: [50,100] in integer",

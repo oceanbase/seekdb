@@ -1017,7 +1017,12 @@ int ObMediumCompactionScheduleFunc::choose_encoding_limit(ObMediumCompactionInfo
 {
   int ret = OB_SUCCESS;
   if (medium_info.medium_compat_version_ >= ObMediumCompactionInfo::MEDIUM_COMPAT_VERSION_V5) {
-    medium_info.encoding_granularity_ = GCONF.ob_encoding_granularity;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (tenant_config.is_valid()) {
+      medium_info.encoding_granularity_ = tenant_config->ob_encoding_granularity;
+    } else {
+      medium_info.encoding_granularity_ = ObMediumCompactionInfo::DEFAULT_ENCODING_ROWS_LIMIT;
+    }
   } else {
     medium_info.encoding_granularity_  = 0; // 0 means there is no limit for encoding
   }

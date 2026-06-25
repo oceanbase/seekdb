@@ -1630,11 +1630,12 @@ int ObPxNodePool::init(ObExecContext &exec_ctx)
 int ObPxNodePool::get_tenant_config_px_node_policy(ObPxNodePolicy &px_node_policy)
 {
   int ret = OB_SUCCESS;
-  if (!true) {
+  oceanbase::omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant config is invalid", K(ret));
   } else {
-    ObString config_px_node_policy = GCONF.px_node_policy.get_value_string();
+    ObString config_px_node_policy = tenant_config->px_node_policy.get_value_string();
     if (0 == config_px_node_policy.case_compare("data")) {
       px_node_policy = ObPxNodePolicy::DATA;
     } else if (0 == config_px_node_policy.case_compare("zone")) {

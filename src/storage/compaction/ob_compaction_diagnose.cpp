@@ -1223,9 +1223,10 @@ int ObCompactionDiagnoseMgr::diagnose_tablet_minor_merge(const ObLSID &ls_id, Ob
   int ret = OB_SUCCESS;
   int64_t minor_compact_trigger = ObPartitionMergePolicy::DEFAULT_MINOR_COMPACT_TRIGGER;
   {
-
-    minor_compact_trigger = GCONF.minor_compact_trigger;
-
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (tenant_config.is_valid()) {
+      minor_compact_trigger = tenant_config->minor_compact_trigger;
+    }
   }
   if (tablet.get_minor_table_count() >= minor_compact_trigger) {
     if (OB_FAIL(diagnose_tablet_merge(

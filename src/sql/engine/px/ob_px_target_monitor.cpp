@@ -15,7 +15,8 @@
  */
 
 #define USING_LOG_PREFIX  SQL_ENG
-#include "ob_px_target_monitor.h"
+#include "ob_px_tenant_target_monitor.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -26,68 +27,110 @@ using namespace obutil;
 namespace sql
 {
 
-ObPxTargetMonitor &ObPxTargetMonitor::get_instance()
-{
-  static ObPxTargetMonitor monitor;
-  return monitor;
-}
-
-int ObPxTargetMonitor::init(const ObAddr &server)
+int ObPxTenantTargetMonitor::init(const uint64_t tenant_id, ObAddr &server)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_init_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_UNLIKELY(!server.is_valid())) {
+  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)) ||
+             OB_UNLIKELY(!server.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(server));
+    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(server));
   } else {
+    tenant_id_ = tenant_id;
     server_ = server;
+    role_ = LEADER;
     parallel_servers_target_ = INT64_MAX;
+    version_ = 0;
     px_target_used_ = 0;
     is_init_ = true;
     parallel_session_count_ = 0;
-    LOG_INFO("ObPxTargetMonitor inited success", K(server_));
   }
   return ret;
 }
 
-void ObPxTargetMonitor::reset()
+void ObPxTenantTargetMonitor::reset()
 {
   is_init_ = false;
+  tenant_id_ = OB_INVALID_TENANT_ID;
   server_.reset();
+  role_ = FOLLOWER;
   parallel_servers_target_ = INT64_MAX;
   px_target_used_ = 0;
+  version_ = UINT64_MAX;
   parallel_session_count_ = 0;
 }
 
-void ObPxTargetMonitor::set_parallel_servers_target(int64_t parallel_servers_target)
+void ObPxTenantTargetMonitor::set_parallel_servers_target(int64_t parallel_servers_target)
 {
   parallel_servers_target_ = parallel_servers_target;
 }
 
-int64_t ObPxTargetMonitor::get_parallel_servers_target()
+int64_t ObPxTenantTargetMonitor::get_parallel_servers_target()
 {
   return parallel_servers_target_;
 }
 
-int64_t ObPxTargetMonitor::get_parallel_session_count()
+int64_t ObPxTenantTargetMonitor::get_parallel_session_count()
 {
   return parallel_session_count_;
 }
 
-int ObPxTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map,
+bool ObPxTenantTargetMonitor::is_leader()
+{
+  return role_ == LEADER;
+}
+
+uint64_t ObPxTenantTargetMonitor::get_version()
+{
+  return version_;
+}
+
+int ObPxTenantTargetMonitor::update_peer_target_used(const ObAddr &server, int64_t peer_used, uint64_t version)
+{
+  // In single-server mode, there are no peer followers to report usage.
+  // Kept for API compatibility; the caller (ObPxTargetMgr) still updates alive_server_set_.
+  UNUSED(server);
+  UNUSED(peer_used);
+  UNUSED(version);
+  return OB_SUCCESS;
+}
+
+int ObPxTenantTargetMonitor::reset_follower_statistics(uint64_t version)
+{
+  int ret = OB_SUCCESS;
+  SpinWLockGuard wlock_guard(spin_lock_);
+  px_target_used_ = 0;
+  version_ = version;
+  LOG_INFO("reset follower statistics", K(tenant_id_), K(ret), K(version));
+  return ret;
+}
+
+int ObPxTenantTargetMonitor::reset_leader_statistics()
+{
+  int ret = OB_SUCCESS;
+  SpinWLockGuard wlock_guard(spin_lock_);
+  px_target_used_ = 0;
+  version_ = get_new_version();
+  LOG_INFO("reset leader statistics", K(tenant_id_), K(ret), K(version_));
+  return ret;
+}
+
+int ObPxTenantTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map,
                               int64_t wait_time_us, int64_t session_target, int64_t req_cnt,
-                              int64_t &admit_count)
+                              int64_t &admit_count, uint64_t &admit_version)
 {
   int ret = OB_SUCCESS;
   admit_count = 0;
+  admit_version = UINT64_MAX;
   bool need_wait = false;
   {
     // Serialize on spin_lock_: apply and release both read-modify-write the
     // single px_target_used_ counter, so they must be mutually exclusive.
     SpinWLockGuard guard(spin_lock_);
     int64_t target = session_target;
+    uint64_t version = version_;
     int64_t total_use = px_target_used_;
     int64_t total_req = 0;
     for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
@@ -109,6 +152,7 @@ int ObPxTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map
       }
       px_target_used_ += acquired;
       admit_count = acquired;
+      admit_version = version;
       parallel_session_count_++;
     } else {
       need_wait = true;
@@ -123,29 +167,34 @@ int ObPxTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &worker_map
   return ret;
 }
 
-int ObPxTargetMonitor::release_target(hash::ObHashMap<ObAddr, int64_t> &worker_map)
+int ObPxTenantTargetMonitor::release_target(hash::ObHashMap<ObAddr, int64_t> &worker_map, uint64_t version)
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard guard(spin_lock_);
-  int64_t total_rel = 0;
-  for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
-      OB_SUCC(ret) && it != worker_map.end(); it++) {
-    total_rel += it->second;
+  if (version == version_) {
+    int64_t total_rel = 0;
+    for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
+        OB_SUCC(ret) && it != worker_map.end(); it++) {
+      total_rel += it->second;
+    }
+    px_target_used_ -= total_rel;
+    target_cond_.notifyAll();
+  } else {
+    LOG_INFO("version changed", K(tenant_id_), K(version_), K(version));
   }
-  px_target_used_ -= total_rel;
-  target_cond_.notifyAll();
   parallel_session_count_--;
   return ret;
 }
 
-int ObPxTargetMonitor::get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array)
+int ObPxTenantTargetMonitor::get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array)
 {
   int ret = OB_SUCCESS;
   target_info_array.reset();
   ObPxTargetInfo monitor_info;
   monitor_info.server_ = server_;
-
+  monitor_info.tenant_id_ = tenant_id_;
   monitor_info.is_leader_ = true;
+  monitor_info.version_ = version_;
   monitor_info.parallel_servers_target_ = parallel_servers_target_;
   monitor_info.peer_server_ = server_;
   monitor_info.peer_target_used_ = px_target_used_;
@@ -157,9 +206,21 @@ int ObPxTargetMonitor::get_all_target_info(common::ObIArray<ObPxTargetInfo> &tar
   return ret;
 }
 
+uint64_t ObPxTenantTargetMonitor::get_new_version()
+{
+  uint64_t current_time = common::ObTimeUtility::current_time();
+	uint64_t server_index = GCTX.get_server_index();
+	uint64_t new_version = ((current_time & 0x0000FFFFFFFFFFFF) | (server_index << SERVER_ID_SHIFT));
+  return new_version;
+}
+
+uint64_t ObPxTenantTargetMonitor::get_server_index(uint64_t version) {
+  return (version >> SERVER_ID_SHIFT);
+}
+
 int ObPxTargetCond::wait(const int64_t wait_time_us)
 {
-  int ret = OB_SUCCESS;
+  int ret = OB_SUCCESS; 
   if (wait_time_us < 0) {
     TRANS_LOG(WARN, "invalid argument", K(wait_time_us));
     ret = OB_INVALID_ARGUMENT;

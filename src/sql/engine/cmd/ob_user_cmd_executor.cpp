@@ -57,7 +57,6 @@ int ObCreateUserExecutor::encrypt_passwd(const common::ObString& pwd,
 
 int ObCreateUserExecutor::check_user_valid(ObSchemaGetterGuard& schema_guard, 
                                            uint64_t priv_set,
-                                           int64_t tenant_id,
                                            const ObString &user_name,
                                            const ObString &host_name,
                                            const ObString &opreation_name)
@@ -65,11 +64,11 @@ int ObCreateUserExecutor::check_user_valid(ObSchemaGetterGuard& schema_guard,
   int ret = OB_SUCCESS;
   ObSqlString full_user_name;
   bool existed = false;
-  if (!ObSchemaChecker::enable_mysql_pl_priv_check(tenant_id, schema_guard)) {
+  if (!ObSchemaChecker::enable_mysql_pl_priv_check(schema_guard)) {
   } else if (OB_FAIL(full_user_name.append_fmt("%.*s@%.*s", user_name.length(), user_name.ptr(), 
                                                 host_name.length(), host_name.ptr()))) {
     LOG_WARN("append fmt failed", K(ret));
-  } else if (OB_FAIL(schema_guard.check_routine_definer_existed(tenant_id, full_user_name.string(), existed))) {
+  } else if (OB_FAIL(schema_guard.check_routine_definer_existed(full_user_name.string(), existed))) {
     LOG_WARN("check routine definer existed failed", K(ret));
   } else if (existed) {
     if ((priv_set & OB_PRIV_SUPER) != 0) {
@@ -112,7 +111,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const ObStrings &users = stmt.get_users();
   const bool if_not_exist = stmt.get_if_not_exists();
   const int64_t FIX_MEMBER_CNT = 4;
@@ -139,7 +138,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     ObString x509_subject;
     ObSSLType ssl_type_enum = ObSSLType::SSL_TYPE_NOT_SPECIFIED;
     ObCreateUserArg &arg = static_cast<ObCreateUserArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = tenant_id;
+    
     arg.user_infos_.reset();
     arg.if_not_exist_ = if_not_exist;
     const int64_t users_cnt = users.count() - FIX_MEMBER_CNT;
@@ -190,9 +189,9 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 
         if (OB_SUCC(ret)) {
           ObSchemaGetterGuard schema_guard;
-          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+          if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
             LOG_WARN("get tenant schema guard failed", K(ret));
-          } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(), tenant_id,
+          } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                     user_name, host_name, "CREATE USER"))) {
             LOG_WARN("check user valid failed", K(ret));
           } else if (OB_FAIL(user_info.set_user_name(user_name))) {
@@ -210,7 +209,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
           } else if (FALSE_IT(user_info.set_password_last_changed(ObTimeUtility::current_time()))) {
             LOG_WARN("set set_password_last_changed failed", K(ret));
           } else {
-            user_info.set_tenant_id(tenant_id);
+            
             if (user_name.empty()) {
               user_info.set_user_id(OB_EMPTY_USER_ID);
             }
@@ -323,7 +322,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const ObStrings *user_names = NULL;
 
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -332,9 +331,6 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is invalid", K(ret));
   } else if (OB_ISNULL(user_names = stmt.get_users())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("names is NULL", K(ret));
@@ -348,10 +344,10 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
     ObString user_name;
     ObString host_name;
     ObDropUserArg &arg = static_cast<ObDropUserArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = tenant_id;
+    
     {
       ObSchemaGetterGuard schema_guard;
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
@@ -363,7 +359,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
           LOG_WARN("Add user name failed", K(ret));
         } else if (OB_FAIL(arg.hosts_.push_back(host_name))) {
           LOG_WARN("Add host name failed", K(ret));
-        } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(), tenant_id,
+        } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                   user_name, host_name, "DROP USER"))) {
           LOG_WARN("check user valid failed", K(ret));
         }
@@ -435,12 +431,9 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const ObStrings *user_names = NULL;
-  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is invalid", K(ret));
-  } else if (OB_ISNULL(user_names = stmt.get_users())) {
+  if (OB_ISNULL(user_names = stmt.get_users())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("names is NULL", K(ret));
   } else if (OB_UNLIKELY(user_names->count() % 2 != 0)) {
@@ -453,7 +446,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
     ObString user_name;
     ObString host_name;
     ObLockUserArg &arg = static_cast<ObLockUserArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = tenant_id;
+    
     arg.locked_ = stmt.is_locked();
     for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
       if (OB_FAIL(user_names->get_string(i, user_name))) {
@@ -530,7 +523,6 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else {
-    const uint64_t tenant_id = session->get_effective_tenant_id();
     const uint64_t user_id = session->get_priv_user_id();
     const ObUserInfo * user_info = NULL;
     common::ObArray<uint64_t> enable_role_id_array;
@@ -538,9 +530,8 @@ int ObAlterUserProfileExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserPro
 
     obcall::ObAlterUserProfileArg &arg = static_cast<obcall::ObAlterUserProfileArg &>(stmt.get_ddl_arg());
     OZ (GCTX.schema_service_->get_tenant_schema_guard(
-                  tenant_id,
                   schema_guard));
-    OZ (schema_guard.get_user_info(tenant_id, user_id, user_info));
+    OZ (schema_guard.get_user_info(user_id, user_info));
     if (OB_SUCC(ret) && NULL == user_info) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("user info is null", K(ret));
@@ -605,7 +596,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const ObStrings *rename_infos = NULL;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -613,9 +604,6 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is invalid", K(ret));
   } else if (OB_ISNULL(rename_infos = stmt.get_rename_infos())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("names is NULL", K(ret));
@@ -634,10 +622,10 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
     ObString new_username;
     ObString new_hostname;
     ObRenameUserArg &arg = static_cast<ObRenameUserArg &>(stmt.get_ddl_arg());
-    arg.tenant_id_ = tenant_id;
+    
     {
       ObSchemaGetterGuard schema_guard;
-      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+      if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       }
       //rename_infos arr contains old names and new names in pairs, so step is 2
@@ -658,10 +646,10 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
           LOG_WARN("Add new user name failed", K(ret));
         } else if (OB_FAIL(arg.new_hosts_.push_back(new_hostname))) {
           LOG_WARN("Add new host name failed", K(ret));
-        } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(), tenant_id,
+        } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                   old_username, old_hostname, "RENAME USER"))) {
           LOG_WARN("check user valid failed", K(ret));
-        } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(), tenant_id,
+        } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                   new_username, new_hostname, "RENAME USER"))) {
           LOG_WARN("check user valid failed", K(ret));
         }

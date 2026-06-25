@@ -2097,9 +2097,10 @@ bool ObInnerSQLConnection::is_inner_session_mgr_enable()
 {
   bool bret = false;
   
-
-  bret = GCONF._enable_inner_session_mgr;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    bret = tenant_config->_enable_inner_session_mgr;
+  }
   return bret;
 }
 

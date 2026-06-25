@@ -46,6 +46,25 @@ ObAllVirtualTabletCompactionHistory::~ObAllVirtualTabletCompactionHistory()
 int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    if (ret != OB_ITER_END) {
+      SERVER_LOG(WARN, "execute fail", K(ret));
+    }
+  }
+  return ret;
+}
+
+bool ObAllVirtualTabletCompactionHistory::is_need_process()
+{
+  if (true || true) {
+    return true;
+  }
+  return false;
+}
+
+int ObAllVirtualTabletCompactionHistory::process_curr_tenant(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
@@ -262,8 +281,7 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
 }
 void ObAllVirtualTabletCompactionHistory::reset()
 {
-  major_merge_info_iter_.reset();
-  minor_merge_info_iter_.reset();
+  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
   memset(ip_buf_, 0, sizeof(ip_buf_));
   memset(parallel_merge_info_buf_, 0, sizeof(parallel_merge_info_buf_));

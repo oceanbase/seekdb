@@ -20,6 +20,7 @@
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/guard/ob_shared_guard.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_scanner.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tablet/ob_tablet_iterator.h"
@@ -29,7 +30,8 @@ namespace oceanbase
 {
 namespace observer
 {
-class ObAllVirtualTabletInfo : public common::ObVirtualTableScannerIterator
+class ObAllVirtualTabletInfo : public common::ObVirtualTableScannerIterator,
+                               public omt::ObMultiTenantOperator
 {
 public:
   ObAllVirtualTabletInfo();
@@ -42,6 +44,12 @@ public:
     addr_ = addr;
   }
 private:
+  // whether a tenant is need return content.
+  virtual bool is_need_process() override;
+  // deal with current tenant's row.
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  // release last tenant's resource.
+  virtual void release_last_tenant() override;
   int get_next_ls(ObLS *&ls);
   int get_next_tablet(storage::ObTabletHandle &tablet_handle);
 private:

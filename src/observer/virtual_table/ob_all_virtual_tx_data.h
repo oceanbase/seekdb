@@ -18,6 +18,7 @@
 #define OB_ALL_VIRTUAL_TX_DATA_H_
 
 #include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {

@@ -207,7 +207,8 @@ int ObLogReplayService::init(PalfEnv *palf_env,
                              ObILogAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  int64_t thread_quota = std::max(static_cast<int64_t>(1), static_cast<int64_t>(true ? GCONF.cpu_quota_concurrency : 4));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  int64_t thread_quota = std::max(static_cast<int64_t>(1), static_cast<int64_t>(tenant_config.is_valid() ? tenant_config->cpu_quota_concurrency : 4));
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;

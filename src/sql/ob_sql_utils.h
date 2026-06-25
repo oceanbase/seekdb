@@ -548,9 +548,10 @@ public:
   static int64_t get_query_record_size_limit()
   {
     int64_t thredhold = OB_MAX_SQL_LENGTH;
-
-    thredhold = GCONF._query_record_size_limit;
-
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (tenant_config.is_valid()) {
+      thredhold = tenant_config->_query_record_size_limit;
+    }
     return thredhold;
   }
   // convert escape char from '\\' to '\\\\';

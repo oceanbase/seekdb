@@ -34,6 +34,7 @@ using namespace oceanbase::common::sqlclient;
 
 ObServerSchemaService::ObServerSchemaService()
     : schema_manager_rwlock_(common::ObLatchIds::SCHEMA_MGR_CACHE_LOCK),
+      mem_mgr_for_liboblog_mutex_(common::ObLatchIds::SCHEMA_MGR_CACHE_LOCK),
       schema_service_(NULL),
       sql_proxy_(NULL),
       config_(NULL)
@@ -62,6 +63,10 @@ int ObServerSchemaService::destroy()
   if (OB_SUCC(ret) && OB_NOT_NULL(mem_mgr_)) {
     mem_mgr_->~ObSchemaMemMgr();
     mem_mgr_ = NULL;
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(mem_mgr_for_liboblog_)) {
+    mem_mgr_for_liboblog_->~ObSchemaMemMgr();
+    mem_mgr_for_liboblog_ = NULL;
   }
   return ret;
 }
@@ -204,6 +209,8 @@ int ObServerSchemaService::AllSchemaKeys::create(int64_t bucket_size)
   if (bucket_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to create hashset,", K(bucket_size), K(ret));
+  } else if (OB_FAIL(new_tenant_keys_.create(bucket_size))) {
+    LOG_WARN("failed to create new_tenant_keys hashset", K(bucket_size), K(ret));
   } else if (OB_FAIL(new_user_keys_.create(bucket_size))) {
     LOG_WARN("failed to create new_user_keys hashset", K(bucket_size), K(ret));
   } else if (OB_FAIL(del_user_keys_.create(bucket_size))) {
@@ -415,17 +422,31 @@ int ObServerSchemaService::get_increment_tenant_keys(const ObSchemaMgr &schema_m
                                                      AllSchemaKeys &schema_keys)
 {
   int ret = OB_SUCCESS;
-  UNUSED(schema_mgr);
-  UNUSED(schema_keys);
 
   if (!(schema_operation.op_type_ > OB_DDL_TENANT_OPERATION_BEGIN
         && schema_operation.op_type_ < OB_DDL_TENANT_OPERATION_END)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
-  } else if (!schema_operation.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(schema_operation), KR(ret));
+  } else {
+    
+    const int64_t schema_version = schema_operation.schema_version_;
+    int hash_ret = OB_SUCCESS;
+    SchemaKey schema_key;
+    
+    schema_key.schema_version_ = schema_version;
+    //the system tenant's schema will refreshed incremently too
+    if (!schema_operation.is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", K(schema_operation), KR(ret));
+    } else if (OB_DDL_ADD_TENANT == schema_operation.op_type_) {
+      hash_ret = schema_keys.new_tenant_keys_.set_refactored_1(schema_key, 1);
+      if (OB_SUCCESS != hash_ret) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to add new tenant key", K(hash_ret), KR(ret));
+      }
+    }
   }
+
   return ret;
 }
 
@@ -440,18 +461,28 @@ int ObServerSchemaService::get_increment_tenant_keys_reversely(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
   } else {
+    
     const int64_t schema_version = schema_operation.schema_version_;
     SchemaKey schema_key;
+    
     schema_key.schema_version_ = schema_version;
-    // OB_DDL_ADD_TENANT branch removed; is_delete always false.
-    const bool is_delete = false;
+    bool is_delete = (OB_DDL_ADD_TENANT == schema_operation.op_type_);
     bool is_exist = false;
+    if (OB_FAIL(ret)) {
+    } else if (OB_DDL_ADD_TENANT == schema_operation.op_type_) {
+      int hash_ret = schema_keys.new_tenant_keys_.erase_refactored(schema_key);
+      if (OB_SUCCESS != hash_ret && OB_HASH_NOT_EXIST != hash_ret) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("erase new tenant keys failed", KR(ret), K(hash_ret));
+      }
+    }
     // sys variable, for compatible
     {
       if (OB_SUCC(ret)) {
         const ObSimpleSysVariableSchema *sys_variable = NULL;
-        if (OB_FAIL(schema_mgr.sys_variable_mgr_.get_sys_variable_schema(sys_variable))) {
-          LOG_WARN("get sys_variable schema failed", K(1UL), KR(ret));
+        is_exist = false;
+        if (OB_FAIL(schema_mgr.sys_variable_mgr_.get_sys_variable_schema( sys_variable))) {
+          LOG_WARN("get user info failed", K(1UL), KR(ret));
         } else if (NULL != sys_variable) {
           is_exist = true;
         }
@@ -460,6 +491,15 @@ int ObServerSchemaService::get_increment_tenant_keys_reversely(
         if (OB_FAIL(REPLAY_OP(schema_key, schema_keys.del_sys_variable_keys_,
             schema_keys.new_sys_variable_keys_, is_delete, is_exist))) {
           LOG_WARN("replay operation failed", KR(ret));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (is_delete) {
+        if (OB_FAIL(del_tenant_operation(schema_keys, true))) {
+          LOG_WARN("delete new op failed", KR(ret));
+        } else if (OB_FAIL(del_tenant_operation(schema_keys, false))) {
+          LOG_WARN("delete del op failed", KR(ret));
         }
       }
     }
@@ -2650,6 +2690,32 @@ int ObServerSchemaService::get_increment_ai_model_keys_reversely(
   return ret;
 }
 
+// Currently only the full tenant schema of the system tenant is cached
+int ObServerSchemaService::add_tenant_schemas_to_cache(const TenantKeys &tenant_keys,
+                                                       ObISQLClient &sql_client)
+{
+  int ret = OB_SUCCESS;
+  ObArray<SchemaKey> schema_keys;
+  if (OB_FAIL(convert_schema_keys_to_array(tenant_keys, schema_keys))) {
+    LOG_WARN("convert set to array failed", K(ret));
+  } else {
+    FOREACH_CNT_X(schema_key, schema_keys, OB_SUCC(ret)) {
+      
+      {
+        if (OB_FAIL(add_tenant_schema_to_cache(sql_client,
+                                               schema_key->schema_version_))) {
+          LOG_WARN("add tenant schema to cache failed", K(ret),
+                   K(1UL), K(schema_key->schema_version_));
+        } else {
+          LOG_INFO("add tenant schema to cache success", K(ret), K(schema_key));
+        }
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
 // Currently only the full sysvariable schema of system tenants is cached
 int ObServerSchemaService::add_sys_variable_schemas_to_cache(
     const SysVariableKeys &sys_variable_keys,
@@ -2785,6 +2851,35 @@ int ObServerSchemaService::fetch_increment_schemas(
   GET_BATCH_SCHEMAS(ccl_rule, ObSimpleCCLRuleSchema, CCLRuleKeys);
   GET_BATCH_SCHEMAS(ai_model, ObAiModelSchema, AiModelKeys);
 
+  // After the schema is split, ordinary tenants do not refresh the tenant schema and system table schema
+  
+  if (OB_FAIL(ret)) {
+    // skip
+  } else if (true) {
+
+    // List pinned to [sys tenant]; the tenant simple schema is fetched
+    // directly for the sys tenant (replaces GET_BATCH_SCHEMAS_WITHOUT_SCHEMA_STATUS(tenant,...)).
+    // Only fetch when there are corresponding tenant keys, preserving the original semantics where
+    // an empty key set yields an empty result array (avoids spuriously re-adding the sys tenant).
+    if (OB_SUCC(ret) && all_keys.new_tenant_keys_.size() > 0) {
+      ObArray<ObSimpleTenantSchema> &simple_schemas = simple_incre_schemas.simple_tenant_schemas_;
+      if (OB_FAIL(schema_service_->get_batch_tenants(sql_client, schema_version, simple_schemas))) {
+        LOG_WARN("get batch tenants failed", K(ret), K(schema_version));
+      } else {
+        ALLOW_NEXT_LOG();
+        LOG_INFO("get batch tenants success", K(simple_schemas.size()));
+        // single-tenant: get_batch_tenants stub always yields exactly 1 sys tenant; the new_tenant
+        // key set is likewise pinned to [sys tenant]. Assert consistency (align with the
+        // GET_BATCH_SCHEMAS / alter / data_dict result-cnt checks). If multi-tenant is restored,
+        // the tenant list must be restored and fetched in batches in sync.
+        if (all_keys.new_tenant_keys_.size() != simple_schemas.size()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("unexpected tenant result cnt",
+                    KR(ret), K(all_keys.new_tenant_keys_.size()), K(simple_schemas.size()));
+        }
+      }
+    }
+  }
   if (OB_SUCC(ret)) {
     ObArray<uint64_t> non_sys_table_ids;
     if (OB_FAIL(non_sys_table_ids.assign(all_keys.non_sys_table_ids_))) {
@@ -2985,9 +3080,13 @@ int ObServerSchemaService::update_schema_mgr(ObISQLClient &sql_client,
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
   } else {
-    // add sys variable schema to cache
+    // 
+    // note: Adjust the position of this code carefully
+    // add sys tenant schema to cache
     {
-      if (OB_FAIL(add_sys_variable_schemas_to_cache(all_keys.new_sys_variable_keys_, sql_client))) {
+      if (OB_FAIL(add_tenant_schemas_to_cache(all_keys.new_tenant_keys_, sql_client))) {
+        LOG_WARN("add new tenant schemas to cache failed", K(ret));
+      } else if (OB_FAIL(add_sys_variable_schemas_to_cache(all_keys.new_sys_variable_keys_, sql_client))) {
         LOG_WARN("add new sys variable schemas to cache failed", K(ret));
       }
     }
@@ -3519,8 +3618,9 @@ int ObServerSchemaService::get_increment_schemas_for_data_dict(
 }
 
 // the following members are valid in schema_keys:
-// 1. new_table_keys_
-// 2. new_database_keys_
+// 1. new_tenant_keys_
+// 2. new_table_keys_
+// 3. new_database_keys_
 int ObServerSchemaService::get_increment_schema_keys_for_data_dict_(
     const ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
     AllSchemaKeys &schema_keys)
@@ -3570,10 +3670,13 @@ int ObServerSchemaService::fetch_increment_schemas_for_data_dict_(
     common::ObIArray<const ObTableSchema *> &table_schemas)
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_schemas);
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
+  } else if (OB_FAIL(fetch_increment_tenant_schemas_for_data_dict_(
+            trans, allocator, schema_keys, tenant_schemas))) {
+    LOG_WARN("fail to fetch increment tenant schemas",
+             KR(ret), "new_tenants", schema_keys.new_tenant_keys_);
   } else if (OB_FAIL(fetch_increment_database_schemas_for_data_dict_(
             trans, allocator, schema_keys, database_schemas))) {
     LOG_WARN("fail to fetch increment database schemas",
@@ -3582,6 +3685,52 @@ int ObServerSchemaService::fetch_increment_schemas_for_data_dict_(
             trans, allocator, schema_keys, table_schemas))) {
     LOG_WARN("fail to fetch increment table schemas",
              KR(ret), "new_tables", schema_keys.new_table_keys_);
+  }
+  return ret;
+}
+
+int ObServerSchemaService::fetch_increment_tenant_schemas_for_data_dict_(
+    common::ObMySQLTransaction &trans,
+    common::ObIAllocator &allocator,
+    const AllSchemaKeys &schema_keys,
+    common::ObIArray<const ObTenantSchema *> &tenant_schemas)
+{
+  int ret = OB_SUCCESS;
+  tenant_schemas.reset();
+  if (!check_inner_stat()) {
+    ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("inner stat error", KR(ret));
+  } else {
+    // single-tenant: get_batch_tenants returns exactly the sys tenant; fetch only when an ADD
+    // tenant key exists, keeping the original "empty in -> empty out" count invariant.
+    const int64_t expect_tenant_cnt = schema_keys.new_tenant_keys_.size();
+    int64_t schema_version = INT64_MAX - 1;
+    ObSEArray<ObTenantSchema, 2> tmp_tenants;
+    if (OB_SUCC(ret) && expect_tenant_cnt > 0
+        && OB_FAIL(schema_service_->get_batch_tenants(
+        trans, schema_version, tmp_tenants))) {
+      LOG_WARN("get batch tenants failed", KR(ret), K(expect_tenant_cnt));
+    } else if (OB_FAIL(ret)) {
+    } else if (tmp_tenants.count() != expect_tenant_cnt) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tenant cnt not match", KR(ret), K(expect_tenant_cnt), K(tmp_tenants));
+    } else {
+      ObTenantSchema *tenant_ptr = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && i < tmp_tenants.count(); i++) {
+        const ObTenantSchema &tenant = tmp_tenants.at(i);
+        if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, tenant, tenant_ptr))) {
+          LOG_WARN("fail to alloc tenant", KR(ret), K(tenant));
+        } else if (OB_ISNULL(tenant_ptr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("ptr is null", KR(ret), K(tenant));
+        } else if (OB_FAIL(tenant_schemas.push_back(tenant_ptr))) {
+          LOG_WARN("fail to push back tenant schema", KR(ret), KPC(tenant_ptr));
+        } else {
+          LOG_INFO("fetch tenant schema for data dict",
+                   "schema_version", tenant_ptr->get_schema_version());
+        }
+      } // end for
+    }
   }
   return ret;
 }
@@ -4122,6 +4271,8 @@ int ObServerSchemaService::init_schema_struct()
 
     INIT_TENANT_MEM_MGR(mem_mgr_,
                         ObModIds::OB_TENANT_SCHEMA_MEM_MGR, ObModIds::OB_TENANT_SCHEMA_MGR);
+    INIT_TENANT_MEM_MGR(mem_mgr_for_liboblog_,
+                        ObModIds::OB_TENANT_SCHEMA_MEM_MGR_FOR_LIBOBLOG, ObModIds::OB_TENANT_SCHEMA_MGR_FOR_LIBOBLOG);
 
 #undef INIT_TENANT_MEM_MGR
 
@@ -4137,11 +4288,12 @@ int ObServerSchemaService::init_schema_struct()
     } else if (OB_ISNULL(schema_mgr_for_cache_)) {
       ObSchemaMgr *schema_mgr_for_cache = NULL;
       ObSchemaMemMgr *mem_mgr = NULL;
+      bool alloc_for_liboblog = false;
       if (FALSE_IT(mem_mgr = mem_mgr_)) {
       } else if (OB_ISNULL(mem_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("mem_mgr is null", K(ret));
-      } else if (OB_FAIL(mem_mgr->alloc_schema_mgr(schema_mgr_for_cache))) {
+      } else if (OB_FAIL(mem_mgr->alloc_schema_mgr(schema_mgr_for_cache, alloc_for_liboblog))) {
         LOG_WARN("alloc schema mgr failed", K(ret));
       } else if (OB_FAIL(schema_mgr_for_cache->init())) {
         LOG_WARN("init schema mgr for cache failed", K(ret));
@@ -4644,7 +4796,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
       } else {
         // bugfix: 52326403
         // Make sure refresh schema status ready before tenant schema is visible.
-        {
+        if (!ObSchemaService::g_liboblog_mode_) {
           bool need_refresh_schema_status = false;
           for (int64_t i = 0; !need_refresh_schema_status && OB_SUCC(ret) && i < simple_tenants.count(); i++) {
             const ObSimpleTenantSchema &simple_tenant = simple_tenants.at(i);
@@ -4859,7 +5011,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
 
       if (OB_SUCC(ret)) {
         const ObSimpleTableSchemaV2 *tmp_table = NULL;
-        if (OB_FAIL(schema_mgr_for_cache->get_table_schema( OB_ALL_LOCATION_HISTORY_TID, tmp_table))) {
+        if (OB_FAIL(schema_mgr_for_cache->get_table_schema( OB_ALL_TENANT_LOCATION_HISTORY_TID, tmp_table))) {
           LOG_WARN("fail to get table schema", KR(ret));
         } else if (OB_ISNULL(tmp_table)) {
           // for compatibility
@@ -4871,7 +5023,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
 
       if (OB_SUCC(ret)) {
         const ObSimpleTableSchemaV2 *tmp_table = NULL;
-        if (OB_FAIL(schema_mgr_for_cache->get_table_schema( OB_ALL_OBJAUTH_MYSQL_HISTORY_TID, tmp_table))) {
+        if (OB_FAIL(schema_mgr_for_cache->get_table_schema( OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TID, tmp_table))) {
           LOG_WARN("fail to get table schema", KR(ret));
         } else if (OB_ISNULL(tmp_table)) {
           // for compatibility

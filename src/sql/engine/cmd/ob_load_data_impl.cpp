@@ -68,7 +68,7 @@ static void delay_process_by_probability(int64_t percentage) {
 const char *ObLoadDataBase::SERVER_TENANT_MEMORY_EXAMINE_SQL =
     "SELECT case when memstore_used < freeze_trigger * 1.02 then false else true end"
     " as need_wait_freeze"
-    " FROM oceanbase.__all_virtual_memstore_info";
+    " FROM oceanbase.__all_virtual_tenant_memstore_info";
 
 const char *log_file_column_names = "\nBatchId\tLineNum\tType\tErrCode\tErrMsg\t\n";
 const char *log_file_row_fmt = "%ld\t%ld\t%s\t%d\t%.*s\t\n";

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_query_retry_ctrl.h"
+#include "share/rc/ob_module_provider.h"
 #include "pl/ob_pl.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/mysql/obmp_query.h"
@@ -156,7 +157,7 @@ public:
   virtual void test(ObRetryParam &v) const override
   {
     if (v.session_.get_retry_info_for_update()
-        .should_fast_fail(v.session_.get_effective_tenant_id())) {
+        .should_fast_fail()) {
       v.client_ret_ = v.err_;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.no_more_test_ = true;
@@ -346,27 +347,27 @@ public:
       int64_t local_tenant_version_latest = 0;
       int64_t local_sys_version_latest = 0;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-                  v.session_.get_effective_tenant_id(), schema_guard))) {
+                  schema_guard))) {
         // No need to retry, and let it return the error code from get_schema_guard because it is the cause of not retrying
         LOG_WARN("get schema guard failed", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else if (OB_FAIL(schema_guard.get_schema_version(
-                  v.session_.get_effective_tenant_id(), local_tenant_version_latest))) {
+                  local_tenant_version_latest))) {
         LOG_WARN("fail get tenant schema version", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else if (OB_FAIL(schema_guard.get_schema_version(
-                  OB_SYS_TENANT_ID, local_sys_version_latest))) {
+                  local_sys_version_latest))) {
         LOG_WARN("fail get sys schema version", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
       } else {
         bool local_schema_not_full = GCTX.schema_service_->is_schema_error_need_retry(
-                                     &schema_guard, v.session_.get_effective_tenant_id());
+                                     &schema_guard);
         int64_t local_tenant_version_start = v.curr_query_tenant_local_schema_version_;
         int64_t global_tenant_version_start = v.curr_query_tenant_global_schema_version_;
         int64_t local_sys_version_start = v.curr_query_sys_local_schema_version_;
@@ -431,18 +432,16 @@ public:
       ObSchemaGetterGuard schema_guard;
       const ObTenantSchema *tenant_schema = NULL;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
-          OB_SYS_TENANT_ID,
           schema_guard))) {
         LOG_TRACE("get sys tenant schema guard failed", KR(ret), K(v));
       } else if (OB_FAIL(schema_guard.get_tenant_info(
-          v.session_.get_effective_tenant_id(),
           tenant_schema))) {
         LOG_TRACE("fail get tenant info", KR(ret),
-            "tenant_id", v.session_.get_effective_tenant_id(), K(v));
+             K(v));
       } else if (OB_ISNULL(tenant_schema) || !tenant_schema->is_normal()) {
         // use LOG_TRACE to prevent too much warning during creating tenant
         LOG_TRACE("tenant status is abnormal, do not retry",
-            "tenant_id", v.session_.get_effective_tenant_id(), KPC(tenant_schema), K(v));
+             KPC(tenant_schema), K(v));
         // tenant status is abnormal, do not retry and return v.err_
         v.client_ret_ = v.err_;
         v.retry_type_ = RETRY_TYPE_NONE;
@@ -578,7 +577,7 @@ public:
   {
     int ret = OB_SUCCESS;
     bool local_schema_not_full = GSCHEMASERVICE.is_schema_error_need_retry(
-                                 NULL, v.session_.get_effective_tenant_id());
+                                 NULL);
     if (local_schema_not_full || OB_ERR_REMOTE_SCHEMA_NOT_FULL == v.err_) {
       v.no_more_test_ = true;
       v.retry_type_ = RETRY_TYPE_LOCAL;
@@ -1026,7 +1025,7 @@ void ObQueryRetryCtrl::after_func(ObRetryParam &v)
   }
   // bug fix, reset lock_wait_mgr node before doing local retry
   if (RETRY_TYPE_LOCAL == v.retry_type_) {
-    rpc::ObLockWaitNode* node = MTL(memtable::ObLockWaitMgr*)->get_thread_node();
+    rpc::ObLockWaitNode* node = share::g_mp->lock_wait_mgr()->get_thread_node();
     if (NULL != node) {
       node->reset_need_wait();
     }

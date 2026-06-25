@@ -16,7 +16,7 @@
 
 #include "sql/test_sql_utils.h"
 #include "sql/ob_sql_init.h"
-#include "share/config/ob_server_config.h"
+#include "observer/omt/ob_tenant_config_mgr.h"
 #define private public
 #include "observer/ob_server.h"
 #undef private
@@ -80,8 +80,10 @@ void TestRawExprResolver::resolve(const char* expr, const char *&json_expr)
   ObSQLSessionInfo session;
   ctx.session_info_ = &session;
   LinkExecCtxGuard link_guard(session, exec_ctx_);
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
+  EXPECT_TRUE(tenant_config.is_valid());
   // disable decimal_int to make json parser happy
-  GCONF._enable_decimal_int_type = false;
+  tenant_config->_enable_decimal_int_type = false;
   session.cached_tenant_config_info_.enable_decimal_int_type_ = false;
 
   EXPECT_TRUE(OB_SUCCESS == oceanbase::ObPreProcessSysVars::init_sys_var());

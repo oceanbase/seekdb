@@ -335,6 +335,7 @@ int ObMViewRefreshExecutor::do_nested_refresh_()
   share::SCN target_data_sync_scn;
   ObMySQLTransaction trans;
   int64_t start_ts = ObTimeUtility::fast_current_time();
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   bool nested_consistent_refresh = false;
   ObMViewMaintenanceService *mview_maintenance_service =
                             share::g_mp->m_view_maintenance_service();

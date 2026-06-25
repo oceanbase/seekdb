@@ -19,6 +19,7 @@
 
 #include "lib/ob_define.h"
 #include "lib/container/ob_array.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "share/ob_ddl_common.h"
 #include "storage/ob_i_store.h"

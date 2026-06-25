@@ -64,11 +64,12 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
 {
   is_enable_lock_priority_ = false;
   
-  if (!true) {
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (!tenant_config.is_valid()) {
     // if tenant config is invalid, this config will be set as false
     LOG_WARN_RET(OB_INVALID_ARGUMENT, "tenant config is invalid");
   } else {
-    is_enable_lock_priority_ = GCONF.enable_lock_priority;
+    is_enable_lock_priority_ = tenant_config->enable_lock_priority;
   }
 }
 

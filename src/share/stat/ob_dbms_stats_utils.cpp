@@ -276,18 +276,18 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
 {
   return is_virtual_index_table(table_id) ||
          table_id == share::OB_PROC_TID ||
-         table_id == share::OB_ALL_VIRTUAL_ALL_TABLE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_TABLE_COLUMN_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_CATALOG_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CATALOG_DATABASES_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_CURRENT_TENANT_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_TABLES_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_PROCEDURE_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLEGROUP_TID ||
-         table_id == share::OB_ALL_VIRTUAL_OBJECT_DEFINITION_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TRIGGER_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_ALL_TABLE_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_TABLE_COLUMN_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_CATALOG_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CATALOG_DATABASES_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_DATABASE_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_TABLE_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_CURRENT_TENANT_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_TABLES_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_PROCEDURE_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_TABLEGROUP_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_OBJECT_DEFINITION_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_TRIGGER_TID ||
          table_id == share::OB_ALL_VIRTUAL_INFORMATION_COLUMNS_TID ||
          table_id == share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TID ||
          table_id == share::OB_ALL_VIRTUAL_TX_DATA_TID ||
@@ -297,7 +297,7 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
 #if defined(__APPLE__) || defined(__ANDROID__)
          table_id == share::OB_ALL_VIRTUAL_THREAD_TID ||
 #endif
-         table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_LOCATION_TID;
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID;
 }
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)

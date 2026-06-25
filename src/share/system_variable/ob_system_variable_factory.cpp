@@ -3181,8 +3181,8 @@ const ObString ObSysVarFactory::get_sys_var_name_by_id(ObSysVarClassType sys_var
   return sys_var_name;
 }
 
-ObSysVarFactory::ObSysVarFactory(const int64_t tenant_id)
-  : allocator_(ObMemAttr(tenant_id, ObModIds::OB_COMMON_SYS_VAR_FAC)),
+ObSysVarFactory::ObSysVarFactory()
+  : allocator_(ObMemAttr(ObModIds::OB_COMMON_SYS_VAR_FAC)),
     store_(nullptr), store_buf_(nullptr), all_sys_vars_created_(false)
 {
 }

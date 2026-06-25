@@ -264,13 +264,13 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                       show_resv_ctx.show_database_name_.ptr(),
                       static_cast<ObString::obstr_size_t>(condition_node->children_[0]->str_len_), // cast int64_t to obstr_size_t
                       condition_node->children_[0]->str_value_);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLES_LIKE, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_TABLES_TNAME, show_db_id);
+                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLES_LIKE, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_TABLES_TNAME, show_db_id);
                 }
               } else {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLES,
                                 show_resv_ctx.show_database_name_.length(),
                                 show_resv_ctx.show_database_name_.ptr());
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLES, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_TABLES_TNAME, show_db_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLES, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_TABLES_TNAME, show_db_id);
               }
             } else {
               if (NULL != condition_node && T_LIKE_CLAUSE == condition_node->type_) {
@@ -292,14 +292,14 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                       condition_node->children_[0]->str_value_);
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_FULL_TABLES_LIKE,
                                   OB_SYS_DATABASE_NAME,
-                                  OB_ALL_VIRTUAL_SHOW_TABLES_TNAME,
+                                  OB_TENANT_VIRTUAL_SHOW_TABLES_TNAME,
                                   show_db_id);
                 }
               } else {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_FULL_TABLES,
                                 show_resv_ctx.show_database_name_.length(),
                                 show_resv_ctx.show_database_name_.ptr());
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_FULL_TABLES, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_TABLES_TNAME, show_db_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_FULL_TABLES, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_TABLES_TNAME, show_db_id);
               }
             }
 
@@ -365,7 +365,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                    static_cast<ObString::obstr_size_t>(
                                        show_resv_ctx.condition_node_->children_[0]->str_len_), // cast int64_t to obstr_size_t
                                    show_resv_ctx.condition_node_->children_[0]->str_value_);
-                    GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_STATUS_LIKE, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_DATABASE_STATUS_TNAME);
+                    GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_STATUS_LIKE, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_DATABASE_STATUS_TNAME);
                   }
                 } else {
                   if (is_external_catalog_id(catalog_id)) {
@@ -375,7 +375,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                    show_resv_ctx.condition_node_->children_[0]->str_value_);
                     GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CATALOG_DATABASES_LIKE,
                                    OB_SYS_DATABASE_NAME,
-                                   OB_ALL_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
+                                   OB_TENANT_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
                                    catalog_id);
                   } else {
                     GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES_LIKE,
@@ -399,14 +399,14 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                   LOG_USER_ERROR(OB_NOT_SUPPORTED, "show database status in catalog is");
                 } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES_STATUS);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_STATUS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_DATABASE_STATUS_TNAME);
+                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_STATUS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_DATABASE_STATUS_TNAME);
                 }
               } else {
                 if (is_external_catalog_id(catalog_id)) {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CATALOG_DATABASES);
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CATALOG_DATABASES,
                                  OB_SYS_DATABASE_NAME,
-                                 OB_ALL_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
+                                 OB_TENANT_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
                                  catalog_id);
                 } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES);
@@ -440,10 +440,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.global_scope_ = 1 == parse_tree.children_[0]->value_ ? true : false;
             if (true == show_resv_ctx.global_scope_) {
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_GLOBAL_VARIABLES);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_GLOBAL_VARIABLES, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_GLOBAL_VARIABLE_TNAME);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_GLOBAL_VARIABLES, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_GLOBAL_VARIABLE_TNAME);
             } else {
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_VARIABLES);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_VARIABLES, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SESSION_VARIABLE_TNAME);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_VARIABLES, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SESSION_VARIABLE_TNAME);
             }
           }
         }();
@@ -494,18 +494,18 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               } else if (is_full) {
                 if (is_extended) {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_EXTENDED_FULL_COLUMNS);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_EXTENDED_FULL_COLUMNS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
+                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_EXTENDED_FULL_COLUMNS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
                 } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_FULL_COLUMNS);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_FULL_COLUMNS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
+                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_FULL_COLUMNS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
                 }
               } else {
                 if (is_extended) {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_EXTENDED_COLUMNS);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_EXTENDED_COLUMNS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
+                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_EXTENDED_COLUMNS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
                 } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_COLUMNS);
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COLUMNS, OB_SYS_DATABASE_NAME,OB_ALL_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
+                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COLUMNS, OB_SYS_DATABASE_NAME,OB_TENANT_VIRTUAL_TABLE_COLUMN_TNAME, show_table_id);
                 }
               }
             }
@@ -546,10 +546,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               }
             } else if (NULL != parse_tree.children_[0]) {
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_DATABASE_EXISTS);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_DATABASE_EXISTS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TNAME, show_db_id);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_DATABASE_EXISTS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_CREATE_DATABASE_TNAME, show_db_id);
             } else {
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_DATABASE);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_DATABASE, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TNAME, show_db_id);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_DATABASE, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_CREATE_DATABASE_TNAME, show_db_id);
             }
           }
         }();
@@ -601,10 +601,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               show_resv_ctx.stmt_type_ = (parse_tree.type_ == T_SHOW_CREATE_TABLE) ? stmt::T_SHOW_CREATE_TABLE : stmt::T_SHOW_CREATE_VIEW;
               if (parse_tree.type_ == T_SHOW_CREATE_VIEW || is_view) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_VIEW);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_VIEW, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TNAME, show_table_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_VIEW, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_CREATE_TABLE_TNAME, show_table_id);
               } else {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_TABLE);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_TABLE, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TNAME, show_table_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_TABLE, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_CREATE_TABLE_TNAME, show_table_id);
               }
             }
           }
@@ -661,10 +661,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               show_resv_ctx.stmt_type_ = (parse_tree.type_ == T_SHOW_CREATE_PROCEDURE) ? stmt::T_SHOW_CREATE_PROCEDURE : stmt::T_SHOW_CREATE_FUNCTION;
               if (parse_tree.type_ == T_SHOW_CREATE_PROCEDURE) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_PROCEDURE);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_PROCEDURE, OB_SYS_DATABASE_NAME,OB_ALL_VIRTUAL_SHOW_CREATE_PROCEDURE_TNAME, show_routine_id, proc_type);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_PROCEDURE, OB_SYS_DATABASE_NAME,OB_TENANT_VIRTUAL_SHOW_CREATE_PROCEDURE_TNAME, show_routine_id, proc_type);
               } else {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_FUNCTION);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_FUNCTION, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_PROCEDURE_TNAME, show_routine_id, proc_type);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_FUNCTION, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_CREATE_PROCEDURE_TNAME, show_routine_id, proc_type);
               }
             }
           }
@@ -752,7 +752,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_TRIGGER);
               GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_TRIGGER,  
                             OB_SYS_DATABASE_NAME, 
-                            OB_ALL_VIRTUAL_SHOW_CREATE_TRIGGER_TNAME,
+                            OB_TENANT_VIRTUAL_SHOW_CREATE_TRIGGER_TNAME,
                             show_tg_id);
             }
           }
@@ -825,10 +825,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             if (OB_SUCC(ret)) {
               if (is_extended) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_EXTENDED_INDEXES);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_EXTENDED_INDEXES, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TABLE_INDEX_TNAME, show_table_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_EXTENDED_INDEXES, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_TABLE_INDEX_TNAME, show_table_id);
               } else {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_INDEXES);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_INDEXES, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TABLE_INDEX_TNAME, show_table_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_INDEXES, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_TABLE_INDEX_TNAME, show_table_id);
               }
             }
           }
@@ -845,7 +845,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_CHARSET;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CHARSET);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CHARSET, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_CHARSET_TNAME);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CHARSET, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_CHARSET_TNAME);
           }
         }();
         break;
@@ -859,7 +859,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_COLLATION;
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_COLLATION);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COLLATION, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_COLLATION_TNAME);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COLLATION, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_COLLATION_TNAME);
           }
         }();
         break;
@@ -987,12 +987,12 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               if (role_list_str.length() > 0) {
                 GEN_SQL_STEP_2(ObShowSqlSet::SHOW_GRANTS_USING_ROLES,
                                OB_SYS_DATABASE_NAME,
-                               OB_ALL_VIRTUAL_PRIVILEGE_GRANT_TNAME,
+                               OB_TENANT_VIRTUAL_PRIVILEGE_GRANT_TNAME,
                                role_list_str.string().length(), role_list_str.string().ptr());
               } else {
                 GEN_SQL_STEP_2(ObShowSqlSet::SHOW_GRANTS,
                                OB_SYS_DATABASE_NAME,
-                               OB_ALL_VIRTUAL_PRIVILEGE_GRANT_TNAME,
+                               OB_TENANT_VIRTUAL_PRIVILEGE_GRANT_TNAME,
                                show_user_id);
               }
             }
@@ -1193,10 +1193,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             if (NULL == parse_tree.children_[0]) { // show  warnings|errors
               if (parse_tree.type_ == T_SHOW_WARNINGS) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_WARNINGS);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_WARNINGS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_WARNINGS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME);
               } else if (parse_tree.type_ == T_SHOW_ERRORS) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_ERRORS);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_ERRORS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_ERRORS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME);
               } else {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("unexpected node type", K(parse_tree.type_));
@@ -1221,7 +1221,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                     LOG_WARN("fail to init sql string generator", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_select_str(ObShowSqlSet::SHOW_WARNINGS_SELECT))) {
                     LOG_WARN("fail to generate select string", K(ret));
-                  } else if (OB_FAIL(sql_gen.gen_from_str(ObShowSqlSet::SHOW_WARNINGS_SUBQUERY, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
+                  } else if (OB_FAIL(sql_gen.gen_from_str(ObShowSqlSet::SHOW_WARNINGS_SUBQUERY, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME))) {
                     LOG_WARN("fail to generate from string", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_limit_str(offset, row_count))) {
                     LOG_WARN("fail to generate limit string", K(ret));
@@ -1233,7 +1233,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                     LOG_WARN("fail to init sql string generator", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_select_str(ObShowSqlSet::SHOW_ERRORS_SELECT))) {
                     LOG_WARN("fail to generate select string", K(ret));
-                  } else if (OB_FAIL(sql_gen.gen_from_str(ObShowSqlSet::SHOW_ERRORS_SUBQUERY, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
+                  } else if (OB_FAIL(sql_gen.gen_from_str(ObShowSqlSet::SHOW_ERRORS_SUBQUERY, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME))) {
                     LOG_WARN("fail to generate from string", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_limit_str(offset, row_count))) {
                     LOG_WARN("fail to generate limit string", K(ret));
@@ -1249,10 +1249,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                       T_FUN_COUNT == parse_tree.children_[0]->type_){
               if (parse_tree.type_ == T_SHOW_WARNINGS) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_COUNT_WARNINGS);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COUNT_WARNINGS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COUNT_WARNINGS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME);
               } else if (parse_tree.type_ == T_SHOW_ERRORS) {
                 GEN_SQL_STEP_1(ObShowSqlSet::SHOW_COUNT_ERRORS);
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COUNT_ERRORS, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_COUNT_ERRORS, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME);
               } else {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("unexpected node type", K(parse_tree.type_));
@@ -1299,12 +1299,12 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           } // if
           if (params_.show_seed_) {
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_SEED);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_SEED, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_PARAMETER_STAT_TNAME);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_SEED, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME);
           } else {
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE);
             GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
                 OB_SYS_DATABASE_NAME,
-                OB_ALL_VIRTUAL_PARAMETER_STAT_TNAME);
+                OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME);
           }
         }
         break;
@@ -1386,7 +1386,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             } else {
               show_tablegroup_id = tablegroup_schema->get_tablegroup_id();
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_TABLEGROUP);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_TABLEGROUP, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_SHOW_CREATE_TABLEGROUP_TNAME, show_tablegroup_id);
+              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_TABLEGROUP, OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_SHOW_CREATE_TABLEGROUP_TNAME, show_tablegroup_id);
             }
           }
         }();
@@ -1615,7 +1615,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                           where_job_name,
                           where_user_from_logs,
                           OB_SYS_DATABASE_NAME,
-                          OB_ALL_SCHEDULER_JOB_TNAME,
+                          OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
                           where_job_name,
                           where_user_from_jobs,
                           limit_count);  
@@ -1664,7 +1664,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_CATALOG);
             GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_CATALOG,
                            OB_SYS_DATABASE_NAME,
-                           OB_ALL_VIRTUAL_SHOW_CREATE_CATALOG_TNAME,
+                           OB_TENANT_VIRTUAL_SHOW_CREATE_CATALOG_TNAME,
                            catalog_id);
           }
         }
@@ -1680,7 +1680,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           GEN_SQL_STEP_1(ObShowSqlSet::SHOW_LOCATIONS);
           GEN_SQL_STEP_2(ObShowSqlSet::SHOW_LOCATIONS,
                          OB_SYS_DATABASE_NAME,
-                         OB_ALL_LOCATION_TNAME);
+                         OB_ALL_TENANT_LOCATION_TNAME);
         }
         break;
       }
@@ -1703,7 +1703,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           if (OB_SUCC(ret)) {
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_LOCATION);
             GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_LOCATION, OB_SYS_DATABASE_NAME, 
-                           OB_ALL_VIRTUAL_SHOW_CREATE_LOCATION_TNAME, location_id);
+                           OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TNAME, location_id);
           }
         }
         break;

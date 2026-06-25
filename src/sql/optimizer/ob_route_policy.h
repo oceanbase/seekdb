@@ -70,6 +70,9 @@ public:
   enum PositionType
   {
     SAME_SERVER = 0,
+    SAME_IDC = 1,
+    SAME_REGION = 2,
+    OTHER_REGION = 3,
     POSITION_TYPE_MAX,
   };
   enum MergeStatus
@@ -97,7 +100,9 @@ public:
       if (merge_status_ == other_attr.merge_status_
           && zone_type_ == other_attr.zone_type_) {
         if (pos_type_ == SAME_SERVER) {
-          bool_ret = (other_attr.pos_type_ == SAME_SERVER);
+          bool_ret = (other_attr.pos_type_ == SAME_SERVER || other_attr.pos_type_ == SAME_IDC);
+        } else if (pos_type_ == SAME_IDC) {
+          bool_ret = (other_attr.pos_type_ == SAME_SERVER || other_attr.pos_type_ == SAME_IDC);
         } else {
           bool_ret = (pos_type_ == other_attr.pos_type_);
         }
@@ -186,6 +191,11 @@ public:
   {
     return UNMERGE_FOLLOWER_FIRST == ctx.policy_type_;
   }
+
+  static bool is_same_idc(const share::ObServerLocality &locality1,
+                          const share::ObServerLocality &locality2);
+  static bool is_same_region(const share::ObServerLocality &locality1,
+                             const share::ObServerLocality &locality2);
 
 protected:
   int init_candidate_replica(CandidateReplica &candi_replica);

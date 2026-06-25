@@ -2240,7 +2240,7 @@ typedef enum ObItemType
   // 4368: T_BACKUP_CLEAN abandoned, id reserved
   // 4369: T_DELETE_POLICY abandoned, id reserved
   // 4370: T_BACKUP_KEY abandoned, id reserved
-  T_RESTORE_TENANT_2 = 4371,
+  // 4371: T_RESTORE_TENANT_2 abandoned, id reserved
   // 4372: T_CANCEL_RESTORE abandoned, id reserved
   // 4373: T_CANCEL_RECOVER_TABLE abandoned, id reserved
   T_GEN_ROWS = 4374,
@@ -2248,7 +2248,7 @@ typedef enum ObItemType
   T_DIRECT = 4376, // direct load data
   T_REMOTE_OSS = 4377,
   T_RECOVER_TABLE_REMAP = 4379,
-  T_PHYSICAL_RESTORE_UNTIL = 4380,
+  // 4380: T_PHYSICAL_RESTORE_UNTIL abandoned, id reserved
   T_REVOKE_SYSAUTH = 4381,
 
   // hint, for slave mapping

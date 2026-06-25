@@ -55,7 +55,13 @@ int ObDtlChannelMemManager::init()
 int ObDtlChannelMemManager::get_max_mem_percent()
 {
   int ret = OB_SUCCESS;
-  max_mem_percent_ = GCONF._px_max_message_pool_pct;
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    max_mem_percent_ = tenant_config->_px_max_message_pool_pct;
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to init tenant config", K(ret));
+  }
   return ret;
 }
 

@@ -34,11 +34,16 @@ int ObTenantStsCredentialMgr::get_sts_credential(
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid args", K(ret),
         KP(sts_credential), K(sts_credential_buf_len));
-  }
+  } else if (OB_UNLIKELY(!true || false)) {
+    // If the tenant is invalid or illegal, the sts_credential of the system tenant will be used as
+    // a backup. Please refer to the following document for specific reasons.
+    // 
+    OB_LOG(WARN, "invalid tenant ctx, use sys tenant", K(ret));
+  } 
   if (OB_SUCC(ret)) {
     const char *tmp_credential = nullptr;
 
-    common::ObServerConfig *tenant_config = &GCONF;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     int tmp_ret = OB_SUCCESS;
     // If the tenant does not have sts_credential, return OB_EAGAIN to wait for the next try.
     if (OB_TMP_FAIL(check_sts_credential(tenant_config))) {
@@ -65,11 +70,11 @@ int ObTenantStsCredentialMgr::get_sts_credential(
   return ret;
 }
 
-int ObTenantStsCredentialMgr::check_sts_credential(common::ObServerConfig *tenant_config) const
+int ObTenantStsCredentialMgr::check_sts_credential(omt::ObTenantConfigGuard &tenant_config) const
 {
   int ret = OB_SUCCESS;
   const char *sts_credential = nullptr;
-  if (OB_UNLIKELY(nullptr == tenant_config)) {
+  if (OB_UNLIKELY(!tenant_config.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "tenant config is invalid", K(ret));
   } else if (OB_ISNULL(sts_credential = tenant_config->sts_credential)) {

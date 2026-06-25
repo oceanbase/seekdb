@@ -109,7 +109,7 @@ LATCH_DEF(LOAD_DATA_RPC_CB_LOCK, 143, "load data rpc asyn callback lock",LATCH_F
 LATCH_DEF(SQL_DYN_SAMPLE_MSG_LOCK, 144, "merge dynamic sampling piece message lock",LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SQL_GI_SHARE_POOL_LOCK, 145, "granule iterator task queue lock",LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DTL_RECV_CHANNEL_PROVIDER_LOCK, 146, "dtl receive channel provider access lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(PX_TENANT_TARGET_LOCK, 147, "parralel execution tenant target lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(PX_TARGET_LOCK, 147, "parralel execution target lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(PX_WORKER_STAT_LOCK, 148, "parallel execution worker stat lock",LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SESSION_QUERY_LOCK, 149, "session query lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SESSION_THREAD_DATA_LOCK, 150, "session thread data lock", LATCH_FIFO, 2000, 0, true)

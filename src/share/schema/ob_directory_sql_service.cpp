@@ -24,8 +24,8 @@ namespace share
 {
 namespace schema
 {
-const char *ObDirectorySqlService::DIRECTORY_TABLES[2] = {OB_ALL_DIRECTORY_TNAME,
-                                                          OB_ALL_DIRECTORY_HISTORY_TNAME};
+const char *ObDirectorySqlService::DIRECTORY_TABLES[2] = {OB_ALL_TENANT_DIRECTORY_TNAME,
+                                                          OB_ALL_TENANT_DIRECTORY_HISTORY_TNAME};
 
 ObDirectorySqlService::ObDirectorySqlService(ObSchemaService &schema_service)
   : ObDDLSqlService(schema_service)

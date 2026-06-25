@@ -1,6 +1,6 @@
-select tenant_id, table_name from oceanbase.__all_virtual_table where table_name = '__all_virtual_sys_parameter_stat';
-tenant_id	table_name
-1	__all_virtual_sys_parameter_stat
+select table_name from oceanbase.__all_table where table_name = '__all_virtual_sys_parameter_stat';
+table_name
+__all_virtual_sys_parameter_stat
 use oceanbase;
 desc __all_virtual_sys_parameter_stat;
 Field	Type	Null	Key	Default	Extra
@@ -59,7 +59,6 @@ datafile_size
 data_dir
 data_disk_usage_limit_percentage
 data_disk_write_limit_percentage
-data_storage_error_tolerance_time
 data_storage_warning_tolerance_time
 ddl_thread_score
 dead_socket_detection_timeout

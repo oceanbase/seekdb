@@ -24,7 +24,6 @@
 #include "share/ob_rpc_struct.h"
 #include "share/ob_server_status.h"
 #include "observer/omt/ob_multi_tenant.h"
-#include "share/config/ob_config_manager.h"
 
 namespace oceanbase
 {

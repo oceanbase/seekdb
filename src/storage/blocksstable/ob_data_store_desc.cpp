@@ -906,9 +906,10 @@ int ObWholeDataStoreDesc::init(
 
   if (is_ddl) {
     // for ddl and direct load, we only limit the encoding granularit for share nothing mode
-
-    encoding_granularity = GCONF.ob_encoding_granularity;
-
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (tenant_config.is_valid()) {
+      encoding_granularity = tenant_config->ob_encoding_granularity;
+    }
   }
 
   if (OB_FAIL(static_desc_.init(is_ddl, merge_schema, ls_id, tablet_id, tablet_transfer_seq, merge_type,

@@ -15,9 +15,8 @@
  */
 
 #include "ob_config.h"
-#include "share/config/ob_server_config.h"
-#include "share/ob_task_define.h"
-#include "share/ob_cluster_version.h"
+#include "observer/omt/ob_tenant_config_mgr.h"
+
 using namespace oceanbase::share;
 namespace oceanbase
 {

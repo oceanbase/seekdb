@@ -1043,15 +1043,16 @@ int64_t ObTmpWriteBufferPool::get_memory_limit()
   } else if (last_access_ts > 0 && common::ObClockGenerator::getClock() - last_access_ts < 10000000) { // 10s
     memory_limit = ATOMIC_LOAD(&wbp_memory_limit_);
   } else {
-    if (!true) {
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (!tenant_config.is_valid()) {
       static const int64_t DEFAULT_MEMORY_LIMIT = 64 * WBP_BLOCK_SIZE; // 126.5MB
       memory_limit = wbp_memory_limit_ <= 0 ? DEFAULT_MEMORY_LIMIT : wbp_memory_limit_;
       LOG_INFO("failed to get tenant config", K(memory_limit), K(wbp_memory_limit_));
-    } else if (0 == GCONF._temporary_file_io_area_size) {
+    } else if (0 == tenant_config->_temporary_file_io_area_size) {
       memory_limit = WBP_BLOCK_SIZE;
     } else {
       int64_t config_memory_limit =
-        lib::get_tenant_memory_limit() * GCONF._temporary_file_io_area_size / 100;
+        lib::get_tenant_memory_limit() * tenant_config->_temporary_file_io_area_size / 100;
       memory_limit = config_memory_limit;
     }
     memory_limit = ((memory_limit + WBP_BLOCK_SIZE - 1) / WBP_BLOCK_SIZE) * WBP_BLOCK_SIZE;

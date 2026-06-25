@@ -40,7 +40,7 @@ int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
   ObSqlString select_sql;
   int64_t row_count = 0;
   if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%.*s';",
-                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
                                     job_name.length(), job_name.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
@@ -109,7 +109,7 @@ int ObPLRecompileTaskHelper::construct_select_dep_table_sql(ObSqlString& query_i
     " and ref_obj_id in ( " ;
   
   OZ (query_inner_sql.assign_fmt(get_dep_objs_info,
-                                       OB_ALL_DEPENDENCY_TNAME));
+                                       OB_ALL_TENANT_DEPENDENCY_TNAME));
   if (OB_SUCC(ret)) {
     common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>::iterator iter = ddl_drop_obj_map.begin();
     int64_t map_size = ddl_drop_obj_map.size();
@@ -147,7 +147,7 @@ int ObPLRecompileTaskHelper::collect_delta_error_data(common::ObMySQLProxy* sql_
     OZ (query_inner_sql.assign_fmt(
             "SELECT * FROM %s WHERE OBJ_ID > 300000 and schema_version > %ld "
             " and ERROR_NUMBER in (-5055, -5019, -5543, -5544, -5201, -5733, -5559) ", 
-             OB_ALL_ERROR_TNAME, last_max_schema_version));
+             OB_ALL_TENANT_ERROR_TNAME, last_max_schema_version));
     OZ (sql_proxy->read(res, query_inner_sql.ptr()));
     CK (OB_NOT_NULL(result = res.get_result()));
     if (OB_SUCC(ret)) {

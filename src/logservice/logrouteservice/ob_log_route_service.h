@@ -27,7 +27,8 @@ namespace logservice
 /*
  * LogRouteService is used for OB-CDC and Standby cluster etc to fetch log. Supports multiple policies, such as:
  *
- * 1. Select machines based on multiple replicated type policies;
+ * 1. Fetch specified Region logs preferentially;
+ * 2. Select machines based on multiple replicated type policies;
  * 3. Fetch log to the standby replica preferentially to minimize the impact on the leader.
  *    If logs cannot be obtained from all replica, logs can be obtained from the leader;
  * 4. Complete blacklist mechanism, including internal automatic maintenance of Server blacklist and whitewashing mechanism;
@@ -46,6 +47,7 @@ public:
   virtual ~ObLogRouteService();
 
   // @param [in] proxy             ObMySQLProxy
+  // @param [in] prefer_region     Prefer Region to fetch log
   // @param [in] cluster_id        ClusterID
   // @param [in] is_across_cluster Whether SQL queries cross cluster
   //   For Standby Cluster, need to set is_across_cluster=true. So SQL Query will contain cluster_id.
@@ -66,6 +68,7 @@ public:
   // @retval OB_SUCCESS           Success
   // @retval Other return values  Failed
   int init(ObISQLClient *proxy,
+      const common::ObRegion &prefer_region,
       const int64_t cluster_id,
       const bool is_across_cluster,
       void *err_handler,

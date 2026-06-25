@@ -177,9 +177,10 @@ int ObPartitionMergePolicy::get_mds_merge_tables(
   }
   int64_t minor_compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
   {
-
-    minor_compact_trigger = GCONF.minor_compact_trigger;
-
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (tenant_config.is_valid()) {
+      minor_compact_trigger = tenant_config->minor_compact_trigger;
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (result.handle_.get_count() < MAX(minor_compact_trigger, DEFAULT_MINOR_COMPACT_TRIGGER)) {
@@ -609,9 +610,10 @@ int ObPartitionMergePolicy::find_minor_merge_tables(
     ObSSTable *table = nullptr;
     bool found_greater = false;
     {
-
-      minor_compact_trigger = GCONF.minor_compact_trigger;
-
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+      if (tenant_config.is_valid()) {
+        minor_compact_trigger = tenant_config->minor_compact_trigger;
+      }
     }
 
     ObTablesHandleArray minor_merge_candidates;
@@ -894,7 +896,8 @@ int ObPartitionMergePolicy::diagnose_table_count_unsafe(
   int tmp_ret = OB_SUCCESS;
   int64_t minor_compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
   {
-    minor_compact_trigger = GCONF.minor_compact_trigger;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    minor_compact_trigger = tenant_config->minor_compact_trigger;
   }
 
   // check min_reserved_snapshot
@@ -1009,12 +1012,13 @@ int ObPartitionMergePolicy::refine_minor_merge_result(
     int64_t write_amplification_threshold = OB_LARGE_MINOR_SSTABLE_ROW_COUNT;
     int64_t size_amplification_factor = OB_DEFAULT_COMPACTION_AMPLIFICATION_FACTOR;
     {
-
-      write_amplification_threshold = GCONF._minor_merge_write_amplification_threshold;
-      if (int64_t(GCONF._minor_compaction_amplification_factor) > 0) {
-        size_amplification_factor = GCONF._minor_compaction_amplification_factor;
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+      if (tenant_config.is_valid()) {
+        write_amplification_threshold = tenant_config->_minor_merge_write_amplification_threshold;
+        if (int64_t(tenant_config->_minor_compaction_amplification_factor) > 0) {
+          size_amplification_factor = tenant_config->_minor_compaction_amplification_factor;
+        }
       }
-
     }
 #ifdef ERRSIM 
 if (OB_SUCC(ret)) {
@@ -1090,9 +1094,10 @@ if (OB_SUCC(ret)) {
 int64_t ObPartitionMergePolicy::cal_hist_minor_merge_threshold(const bool is_tablet_referenced_by_collect_mv)
 {
   int64_t compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
-
-  compact_trigger = GCONF.minor_compact_trigger;
-
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    compact_trigger = tenant_config->minor_compact_trigger;
+  }
   if (!is_tablet_referenced_by_collect_mv) {
     compact_trigger = MIN((1 + compact_trigger) * OB_HIST_MINOR_FACTOR, MAX_TABLE_CNT_IN_STORAGE / 2);
   }

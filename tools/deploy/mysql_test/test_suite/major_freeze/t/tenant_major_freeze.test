@@ -42,7 +42,6 @@ let $merge_stage = 0;
 
 ############################################################
 connection sys_conn;
-## single-tenant: tenant-name validation for `major freeze tenant = X` no longer applies
 --source mysql_test/include/check_merge_status.inc
 
 ############################################################

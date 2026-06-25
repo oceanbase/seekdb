@@ -792,7 +792,8 @@ int ObMultiTenant::update_tenant_config()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  if (false == true) {
+  ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (false == tenant_config.is_valid()) {
   } else {
     MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
     if (OB_SUCC(guard.switch_to())) {
@@ -854,14 +855,15 @@ int ObMultiTenant::update_tenant_ddl_config()
 {
   int ret = OB_SUCCESS;
   
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 #ifdef ERRSIM
-
-  if (OB_FAIL(ObDDLSimPointMgr::get_instance().set_tenant_param(GCONF.errsim_ddl_sim_point_random_control,
-                                                                GCONF.errsim_ddl_sim_point_fixed_list))) {
-    LOG_WARN("set tenant param for ddl sim point failed", K(ret),
-        K(GCONF.errsim_ddl_sim_point_random_control), K(GCONF.errsim_ddl_sim_point_fixed_list));
+  if (tenant_config.is_valid()) {
+    if (OB_FAIL(ObDDLSimPointMgr::get_instance().set_tenant_param(tenant_config->errsim_ddl_sim_point_random_control,
+                                                                  tenant_config->errsim_ddl_sim_point_fixed_list))) {
+      LOG_WARN("set tenant param for ddl sim point failed", K(ret),
+          K(tenant_config->errsim_ddl_sim_point_random_control), K(tenant_config->errsim_ddl_sim_point_fixed_list));
+    }
   }
-
 #endif
   return ret;
 }
@@ -870,7 +872,8 @@ int ObMultiTenant::update_checkpoint_diagnose_config()
 {
   int ret = OB_SUCCESS;
   ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
-  const int64_t checkpoint_diagnose_preservation_count = GCONF._checkpoint_diagnose_preservation_count;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  const int64_t checkpoint_diagnose_preservation_count = tenant_config->_checkpoint_diagnose_preservation_count;
   if (OB_ISNULL(cdm)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cdm should not be null", K(ret));
@@ -927,10 +930,11 @@ int ObMultiTenant::update_tenant_query_response_time_flush_config()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("t_query_resp_time_collector should not be null", K(ret));
       } else if (flush_version > t_query_resp_time_collector->get_flush_config_version()) {
-        if (!true) {
+        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+        if (!tenant_config.is_valid()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tenant config is invalid",K(ret));
-        } else if (GCONF.query_response_time_flush) {
+        } else if (tenant_config->query_response_time_flush) {
           if (OB_FAIL(t_query_resp_time_collector->flush())) {
             LOG_WARN("failed to refresh tenant query response time", K(ret));
           } else {
@@ -1026,13 +1030,14 @@ int ObMultiTenant::modify_tenant_io(const ObUnitConfig &unit_config)
   } else {
     ObTenantIOConfig::UnitConfig io_unit_config(unit_config);
     ObTenantIOConfig::ParamConfig io_param_config;
-    if (!true) {
+    ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (!tenant_config.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant config is invalid", K(ret));
     } else {
       io_param_config.memory_limit_ = unit_config.memory_size();
-      io_param_config.callback_thread_count_ = GCONF._io_callback_thread_count;
-      io_param_config.object_storage_io_timeout_ms_ = GCONF._object_storage_io_timeout / 1000L;
+      io_param_config.callback_thread_count_ = tenant_config->_io_callback_thread_count;
+      io_param_config.object_storage_io_timeout_ms_ = tenant_config->_object_storage_io_timeout / 1000L;
       if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_unit_config( io_unit_config))) {
         LOG_WARN("refresh tenant io unit config failed", K(ret), K(io_unit_config));
       } else if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_param_config( io_param_config))) {

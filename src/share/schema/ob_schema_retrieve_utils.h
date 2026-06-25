@@ -595,6 +595,10 @@ public:
   template<typename T>
   static int fill_schema_operation(T &result, ObSchemaService::SchemaOperationSetWithAlloc &schema_operations,
                                    ObSchemaOperation &schema_op);
+  template<typename SCHEMA>
+  static int fill_schema_zone_region_replica_num_array(SCHEMA &schema);
+  template<typename SCHEMA>
+  static int fill_table_zone_region_replica_num_array(SCHEMA &table_schema);
   template<typename T>
   static T *find_table_schema(const uint64_t table_id,
                               common::ObArray<T *> &table_schema_array);

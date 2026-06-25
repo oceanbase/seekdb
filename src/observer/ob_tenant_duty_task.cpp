@@ -95,8 +95,9 @@ int ObTenantDutyTask::update_tenant_sql_throttle()
   }
   if (OB_SUCC(ret)) {
     int64_t throughput = -1;
-    if (OB_LIKELY(true)) {
-      throughput = GCONF._ob_query_rate_limit;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_LIKELY(tenant_config.is_valid())) {
+      throughput = tenant_config->_ob_query_rate_limit;
     }
     GCTX.omt_->update_tenant([&throughput] (omt::ObTenant &tenant) {
       tenant.update_sql_throughput(throughput);
@@ -109,17 +110,18 @@ int ObTenantDutyTask::update_tenant_sql_throttle()
 int ObTenantDutyTask::update_tenant_ctx_memory_throttle()
 {
   int ret = OB_SUCCESS;
-  if (!true) {
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (!tenant_config.is_valid()) {
     // do nothing
   } else {
     ObCtxMemoryLimitChecker checker;
     uint64_t ctx_id = 0;
     int64_t limit = 0;
     ObMallocAllocator *alloc = ObMallocAllocator::get_instance();
-    if (!checker.check(GCONF._ctx_memory_limit, ctx_id, limit)) {
+    if (!checker.check(tenant_config->_ctx_memory_limit, ctx_id, limit)) {
       // do nothing
     } else {
-      if ('\0' == GCONF._ctx_memory_limit[0]) {
+      if ('\0' == tenant_config->_ctx_memory_limit[0]) {
         ctx_id = ObCtxIds::MAX_CTX_ID;
         limit = INT64_MAX; // empty str means no limit, and not care ctx_id.
       }

@@ -327,7 +327,7 @@ int is_snapshot_related_to_tablet(
       || snapshot.snapshot_type_ == share::SNAPSHOT_FOR_BACKUP_POINT) {
     if (snapshot.snapshot_type_ == share::SNAPSHOT_FOR_RESTORE_POINT && tablet_id.is_inner_tablet()) {
       related = false;
-    } else {
+    } else if (true) {
 //      TODO (@yanyuan) fix restore point
 //      related = true;
 //      bool is_complete = false;
@@ -355,7 +355,12 @@ int ObTenantFreezeInfoMgr::get_multi_version_duration(int64_t &duration) const
 {
   int ret = OB_SUCCESS;
 
-  duration = GCONF.undo_retention;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    duration = tenant_config->undo_retention;
+  } else {
+    ret = OB_TENANT_NOT_EXIST;
+  }
 
   return ret;
 }
@@ -371,6 +376,7 @@ int64_t ObTenantFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
   bool is_gc_disabled = share::g_mp->multi_version_garbage_collector()->
     is_gc_disabled();
 
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
   if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
     STORAGE_LOG(WARN, "get min data version failed", KR(ret));
@@ -378,7 +384,7 @@ int64_t ObTenantFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
     is_gc_disabled = true;
   }
 
-  if (GCONF._mvcc_gc_using_min_txn_snapshot
+  if (tenant_config->_mvcc_gc_using_min_txn_snapshot
       && !is_gc_disabled) {
     share::SCN snapshot_for_active_tx =
       share::g_mp->multi_version_garbage_collector()->

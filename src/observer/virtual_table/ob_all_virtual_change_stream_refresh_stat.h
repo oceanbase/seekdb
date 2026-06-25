@@ -18,13 +18,15 @@
 #define OB_ALL_VIRTUAL_CHANGE_STREAM_REFRESH_STAT_H_
 
 #include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObAllVirtualChangeStreamRefreshStat : public common::ObVirtualTableScannerIterator
+class ObAllVirtualChangeStreamRefreshStat : public common::ObVirtualTableScannerIterator,
+                                             public omt::ObMultiTenantOperator
 {
 public:
   ObAllVirtualChangeStreamRefreshStat();
@@ -34,6 +36,10 @@ public:
   virtual void reset() override;
 
 protected:
+  virtual bool is_need_process() override;
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual void release_last_tenant() override;
+
 private:
   enum COLUMN_ID_LIST
   {

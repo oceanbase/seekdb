@@ -15,6 +15,7 @@
  */
 
 #include "ob_backup_io_adapter.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_device_manager.h"
 #include "lib/restore/ob_object_device.h"
 #include "share/io/ob_io_manager.h"

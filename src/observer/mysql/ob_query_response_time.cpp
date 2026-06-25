@@ -16,6 +16,8 @@
 #define USING_LOG_PREFIX SQL
 #include "ob_query_response_time.h"
 #include "lib/oblog/ob_log.h"
+#include "observer/omt/ob_tenant_config_mgr.h"
+
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
@@ -177,9 +179,10 @@ int ObRespTimeInfoCollector::collect(const sql::stmt::StmtType sql_type, const b
 int ObRespTimeInfoCollector::flush(int64_t base /*=OB_INVALID_ID*/)
 {
   int ret = OB_SUCCESS;
-  if (!true) {
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (!tenant_config.is_valid()) {
   } else {
-    if (OB_FAIL(setup(base == OB_INVALID_ID ? GCONF.query_response_time_range_base : base))) {
+    if (OB_FAIL(setup(base == OB_INVALID_ID ? tenant_config->query_response_time_range_base : base))) {
       LOG_WARN("failed to setup utility", K(ret));
     }
   }

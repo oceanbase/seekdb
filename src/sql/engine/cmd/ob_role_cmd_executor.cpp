@@ -38,7 +38,7 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *mysession = NULL;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   const ObString &role_name = stmt.get_role_name();
   const ObString &pwd = stmt.get_password();
   ObCreateUserArg arg;
@@ -47,8 +47,8 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get mysession", K(ret));
   } else {
-    arg.tenant_id_ = tenant_id;
-    arg.exec_tenant_id_ = tenant_id;
+    
+    
     arg.creator_id_ = mysession->get_user_id();
   }
 
@@ -58,7 +58,7 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
     arg.is_create_role_ = true;
     for (int i = 0; OB_SUCC(ret) && i < stmt.get_user_names().count(); i++) {
       ObUserInfo user_info;
-      user_info.set_tenant_id(tenant_id);
+      
       user_info.set_type(OB_ROLE);
       user_info.set_user_name(stmt.get_user_names().at(i));
       user_info.set_host(stmt.get_host_names().at(i));
@@ -74,14 +74,9 @@ int ObCreateRoleExecutor::execute(ObExecContext &ctx, ObCreateRoleStmt &stmt)
 int ObDropRoleExecutor::execute(ObExecContext &ctx, ObDropRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = stmt.get_tenant_id();
+  
   ObDropUserArg &arg = static_cast<ObDropUserArg &>(stmt.get_ddl_arg());
-  if (OB_INVALID_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant is invalid", K(ret));
-  } else {
-    arg.tenant_id_ = tenant_id;
-    arg.exec_tenant_id_ = tenant_id;
+  {
     arg.is_role_ = true;
     for (int i = 0; OB_SUCC(ret) && i < stmt.get_user_names().count(); i++) {
       OZ (arg.users_.push_back(stmt.get_user_names().at(i)));
@@ -98,7 +93,7 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
   int ret = OB_SUCCESS;
   ObAlterRoleArg &arg = static_cast<ObAlterRoleArg &>(stmt.get_ddl_arg());
   char enc_buf[ENC_BUF_LEN] = {0};
-  arg.tenant_id_ = stmt.get_tenant_id();
+  
   arg.role_name_ = stmt.get_role_name();
   arg.host_name_ = ObString(OB_DEFAULT_HOST_NAME);
   const ObString &pwd = stmt.get_password();

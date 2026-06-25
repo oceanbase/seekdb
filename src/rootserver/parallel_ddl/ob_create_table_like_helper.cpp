@@ -33,13 +33,12 @@ using namespace oceanbase::rootserver;
 
 ObCreateTableLikeHelper::ObCreateTableLikeHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
-    const uint64_t tenant_id,
     const obcall::ObCreateTableLikeArg &arg,
     obcall::ObCreateTableRes &res,
     bool enable_ddl_parallel,
     ObDDLSQLTransaction *external_trans):
-    ObDDLHelper(schema_service, tenant_id, "[create table like]", external_trans, enable_ddl_parallel),
-    ObTableHelper(schema_service, tenant_id, "[create table like]", external_trans, enable_ddl_parallel),
+    ObDDLHelper(schema_service, "[create table like]", external_trans, enable_ddl_parallel),
+    ObTableHelper(schema_service, "[create table like]", external_trans, enable_ddl_parallel),
     arg_(arg),
     res_(res),
     orig_table_id_(common::OB_INVALID_ID),
@@ -78,16 +77,16 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(check_database_legitimacy_(arg_.origin_db_name_, orig_database_id))) {
-    LOG_WARN("fail to check database legitimacy", KR(ret), K_(tenant_id), K(arg_.origin_db_name_));
+    LOG_WARN("fail to check database legitimacy", KR(ret), K(arg_.origin_db_name_));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(orig_database_id, arg_.session_id_, arg_.origin_table_name_, orig_table_id_, table_type, orig_schema_version))) {
-    LOG_WARN("fail to get table id", KR(ret), K_(tenant_id), K(orig_database_id), K_(arg_.session_id), K_(arg_.origin_table_name));
+    LOG_WARN("fail to get table id", KR(ret), K(orig_database_id), K_(arg_.session_id), K_(arg_.origin_table_name));
   } else if (OB_INVALID_ID == orig_table_id_) {
     ret = OB_TABLE_NOT_EXIST;
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg_.origin_db_name_),
                                        helper.convert(arg_.origin_table_name_));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(orig_table_id_, orig_table_schema))) {
-    LOG_WARN("fail to get orig table schema", KR(ret), K_(tenant_id), K_(orig_table_id));
+    LOG_WARN("fail to get orig table schema", KR(ret), K_(orig_table_id));
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig table schema is null", KR(ret));
@@ -125,16 +124,16 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
                    "BASE TABLE");
     LOG_WARN("create table like inner table not allowed", KR(ret), K_(arg));
   } else if (OB_FAIL(check_database_legitimacy_(arg_.new_db_name_, new_database_id))) {
-    LOG_WARN("fail to check database legitimacy", KR(ret), K_(tenant_id), K(arg_.origin_db_name_));
+    LOG_WARN("fail to check database legitimacy", KR(ret), K(arg_.origin_db_name_));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(new_database_id, arg_.session_id_, arg_.new_table_name_, new_table_id, table_type, new_schema_version))) {
-    LOG_WARN("fail to get table id", KR(ret), K_(tenant_id), K(new_database_id), K_(arg_.session_id), K_(arg_.origin_table_name));
+    LOG_WARN("fail to get table id", KR(ret), K(new_database_id), K_(arg_.session_id), K_(arg_.origin_table_name));
   } else if (OB_INVALID_ID != new_table_id) {
     ret = OB_ERR_TABLE_EXIST;
     if (arg_.if_not_exist_) {
       res_.table_id_ = new_table_id;
       res_.schema_version_ = new_schema_version;
     }
-    LOG_WARN("target table already exist", KR(ret), K_(arg), K_(tenant_id));
+    LOG_WARN("target table already exist", KR(ret), K_(arg));
   }
   return ret;
 }
@@ -163,7 +162,7 @@ int ObCreateTableLikeHelper::generate_table_schema_()
                        new_table_schema))) {
       LOG_WARN("fail to delete unused columns and redistribute schema", KR(ret), K(*orig_table_schema));
     } else if (OB_FAIL(gen_object_ids_(obj_cnt, id_generator))) {
-      LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id));
+      LOG_WARN("fail to gen object ids", KR(ret));
     } else if (OB_FAIL(id_generator.next(new_table_id))) {
       LOG_WARN("fail to get next object_id", KR(ret));
     } else {
@@ -181,7 +180,6 @@ int ObCreateTableLikeHelper::generate_table_schema_()
         uint64_t object_id = OB_INVALID_ID;
         for (; OB_SUCC(ret) && iter != new_table_schema.constraint_end();++iter) {
           (*iter)->set_table_id(new_table_id);
-          (*iter)->set_tenant_id(tenant_id_);
           do {
             if (OB_FAIL(ObTableSchema::create_cons_name_automatically(
                         new_constraint_name, arg_.new_table_name_, allocator_,
@@ -212,8 +210,6 @@ int ObCreateTableLikeHelper::generate_table_schema_()
       new_table_schema.set_table_type(USER_TABLE);
     } else if (orig_table_schema->is_sys_view()) {
       new_table_schema.set_table_type(USER_VIEW);
-    } else if (orig_table_schema->is_external_table()) {
-      new_table_schema.set_table_type(EXTERNAL_TABLE);
     }
     if (new_table_schema.is_user_table()
         && TMP_TABLE == arg_.table_type_) {
@@ -267,14 +263,14 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       new_database_id = new_table_schema->get_database_id();
     }
     if (FAILEDx(gen_object_ids_(obj_cnt, id_generator))) {
-      LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id), K(obj_cnt));
+      LOG_WARN("fail to gen object ids", KR(ret), K(obj_cnt));
     }
     HEAP_VAR(ObTableSchema, new_index_schema) {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_table_schema = nullptr;
       new_index_schema.reset();
       if (OB_FAIL(schema_guard_wrapper_.get_table_schema(simple_index_infos.at(i).table_id_, index_table_schema))) {
-        LOG_WARN("fail to get index table schema", KR(ret), K_(tenant_id), K_(simple_index_infos.at(i).table_id));
+        LOG_WARN("fail to get index table schema", KR(ret), K_(simple_index_infos.at(i).table_id));
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema should not be null", KR(ret));
@@ -401,7 +397,7 @@ int ObCreateTableLikeHelper::generate_foreign_keys_()
   } else if (OB_FAIL(schema_guard_wrapper_.get_mock_fk_parent_table_id(
     new_tables_.at(0).get_database_id(), arg_.new_table_name_, replace_mock_fk_parent_table_id_))) {
     LOG_WARN("fail to ge mock fk parent table id",
-              KR(ret), K_(tenant_id), K(new_tables_.at(0).get_database_id()), K_(arg_.new_table_name));
+              KR(ret), K(new_tables_.at(0).get_database_id()), K_(arg_.new_table_name));
   } else if (OB_INVALID_ID != replace_mock_fk_parent_table_id_) {
     ObMockFKParentTableSchema *new_mock_fk_parent_table = nullptr;
     if (OB_FAIL(try_replace_mock_fk_parent_table_(replace_mock_fk_parent_table_id_,

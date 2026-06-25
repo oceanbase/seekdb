@@ -189,7 +189,7 @@ int ObSchemaStatusProxy::set_tenant_schema_status(
     LOG_WARN("fail to start", K(ret));
   } else {
     ObCoreTableProxy kv(OB_ALL_SCHEMA_STATUS_TNAME, trans);
-    if (OB_FAIL(dml.add_pk_column(ROW_ID_CNAME, static_cast<uint64_t>(1)))
+    if (OB_FAIL(dml.add_pk_column(ROW_ID_CNAME, 1UL))
         || OB_FAIL(dml.add_column(SNAPSHOT_TIMESTAMP_CNAME, refresh_schema_status.snapshot_timestamp_))
         || OB_FAIL(dml.add_column(READABLE_SCHEMA_VERSION_CNAME, refresh_schema_status.readable_schema_version_))) {
       LOG_WARN("fail to add column", KR(ret), K(refresh_schema_status));

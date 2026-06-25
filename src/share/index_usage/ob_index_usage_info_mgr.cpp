@@ -256,10 +256,11 @@ void ObIndexUsageInfoMgr::update(const uint64_t index_table_id)
 
 void ObIndexUsageInfoMgr::refresh_config()
 {
-  if (OB_LIKELY(true)) {
-    max_entries_ = GCONF._iut_max_entries.get();
-    is_enabled_ = GCONF._iut_enable;
-    is_sample_mode_ = GCONF._iut_stat_collection_type.get_value_string().case_compare("SAMPLED") == 0;
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (OB_LIKELY(tenant_config.is_valid())) {
+    max_entries_ = tenant_config->_iut_max_entries.get();
+    is_enabled_ = tenant_config->_iut_enable;
+    is_sample_mode_ = tenant_config->_iut_stat_collection_type.get_value_string().case_compare("SAMPLED") == 0;
   }
 }
 

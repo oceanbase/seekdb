@@ -36,6 +36,8 @@
 #include "share/domain_id/ob_domain_id.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
+#ifndef OB_BUILD_EMBED_MODE
+#endif
 #include "share/catalog/ob_catalog_utils.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
@@ -8483,7 +8485,8 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid obj type", K(ret), K(obj_type));
     } else {
-      bool convert_real_to_decimal = (true && GCONF._enable_convert_real_to_decimal);
+      omt::ObTenantConfigGuard tcg(TENANT_CONF());
+      bool convert_real_to_decimal = (tcg.is_valid() && tcg->_enable_convert_real_to_decimal);
       uint64_t tenant_data_version = 0;
       bool enable_mysql_compatible_dates = false;
       if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info_, false,
@@ -9674,9 +9677,10 @@ int ObDMLResolver::generate_ddl_sample_info_if_needed(TableItem &table_item)
       sample_info->method_ = SampleInfo::SampleMethod::DDL_BLOCK_SAMPLE;
       sample_info->scope_ = SampleInfo::SAMPLE_ALL_DATA;
       int64_t px_object_sample_rate = 0;
-
-      px_object_sample_rate = GCONF._px_object_sampling;
-
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+      if (tenant_config.is_valid()) {
+        px_object_sample_rate = tenant_config->_px_object_sampling;
+      }
       sample_info->percent_ = (double)px_object_sample_rate / 1000;
       sample_info->table_id_ = table_item.table_id_;
       // Check if target table is FTS or vector index via upper_insert_resolver_

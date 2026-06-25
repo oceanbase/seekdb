@@ -198,12 +198,13 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     query_ctx_->type_demotion_flag_ = 0;
     // check tenant configure.
     
-    if (OB_LIKELY(true)) {
-      query_ctx_->enable_constant_type_demotion_ = GCONF._enable_constant_type_demotion;
-      if (0 == GCONF._non_standard_comparison_level.case_compare("range")) {
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+    if (OB_LIKELY(tenant_config.is_valid())) {
+      query_ctx_->enable_constant_type_demotion_ = tenant_config->_enable_constant_type_demotion;
+      if (0 == tenant_config->_non_standard_comparison_level.case_compare("range")) {
         query_ctx_->non_standard_equal_comparison_ = 1;
         query_ctx_->non_standard_range_comparison_ = 1;
-      } else if (0 == GCONF._non_standard_comparison_level.case_compare("equal")) {
+      } else if (0 == tenant_config->_non_standard_comparison_level.case_compare("equal")) {
         query_ctx_->non_standard_equal_comparison_ = 1;
       }
       query_ctx_->type_demotion_flag_inited_ = 1;

@@ -610,12 +610,12 @@ struct ScanMonitorNodeInfo final
 {
 public:
   ScanMonitorNodeInfo():
-    tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), first_change_time_(0), last_change_time_(0), last_refresh_time_(0), output_rows_(0)
+    task_id_(0), execution_id_(0), first_change_time_(0), last_change_time_(0), last_refresh_time_(0), output_rows_(0)
   {}
   ~ScanMonitorNodeInfo() = default;
-  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(first_change_time_), K(last_change_time_), K(last_refresh_time_), K(output_rows_));
+  TO_STRING_KV(K(task_id_), K(execution_id_), K(first_change_time_), K(last_change_time_), K(last_refresh_time_), K(output_rows_));
 public:
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   int64_t execution_id_;
   int64_t first_change_time_;
@@ -628,16 +628,16 @@ struct SortMonitorNodeInfo final
 {
 public:
   SortMonitorNodeInfo():
-    tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), thread_id_(0), row_count_id_(0), first_change_time_(0), last_change_time_(0),
+    task_id_(0), execution_id_(0), thread_id_(0), row_count_id_(0), first_change_time_(0), last_change_time_(0),
     output_rows_(0), row_sorted_(0), dump_size_(0), row_count_(0), sort_expected_round_count_(0), merge_sort_start_time_(0), compress_type_(0)
   {}
   ~SortMonitorNodeInfo() = default;
-  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(thread_id_), K(row_count_id_),
+  TO_STRING_KV(K(task_id_), K(execution_id_), K(thread_id_), K(row_count_id_),
   K(first_change_time_), K(last_change_time_), K(output_rows_), K(row_sorted_), K(dump_size_),
   K(row_count_), K(sort_expected_round_count_), K(merge_sort_start_time_), K(compress_type_));
 
 public:
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   int64_t execution_id_;
   int64_t thread_id_;
@@ -657,15 +657,15 @@ struct InsertMonitorNodeInfo final
 {
 public:
   InsertMonitorNodeInfo():
-    tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), cg_row_inserted_(0), sstable_row_inserted_(0),
+    task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), cg_row_inserted_(0), sstable_row_inserted_(0),
     vec_task_thread_pool_cnt_(0), vec_task_total_cnt_(0), vec_task_finish_cnt_(0)
   {}
   ~InsertMonitorNodeInfo() = default;
-  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(cg_row_inserted_), K(sstable_row_inserted_),
+  TO_STRING_KV(K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(cg_row_inserted_), K(sstable_row_inserted_),
   K(vec_task_thread_pool_cnt_), K(vec_task_total_cnt_), K(vec_task_finish_cnt_));
 
 public:
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   int64_t execution_id_;
   int64_t thread_id_;
@@ -681,13 +681,13 @@ public:
 struct ObSqlMonitorStats final
 {
   ObSqlMonitorStats():
-    is_inited_(false), tenant_id_(OB_INVALID_ID), task_id_(0), ddl_type_(ObDDLType::DDL_INVALID), execution_id_(-1), is_empty_(true)
+    is_inited_(false), task_id_(0), ddl_type_(ObDDLType::DDL_INVALID), execution_id_(-1), is_empty_(true)
   {}
   ~ObSqlMonitorStats() = default;
-  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(ddl_type_), K(is_empty_), K(scan_node_), K(sort_node_), K(insert_node_));
+  TO_STRING_KV(K(task_id_), K(execution_id_), K(ddl_type_), K(is_empty_), K(scan_node_), K(sort_node_), K(insert_node_));
 
 public:
-  int init(const uint64_t tenant_id, const int64_t task_id, const ObDDLType ddl_type);
+  int init(const int64_t task_id, const ObDDLType ddl_type);
   int clean_invalid_data(const int64_t execution_id);
   void reuse()
   {
@@ -700,7 +700,7 @@ public:
 
 public:
   bool is_inited_;
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   ObDDLType ddl_type_;
   int64_t execution_id_;
@@ -714,9 +714,8 @@ class ObSqlMonitorStatsCollector final
 {
 public:
   ObSqlMonitorStatsCollector()
-    :sql_proxy_(nullptr), scan_task_id_(), scan_tenant_id_(), is_inited_(false),
-     scan_res_(), sort_res_(), insert_res_(), scan_index_id_(0), sort_index_id_(0), insert_index_id_(0),
-     tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), ddl_type_(DDL_INVALID)
+    :sql_proxy_(nullptr), scan_task_id_(), is_inited_(false),
+     scan_res_(), sort_res_(), insert_res_(), scan_index_id_(0), sort_index_id_(0), insert_index_id_(0), task_id_(0), execution_id_(0), ddl_type_(DDL_INVALID)
   {}
   int init(ObMySQLProxy *sql_proxy);
   int get_next_sql_plan_monitor_stat(ObSqlMonitorStats &sql_monitor_stats);
@@ -730,14 +729,14 @@ private:
   int get_next_sorted_stats(ObSqlMonitorStats &sql_monitor_stats);
   int get_next_inserted_stats(ObSqlMonitorStats &sql_monitor_stats);
 
-  bool inline next_ddl_monitor_node(const uint64_t tenant_id, const int64_t task_id)
+  bool inline next_ddl_monitor_node(const int64_t task_id)
   {
-    return task_id < task_id_ || (task_id == task_id_ && tenant_id < tenant_id_);
+    return task_id < task_id_;
   }
 
-  bool inline previous_ddl_monitor_node(const uint64_t tenant_id, const int64_t task_id)
+  bool inline previous_ddl_monitor_node(const int64_t task_id)
   {
-    return task_id > task_id_ || tenant_id > tenant_id_;
+    return task_id > task_id_;
   }
 
   bool inline outdated_monitor_node(const int64_t execution_id)
@@ -752,7 +751,7 @@ private:
 public:
   ObMySQLProxy *sql_proxy_;
   ObSEArray<int64_t, 100> scan_task_id_;
-  ObSEArray<uint64_t, 100> scan_tenant_id_;
+  
 private:
   bool is_inited_;
   ObSEArray<ScanMonitorNodeInfo, 100> scan_res_;
@@ -761,7 +760,7 @@ private:
   uint64_t scan_index_id_;
   uint64_t sort_index_id_;
   uint64_t insert_index_id_;
-  uint64_t tenant_id_;
+  
   int64_t task_id_;
   int64_t execution_id_;
   ObDDLType ddl_type_;
@@ -791,7 +790,6 @@ public:
   ObDDLDiagnoseInfo()
   {
     is_inited_ = false;
-    tenant_id_ = OB_INVALID_ID;
     task_id_ = 0;
     ddl_type_ = ObDDLType::DDL_INVALID;
 
@@ -853,7 +851,7 @@ public:
   }
 
   ~ObDDLDiagnoseInfo() = default;
-  int init(const uint64_t tenant_id, const int64_t task_id, const ObDDLType ddl_type, const int64_t execution_id);
+  int init(const int64_t task_id, const ObDDLType ddl_type, const int64_t execution_id);
 
   void inline reuse()
   {
@@ -919,7 +917,7 @@ public:
   {
     return diagnose_message_;
   }
-  TO_STRING_KV(K(tenant_id_), K(task_id_),
+  TO_STRING_KV(K(task_id_),
   K(scan_thread_num_), K(row_scanned_), K(max_row_scan_), K(min_row_scan_), K(scan_start_time_), K(scan_end_time_), K(scan_spend_time_),
   K(inmem_sort_thread_num_), K(row_sorted_), K(inmem_sort_remain_time_), K(inmem_sort_progress_),
   K(merge_sort_thread_num_), K(row_merge_sorted_), K(expected_round_), K(merge_sort_remain_time_), K(merge_sort_progress_),
@@ -977,7 +975,6 @@ static constexpr double DATA_SKEW_RATE = 1.00;
 private:
   // ddl info
   bool is_inited_;
-  uint64_t tenant_id_;
   int64_t task_id_;
   ObDDLType ddl_type_;
 
@@ -1086,16 +1083,13 @@ public:
 
   // get all tablets of a table by table_id
   static int get_tablets(
-      const uint64_t tenant_id,
       const int64_t table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
-  static int get_tablet_count(const uint64_t tenant_id,
-                              const int64_t table_id,
+  static int get_tablet_count(const int64_t table_id,
                               int64_t &tablet_count);
   static int get_all_indexes_tablets_count(
       schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
       const uint64_t data_table_id,
       int64_t &all_tablet_count);
 
@@ -1115,9 +1109,7 @@ public:
                                             const share::schema::ObTableSchema &source_table_schema,
                                             ObArray<ObColumnNameInfo> &column_names,
                                             ObArray<int64_t> &select_column_ids);
-  static int generate_build_replica_sql(
-      const uint64_t tenant_id,
-      const int64_t data_table_id,
+  static int generate_build_replica_sql(const int64_t data_table_id,
       const int64_t dest_table_id,
       const int64_t schema_version,
       const int64_t snapshot_version,
@@ -1130,9 +1122,7 @@ public:
       const ObString &partition_names,
       ObSqlString &sql_string);
 
-  static int generate_build_mview_replica_sql(
-      const uint64_t tenant_id,
-      const int64_t mview_table_id,
+  static int generate_build_mview_replica_sql(const int64_t mview_table_id,
       const int64_t container_table_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       const int64_t snapshot_version,
@@ -1147,15 +1137,12 @@ public:
 
   static int get_tablet_leader_addr(
       share::ObLocationService *location_service,
-      const uint64_t tenant_id,
       const common::ObTabletID &tablet_id,
       const int64_t timeout,
       share::ObLSID &ls_id,
       common::ObAddr &leader_addr);
 
-  static int refresh_alter_table_arg(
-      const uint64_t tenant_id,
-      const int64_t orig_table_id,
+  static int refresh_alter_table_arg(const int64_t orig_table_id,
       const uint64_t foreign_key_id,
       obcall::ObAlterTableArg &alter_table_arg);
 
@@ -1164,9 +1151,7 @@ public:
       const int64_t schema_version,
       ObSqlString &sql_string);
 
-  static int generate_mview_ddl_schema_hint_str(
-      const uint64_t tenant_id,
-      const uint64_t mview_table_id,
+  static int generate_mview_ddl_schema_hint_str(const uint64_t mview_table_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<share::schema::ObBasedSchemaObjectInfo> &based_schema_object_infos,
       ObSqlString &sql_string);
@@ -1198,53 +1183,39 @@ public:
 
   static int get_sys_ls_leader_addr(
     const uint64_t cluster_id,
-    const uint64_t tenant_id,
     common::ObAddr &leader_addr);
 
-  static int get_tablet_paxos_member_list(
-    const uint64_t tenant_id,
-    const common::ObTabletID &tablet_id,
+  static int get_tablet_paxos_member_list(const common::ObTabletID &tablet_id,
     common::ObIArray<common::ObAddr> &paxos_server_list,
     int64_t &paxos_member_count);
 
-  static int get_tablet_replica_location(
-    const uint64_t tenant_id,
-    const common::ObTabletID &tablet_id,
+  static int get_tablet_replica_location(const common::ObTabletID &tablet_id,
     ObLSID &ls_id,
     ObLSLocation &location);
-  static int get_split_replicas_addrs(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  static int get_split_replicas_addrs(const share::ObLSID &ls_id,
     ObIArray<ObAddr> &member_addrs_array,
     ObIArray<ObAddr> &learner_addrs_array);
-  static int get_split_replicas_addrs(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
+  static int get_split_replicas_addrs(const share::ObLSID &ls_id,
     ObIArray<ObAddr> &replica_addr_array);
   static int construct_ls_tablet_id_map(
-    const uint64_t &tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
     hash::ObHashMap<ObLSID, ObArray<ObTabletID>> &ls_tablet_id_map);
   static int get_index_table_batch_partition_names(
-    const uint64_t &tenant_id,
     const int64_t &data_table_id,
     const int64_t &index_table_id,
     const ObIArray<ObTabletID> &tablets,
     common::ObIAllocator &allocator,
     ObIArray<ObString> &partition_names);
   static int get_tablet_data_size(
-    const uint64_t &tenant_id,
     const common::ObTabletID &tablet_id,
     const share::ObLSID &ls_id,
     int64_t &data_size);
   static int get_tablet_data_row_cnt(
-    const uint64_t &tenant_id,
     const common::ObTabletID &tablet_id,
     const share::ObLSID &ls_id,
     int64_t &data_row_cnt);
   static int get_ls_host_left_disk_space(
-    const uint64_t &tenant_id,
     const share::ObLSID &ls_id,
     const common::ObAddr &leader_addr,
     uint64_t &left_space_size);
@@ -1258,28 +1229,22 @@ public:
    common::ObIAllocator &allocator,
    bool &is_running_status);
   static int check_table_exist(
-     const uint64_t tenant_id,
      const uint64_t table_id,
      share::schema::ObSchemaGetterGuard &schema_guard);
   static int get_ddl_rpc_timeout(const int64_t tablet_count, int64_t &ddl_rpc_timeout_us);
-  static int get_ddl_rpc_timeout(const int64_t tenant_id, const int64_t table_id, int64_t &ddl_rpc_timeout_us);
+  static int get_ddl_rpc_timeout_by_table(const int64_t table_id, int64_t &ddl_rpc_timeout_us);
   static int get_ddl_tx_timeout(const int64_t tablet_count, int64_t &ddl_tx_timeout_us);
-  static void get_ddl_rpc_timeout_for_database(const int64_t tenant_id, const int64_t database_id, int64_t &ddl_rpc_timeout_us);
+  static void get_ddl_rpc_timeout_for_database(const int64_t database_id, int64_t &ddl_rpc_timeout_us);
   static int64_t get_default_ddl_rpc_timeout();
 
-  static int get_task_tablet_slice_count(const int64_t tenant_id, const int64_t task_id, bool &is_partition_table, common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_count_map);
+  static int get_task_tablet_slice_count(const int64_t task_id, bool &is_partition_table, common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_count_map);
 
-  static int get_data_information(
-     const uint64_t tenant_id,
-     const uint64_t task_id,
+  static int get_data_information(const uint64_t task_id,
      uint64_t &data_format_version,
      int64_t &snapshot_version,
      share::ObDDLTaskStatus &task_status);
 
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObPartitionSplitArg &split_arg);
-  static int get_data_information(
-     const uint64_t tenant_id,
-     const uint64_t task_id,
+  static int get_data_information(const uint64_t task_id,
      uint64_t &data_format_version,
      int64_t &snapshot_version,
      share::ObDDLTaskStatus &task_status,
@@ -1288,18 +1253,6 @@ public:
      bool &is_no_logging,
      bool &is_offline_index_rebuild);
 
-  static int replace_user_tenant_id(
-    const ObDDLType &ddl_type,
-    const uint64_t tenant_id,
-    obcall::ObAlterTableArg &alter_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObDropDatabaseArg &drop_db_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObDropTableArg &drop_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObDropIndexArg &drop_index_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObRebuildIndexArg &rebuild_index_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObTruncateTableArg &trucnate_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObCreateIndexArg &create_index_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObForkTableArg &fork_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObForkDatabaseArg &fork_database_arg);
 
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
@@ -1323,28 +1276,21 @@ public:
 
   /**
    * NOTICE: The interface is designed for Offline DDL operation only.
-   * The caller can not obtain the schema via the hold_buf_src_tenant_schema_guard whose
-   * validity is limited by whether src_tenant_id and dst_tenant_id are the same.
+   * The caller can not obtain the schema via the hold_buf_src_tenant_schema_guard.
    *
-   * 1. This interface will provide the same tenant schema guard when src_tenant_id = dst_tenant_id,
-   *    to avoid using two different versions of the guard caused by the parallel ddl under the tenant.
-   * 2. This interface will provide corresponding tenant schema guard when src_tenant_id != dst_tenant_id.
+   * This interface provides the schema guard for the source and destination,
+   * to avoid using two different versions of the guard caused by the parallel ddl.
    *
-   * @param [in] src_tenant_id
-   * @param [in] dst_tenant_id
-   * @param [in] hold_buf_src_tenant_schema_guard: hold buf, invalid when src_tenant_id = dst_tenant_id.
+   * @param [in] hold_buf_src_tenant_schema_guard: hold buf.
    * @param [in] hold_buf_dst_tenant_schema_guard: hold buf.
    * @param [out] src_tenant_schema_guard:
-   *    pointer to the hold_buf_dst_tenant_schema_guard if src_tenant_id = dst_tenant_id,
-   *    pointer to the hold_buf_src_tenant_schema_guard if src_tenant_id != dst_tenant_id,
+   *    pointer to the hold_buf_src_tenant_schema_guard,
    *    is always not nullptr if the interface return OB_SUCC.
    * @param [out] dst_tenant_schema_guard:
    *    pointer to the hold_buf_dst_tenant_schema_guard,
    *    is always not nullptr if the interface return OB_SUCC.
   */
   static int get_tenant_schema_guard(
-      const uint64_t src_tenant_id,
-      const uint64_t dst_tenant_id,
       share::schema::ObSchemaGetterGuard &hold_buf_src_tenant_schema_guard,
       share::schema::ObSchemaGetterGuard &hold_buf_dst_tenant_schema_guard,
       share::schema::ObSchemaGetterGuard *&src_tenant_schema_guard,
@@ -1361,18 +1307,11 @@ public:
       const share::schema::ObTableSchema &table_schema,
       const ObSQLMode sql_mode,
       bool &is_table_empty);
-  static int check_tenant_status_normal(
-      ObISQLClient *proxy,
-      const uint64_t check_tenant_id);
-  static int check_schema_version_refreshed(
-      const uint64_t tenant_id,
-      const int64_t target_schema_version);
+  static int check_schema_version_refreshed(const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
   static int is_major_exist(const ObLSID &ls_id, const common::ObTabletID &tablet_id, bool &is_exist);
   static int set_tablet_autoinc_seq(const ObLSID &ls_id, const ObTabletID &tablet_id, const int64_t seq_value);
-  static int check_table_compaction_checksum_error(
-      const uint64_t tenant_id,
-      const uint64_t table_id);
+  static int check_table_compaction_checksum_error(const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
                                           const int64_t parallel,
                                           ObCompressorType &compr_type);
@@ -1426,7 +1365,6 @@ public:
   static bool is_mview_not_retryable(const share::ObDDLType task_type);
   static int64_t get_real_parallelism(const int64_t parallelism, const bool is_mv_refresh);
   static int get_tablet_ids(
-      const uint64_t tenant_id,
       const int64_t table_id,
       const int64_t target_table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
@@ -1451,10 +1389,8 @@ public:
       int64_t &check_dag_exit_retry_cnt,
       bool is_complement_data_dag,
       bool &all_dag_exit);
-  static int get_no_logging_param(const int64_t tenant_id, bool &is_no_logging);
-  static int batch_check_tablet_checksum(
-      const uint64_t tenant_id,
-      const int64_t start_idx,
+  static int get_no_logging_param(bool &is_no_logging);
+  static int batch_check_tablet_checksum(const int64_t start_idx,
       const int64_t end_idx,
       const ObIArray<ObTabletID> &tablet_ids);
   static int hold_snapshot(
@@ -1473,7 +1409,6 @@ public:
       int64_t &new_fetched_snapshot);
   static int calc_snapshot_with_gts(
       int64_t &snapshot,
-      const uint64_t tenant_id,
       const int64_t ddl_task_id = 0,
       const int64_t trans_end_snapshot = 0,
       const int64_t index_snapshot_version_diff = 0);
@@ -1499,7 +1434,6 @@ public:
 
   static int write_defensive_and_obtain_snapshot(
       common::ObMySQLTransaction &trans,
-      const uint64_t tenant_id,
       const ObTableSchema &data_table_schema,
       const ObTableSchema &index_table_schema,
       ObSchemaService *schema_service,
@@ -1507,7 +1441,6 @@ public:
 
   static int get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray<uint64_t> &lob_col_idxs);
   static int load_ddl_task(
-      const int64_t tenant_id,
       const int64_t task_id,
       ObIAllocator &allocator,
       rootserver::ObDDLTask &task);
@@ -1590,9 +1523,7 @@ public:
       ObLobMacroBlockWriter *&lob_writer,
       ObArenaAllocator &row_arena,
       blocksstable::ObDatumRow &current_row);
-  static int fill_ddl_table_schema(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
+  static int fill_ddl_table_schema(const uint64_t table_id,
       ObArenaAllocator &allocator,
       ObDDLTableSchema &ddl_table_schema);
   static int fill_writer_param(
@@ -1636,9 +1567,7 @@ public:
       ObDDLWriteStat *&ddl_write_stat);
 
 private:
-  static int fill_vector_index_schema_item(
-      const uint64_t tenant_id,
-      ObSchemaGetterGuard &schema_guard,
+  static int fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
       const ObTableSchema *table_schema,
       ObArenaAllocator &allocator,
       const ObIArray<ObColDesc> &column_descs,
@@ -1660,13 +1589,9 @@ private:
       const int64_t snapshot_version,
       const common::ObIArray<common::ObTabletID> *extra_mv_tablet_ids);
 
-  static int check_table_column_checksum_error(
-      const uint64_t tenant_id,
-      const int64_t table_id);
+  static int check_table_column_checksum_error(const int64_t table_id);
 
-  static int check_tablet_checksum_error(
-      const uint64_t tenant_id,
-      const int64_t table_id);
+  static int check_tablet_checksum_error(const int64_t table_id);
 
   static int generate_order_by_str(
       const ObIArray<int64_t> &select_column_ids,
@@ -1711,9 +1636,7 @@ class ObCheckTabletDataComplementOp
 {
 public:
 
-  static int check_and_wait_old_complement_task(
-      const uint64_t tenant_id,
-      const uint64_t index_table_id,
+  static int check_and_wait_old_complement_task(const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const int64_t execution_id,
       const common::ObAddr &inner_sql_exec_addr,
@@ -1721,23 +1644,17 @@ public:
       const int64_t schema_version,
       const int64_t scn,
       bool &need_exec_new_inner_sql);
-  static int check_finish_report_checksum(
-      const uint64_t tenant_id,
-      const uint64_t index_table_id,
+  static int check_finish_report_checksum(const uint64_t index_table_id,
       const int64_t execution_id,
       const uint64_t ddl_task_id);
-  static int check_tablet_checksum_update_status(
-      const uint64_t tenant_id,
-      const uint64_t index_table_id,
+  static int check_tablet_checksum_update_status(const uint64_t index_table_id,
       const uint64_t ddl_task_id,
       const int64_t execution_id,
       const ObIArray<ObTabletID> &tablet_ids,
       bool &tablet_checksum_status);
 
 private:
-  static int check_all_tablet_sstable_status(
-      const uint64_t tenant_id,
-      const uint64_t index_table_id,
+  static int check_all_tablet_sstable_status(const uint64_t index_table_id,
       const int64_t snapshot_version,
       const int64_t execution_id,
       const uint64_t ddl_task_id,
@@ -1746,23 +1663,18 @@ private:
   static int check_task_inner_sql_session_status(
       const common::ObAddr &inner_sql_exec_addr,
       const common::ObCurTraceId::TraceId &trace_id,
-      const uint64_t tenant_id,
       const int64_t task_id,
       const int64_t scn,
       bool &is_old_task_session_exist);
 
-  static int do_check_tablets_merge_status(
-      const uint64_t tenant_id,
-      const int64_t snapshot_version,
+  static int do_check_tablets_merge_status(const int64_t snapshot_version,
       const ObIArray<ObTabletID> &tablet_ids,
       const ObLSID &ls_id,
       hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map,
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
       int64_t &tablet_commit_count);
 
-  static int check_tablet_merge_status(
-      const uint64_t tenant_id,
-      const ObIArray<common::ObTabletID> &tablet_ids,
+  static int check_tablet_merge_status(const ObIArray<common::ObTabletID> &tablet_ids,
       const int64_t snapshot_version,
       bool &is_all_tablets_commited);
 
@@ -1772,20 +1684,14 @@ private:
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map);
 
 
-  static int calculate_build_finish(
-      const uint64_t tenant_id,
-      const common::ObIArray<common::ObTabletID> &tablet_ids,
+  static int calculate_build_finish(const common::ObIArray<common::ObTabletID> &tablet_ids,
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
       int64_t &commit_succ_count);
 
-  static int construct_ls_tablet_map(
-      const uint64_t tenant_id,
-      const common::ObTabletID &tablet_id,
+  static int construct_ls_tablet_map(const common::ObTabletID &tablet_id,
       hash::ObHashMap<ObLSID, ObArray<ObTabletID>> &ls_tablets_map);
 
-  static int construct_tablet_ip_map(
-      const uint64_t tenant_id,
-      const ObTabletID &tablet_id,
+  static int construct_tablet_ip_map(const ObTabletID &tablet_id,
       hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map);
 };
 

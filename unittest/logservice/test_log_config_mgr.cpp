@@ -23,6 +23,7 @@
 #include "mock_logservice_container/mock_log_engine.h"
 #include "mock_logservice_container/mock_log_mode_mgr.h"
 #include "mock_logservice_container/mock_log_reconfirm.h"
+#include "logservice/env/mock_ob_locality_manager.h"
 #undef private
 namespace oceanbase
 {
@@ -41,6 +42,9 @@ const ObAddr addr6(ObAddr::IPV4, "127.0.0.6", 1000);
 const ObAddr addr7(ObAddr::IPV4, "127.0.0.7", 1000);
 const ObAddr addr8(ObAddr::IPV4, "127.0.0.8", 1000);
 const ObAddr addr9(ObAddr::IPV4, "127.0.0.9", 1000);
+ObRegion region1("BEIJING");
+ObRegion region2("SHANGHAI");
+ObRegion default_region(DEFAULT_REGION_NAME);
 const int64_t INIT_ELE_EPOCH = 1;
 const int64_t INIT_PROPOSAL_ID = 1;
 
@@ -82,9 +86,16 @@ public:
     mock_mode_mgr_ = OB_NEW(MockLogModeMgr, "TestLog");
     mock_reconfirm_ = OB_NEW(MockLogReconfirm, "TestLog");
     mock_plugins_ = OB_NEW(LogPlugins, "TestLog");
+    mock_locality_cb_ = OB_NEW(MockObLocalityManager, "TestLog");
+
+    region_map_.create(OB_MAX_MEMBER_NUMBER, ObMemAttr(ObModIds::OB_HASH_NODE,
+        ObCtxIds::DEFAULT_CTX_ID));
+    EXPECT_EQ(OB_SUCCESS, mock_locality_cb_->init(&region_map_));
+    EXPECT_EQ(OB_SUCCESS, mock_plugins_->add_plugin(dynamic_cast<PalfLocalityInfoCb*>(mock_locality_cb_)));
   }
   ~TestLogConfigMgr()
   {
+    EXPECT_EQ(OB_SUCCESS, mock_plugins_->del_plugin(dynamic_cast<PalfLocalityInfoCb*>(mock_locality_cb_)));
     OB_DELETE(MockElection, "TestLog", mock_election_);
     OB_DELETE(MockLogStateMgr, "TestLog", mock_state_mgr_);
     OB_DELETE(MockLogSlidingWindow, "TestLog", mock_sw_);
@@ -92,6 +103,7 @@ public:
     OB_DELETE(MockLogModeMgr, "TestLog", mock_mode_mgr_);
     OB_DELETE(MockLogReconfirm, "TestLog", mock_reconfirm_);
     OB_DELETE(LogPlugins, "TestLog", mock_plugins_);
+    OB_DELETE(MockObLocalityManager, "TestLog", mock_locality_cb_);
   }
   void init_test_log_config_env(const common::ObAddr &self,
                                 const LogConfigInfoV2 &config_info,
@@ -126,6 +138,8 @@ public:
   palf::MockLogModeMgr *mock_mode_mgr_;
   palf::MockLogReconfirm *mock_reconfirm_;
   palf::LogPlugins *mock_plugins_;
+  unittest::MockObLocalityManager *mock_locality_cb_;
+  LogMemberRegionMap region_map_;
 };
 
 TEST_F(TestLogConfigMgr, test_remove_child_is_not_learner)
@@ -148,6 +162,49 @@ TEST_F(TestLogConfigMgr, test_remove_child_is_not_learner)
   EXPECT_TRUE(cm.children_.learner_addr_equal(target_children));
   EXPECT_TRUE(retire_children.learner_addr_equal(removed_children));
   PALF_LOG(INFO, "children", K(cm.children_));
+}
+
+TEST_F(TestLogConfigMgr, test_remove_diff_region_child)
+{
+  LogConfigMgr cm;
+  LogLearnerList diff_region_children;
+  LogLearnerList removed_children;
+  LogLearnerList target_children;
+  ObTenantBase tenant_base(1);
+  ObTenantEnv::set_tenant(&tenant_base);
+  cm.region_ = region1;
+  EXPECT_EQ(OB_SUCCESS, target_children.add_learner(LogLearner(addr1, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, target_children.add_learner(LogLearner(addr2, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, removed_children.add_learner(LogLearner(addr3, 1)));
+  EXPECT_EQ(OB_SUCCESS, removed_children.add_learner(LogLearner(addr4, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr1, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr2, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr3, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr4, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.remove_diff_region_child_(diff_region_children));
+  EXPECT_TRUE(target_children.learner_addr_equal(cm.children_));
+  EXPECT_TRUE(removed_children.learner_addr_equal(diff_region_children));
+}
+
+TEST_F(TestLogConfigMgr, test_remove_duplicate_region_child)
+{
+  LogConfigMgr cm;
+  LogLearnerList dup_region_children;
+  LogLearnerList removed_children;
+  LogLearnerList target_children;
+  ObTenantBase tenant_base(1);
+  ObTenantEnv::set_tenant(&tenant_base);
+  EXPECT_EQ(OB_SUCCESS, target_children.add_learner(LogLearner(addr1, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, target_children.add_learner(LogLearner(addr3, region2, 1)));
+  EXPECT_EQ(OB_SUCCESS, removed_children.add_learner(LogLearner(addr2, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, removed_children.add_learner(LogLearner(addr4, region2, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr1, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr2, region1, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr3, region2, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(LogLearner(addr4, region2, 1)));
+  EXPECT_EQ(OB_SUCCESS, cm.remove_duplicate_region_child_(dup_region_children));
+  EXPECT_TRUE(target_children.learner_addr_equal(cm.children_));
+  EXPECT_TRUE(removed_children.learner_addr_equal(dup_region_children));
 }
 
 TEST_F(TestLogConfigMgr, test_handle_learner_keepalive)
@@ -486,12 +543,12 @@ TEST_F(TestLogConfigMgr, test_handle_register_parent_req)
   ASSERT_EQ(OB_SUCCESS, build_log_sync_member_list(init_member_list));
   ASSERT_EQ(OB_SUCCESS, init_config_version.generate(1, 1));
   {
-    // non-learner (paxos member) register to leader is rejected (not in learner list)
+    // paxos member register, ignore
     LogConfigMgr cm;
     LogConfigInfoV2 config_info;
     EXPECT_EQ(OB_SUCCESS, config_info.generate(init_member_list, get_default_log_sync_replica_num(), learner_list, init_config_version));
     init_test_log_config_env(addr1, config_info, cm);
-    EXPECT_EQ(OB_INVALID_ARGUMENT, cm.handle_register_parent_req(LogLearner(addr3, 1), true));
+    EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_req(LogLearner(addr3, 1), true));
     EXPECT_EQ(0, cm.children_.get_member_number());
     EXPECT_EQ(RegisterReturn::INVALID_REG_RET, mock_log_engine_->reg_ret_);
   }
@@ -515,23 +572,22 @@ TEST_F(TestLogConfigMgr, test_handle_register_parent_req)
     EXPECT_EQ(OB_SUCCESS, config_info.generate(init_member_list, get_default_log_sync_replica_num(), learner_list, init_config_version));
     init_test_log_config_env(addr1, config_info, cm);
     LogLearner child1(addr4, 1);
-    LogLearner exist_child(addr5, 1);
+    LogLearner exist_child(addr5, region1, 1);
     EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(child1));
     EXPECT_EQ(OB_SUCCESS, cm.children_.add_learner(exist_child));
     cm.all_learnerlist_.add_learner(ObMember(child1.get_server(), -1));
     cm.all_learnerlist_.add_learner(ObMember(exist_child.get_server(), -1));
     child1.register_time_us_ = 1;
-    // child1 already in children_ -> REGISTER_DONE (refresh)
+    child1.region_ = region1;
     EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_req(child1, true));
-    EXPECT_EQ(RegisterReturn::REGISTER_DONE, mock_log_engine_->reg_ret_);
+    EXPECT_EQ(RegisterReturn::REGISTER_CONTINUE, mock_log_engine_->reg_ret_);
     mock_log_engine_->reset_register_parent_resp_ret();
-    LogLearner child2(addr6, 1);
+    LogLearner child2(addr6, region2, 1);
     child2.register_time_us_ = 1;
     cm.all_learnerlist_.add_learner(ObMember(child2.get_server(), -1));
-    // new child with existing children -> redirected (REGISTER_CONTINUE), not added to leader's children
     EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_req(child2, true));
-    EXPECT_EQ(RegisterReturn::REGISTER_CONTINUE, mock_log_engine_->reg_ret_);
-    EXPECT_FALSE(cm.children_.contains(child2));
+    EXPECT_EQ(RegisterReturn::REGISTER_DONE, mock_log_engine_->reg_ret_);
+    EXPECT_TRUE(cm.children_.contains(child2));
     EXPECT_EQ(cm.self_, mock_log_engine_->parent_itself_.server_);
     EXPECT_EQ(child2.register_time_us_, mock_log_engine_->parent_itself_.register_time_us_);
   }
@@ -541,6 +597,11 @@ TEST_F(TestLogConfigMgr, test_handle_register_parent_req)
     LogConfigInfoV2 config_info;
     EXPECT_EQ(OB_SUCCESS, config_info.generate(init_member_list, get_default_log_sync_replica_num(), learner_list, init_config_version));
     init_test_log_config_env(addr1, config_info, cm);
+    LogLearner child1(addr4, region1, 1);
+    child1.register_time_us_ = 1;
+    EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_req(child1, false));
+    EXPECT_EQ(REGISTER_DIFF_REGION, mock_log_engine_->reg_ret_);
+    mock_log_engine_->reset_register_parent_resp_ret();
     LogLearner child2(addr4, 1);
     child2.register_time_us_ = 1;
     EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_req(child2, false));
@@ -619,8 +680,36 @@ TEST_F(TestLogConfigMgr, test_handle_register_parent_resp)
     EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_resp(parent, candidate_list, REGISTER_NOT_MASTER));
     EXPECT_EQ(cm.last_submit_register_req_time_us_, 1);
     EXPECT_EQ(cm.register_time_us_, 1);
+    EXPECT_EQ(OB_SUCCESS, cm.handle_register_parent_resp(parent, candidate_list, REGISTER_DIFF_REGION));
+    EXPECT_GT(cm.last_submit_register_req_time_us_, 1);
+    EXPECT_GT(cm.register_time_us_, 1);
   }
   PALF_LOG(INFO, "test_handle_register_parent_resp end case");
+}
+
+TEST_F(TestLogConfigMgr, test_region_changed)
+{
+  PALF_LOG(INFO, "test_region_changed begin case");
+  ObMemberList init_member_list;
+  GlobalLearnerList learner_list;
+  LogConfigVersion init_config_version;
+  ASSERT_EQ(OB_SUCCESS, build_log_sync_member_list(init_member_list));
+  ASSERT_EQ(OB_SUCCESS, init_config_version.generate(1, 1));
+  LogConfigMgr cm;
+  LogConfigInfoV2 config_info;
+  EXPECT_EQ(OB_SUCCESS, config_info.generate(init_member_list, get_default_log_sync_replica_num(), learner_list, init_config_version));
+  init_test_log_config_env(addr5, config_info, cm, FOLLOWER);
+  cm.parent_ = addr4;
+  cm.register_time_us_ = 1;
+  cm.parent_keepalive_time_us_ = 5;
+  mock_state_mgr_->leader_ = addr1;
+  EXPECT_EQ(OB_SUCCESS, cm.set_region(region1));
+  EXPECT_EQ(region1, cm.region_);
+  EXPECT_FALSE(cm.parent_.is_valid());
+  EXPECT_GT(cm.last_submit_register_req_time_us_, 1);
+  EXPECT_GT(cm.register_time_us_, 1);
+  EXPECT_EQ(cm.parent_keepalive_time_us_, OB_INVALID_TIMESTAMP);
+  PALF_LOG(INFO, "test_region_changed end case");
 }
 
 TEST_F(TestLogConfigMgr, test_check_children_health)
@@ -638,17 +727,17 @@ TEST_F(TestLogConfigMgr, test_check_children_health)
     EXPECT_EQ(OB_SUCCESS, config_info.generate(init_member_list, get_default_log_sync_replica_num(), learner_list, init_config_version));
     init_test_log_config_env(addr1, config_info, cm);
     LogLearner timeout_child(addr4, 1);
-    LogLearner child_a(addr5, 1);
-    LogLearner normal_child(addr6, 1);
-    child_a.keepalive_ts_ = ObTimeUtility::current_time_ns();
+    LogLearner dup_region_child(addr5, 1);
+    LogLearner normal_child(addr6, region1, 1);
+    dup_region_child.keepalive_ts_ = ObTimeUtility::current_time_ns();
     normal_child.keepalive_ts_ = ObTimeUtility::current_time_ns();
     cm.children_.add_learner(timeout_child);
-    cm.children_.add_learner(child_a);
+    cm.children_.add_learner(dup_region_child);
     cm.children_.add_learner(normal_child);
     (void) cm.check_children_health();
     EXPECT_EQ(2, cm.children_.get_member_number());
     EXPECT_TRUE(cm.children_.contains(normal_child.server_));
-    EXPECT_TRUE(cm.children_.contains(child_a.server_));
+    EXPECT_TRUE(cm.children_.contains(dup_region_child.server_));
   }
   {
     // active follower
@@ -657,9 +746,12 @@ TEST_F(TestLogConfigMgr, test_check_children_health)
     EXPECT_EQ(OB_SUCCESS, config_info.generate(init_member_list, get_default_log_sync_replica_num(), learner_list, init_config_version));
     init_test_log_config_env(addr2, config_info, cm, FOLLOWER);
     LogLearner timeout_child(addr4, 1);
+    LogLearner diff_region_child(addr5, region1, 1);
     LogLearner normal_child(addr6, 1);
+    diff_region_child.keepalive_ts_ = ObTimeUtility::current_time_ns();
     normal_child.keepalive_ts_ = ObTimeUtility::current_time_ns();
     cm.children_.add_learner(timeout_child);
+    cm.children_.add_learner(diff_region_child);
     cm.children_.add_learner(normal_child);
     (void) cm.check_children_health();
     LogLearnerList children;

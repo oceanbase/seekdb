@@ -26,6 +26,7 @@
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/ob_i_table.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
@@ -35,7 +36,8 @@ class ObTenantTabletIterator;
 }
 namespace observer
 {
-class ObAllVirtualTableMgr : public common::ObVirtualTableScannerIterator
+class ObAllVirtualTableMgr : public common::ObVirtualTableScannerIterator,
+                             public omt::ObMultiTenantOperator
 {
   enum COLUMN_ID_LIST
   {
@@ -67,6 +69,13 @@ public:
   virtual void reset();
   inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
+  // Filter to get the tenants that need processing
+  virtual bool is_need_process() override;
+  // Process the tenant of the current iteration
+  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  // Release the resources of the previous tenant
+  virtual void release_last_tenant() override;
+
   int get_next_tablet();
   int get_next_table(storage::ObITable *&table);
 private:

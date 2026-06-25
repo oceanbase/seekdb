@@ -28,7 +28,6 @@
 #include "share/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ddl/ob_storage_cache_ddl_util.h"
 #include "lib/restore/ob_storage_info.h"
-#include "share/external_table/ob_external_table_utils.h"
 
 namespace oceanbase
 {
@@ -53,8 +52,7 @@ ObSchemaPrinter::ObSchemaPrinter(ObSchemaGetterGuard &schema_guard,
 {
 }
 
-int ObSchemaPrinter::print_table_definition(const uint64_t tenant_id,
-                                          const uint64_t table_id,
+int ObSchemaPrinter::print_table_definition(const uint64_t table_id,
                                           char* buf,
                                           const int64_t& buf_len,
                                           int64_t& pos,
@@ -72,21 +70,19 @@ int ObSchemaPrinter::print_table_definition(const uint64_t tenant_id,
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
   const char* prefix_arr[4] = {"", " TEMPORARY", " GLOBAL TEMPORARY", " EXTERNAL"};
   int prefix_idx = 0;
-  if (OB_FAIL(get_table_schema_(tenant_id, table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", K(ret), K(tenant_id));
+  if (OB_FAIL(get_table_schema_(table_id, table_schema))) {
+    LOG_WARN("fail to get table schema", K(ret));
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     SHARE_SCHEMA_LOG(WARN, "Unknow table", K(ret), K(table_id));
-  } else if (OB_FAIL(get_database_schema_(tenant_id, table_schema->get_database_id(), db_schema))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to get database schema", K(ret), K(tenant_id));
+  } else if (OB_FAIL(get_database_schema_( table_schema->get_database_id(), db_schema))) {
+    SHARE_SCHEMA_LOG(WARN, "fail to get database schema", K(ret));
   } else if (NULL == db_schema) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "database not exist", K(ret));
   } else {
     if (table_schema->is_mysql_tmp_table()) {
       prefix_idx = 1;
-    } else if (table_schema->is_external_table()) {
-      prefix_idx = 3;
     } else {
       prefix_idx = 0;
     }
@@ -131,8 +127,6 @@ int ObSchemaPrinter::print_table_definition(const uint64_t tenant_id,
       SHARE_SCHEMA_LOG(WARN, "fail to print constraints", K(ret), K(*table_schema));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n) "))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print )", K(ret));
-    } else if (table_schema->is_external_table() && (OB_FAIL(print_external_table_file_info(*table_schema, allocator, buf, buf_len, pos)))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print external table file format", K(ret));
     } else if (OB_FAIL(print_table_definition_table_options(*table_schema, buf, buf_len, pos, false, agent_mode, sql_mode))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print table options", K(ret), K(*table_schema));
     } else if (OB_FAIL(print_table_definition_partition_options(*table_schema, buf, buf_len, pos, agent_mode, tz_info))) {
@@ -423,9 +417,7 @@ int ObSchemaPrinter::print_generated_column_definition(const ObColumnSchemaV2 &g
       SHARE_SCHEMA_LOG(WARN, "fail to print keywords", K(ret));
     } else if (OB_FAIL(gen_col.get_cur_default_value().get_string(expr_str))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print sql literal", K(ret));
-    } else if (OB_FAIL(session.init(0 /*default session id*/,
-                                    0 /*default proxy id*/,
-                                    &allocator))) {
+    } else if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
       SHARE_SCHEMA_LOG(WARN, "fail to init session", K(ret));
     } else if (OB_FAIL(session.load_default_sys_variable(false, false))) {
       SHARE_SCHEMA_LOG(WARN, "session load default system variable failed", K(ret));
@@ -482,10 +474,10 @@ int ObSchemaPrinter::print_identity_column_definition(const ObColumnSchemaV2 &id
     } else {
       const ObSequenceSchema *sequence_schema = NULL;
       const ObDatabaseSchema *database_schema = NULL;
-      if (OB_FAIL(schema_guard_.get_sequence_schema(table_schema.get_tenant_id(),
+      if (OB_FAIL(schema_guard_.get_sequence_schema(
                                                     iden_col.get_sequence_id(),
                                                     sequence_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "get sequence schema failed", K(table_schema.get_tenant_id()),
+        SHARE_SCHEMA_LOG(WARN, "get sequence schema failed",
                                                              K(iden_col.get_sequence_id()),
                                                              K(ret));
       } else if (OB_ISNULL(sequence_schema)) {
@@ -577,7 +569,7 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
           if (NULL == rowkey_column) {
             ret = OB_SCHEMA_ERROR;
             SHARE_SCHEMA_LOG(WARN, "fail to get rowkey column", K(ret));
-          } else if (NULL == (col = schema_guard_.get_column_schema(index_schema->get_tenant_id(),
+          } else if (NULL == (col = schema_guard_.get_column_schema(
                                                                     index_schema->get_table_id(),
                                                                     rowkey_column->column_id_))) {
             ret = OB_SCHEMA_ERROR;
@@ -710,7 +702,7 @@ int ObSchemaPrinter::print_table_definition_indexes(const ObTableSchema &table_s
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
     const ObTableSchema *index_schema = NULL;
-    if (OB_FAIL(schema_guard_.get_table_schema(table_schema.get_tenant_id(),
+    if (OB_FAIL(schema_guard_.get_table_schema(
                 simple_index_infos.at(i).table_id_, index_schema))) {
       LOG_WARN("fail to get table schema", K(ret));
     } else if (NULL == index_schema) {
@@ -977,7 +969,7 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
     LinkExecCtxGuard link_guard(default_session, exec_ctx);
     exec_ctx.set_my_session(&default_session);
     exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
-    if (OB_FAIL(default_session.test_init(0, 0, 0, &allocator))) {
+    if (OB_FAIL(default_session.test_init(0, 0, &allocator))) {
       LOG_WARN("init empty session failed", K(ret));
     } else if (OB_FAIL(default_session.load_default_sys_variable(false, false))) {
       LOG_WARN("session load default system variable failed", K(ret));
@@ -1217,7 +1209,7 @@ int ObSchemaPrinter::print_rowkey_info(
 {
   int ret = OB_SUCCESS;
   const ObRowkeyInfo& rowkey_info = table_schema.get_rowkey_info();
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   const uint64_t table_id = table_schema.get_table_id();
   ObArenaAllocator allocator("PrintRowkeyInfo");
   bool is_first_col = true;
@@ -1226,7 +1218,7 @@ int ObSchemaPrinter::print_rowkey_info(
     ObString new_col_name;
     if (NULL == (col = table_schema.get_column_schema(rowkey_info.get_column(j)->column_id_))) {
       ret = OB_ERR_BAD_FIELD_ERROR;
-      SHARE_SCHEMA_LOG(WARN, "fail to get column", KR(ret), K(tenant_id),
+      SHARE_SCHEMA_LOG(WARN, "fail to get column", KR(ret),
                        "column_id", rowkey_info.get_column(j)->column_id_);
     } else if (col->get_column_id() == OB_HIDDEN_SESSION_ID_COLUMN_ID) {
       // do nothing
@@ -1268,7 +1260,7 @@ int ObSchemaPrinter::print_referenced_table_info(
   if (NULL == parent_table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     SHARE_SCHEMA_LOG(WARN, "unknown table", K(ret));
-  } else if (OB_FAIL(schema_guard_.get_database_schema(parent_table_schema->get_tenant_id(), parent_table_schema->get_database_id(), parent_db_schema))) {
+  } else if (OB_FAIL(schema_guard_.get_database_schema( parent_table_schema->get_database_id(), parent_db_schema))) {
     SHARE_SCHEMA_LOG(WARN, "failed to get database", K(ret), K(parent_table_schema->get_database_id()));
   } else if (NULL == parent_db_schema) {
     ret = OB_ERR_BAD_DATABASE;
@@ -1351,7 +1343,7 @@ int ObSchemaPrinter::print_table_definition_foreign_keys(const ObTableSchema &ta
         if (OB_SUCC(ret)) {
           if (foreign_key_info->is_parent_table_mock_) {
             const ObMockFKParentTableSchema *mock_fk_parent_table_schema = NULL;
-            if (OB_FAIL(schema_guard_.get_mock_fk_parent_table_schema_with_id(table_schema.get_tenant_id(), parent_table_id, mock_fk_parent_table_schema))) {
+            if (OB_FAIL(schema_guard_.get_mock_fk_parent_table_schema_with_id(parent_table_id, mock_fk_parent_table_schema))) {
               LOG_WARN("fail to get table schema", K(ret), K(parent_table_id));
             } else if (OB_ISNULL(mock_fk_parent_table_schema)) {
               ret = OB_TABLE_NOT_EXIST;
@@ -1361,7 +1353,7 @@ int ObSchemaPrinter::print_table_definition_foreign_keys(const ObTableSchema &ta
             }
           } else {
             const ObTableSchema *parent_table_schema = NULL;
-            if (OB_FAIL(schema_guard_.get_table_schema(table_schema.get_tenant_id(), parent_table_id, parent_table_schema))) {
+            if (OB_FAIL(schema_guard_.get_table_schema( parent_table_id, parent_table_schema))) {
               LOG_WARN("fail to get table schema", K(ret), K(parent_table_id));
             } else if (OB_ISNULL(parent_table_schema)) {
               ret = OB_TABLE_NOT_EXIST;
@@ -1478,7 +1470,7 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
 {
   int ret = OB_SUCCESS;
   const bool is_index_tbl = table_schema.is_index_table();
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
 
 
   if (OB_SUCCESS == ret && !table_schema.is_external_table() && !is_index_tbl && !is_for_table_status
@@ -1492,7 +1484,7 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
     uint64_t auto_increment = 0;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(
-          table_schema.get_tenant_id(), table_schema.get_table_id(),
+          table_schema.get_table_id(),
           table_schema.get_autoinc_column_id(), table_schema.is_order_auto_increment_mode(),
           table_schema.get_truncate_version(), auto_increment))) {
       SHARE_SCHEMA_LOG(WARN, "fail to get auto_increment value", K(ret));
@@ -1626,8 +1618,7 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl
       && common::OB_INVALID_ID != table_schema.get_tablegroup_id()
       && !is_no_table_options(sql_mode)) {
-    const ObTablegroupSchema *tablegroup_schema = schema_guard_.get_tablegroup_schema(
-          tenant_id, table_schema.get_tablegroup_id());
+    const ObTablegroupSchema *tablegroup_schema = schema_guard_.get_tablegroup_schema( table_schema.get_tablegroup_id());
     if (NULL != tablegroup_schema) {
       const ObString tablegroup_name = tablegroup_schema->get_tablegroup_name();
       if (tablegroup_name.length() > 0 && NULL != tablegroup_name.ptr()) {
@@ -1959,7 +1950,6 @@ int ObSchemaPrinter::print_table_definition_table_options(
 {
   int ret = OB_SUCCESS;
   const bool is_index_tbl = table_schema.is_index_table();
-  const uint64_t tenant_id = table_schema.get_tenant_id();
 
   if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -1972,7 +1962,6 @@ int ObSchemaPrinter::print_table_definition_table_options(
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "sql_proxy is null", K(ret));
     } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(
-                         table_schema.get_tenant_id(),
                          table_schema.get_table_id(),
                          table_schema.get_autoinc_column_id(),
                          table_schema.is_order_auto_increment_mode(),
@@ -2091,8 +2080,7 @@ int ObSchemaPrinter::print_table_definition_table_options(
   }
   if (OB_SUCC(ret) && !strict_compat_
       && !is_index_tbl && common::OB_INVALID_ID != table_schema.get_tablegroup_id()) {
-    const ObTablegroupSchema *tablegroup_schema = schema_guard_.get_tablegroup_schema(
-          tenant_id, table_schema.get_tablegroup_id());
+    const ObTablegroupSchema *tablegroup_schema = schema_guard_.get_tablegroup_schema( table_schema.get_tablegroup_id());
     if (NULL != tablegroup_schema) {
       const ObString tablegroup_name = tablegroup_schema->get_tablegroup_name_str();
       if (tablegroup_name.length() > 0 && NULL != tablegroup_name.ptr()) {
@@ -2286,7 +2274,7 @@ int ObSchemaPrinter::print_index_definition_columns(
                 LinkExecCtxGuard link_guard(default_session, exec_ctx);
                 exec_ctx.set_my_session(&default_session);
                 exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
-                if (OB_FAIL(default_session.test_init(0, 0, 0, &allocator))) {
+                if (OB_FAIL(default_session.test_init(0, 0, &allocator))) {
                   OB_LOG(WARN, "init empty session failed", K(ret));
                 } else if (OB_FAIL(default_session.load_default_sys_variable(false, false))) {
                   OB_LOG(WARN, "session load default system variable failed", K(ret));
@@ -2450,9 +2438,7 @@ int ObSchemaPrinter::print_table_index_stroing(
   return ret;
 }
 
-int ObSchemaPrinter::print_index_table_definition(
-    const uint64_t tenant_id,
-    const uint64_t index_table_id,
+int ObSchemaPrinter::print_index_table_definition(const uint64_t index_table_id,
     char* buf, const int64_t buf_len, int64_t& pos,
     const ObTimeZoneInfo *tz_info,
     bool is_agent_mode) const
@@ -2467,21 +2453,21 @@ int ObSchemaPrinter::print_index_table_definition(
   if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "argument is invalid", K(ret));
-  } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard_.get_table_schema(
              index_table_id, index_table_schema))) {
-    OB_LOG(WARN, "fail to get index table schema", K(ret), K(tenant_id));
+    OB_LOG(WARN, "fail to get index table schema", K(ret));
   } else if (NULL == index_table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     OB_LOG(WARN, "Unknow table", K(ret), K(index_table_id));
-  } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard_.get_table_schema(
              index_table_schema->get_data_table_id(), table_schema))) {
-    OB_LOG(WARN, "fail to get data table schema", K(ret), K(tenant_id));
+    OB_LOG(WARN, "fail to get data table schema", K(ret));
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     OB_LOG(WARN, "Unknow table", K(ret), K(index_table_schema->get_data_table_id()));
-  } else if (OB_FAIL(schema_guard_.get_database_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard_.get_database_schema(
              table_schema->get_database_id(), ds_schema))) {
-    OB_LOG(WARN, "fail to get database schema", K(ret), K(tenant_id));
+    OB_LOG(WARN, "fail to get database schema", K(ret));
   } else if (NULL == ds_schema) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "database not exist", K(ret));
@@ -2559,9 +2545,7 @@ int ObSchemaPrinter::print_index_table_definition(
   return ret;
 }
 
-int ObSchemaPrinter::print_view_definiton(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObSchemaPrinter::print_view_definiton(const uint64_t table_id,
     char *buf,
     const int64_t &buf_len,
     int64_t &pos,
@@ -2575,8 +2559,8 @@ int ObSchemaPrinter::print_view_definiton(
     const ObTableSchema *table_schema = NULL;
     bool need_print_column_list = false;
     common::ObSEArray<uint64_t, 16> column_ids;
-    if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, table_id, table_schema))) {
-      LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(table_id));
+    if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
+      LOG_WARN("fail to get table schema", K(ret), K(table_id));
     } else if (NULL == table_schema) {
       ret = OB_TABLE_NOT_EXIST;
       SHARE_SCHEMA_LOG(WARN, "Unknow table", K(ret), K(table_id));
@@ -2618,9 +2602,7 @@ int ObSchemaPrinter::print_view_definiton(
   }
   return ret;
 }
-int ObSchemaPrinter::print_materialized_view_definition(
-    const uint64_t tenant_id,
-    const uint64_t table_id,
+int ObSchemaPrinter::print_materialized_view_definition(const uint64_t table_id,
     char *buf,
     const int64_t &buf_len,
     int64_t &pos,
@@ -2642,16 +2624,16 @@ int ObSchemaPrinter::print_materialized_view_definition(
     ObMViewInfo mview_info;
     bool need_print_column_list = false;
     common::ObSEArray<uint64_t, 16> column_ids;
-    if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, table_id, table_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get table schema", KR(ret), K(tenant_id), K(table_id));
+    if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to get table schema", KR(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       SHARE_SCHEMA_LOG(WARN, "Unknow table", KR(ret), K(table_id));
     } else if (OB_INVALID_ID == (container_table_id = table_schema->get_data_table_id())) {
       ret = OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN, "fail to get container_table_id", KR(ret), K(tenant_id), K(table_id));
-    } else if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, container_table_id, container_table_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get container_table_schema", KR(ret), K(tenant_id), K(table_id), K(container_table_id));
+      SHARE_SCHEMA_LOG(WARN, "fail to get container_table_id", KR(ret), K(table_id));
+    } else if (OB_FAIL(schema_guard_.get_table_schema( container_table_id, container_table_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to get container_table_schema", KR(ret), K(table_id), K(container_table_id));
     } else if (OB_ISNULL(container_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       SHARE_SCHEMA_LOG(WARN, "Unknow container table", KR(ret), K(table_id), K(container_table_id));
@@ -2679,12 +2661,12 @@ int ObSchemaPrinter::print_materialized_view_definition(
         const ObColumnSchemaV2 *col = nullptr;
         if (OB_ISNULL(rowkey_info.get_column(j))) {
           ret = OB_ERR_UNEXPECTED;
-          SHARE_SCHEMA_LOG(WARN, "fail to get column", KR(ret), K(tenant_id));
-        } else if (OB_ISNULL(col = schema_guard_.get_column_schema(tenant_id, 
+          SHARE_SCHEMA_LOG(WARN, "fail to get column", KR(ret));
+        } else if (OB_ISNULL(col = schema_guard_.get_column_schema( 
                                                     container_table_id, 
                                                     rowkey_info.get_column(j)->column_id_))) {
           ret = OB_ERR_UNEXPECTED;
-          SHARE_SCHEMA_LOG(WARN, "fail to get column schema", KR(ret), K(tenant_id),
+          SHARE_SCHEMA_LOG(WARN, "fail to get column schema", KR(ret),
                        "column_id", rowkey_info.get_column(j)->column_id_);
         } else if (OB_SUCC(ret) 
                    && col->get_column_id() != OB_HIDDEN_SESSION_ID_COLUMN_ID
@@ -2726,7 +2708,7 @@ int ObSchemaPrinter::print_materialized_view_definition(
                                                               buf_len, 
                                                               pos))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print materialized view column group", KR(ret), K(*container_table_schema));
-      } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(*GCTX.sql_proxy_, tenant_id, table_id, mview_info))) {
+      } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(*GCTX.sql_proxy_, table_id, mview_info))) {
         SHARE_SCHEMA_LOG(WARN, "fail to fecth materialized view info", KR(ret), K(table_id));
       } else if (!strict_compat_) {
         switch (mview_info.get_refresh_method()) {
@@ -2814,9 +2796,7 @@ int ObSchemaPrinter::print_materialized_view_definition(
   return ret;
 }
 
-int ObSchemaPrinter::print_tablegroup_definition(
-    const uint64_t tenant_id,
-    const uint64_t tablegroup_id,
+int ObSchemaPrinter::print_tablegroup_definition(const uint64_t tablegroup_id,
     char* buf,
     const int64_t& buf_len,
     int64_t& pos,
@@ -2826,8 +2806,8 @@ int ObSchemaPrinter::print_tablegroup_definition(
   int ret = OB_SUCCESS;
 
   const ObTablegroupSchema *tablegroup_schema = NULL;
-  if (OB_FAIL(schema_guard_.get_tablegroup_schema(tenant_id, tablegroup_id, tablegroup_schema))) {
-      LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(tablegroup_id));
+  if (OB_FAIL(schema_guard_.get_tablegroup_schema( tablegroup_id, tablegroup_schema))) {
+      LOG_WARN("fail to get table schema", K(ret), K(tablegroup_id));
   } else if (NULL == tablegroup_schema) {
     ret = OB_TABLE_NOT_EXIST;
     SHARE_SCHEMA_LOG(WARN, "Unknow table", K(ret), K(tablegroup_id));
@@ -3240,9 +3220,7 @@ int ObSchemaPrinter::print_range_partition_elements(const ObPartitionSchema *&sc
   return ret;
 }
 
-int ObSchemaPrinter::print_database_definiton(
-    const uint64_t tenant_id,
-    const uint64_t database_id,
+int ObSchemaPrinter::print_database_definiton(const uint64_t database_id,
     bool if_not_exists,
     char *buf,
     const int64_t &buf_len,
@@ -3258,11 +3236,11 @@ int ObSchemaPrinter::print_database_definiton(
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_database_schema(tenant_id, database_id, database_schema))) {
-      LOG_WARN("get database schema failed ", K(ret), K(tenant_id));
+    if (OB_FAIL(schema_guard_.get_database_schema( database_id, database_schema))) {
+      LOG_WARN("get database schema failed ", K(ret));
     } else if (NULL == database_schema) {
       ret = OB_ERR_BAD_DATABASE;
-      SHARE_SCHEMA_LOG(WARN, "Unknow database", K(ret), K(tenant_id), K(database_id));
+      SHARE_SCHEMA_LOG(WARN, "Unknow database", K(ret), K(database_id));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                        "CREATE DATABASE %s",
                                        true == if_not_exists? "IF NOT EXISTS " : ""))) {
@@ -3304,8 +3282,7 @@ int ObSchemaPrinter::print_database_definiton(
   if (OB_SUCC(ret) && !strict_compat_) {
     uint64_t tablegroup_id = database_schema->get_default_tablegroup_id();
     if (common::OB_INVALID_ID != tablegroup_id) {
-      const ObTablegroupSchema *tablegroup_schema = schema_guard_.get_tablegroup_schema(
-                                                    tenant_id, tablegroup_id);
+      const ObTablegroupSchema *tablegroup_schema = schema_guard_.get_tablegroup_schema( tablegroup_id);
       if (NULL != tablegroup_schema) {
         const ObString tablegroup_name = tablegroup_schema->get_tablegroup_name();
         if (!tablegroup_name.empty()) {
@@ -3330,8 +3307,7 @@ int ObSchemaPrinter::print_database_definiton(
   return ret;
 }
 
-int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
-                            common::ObMySQLProxy *sql_proxy,
+int ObSchemaPrinter::print_tenant_definition(common::ObMySQLProxy *sql_proxy,
                             char* buf,
                             const int64_t& buf_len,
                             int64_t& pos,
@@ -3347,12 +3323,12 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_tenant_info(tenant_id, tenant_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to get tenant info", K(tenant_id), K(ret));
+    if (OB_FAIL(schema_guard_.get_tenant_info(tenant_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to get tenant info", K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
-      SHARE_SCHEMA_LOG(WARN, "tenant not exist", K(tenant_id), K(ret));
-    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
+      SHARE_SCHEMA_LOG(WARN, "tenant not exist", K(ret));
+    } else if (OB_FAIL(schema_guard_.get_sys_variable_schema( sys_variable_schema))) {
       SHARE_SCHEMA_LOG(WARN, "get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -3370,8 +3346,7 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
     ObObj server_collation_obj;
     ObCollationType server_collation_type = CS_TYPE_INVALID;
     ObArenaAllocator allocator;
-    if (OB_FAIL(schema_guard_.get_tenant_system_variable(tenant_id,
-                                                         SYS_VAR_COLLATION_SERVER,
+    if (OB_FAIL(schema_guard_.get_tenant_system_variable(SYS_VAR_COLLATION_SERVER,
                                                          server_collation))) {
       LOG_WARN("fail to get tenant system variable", K(ret));
     } else if (OB_FAIL(server_collation->get_value(&allocator, NULL, server_collation_obj))) {
@@ -3425,8 +3400,8 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
       SHARE_SCHEMA_LOG(WARN, "sql proxy is null", K(ret));
     } else if (OB_FAIL(ui_getter.init(*sql_proxy, &GCONF))) {
       SHARE_SCHEMA_LOG(WARN, "init unit getter fail", K(ret));
-    } else if (OB_FAIL(ui_getter.get_pools_of_tenant(tenant_id, pool_list))) {
-      SHARE_SCHEMA_LOG(WARN, "faile to get pool list", K(tenant_id));
+    } else if (OB_FAIL(ui_getter.get_pools_of_tenant(pool_list))) {
+      SHARE_SCHEMA_LOG(WARN, "faile to get pool list");
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "resource_pool_list("))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print resource_pool_list", K(ret));
     } else {
@@ -3455,8 +3430,7 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
   return ret;
 }
 
-int ObSchemaPrinter::add_create_tenant_variables(
-    const uint64_t tenant_id, common::ObMySQLProxy *const sql_proxy,
+int ObSchemaPrinter::add_create_tenant_variables(common::ObMySQLProxy *const sql_proxy,
     char *buf, const int64_t buf_len, int64_t &pos) const
 {
   int ret = OB_SUCCESS;
@@ -3473,7 +3447,7 @@ int ObSchemaPrinter::add_create_tenant_variables(
     if (OB_ISNULL(buf) || OB_ISNULL(sql_proxy)) {
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "argument is invalid", K(ret));
-    } else if (OB_FAIL(sql.assign_fmt("select flags, data_type, name, value from __all_virtual_sys_variable;"))) {
+    } else if (OB_FAIL(sql.assign_fmt("select flags, data_type, name, value from __all_sys_variable;"))) {
       OB_LOG(WARN, "fail to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
       OB_LOG(WARN, "fail to execute sql", K(ret));
@@ -3548,8 +3522,7 @@ int ObSchemaPrinter::add_create_tenant_variables(
   return ret;
 }
 
-int ObSchemaPrinter::print_package_definition(const uint64_t tenant_id,
-                                              uint64_t package_id,
+int ObSchemaPrinter::print_package_definition(uint64_t package_id,
                                               char* buf,
                                               const int64_t& buf_len,
                                               int64_t& pos) const
@@ -3562,12 +3535,12 @@ int ObSchemaPrinter::print_package_definition(const uint64_t tenant_id,
   pl::ObPLParser parser(allocator, ObCharsets4Parser());
   ObStmtNodeTree *package_stmt = NULL;
   const ObStmtNodeTree *real_package_stmt = NULL;
-  OZ (schema_guard_.get_package_info(tenant_id, package_id, package_info));
+  OZ (schema_guard_.get_package_info( package_id, package_info));
   if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
     ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
     SHARE_SCHEMA_LOG(WARN, "Unknow package", K(ret), K(package_id));
   }
-  OZ (schema_guard_.get_database_schema(tenant_id, package_info->get_database_id(), database_schema));
+  OZ (schema_guard_.get_database_schema( package_info->get_database_id(), database_schema));
   if (OB_SUCC(ret) && OB_ISNULL(database_schema)) {
     ret = OB_ERR_BAD_DATABASE;
     SHARE_SCHEMA_LOG(WARN, "Unknow database", K(ret), K(package_info->get_database_id()));
@@ -3628,7 +3601,7 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
       OZ (databuff_printf(buf, buf_len, pos, " %.*s", param->get_type_name().length(), param->get_type_name().ptr()));
     } else {
       CK (param->get_type_owner() != OB_INVALID_ID);
-      OZ (schema_guard_.get_database_schema(param->get_tenant_id(),
+      OZ (schema_guard_.get_database_schema(
                                           param->get_type_owner(),
                                           database_schema));
       if (OB_SUCC(ret))  {
@@ -3798,7 +3771,7 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
   const ObDatabaseSchema *db_schema = NULL;
   CK (OB_NOT_NULL(routine_info));
   CK (!body.empty());
-  OZ (schema_guard_.get_database_schema(routine_info->get_tenant_id(),
+  OZ (schema_guard_.get_database_schema(
       routine_info->get_database_id(), db_schema), routine_info);
   if (OB_SUCC(ret) && OB_ISNULL(db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
@@ -3853,9 +3826,7 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
   return ret;
 }
 
-int ObSchemaPrinter::print_routine_definition(
-    const uint64_t tenant_id,
-    const uint64_t routine_id,
+int ObSchemaPrinter::print_routine_definition(const uint64_t routine_id,
     const sql::ObExecEnv &exec_env,
     char* buf,
     const int64_t& buf_len,
@@ -3865,7 +3836,7 @@ int ObSchemaPrinter::print_routine_definition(
   int ret = OB_SUCCESS;
   const ObRoutineInfo *routine_info = NULL;
   bool use_v1 = true;
-  OZ (schema_guard_.get_routine_info(tenant_id, routine_id, routine_info), routine_id);
+  OZ (schema_guard_.get_routine_info( routine_id, routine_info), routine_id);
   if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
     ret = OB_ERR_SP_DOES_NOT_EXIST;
     SHARE_SCHEMA_LOG(WARN, "Unknow routine", K(ret), K(routine_id));
@@ -4065,7 +4036,7 @@ int ObSchemaPrinter::print_routine_definition_v2_oracle(
 
   const ObString db_name;
   const ObDatabaseSchema *db_schema = nullptr;
-  OZ (schema_guard_.get_database_schema(routine_info.get_tenant_id(),
+  OZ (schema_guard_.get_database_schema(
       routine_info.get_database_id(), db_schema), routine_info);
   if (OB_SUCC(ret) && OB_ISNULL(db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
@@ -4085,9 +4056,7 @@ int ObSchemaPrinter::print_routine_definition_v2_oracle(
   return ret;
 }
 
-int ObSchemaPrinter::print_foreign_key_definition(
-    const uint64_t tenant_id,
-    const ObForeignKeyInfo &foreign_key_info,
+int ObSchemaPrinter::print_foreign_key_definition(const ObForeignKeyInfo &foreign_key_info,
     char *buf, int64_t buf_len, int64_t &pos) const
 {
   /*
@@ -4119,26 +4088,25 @@ int ObSchemaPrinter::print_foreign_key_definition(
   const char *update_action_str = NULL;
   const char *delete_action_str = NULL;
   uint64_t parent_database_id = OB_INVALID_ID;
-  OZ (schema_guard_.get_table_schema(
-      tenant_id, foreign_key_info.child_table_id_, child_table_schema));
+  OZ (schema_guard_.get_table_schema( foreign_key_info.child_table_id_, child_table_schema));
   OV (OB_NOT_NULL(child_table_schema), OB_TABLE_NOT_EXIST, foreign_key_info.child_table_id_);
 
   if (OB_SUCC(ret)) {
     if (foreign_key_info.is_parent_table_mock_) {
-      if (OB_FAIL(schema_guard_.get_mock_fk_parent_table_schema_with_id(child_table_schema->get_tenant_id(), foreign_key_info.parent_table_id_, mock_fk_parent_table_schema))) {
+      if (OB_FAIL(schema_guard_.get_mock_fk_parent_table_schema_with_id(foreign_key_info.parent_table_id_, mock_fk_parent_table_schema))) {
         LOG_WARN("fail to check_mock_fk_parent_table_exist_by_id", K(ret));
       } else if (OB_ISNULL(mock_fk_parent_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("mock_fk_parent_table_schema is not exist or is null", K(ret), K(mock_fk_parent_table_schema), K(child_table_schema->get_tenant_id()), K(foreign_key_info.parent_table_id_));
+        LOG_WARN("mock_fk_parent_table_schema is not exist or is null", K(ret), K(mock_fk_parent_table_schema), K(foreign_key_info.parent_table_id_));
       }
     } else {
-      OZ (schema_guard_.get_table_schema(tenant_id, foreign_key_info.parent_table_id_, parent_table_schema));
+      OZ (schema_guard_.get_table_schema( foreign_key_info.parent_table_id_, parent_table_schema));
       OV (OB_NOT_NULL(parent_table_schema), OB_TABLE_NOT_EXIST, foreign_key_info.parent_table_id_);
     }
   }
-  OZ (schema_guard_.get_database_schema(tenant_id, child_table_schema->get_database_id(), child_database_schema));
+  OZ (schema_guard_.get_database_schema( child_table_schema->get_database_id(), child_database_schema));
   OX (parent_database_id = foreign_key_info.is_parent_table_mock_ ? mock_fk_parent_table_schema->get_database_id() : parent_table_schema->get_database_id())
-  OZ (schema_guard_.get_database_schema(tenant_id, parent_database_id, parent_database_schema));
+  OZ (schema_guard_.get_database_schema( parent_database_id, parent_database_schema));
   OV (OB_NOT_NULL(child_database_schema), OB_ERR_BAD_DATABASE, child_table_schema->get_database_id());
   OV (OB_NOT_NULL(parent_database_schema), OB_ERR_BAD_DATABASE, parent_database_id);
 
@@ -4347,7 +4315,7 @@ int ObSchemaPrinter::print_trigger_status(const ObTriggerInfo &trigger_info,
 {
   int ret = OB_SUCCESS;
   const ObDatabaseSchema *database_schema = NULL;
-  OZ (schema_guard_.get_database_schema(trigger_info.get_tenant_id(),
+  OZ (schema_guard_.get_database_schema(
                                         trigger_info.get_database_id(),
                                         database_schema));
   CK (OB_NOT_NULL(database_schema));
@@ -4366,12 +4334,12 @@ int ObSchemaPrinter::print_trigger_base_object(const ObTriggerInfo &trigger_info
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
   const ObDatabaseSchema *database_schema = NULL;
-  const uint64_t tenant_id = trigger_info.get_tenant_id();
+  
   OV (!trigger_info.is_system_type(), OB_NOT_SUPPORTED, trigger_info.get_trigger_type());
-  OZ (schema_guard_.get_table_schema(tenant_id, trigger_info.get_base_object_id(), table_schema),
+  OZ (schema_guard_.get_table_schema( trigger_info.get_base_object_id(), table_schema),
       trigger_info.get_base_object_id());
   OV (OB_NOT_NULL(table_schema), OB_ERR_UNEXPECTED, trigger_info.get_base_object_id());
-  OZ (schema_guard_.get_database_schema(tenant_id,
+  OZ (schema_guard_.get_database_schema(
       table_schema->get_database_id(), database_schema),
       trigger_info.get_base_object_id());
   OV (OB_NOT_NULL(database_schema), OB_ERR_UNEXPECTED, table_schema->get_database_id());
@@ -4488,7 +4456,7 @@ int ObSchemaPrinter::print_constraint_definition(const ObDatabaseSchema &db_sche
 {
   int ret = OB_SUCCESS;
   const ObConstraint *cst = NULL;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
   ObArenaAllocator allocator("PrintConsDef");
   ObTableSchema::const_constraint_iterator it_begin = table_schema.constraint_begin();
   ObTableSchema::const_constraint_iterator it_end = table_schema.constraint_end();
@@ -4549,8 +4517,7 @@ int ObSchemaPrinter::print_constraint_definition(const ObDatabaseSchema &db_sche
   return ret;
 }
 
-int ObSchemaPrinter::print_user_definition(uint64_t tenant_id,
-                                          const ObUserInfo &user_info,
+int ObSchemaPrinter::print_user_definition(const ObUserInfo &user_info,
                                           char *buf,
                                           const int64_t &buf_len,
                                           int64_t &pos,
@@ -5021,7 +4988,7 @@ int ObSchemaPrinter::print_table_definition_lob_params(const ObTableSchema &tabl
                                                        int64_t& pos) const
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = table_schema.get_tenant_id();
+  
   if (table_schema.is_sys_table() || table_schema.is_vir_table()) {
     // skip for sys/vir table
   } else if (table_schema.get_lob_inrow_threshold() == OB_SYS_VAR_DEFAULT_LOB_INROW_THRESHOLD) {
@@ -5040,19 +5007,18 @@ int ObSchemaPrinter::print_heap_table_pk_info(const ObTableSchema &table_schema,
 {
   int ret = OB_SUCCESS;
   bool is_first_col = true;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
   const uint64_t table_id = table_schema.get_table_id();
   bool has_pk = false;
   const ObTableSchema *index_schema = NULL;
-  ObArenaAllocator allocator("PrintHeapTblPk", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
+  ObArenaAllocator allocator("PrintHeapTblPk", OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   const common::ObIArray<ObAuxTableMetaInfo> &simple_index_infos = table_schema.get_simple_index_infos();
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
-    if (OB_FAIL(schema_guard_.get_table_schema(tenant_id, simple_index_infos.at(i).table_id_, index_schema))) {
+    if (OB_FAIL(schema_guard_.get_table_schema( simple_index_infos.at(i).table_id_, index_schema))) {
       LOG_WARN("fail to get index schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("index table not exist", K(ret), K(tenant_id), "table_id", simple_index_infos.at(i).table_id_);
+      LOG_WARN("index table not exist", K(ret), "table_id", simple_index_infos.at(i).table_id_);
     } else if (ObIndexType::INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_schema->get_index_type()) {
       has_pk = true;
       break;
@@ -5141,7 +5107,7 @@ int ObSchemaPrinter::print_dynamic_partition_policy(
   int64_t& pos) const
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = table_schema.get_tenant_id();
+  
 
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "DYNAMIC_PARTITION_POLICY = ("))) {
     SHARE_SCHEMA_LOG(WARN, "fail to do databuff printf", KR(ret));
@@ -5159,32 +5125,30 @@ void ObSchemaPrinter::set_sql_schema_guard(ObSqlSchemaGuard *sql_schema_guard)
   sql_schema_guard_ = sql_schema_guard;
 }
 
-int ObSchemaPrinter::get_database_schema_(const uint64_t tenant_id,
-                                          const uint64_t database_id,
+int ObSchemaPrinter::get_database_schema_(const uint64_t database_id,
                                           const ObDatabaseSchema *&database_schema) const
 {
   int ret = OB_SUCCESS;
   if (sql_schema_guard_ != NULL) {
-    ret = sql_schema_guard_->get_database_schema(tenant_id, database_id, database_schema);
+    ret = sql_schema_guard_->get_database_schema( database_id, database_schema);
   } else {
-    ret = schema_guard_.get_database_schema(tenant_id, database_id, database_schema);
+    ret = schema_guard_.get_database_schema( database_id, database_schema);
   }
   return ret;
 }
 
-int ObSchemaPrinter::get_table_schema_(const uint64_t tenant_id, const uint64_t table_id, const ObTableSchema *&table_schema) const
+int ObSchemaPrinter::get_table_schema_(const uint64_t table_id, const ObTableSchema *&table_schema) const
 {
   int ret = OB_SUCCESS;
   if (sql_schema_guard_ != NULL) {
-    ret = sql_schema_guard_->get_table_schema(tenant_id, table_id, table_schema);
+    ret = sql_schema_guard_->get_table_schema( table_id, table_schema);
   } else {
-    ret = schema_guard_.get_table_schema(tenant_id, table_id, table_schema);
+    ret = schema_guard_.get_table_schema( table_id, table_schema);
   }
   return ret;
 }
 
-int ObSchemaPrinter::print_location_definiton(const uint64_t tenant_id,
-                                             const uint64_t location_id,
+int ObSchemaPrinter::print_location_definiton(const uint64_t location_id,
                                              char *buf,
                                              const int64_t &buf_len,
                                              int64_t &pos) const
@@ -5199,11 +5163,11 @@ int ObSchemaPrinter::print_location_definiton(const uint64_t tenant_id,
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_guard_.get_location_schema_by_id(tenant_id, location_id, location_schema))) {
-      LOG_WARN("get location schema failed ", K(ret), K(tenant_id));
+    if (OB_FAIL(schema_guard_.get_location_schema_by_id(location_id, location_schema))) {
+      LOG_WARN("get location schema failed ", K(ret));
     } else if (NULL == location_schema) {
       ret = OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN, "Unknow location", K(ret), K(tenant_id), K(location_id));
+      SHARE_SCHEMA_LOG(WARN, "Unknow location", K(ret), K(location_id));
     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                        "CREATE LOCATION "))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print location definition", K(ret));

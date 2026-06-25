@@ -40,11 +40,12 @@ int64_t ObTenantCpuShare::calc_px_pool_share(int64_t min_cpu)
 {
   int64_t share = 3;
   int ret = OB_SUCCESS;
-  if (!true) {
+  oceanbase::omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (!tenant_config.is_valid()) {
     share = 3;
     COMMON_LOG(ERROR, "fail get tenant config. share default to 3", K(share));
   } else {
-    share = std::max(static_cast<int64_t>(3), min_cpu * GCONF.px_workers_per_cpu_quota);
+    share = std::max(static_cast<int64_t>(3), min_cpu * tenant_config->px_workers_per_cpu_quota);
   }
   return share;
 }

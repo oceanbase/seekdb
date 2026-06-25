@@ -48,6 +48,13 @@ ObAllVirtualObjLock::~ObAllVirtualObjLock()
 
 void ObAllVirtualObjLock::reset()
 {
+  omt::ObMultiTenantOperator::reset();
+  addr_.reset();
+  ObVirtualTableScannerIterator::reset();
+}
+
+void ObAllVirtualObjLock::release_last_tenant()
+{
   ls_ = nullptr;
   if (OB_NOT_NULL(tx_ctx_)) {
     ls_tx_ctx_iter_.revert_tx_ctx(tx_ctx_);
@@ -61,8 +68,24 @@ void ObAllVirtualObjLock::reset()
   prio_op_iter_.reset();
   start_to_read_ = false;
   is_iter_priority_list_ = true;
-  addr_.reset();
-  ObVirtualTableScannerIterator::reset();
+}
+
+int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(execute(row))) {
+    SERVER_LOG(WARN, "execute fail", K(ret));
+  }
+  return ret;
+}
+
+bool ObAllVirtualObjLock::is_need_process()
+{
+  if (!false &&
+      (true || true)) {
+    return true;
+  }
+  return false;
 }
 
 int ObAllVirtualObjLock::get_next_ls()
@@ -318,7 +341,7 @@ int ObAllVirtualObjLock::prepare_start_to_read()
   return ret;
 }
 
-int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
+int ObAllVirtualObjLock::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   transaction::tablelock::ObTableLockOp lock_op;

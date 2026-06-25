@@ -19,6 +19,7 @@
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "storage/tablet/ob_tablet_iterator.h"
+#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
