@@ -1133,30 +1133,6 @@ int ObCancelTaskExecutor::parse_task_id(
 	return ret;
 }
 
-int ObSetDiskValidExecutor::execute(ObExecContext &ctx, ObSetDiskValidStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
-  ObAddr server = stmt.server_;
-  ObSetDiskValidArg arg;
-
-  LOG_INFO("set_disk_valid", K(server));
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor failed");
-  } else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get srv rpc proxy failed");
-  } else if (OB_FAIL(srv_rpc_proxy->to(GCTX.self_addr()).set_disk_valid(arg))) {
-    LOG_WARN("rpc proxy set_disk_valid failed", K(ret));
-  } else {
-    LOG_INFO("set_disk_valid success", K(server));
-  }
-
-  return ret;
-}
-
 int ObAddDiskExecutor::execute(ObExecContext &ctx, ObAddDiskStmt &stmt)
 {
   int ret = OB_SUCCESS;

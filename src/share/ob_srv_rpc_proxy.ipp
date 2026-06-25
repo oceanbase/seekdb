@@ -62,7 +62,6 @@
   RPC_S(PR5 set_tracepoint, OB_SET_TP, (obrpc::ObAdminSetTPArg));
   RPC_S(PR5 kill_session, OB_KILL_SESSION, (sql::ObKillSessionArg));
   RPC_S(PR5 cancel_sys_task, OB_CANCEL_SYS_TASK, (obrpc::ObCancelTaskArg));
-  RPC_S(PR5 set_disk_valid, OB_SET_DISK_VALID, (ObSetDiskValidArg));
   RPC_S(PR5 add_disk, OB_ADD_DISK, (ObAdminAddDiskArg));
   RPC_S(PR5 drop_disk, OB_DROP_DISK, (ObAdminDropDiskArg));
   RPC_S(PR5 force_switch_ilog_file, OB_FORCE_SWITCH_ILOG_FILE, (ObForceSwitchILogFileArg));

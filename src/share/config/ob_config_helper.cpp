@@ -687,17 +687,6 @@ bool ObConfigPartitionBalanceStrategyFuncChecker::check(const ObConfigItem &t) c
   return is_valid;
 }
 
-bool ObDataStorageErrorToleranceTimeChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  int64_t value = ObConfigTimeParser::get(t.str(), is_valid);
-  if (is_valid) {
-    const int64_t warning_value = GCONF.data_storage_warning_tolerance_time;
-    is_valid = value >= warning_value;
-  }
-  return is_valid;
-}
-
 bool ObConfigOfsBlockVerifyIntervalChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = true;

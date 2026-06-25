@@ -4219,7 +4219,6 @@ int ObFlushLSArchiveArg::assign(const ObFlushLSArchiveArg &other)
 OB_SERIALIZE_MEMBER(ObFlushLSArchiveArg, tenant_id_);
 OB_SERIALIZE_MEMBER(ObCancelTaskArg, task_id_);
 OB_SERIALIZE_MEMBER(ObReportSingleReplicaArg, tenant_id_, ls_id_);
-OB_SERIALIZE_MEMBER(ObSetDiskValidArg);
 
 OB_SERIALIZE_MEMBER(ObAdminClearDRTaskArg, tenant_ids_, type_, zone_names_);
 

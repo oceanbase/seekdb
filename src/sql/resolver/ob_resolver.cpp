@@ -766,10 +766,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(DisableSqlThrottle);
         break;
       }
-      case T_SET_DISK_VALID: {
-        REGISTER_STMT_RESOLVER(SetDiskValid);
-        break;
-      }
       case T_ANALYZE:
       case T_MYSQL_UPDATE_HISTOGRAM:
       case T_MYSQL_DROP_HISTOGRAM:

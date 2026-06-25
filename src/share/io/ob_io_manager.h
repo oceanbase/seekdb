@@ -304,7 +304,6 @@ public:
   // device health management
   ObIOFaultDetector &get_device_health_detector();
   int get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &device_abnormal_time);
-  int reset_device_health();
 
   // device channel management
   int add_device_channel(ObIODevice *device_handle, const int64_t async_channel_count, const int64_t sync_channel_count,

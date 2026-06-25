@@ -101,7 +101,6 @@ void oceanbase::observer::init_srv_xlator_for_schema_test(ObSrvRpcXlator *xlator
   //RPC_PROCESSOR(ObGetLatestSchemaVersionP, gctx_.schema_service_);
   RPC_PROCESSOR(ObGetAllSchemaP, gctx_.schema_service_);
   RPC_PROCESSOR(ObRpcSetTPP, gctx_);
-  RPC_PROCESSOR(ObSetDiskValidP, gctx_);
 }
 
 void oceanbase::observer::init_srv_xlator_for_transaction(ObSrvRpcXlator *xlator) {

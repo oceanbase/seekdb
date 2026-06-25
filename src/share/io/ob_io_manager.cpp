@@ -976,13 +976,6 @@ int ObIOManager::get_device_health_status(ObDeviceHealthStatus &dhs, int64_t &de
   return fault_detector_.get_device_health_status(dhs, device_abnormal_time);
 }
 
-int ObIOManager::reset_device_health()
-{
-  int ret = OB_SUCCESS;
-  fault_detector_.reset_device_health();
-  return ret;
-}
-
 int ObIOManager::add_device_channel(ObIODevice *device_handle,
                                     const int64_t async_channel_thread_count,
                                     const int64_t sync_channel_thread_count,
@@ -1544,7 +1537,6 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   handle.reset();
   ObIORequest *req = nullptr;
   RequestHolder req_holder;
-  bool is_data_disk_healthy = true;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
@@ -1554,16 +1546,6 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_ISNULL(info.fd_.device_handle_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("device handle is null", K(ret), K(info));
-  } else if (OB_FAIL(ObShareUtil::check_data_disk_health_status(is_data_disk_healthy))) {
-    LOG_WARN("fail to check data disk status", KR(ret));
-  } else if ((SLOG_IO != info.flag_.get_sys_module_id() &&
-              CLOG_READ_IO != info.flag_.get_sys_module_id() &&
-              CLOG_WRITE_IO != info.flag_.get_sys_module_id()) &&
-              !info.fd_.device_handle_->is_object_device() &&
-              !is_data_disk_healthy) {
-    ret = OB_DISK_HUNG;
-    // for temporary positioning issue, get lbt of log replay
-    LOG_DBA_ERROR(OB_DISK_HUNG, "msg", "disk has fatal error");
   } else if (OB_FAIL(alloc_req_and_result(info, handle, req, req_holder))) {
     LOG_WARN("pre set io args failed", K(ret), K(info));
   } else if (OB_FAIL(qsched_.schedule_request(*req))) {

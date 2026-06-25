@@ -668,10 +668,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObAlterTriggerStmt, ObAlterTriggerExecutor);
         break;
       }
-      case stmt::T_SET_DISK_VALID: {
-        DEFINE_EXECUTE_CMD(ObSetDiskValidStmt, ObSetDiskValidExecutor);
-        break;
-      }
       case stmt::T_ANALYZE: {
         DEFINE_EXECUTE_CMD(ObAnalyzeStmt, ObAnalyzeExecutor);
         break;

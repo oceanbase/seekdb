@@ -132,8 +132,6 @@ DEF_SIMPLE_CMD_RESOLVER(ObAdminRollingUpgradeCmdResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObCancelTaskResolver);
 
-DEF_SIMPLE_CMD_RESOLVER(ObSetDiskValidResolver);
-
 DEF_SIMPLE_CMD_RESOLVER(ObDropTempTableResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshTempTableResolver);
 

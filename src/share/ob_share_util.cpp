@@ -444,22 +444,6 @@ int ObShareUtil::check_clog_disk_full_or_hang(
   return ret;
 }
 
-int ObShareUtil::check_data_disk_health_status(
-    bool &is_data_disk_healthy)
-{
-  int ret = OB_SUCCESS;
-  is_data_disk_healthy = true;
-  ObDeviceHealthStatus data_disk_status;
-  int64_t data_disk_error_start_ts = OB_INVALID_TIMESTAMP;
-  if (OB_FAIL(OB_IO_MANAGER.get_device_health_detector().get_device_health_status(data_disk_status,
-                                                                                  data_disk_error_start_ts))) {
-    LOG_WARN("get_device_health_status failed", KR(ret));
-  } else if (ObDeviceHealthStatus::DEVICE_HEALTH_NORMAL != data_disk_status) {
-    is_data_disk_healthy = false;
-  }
-  return ret;
-}
-
 int ObShareUtil::get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn)
 {
   int ret = OB_SUCCESS;

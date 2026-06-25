@@ -19273,13 +19273,6 @@ alter_with_opt_hint SYSTEM DISABLE SQL THROTTLE
   (void)($1);
   malloc_terminal_node($$, result->malloc_pool_, T_DISABLE_SQL_THROTTLE);
 }
-|
-alter_with_opt_hint SYSTEM SET DISK VALID ip_port
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SET_DISK_VALID, 1, $6);
-}
-|
 alter_with_opt_hint SYSTEM ADD RESTORE SOURCE STRING_VALUE
 {
   (void)($1);

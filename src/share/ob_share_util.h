@@ -114,8 +114,6 @@ public:
   static int check_clog_disk_full_or_hang(
              bool &clog_disk_is_full,
              bool &clog_disk_is_hang);
-  static int check_data_disk_health_status(
-             bool &is_data_disk_healthy);
   static int get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn);
   static int gen_sys_unit(ObUnit &unit);
   static int gen_sys_resource_pool(ObResourcePool &resource_pool);
