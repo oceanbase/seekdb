@@ -608,16 +608,6 @@ bool ObConfigPartitionBalanceStrategyFuncChecker::check(const ObConfigItem &t) c
   return is_valid;
 }
 
-bool ObConfigOfsBlockVerifyIntervalChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = true;
-  int64_t value = ObConfigTimeParser::get(t.str(), is_valid);
-  if (is_valid) {
-    is_valid = (0 == value) || (value >= MIN_VALID_INTVL && value <= MAX_VALID_INTVL);
-  }
-  return is_valid;
-}
-
 bool ObLogDiskUsagePercentageChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;

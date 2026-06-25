@@ -604,19 +604,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigAuditModeChecker);
 };
 
-class ObConfigOfsBlockVerifyIntervalChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigOfsBlockVerifyIntervalChecker() {}
-  virtual ~ObConfigOfsBlockVerifyIntervalChecker() {}
-  bool check(const ObConfigItem &t) const;
-  static constexpr int64_t MIN_VALID_INTVL = 60 * 60 * 1000 * 1000UL; // 1 hour
-  static constexpr int64_t MAX_VALID_INTVL = 30 * 24 * MIN_VALID_INTVL; // 30 days
-private:
-  DISABLE_COPY_ASSIGN(ObConfigOfsBlockVerifyIntervalChecker);
-};
-
 class ObLogDiskUsagePercentageChecker
   : public ObConfigChecker
 {
