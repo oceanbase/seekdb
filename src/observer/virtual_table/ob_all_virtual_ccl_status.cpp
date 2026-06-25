@@ -68,35 +68,10 @@ void ObAllVirtualCCLStatus::reset()
   cur_idx_ = 0;
   MEMSET(svr_ip_buf_, 0, common::OB_IP_STR_BUFF);
   tmp_ccl_status_.reset();
-  omt::ObMultiTenantOperator::reset();
   ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualCCLStatus::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    LOG_WARN("execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualCCLStatus::is_need_process()
-{
-  if (!false &&
-      (true || true)) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualCCLStatus::release_last_tenant()
-{
-  cur_idx_ = 0;
-  tmp_ccl_status_.reset();
-}
-
-int ObAllVirtualCCLStatus::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;

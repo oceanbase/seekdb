@@ -116,11 +116,10 @@ int ObCodeGenerator::detect_batch_size(
   } else {
     
     double scan_cardinality = 0;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     // TODO bin.lb: move to optimizer and more sophisticated rules
-    bool rowsets_enabled = tenant_config.is_valid() && tenant_config->_rowsets_enabled;
+    bool rowsets_enabled = true && GCONF._rowsets_enabled;
     // if tenant config is invalid, use 8 as lob_rowsets_max_rows, compatible to origin behavior
-    int64_t lob_rowsets_max_rows = tenant_config.is_valid() ? tenant_config->_lob_rowsets_max_rows : 8;
+    int64_t lob_rowsets_max_rows = true ? GCONF._lob_rowsets_max_rows : 8;
     const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     if (OB_FAIL(opt_params->get_integer_opt_param(ObOptParamHint::LOB_ROWSETS_MAX_ROWS, lob_rowsets_max_rows))) {
       LOG_WARN("get integer opt param failed", K(ret));
@@ -154,10 +153,10 @@ int ObCodeGenerator::detect_batch_size(
           exec_ctx->get_physical_plan_ctx()->get_original_param_cnt(),
           0,
           exec_ctx->get_min_cluster_version());
-      int64_t rowsets_max_rows = tenant_config->_rowsets_max_rows;
+      int64_t rowsets_max_rows = GCONF._rowsets_max_rows;
       OZ(expr_cg.detect_batch_size(flattened_exprs, batch_size,
                                    rowsets_max_rows,
-                                   tenant_config->_rowsets_target_maxsize,
+                                   GCONF._rowsets_target_maxsize,
                                    scan_cardinality,
                                    lob_rowsets_max_rows));
       // overwrite batch size if hint is specified

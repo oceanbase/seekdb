@@ -585,15 +585,8 @@ int ObEmbeddingTaskMgr::init(const ObString &model_id)
   }
 
   if (OB_SUCC(ret)) {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      model_request_timeout_us_ = tenant_config->model_request_timeout;
-      model_max_retries_ = tenant_config->model_max_retries;
-    } else {
-      SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init model request timeout and max retries config with default value");
-      model_request_timeout_us_ = 60 * 1000 * 1000; // 60 seconds
-      model_max_retries_ = 2;
-    }
+    model_request_timeout_us_ = GCONF.model_request_timeout;
+    model_max_retries_ = GCONF.model_max_retries;
   }
 
   if (OB_SUCC(ret)) {

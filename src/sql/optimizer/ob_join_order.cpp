@@ -3259,11 +3259,10 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 4> valid_index_ids; // all valid indexes
   ObSEArray<ObSEArray<uint64_t, 4>, 4> valid_index_cols; // column ids in the valid indexes
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   is_match_hint = false;
-  if (OB_ISNULL(get_plan()) || OB_UNLIKELY(!tenant_config.is_valid())) {
+  if (OB_ISNULL(get_plan()) || OB_UNLIKELY(!true)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid plan or tenant config", K(ret), K(get_plan()), K(tenant_config.is_valid()));
+    LOG_WARN("get invalid plan or tenant config", K(ret), K(get_plan()), K(true));
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,
                                                    valid_index_ids,
@@ -3284,7 +3283,7 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
     OPT_TRACE("generate", candi_index_trees.count(), "candi index merge trees using hint");
     LOG_TRACE("generate candi index merge trees using hint", K(table_id), K(candi_index_trees));
   } else if (get_plan()->get_log_plan_hint().is_outline_data_
-             || (!tenant_config->_enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
+             || (!GCONF._enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
     OPT_TRACE("can not create index merge paths due to outline or tenant config");
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,

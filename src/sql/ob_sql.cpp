@@ -1686,11 +1686,10 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
       bool is_expired = false;
       int64_t open_cursors_limit = 0;
       int64_t cur_ps_handle_size = session.get_ps_session_info_size();
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (!tenant_config.is_valid()) {
+      if (!true) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", K(ret));
-      } else if (FALSE_IT(open_cursors_limit = tenant_config->open_cursors)) {
+      } else if (FALSE_IT(open_cursors_limit = GCONF.open_cursors)) {
       } else if (!is_inner_sql
                 && NEED_CHECK_SESS_MAX_PS_HANDLE_LIMIT(open_cursors_limit)
                 && cur_ps_handle_size >= open_cursors_limit) {

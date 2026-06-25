@@ -176,7 +176,8 @@ public:
 
 DEF_SIMPLE_CMD_RESOLVER(ObEnableSqlThrottleResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObDisableSqlThrottleResolver);
-DEF_SIMPLE_CMD_RESOLVER(ObSetRegionBandwidthResolver);
+DEF_SIMPLE_CMD_RESOLVER(ObTableTTLResolver);
+DEF_SIMPLE_CMD_RESOLVER(ObChangeExternalStorageDestResolver);
 
 #undef DEF_SIMPLE_CMD_RESOLVER
 

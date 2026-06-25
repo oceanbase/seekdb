@@ -135,10 +135,9 @@ int ObLSService::get_resource_constraint_value_(ObResoureConstraintValue &constr
   int64_t memory_value = INT64_MAX;
   int64_t clog_disk_value = INT64_MAX;
   // 1. configuration
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (OB_LIKELY(tenant_config.is_valid())) {
-    config_value = (tenant_config->_max_ls_cnt_per_server != 0
-                    ? tenant_config->_max_ls_cnt_per_server : config_value);
+  if (OB_LIKELY(true)) {
+    config_value = (GCONF._max_ls_cnt_per_server != 0
+                    ? GCONF._max_ls_cnt_per_server : config_value);
   }
 
   // 2. memory
@@ -1284,16 +1283,16 @@ int ObLSService::get_restore_status_(
   restore_status = ObRestoreStatus::Status::NONE;
   bool is_primary = true;
 
-  if (true) {
-    if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary))) {
-      LOG_WARN("fail to check whether is primary cluster", KR(ret));
-    } else if (is_primary) {
-      restore_status = ObRestoreStatus::Status::NONE;
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only supported primary cluster now", KR(ret));
-    }
+
+  if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary))) {
+    LOG_WARN("fail to check whether is primary cluster", KR(ret));
+  } else if (is_primary) {
+    restore_status = ObRestoreStatus::Status::NONE;
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("only supported primary cluster now", KR(ret));
   }
+
   return ret;
 }
 

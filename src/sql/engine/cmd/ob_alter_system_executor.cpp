@@ -322,8 +322,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       //  } else if (OB_ISNULL(common_rpc_proxy)) {
       //    ret = OB_ERR_UNEXPECTED;
       //    LOG_WARN("common_rpc_proxy is null", K(ret));
-      //  } else if (OB_FAIL(common_rpc_proxy->flush_balance_info())) {
-      //    LOG_WARN("fail to flush balance info", K(ret));
       //  }
       //  break;
       //}

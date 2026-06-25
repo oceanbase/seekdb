@@ -39,14 +39,14 @@ int ObTriggerSqlService::create_trigger(const ObTriggerInfo &trigger_info,
   // insert or update all_trigger.
   OZ (fill_dml_sql(trigger_info, trigger_info.get_schema_version(), dml));
   if (is_replace) {
-    OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   } else {
-    OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_insert(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   }
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, trigger_info.get_schema_version(),
                             OB_DDL_CREATE_TRIGGER, ddl_stmt_str, sql_client));
@@ -68,16 +68,16 @@ int ObTriggerSqlService::drop_trigger(const ObTriggerInfo &trigger_info,
   OZ (fill_dml_sql(trigger_info, new_schema_version, dml));
   // update or delete all_trigger.
   if (drop_to_recyclebin) {
-    OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
     OX (drop_type = OB_DDL_DROP_TRIGGER_TO_RECYCLEBIN);
   } else {
-    OZ (exec.exec_delete(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+    OZ (exec.exec_delete(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
     OX (drop_type = OB_DDL_DROP_TRIGGER);
   }
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", drop_to_recyclebin ? 0 : 1));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version,
                             drop_type, ddl_stmt_str, sql_client));
@@ -96,9 +96,9 @@ int ObTriggerSqlService::alter_trigger(const ObTriggerInfo &trigger_info,
   OV (trigger_info.is_valid(), OB_INVALID_ARGUMENT, trigger_info);
   OZ (fill_dml_sql(trigger_info, new_schema_version, dml));
   // alter trigger disable/enable
-  OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+  OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version, OB_DDL_ALTER_TRIGGER, ddl_stmt_str,
                             sql_client));
@@ -120,11 +120,11 @@ int ObTriggerSqlService::flashback_trigger(const ObTriggerInfo &trigger_info,
   OX (new_values.set_trigger_name(trigger_info.get_trigger_name()));
   // update all_trigger.
   OZ (fill_dml_sql(trigger_info, new_values, new_schema_version, dml));
-  OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+  OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(trigger_info, new_schema_version,
                             OB_DDL_FLASHBACK_TRIGGER, NULL, sql_client));
@@ -153,11 +153,11 @@ int ObTriggerSqlService::rebuild_trigger_on_rename(const ObTriggerInfo &trigger_
 
   // update all_trigger.
   OZ (fill_dml_sql(new_trigger_info, new_schema_version, dml));
-  OZ (exec.exec_update(OB_ALL_TENANT_TRIGGER_TNAME, dml, affected_rows));
+  OZ (exec.exec_update(OB_ALL_TRIGGER_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   // insert all_trigger_history.
   OZ (dml.add_column("is_deleted", 0));
-  OZ (exec.exec_insert(OB_ALL_TENANT_TRIGGER_HISTORY_TNAME, dml, affected_rows));
+  OZ (exec.exec_insert(OB_ALL_TRIGGER_HISTORY_TNAME, dml, affected_rows));
   OV (is_single_row(affected_rows), OB_ERR_UNEXPECTED, affected_rows);
   OZ (log_trigger_operation(new_trigger_info, new_schema_version,
                             op_type, NULL, sql_client));

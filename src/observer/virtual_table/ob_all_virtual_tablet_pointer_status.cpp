@@ -39,7 +39,10 @@ ObAllVirtualTabletPtr::~ObAllVirtualTabletPtr()
 
 void ObAllVirtualTabletPtr::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  if (OB_NOT_NULL(tablet_iter_)) {
+    tablet_iter_->~ObTenantTabletPtrWithInMemObjIterator();
+    tablet_iter_ = nullptr;
+  }
   addr_.reset();
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
@@ -66,32 +69,6 @@ int ObAllVirtualTabletPtr::init(ObIAllocator *allocator, common::ObAddr &addr)
     start_to_read_ = true;
   }
   return ret;
-}
-
-int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualTabletPtr::release_last_tenant()
-{
-  if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletPtrWithInMemObjIterator();
-    tablet_iter_ = nullptr;
-  }
-}
-
-bool ObAllVirtualTabletPtr::is_need_process()
-{
-  if (!false &&
-      (true || true)){
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualTabletPtr::get_next_tablet_pointer(
@@ -121,7 +98,7 @@ int ObAllVirtualTabletPtr::get_next_tablet_pointer(
   return ret;
 }
 
-int ObAllVirtualTabletPtr::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTabletMapKey key;

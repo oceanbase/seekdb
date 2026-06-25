@@ -67,7 +67,7 @@ int ObDBMSSchedulerMysql::disable(
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
   OZ (dml.add_column("enabled", false));
-  OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
+  OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
   OZ (execute_sql(ctx, sql, affected_rows));
   CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
   rootserver::ObDBMSSchedService::wakeup_scheduler();
@@ -89,7 +89,7 @@ int ObDBMSSchedulerMysql::enable(
   OZ (dml.add_gmt_modified(now));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
   OZ (dml.add_column("enabled", true));
-  OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
+  OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
   OZ (execute_sql(ctx, sql, affected_rows));
   CK (OB_LIKELY(1 == affected_rows || 2 == affected_rows));
   rootserver::ObDBMSSchedService::wakeup_scheduler();
@@ -124,7 +124,7 @@ int ObDBMSSchedulerMysql::set_attribute(
       LOG_WARN("failed to is stats maintenance window attr", K(ret), K(params.at(0).get_string()),
                                         K(params.at(1).get_string()), K(params.at(2).get_string()));
     } else if (is_stat_window_attr) {
-      OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
+      OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
       OZ (execute_sql(ctx, sql, affected_rows));
       CK (1 == affected_rows || 2 == affected_rows);
       rootserver::ObDBMSSchedService::wakeup_scheduler();
@@ -137,7 +137,7 @@ int ObDBMSSchedulerMysql::set_attribute(
       LOG_WARN("failed to set attribute for scheduled manage dynamic partition", KR(ret),
         K(params.at(0).get_string()), K(params.at(1).get_string()), K(params.at(2).get_string()));
     } else if (is_dynamic_partition_attr) {
-      OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
+      OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
       OZ (execute_sql(ctx, sql, affected_rows));
       CK (1 == affected_rows || 2 == affected_rows);
       rootserver::ObDBMSSchedService::wakeup_scheduler();

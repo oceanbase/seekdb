@@ -19,7 +19,6 @@
 
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
@@ -34,19 +33,15 @@ class ObTenantTabletIterator;
 namespace observer
 {
 
-class ObAllVirtualTableLSTabletIter : public common::ObVirtualTableScannerIterator,
-                                      public omt::ObMultiTenantOperator
+class ObAllVirtualTableLSTabletIter : public common::ObVirtualTableScannerIterator
 {
 public:
   ObAllVirtualTableLSTabletIter();
   virtual ~ObAllVirtualTableLSTabletIter();
   virtual void reset();
-  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual int inner_get_next_row(common::ObNewRow *&row) = 0;
   int init(common::ObIAllocator *allocator, common::ObAddr &addr);
 protected:
-  virtual bool is_need_process() override;
-  virtual void release_last_tenant() override { inner_reset(); };
-  virtual int process_curr_tenant(common::ObNewRow *&row) = 0;
   virtual void inner_reset();
   virtual int inner_get_ls_infos(const ObLS &ls) { UNUSED(ls); return OB_SUCCESS; }
   virtual int check_need_iterate_ls(const ObLS &ls, bool &need_iterate);
@@ -75,7 +70,7 @@ public:
   ObAllVirtualCSReplicaTabletStats();
   virtual ~ObAllVirtualCSReplicaTabletStats();
 private:
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
+  virtual int inner_get_next_row(common::ObNewRow *&row) override;
   virtual void inner_reset() override;
   virtual int inner_get_ls_infos(const ObLS &ls) override;
   virtual int check_need_iterate_ls(const ObLS &ls, bool &need_iterate) override;

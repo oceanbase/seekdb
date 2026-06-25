@@ -1006,11 +1006,10 @@ int ObOptimizerTraceImpl::trace_parameters()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session_info_)) {
     
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      new_line();
-      append("tenant config:");
-    }
+
+    new_line();
+    append("tenant config:");
+
     new_line();
     append("system variables:");
     session_info_->trace_all_sys_vars();

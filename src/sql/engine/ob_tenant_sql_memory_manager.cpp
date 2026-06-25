@@ -1071,14 +1071,11 @@ int ObTenantSqlMemoryManager::count_profile_into_work_area_intervals(
 bool ObTenantSqlMemoryManager::enable_auto_sql_memory_manager()
 {
   bool auto_memory_mgr = false;
-  ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    const ObString tmp_str(tenant_config->workarea_size_policy.str());
+  {
+    const ObString tmp_str(GCONF.workarea_size_policy.str());
     auto_memory_mgr = !tmp_str.case_compare("AUTO");
     LOG_TRACE("get work area policy config", K(auto_memory_mgr), K(tmp_str),
-      K(tenant_config->workarea_size_policy.str()));
-  } else {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "failed to init tenant config");
+      K(GCONF.workarea_size_policy.str()));
   }
   return auto_memory_mgr;
 }

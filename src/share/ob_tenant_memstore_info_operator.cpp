@@ -54,7 +54,7 @@ int ObTenantMemstoreInfoOperator::get(
     } else if (OB_FAIL(sql.assign_fmt("SELECT active_span, "
         "memstore_used, freeze_trigger, memstore_limit FROM %s "
         "WHERE (%s)",
-        OB_ALL_VIRTUAL_TENANT_MEMSTORE_INFO_TNAME, unit_servers_str.ptr()))) {
+        OB_ALL_VIRTUAL_MEMSTORE_INFO_TNAME, unit_servers_str.ptr()))) {
       LOG_WARN("assign_fmt failed", K(ret));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {

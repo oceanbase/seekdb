@@ -30,15 +30,14 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
   int64_t parallel_servers_target = INT64_MAX; // default to unlimited
   session_target = INT64_MAX; // default to unlimited
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   parallel_servers_target = OB_PX_TARGET_MONITOR.get_parallel_servers_target();
   if (OB_UNLIKELY(minimal_session_target > parallel_servers_target)) {
     ret = OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH;
     LOG_WARN("minimal_session_target is more than parallel_servers_target", K(ret),
                                       K(minimal_session_target), K(parallel_servers_target));
-  } else if (OB_LIKELY(tenant_config.is_valid())) {
+  } else if (OB_LIKELY(true)) {
     session_target = parallel_servers_target;
-    int64_t pmas = tenant_config->_parallel_max_active_sessions;
+    int64_t pmas = GCONF._parallel_max_active_sessions;
     int64_t parallel_session_count = OB_PX_TARGET_MONITOR.get_parallel_session_count();
     if (pmas > 0 && parallel_servers_target != INT64_MAX && parallel_session_count > 0) {
       // when pmas is TOO large, session target could be less than one,
@@ -49,7 +48,7 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
     // tenant_config is invalid, use parallel_servers_target
     session_target = parallel_servers_target;
   }
-  LOG_TRACE("PX get parallel session target", K(tenant_config.is_valid()),
+  LOG_TRACE("PX get parallel session target", K(true),
                         K(parallel_servers_target), K(minimal_session_target), K(session_target));
   return ret;
 }
@@ -230,12 +229,11 @@ void ObPxSubAdmission::acquire(int64_t max, int64_t min, int64_t &acquired_cnt)
   } else if (nullptr == (tenant = worker->get_tenant())) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "Oooops! can't find tenant. Unexpected!", KP(worker), K(max), K(min));
   } else {
-    oceanbase::omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (!tenant_config.is_valid()) {
+    if (!true) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "get tenant config failed, use default cpu_quota_concurrency");
       upper_bound = tenant->unit_min_cpu() * 4;
     } else {
-      upper_bound = tenant->unit_min_cpu() * tenant_config->_max_px_workers_per_cpu;
+      upper_bound = tenant->unit_min_cpu() * GCONF._max_px_workers_per_cpu;
     }
   }
   acquired_cnt = std::min(max, upper_bound);

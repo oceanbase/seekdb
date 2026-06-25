@@ -22,7 +22,6 @@
 #include "ob_throttle_unit.h"
 #endif
 
-#include "observer/omt/ob_tenant_config_mgr.h"
 #include "lib/thread_local/ob_tsi_utils.h"
 
 namespace oceanbase {

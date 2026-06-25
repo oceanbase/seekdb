@@ -58,8 +58,7 @@ int ObDtlFlowControl::init(int64_t chan_cnt)
   } else if (OB_FAIL(blocks_.reserve(chan_cnt))) {
     LOG_WARN("failed to reserve data", K(ret));
   } else {
-    ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid() && true == tenant_config->_px_message_compression) {
+    if (true && true == GCONF._px_message_compression) {
       compressor_type_ = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
     }
     is_init_ = true;

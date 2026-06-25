@@ -82,7 +82,6 @@ public:
                                        const bool is_register, /* true: register; false; retire; */
                                        const bool is_parent,   /* true: parent; false: child; */
                                        const common::ObAddr &server,
-                                       const common::ObRegion &region,
                                        const int64_t register_time_us,
                                        const char *extra_info = NULL) override final;
   // =========== PALF Event Reporting ===========

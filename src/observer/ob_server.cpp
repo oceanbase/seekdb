@@ -1952,8 +1952,7 @@ int ObServer::init_schema()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(schema_service_.init(&sql_proxy_, &config_,
-                                   OB_MAX_VERSION_COUNT,
-                                   OB_MAX_VERSION_COUNT_FOR_MERGE))) {
+                                   OB_MAX_VERSION_COUNT))) {
     LOG_WARN("init schema_service_ fail", KR(ret));
   }
 

@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "ob_dtl_tenant_mem_manager.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
-
 using namespace oceanbase::common;
 using namespace oceanbase::omt;
 using namespace oceanbase::sql;
@@ -201,13 +199,7 @@ int64_t ObDtlTenantMemManager::variance_alloc_times()
 
 int64_t ObDtlTenantMemManager::get_min_buffer_size()
 {
-  int64_t reserve_buffer_min_size = 0;
-  ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    reserve_buffer_min_size = tenant_config->_parallel_min_message_pool;
-  } else {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "failed to init tenant config");
-  }
+  int64_t reserve_buffer_min_size = GCONF._parallel_min_message_pool;
   return reserve_buffer_min_size;
 }
 

@@ -22,7 +22,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/ob_define.h"
 #include "lib/string/ob_sql_string.h"
-#include "common/ob_region.h"
 #include "lib/json/ob_yson.h"
 
 namespace oceanbase
@@ -143,12 +142,11 @@ public:
   virtual bool is_readonly_replica() const;
   ObReplicaMember &operator=(const ObReplicaMember &rhs);
 
-  TO_STRING_KV(K_(server), K_(timestamp), K_(flag), K_(replica_type), K_(region), K_(memstore_percent));
+  TO_STRING_KV(K_(server), K_(timestamp), K_(flag), K_(replica_type), K_(memstore_percent));
   OB_UNIS_VERSION(1);
 private:
   common::ObReplicaType replica_type_;
   int64_t memstore_percent_;                       // obsolate, only as placeholder
-  common::ObRegion region_ = DEFAULT_REGION_NAME;  // obsolate, only as placeholder
 };
 } // namespace common
 } // namespace oceanbase

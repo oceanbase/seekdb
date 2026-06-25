@@ -196,7 +196,7 @@ int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
   } else {
     CK (OB_NOT_NULL(sql_proxy));
     OZ (sql.append_fmt("select count(*) rows from %s where job_class_name = \'%.*s\'",
-        OB_ALL_TENANT_SCHEDULER_JOB_CLASS_TNAME,
+        OB_ALL_SCHEDULER_JOB_CLASS_TNAME,
         job_class_name.length(), job_class_name.ptr()));
 
     if (OB_SUCC(ret)) {
@@ -319,7 +319,7 @@ ObDBMSSchedFuncType ObDBMSSchedJobInfo::get_func_type() const
       OZ (dml.add_pk_column("job", job_));
       OZ (dml.add_pk_column("job_name", job_name_));
       OZ (dml.add_column("func_type", static_cast<uint64_t>(func_type)));
-      OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
+      OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
       OZ (sql_proxy->write(sql.ptr(), affected_rows));
     }
   }
@@ -371,7 +371,7 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
     if (OB_SUCC(ret)) {
       // vtable_route_policy = 'local', so the query only returns jobs running on the local server
       if (OB_FAIL(sql.append_fmt("select session_id from %s where job_name = \'%.*s\'",
-        OB_ALL_VIRTUAL_TENANT_SCHEDULER_RUNNING_JOB_TNAME, job_info.job_name_.length(),job_info.job_name_.ptr()))) {
+        OB_ALL_VIRTUAL_SCHEDULER_RUNNING_JOB_TNAME, job_info.job_name_.length(),job_info.job_name_.ptr()))) {
         LOG_WARN("append sql failed", KR(ret)); 
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, result) {
@@ -477,7 +477,7 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
-      if (OB_FAIL(exec.exec_delete(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
+      if (OB_FAIL(exec.exec_delete(OB_ALL_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
         LOG_WARN("execute delete failed", KR(ret));
       } else if (is_zero_row(affected_rows) && !if_exists) {
         ret = OB_INVALID_ARGUMENT;
@@ -590,7 +590,7 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
         OZ (dml.add_column("func_type", static_cast<uint64_t>(job_info.func_type_)));
         OZ (dml.finish_row());
       }
-      OZ(dml.splice_batch_insert_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
+      OZ(dml.splice_batch_insert_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
       OZ(sql_client.write(sql.ptr(), affected_rows));
       if (OB_SUCC(ret) && OB_UNLIKELY(!is_double_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
@@ -731,7 +731,7 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
   if (OB_SUCC(ret)) {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
-    if (OB_FAIL(exec.exec_update(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
+    if (OB_FAIL(exec.exec_update(OB_ALL_SCHEDULER_JOB_TNAME, dml, affected_rows))) {
       LOG_WARN("execute update failed", KR(ret));
     } else if (is_zero_row(affected_rows)) {
       ret = OB_ENTRY_NOT_EXIST;
@@ -760,7 +760,7 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
   } else {
     
     if (OB_FAIL(sql.append_fmt("select * from %s where job_name = \'%.*s\' and job > 0",
-                                                     OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
+                                                     OB_ALL_SCHEDULER_JOB_TNAME,
                                                      job_name.length(), job_name.ptr()))) {
         LOG_WARN("failed to assign sql", K(ret));
     } else {

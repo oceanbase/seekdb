@@ -17,7 +17,6 @@
 #ifndef OB_ALL_VIRTUAL_LONG_OPS_STATUS_H_
 #define OB_ALL_VIRTUAL_LONG_OPS_STATUS_H_
 
-#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "share/longops_mgr/ob_longops_mgr.h"
 

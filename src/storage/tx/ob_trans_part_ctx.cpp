@@ -7410,9 +7410,8 @@ int ObPartTransCtx::check_pending_log_overflow(const int64_t stmt_timeout)
   const int64_t LOCAL_RETRY_INTERVAL_US = 50 * 1000;  // 50ms
 
   if (OB_SUCC(ret) && ATOMIC_LOAD(&has_extra_log_cb_group_)) {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     const int64_t trx_max_log_cb_limit =
-        tenant_config.is_valid() ? tenant_config->_trx_max_log_cb_limit : 16;
+        true ? GCONF._trx_max_log_cb_limit : 16;
     // smaller than 16  || no limit with tx_log_cb =>  disable the check of pending logs
     if (trx_max_log_cb_limit >= 16) {
       const int64_t start_wait_us = ObTimeUtility::current_time();

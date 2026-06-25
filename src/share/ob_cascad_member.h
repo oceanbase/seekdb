@@ -22,7 +22,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/ob_define.h"
 #include "lib/json/ob_yson.h"
-#include "common/ob_region.h"
 
 namespace oceanbase
 {

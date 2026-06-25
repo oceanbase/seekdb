@@ -1545,41 +1545,6 @@ int ObService::check_partition_log(const obcall::Int64 &switchover_timestamp, ob
   // The primary has stopped writing
   int ret = OB_NOT_SUPPORTED;
 
-  // ObTenantDagScheduler is at tenant level now, check all tenants task
-  // int64_t balance_task = 0;
-  // all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
-  // if (OB_ISNULL(GCTX.omt_)) {
-  //   ret = OB_ERR_UNEXPECTED;
-  //   LOG_WARN("failed to get multi tenant from GCTX", K(ret));
-  // } else {
-  //   (all_tenants.clear(), all_tenants.push_back(sys tenant));
-  //   for (int64_t i = 0; OB_SUCC(ret) && i < all_tenants.size(); ++i) {
-  //     uint64_t tenant = all_tenants[i];
-  //     if (!is_virtual_tenant(tenant)) { // skip virtual tenant
-  //       if (OB_SUCC(guard.switch_to(tenant))) {
-  //         ObTenantDagScheduler *scheduler = nullptr;
-  //         if (OB_ISNULL(scheduler = share::g_mp->tenant_dag_scheduler())) {
-  //           ret = OB_ERR_UNEXPECTED;
-  //           FLOG_WARN("MTL ObTenantDagScheduler is NULL", K(ret), K(scheduler));
-  //         } else {
-  //           balance_task += scheduler->get_dag_count(ObDagType::DAG_TYPE_MIGRATE);
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
-  // if (OB_SUCC(ret)) {
-  //   if (balance_task > 0) {
-  //     ret = OB_EAGAIN;
-  //     result = switchover_timestamp;
-  //     LOG_INFO("observer already has task to do", K(switchover_timestamp), K(balance_task));
-  //   } else if (OB_FAIL(gctx_.par_ser_->check_all_partition_sync_state(switchover_timestamp))) {
-  //     LOG_WARN("fail to check_all_partition_sync_state", K(ret));
-  //   } else {
-  //     result = switchover_timestamp;
-  //   }
-  // }
   return ret;
 }
 

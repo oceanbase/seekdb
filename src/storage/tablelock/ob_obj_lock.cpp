@@ -158,12 +158,11 @@ int ObOBJLock::slow_lock(
   const int64_t trans_id_value = lock_op.create_trans_id_;
   bool enable_lock_priority = false;
   const ObTableLockPriority priority = param.lock_priority_;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant config is invalid", K(ret), K(lock_op));
   } else {
-    enable_lock_priority = tenant_config->enable_lock_priority;
+    enable_lock_priority = GCONF.enable_lock_priority;
   }
   // case 1, if it is two phase lock, must check first
   // case 2, if enable_lock_priority is true, must check first (for dml)
@@ -530,12 +529,11 @@ int ObOBJLock::check_enable_lock_priority_(bool &enable_lock_priority)
   bool tmp_enable_lock_priority = false;
   if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (!tenant_config.is_valid()) {
+    if (!true) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant config is invalid", K(ret));
     } else {
-      tmp_enable_lock_priority = tenant_config->enable_lock_priority;
+      tmp_enable_lock_priority = GCONF.enable_lock_priority;
     }
     last_result = tmp_enable_lock_priority;
     last_check_timestamp = current_time;

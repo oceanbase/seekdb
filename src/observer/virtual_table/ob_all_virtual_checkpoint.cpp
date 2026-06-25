@@ -41,7 +41,8 @@ ObAllVirtualCheckpointInfo::~ObAllVirtualCheckpointInfo()
 
 void ObAllVirtualCheckpointInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  ls_iter_guard_.reset();
+  ob_checkpoint_iter_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
@@ -124,30 +125,7 @@ int ObAllVirtualCheckpointInfo::get_next_(ObCheckpointVTInfo &checkpoint)
   return ret;
 }
 
-bool ObAllVirtualCheckpointInfo::is_need_process()
-{
-  if (true || true) {
-    return true;
-  }
-  return false;
-}
-
-void ObAllVirtualCheckpointInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ob_checkpoint_iter_.reset();
-}
-
 int ObAllVirtualCheckpointInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-int ObAllVirtualCheckpointInfo::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObCheckpointVTInfo checkpoint;

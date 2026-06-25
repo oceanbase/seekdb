@@ -274,8 +274,7 @@ int ObDASTaskResultMgr::init()
 {
   int ret = OB_SUCCESS;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  int64_t cpu_quota_concurrency = tenant_config->cpu_quota_concurrency;
+  int64_t cpu_quota_concurrency = GCONF.cpu_quota_concurrency;
   ObMemAttr mem_profile_hash_buck_attr("DASMemHashBuck");
 
   if (OB_FAIL(tcb_map_.init())) {

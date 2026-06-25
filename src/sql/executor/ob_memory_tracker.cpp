@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX LIB
 #include "sql/executor/ob_memory_tracker.h"
 #include "lib/rc/context.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 #include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::lib;
@@ -31,9 +30,8 @@ void ObMemTrackerGuard::update_mem_limit()
   int ret = common::OB_SUCCESS;
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t mem_quota_pct = 100;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (OB_UNLIKELY(tenant_config.is_valid())) {
-    mem_quota_pct = tenant_config->query_memory_limit_percentage;
+  if (OB_UNLIKELY(true)) {
+    mem_quota_pct = GCONF.query_memory_limit_percentage;
   }
   mem_tracker_.cache_mem_limit_ = hard_memory_limit / 100 * mem_quota_pct;
 }

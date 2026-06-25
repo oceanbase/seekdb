@@ -734,7 +734,6 @@ class ObSchemaService
 public:
   //default false, only use for liboblog to control compatable
   static bool g_ignore_column_retrieve_error_;
-  static bool g_liboblog_mode_;
   typedef common::ObSEArrayImpl<ObSchemaOperation, 0>  ObSchemaOperationSet;
   class SchemaOperationSetWithAlloc: public ObSchemaOperationSet
   {
@@ -1106,9 +1105,6 @@ public:
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
       int64_t timestamp,
-      int64_t &schema_version) = 0;
-  virtual int get_first_trans_end_schema_version(
-      common::ObISQLClient &sql_client,
       int64_t &schema_version) = 0;
   static bool is_formal_version(const int64_t schema_version);
   static int gen_core_temp_version(const int64_t schema_version,

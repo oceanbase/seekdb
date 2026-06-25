@@ -82,7 +82,7 @@ CHARACTER_SET_NAME	DEFAULT_COLLATE_NAME	DESCRIPTION	MAXLEN
 binary	binary	Binary pseudo charset	1
 show create table character_sets;
 View	Create View	character_set_client	collation_connection
-CHARACTER_SETS	CREATE VIEW `CHARACTER_SETS` AS    SELECT CHARSET AS CHARACTER_SET_NAME, DEFAULT_COLLATION AS DEFAULT_COLLATE_NAME, DESCRIPTION, max_length AS MAXLEN FROM oceanbase.__tenant_virtual_charset 	utf8mb4	utf8mb4_general_ci
+CHARACTER_SETS	CREATE VIEW `CHARACTER_SETS` AS    SELECT CHARSET AS CHARACTER_SET_NAME, DEFAULT_COLLATION AS DEFAULT_COLLATE_NAME, DESCRIPTION, max_length AS MAXLEN FROM oceanbase.__all_virtual_charset 	utf8mb4	utf8mb4_general_ci
 desc character_sets;
 Field	Type	Null	Key	Default	Extra
 CHARACTER_SET_NAME	varchar(128)	NO			

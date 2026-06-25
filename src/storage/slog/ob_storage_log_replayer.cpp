@@ -18,6 +18,7 @@
 
 #include "ob_storage_log_replayer.h"
 #include "storage/slog/ob_storage_log_reader.h"
+#include "share/ob_force_print_log.h"
 
 namespace oceanbase
 {

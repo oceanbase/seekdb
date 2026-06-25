@@ -56,11 +56,10 @@ int ObRenameTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret));
-  } else if (tenant_config->enable_lock_priority) {
+  } else if (GCONF.enable_lock_priority) {
     if (!ObLockExecutor::proxy_is_support(session)) {
       ret = OB_NOT_SUPPORTED;
       SQL_RESV_LOG(WARN, "is in proxy_mode and not support rename", K(ret), KPC(session));

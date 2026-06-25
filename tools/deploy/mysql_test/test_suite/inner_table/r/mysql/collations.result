@@ -430,7 +430,7 @@ utf8mb4_mn_cyrl_0900_ai_ci	utf8mb4	322		Yes	0
 utf8mb4_mn_cyrl_0900_as_cs	utf8mb4	323		Yes	0
 show create table collations;
 View	Create View	character_set_client	collation_connection
-COLLATIONS	CREATE VIEW `COLLATIONS` AS select collation as COLLATION_NAME, charset as CHARACTER_SET_NAME, id as ID, `is_default` as IS_DEFAULT, is_compiled as IS_COMPILED, sortlen as SORTLEN from oceanbase.__tenant_virtual_collation 	utf8mb4	utf8mb4_general_ci
+COLLATIONS	CREATE VIEW `COLLATIONS` AS select collation as COLLATION_NAME, charset as CHARACTER_SET_NAME, id as ID, `is_default` as IS_DEFAULT, is_compiled as IS_COMPILED, sortlen as SORTLEN from oceanbase.__all_virtual_collation 	utf8mb4	utf8mb4_general_ci
 desc collations;
 Field	Type	Null	Key	Default	Extra
 COLLATION_NAME	varchar(128)	NO			

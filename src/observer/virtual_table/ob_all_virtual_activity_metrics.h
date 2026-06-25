@@ -19,7 +19,6 @@
 
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "share/ob_define.h"
@@ -32,8 +31,7 @@ class ObAddr;
 }
 namespace observer
 {
-class ObAllVirtualActivityMetric : public common::ObVirtualTableScannerIterator,
-                                   public omt::ObMultiTenantOperator
+class ObAllVirtualActivityMetric : public common::ObVirtualTableScannerIterator
 {
   enum ACTIVITY_METRIC_COLUMN {
         ACTIVITY_TIMESTAMP = common::OB_APP_MIN_COLUMN_ID,
@@ -54,9 +52,6 @@ public:
   virtual void reset();
   inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
-  bool is_need_process() override;
-  int process_curr_tenant(common::ObNewRow *&row) override;
-  void release_last_tenant() override;
   int get_next_freezer_stat_(storage::ObTenantFreezerStat& stat);
   int prepare_start_to_read_();
 

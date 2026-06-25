@@ -784,7 +784,6 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
   int ret = OB_SUCCESS;
   ObString codec_str;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_ISNULL(log_plan.get_stmt()) || OB_ISNULL(log_plan.get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt or query ctx is null", K(ret));
@@ -795,12 +794,9 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
     if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::SPILL_COMPRESSION_CODEC, hint_val))) {
       LOG_WARN("fail to get compression algorithm opt param from hint", K(ret));
     } else if (hint_val.is_nop_value()) { // get compression algorithm from configure
-      codec_str = ObString::make_string(tenant_config->spill_compression_codec.get_value());
-    } else if (tenant_config.is_valid()) { // get compression algorithm from hint
+      codec_str = ObString::make_string(GCONF.spill_compression_codec.get_value());
+    } else { // get compression algorithm from hint
       codec_str = hint_val.get_varchar();
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected tenant config", K(ret));
     }
   }
   compress_type = NONE_COMPRESSOR;
@@ -3744,25 +3740,21 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
 
   if (OB_SUCC(ret)) {
     
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
+    {
       const char *ptr = NULL;
-      if (OB_ISNULL(ptr = tenant_config->_px_bloom_filter_group_size.get_value())) {
+      if (OB_ISNULL(ptr = GCONF._px_bloom_filter_group_size.get_value())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("each group size ptr is null", K(ret));
       } else if (0 == ObString::make_string("auto").case_compare(ptr)) {
         spec.each_group_size_ = -1;
       } else {
         char *end_ptr = nullptr;
-        spec.each_group_size_ = strtoull(ptr, &end_ptr, 10); // get group size from tenant config
+        spec.each_group_size_ = strtoull(ptr, &end_ptr, 10); // get group size from config
         if (*end_ptr != '\0') {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("each group size ptr is unexpected", K(ret));
         }
       }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected tenant config", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -4982,11 +4974,8 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObHashGroupBySpec &spec,
     OZ(set_3stage_info(op, spec));
     spec.by_pass_enabled_ = op.is_adaptive_aggregate();
     
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      spec.llc_ndv_est_enabled_ = tenant_config->_enable_hgby_llc_ndv_adaptive;
-      spec.skew_detection_enabled_ = tenant_config->_enable_hgby_skew_detection;
-    }
+    spec.llc_ndv_est_enabled_ = GCONF._enable_hgby_llc_ndv_adaptive;
+    spec.skew_detection_enabled_ = GCONF._enable_hgby_skew_detection;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(generate_dist_aggr_distinct_columns(op, spec))) {
       LOG_WARN("failed to generate distinct aggregate function duplicate columns", K(ret));
@@ -5414,15 +5403,14 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
     int64_t hint_io_gap_percentage = 0;
     const ObOptParamHint *opt_params = &log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     int64_t pd_level = 0;
-    if (OB_UNLIKELY(!tenant_config.is_valid())) {
+    if (OB_UNLIKELY(!true)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to init tenant config");
     } else if (OB_ISNULL(opt_params)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid opt params", K(ret), KP(opt_params));
-    } else if (OB_FAIL(get_pushdown_storage_level(log_plan->get_optimizer_context(), tenant_config->_pushdown_storage_level, pd_level))) {
+    } else if (OB_FAIL(get_pushdown_storage_level(log_plan->get_optimizer_context(), GCONF._pushdown_storage_level, pd_level))) {
       LOG_WARN("failed to get hint pushdown storage level", K(ret));
     } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_BATCH_SIZE, has_io_batch_size_hint))) {
       LOG_WARN("check has hint of io read batch size failed", K(ret), KPC(opt_params));
@@ -5446,27 +5434,27 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
       }
     }
     if (OB_SUCC(ret)) {
-      const int64_t io_read_batch_size = has_io_batch_size_hint ? hint_io_read_batch_size : tenant_config->_io_read_batch_size;
-      const int64_t io_read_gap_size = io_read_batch_size * (has_io_gap_percentage_hint ? hint_io_gap_percentage : tenant_config->_io_read_redundant_limit_percentage) / 100;
+      const int64_t io_read_batch_size = has_io_batch_size_hint ? hint_io_read_batch_size : GCONF._io_read_batch_size;
+      const int64_t io_read_gap_size = io_read_batch_size * (has_io_gap_percentage_hint ? hint_io_gap_percentage : GCONF._io_read_redundant_limit_percentage) / 100;
       pd_blockscan = ObPushdownFilterUtils::is_blockscan_pushdown_enabled(pd_level);
       pd_filter = ObPushdownFilterUtils::is_filter_pushdown_enabled(pd_level);
-      enable_skip_index = tenant_config->_enable_skip_index;
-      enable_prefetch_limit = tenant_config->_enable_prefetch_limiting;
+      enable_skip_index = GCONF._enable_skip_index;
+      enable_prefetch_limit = GCONF._enable_prefetch_limiting;
       enable_column_store = op.use_column_store();
       ObDASScanCtDef &scan_ctdef = spec.tsc_ctdef_.scan_ctdef_;
       ObDASScanCtDef *lookup_ctdef = spec.tsc_ctdef_.lookup_ctdef_;
-      enable_filter_reordering = tenant_config->_enable_filter_reordering;
+      enable_filter_reordering = GCONF._enable_filter_reordering;
       scan_ctdef.pd_expr_spec_.pd_storage_flag_.set_flags(pd_blockscan, pd_filter, enable_skip_index,
                                                           enable_column_store, enable_prefetch_limit, enable_filter_reordering);
       scan_ctdef.table_scan_opt_.io_read_batch_size_ = io_read_batch_size;
       scan_ctdef.table_scan_opt_.io_read_gap_size_ = io_read_gap_size;
-      scan_ctdef.table_scan_opt_.storage_rowsets_size_ = tenant_config->storage_rowsets_size;
+      scan_ctdef.table_scan_opt_.storage_rowsets_size_ = GCONF.storage_rowsets_size;
       if (nullptr != lookup_ctdef) {
         lookup_ctdef->pd_expr_spec_.pd_storage_flag_.set_flags(pd_blockscan, pd_filter, enable_skip_index,
                                                               enable_column_store, enable_prefetch_limit, enable_filter_reordering);
         lookup_ctdef->table_scan_opt_.io_read_batch_size_ = io_read_batch_size;
         lookup_ctdef->table_scan_opt_.io_read_gap_size_ = io_read_gap_size;
-        lookup_ctdef->table_scan_opt_.storage_rowsets_size_ = tenant_config->storage_rowsets_size;
+        lookup_ctdef->table_scan_opt_.storage_rowsets_size_ = GCONF.storage_rowsets_size;
       }
     }
   }

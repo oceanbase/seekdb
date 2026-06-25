@@ -23,7 +23,6 @@
 #include "share/ob_scanner.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "share/rc/ob_tenant_base.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 
 namespace oceanbase
@@ -34,21 +33,17 @@ class ObTenantTabletIterator;
 }
 namespace observer
 {
-class ObVirtualTableTabletIter : public common::ObVirtualTableScannerIterator,
-                                         public omt::ObMultiTenantOperator
+class ObVirtualTableTabletIter : public common::ObVirtualTableScannerIterator
 {
 public:
   ObVirtualTableTabletIter();
   virtual ~ObVirtualTableTabletIter();
   int init(common::ObIAllocator *allocator, common::ObAddr &addr);
 public:
-  virtual int inner_get_next_row(common::ObNewRow *&row);
+  virtual int inner_get_next_row(common::ObNewRow *&row) = 0;
   virtual void reset();
 protected:
   int get_next_tablet();
-  virtual bool is_need_process() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) = 0;
-  virtual void release_last_tenant() override;
 protected:
   common::ObAddr addr_;
   storage::ObTenantTabletIterator *tablet_iter_;

@@ -20,7 +20,6 @@
 #include "share/ob_virtual_table_iterator.h"
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_config_helper.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 
 namespace oceanbase
 {
@@ -55,7 +54,7 @@ private:
     ISDEFAULT
 };
   common::ObConfigContainer::const_iterator sys_iter_;
-  omt::ObTenantConfigGuard tenant_config_;
+  common::ObServerConfig *tenant_config_ = &GCONF;
   common::ObConfigContainer::const_iterator tenant_iter_;
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSysParameterStat);
 };

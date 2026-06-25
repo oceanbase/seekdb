@@ -22,7 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_qsync_lock.h"
 #include "lib/restore/ob_storage_info.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
@@ -36,7 +36,7 @@ public:
   ObTenantStsCredentialMgr() {}
   virtual ~ObTenantStsCredentialMgr() {}
   virtual int get_sts_credential(char *sts_credential, const int64_t sts_credential_buf_len) override;
-  virtual int check_sts_credential(omt::ObTenantConfigGuard &tenant_config) const;
+  virtual int check_sts_credential(common::ObServerConfig *tenant_config) const;
   static ObTenantStsCredentialBaseMgr &get_instance()
   {
     static ObTenantStsCredentialMgr mgr;

@@ -265,20 +265,19 @@ int ObSplitPartitionHelper::check_enable_global_index_auto_split(
     auto_part_size = data_table_schema.get_part_option().get_auto_part_size();
   } else {
     
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      const ObString policy_str(tenant_config->global_index_auto_split_policy.str());
-      if (0 == policy_str.case_compare("DISTRIBUTED")) {
-        enable_auto_split = false;
-      } else if (0 == policy_str.case_compare("ALL")) {
-        enable_auto_split = true;
-      }
-      if (OB_SUCC(ret) && enable_auto_split) {
-        const int64_t data_auto_part_size = data_table_schema.get_part_option().get_auto_part_size();
-        auto_part_size = data_table_schema.get_part_option().is_valid_auto_part_size() ? data_auto_part_size : tenant_config->auto_split_tablet_size;
-        LOG_INFO("enable global index auto split by tenant config", K(auto_part_size), K(data_auto_part_size), K(policy_str));
-      }
+
+    const ObString policy_str(GCONF.global_index_auto_split_policy.str());
+    if (0 == policy_str.case_compare("DISTRIBUTED")) {
+      enable_auto_split = false;
+    } else if (0 == policy_str.case_compare("ALL")) {
+      enable_auto_split = true;
     }
+    if (OB_SUCC(ret) && enable_auto_split) {
+      const int64_t data_auto_part_size = data_table_schema.get_part_option().get_auto_part_size();
+      auto_part_size = data_table_schema.get_part_option().is_valid_auto_part_size() ? data_auto_part_size : GCONF.auto_split_tablet_size;
+      LOG_INFO("enable global index auto split by tenant config", K(auto_part_size), K(data_auto_part_size), K(policy_str));
+    }
+
   }
   return ret;
 }

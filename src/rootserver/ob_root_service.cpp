@@ -948,7 +948,7 @@ int ObRootService::check_config_result(const char *name, const char* value)
     common::sqlclient::ObMySQLResult *result = NULL;
     if (OB_FAIL(sql.assign_fmt("SELECT count(*) as count FROM %s "
                                "WHERE name = '%s' and value != '%s'",
-                               "__all_virtual_tenant_parameter_stat", name, value))) {
+                               "__all_virtual_parameter_stat", name, value))) {
       LOG_WARN("fail to append sql", K(ret));
     }
     while(OB_SUCC(ret) || OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == ret /* remote schema not ready, return -4029 on remote */) {
@@ -4451,52 +4451,6 @@ int ObRootService::set_config_pre_hook(obcall::ObAdminSetConfigArg &arg)
       } else if (!valid) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("config invalid", KR(ret), K(*item));
-      }
-    } else if (0 == STRCMP(item->name_.ptr(), PARTITION_BALANCE_SCHEDULE_INTERVAL)) {
-      const int64_t DEFAULT_BALANCER_IDLE_TIME = 10 * 1000 * 1000L; // 10s
-      for (int i = 0; i < item->batch_ids_.count() && valid; i++) {
-        
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-        int64_t balancer_idle_time = tenant_config.is_valid() ? tenant_config->balancer_idle_time : DEFAULT_BALANCER_IDLE_TIME;
-        int64_t interval = ObConfigTimeParser::get(item->value_.ptr(), valid);
-        if (valid) {
-          if (0 == interval) {
-            valid = true;
-          } else if (interval >= balancer_idle_time) {
-            valid = true;
-          } else {
-            valid = false;
-            char err_msg[DEFAULT_BUF_LENGTH];
-            (void)snprintf(err_msg, sizeof(err_msg), "partition_balance_schedule_interval of tenant 1, "
-                "it should not be less than balancer_idle_time");
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, err_msg);
-          }
-        }
-        if (!valid) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("config invalid", KR(ret), K(*item), K(balancer_idle_time));
-        }
-      }
-    } else if (0 == STRCMP(item->name_.ptr(), BALANCER_IDLE_TIME)) {
-      const int64_t DEFAULT_PARTITION_BALANCE_SCHEDULE_INTERVAL = 2 * 3600 * 1000 * 1000L; // 2h
-      for (int i = 0; i < item->batch_ids_.count() && valid; i++) {
-        
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-        int64_t interval = tenant_config.is_valid()
-            ? tenant_config->partition_balance_schedule_interval
-            : DEFAULT_PARTITION_BALANCE_SCHEDULE_INTERVAL;
-        int64_t idle_time = ObConfigTimeParser::get(item->value_.ptr(), valid);
-        if (valid && (idle_time > interval)) {
-          valid = false;
-          char err_msg[DEFAULT_BUF_LENGTH];
-          (void)snprintf(err_msg, sizeof(err_msg), "balancer_idle_time of tenant 1, "
-              "it should not be longer than partition_balance_schedule_interval");
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, err_msg);
-        }
-        if (!valid) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("config invalid", KR(ret), K(*item), K(interval));
-        }
       }
     } else if (0 == STRCMP(item->name_.ptr(), LOG_DISK_UTILIZATION_LIMIT_THRESHOLD)) {
       // check log_disk_utilization_limit_threshold

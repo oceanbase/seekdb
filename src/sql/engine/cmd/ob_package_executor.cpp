@@ -43,7 +43,6 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
   share::schema::ObPackageType type = arg.package_info_.get_type();
   ObString first_stmt;
   obcall::ObRoutineDDLRes res;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -59,8 +58,8 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
   }
   if (OB_SUCC(ret)
       && !has_error
-      && tenant_config.is_valid()
-      && tenant_config->plsql_v2_compatibility) {
+      && true
+      && GCONF.plsql_v2_compatibility) {
     OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
       get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
@@ -86,7 +85,6 @@ int ObAlterPackageExecutor::execute(ObExecContext &ctx, ObAlterPackageStmt &stmt
   share::schema::ObPackageType type = arg.package_type_;
   ObString first_stmt;
   obcall::ObRoutineDDLRes res;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -101,8 +99,8 @@ int ObAlterPackageExecutor::execute(ObExecContext &ctx, ObAlterPackageStmt &stmt
     LOG_WARN("rpc proxy drop procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   if (OB_SUCC(ret) && !has_error &&
-      tenant_config.is_valid() &&
-      tenant_config->plsql_v2_compatibility) {
+      true &&
+      GCONF.plsql_v2_compatibility) {
     OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
       get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));

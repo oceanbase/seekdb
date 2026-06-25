@@ -218,20 +218,6 @@ private:
     int64_t unrecycable_log_disk_size_;
   };
 private:
-  class ObDefaultLocalityCb : public palf::PalfLocalityInfoCb
-  {
-  public:
-    int get_server_region(const common::ObAddr &server, common::ObRegion &region) const override final
-    {
-      int ret = OB_SUCCESS;
-      if (!server.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        region = DEFAULT_REGION_NAME;
-      }
-      return ret;
-    }
-  };
   bool is_inited_;
   bool is_running_;
   bool enable_shared_storage_;
@@ -250,7 +236,6 @@ private:
   ObLogFlashbackService flashback_service_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
-  ObDefaultLocalityCb default_locality_cb_;
   // Restore service for standby log sync
   // CDC service for log fetcher (standby log sync server side)
 private:

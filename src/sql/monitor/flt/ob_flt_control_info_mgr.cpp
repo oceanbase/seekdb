@@ -967,12 +967,11 @@ int ObFLTControlInfoManager::remove_tenant_con_info(sql::ObExecContext &ctx)
 int ObFLTControlInfoManager::init()
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (!tenant_config.is_valid()){
+  if (!true){
     // do nothing
   } else {
-    ObString trace_info(strlen(tenant_config->_trace_control_info.str()),
-                                tenant_config->_trace_control_info.str());
+    ObString trace_info(strlen(GCONF._trace_control_info.str()),
+                                GCONF._trace_control_info.str());
     if (OB_FAIL(from_json(alloc_, trace_info.ptr(), trace_info.length()))) {
       LOG_WARN("failed to resolve json val", K(ret));
     } else {

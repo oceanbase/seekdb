@@ -21,7 +21,6 @@
 #include "storage/checkpoint/ob_common_checkpoint.h"
 #include "storage/tx_storage/ob_ls_map.h"
 #include "observer/omt/ob_multi_tenant.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
@@ -32,8 +31,7 @@ typedef common::ObSimpleIterator<checkpoint::ObCommonCheckpointVTInfo,
   OB_COMMON_CHECKPOINT, 5> ObCommonCheckpointVTIterator;
 
 
-class ObAllVirtualTransCheckpointInfo : public common::ObVirtualTableScannerIterator,
-                                        public omt::ObMultiTenantOperator
+class ObAllVirtualTransCheckpointInfo : public common::ObVirtualTableScannerIterator
 {
  public:
   explicit ObAllVirtualTransCheckpointInfo();
@@ -46,10 +44,6 @@ class ObAllVirtualTransCheckpointInfo : public common::ObVirtualTableScannerIter
     addr_ = addr;
   }
  private:
-  virtual bool is_need_process() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override;
-
   int get_next_ls_(ObLS *&ls);
   int prepare_to_read_();
   int get_next_(storage::checkpoint::ObCommonCheckpointVTInfo &common_checkpoint);
@@ -57,7 +51,6 @@ class ObAllVirtualTransCheckpointInfo : public common::ObVirtualTableScannerIter
   common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   char checkpoint_type_buf_[common::MAX_CHECKPOINT_TYPE_BUF_LENGTH];
-  // These resources must be released in their own tenant
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   ObCommonCheckpointVTIterator ob_common_checkpoint_iter_;
   

@@ -571,25 +571,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigQueryRateLimitChecker);
 };
 
-class ObConfigPartitionBalanceStrategyFuncChecker
-  : public ObConfigChecker
-{
-public:
-  enum PartitionBalanceStrategy
-  {
-    AUTO = 0,
-    STANDARD,
-    DISK_UTILIZATION_ONLY,
-    PARTITION_BALANCE_STRATEGY_MAX,
-  };
-  static const char *balance_strategy[PARTITION_BALANCE_STRATEGY_MAX];
-public:
-  ObConfigPartitionBalanceStrategyFuncChecker() {}
-  virtual ~ObConfigPartitionBalanceStrategyFuncChecker() {}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigPartitionBalanceStrategyFuncChecker);
-};
 
 class ObConfigAuditModeChecker
   : public ObConfigChecker
@@ -946,17 +927,6 @@ public:
   static bool check(const obcall::ObAdminSetConfigItem &t);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigArchiveLagTargetChecker);
-};
-
-class ObConfigMigrationChooseSourceChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigMigrationChooseSourceChecker() {}
-  virtual ~ObConfigMigrationChooseSourceChecker() {}
-  bool check(const ObConfigItem &t) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigMigrationChooseSourceChecker);
 };
 
 

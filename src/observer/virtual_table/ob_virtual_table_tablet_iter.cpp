@@ -25,7 +25,6 @@ using namespace observer;
 
 ObVirtualTableTabletIter::ObVirtualTableTabletIter()
     : ObVirtualTableScannerIterator(),
-      ObMultiTenantOperator(),
       addr_(),
       tablet_iter_(nullptr),
       tablet_allocator_("VTTable"),
@@ -42,7 +41,6 @@ ObVirtualTableTabletIter::~ObVirtualTableTabletIter()
 
 void ObVirtualTableTabletIter::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_id_ = share::ObLSID::INVALID_LS_ID;
 
@@ -79,34 +77,6 @@ int ObVirtualTableTabletIter::init(
     start_to_read_ = true;
   }
   return ret;
-}
-
-int ObVirtualTableTabletIter::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObVirtualTableTabletIter::release_last_tenant()
-{
-  if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletIterator();
-    tablet_iter_ = nullptr;
-  }
-  tablet_handle_.reset();
-  tablet_allocator_.reset();
-}
-
-bool ObVirtualTableTabletIter::is_need_process()
-{
-  if (!false &&
-      (true || true)){
-    return true;
-  }
-  return false;
 }
 
 int ObVirtualTableTabletIter::get_next_tablet()

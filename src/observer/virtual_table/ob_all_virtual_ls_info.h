@@ -19,15 +19,13 @@
 
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObAllVirtualLSInfo : public common::ObVirtualTableScannerIterator,
-                           public omt::ObMultiTenantOperator
+class ObAllVirtualLSInfo : public common::ObVirtualTableScannerIterator
 {
 public:
   ObAllVirtualLSInfo();
@@ -40,19 +38,12 @@ public:
     addr_ = addr;
   }
 private:
-  // Filter to get the tenants that need processing
-  virtual bool is_need_process() override;
-  // Process the tenant of the current iteration
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  // Release the resources of the previous tenant
-  virtual void release_last_tenant() override;
 private:
   int next_ls_info_(ObLSVTInfo &ls_info);
 private:
   common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   char state_name_[common::MAX_LS_STATE_LENGTH];
-  /* The resources for cross-tenant access must be handled and released by ObMultiTenantOperator */
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualLSInfo);

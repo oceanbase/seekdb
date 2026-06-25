@@ -23,7 +23,6 @@ using namespace common;
 using namespace obcall;
 using namespace share;
 using namespace share::schema;
-using namespace omt;
 namespace sql
 {
 ObCreateTableResolverBase::ObCreateTableResolverBase(ObResolverParams &params)
@@ -103,8 +102,7 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     table_schema.set_table_mode_struct(table_mode_);
     table_schema.set_dop(table_dop_);
     if (0 == progressive_merge_num_) {
-      ObTenantConfigGuard tenant_config(TENANT_CONF());
-      table_schema.set_progressive_merge_num(tenant_config.is_valid() ? tenant_config->default_progressive_merge_num : 0);
+      table_schema.set_progressive_merge_num(GCONF.default_progressive_merge_num);
     } else {
       table_schema.set_progressive_merge_num(progressive_merge_num_);
     }
@@ -290,13 +288,12 @@ int ObCreateTableResolverBase::resolve_column_group_helper(const ParseNode *cg_n
     }
 
     /* build column group when cg node is null && tenant cg valid*/
-    ObTenantConfigGuard tenant_config(TENANT_CONF());
     if (OB_FAIL(ret)) {
-    } else if ( OB_LIKELY(tenant_config.is_valid()) && nullptr == cg_node) {
+    } else if (nullptr == cg_node) {
       /* force to build each cg*/
       if (!ObSchemaUtils::can_add_column_group(table_schema)) {
       } else if (OB_FAIL(ObTableStoreFormat::find_table_store_type(
-                  tenant_config->default_table_store_format.get_value_string(),
+                  GCONF.default_table_store_format.get_value_string(),
                   table_store_type))) {
         LOG_WARN("fail to get table store format", K(ret), K(table_store_type));
       } else if (ObTableStoreFormat::is_with_column(table_store_type)) {
@@ -363,11 +360,11 @@ int ObCreateTableResolverBase::resolve_column_group(const ParseNode *cg_node)
   return ret;
 }
 
-int ObCreateTableResolverBase::resolve_table_organization(omt::ObTenantConfigGuard &tenant_config, ParseNode *node)
+int ObCreateTableResolverBase::resolve_table_organization(common::ObServerConfig *tenant_config, ParseNode *node)
 {
   int ret = OB_SUCCESS;
   // get the table organization from the tenant config
-  if (OB_LIKELY(tenant_config.is_valid())) {
+  {
     const char *ptr = NULL;
     if (OB_ISNULL(ptr = tenant_config->default_table_organization.get_value())) {
       ret = OB_ERR_UNEXPECTED;

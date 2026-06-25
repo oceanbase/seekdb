@@ -335,11 +335,10 @@ void ObCheckPointService::ObAdvanceCkptTask::runTimerTask()
 
   // set 10 minutes as default value
   int64_t advance_checkpoint_interval = 10LL * 60LL * 1000LL * 1000LL;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    // use config value if config is valid
-    advance_checkpoint_interval = tenant_config->_advance_checkpoint_interval;
-  }
+
+  // use config value if config is valid
+  advance_checkpoint_interval = GCONF._advance_checkpoint_interval;
+
 
   if (0 != advance_checkpoint_interval) {
     STORAGE_LOG(INFO, "====== Advance Checkpoint Task ======");

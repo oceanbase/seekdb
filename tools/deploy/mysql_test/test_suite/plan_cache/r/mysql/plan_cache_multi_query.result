@@ -7,7 +7,7 @@ begin;
 select * from t1 where c1 = 1;select * from t1 where c1 = 1;select * from t1 where c1 = 1;//
 commit;
 // expected hit_count 2
-select  hit_count from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like "select * from t1 where c1 = ?;";
+select  hit_count from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement like "select * from t1 where c1 = ?;";
 hit_count
 2
 drop table t1;

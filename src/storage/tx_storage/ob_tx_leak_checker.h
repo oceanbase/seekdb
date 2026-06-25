@@ -227,9 +227,8 @@ static int64_t get_tx_debug_level()
   if (current_time - last_check_timestamp < TX_DEBUG_LEVEL_CACHE_REFRESH_INTERVAL) {
     // Check once when the last memory burst or tenant does not match or the interval reaches the threshold
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (OB_LIKELY(tenant_config.is_valid())) {
-      last_result = tenant_config->_tx_debug_level;
+    if (OB_LIKELY(true)) {
+      last_result = GCONF._tx_debug_level;
     }
     last_check_timestamp = current_time;
   }

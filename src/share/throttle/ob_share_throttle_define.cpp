@@ -20,6 +20,7 @@
 #include "share/throttle/ob_throttle_info.h"
 #include "share/allocator/ob_tenant_vector_allocator.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
+#include "share/config/ob_server_config.h"
 
 
 namespace oceanbase {
@@ -43,8 +44,8 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
 
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
+  common::ObServerConfig *tenant_config = &GCONF;
+  {
     int64_t share_mem_limit = tenant_config->_tx_share_memory_limit_percentage;
     // if _tx_share_memory_limit_percentage equals 0, use (MAX(memstore_limit_percentage, vector_mem_limit_percentage + 5) + 10) as default value
     if (0 == share_mem_limit) {
@@ -55,10 +56,6 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
     resource_limit = hard_memory_limit * share_mem_limit / 100LL;
     trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
     max_duration = tenant_config->writing_throttling_maximum_duration;
-  } else {
-    resource_limit = hard_memory_limit * SR_LIMIT_PERCENTAGE / 100;
-    trigger_percentage = SR_THROTTLE_TRIGGER_PERCENTAGE;
-    max_duration = SR_THROTTLE_MAX_DURATION;
   }
 }
 

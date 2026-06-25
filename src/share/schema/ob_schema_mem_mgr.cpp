@@ -120,7 +120,7 @@ int ObSchemaMemMgr::alloc_(const int size, void *&ptr,
 }
 
 ERRSIM_POINT_DEF(ERRSIM_ALLOC_SCHEMA_MGR);
-int ObSchemaMemMgr::alloc_schema_mgr(ObSchemaMgr *&schema_mgr, bool alloc_for_liboblog)
+int ObSchemaMemMgr::alloc_schema_mgr(ObSchemaMgr *&schema_mgr)
 {
   int ret = OB_SUCCESS;
   void *tmp_ptr = NULL;
@@ -134,8 +134,6 @@ int ObSchemaMemMgr::alloc_schema_mgr(ObSchemaMgr *&schema_mgr, bool alloc_for_li
   } else if (OB_ISNULL(allocator) || OB_ISNULL(tmp_ptr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tmp ptr or allocator is null", KR(ret), K(tmp_ptr), K(allocator));
-  } else if (alloc_for_liboblog) {
-    schema_mgr = new (tmp_ptr) ObSchemaMgr();
   } else {
     schema_mgr = new (tmp_ptr) ObSchemaMgr(*allocator);
     schema_mgr->set_allocator_idx(pos_);

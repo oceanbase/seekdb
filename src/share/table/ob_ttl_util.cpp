@@ -1238,9 +1238,8 @@ int ObTTLUtil::check_task_status_from_sys_table(common::ObISQLClient& proxy,
 
 bool ObTTLUtil::is_enable_ttl()
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  return tenant_config.is_valid() &&
-         tenant_config->enable_kv_ttl &&
+  return true &&
+         GCONF.enable_kv_ttl &&
          ObKVFeatureModeUitl::is_ttl_enable();
 }
 

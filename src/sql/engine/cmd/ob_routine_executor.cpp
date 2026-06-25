@@ -46,7 +46,6 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   ObRoutineType type = crt_routine_arg.routine_info_.get_routine_type();
   obcall::ObRoutineDDLRes res;
   bool has_error = ERROR_STATUS_HAS_ERROR == crt_routine_arg.error_info_.get_error_status();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
@@ -61,8 +60,8 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   }
   if (OB_SUCC(ret)
       && !has_error
-      && tenant_config.is_valid()
-      && tenant_config->plsql_v2_compatibility) {
+      && true
+      && GCONF.plsql_v2_compatibility) {
     CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
     OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
@@ -330,7 +329,6 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
   bool has_error = ERROR_STATUS_HAS_ERROR == alter_routine_arg.error_info_.get_error_status();
   bool need_create_routine = (alter_routine_arg.is_need_alter_);
   ObString first_stmt;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (need_create_routine) {
     obcall::ObRoutineDDLRes res;
     if (OB_ISNULL(ctx.get_pl_engine())) {
@@ -350,8 +348,8 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     }
     if (OB_SUCC(ret)
         && !has_error
-        && tenant_config.is_valid()
-        && tenant_config->plsql_v2_compatibility) {
+        && true
+        && GCONF.plsql_v2_compatibility) {
       CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
       OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
@@ -392,8 +390,8 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     }
     if (OB_SUCC(ret)
         && !has_error
-        && tenant_config.is_valid()
-        && tenant_config->plsql_v2_compatibility) {
+        && true
+        && GCONF.plsql_v2_compatibility) {
       CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
         get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));

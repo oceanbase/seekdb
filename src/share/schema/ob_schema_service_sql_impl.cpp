@@ -148,11 +148,6 @@
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable)
 
 #define DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable)    \
-  if (g_liboblog_mode_) {                                               \
-    /* To avoid error when liboblog use mysql connection and */         \
-    /* set non-existed sys variable, check_sys_variable is reset to true. */ \
-    check_sys_variable = true;                                          \
-  }                                                                     \
   ObSQLClientRetryWeak sql_client_retry_weak(&sql_client, false, \
                                              snapshot_timestamp, check_sys_variable);
 namespace oceanbase
@@ -719,11 +714,6 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schemas(
       } else if (OB_FAIL(fetch_all_constraint_info_ignore_inner_table(schema_status, schema_version,
                  sql_client, not_core_schemas, &table_ids.at(begin), end - begin))) {
         LOG_WARN("fetch all constraints info failed", K(schema_version), K(schema_status), K(ret));
-        // For liboblog compatibility, we should ingore error when table is not exist.
-        if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {
-          LOG_WARN("liboblog mode, ignore all constraint info schema table NOT EXIST error",
-              K(ret), K(schema_version), K(schema_status));
-        }
       }
       begin = end;
     }
@@ -1182,23 +1172,12 @@ int ObSchemaServiceSQLImpl::get_tenant_system_variable(const ObRefreshSchemaStat
       } else if (OB_FAIL(sql.append(" order by schema_version desc;"))) {
         LOG_WARN("append sql failed", K(var_name), K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        // for liboblog compatibility
-        if (ret == -1146 && ObSchemaService::g_liboblog_mode_) {
-          ret = OB_SUCCESS;
-          try_sys_variable = true;
-        } else {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
-        }
+        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result.", K(var_name), K(ret));
       } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret && ObSchemaService::g_liboblog_mode_) {
-          ret = OB_SUCCESS;
-          try_sys_variable = true;
-        } else {
-          LOG_WARN("fail to get system variable", K(var_name), K(ret));
-        }
+        LOG_WARN("fail to get system variable", K(var_name), K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_obj(*result, allocator, out_var_obj))) {
         LOG_WARN("fail to retrieve system variable obj", K(ret), K(var_name));
       }
@@ -1247,12 +1226,6 @@ int ObSchemaServiceSQLImpl::get_tenant_system_variable(const ObRefreshSchemaStat
       LOG_WARN("check inner stat fail", KR(ret));           \
     } else if (OB_FAIL(fetch_##SCHEMA##s(client, allocator, schema_status, schema_version, schema_array))) { \
       LOG_WARN("fetch "#SCHEMA"s failed", KR(ret), K(schema_status), K(schema_version)); \
-      /* for liboblog compatibility */ \
-      if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) { \
-        LOG_WARN("liboblog mode, ignore "#SCHEMA" schema table NOT EXIST error", \
-                 KR(ret), K(schema_status), K(schema_version)); \
-        ret = OB_SUCCESS;                                   \
-      }                                                     \
     }                                                       \
     return ret;                                             \
   }
@@ -1270,12 +1243,6 @@ int ObSchemaServiceSQLImpl::get_tenant_system_variable(const ObRefreshSchemaStat
       LOG_WARN("check inner stat fail", KR(ret));           \
     } else if (OB_FAIL(fetch_##SCHEMA##s(client, schema_status, schema_version, schema_array))) { \
       LOG_WARN("fetch "#SCHEMA"s failed", KR(ret), K(schema_status), K(schema_version)); \
-      /* for liboblog compatibility */ \
-      if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) { \
-        LOG_WARN("liboblog mode, ignore "#SCHEMA" schema table NOT EXIST error", \
-                 KR(ret), K(schema_status), K(schema_version)); \
-        ret = OB_SUCCESS;                                   \
-      }                                                     \
     }                                                       \
     return ret;                                             \
   }
@@ -1419,19 +1386,12 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
       } else if (OB_FAIL(sql.append(" ORDER BY NAME DESC, SCHEMA_VERSION DESC"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        if (ret == -ER_NO_SUCH_TABLE && ObSchemaService::g_liboblog_mode_) {
-          ret = OB_SUCCESS;
-          try_sys_variable = true;
-        } else {
-          LOG_WARN("read all system variable failed", K(ret));
-        }
+        LOG_WARN("read all system variable failed", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable(*result, sys_variable_schema))) {
         LOG_WARN("retrieve tenant global system variable failed", K(ret));
-      } else if (sys_variable_schema.get_real_sysvar_count() <= 0 && ObSchemaService::g_liboblog_mode_) {
-        try_sys_variable = true;
       }
     }
   }
@@ -3365,12 +3325,6 @@ int ObSchemaServiceSQLImpl::get_batch_tenants(
                                       &schema_keys.at(begin),                   \
                                       end - begin))) {                          \
           LOG_WARN("fetch batch "#SCHEMA"s failed", KR(ret));                   \
-          /* for liboblog compatibility */                                      \
-          if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {  \
-            LOG_WARN("liboblog mode, ignore "#SCHEMA" schema table NOT EXIST error",\
-                     KR(ret), K(schema_version), K(schema_status));\
-            ret = OB_SUCCESS;                                                   \
-          }                                                                     \
         }                                                                       \
         LOG_TRACE("finish fetch batch "#SCHEMA"s", KR(ret), K(begin), K(end),   \
                   "total_count", schema_keys.count());                          \
@@ -3414,12 +3368,6 @@ GET_BATCH_SCHEMAS_WITH_ALLOCATOR_FUNC_DEFINE(table, ObSimpleTableSchemaV2);
                                       &schema_keys.at(begin),                   \
                                       end - begin))) {                          \
           LOG_WARN("fetch batch "#SCHEMA"s failed", KR(ret));                   \
-          /* for liboblog compatibility */                                      \
-          if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {  \
-            LOG_WARN("liboblog mode, ignore "#SCHEMA" schema table NOT EXIST error",\
-                     KR(ret), K(schema_version), K(schema_status));\
-            ret = OB_SUCCESS;                                                   \
-          }                                                                     \
         }                                                                       \
         LOG_TRACE("finish fetch batch "#SCHEMA"s", KR(ret), K(begin), K(end),   \
                   "total_count", schema_keys.count());                          \
@@ -4252,7 +4200,7 @@ int ObSchemaServiceSQLImpl::fetch_all_trigger_info(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
     if (OB_FAIL(
-        sql.append_fmt(FETCH_ALL_TRIGGER_HISTORY_SQL, OB_ALL_TENANT_TRIGGER_HISTORY_TNAME,
+        sql.append_fmt(FETCH_ALL_TRIGGER_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
         fill_extract_compat_id(schema_status)))) {
       LOG_WARN("append sql failed", K(ret));
     } else if (NULL != trigger_keys && triggers_size > 0) {
@@ -4316,7 +4264,7 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     
     bool is_need_inc_fetch = false; // control generation logic of sql
-    if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL, OB_ALL_TENANT_ROLE_GRANTEE_MAP_HISTORY_TNAME,
+    if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL, OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME,
                                1UL))) {
       LOG_WARN("append sql failed", K(ret));
     } else if (!is_full_schema) {
@@ -4635,13 +4583,13 @@ FETCH_SCHEMAS_FUNC_DEFINE(tablegroup, ObSimpleTablegroupSchema, OB_ALL_TABLEGROU
 FETCH_SCHEMAS_FUNC_DEFINE(outline, ObSimpleOutlineSchema, OB_ALL_OUTLINE_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(package, ObSimplePackageSchema, OB_ALL_PACKAGE_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(routine, ObSimpleRoutineSchema, OB_ALL_ROUTINE_HISTORY_TNAME);
-FETCH_SCHEMAS_FUNC_DEFINE(trigger, ObSimpleTriggerSchema, OB_ALL_TENANT_TRIGGER_HISTORY_TNAME);
+FETCH_SCHEMAS_FUNC_DEFINE(trigger, ObSimpleTriggerSchema, OB_ALL_TRIGGER_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(sequence, ObSequenceSchema, OB_ALL_SEQUENCE_OBJECT_HISTORY_TNAME);
-FETCH_SCHEMAS_FUNC_DEFINE(directory, ObDirectorySchema, OB_ALL_TENANT_DIRECTORY_HISTORY_TNAME);
+FETCH_SCHEMAS_FUNC_DEFINE(directory, ObDirectorySchema, OB_ALL_DIRECTORY_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(context, ObContextSchema, OB_ALL_CONTEXT_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema, OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(catalog, ObCatalogSchema, OB_ALL_CATALOG_HISTORY_TNAME);
-FETCH_SCHEMAS_FUNC_DEFINE(location, ObLocationSchema, OB_ALL_TENANT_LOCATION_HISTORY_TNAME);
+FETCH_SCHEMAS_FUNC_DEFINE(location, ObLocationSchema, OB_ALL_LOCATION_HISTORY_TNAME);
 FETCH_SCHEMAS_FUNC_DEFINE(ccl_rule, ObSimpleCCLRuleSchema, OB_ALL_CCL_RULE_HISTORY_TNAME);
 
 int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
@@ -4867,7 +4815,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_privs(
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_SYS_PRIV_HISTORY_SQL,
-                               OB_ALL_TENANT_SYSAUTH_HISTORY_TNAME,
+                               OB_ALL_SYSAUTH_HISTORY_TNAME,
                                fill_extract_compat_id(schema_status)))) {
       LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -5011,7 +4959,7 @@ int ObSchemaServiceSQLImpl::fetch_obj_privs(
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     
-    if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_PRIV_HISTORY_SQL, OB_ALL_TENANT_OBJAUTH_HISTORY_TNAME,
+    if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_HISTORY_TNAME,
                                fill_extract_compat_id(schema_status)))) {
       LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -5059,7 +5007,7 @@ int ObSchemaServiceSQLImpl::fetch_obj_mysql_privs(
     ObSqlString sql;
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     
-    if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_MYSQL_PRIV_HISTORY_SQL, OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME,
+    if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_MYSQL_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
                               fill_extract_compat_id(schema_status)))) {
       LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
@@ -5249,36 +5197,18 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schema(
     if (OB_FAIL(fetch_foreign_key_info(schema_status, table_id,
                                        schema_version, sql_client, *table_schema))) {
       LOG_WARN("Failed to fetch foreign key info", K(ret));
-      if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {
-        LOG_WARN("liboblog mode, ignore foreign key info schema table NOT EXIST error",
-            K(ret), K(schema_version), K(table_id),
-            "table_name", table_schema->get_table_name());
-        ret = OB_SUCCESS;
-      }
     }
   }
   if (OB_SUCCESS == ret) {
     if (OB_FAIL(fetch_constraint_info(schema_status, table_id,
                                       schema_version, sql_client, table_schema))) {
       LOG_WARN("Failed to fetch constraints info", K(ret));
-      if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {
-        LOG_WARN("liboblog mode, ignore constraint info schema table NOT EXIST error",
-            K(ret), K(schema_version), K(table_id),
-            "table_name", table_schema->get_table_name());
-        ret = OB_SUCCESS;
-      }
     }
   }
   if (OB_SUCCESS == ret) {
     if (OB_FAIL(fetch_trigger_list(schema_status, table_id,
                                           schema_version, sql_client, *table_schema))) {
       LOG_WARN("Failed to fetch trigger list", K(ret));
-      if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {
-        LOG_WARN("liboblog mode, ignore constraint info schema table NOT EXIST error",
-                 K(ret), K(schema_version), K(table_id),
-                 "table_name", table_schema->get_table_name());
-        ret = OB_SUCCESS;
-      }
     }
   }
   return ret;
@@ -5436,7 +5366,7 @@ int ObSchemaServiceSQLImpl::fetch_constraint_column_info(const ObRefreshSchemaSt
     
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
-    if (OB_FAIL(sql.append_fmt(FETCH_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_SQL, OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME,
+    if (OB_FAIL(sql.append_fmt(FETCH_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_SQL, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
                                fill_extract_compat_id(schema_status)))) {
       LOG_WARN("append sql failed", KR(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND constraint_id = %lu AND schema_version <= %ld "
@@ -6004,9 +5934,6 @@ int ObSchemaServiceSQLImpl::construct_recycle_table_object(
              || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(table_id), K(table_name), K(schema_version));
-  } else if (!ObSchemaService::g_liboblog_mode_) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("for backup used only", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
@@ -6085,9 +6012,6 @@ int ObSchemaServiceSQLImpl::construct_recycle_database_object(
       || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(database_id), K(database_name), K(schema_version));
-  } else if (!ObSchemaService::g_liboblog_mode_) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("for backup used only", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
@@ -6173,11 +6097,6 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
         LOG_WARN("Failed to append fmt", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         LOG_WARN("failed to execute sql", K(sql), K(ret));
-        if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {
-          LOG_INFO("liboblog mode, ignore");
-          ret = OB_SUCCESS;
-          has_error = true;
-        }
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", K(ret));
@@ -6286,7 +6205,7 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
   
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    if (OB_FAIL(sql.append_fmt(FETCH_ALL_TRIGGER_ID_HISTORY_SQL, OB_ALL_TENANT_TRIGGER_HISTORY_TNAME,
+    if (OB_FAIL(sql.append_fmt(FETCH_ALL_TRIGGER_ID_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
                                fill_extract_compat_id(schema_status)))) {
       LOG_WARN("failed to append sql", K(table_id), K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND base_object_id = %lu",
@@ -6298,10 +6217,6 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
       LOG_WARN("Failed to append fmt", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       LOG_WARN("failed to execute sql", K(sql), K(ret));
-      if (-ER_NO_SUCH_TABLE == ret && ObSchemaService::g_liboblog_mode_) {
-        LOG_INFO("liboblog mode, ignore");
-        ret = OB_SUCCESS;
-      }
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", K(ret));
@@ -6858,74 +6773,32 @@ int ObSchemaServiceSQLImpl::construct_schema_version_history(
         } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                                      schema_service_))) {
           LOG_WARN("fail to get all table name", K(ret));
-        } else if (!g_liboblog_mode_) {
-          if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL1,
+        } else if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL1,
                                      table_name,
                                      fill_extract_compat_id(schema_status),
                                      fill_extract_schema_id(schema_status, schema_id),
                                      snapshot_version, MAX_CACHED_VERSION_CNT))) {
-            LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
-          } else { } // do-nothing
-        } else {
-          if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL2,
-                                     table_name,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version, MAX_CACHED_VERSION_CNT,
-                                     table_name,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version))) {
-            LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
-          } else { } // do-nothing
+          LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
         }
         break;
       }
       case TABLEGROUP_SCHEMA: {
-        if (!g_liboblog_mode_) {
-          if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLEGROUP_SCHEMA_VERSION_HISTORY_SQL1,
-                                     OB_ALL_TABLEGROUP_HISTORY_TNAME,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version, MAX_CACHED_VERSION_CNT))) {
-            LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
-          } else { } // do-nothing
-        } else {
-          if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLEGROUP_SCHEMA_VERSION_HISTORY_SQL2,
-                                     OB_ALL_TABLEGROUP_HISTORY_TNAME,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version, MAX_CACHED_VERSION_CNT,
-                                     OB_ALL_TABLEGROUP_HISTORY_TNAME,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version))) {
-            LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
-          } else { } // do-nothing
+        if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLEGROUP_SCHEMA_VERSION_HISTORY_SQL1,
+                                   OB_ALL_TABLEGROUP_HISTORY_TNAME,
+                                   fill_extract_compat_id(schema_status),
+                                   fill_extract_schema_id(schema_status, schema_id),
+                                   snapshot_version, MAX_CACHED_VERSION_CNT))) {
+          LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
         }
         break;
       }
       case DATABASE_SCHEMA: {
-        if (!g_liboblog_mode_) {
-          if (OB_FAIL(sql.append_fmt(CONSTRUCT_DATABASE_SCHEMA_VERSION_HISTORY_SQL1,
-                                     OB_ALL_DATABASE_HISTORY_TNAME,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version, MAX_CACHED_VERSION_CNT))) {
-            LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
-          } else { } // do-nothing
-        } else {
-          if (OB_FAIL(sql.append_fmt(CONSTRUCT_DATABASE_SCHEMA_VERSION_HISTORY_SQL2,
-                                     OB_ALL_DATABASE_HISTORY_TNAME,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version, MAX_CACHED_VERSION_CNT,
-                                     OB_ALL_DATABASE_HISTORY_TNAME,
-                                     fill_extract_compat_id(schema_status),
-                                     fill_extract_schema_id(schema_status, schema_id),
-                                     snapshot_version))) {
-            LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
-          } else { } // do-nothing
+        if (OB_FAIL(sql.append_fmt(CONSTRUCT_DATABASE_SCHEMA_VERSION_HISTORY_SQL1,
+                                   OB_ALL_DATABASE_HISTORY_TNAME,
+                                   fill_extract_compat_id(schema_status),
+                                   fill_extract_schema_id(schema_status, schema_id),
+                                   snapshot_version, MAX_CACHED_VERSION_CNT))) {
+          LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
         }
         break;
       }
@@ -7251,51 +7124,6 @@ int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
     }
   }
 
-  return ret;
-}
-
-// only for liboblog used
-int ObSchemaServiceSQLImpl::get_first_trans_end_schema_version(
-    ObISQLClient &sql_client,
-    int64_t &schema_version)
-{
-  int ret = OB_SUCCESS;
-  schema_version = OB_INVALID_VERSION;
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
-  } else if (!ObSchemaService::g_liboblog_mode_) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("only work for liboblog", K(ret));
-  } else if (false
-             || true) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
-  } else {
-    ObSqlString sql;
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObMySQLResult *result = NULL;
-      // Liboblog will only use this function when cluster runs in new schema refresh mode(after schema split),
-      // so compatibility is not considered here.
-      if (OB_FAIL(sql.assign_fmt("SELECT schema_version FROM %s WHERE operation_type = %d "
-                                 "ORDER BY schema_version ASC LIMIT 1",
-                                 OB_ALL_DDL_OPERATION_TNAME, OB_DDL_END_SIGN))) {
-        LOG_WARN("fail to append sql", K(ret));
-      } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(ret), K(sql));
-      } else if (NULL == (result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", K(ret));
-      } else if (OB_FAIL(result->next())) {
-        LOG_WARN("next sql result fail", KR(ret), K(sql));
-      } else if (OB_FAIL((*result).get_int("schema_version", schema_version))) {
-        LOG_WARN("fail to get schema_version", K(ret), K(sql));
-      } else if (schema_version <= 0 || !is_formal_version(schema_version)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid schema version", K(ret), K(schema_version));
-      }
-    }
-  }
   return ret;
 }
 
@@ -8615,7 +8443,7 @@ int ObSchemaServiceSQLImpl::get_obj_priv_with_obj_id(
     LOG_WARN("invalid argument", KR(ret), K(obj_id), K(obj_type));
   } else if (OB_FAIL(sql.append_fmt("SELECT *, 0 as is_deleted, -1 as schema_version FROM %s "
              " WHERE obj_id = %lu AND objtype = %lu",
-             OB_ALL_TENANT_OBJAUTH_TNAME, obj_id, obj_type))) {
+             OB_ALL_OBJAUTH_TNAME, obj_id, obj_type))) {
     LOG_WARN("append sql failed", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {

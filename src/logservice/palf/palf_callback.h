@@ -115,7 +115,6 @@ public:
                                                const bool is_register, /* true: register; false; retire; */
                                                const bool is_parent,   /* true: parent; false: child; */
                                                const common::ObAddr &server,
-                                               const common::ObRegion &region,
                                                const int64_t register_time_us,
                                                const char *extra_info = NULL) = 0;
   
@@ -134,12 +133,6 @@ public:
                                             const int64_t ls_id,
                                             const bool is_create,
                                             const char *extra_info) = 0;
-};
-
-class PalfLocalityInfoCb
-{
-public:
-  virtual int get_server_region(const common::ObAddr &server, common::ObRegion &region) const = 0;
 };
 
 } // end namespace palf

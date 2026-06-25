@@ -199,13 +199,10 @@ int ObMultiVersionSchemaService::init_multi_version_schema_struct(
     )
 {
   int ret = OB_SUCCESS;
-  const ObSchemaStore *schema_store = NULL;
-  if (OB_ISNULL(schema_store = schema_store_)) {
-    if (OB_FAIL(create_schema_store_(init_version_cnt_, init_version_cnt_for_liboblog_))) {
-      LOG_WARN("fail to create schema store", K(ret));
-    }
-  } else {
-    LOG_INFO("schema store already exist", K(ret));
+  if (schema_store_.get_refreshed_version() > 0) {
+    LOG_INFO("schema store already inited", K(ret));
+  } else if (OB_FAIL(schema_store_.init(init_version_cnt_))) {
+    LOG_WARN("fail to init schema store", K(ret));
   }
   return ret;
 }
@@ -316,20 +313,8 @@ int ObMultiVersionSchemaService::get_latest_schema(
     if (OB_ISNULL(hard_code_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("all core table schema is null", KR(ret));
-    } else if (true) {
-      schema = hard_code_schema;
     } else {
-      ObTableSchema* new_table = NULL;
-      if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, new_table))) {
-        LOG_WARN("fail to alloc table schema", KR(ret));
-      } else if (OB_FAIL(new_table->assign(*hard_code_schema))) {
-        LOG_WARN("fail to assign all core schema", KR(ret));
-      } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
-                *new_table))) {
-        LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret));
-      } else {
-        schema = static_cast<const ObSchema*>(new_table);
-      }
+      schema = hard_code_schema;
     }
   } else {
     ObRefreshSchemaStatus schema_status;
@@ -393,8 +378,8 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema_id not match for TENANT_SCHEMA",
              KR(ret), K(schema_id));
-  } else if (TABLE_SIMPLE_SCHEMA == schema_type && !ObSchemaService::g_liboblog_mode_) {
-    // The simple table schema is currently only available for liboblog
+  } else if (TABLE_SIMPLE_SCHEMA == schema_type) {
+    // The simple table schema is not available in single-tenant mode
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("fail to get simple table", K(ret),
              KP(mgr), K(schema_id), K(schema_version));
@@ -404,33 +389,8 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
     if (OB_ISNULL(hard_code_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("all core table schema is null", KR(ret));
-    } else if (true) {
-      schema = hard_code_schema;
     } else {
-      HEAP_VAR(ObTableSchema, new_schema) {
-        if (OB_FAIL(schema_cache_.get_schema(TABLE_SCHEMA,
-                                             schema_id,
-                                             OB_CORE_SCHEMA_VERSION ,
-                                             handle,
-                                             schema))) {
-          if (ret != OB_ENTRY_NOT_EXIST) {
-            LOG_WARN("get schema from cache failed", KR(ret), K(1UL),
-                     K(schema_type), K(schema_id), K(schema_version));
-          } else if (OB_FAIL(new_schema.assign(*hard_code_schema))) { // overwrite ret
-            LOG_WARN("fail to assign all core schema", KR(ret), K(1UL));
-          } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
-                    new_schema))) {
-            LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret), K(1UL));
-          } else if (OB_FAIL(schema_cache_.put_and_fetch_schema(schema_type,
-                                                                schema_id,
-                                                                OB_CORE_SCHEMA_VERSION,
-                                                                new_schema,
-                                                                handle,
-                                                                schema))) {
-            LOG_WARN("fail to push back tenant's __all_core_table schema", KR(ret), K(1UL));
-          }
-        }
-      }
+      schema = hard_code_schema;
     }
   } else if (OB_FAIL(schema_cache_.get_schema(schema_type,
                                               schema_id,
@@ -709,32 +669,8 @@ int ObMultiVersionSchemaService::add_aux_schema_from_mgr(
   return ret;
 }
 
-int ObMultiVersionSchemaService::put_fallback_liboblog_schema_to_slot(
-    ObSchemaMgrCache &schema_mgr_cache_for_liboblog,
-    ObSchemaMemMgr &mem_mgr_for_liboblog,
-    ObSchemaMgr *&target_mgr,
-    ObSchemaMgrHandle &handle)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(put_fallback_schema_to_slot(target_mgr,
-                                          schema_mgr_cache_for_liboblog,
-                                          mem_mgr_for_liboblog,
-                                          handle))) {
-    LOG_WARN("put fallback schema to slot failed", K(ret));
-  } else {
-    //protect by the lock mem_mgr_for_liboblog_mutex_, so no concurrent here
-    static int64_t last_dump_time = 0;
-    int64_t current_time = ObTimeUtility::current_time();
-    if (current_time - last_dump_time > 60000000) {// print every 60 seconds
-      schema_mgr_cache_for_liboblog_.dump();
-      last_dump_time = current_time;
-    }
-  }
-  return ret;
-}
-
 /**
- * put fallback schema to slot for liboblog and check need to switch allocator
+ * put fallback schema to slot and check need to switch allocator
  */
 int ObMultiVersionSchemaService::put_fallback_schema_to_slot(ObSchemaMgr *&new_mgr,
                                                              ObSchemaMgrCache &schema_mgr_cache,
@@ -765,172 +701,6 @@ int ObMultiVersionSchemaService::put_fallback_schema_to_slot(ObSchemaMgr *&new_m
   return ret;
 }
 
-/**
- * fallback to target_version
- *
- */
-int ObMultiVersionSchemaService::fallback_schema_mgr_for_liboblog(
-    const ObRefreshSchemaStatus &schema_status,
-    const int64_t target_version,
-    const int64_t latest_local_version,
-    const ObSchemaMgr *&schema_mgr,
-    ObSchemaMgrHandle &handle)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaMgrCache *schema_mgr_cache_for_liboblog = NULL;
-  ObSchemaMemMgr *mem_mgr_for_liboblog = NULL;
-  ObSchemaMgrCache *schema_mgr_cache = NULL;
-//   add concurrency control for fallback
-  ObSchemaConstructTask &task = ObSchemaConstructTask::get_instance();
-  
-  task.cc_before(target_version);
-  // Determine whether the schema has been split according to whether the tenant is legal
-  ObSchemaStore* schema_store = NULL;
-  if (OB_ISNULL(schema_store = schema_store_)) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", K(ret));
-  } else if (FALSE_IT(mem_mgr_for_liboblog = mem_mgr_for_liboblog_)) {
-  } else if (OB_ISNULL(mem_mgr_for_liboblog)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem_mgr is null", K(ret));
-  } else {
-    schema_mgr_cache = &schema_store->schema_mgr_cache_;
-    schema_mgr_cache_for_liboblog = &schema_store->schema_mgr_cache_for_liboblog_;
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_mgr_cache_for_liboblog->get(target_version,
-                                                        schema_mgr,
-                                                        handle))) {
-    if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("get schema mgr failed", K(ret), K(target_version));
-      schema_mgr_cache_for_liboblog->dump();
-    } else if (!is_tenant_full_schema()) {
-      ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("full schema is not ready, cann't get fallback schema guard",
-                K(ret), K(schema_status), K(target_version));
-    } else {
-      FLOG_INFO("[FALLBACK_SCHEMA] schema mgr cache for liboblog miss",
-                K(schema_status), K(target_version));
-      const int64_t start = ObTimeUtility::current_time();
-      const ObSchemaMgr *target_mgr = NULL;
-      ObSchemaMgrHandle target_mgr_handle;
-      // true if 1) miss in fallback OR 2) hit but with larger abs
-      bool need_extra_get = false;
-
-      // for faster fallback, find the schema manager with nearest version:
-      ret = schema_mgr_cache_for_liboblog->get_nearest(target_version,
-                                                       target_mgr,
-                                                       target_mgr_handle);
-      if (OB_FAIL(ret)) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_ERROR("get_nearest schema_mgr failed",
-                    K(ret), K(schema_status), K(target_version));
-        } else {
-          need_extra_get = true;
-          LOG_INFO("get from liboblog slot failed, need extra get",
-                    K(ret), K(schema_status), K(target_version));
-        }
-      } else {
-        if (NULL == target_mgr) {
-          ret = OB_SCHEMA_ERROR;
-          LOG_ERROR("get target_mgr is NULL", K(ret), K(schema_status), K(target_version));
-        } else if (
-            llabs(target_mgr->get_schema_version() - target_version) >
-            llabs(latest_local_version - target_version)) {
-          need_extra_get = true;
-          LOG_INFO("get from liboblog slot failed, need extra get",
-                    K(ret), K(schema_status), K(target_version), K(latest_local_version));
-        }
-      }
-
-      if (need_extra_get) {
-        // reset to success due to might OB_ENTRY_NOT_EXIST
-        if (OB_FAIL(schema_mgr_cache->get(latest_local_version, target_mgr,
-                target_mgr_handle))) {
-          LOG_WARN("get schema mgr failed",
-                   K(ret), K(schema_status), K(target_version), K(latest_local_version));
-          schema_mgr_cache_.dump();
-        } else if (NULL == target_mgr) {
-          ret = OB_SCHEMA_ERROR;
-          LOG_ERROR("get target_mgr is NULL",
-                    K(ret), K(schema_status), K(target_version));
-        } else {}
-      }
-
-      int64_t from_version = OB_INVALID_VERSION;
-      if (OB_SUCC(ret)) {
-        HEAP_VAR(ObSchemaMgr, tmp_mgr) {
-          lib::ObMutexGuard mutex_guard(mem_mgr_for_liboblog_mutex_);
-          from_version = target_mgr->get_schema_version();
-          if (OB_FAIL(tmp_mgr.init())) {
-            LOG_WARN("init tmp_mgr failed",
-                     K(ret), K(schema_status), K(from_version), K(target_version));
-          } else {
-            const int64_t tmp_start = ObTimeUtility::current_time();
-            if (OB_FAIL(tmp_mgr.deep_copy(*target_mgr))) {
-              LOG_WARN("deep copy schema_mgr failed",
-                       K(ret), K(schema_status), K(from_version), K(target_version));
-            }
-            LOG_INFO("deep copy schema_mgr cost", KR(ret),
-                     "cost", ObTimeUtility::current_time() - tmp_start,
-                     K(schema_status), K(from_version), K(target_version));
-          }
-          if (OB_SUCC(ret)) {
-            bool alloc_for_liboblog = true;
-            ObSchemaMgr *new_mgr = NULL;
-            target_mgr_handle.reset();
-            if (OB_FAIL(fallback_schema_mgr(schema_status, tmp_mgr, target_version))) {
-              LOG_WARN("fallback schema mgr falied",
-                       K(ret), K(schema_status), K(from_version), K(target_version));
-            } else if (OB_FAIL(mem_mgr_for_liboblog->alloc_schema_mgr(new_mgr, alloc_for_liboblog))) {
-              LOG_WARN("alloc schema mgr for liboblog failed",
-                       K(ret), K(schema_status), K(from_version), K(target_version));
-            } else if (OB_ISNULL(new_mgr)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("new_mgr is null",
-                       K(ret), K(schema_status), K(from_version), K(target_version));
-            } else if (OB_FAIL(new_mgr->init())) {
-              LOG_WARN("init new_mgr failed",
-                       K(ret), K(schema_status), K(from_version), K(target_version));
-            } else {
-              const int64_t tmp_start = ObTimeUtility::current_time();
-              if (OB_FAIL(new_mgr->deep_copy(tmp_mgr))) {
-                LOG_WARN("fail to copy mgr", K(ret));
-              }
-              LOG_INFO("deep copy schema_mgr cost", KR(ret),
-                       "cost", ObTimeUtility::current_time() - tmp_start);
-
-              if (OB_FAIL(ret)) {
-              } else if (OB_FAIL(put_fallback_liboblog_schema_to_slot(
-                         *schema_mgr_cache_for_liboblog, *mem_mgr_for_liboblog, new_mgr, handle))) {
-                LOG_WARN("put fallback schema to slot failed", K(ret));
-              } else {
-                schema_mgr = new_mgr;
-              }
-            }
-            if (OB_FAIL(ret)) {
-              int tmp_ret = OB_SUCCESS;
-              schema_mgr = NULL;
-              if (OB_TMP_FAIL(mem_mgr_for_liboblog->free_schema_mgr(new_mgr))) {
-                LOG_ERROR("fail to free schema mgr", K(ret), K(tmp_ret), K(from_version));
-              }
-            }
-          }
-        }
-      }
-
-      FLOG_INFO("[FALLBACK_SCHEMA] fallback schema mgr for liboblog finish",
-                KR(ret), K(schema_status), K(from_version), K(target_version),
-                "cost", ObTimeUtility::current_time() - start);
-    }
-  } else {
-    LOG_TRACE("[FALLBACK_SCHEMA] get schema_mgr from cache", K(schema_status), K(target_version));
-  }
-  task.cc_after(target_version);
-  return ret;
-}
-
 int ObMultiVersionSchemaService::get_cluster_schema_guard(
     ObSchemaGetterGuard &guard,
     const RefreshSchemaMode refresh_schema_mode /* = RefreshSchemaMode::NORMAL */)
@@ -942,8 +712,7 @@ int ObMultiVersionSchemaService::get_cluster_schema_guard(
   } else if (OB_FAIL(guard.init())) {
     LOG_WARN("fail to init guard", K(ret));
   } else {
-    if (!ObSchemaService::g_liboblog_mode_// Avoid using schema_status_proxy for agentserver and liboblog
-        && OB_FAIL(check_restore_tenant_exist(guard.restore_tenant_exist_))) {
+    if (OB_FAIL(check_restore_tenant_exist(guard.restore_tenant_exist_))) {
       LOG_WARN("fail to check restore tenant exist", K(ret));
     }
   }
@@ -966,9 +735,7 @@ int ObMultiVersionSchemaService::get_cluster_schema_guard(
     ObSchemaStore* sys_schema_store = NULL;
     if (OB_FAIL(get_schema_status(schema_status_array, schema_status))) {
       LOG_WARN("fail to get schema status", K(ret));
-    } else if (NULL == (sys_schema_store = schema_store_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sys schema store");
+    } else if (FALSE_IT(sys_schema_store = &schema_store_)) {
     } else if (OB_FAIL(get_tenant_refreshed_schema_version(
                sys_snapshot_version))) {
       LOG_WARN("fail to get sys refreshed schema version", K(ret));
@@ -1034,9 +801,7 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard(
 
   // get system tenant schema_mgr_info
   if (OB_FAIL(ret)) {
-  } else if (NULL == (sys_schema_store = schema_store_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get sys schema store fail", K(ret));
+  } else if (FALSE_IT(sys_schema_store = &schema_store_)) {
   } else if (OB_INVALID_VERSION == (sys_latest_local_version = sys_schema_store->get_refreshed_version())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sys refreshed schema version is invalid", K(ret), K(sys_latest_local_version), K(sys_schema_version));
@@ -1047,8 +812,7 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard(
   } else {
     sys_snapshot_version = OB_INVALID_VERSION == sys_schema_version ?
                            sys_latest_local_version : sys_schema_version;
-    if (!ObSchemaService::g_liboblog_mode_
-        && OB_INVALID_VERSION != sys_schema_version) {
+    if (OB_INVALID_VERSION != sys_schema_version) {
       // for max avaliablity, ignore tmp_ret
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = get_baseline_schema_version(
@@ -1160,6 +924,99 @@ int ObMultiVersionSchemaService::get_tenant_schema_guard_with_version_in_inner_t
   return ret;
 }
 
+int ObMultiVersionSchemaService::construct_fallback_schema_mgr_(
+    ObSchemaStore *schema_store,
+    const ObRefreshSchemaStatus &schema_status,
+    const int64_t target_version,
+    const int64_t latest_local_version,
+    const ObSchemaMgr *&schema_mgr,
+    ObSchemaMgrHandle &handle)
+{
+  int ret = OB_SUCCESS;
+  // serialize concurrent reconstruction of the same version (MAX_PARALLEL_TASK == 1)
+  ObSchemaConstructTask &task = ObSchemaConstructTask::get_instance();
+  task.cc_before(target_version);
+  ObSchemaMgrCache *schema_mgr_cache = NULL;
+  ObSchemaMemMgr *mem_mgr = mem_mgr_;
+  if (OB_ISNULL(schema_store) || OB_ISNULL(mem_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema_store or mem_mgr is null", KR(ret), KP(schema_store), KP(mem_mgr));
+  } else if (FALSE_IT(schema_mgr_cache = &schema_store->schema_mgr_cache_)) {
+  } else if (OB_FAIL(schema_mgr_cache->get(target_version, schema_mgr, handle))) {
+    // double-check: another thread may have built the slot while we waited on cc_before
+    if (OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("get schema mgr failed", KR(ret), K(target_version));
+    } else if (!is_tenant_full_schema()) {
+      ret = OB_SCHEMA_EAGAIN;
+      LOG_WARN("full schema is not ready, can't construct fallback schema guard",
+               KR(ret), K(schema_status), K(target_version));
+    } else {
+      // cache miss: reconstruct the evicted historical schema_mgr
+      FLOG_INFO("[FALLBACK_SCHEMA] schema mgr cache miss, reconstruct",
+                K(schema_status), K(target_version), K(latest_local_version));
+      const ObSchemaMgr *src_mgr = NULL;
+      ObSchemaMgrHandle src_mgr_handle;
+      bool need_latest = false;
+      // for faster fallback, start from the schema_mgr with the nearest version
+      if (OB_FAIL(schema_mgr_cache->get_nearest(target_version, src_mgr, src_mgr_handle))) {
+        if (OB_ENTRY_NOT_EXIST != ret) {
+          LOG_WARN("get_nearest schema_mgr failed", KR(ret), K(schema_status), K(target_version));
+        } else {
+          need_latest = true;
+          ret = OB_SUCCESS;
+        }
+      } else if (OB_ISNULL(src_mgr)
+                 || llabs(src_mgr->get_schema_version() - target_version)
+                      > llabs(latest_local_version - target_version)) {
+        // the latest slot is closer to target than the nearest cached one
+        need_latest = true;
+      }
+      if (OB_SUCC(ret) && need_latest) {
+        src_mgr_handle.reset();
+        if (OB_FAIL(schema_mgr_cache->get(latest_local_version, src_mgr, src_mgr_handle))) {
+          LOG_WARN("get latest schema mgr failed",
+                   KR(ret), K(schema_status), K(target_version), K(latest_local_version));
+        } else if (OB_ISNULL(src_mgr)) {
+          ret = OB_SCHEMA_ERROR;
+          LOG_WARN("src_mgr is null", KR(ret), K(schema_status), K(target_version));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ObSchemaMgr *new_mgr = NULL;
+        const int64_t from_version = src_mgr->get_schema_version();
+        if (OB_FAIL(mem_mgr->alloc_schema_mgr(new_mgr))) {
+          LOG_WARN("alloc schema mgr failed", KR(ret), K(from_version), K(target_version));
+        } else if (OB_ISNULL(new_mgr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("new_mgr is null", KR(ret), K(from_version), K(target_version));
+        } else if (OB_FAIL(new_mgr->init())) {
+          LOG_WARN("init new_mgr failed", KR(ret), K(from_version), K(target_version));
+        } else if (OB_FAIL(new_mgr->deep_copy(*src_mgr))) {
+          LOG_WARN("deep copy schema_mgr failed", KR(ret), K(from_version), K(target_version));
+        } else if (FALSE_IT(src_mgr_handle.reset())) {  // release borrowed source after the copy
+        } else if (OB_FAIL(fallback_schema_mgr(schema_status, *new_mgr, target_version))) {
+          LOG_WARN("fallback schema mgr failed", KR(ret), K(from_version), K(target_version));
+        } else if (OB_FAIL(put_fallback_schema_to_slot(new_mgr, *schema_mgr_cache, *mem_mgr, handle))) {
+          LOG_WARN("put fallback schema to slot failed", KR(ret), K(target_version));
+        } else {
+          schema_mgr = new_mgr;
+          FLOG_INFO("[FALLBACK_SCHEMA] reconstruct fallback schema mgr finish",
+                    K(schema_status), K(from_version), K(target_version));
+        }
+        if (OB_FAIL(ret)) {
+          int tmp_ret = OB_SUCCESS;
+          schema_mgr = NULL;
+          if (OB_TMP_FAIL(mem_mgr->free_schema_mgr(new_mgr))) {
+            LOG_ERROR("fail to free new schema mgr", KR(ret), K(tmp_ret), K(from_version));
+          }
+        }
+      }
+    }
+  }
+  task.cc_after(target_version);
+  return ret;
+}
+
 int ObMultiVersionSchemaService::add_schema_mgr_info(
     ObSchemaGetterGuard &schema_guard,
     ObSchemaStore* schema_store,
@@ -1201,11 +1058,15 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
     LOG_WARN("schema_mgr is null", KR(ret));
   } else {
     ObSchemaMgrHandle& handle = new_schema_mgr_info->get_schema_mgr_handle();
-    bool need_fallback = false;
-    if (OB_FAIL(ret)) {
-    } else if (RefreshSchemaMode::FORCE_FALLBACK == refresh_schema_mode) {
-      // Avoid force_fallback mode occupying the schema slot to cause OOM, schema_mgr deep_copy to schema_mgr_cache_for_liboblog
-      need_fallback = true;
+    if (RefreshSchemaMode::FORCE_FALLBACK == refresh_schema_mode) {
+      // The requested historical version may have aged out of the live schema_mgr_cache;
+      // reconstruct it instead of falling into NULL/lazy mode (which would make the
+      // data dictionary dump / change stream async index retry on OB_SCHEMA_EAGAIN forever).
+      if (OB_FAIL(construct_fallback_schema_mgr_(schema_store, schema_status, snapshot_version,
+          latest_local_version, schema_mgr, handle))) {
+        LOG_WARN("construct fallback schema mgr failed",
+                 K(ret), K(snapshot_version), K(latest_local_version));
+      }
     } else if (OB_FAIL(schema_store->schema_mgr_cache_.get(snapshot_version, schema_mgr, handle))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
         LOG_WARN("get schema mgr failed", K(ret), K(snapshot_version));
@@ -1213,30 +1074,9 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
         ret = OB_SUCCESS;
       }
     }
-    if (OB_SUCC(ret) && need_fallback) {
-      // fallback
-      if (OB_FAIL(schema_store->schema_mgr_cache_for_liboblog_.get(snapshot_version, schema_mgr, handle))) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("[FALLBACK_SCHEMA] get schema mgr failed",
-                    K(ret), K(schema_status), K(snapshot_version));
-        } else if (OB_FAIL(fallback_schema_mgr_for_liboblog(schema_status, snapshot_version,
-            latest_local_version, schema_mgr, handle))) {
-          LOG_WARN("[FALLBACK_SCHEMA] fallback schema mgr for liboblog failed", K(ret),
-                   K(schema_status), K(snapshot_version), K(latest_local_version));
-        } else {
-          LOG_TRACE("[FALLBACK_SCHEMA] get schema_mgr by fallback schema_mgr",
-                    K(schema_status), K(snapshot_version), K(latest_local_version));
-        }
-      } else {
-        LOG_TRACE("[FALLBACK_SCHEMA] get schema_mgr by fallback schema_mgr",
-                  K(schema_status), K(snapshot_version), K(latest_local_version));
-      }
-    }
     if (OB_SUCC(ret)) {
       new_schema_mgr_info->set_schema_mgr(schema_mgr);
-      if (snapshot_version == latest_local_version
-          /*&& RefreshSchemaMode::FORCE_LAZY != refresh_schema_mode*/
-          && OB_ISNULL(schema_mgr)) {
+      if (snapshot_version == latest_local_version && OB_ISNULL(schema_mgr)) {
         LOG_INFO("should not be lazy mode", K(ret), KPC(new_schema_mgr_info), K(latest_local_version));
       }
     }
@@ -1337,22 +1177,7 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
     ObRefreshSchemaStatus schema_status;
     
 
-    bool is_restore = false;
-    if (true
-        || ObSchemaService::g_liboblog_mode_) {
-      // skip
-    } else if (OB_FAIL(check_tenant_is_restore(&schema_guard, is_restore))) {
-      LOG_WARN("fail to check restore tenant exist", K(ret));
-    } else if (is_restore) {
-      ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-      if (OB_ISNULL(schema_status_proxy)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema_status_proxy is null", K(ret));
-      } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(
-                         schema_status))) {
-        LOG_WARN("fail to get refresh schema status", K(ret));
-      } else {}
-    }
+    // single-tenant: never in restore; schema_status stays default
     if (OB_FAIL(ret)) {
     } else if (is_inner_table(table_id)) {
       int64_t baseline_schema_version = OB_INVALID_VERSION;
@@ -1475,12 +1300,10 @@ ObMultiVersionSchemaService::ObMultiVersionSchemaService() :
     schema_refresh_mutex_(common::ObLatchIds::REFRESH_SCHEMA_LOCK),
     schema_cache_(),
     schema_mgr_cache_(),
-    schema_mgr_cache_for_liboblog_(),
     schema_fetcher_(),
     schema_info_rwlock_(common::ObLatchIds::REFRESHED_SCHEMA_CACHE_LOCK),
     last_refreshed_schema_info_(),
-    init_version_cnt_(OB_INVALID_COUNT),
-    init_version_cnt_for_liboblog_(OB_INVALID_COUNT)
+    init_version_cnt_(OB_INVALID_COUNT)
 {
 }
 
@@ -1499,14 +1322,9 @@ void ObMultiVersionSchemaService::wait()
   ddl_trans_controller_.wait();
 }
 
-//FIXME: Will there be a memory leak
 int ObMultiVersionSchemaService::destroy()
 {
   int ret = OB_SUCCESS;
-  if (NULL != schema_store_) {
-    schema_store_->~ObSchemaStore();
-    schema_store_ = NULL;
-  }
   ddl_trans_controller_.destroy();
   schema_cache_.destroy();
   return ret;
@@ -1522,8 +1340,7 @@ ObMultiVersionSchemaService &ObMultiVersionSchemaService::get_instance()
 int ObMultiVersionSchemaService::init(
     ObMySQLProxy *sql_proxy,
     const ObCommonConfig *config,
-    const int64_t init_version_count,
-    const int64_t init_version_count_for_liboblog)
+    const int64_t init_version_count)
 {
   int ret = OB_SUCCESS;
 
@@ -1538,9 +1355,6 @@ int ObMultiVersionSchemaService::init(
     LOG_WARN("fail to init schema cache", K(ret));
   } else if (OB_FAIL(schema_mgr_cache_.init(init_version_count, ObSchemaMgrCache::REFRESH))) {
     LOG_WARN("fail to init schema mgr cache", K(ret));
-  } else if (OB_FAIL(schema_mgr_cache_for_liboblog_.init(init_version_count_for_liboblog,
-                                                         ObSchemaMgrCache::FALLBACK))) {
-    LOG_WARN("fail to init schema mgr cache", K(ret));
   } else if (OB_FAIL(ddl_trans_controller_.init(this))) {
     LOG_WARN("fail to init ddl trans controller", KR(ret));
   } else if (OB_FAIL(ddl_epoch_mgr_.init(sql_proxy, this))) {
@@ -1548,7 +1362,6 @@ int ObMultiVersionSchemaService::init(
   } else {
     // init sys schema struct
     init_version_cnt_ = init_version_count;
-    init_version_cnt_for_liboblog_ = init_version_count_for_liboblog;
     if (OB_FAIL(init_multi_version_schema_struct())) {
       LOG_WARN("fail to init multi version schema struct", K(ret));
     } else if (OB_FAIL(init_sys_tenant_user_schema())) {
@@ -1911,9 +1724,7 @@ int ObMultiVersionSchemaService::add_schema(
   } else if (false) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_ISNULL(schema_store = schema_store_)) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", K(ret));
+  } else if (FALSE_IT(schema_store = &schema_store_)) {
   } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1948,15 +1759,7 @@ int ObMultiVersionSchemaService::add_schema(
     // try switch allocator
     if (OB_SUCC(ret)) {
       bool can_switch = false;
-      int64_t max_schema_slot_num = OB_MAX_VERSION_COUNT;
-      if (!ObSchemaService::g_liboblog_mode_) {
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-        if (tenant_config.is_valid()) {
-          max_schema_slot_num = tenant_config->_max_schema_slot_num;
-        }
-      } else {
-        max_schema_slot_num = init_version_cnt_;
-      }
+      int64_t max_schema_slot_num = GCONF._max_schema_slot_num;
       const int64_t switch_cnt = max_schema_slot_num;
       if (OB_FAIL(mem_mgr->check_can_switch_allocator(switch_cnt, can_switch))) {
         LOG_WARN("fail to check can switch allocator", KR(ret));
@@ -1995,11 +1798,10 @@ int ObMultiVersionSchemaService::alloc_and_put_schema_mgr_(
 {
   int ret = OB_SUCCESS;
   ObSchemaMgr *new_mgr = NULL;
-  bool alloc_for_liboblog = false;
   ObSchemaMgr *eli_schema_mgr = NULL;
   
   const int64_t schema_version = latest_schema_mgr.get_schema_version();
-  if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr, alloc_for_liboblog))) {
+  if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr))) {
     LOG_WARN("fail to alloc mem", KR(ret));
   } else {
     if (OB_ISNULL(new_mgr)) {
@@ -2057,14 +1859,13 @@ int ObMultiVersionSchemaService::switch_allocator_(
     LOG_WARN("switch allocator falied", KR(ret));
   } else {
     bool need_switch_back = true;
-    bool alloc_for_liboblog = false;
     ObSchemaMgr *new_mgr = NULL;
     ObSchemaMgr *old_mgr = latest_schema_mgr;
     
     const int64_t schema_version = latest_schema_mgr->get_schema_version();
     LOG_INFO("try to switch allocator", KR(ret), K(schema_version));
 
-    if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr, alloc_for_liboblog))) {
+    if (OB_FAIL(mem_mgr.alloc_schema_mgr(new_mgr))) {
       LOG_WARN("fail to alloc mem", KR(ret));
     } else {
       if (OB_ISNULL(new_mgr)) {
@@ -2252,12 +2053,10 @@ int ObMultiVersionSchemaService::refresh_and_add_schema(bool check_bootstrap/* =
         LOG_WARN("fail to refresh tenant schema", K(ret));
       }
     };
-    CREATE_WITH_TEMP_ENTITY_P(!ObSchemaService::g_liboblog_mode_, RESOURCE_OWNER, common::OB_SERVER_TENANT_ID)
+    CREATE_WITH_TEMP_ENTITY_P(true, RESOURCE_OWNER, common::OB_SERVER_TENANT_ID)
     {
       func();
     } else {
-      // Two aspects are considered, one is that there is no omt module in one side,
-      // and the other is that the tenant has not been loaded during the omt startup phase.
       func();
     }
   }
@@ -2335,8 +2134,7 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(common::ObIArray<share::s
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is null", KR(ret));
-  } else if (!ObSchemaService::g_liboblog_mode_
-             && OB_FAIL(check_tenant_is_restore(NULL, is_restore))) {
+  } else if (OB_FAIL(check_tenant_is_restore(NULL, is_restore))) {
     LOG_WARN("fail to check restore tenant exist", KR(ret));
   } else {
     int64_t new_received_schema_version = OB_INVALID_VERSION;
@@ -2381,11 +2179,8 @@ int ObMultiVersionSchemaService::refresh_tenant_schema(common::ObIArray<share::s
             sql_client, refresh_schema_status, new_received_schema_version))) {
           LOG_WARN("fail to get tenant schema version", KR(ret), K(refresh_schema_status));
         } else {
-          ObSchemaStore* schema_store = schema_store_;
-          if (NULL == schema_store) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to get schema store", KR(ret));
-          } else {
+          ObSchemaStore* schema_store = &schema_store_;
+          {
             // schema_store->update_received_version(new_received_schema_version);
             // if (schema_store->get_refreshed_version() >= schema_store->get_received_version()) {
             if (schema_store->get_refreshed_version() >= new_received_schema_version) {
@@ -2657,38 +2452,9 @@ void ObMultiVersionSchemaService::dump_schema_statistics()
           schema_mgr_for_cache->dump();
         }
 
-        ObSchemaStore *schema_store = NULL;
-        ObSchemaMgrCache *schema_mgr_cache = NULL;
-        if (OB_ISNULL(schema_store = schema_store_)) {
-          LOG_INFO("schema_store is null", K(ret));
-        } else if (OB_ISNULL(schema_mgr_cache = &schema_store->schema_mgr_cache_)) {
-          LOG_INFO("schema_mgr_cache is null", K(ret));
-        } else {
-          schema_mgr_cache->dump();
-        }
+        schema_store_.schema_mgr_cache_.dump();
       }
       FLOG_INFO("[SCHEMA_STATISTICS] dump schema for refresh end", K(ret));
-    }
-
-    {
-      ObSchemaMemMgr *mem_mgr = mem_mgr_for_liboblog_;
-      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for fallback start", K(ret));
-      if (OB_ISNULL(mem_mgr)) {
-        LOG_INFO("mem_mgr is null", K(ret));
-      } else {
-        mem_mgr->dump();
-
-        ObSchemaStore *schema_store = NULL;
-        ObSchemaMgrCache *schema_mgr_cache = NULL;
-        if (OB_ISNULL(schema_store = schema_store_)) {
-          LOG_INFO("schema_store is null", K(ret));
-        } else if (OB_ISNULL(schema_mgr_cache = &schema_store->schema_mgr_cache_for_liboblog_)) {
-          LOG_INFO("schema_mgr_cache is null", K(ret));
-        } else {
-          schema_mgr_cache->dump();
-        }
-      }
-      FLOG_INFO("[SCHEMA_STATISTICS] dump schema for fallback end", K(ret));
     }
   }
 }
@@ -2716,63 +2482,12 @@ int ObMultiVersionSchemaService::try_eliminate_schema_mgr()
 }
 
 // try gc dropped tenant's schema mgr
+// Single-tenant: only sys tenant exists and sys GC is not supported;
+// this function is always a no-op.
 int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr()
 {
-  int ret = OB_SUCCESS;
-  ObHashSet<uint64_t> candidates;
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
-  } else if (OB_FAIL(candidates.create(DEFAULT_TENANT_SET_SIZE))) {
-    LOG_WARN("fail to create hash set", K(ret));
-  } else if (OB_FAIL(get_gc_candidates(candidates))) {
-    LOG_WARN("fail to get gc candidates", K(ret));
-  } else {
-    FOREACH_X(it, candidates, OB_SUCC(ret)) {
-      if (OB_FAIL(try_gc_tenant_schema_mgr((*it).first))) {
-        LOG_WARN("fail to eliminate schema mgr", K(ret), "tid", (*it).first);
-      } else {
-        LOG_INFO("try eliminate schema mgr", K(ret), "tid", (*it).first);
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMultiVersionSchemaService::get_gc_candidates(ObHashSet<uint64_t> &candidates)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  // The purpose of locking here is to ensure that there are no new tenants in the GC phase,
-  // and to prevent the new tenant schema from being considered as dropped tenants and being GC dropped
-  // during the schema refresh process.
-  lib::ObMutexGuard guard(schema_refresh_mutex_);
-  if (!is_tenant_refreshed()) {
-    ret = OB_SCHEMA_EAGAIN;
-    LOG_WARN("sys tenant's full schema is not ready, we cannot gc normal tenant schema now", KR(ret));
-  } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get schema guard failed ", K(ret));
-  } else {
-
-    // Mem_mgr maps held exactly one entry (sys). The GC candidate
-    // scan only ever collects *dropped non-sys* tenants; sys is in tenant_set and is never
-    // dropped/GC'd, so the candidate set is always empty. Reduced to a no-op (UNUSED guards
-    // keep the lock acquisition's original side-effect contract).
-    {
-      lib::ObMutexGuard guard(mem_mgr_for_liboblog_mutex_);
-      UNUSED(guard);
-    }
-
-    if (OB_SUCC(ret)) {
-      ret = candidates.exist_refactored(1UL);
-      if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("sys tenant should not exist in candidates", K(ret));
-      } else {
-        ret = OB_SUCCESS;
-      }
-    }
-  }
-  return ret;
+  // Single-tenant: no non-sys tenants to GC.
+  return OB_SUCCESS;
 }
 
 /*
@@ -2821,14 +2536,10 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_refresh(
     ObSchemaMgrCache *schema_mgr_cache = NULL;
     ObSchemaStore* schema_store = NULL;
 
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get schema_store", K(ret));
-    } else if (FALSE_IT(mem_mgr = mem_mgr_)) {
-    } else {
-      schema_store->reset_version();
-      schema_mgr_cache = &schema_store->schema_mgr_cache_;
-    }
+    schema_store = &schema_store_;
+    mem_mgr = mem_mgr_;
+    schema_store->reset_version();
+    schema_mgr_cache = &schema_store->schema_mgr_cache_;
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_gc_tenant_schema_mgr(mem_mgr, schema_mgr_cache))) {
@@ -2841,36 +2552,10 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_refresh(
   return ret;
 }
 
-int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_fallback(
-    )
+int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_fallback()
 {
-  int ret = OB_SUCCESS;
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
-  } else {
-    lib::ObMutexGuard guard(mem_mgr_for_liboblog_mutex_);
-    ObSchemaMemMgr *mem_mgr = NULL;
-    ObSchemaMgrCache *schema_mgr_cache = NULL;
-    ObSchemaStore* schema_store = NULL;
-
-    // reset schema mgr for fallback in new mode
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get schema_store", K(ret));
-    } else if (FALSE_IT(mem_mgr = mem_mgr_for_liboblog_)) {
-    } else {
-      schema_mgr_cache = &schema_store->schema_mgr_cache_for_liboblog_;
-      if (OB_FAIL(try_gc_tenant_schema_mgr(mem_mgr, schema_mgr_cache))) {
-        LOG_WARN("fail to eliminate schema mgr", K(ret));
-      }
-    }
-  }
-  LOG_INFO("try gc schema mgr for fallback", K(ret));
-  return ret;
+  // liboblog fallback cache removed; this is a no-op.
+  return OB_SUCCESS;
 }
 
 // need protect by lock
@@ -2918,34 +2603,22 @@ int ObMultiVersionSchemaService::try_gc_existed_tenant_schema_mgr()
   } else if (OB_FAIL(get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed ", KR(ret));
   } else {
-    ObSchemaMemMgr *mem_mgr = NULL;
-    ObSchemaMgrCache *schema_mgr_cache = NULL;
+    ObSchemaMemMgr *mem_mgr = mem_mgr_;
+    ObSchemaMgrCache *schema_mgr_cache = &schema_store_.schema_mgr_cache_;
     { // ignore ret
-      ObSchemaStore* schema_store = NULL;
-      
-      if (NULL == (schema_store = schema_store_)) {
-        ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("fail to get schema_store", KR(ret));
-      } else if (FALSE_IT(schema_mgr_cache = &schema_store->schema_mgr_cache_)) {
-      } else if (FALSE_IT(mem_mgr = mem_mgr_)) {
-      } else {
-        // ignore failure in eache scene
-        // 1. another allocator for schema refresh
-        if (OB_FAIL(try_gc_another_allocator(mem_mgr, schema_mgr_cache))) {
-          LOG_WARN("fail to gc another allocator", KR(ret));
-        }
-        // 2. schema fallback
-        if (ObSchemaService::g_liboblog_mode_) {
-          // liboblog/agentserver do nothing
-        } else if (OB_FAIL(try_gc_tenant_schema_mgr_for_fallback())) {
-          // overwrite ret
-          LOG_WARN("fail to gc tenant schema mgr for fallback", KR(ret));
-        }
-        // 3.let schema mgr to free slot's memory
-        if (OB_FAIL(try_gc_current_allocator(mem_mgr, schema_mgr_cache))) {
-          // overwrite ret
-          LOG_WARN("fail to gc current slot", KR(ret));
-        }
+      int tmp_ret = OB_SUCCESS;
+      // 1. another allocator for schema refresh
+      if (OB_TMP_FAIL(try_gc_another_allocator(mem_mgr, schema_mgr_cache))) {
+        LOG_WARN("fail to gc another allocator", KR(tmp_ret));
+      }
+      // 2. schema fallback (no-op, liboblog cache removed)
+      if (OB_TMP_FAIL(try_gc_tenant_schema_mgr_for_fallback())) {
+        LOG_WARN("fail to gc tenant schema mgr for fallback", KR(tmp_ret));
+      }
+      // 3. let schema mgr to free slot's memory
+      if (OB_FAIL(try_gc_current_allocator(mem_mgr, schema_mgr_cache))) {
+        // overwrite ret
+        LOG_WARN("fail to gc current slot", KR(ret));
       }
     }
   }
@@ -3349,13 +3022,7 @@ int ObMultiVersionSchemaService::get_tenant_refreshed_schema_version(
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   {
     // new schema refresh
-    const ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_TRACE("fail to get schema_store", K(ret));
-    } else {
-      refreshed_schema_version = schema_store->get_refreshed_version();
-    }
+    refreshed_schema_version = schema_store_.get_refreshed_version();
   }
   if (OB_SUCC(ret)) {
     schema_version = (!core_version || refreshed_schema_version > 0) ? refreshed_schema_version : OB_CORE_SCHEMA_VERSION;
@@ -3370,13 +3037,7 @@ int ObMultiVersionSchemaService::get_tenant_received_broadcast_version(
   int ret = OB_SUCCESS;
   int64_t received_broadcast_version = OB_INVALID_VERSION;
   {
-    const ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get schema_store", K(ret));
-    } else {
-      received_broadcast_version = schema_store->get_received_version();
-    }
+    received_broadcast_version = schema_store_.get_received_version();
   }
   if (OB_SUCC(ret)) {
     schema_version = (!core_schema_version || received_broadcast_version > 0) ? received_broadcast_version : OB_CORE_SCHEMA_VERSION;
@@ -3387,31 +3048,15 @@ int ObMultiVersionSchemaService::get_tenant_received_broadcast_version(
 int ObMultiVersionSchemaService::get_tenant_broadcast_consensus_version(int64_t &consensus_version)
 {
   int ret = OB_SUCCESS;
-  {
-    const ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get schema_store", KR(ret));
-    } else {
-      consensus_version = schema_store->get_consensus_version();
-    }
-  }
+  consensus_version = schema_store_.get_consensus_version();
   return ret;
 }
 
 int ObMultiVersionSchemaService::set_tenant_broadcast_consensus_version(const int64_t consensus_version)
 {
   int ret = OB_SUCCESS;
-  {
-    ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get schema_store", KR(ret));
-    } else {
-      schema_store->update_consensus_version(consensus_version);
-      LOG_INFO("try to set tenant broadcast consensus version", KR(ret), K(consensus_version));
-    }
-  }
+  schema_store_.update_consensus_version(consensus_version);
+  LOG_INFO("try to set tenant broadcast consensus version", KR(ret), K(consensus_version));
   return ret;
 }
 
@@ -3420,14 +3065,8 @@ int ObMultiVersionSchemaService::set_tenant_received_broadcast_version(
 {
   int ret = OB_SUCCESS;
   if (version != OB_CORE_SCHEMA_VERSION) {
-    ObSchemaStore* schema_store = NULL;
-    if (NULL == (schema_store = schema_store_)) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("fail to get schema_store", K(ret));
-    } else {
-      schema_store->update_received_version(version);
-      LOG_INFO("try to set tenant received_broadcast_version", K(ret), K(version));
-    }
+    schema_store_.update_received_version(version);
+    LOG_INFO("try to set tenant received_broadcast_version", K(ret), K(version));
   } else {
     ret = OB_OLD_SCHEMA_VERSION;
   }
@@ -3536,52 +3175,11 @@ int ObMultiVersionSchemaService::get_tenant_slot_info(
     common::ObIArray<ObSchemaSlot> &tenant_slot_infos)
 {
   int ret = OB_SUCCESS;
-  ObSchemaStore * schema_store = NULL;
-
   if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_ISNULL(schema_store = schema_store_)) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", KR(ret));
-  } else if (OB_FAIL((schema_store->schema_mgr_cache_).get_slot_info(allocator, tenant_slot_infos))) {
-    LOG_WARN("fail tp get slot info from schema_mgr_cache", KR(ret));
-  }
-  return ret;
-}
-
-int ObMultiVersionSchemaService::create_schema_store_(const int64_t init_version_count,
-                                                    const int64_t init_version_count_for_liboblog)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaStore *store = NULL;
-  common::ObMemAttr mattr(ObModIds::OB_SCHEMA_MGR_CACHE_MAP);
-  if (NULL == (store = (ObSchemaStore *)ob_malloc(sizeof(*store), mattr))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory for schema_store");
-  } else if (NULL == new(store)ObSchemaStore()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("construct schema_store fail");
-  } else if (OB_FAIL(store->init(init_version_count, init_version_count_for_liboblog))) {
-    LOG_WARN("fail to init schema store", K(ret));
-  } else {
-    schema_store_ = store;
-  }
-  if (OB_FAIL(ret) && NULL != store) {
-    store->~ObSchemaStore();
-    ob_free(store);
-  }
-  return ret;
-}
-
-int ObMultiVersionSchemaService::get_schema_store_tenants(common::ObIArray<uint64_t> &tenants) {
-  int ret = OB_SUCCESS;
-  tenants.reset();
-  if (OB_NOT_NULL(schema_store_)) {
-    // consumer only reads count(); element value unused
-    if (OB_FAIL(tenants.push_back(0))) {
-      LOG_WARN("fail to push slot marker", KR(ret));
-    }
+  } else if (OB_FAIL(schema_store_.schema_mgr_cache_.get_slot_info(allocator, tenant_slot_infos))) {
+    LOG_WARN("fail to get slot info from schema_mgr_cache", KR(ret));
   }
   return ret;
 }
@@ -3601,7 +3199,7 @@ int ObMultiVersionSchemaService::get_schema_status(
       if (OB_ISNULL(schema_status_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_status is null", K(ret));
-      } else if (true) {
+      } else {
         finded = true;
         schema_status = *schema_status_ptr;
       }
@@ -3673,19 +3271,8 @@ int ObMultiVersionSchemaService::check_tenant_is_restore(
     bool &is_restore)
 {
   int ret = OB_SUCCESS;
+  // single-tenant: never in restore
   is_restore = false;
-  if (true) {
-    is_restore = false;
-  } else if (OB_ISNULL(schema_guard)) {
-    ObSchemaGetterGuard tmp_guard;
-    if (OB_FAIL(get_tenant_schema_guard(tmp_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret));
-    } else if (OB_FAIL(tmp_guard.check_tenant_is_restore(is_restore))) {
-      LOG_WARN("fail to check tenant is restore", K(ret));
-    }
-  } else if (OB_FAIL(schema_guard->check_tenant_is_restore(is_restore))) {
-    LOG_WARN("fail to check tenant is restore", K(ret));
-  }
   return ret;
 }
 
@@ -3737,11 +3324,7 @@ int ObMultiVersionSchemaService::get_recycle_schema_version(
 {
   int ret = OB_SUCCESS;
   schema_version = OB_INVALID_VERSION;
-  const ObSchemaStore *schema_store = NULL;
-  if (OB_ISNULL(schema_store = schema_store_)) {
-    ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("schema store not exist", K(ret));
-  } else if (OB_FAIL(schema_store->schema_mgr_cache_.get_recycle_schema_version(schema_version))) {
+  if (OB_FAIL(schema_store_.schema_mgr_cache_.get_recycle_schema_version(schema_version))) {
     LOG_WARN("fail to get recycle schema version", K(ret), K(schema_version));
   }
   if (OB_FAIL(ret)) {
@@ -3755,24 +3338,20 @@ int ObMultiVersionSchemaService::update_baseline_schema_version(
 {
   int ret = OB_SUCCESS;
   int64_t bl_schema_version = OB_INVALID_VERSION;
-  ObSchemaStore* schema_store = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
   } else if (false) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(schema_store = schema_store_)) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", KR(ret));
   } else {
-    bl_schema_version = schema_store->get_baseline_schema_version();
+    bl_schema_version = schema_store_.get_baseline_schema_version();
     if (baseline_schema_version < bl_schema_version) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret),
                K(baseline_schema_version), K(bl_schema_version));
     } else {
-      schema_store->update_baseline_schema_version(baseline_schema_version);
+      schema_store_.update_baseline_schema_version(baseline_schema_version);
     }
   }
   return ret;
@@ -3783,34 +3362,20 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
     int64_t &baseline_schema_version)
 {
   int ret = OB_SUCCESS;
-  ObSchemaStore* schema_store = NULL;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (false) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
-  } else if (OB_ISNULL(schema_store = schema_store_)) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("fail to get schema_store", KR(ret));
   } else {
-    baseline_schema_version = schema_store->get_baseline_schema_version();
+    baseline_schema_version = schema_store_.get_baseline_schema_version();
     if (OB_INVALID_VERSION == baseline_schema_version && auto_update) {
       ObISQLClient &sql_client = *sql_proxy_;
       ObRefreshSchemaStatus schema_status;
-      if (ObSchemaService::g_liboblog_mode_) {
-        //FIXME:(yanmu.ztl) For now, liboblog won't fetch schema from standby cluster or restore tenant.
-        
-        schema_status.snapshot_timestamp_ = OB_INVALID_VERSION;
-        schema_status.readable_schema_version_ = OB_INVALID_VERSION;
-      } else {
-        ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-        if (OB_ISNULL(schema_status_proxy)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("schema_status_proxy is null", K(ret));
-        } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
-          LOG_WARN("fail to get refresh schema status", KR(ret), K(schema_status));
-        }
+      ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+      if (OB_ISNULL(schema_status_proxy)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema_status_proxy is null", K(ret));
+      } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
+        LOG_WARN("fail to get refresh schema status", KR(ret), K(schema_status));
       }
       if (FAILEDx(schema_service_->get_baseline_schema_version(
                   sql_client, schema_status, baseline_schema_version))) {
@@ -3820,7 +3385,7 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
         LOG_ERROR("unexpected baseline schema version",
                   KR(ret), K(schema_status), K(baseline_schema_version));
       } else {
-        schema_store->update_baseline_schema_version(baseline_schema_version);
+        schema_store_.update_baseline_schema_version(baseline_schema_version);
         LOG_INFO("fetch baseline schema version finish",
                  KR(ret), K(schema_status), K(baseline_schema_version));
       }

@@ -19,8 +19,6 @@
 #include "ob_common_config.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/utility/ob_sort.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
-
 namespace oceanbase
 {
 namespace common

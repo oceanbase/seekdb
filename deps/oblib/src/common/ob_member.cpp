@@ -182,12 +182,11 @@ ObReplicaMember &ObReplicaMember::operator=(const ObReplicaMember &rhs)
   timestamp_ = rhs.timestamp_;
   flag_ = rhs.flag_;
   replica_type_ = rhs.replica_type_;
-  region_ = rhs.region_;
   memstore_percent_ = rhs.memstore_percent_;
   return *this;
 }
 
-OB_SERIALIZE_MEMBER((ObReplicaMember, ObMember), replica_type_, region_, memstore_percent_);
+OB_SERIALIZE_MEMBER((ObReplicaMember, ObMember), replica_type_, memstore_percent_);
 
 } // namespace common
 } // namespace oceanbase

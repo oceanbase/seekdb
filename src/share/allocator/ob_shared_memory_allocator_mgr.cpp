@@ -18,6 +18,7 @@
 
 #include "ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/config/ob_server_config.h"
 
 namespace oceanbase {
 namespace share {
@@ -40,8 +41,8 @@ void ObSharedMemAllocMgr::update_throttle_config()
 
   int64_t total_memory = lib::get_tenant_memory_limit();
   int64_t hard_memory_limit = lib::get_hard_memory_limit();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
+  common::ObServerConfig *tenant_config = &GCONF;
+  {
     int64_t share_mem_limit_percentage = tenant_config->_tx_share_memory_limit_percentage;
     int64_t tenant_memstore_limit_percentage = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
     int64_t tx_data_limit_percentage = tenant_config->_tx_data_memory_limit_percentage;
@@ -99,8 +100,6 @@ void ObSharedMemAllocMgr::update_throttle_config()
                 K(vector_limit));
 
     }
-  } else {
-    SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "invalid tenant config", K(total_memory));
   }
 }
 

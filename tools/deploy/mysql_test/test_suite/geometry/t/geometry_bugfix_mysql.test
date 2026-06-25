@@ -190,7 +190,7 @@ insert into gis_point_plancache (x,y,poi) values (1.111111, 1.211111, st_srid(li
 
 select x,y,st_astext(poi) from gis_point_plancache;
 
-select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where query_sql like '%x,y,poi%' order by plan_size desc limit 10;
+select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where query_sql like '%x,y,poi%' order by plan_size desc limit 10;
 
 drop table gis_point_plancache;
 
@@ -209,7 +209,7 @@ select cast(1.11 as double), st_astext(point(1.1, 1.1)) as plancache_not_share;
 
 select cast(1.11111 as double), st_astext(point(1.1, 1.1111)) as plancache_not_share;
 
-select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where query_sql like '%plancache_not_share%' and query_sql not like '%OB_PLAN_CACHE_PLAN_STAT%' order by plan_size desc limit 10;
+select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where query_sql like '%plancache_not_share%' and query_sql not like '%OB_PLAN_CACHE_PLAN_STAT%' order by plan_size desc limit 10;
 
 --disable_warnings
 drop table if exists tt2;

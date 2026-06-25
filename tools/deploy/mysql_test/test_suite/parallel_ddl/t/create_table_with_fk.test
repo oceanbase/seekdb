@@ -11,7 +11,7 @@ connect (mysql,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 
 set @@session.recyclebin = off;
 set @@session.foreign_key_checks = on;
-let $orig_value = `select value from __all_virtual_tenant_parameter_stat where name = '_enable_parallel_table_creation' limit 1`;
+let $orig_value = `select value from __all_virtual_parameter_stat where name = '_enable_parallel_table_creation' limit 1`;
 alter system set _enable_parallel_table_creation = true;
 sleep 5;
 

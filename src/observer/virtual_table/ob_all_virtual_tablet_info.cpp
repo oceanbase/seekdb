@@ -41,35 +41,10 @@ ObAllVirtualTabletInfo::~ObAllVirtualTabletInfo()
 
 void ObAllVirtualTabletInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_tablet_iter_.reset();
   ls_iter_guard_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualTabletInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ls_tablet_iter_.reset();
-}
-
-int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualTabletInfo::is_need_process()
-{
-  if (!false &&
-      (true || true)) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualTabletInfo::get_next_ls(ObLS *&ls)
@@ -127,7 +102,7 @@ int ObAllVirtualTabletInfo::get_next_tablet(ObTabletHandle &tablet_handle)
   return ret;
 }
 
-int ObAllVirtualTabletInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;

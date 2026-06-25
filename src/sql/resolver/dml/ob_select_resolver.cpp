@@ -2706,10 +2706,9 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
         LOG_WARN("failed to push back to order items.", K(ret));
       } else {/* do nothing. */}
     }
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    bool enable_hash_rollup = tenant_config.is_valid()
-                              && (tenant_config->_use_hash_rollup.case_compare("auto") == 0
-                                  || tenant_config->_use_hash_rollup.case_compare("forced") == 0);
+    bool enable_hash_rollup = true
+                              && (GCONF._use_hash_rollup.case_compare("auto") == 0
+                                  || GCONF._use_hash_rollup.case_compare("forced") == 0);
     if (OB_SUCC(ret) && enable_hash_rollup) {
       if (OB_FAIL(append(select_stmt->get_order_items(), order_items))) {
         LOG_WARN("append order items failed", K(ret));

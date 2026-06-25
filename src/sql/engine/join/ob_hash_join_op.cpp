@@ -397,19 +397,13 @@ int ObHashJoinOp::inner_open()
     init_system_parameters();
     
     first_get_row_ = true;
-    ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      force_hash_join_spill_ = tenant_config->_force_hash_join_spill;
-      hash_join_processor_ = tenant_config->_enable_hash_join_processor;
-      if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
-      } else if (OB_FAIL(set_hash_function())) {
-        LOG_WARN("unexpect hash join function", K(ret));
-      }
-    } else {
+    force_hash_join_spill_ = GCONF._force_hash_join_spill;
+    hash_join_processor_ = GCONF._enable_hash_join_processor;
+    if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid tenant config", K(ret));
+      LOG_WARN("unexpect hash join processor", K(ret), K(hash_join_processor_));
+    } else if (OB_FAIL(set_hash_function())) {
+      LOG_WARN("unexpect hash join function", K(ret));
     }
     if (is_vectorized()) {
       if (INNER_JOIN == MY_SPEC.join_type_) {

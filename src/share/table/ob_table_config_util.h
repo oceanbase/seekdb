@@ -19,7 +19,6 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/config/ob_server_config.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 namespace oceanbase
 {
 namespace common

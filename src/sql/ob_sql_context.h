@@ -27,7 +27,6 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 #include "sql/monitor/ob_sql_stat_record.h"
 #include "share/stat/ob_opt_ds_stat_cache.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
@@ -400,13 +399,12 @@ public:
     if (0 == query_switch_leader_retry_timeout_ts_) {
       query_switch_leader_retry_timeout_ts_ = INT64_MAX;
       // start timing from first retry, not from query start
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (tenant_config.is_valid()) {
-        int64_t timeout = tenant_config->ob_query_switch_leader_retry_timeout;
-        if (timeout > 0) {
-          query_switch_leader_retry_timeout_ts_ = timeout + common::ObTimeUtility::current_time();
-        }
+
+      int64_t timeout = GCONF.ob_query_switch_leader_retry_timeout;
+      if (timeout > 0) {
+        query_switch_leader_retry_timeout_ts_ = timeout + common::ObTimeUtility::current_time();
       }
+
     }
     if (query_switch_leader_retry_timeout_ts_ < common::ObTimeUtility::current_time()) {
       fast_fail = true;

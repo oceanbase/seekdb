@@ -37,7 +37,7 @@ void ObTenantVectorAllocator::init_throttle_config(int64_t &resource_limit, int6
   get_vector_mem_config(resource_limit, max_duration);
 }
 
-int64_t ObTenantVectorAllocator::get_vector_mem_limit_percentage(omt::ObTenantConfigGuard &tenant_config)
+int64_t ObTenantVectorAllocator::get_vector_mem_limit_percentage(common::ObServerConfig *tenant_config)
 {
   const int64_t SMALL_TENANT_MEMORY_LIMIT = 8 * 1024 * 1024 * 1024L; // 8G
   const int64_t SMALL_VECTOR_LIMIT_PERCENTAGE = 40;
@@ -45,7 +45,7 @@ int64_t ObTenantVectorAllocator::get_vector_mem_limit_percentage(omt::ObTenantCo
   const int64_t tenant_memory = lib::get_tenant_memory_limit();
   int64_t tenant_memstore_limit_percent = 0;
   int64_t percent = 0;
-  if (tenant_config.is_valid()) {
+  if (nullptr != tenant_config) {
     tenant_memstore_limit_percent = tenant_config->ob_vector_memory_limit_percentage;
   }
   if (tenant_memstore_limit_percent != 0) {
@@ -66,13 +66,8 @@ void ObTenantVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int
   const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
   const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t percent = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    max_duration = tenant_config->writing_throttling_maximum_duration;
-  } else {
-    SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
-    max_duration = VECTOR_THROTTLE_MAX_DURATION;
-  }
+  common::ObServerConfig *tenant_config = &GCONF;
+  max_duration = tenant_config->writing_throttling_maximum_duration;
   percent = get_vector_mem_limit_percentage(tenant_config);
   resource_limit = hard_memory_limit * percent / 100;
 }

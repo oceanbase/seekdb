@@ -48,25 +48,15 @@ int ObTenantSqlService::replace_tenant(
     const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
+  UNUSED(sql_client);
+  UNUSED(ddl_stmt_str);
   if (!tenant_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     ObCStringHelper helper;
     LOG_WARN("tenant_schema is invalid", "tenant_schema",
         helper.convert(tenant_schema), K(ret));
-  } else {
-    // log ddl_operation
-    if (OB_SUCC(ret)) {
-      ObSchemaOperation tenant_op;
-
-      tenant_op.op_type_ = OB_DDL_ADD_TENANT;
-      tenant_op.schema_version_ = tenant_schema.get_schema_version();
-      tenant_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
-      
-      if (OB_FAIL(log_operation(tenant_op, sql_client))) {
-        LOG_WARN("log add tenant ddl operation failed", K(ret));
-      }
-    }
   }
+  // OB_DDL_ADD_TENANT op-logging removed: single-tenant, op never consumed.
   return ret;
 }
 

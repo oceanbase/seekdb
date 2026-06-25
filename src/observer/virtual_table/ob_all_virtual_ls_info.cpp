@@ -39,34 +39,9 @@ ObAllVirtualLSInfo::~ObAllVirtualLSInfo()
 
 void ObAllVirtualLSInfo::reset()
 {
-  // Note that cross-tenant resources must be released by ObMultiTenantOperator, therefore it must be called first
-  omt::ObMultiTenantOperator::reset();
+  ls_iter_guard_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualLSInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-}
-
-int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "execute fail", KR(ret));
-    }
-  }
-  return ret;
-}
-
-bool ObAllVirtualLSInfo::is_need_process()
-{
-  if (true || true) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualLSInfo::next_ls_info_(ObLSVTInfo &ls_info)
@@ -91,7 +66,7 @@ int ObAllVirtualLSInfo::next_ls_info_(ObLSVTInfo &ls_info)
   return ret;
 }
 
-int ObAllVirtualLSInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObLSVTInfo ls_info;

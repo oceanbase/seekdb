@@ -111,11 +111,10 @@ int ObGITaskReBalancer::trigger_rebalance(ObGranuleIteratorOp *gi_op, bool &need
   // record the version before trigger rebalance
   int64_t record_pump_version = gi_op->pump_arg()->get_pump_version();
   int64_t cur_timestamp =  ObTimeUtil::current_time();
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   int64_t trigger_time = 10 * 1000UL;
-  if (tenant_config.is_valid()) {
-    trigger_time = (tenant_config->_px_task_rebalance_trigger_time);
-  }
+
+  trigger_time = (GCONF._px_task_rebalance_trigger_time);
+
   //+1 in case of cur_timestamp == wait_until_time;
   int64_t wait_until_time = cur_timestamp + 1 + max(trigger_time, split_gi_task_cost_);
   bool maybe_has_new_task = false;

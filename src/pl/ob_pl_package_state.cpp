@@ -568,9 +568,8 @@ int ObPLPackageState::encode_pkg_var_value(ObPLExecCtx &pl_ctx,
 
     if (OB_SUCC(ret)) {
       int64_t max_serialize_size = 0;
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (OB_LIKELY(tenant_config.is_valid())) {
-        max_serialize_size = tenant_config->package_state_sync_max_size;
+      if (OB_LIKELY(true)) {
+        max_serialize_size = GCONF.package_state_sync_max_size;
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid tenant_config", K(ret));

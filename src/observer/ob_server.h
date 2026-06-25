@@ -27,6 +27,7 @@
 
 #include "share/object_storage/ob_device_config_mgr.h"
 #include "share/stat/ob_opt_stat_service.h"
+#include "share/config/ob_config_manager.h"
 
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/location_cache/ob_location_service.h"

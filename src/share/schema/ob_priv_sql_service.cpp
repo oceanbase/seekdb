@@ -130,9 +130,9 @@ int ObPrivSqlService::insert_objauth(
       OZ (gen_obj_priv_dml_ora(obj_priv_key, raw_obj_priv,
                                option, dml, is_deleted));
       if (is_deleted) {
-        OZ (exec.exec_delete(OB_ALL_TENANT_OBJAUTH_TNAME, dml, affected_rows));
+        OZ (exec.exec_delete(OB_ALL_OBJAUTH_TNAME, dml, affected_rows));
       } else {
-        OZ (exec.exec_replace(OB_ALL_TENANT_OBJAUTH_TNAME, dml, affected_rows));
+        OZ (exec.exec_replace(OB_ALL_OBJAUTH_TNAME, dml, affected_rows));
       }
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
@@ -147,7 +147,7 @@ int ObPrivSqlService::insert_objauth(
       if (OB_SUCC(ret)) {
         OZ (dml.add_pk_column("schema_version", new_schema_version));
         OZ (dml.add_column("is_deleted", is_deleted));
-        OZ (exec.exec_insert(OB_ALL_TENANT_OBJAUTH_HISTORY_TNAME,
+        OZ (exec.exec_insert(OB_ALL_OBJAUTH_HISTORY_TNAME,
                             dml,
                             affected_rows));
         if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
@@ -1157,7 +1157,7 @@ int ObPrivSqlService::alter_user_default_role(
       }
 
       // replace __all_tenant_role_grantee_map table
-      OZ (exec.exec_update(OB_ALL_TENANT_ROLE_GRANTEE_MAP_TNAME, dml, affected_rows));
+      OZ (exec.exec_update(OB_ALL_ROLE_GRANTEE_MAP_TNAME, dml, affected_rows));
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("update should affect only 1 row", K(role_id), K(affected_rows), K(ret));
@@ -1166,7 +1166,7 @@ int ObPrivSqlService::alter_user_default_role(
       // insert __all_tenant_role_grantee_map history table
       OZ (dml.add_pk_column("schema_version", new_schema_version));
       OZ (dml.add_column("is_deleted", 0));
-      OZ (exec.exec_insert(OB_ALL_TENANT_ROLE_GRANTEE_MAP_HISTORY_TNAME, dml, affected_rows));
+      OZ (exec.exec_insert(OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME, dml, affected_rows));
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("update should affect only 1 row", K(role_id), K(affected_rows), K(ret));
@@ -1213,7 +1213,7 @@ int ObPrivSqlService::grant_revoke_role(
   } else if (is_grant) {
     // grant role to grantee
     // grant role to user (reentrantly)
-    if (OB_FAIL(sql.append_fmt("REPLACE INTO %s VALUES ", OB_ALL_TENANT_ROLE_GRANTEE_MAP_TNAME))) {
+    if (OB_FAIL(sql.append_fmt("REPLACE INTO %s VALUES ", OB_ALL_ROLE_GRANTEE_MAP_TNAME))) {
       LOG_WARN("append table name failed, ", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < role_ids.count(); i++) {
@@ -1239,7 +1239,7 @@ int ObPrivSqlService::grant_revoke_role(
   } else {
     // revoke role from grantee
     if (OB_FAIL(sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %lu and ROLE_ID IN (",
-        OB_ALL_TENANT_ROLE_GRANTEE_MAP_TNAME,
+        OB_ALL_ROLE_GRANTEE_MAP_TNAME,
         ObSchemaUtils::get_extract_schema_id(grantee_id)))) {
       LOG_WARN("append table name failed, ", K(ret));
     }
@@ -1268,7 +1268,7 @@ int ObPrivSqlService::grant_revoke_role(
 
   // insert into __all_tenant_role_grantee_map_history
   sql.reset();
-  if (FAILEDx(sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_TENANT_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
+  if (FAILEDx(sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
     LOG_WARN("append table name failed, ", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < role_ids.count(); i++) {
@@ -1386,9 +1386,9 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
     dml.reset();
     OZ (gen_grant_sys_priv_dml(grantee_id, option, priv_array.at(idx), dml));
     if (is_grant) {
-      OZ (exec.exec_replace(OB_ALL_TENANT_SYSAUTH_TNAME, dml, affected_rows));
+      OZ (exec.exec_replace(OB_ALL_SYSAUTH_TNAME, dml, affected_rows));
     } else {
-      OZ (exec.exec_delete(OB_ALL_TENANT_SYSAUTH_TNAME, dml, affected_rows));
+      OZ (exec.exec_delete(OB_ALL_SYSAUTH_TNAME, dml, affected_rows));
     }
     if (OB_SUCC(ret) && !is_single_row(affected_rows) && !is_double_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1398,7 +1398,7 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
     // insert __all_tenant_sysauth_history
     OZ (dml.add_pk_column("schema_version", new_schema_version));
     OZ (dml.add_column("is_deleted", !is_grant));
-    OZ (exec.exec_insert(OB_ALL_TENANT_SYSAUTH_HISTORY_TNAME, dml, affected_rows));
+    OZ (exec.exec_insert(OB_ALL_SYSAUTH_HISTORY_TNAME, dml, affected_rows));
     if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected to be one ",
@@ -1455,11 +1455,11 @@ int ObPrivSqlService::grant_object(
     // insert into __all_tenant_objauth_mysql
     if (OB_SUCC(ret)) {
       if (is_deleted) {
-        if (OB_FAIL(exec.exec_delete(OB_ALL_TENANT_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_delete(OB_ALL_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
           LOG_WARN("exec_delete failed", K(ret));
         }
       } else {
-        if (OB_FAIL(exec.exec_replace(OB_ALL_TENANT_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
+        if (OB_FAIL(exec.exec_replace(OB_ALL_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
           LOG_WARN("exec_replace failed", K(ret));
         }
       }
@@ -1477,7 +1477,7 @@ int ObPrivSqlService::grant_object(
         if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
             || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
           LOG_WARN("add column failed", K(ret));
-        } else if (OB_FAIL(exec.exec_replace(OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME, dml, affected_rows))) {
+        } else if (OB_FAIL(exec.exec_replace(OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME, dml, affected_rows))) {
           LOG_WARN("exec_replace failed", K(ret));
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1579,7 +1579,7 @@ int ObPrivSqlService::add_obj_mysql_priv_history(
     if (OB_FAIL(dml.add_pk_column("schema_version", schema_version))
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
       LOG_WARN("add column failed", K(ret));
-    } else if (OB_FAIL(exec.exec_replace(OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME,
+    } else if (OB_FAIL(exec.exec_replace(OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
         dml, affected_rows))) {
       LOG_WARN("execute update sql fail", K(ret));
     } else if (!is_single_row(affected_rows)) {

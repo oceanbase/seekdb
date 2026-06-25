@@ -1469,57 +1469,51 @@ int select_schema_slot(lua_State *L)
   } else {
     int ret = OB_SUCCESS;
     auto& schema_service = OBSERVER.get_root_service().get_schema_service();
-    const static int64_t DEFAULT_TENANT_NUM = 10;
-    ObSEArray<uint64_t, DEFAULT_TENANT_NUM> batch_ids;
-    if (OB_FAIL(schema_service.get_schema_store_tenants(batch_ids))) {
-      OB_LOG(ERROR, "fail to get schema store tenants", K(ret));
-      lua_pushnil(L);
-    } else {
-      std::vector<const char*> columns = {
-        "slot_id",
-        "schema_version",
-        "schema_count",
-        "total_ref_cnt",
-        "ref_info"
-      };
-      LuaVtableGenerator gen(L, columns);
-      for (int64_t idx = 0; idx < batch_ids.count() && !gen.is_end(); ++idx) {
-        const static int64_t DEFAULT_SLOT_NUM = 32;
-        ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos;
-        
-        if (OB_FAIL(schema_service.get_tenant_slot_info(get_global_allocator(), 1UL/*req_id, unused*/, schema_slot_infos))) {
-          OB_LOG(ERROR, "fail to get tenant slot info", K(ret));
-        } else {
-          for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count() && !gen.is_end(); ++slot_idx) {
-            auto& schema_slot = schema_slot_infos.at(slot_idx);
-            gen.next_row();
-            // slot_id
-            gen.next_column(schema_slot.get_slot_id());
-            // schema_version
-            gen.next_column(schema_slot.get_schema_version());
-            // schema_count
-            gen.next_column(schema_slot.get_schema_count());
-            // total_ref_cnt
-            gen.next_column(schema_slot.get_ref_cnt());
-            // ref_info
-            if (OB_NOT_NULL(schema_slot.get_mod_ref_infos().ptr())) {
-              gen.next_column(schema_slot.get_mod_ref_infos());
-            } else {
-              gen.next_column("");
-            }
-
-            gen.row_end();
+    std::vector<const char*> columns = {
+      "slot_id",
+      "schema_version",
+      "schema_count",
+      "total_ref_cnt",
+      "ref_info"
+    };
+    LuaVtableGenerator gen(L, columns);
+    // Single-tenant: always fetch slot info for the sys tenant store directly.
+    {
+      const static int64_t DEFAULT_SLOT_NUM = 32;
+      ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos;
+      if (OB_FAIL(schema_service.get_tenant_slot_info(get_global_allocator(), 1UL, schema_slot_infos))) {
+        OB_LOG(ERROR, "fail to get tenant slot info", K(ret));
+      } else {
+        for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count() && !gen.is_end(); ++slot_idx) {
+          auto& schema_slot = schema_slot_infos.at(slot_idx);
+          gen.next_row();
+          // slot_id
+          gen.next_column(schema_slot.get_slot_id());
+          // schema_version
+          gen.next_column(schema_slot.get_schema_version());
+          // schema_count
+          gen.next_column(schema_slot.get_schema_count());
+          // total_ref_cnt
+          gen.next_column(schema_slot.get_ref_cnt());
+          // ref_info
+          if (OB_NOT_NULL(schema_slot.get_mod_ref_infos().ptr())) {
+            gen.next_column(schema_slot.get_mod_ref_infos());
+          } else {
+            gen.next_column("");
           }
+          gen.row_end();
         }
-        for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count(); ++slot_idx) {
-          auto* ptr = schema_slot_infos.at(slot_idx).get_mod_ref_infos().ptr();
-          if (OB_NOT_NULL(ptr)) {
-            get_global_allocator().free((void*)ptr);
-          }
-          schema_slot_infos.at(slot_idx).reset();
-        }
-        schema_slot_infos.reset();
       }
+      for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count(); ++slot_idx) {
+        auto* ptr = schema_slot_infos.at(slot_idx).get_mod_ref_infos().ptr();
+        if (OB_NOT_NULL(ptr)) {
+          get_global_allocator().free((void*)ptr);
+        }
+        schema_slot_infos.at(slot_idx).reset();
+      }
+    }
+    if (OB_FAIL(ret)) {
+      lua_pushnil(L);
     }
   }
   return 1;

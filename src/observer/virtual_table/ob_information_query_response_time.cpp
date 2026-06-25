@@ -40,7 +40,6 @@ ObInfoSchemaQueryResponseTimeTable::~ObInfoSchemaQueryResponseTimeTable()
 
 void ObInfoSchemaQueryResponseTimeTable::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_ = NULL;
   port_ = 0;
   ipstr_.reset();
@@ -81,25 +80,7 @@ int ObInfoSchemaQueryResponseTimeTable::inner_open()
   return ret;
 }
 
-int ObInfoSchemaQueryResponseTimeTable::inner_get_next_row(common::ObNewRow*& row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-bool ObInfoSchemaQueryResponseTimeTable::is_need_process()
-{
-  if (!false &&
-      (true || true)){
-    return true;
-  }
-  return false;
-}
-
-int ObInfoSchemaQueryResponseTimeTable::process_curr_tenant(ObNewRow *&row)
+int ObInfoSchemaQueryResponseTimeTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObObj* cells = cur_row_.cells_;
@@ -213,12 +194,6 @@ int ObInfoSchemaQueryResponseTimeTable::process_row_data(ObNewRow *&row, ObObj* 
   return ret;
 }
 
-void ObInfoSchemaQueryResponseTimeTable::release_last_tenant()
-{
-  time_collector_.flush();
-  utility_iter_ = 0;
-  sql_type_iter_ = 0;
-}
 
 }  // namespace observer
 }  // namespace oceanbase

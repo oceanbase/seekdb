@@ -207,11 +207,10 @@ bool ObLobAccessParam::has_single_chunk() const
 bool ObLobAccessParam::enable_block_cache() const
 {
   bool res = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     res = false;
   } else {
-    res = byte_size_ <= tenant_config->lob_enable_block_cache_threshold;
+    res = byte_size_ <= GCONF.lob_enable_block_cache_threshold;
   }
   return res;
 }

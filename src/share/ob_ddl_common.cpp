@@ -4284,19 +4284,18 @@ int ObDDLUtil::get_temp_store_compress_type(const ObCompressorType schema_compr_
                                             ObCompressorType &compr_type)
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   compr_type = NONE_COMPRESSOR;
-  if (OB_UNLIKELY(!tenant_config.is_valid())) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail get tenant_config", K(ret));
   } else {
-    if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("NONE")) {
+    if (0 == GCONF._ob_ddl_temp_file_compress_func.get_value_string().case_compare("NONE")) {
       compr_type = NONE_COMPRESSOR;
-    } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("ZSTD")) {
+    } else if (0 == GCONF._ob_ddl_temp_file_compress_func.get_value_string().case_compare("ZSTD")) {
       compr_type = ZSTD_1_3_8_COMPRESSOR;
-    } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("LZ4")) {
+    } else if (0 == GCONF._ob_ddl_temp_file_compress_func.get_value_string().case_compare("LZ4")) {
       compr_type = ZSTD_1_3_8_COMPRESSOR;
-    } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("AUTO")) {
+    } else if (0 == GCONF._ob_ddl_temp_file_compress_func.get_value_string().case_compare("AUTO")) {
       UNUSED(parallel);
       if (schema_compr_type > INVALID_COMPRESSOR && schema_compr_type < MAX_COMPRESSOR) {
         compr_type = schema_compr_type;
@@ -4305,7 +4304,7 @@ int ObDDLUtil::get_temp_store_compress_type(const ObCompressorType schema_compr_
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the temp store format config is unexpected", K(ret), K(tenant_config->_ob_ddl_temp_file_compress_func.get_value_string()));
+      LOG_WARN("the temp store format config is unexpected", K(ret), K(GCONF._ob_ddl_temp_file_compress_func.get_value_string()));
     }
   }
   LOG_INFO("get compressor type", K(ret), K(compr_type), K(schema_compr_type));
@@ -4660,12 +4659,11 @@ int ObDDLUtil::get_no_logging_param(bool &is_no_logging)
 {
   int ret = OB_SUCCESS;
   is_no_logging = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant config is invalid", K(ret));
   } else {
-    is_no_logging = tenant_config->_no_logging;
+    is_no_logging = GCONF._no_logging;
   }
   return ret;
 }

@@ -88,10 +88,9 @@ bool ObConfigFreezeTriggerIntChecker::check(const ObAdminSetConfigItem &t)
 int64_t ObConfigFreezeTriggerIntChecker::get_write_throttle_trigger_percentage_()
 {
   int64_t percent = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    percent = tenant_config->writing_throttling_trigger_percentage;
-  }
+
+  percent = GCONF.writing_throttling_trigger_percentage;
+
   return percent;
 }
 
@@ -104,15 +103,9 @@ bool ObConfigTxShareMemoryLimitChecker::check(const ObAdminSetConfigItem &t)
   int64_t tx_data_limit = 0;
   int64_t mds_limit = 0;
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    memstore_limit = tenant_config->_memstore_limit_percentage;
-    tx_data_limit = tenant_config->_tx_data_memory_limit_percentage;
-    mds_limit = tenant_config->_mds_memory_limit_percentage;
-  } else {
-    is_valid = false;
-    OB_LOG_RET(ERROR, OB_INVALID_CONFIG, "tenant config is invalid");
-  }
+  memstore_limit = GCONF._memstore_limit_percentage;
+  tx_data_limit = GCONF._tx_data_memory_limit_percentage;
+  mds_limit = GCONF._mds_memory_limit_percentage;
 
   if (0 == memstore_limit) {
     memstore_limit = cluster_memstore_limit;
@@ -147,23 +140,17 @@ bool less_or_equal_tx_share_limit(const int64_t value)
 {
   bool bool_ret = true;
   int64_t tx_share_limit = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    tx_share_limit = tenant_config->_tx_share_memory_limit_percentage;
-    if (0 == value) {
-      // 0 is default value, which means memstore limit percentage will adjust itself.
-      bool_ret = true;
-    } else if (0 == tx_share_limit) {
-      // 0 is default value, which means (_tx_share_memory_limit_percentage = memstore_limit_percentage + 10)
-      bool_ret = true;
-    } else if (value > 0 && value < 100 && value <= tx_share_limit) {
-      bool_ret = true;
-    } else {
-      bool_ret = false;
-    }
+  tx_share_limit = GCONF._tx_share_memory_limit_percentage;
+  if (0 == value) {
+    // 0 is default value, which means memstore limit percentage will adjust itself.
+    bool_ret = true;
+  } else if (0 == tx_share_limit) {
+    // 0 is default value, which means (_tx_share_memory_limit_percentage = memstore_limit_percentage + 10)
+    bool_ret = true;
+  } else if (value > 0 && value < 100 && value <= tx_share_limit) {
+    bool_ret = true;
   } else {
     bool_ret = false;
-    OB_LOG_RET(ERROR, OB_INVALID_CONFIG, "tenant config is invalid");
   }
   return bool_ret;
 }
@@ -224,10 +211,9 @@ bool ObConfigWriteThrottleTriggerIntChecker::check(const ObAdminSetConfigItem &t
 int64_t ObConfigWriteThrottleTriggerIntChecker::get_freeze_trigger_percentage_()
 {
   int64_t percent = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    percent = tenant_config->freeze_trigger_percentage;
-  }
+
+  percent = GCONF.freeze_trigger_percentage;
+
   return percent;
 }
 
@@ -248,10 +234,9 @@ bool ObConfigLogDiskLimitThresholdIntChecker::check(const ObAdminSetConfigItem &
 int64_t ObConfigLogDiskLimitThresholdIntChecker::get_log_disk_throttling_percentage_()
 {
   int64_t percent = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    percent = tenant_config->log_disk_throttling_percentage;
-  }
+
+  percent = GCONF.log_disk_throttling_percentage;
+
   return percent;
 }
 
@@ -272,10 +257,9 @@ bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const obcall::ObAdminS
 int64_t ObConfigLogDiskThrottlingPercentageIntChecker::get_log_disk_utilization_limit_threshold_()
 {
   int64_t threshold = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    threshold = tenant_config->log_disk_utilization_limit_threshold;
-  }
+
+  threshold = GCONF.log_disk_utilization_limit_threshold;
+
   return threshold;
 }
 
@@ -586,24 +570,6 @@ bool ObConfigQueryRateLimitChecker::check(const ObConfigItem &t) const
     is_valid = (-1 == value ||
                 (value >= MIN_QUERY_RATE_LIMIT &&
                  value <= MAX_QUERY_RATE_LIMIT));
-  }
-  return is_valid;
-}
-
-const char *ObConfigPartitionBalanceStrategyFuncChecker::balance_strategy[
-      ObConfigPartitionBalanceStrategyFuncChecker::PARTITION_BALANCE_STRATEGY_MAX] = {
-  "auto",
-  "standard",
-  "disk_utilization_only",
-};
-
-bool ObConfigPartitionBalanceStrategyFuncChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  for (int64_t i = 0; i < ARRAYSIZEOF(balance_strategy) && !is_valid; ++i) {
-    if (0 == ObString::make_string(balance_strategy[i]).case_compare(t.str())) {
-      is_valid = true;
-    }
   }
   return is_valid;
 }
@@ -1227,13 +1193,6 @@ bool ObConfigDDLNoLoggingChecker::check(const obcall::ObAdminSetConfigItem &t) {
     is_valid = false;
   }
   return is_valid;
-}
-
-bool ObConfigMigrationChooseSourceChecker::check(const ObConfigItem &t) const
-{
-  ObString v_str(t.str());
-  return 0 == v_str.case_compare("idc")
-      || 0 == v_str.case_compare("region");
 }
 
 bool ObConfigArchiveLagTargetChecker::check(const ObAdminSetConfigItem &t)

@@ -44,35 +44,13 @@ ObAllVirtualTabletDDLKVInfo::~ObAllVirtualTabletDDLKVInfo()
 
 void ObAllVirtualTabletDDLKVInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
-  addr_.reset();
-  ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualTabletDDLKVInfo::release_last_tenant()
-{
   ddl_kv_idx_ = -1;
   ddl_kvs_handle_.reset();
   curr_tablet_id_.reset();
   ls_tablet_iter_.reset();
   ls_iter_guard_.reset();
-}
-
-int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualTabletDDLKVInfo::is_need_process()
-{
-  if (true || true) {
-    return true;
-  }
-  return false;
+  addr_.reset();
+  ObVirtualTableScannerIterator::reset();
 }
 
 int ObAllVirtualTabletDDLKVInfo::get_next_ls(ObLS *&ls)
@@ -154,7 +132,7 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv(ObDDLKV *&ddl_kv)
   return ret;
 }
 
-int ObAllVirtualTabletDDLKVInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObDDLKV *cur_kv = nullptr;

@@ -1084,7 +1084,7 @@ int ObTableSqlService::revise_check_cst_column_info(
         if (OB_FAIL(gen_constraint_column_dml(csts.at(i), *iter, dml))) {
           LOG_WARN("failed to gen constraint column dml", K(ret));
         } else if (OB_FAIL(exec.exec_insert(
-            OB_ALL_TENANT_CONSTRAINT_COLUMN_TNAME, dml, affected_rows))) {
+            OB_ALL_CONSTRAINT_COLUMN_TNAME, dml, affected_rows))) {
           LOG_WARN("failed to insert constraint column", K(ret));
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1095,7 +1095,7 @@ int ObTableSqlService::revise_check_cst_column_info(
           if (OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
             LOG_WARN("add column failed", K(ret));
           } else if (OB_FAIL(exec.exec_insert(
-              OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
+              OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
             LOG_WARN("execute insert failed", K(ret));
           } else if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;
@@ -1540,13 +1540,13 @@ int ObTableSqlService::batch_add_constraints_for_create_table(
     } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_CONSTRAINT_HISTORY_TNAME, cst_dml, cst_count))) {
       LOG_WARN("failed to insert all_cst_history", KR(ret), K(cst_count));
     } else if (FALSE_IT(time_guard.click("insert_all_cst_history"))) {
-    } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TENANT_CONSTRAINT_COLUMN_TNAME,
+    } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_CONSTRAINT_COLUMN_TNAME,
             cst_col_dml, cst_col_count))) {
       LOG_WARN("failed to insert all_cst_column", KR(ret), K(cst_col_count));
     } else if (FALSE_IT(time_guard.click("insert_all_cst_col"))) {
     } else if (OB_FAIL(cst_col_dml.set_default_columns("is_deleted", "0"))) {
       LOG_WARN("failed to set default columns", KR(ret));
-    } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME,
+    } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
             cst_col_dml, cst_col_count))) {
       LOG_WARN("failed to insert all_cst_column_history", KR(ret), K(cst_col_count));
     } else if (FALSE_IT(time_guard.click("insert_all_cst_col_history"))) {
@@ -1582,12 +1582,12 @@ int ObTableSqlService::add_constraints_for_not_core(ObISQLClient &sql_client,
           table.get_constraint_count()))) {
     LOG_WARN("failed to insert all constraint history table", KR(ret));
   } else if (cst_col_dml.empty()) {
-  } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TENANT_CONSTRAINT_COLUMN_TNAME,
+  } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_CONSTRAINT_COLUMN_TNAME,
           cst_col_dml, cst_cols_num_in_table))) {
     LOG_WARN("failed to insert all column constraint history table", KR(ret));
   } else if (OB_FAIL(cst_col_dml.set_default_columns("is_deleted", "0"))) {
     LOG_WARN("failed to set default columns", KR(ret));
-  } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME,
+  } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
           cst_col_dml, cst_cols_num_in_table))) {
     LOG_WARN("failed to insert all column constraint history table", KR(ret));
   }
@@ -1704,7 +1704,7 @@ int ObTableSqlService::delete_constraint(common::ObISQLClient &sql_client,
           if (OB_FAIL(constraint_column_history_sql.assign_fmt(
               "INSERT INTO %s(table_id, constraint_id, column_id, schema_version, is_deleted)"
               " VALUES(%lu, %lu, %lu, %ld, %ld)",
-              OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME,
+              OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
               ObSchemaUtils::get_extract_schema_id((*cst_iter)->get_table_id()),
               (*cst_iter)->get_constraint_id(), *cst_col_iter, new_schema_version, is_deleted))) {
             LOG_WARN("assign insert into __all_constraint_column_history fail",
@@ -1713,7 +1713,7 @@ int ObTableSqlService::delete_constraint(common::ObISQLClient &sql_client,
           } else if (OB_FAIL(constraint_column_sql.assign_fmt(
               "DELETE FROM %s WHERE (table_id, constraint_id, column_id)"
               " IN ((%lu, %lu, %lu)",
-              OB_ALL_TENANT_CONSTRAINT_COLUMN_TNAME,
+              OB_ALL_CONSTRAINT_COLUMN_TNAME,
               ObSchemaUtils::get_extract_schema_id((*cst_iter)->get_table_id()),
               (*cst_iter)->get_constraint_id(),
               *cst_col_iter))) {
@@ -1930,7 +1930,7 @@ int ObTableSqlService::add_single_constraint(ObISQLClient &sql_client,
       } else {
         if (!only_history) {
           if (OB_FAIL(exec.exec_insert(
-              OB_ALL_TENANT_CONSTRAINT_COLUMN_TNAME, dml, affected_rows))) {
+              OB_ALL_CONSTRAINT_COLUMN_TNAME, dml, affected_rows))) {
             LOG_WARN("failed to insert foreign key column", K(ret));
           } else if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;
@@ -1942,7 +1942,7 @@ int ObTableSqlService::add_single_constraint(ObISQLClient &sql_client,
           if (OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
             LOG_WARN("add column failed", K(ret));
           } else if (OB_FAIL(exec.exec_insert(
-              OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
+              OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME, dml, affected_rows))) {
             LOG_WARN("execute insert failed", K(ret));
           } else if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;
@@ -2318,7 +2318,7 @@ int ObTableSqlService::delete_single_constraint(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(affected_rows), K(ret));
     } else if (OB_FAIL(exec_delete(sql_client, table_id,
-               OB_ALL_TENANT_CONSTRAINT_COLUMN_TNAME, dml, affected_rows))) {
+               OB_ALL_CONSTRAINT_COLUMN_TNAME, dml, affected_rows))) {
       LOG_WARN("exec delete failed", K(ret));
     }
   }
@@ -2364,7 +2364,7 @@ int ObTableSqlService::delete_single_constraint(
           || OB_FAIL(dml.add_gmt_create())
           || OB_FAIL(dml.add_gmt_modified())) {
         LOG_WARN("dml add constraint column failed", K(ret));
-      } else if (OB_FAIL(exec.exec_insert(OB_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_TNAME,
+      } else if (OB_FAIL(exec.exec_insert(OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
                                           dml, affected_rows))) {
         LOG_WARN("execute insert failed", K(ret));
       } else if (!is_single_row(affected_rows)) {

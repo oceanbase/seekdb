@@ -28,7 +28,6 @@ namespace observer
 
 ObAllVirtualMemstoreInfo::ObAllVirtualMemstoreInfo()
   : ObVirtualTableScannerIterator(),
-    ObMultiTenantOperator(),
     addr_(),
     ls_iter_guard_(),
     ls_tablet_iter_(ObMDSGetTabletMode::READ_ALL_COMMITED),
@@ -44,7 +43,6 @@ ObAllVirtualMemstoreInfo::~ObAllVirtualMemstoreInfo()
 
 void ObAllVirtualMemstoreInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ls_tablet_iter_.reset();
   ls_iter_guard_.reset();
@@ -53,33 +51,6 @@ void ObAllVirtualMemstoreInfo::reset()
   memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
   memset(compaction_info_buf_, 0, sizeof(compaction_info_buf_));
   ObVirtualTableScannerIterator::reset();
-}
-
-void ObAllVirtualMemstoreInfo::release_last_tenant()
-{
-  ls_iter_guard_.reset();
-  ls_tablet_iter_.reset();
-  tables_handle_.reset();
-  memtable_array_pos_ = 0;
-  memset(freeze_time_dist_, 0, OB_MAX_CHAR_LENGTH);
-}
-
-int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "execute fail", K(ret));
-  }
-  return ret;
-}
-
-bool ObAllVirtualMemstoreInfo::is_need_process()
-{
-  if (!false &&
-      (true || true)) {
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualMemstoreInfo::get_next_ls(ObLS *&ls)
@@ -198,7 +169,7 @@ void ObAllVirtualMemstoreInfo::get_freeze_time_dist(const ObMtStat& mt_stat)
   }
 }
 
-int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
+int ObAllVirtualMemstoreInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObITabletMemtable *mt = NULL;

@@ -42,7 +42,13 @@ ObAllVirtualTableMgr::~ObAllVirtualTableMgr()
 
 void ObAllVirtualTableMgr::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  table_store_iter_.reset();
+  tablet_handle_.reset();
+  if (OB_NOT_NULL(tablet_iter_)) {
+    tablet_iter_->~ObTenantTabletIterator();
+    tablet_iter_ = nullptr;
+  }
+  tablet_allocator_.reset();
   addr_.reset();
 
   if (OB_NOT_NULL(iter_buf_)) {
@@ -70,35 +76,6 @@ int ObAllVirtualTableMgr::init(common::ObIAllocator *allocator)
     start_to_read_ = true;
   }
   return ret;
-}
-
-int ObAllVirtualTableMgr::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualTableMgr::release_last_tenant()
-{
-  table_store_iter_.reset();
-  tablet_handle_.reset();
-  if (OB_NOT_NULL(tablet_iter_)) {
-    tablet_iter_->~ObTenantTabletIterator();
-    tablet_iter_ = nullptr;
-  }
-  tablet_allocator_.reset();
-}
-
-bool ObAllVirtualTableMgr::is_need_process()
-{
-  if (!false &&
-      (true || true)){
-    return true;
-  }
-  return false;
 }
 
 int ObAllVirtualTableMgr::get_next_tablet()
@@ -162,7 +139,7 @@ int ObAllVirtualTableMgr::get_next_table(ObITable *&table)
   return ret;
 }
 
-int ObAllVirtualTableMgr::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualTableMgr::inner_get_next_row(common::ObNewRow *&row)
 {
   // each get_next_row will switch to required tenant, and released guard later
   int ret = OB_SUCCESS;

@@ -53,8 +53,7 @@ ObLogService::ObLogService() :
   rpc_proxy_(),
   flashback_service_(),
   monitor_(),
-  update_palf_opts_lock_(),
-  default_locality_cb_()
+  update_palf_opts_lock_()
 {}
 
 ObLogService::~ObLogService()
@@ -359,7 +358,6 @@ int ObLogService::add_ls(const ObLSID &id,
   PalfHandle &log_handler_palf_handle = log_handler.palf_handle_;
   PalfRoleChangeCb *rc_cb = &role_change_service_;
   PalfLocationCacheCb *loc_cache_cb = &location_adapter_;
-  PalfLocalityInfoCb *locality_cb = &default_locality_cb_;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret), K(id));
@@ -374,8 +372,6 @@ int ObLogService::add_ls(const ObLSID &id,
     CLOG_LOG(WARN, "register_role_change_cb failed", K(ret));
   } else if (OB_FAIL(log_handler_palf_handle.set_location_cache_cb(loc_cache_cb))) {
     CLOG_LOG(WARN, "set_location_cache_cb failed", K(ret), K(id));
-  } else if (OB_FAIL(log_handler_palf_handle.set_locality_cb(locality_cb))) {
-    CLOG_LOG(WARN, "set_locality_cb failed", K(ret), K(id));
   } else {
     FLOG_INFO("add_ls success", K(ret), K(id), KP(this));
   }
@@ -482,33 +478,32 @@ int ObLogService::get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &t
 
 int ObLogService::update_palf_options_except_disk_usage_limit_size()
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   ObSpinLockGuard guard(update_palf_opts_lock_);
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!tenant_config.is_valid()) {
+  } else if (!true) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "tenant_config is not valid", K(ret));
   } else {
     PalfOptions palf_opts;
     common::ObCompressorType compressor_type = ZSTD_1_3_8_COMPRESSOR;
     if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor_type(
-                tenant_config->log_transport_compress_func, compressor_type))) {
+                GCONF.log_transport_compress_func, compressor_type))) {
       CLOG_LOG(ERROR, "log_transport_compress_func invalid.", K(ret));
       //Need to get log_disk_usage_limit_size
     } else if (OB_FAIL(palf_env_->get_options(palf_opts))) {
       CLOG_LOG(WARN, "palf get_options failed", K(ret));
     } else {
-      palf_opts.disk_options_.log_disk_utilization_threshold_ = tenant_config->log_disk_utilization_threshold;
-      palf_opts.disk_options_.log_disk_utilization_limit_threshold_ = tenant_config->log_disk_utilization_limit_threshold;
-      palf_opts.disk_options_.log_disk_throttling_percentage_ = tenant_config->log_disk_throttling_percentage;
-      palf_opts.disk_options_.log_disk_throttling_maximum_duration_ = tenant_config->log_disk_throttling_maximum_duration;
-      palf_opts.compress_options_.enable_transport_compress_ = tenant_config->log_transport_compress_all;
+      palf_opts.disk_options_.log_disk_utilization_threshold_ = GCONF.log_disk_utilization_threshold;
+      palf_opts.disk_options_.log_disk_utilization_limit_threshold_ = GCONF.log_disk_utilization_limit_threshold;
+      palf_opts.disk_options_.log_disk_throttling_percentage_ = GCONF.log_disk_throttling_percentage;
+      palf_opts.disk_options_.log_disk_throttling_maximum_duration_ = GCONF.log_disk_throttling_maximum_duration;
+      palf_opts.compress_options_.enable_transport_compress_ = GCONF.log_transport_compress_all;
       palf_opts.compress_options_.transport_compress_func_ = compressor_type;
-      palf_opts.rebuild_replica_log_lag_threshold_ = tenant_config->_rebuild_replica_log_lag_threshold;
-      palf_opts.disk_options_.log_writer_parallelism_ = tenant_config->_log_writer_parallelism;
-      palf_opts.enable_log_cache_ = tenant_config->_enable_log_cache;
+      palf_opts.rebuild_replica_log_lag_threshold_ = GCONF._rebuild_replica_log_lag_threshold;
+      palf_opts.disk_options_.log_writer_parallelism_ = GCONF._log_writer_parallelism;
+      palf_opts.enable_log_cache_ = GCONF._enable_log_cache;
       if (OB_FAIL(palf_env_->update_options(palf_opts))) {
         CLOG_LOG(WARN, "palf update_options failed", K(ret), K(palf_opts));
       } else {
@@ -592,7 +587,6 @@ int ObLogService::create_ls_(const share::ObLSID &id,
   PalfHandle palf_handle;
   PalfRoleChangeCb *rc_cb = &role_change_service_;
   PalfLocationCacheCb *loc_cache_cb = &location_adapter_;
-  PalfLocalityInfoCb *locality_cb = &default_locality_cb_;
   const bool is_arb_replica = (replica_type == REPLICA_TYPE_ARBITRATION);
   PalfHandle &log_handler_palf_handle = log_handler.palf_handle_;
   bool palf_exist = true;
@@ -623,8 +617,6 @@ int ObLogService::create_ls_(const share::ObLSID &id,
       CLOG_LOG(WARN, "register_role_change_cb failed", K(ret), K(id));
     } else if (OB_FAIL(log_handler_palf_handle.set_location_cache_cb(loc_cache_cb))) {
       CLOG_LOG(WARN, "set_location_cache_cb failed", K(ret), K(id));
-    } else if (OB_FAIL(log_handler_palf_handle.set_locality_cb(locality_cb))) {
-      CLOG_LOG(WARN, "set_locality_cb failed", K(ret), K(id));
     } else {
       CLOG_LOG(INFO, "ObLogService create_ls success", K(ret), K(id), K(log_handler));
     }

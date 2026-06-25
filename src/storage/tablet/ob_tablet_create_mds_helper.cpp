@@ -208,12 +208,11 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
   int64_t tablet_cnt_per_gb = 20000; // default value
 
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (OB_UNLIKELY(!tenant_config.is_valid())) {
+    if (OB_UNLIKELY(!true)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get invalid tenant config", K(ret));
     } else {
-      tablet_cnt_per_gb = tenant_config->_max_tablet_cnt_per_gb;
+      tablet_cnt_per_gb = GCONF._max_tablet_cnt_per_gb;
       switch (level) {
         case ObTabletCreateThrottlingLevel::SOFT:
           tablet_cnt_per_gb = MAX(tablet_cnt_per_gb, 30000);

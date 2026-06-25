@@ -164,8 +164,7 @@ void ObMultiVersionGarbageCollector::run_timer_task()
 {
    int ret = OB_SUCCESS;
    uint64_t data_version = 0;
-   omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-   if (!tenant_config->_mvcc_gc_using_min_txn_snapshot) {
+   if (!GCONF._mvcc_gc_using_min_txn_snapshot) {
      cure();
    } else {
      // compatibility is important
@@ -640,9 +639,8 @@ void ObMultiVersionGarbageCollector::decide_reserved_snapshot_version_(
 
 share::SCN ObMultiVersionGarbageCollector::get_reserved_snapshot_for_active_txn() const
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
-  if (!tenant_config->_mvcc_gc_using_min_txn_snapshot) {
+  if (!GCONF._mvcc_gc_using_min_txn_snapshot) {
     return share::SCN::max_scn();
   } else if (refresh_error_too_long_) {
     if (REACH_THREAD_TIME_INTERVAL(1_s)) {
@@ -1234,7 +1232,7 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
     MVCC_LOG(WARN, "session info is not valid", K(ret));
   } else if (sess_info->get_is_deserialized()) {
     // skip deserialized session, only visit the original
-  } else if (true) {
+  } else {
     sql::ObSQLSessionInfo::LockGuard data_lock_guard(sess_info->get_thread_data_lock());
     share::SCN snapshot_version(share::SCN::max_scn());
 
