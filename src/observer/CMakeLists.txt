@@ -509,9 +509,7 @@ if(WIN32)
   endif()
   # oblib_add_extra_objects creates separate .lib files not merged into oblib.lib on Windows
   target_link_libraries(observer_without_bolt PRIVATE
-    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
-    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd/zstd_objs.lib
-    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/lz4/lz4-all.lib)
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib)
   # Itanium ABI _Unwind_* stubs (Windows uses SEH; PL unwinding non-functional)
   target_sources(observer_without_bolt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win32_unwind_stubs.c)
 endif()
