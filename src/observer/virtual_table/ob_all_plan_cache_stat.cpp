@@ -380,7 +380,7 @@ int ObAllPlanCacheStatI1::set_ids(const common::ObIArray<common::ObNewRange> &ra
         } else {
           (void)(start_key_obj_ptr[0].get_int());
           if (OB_FAIL(add_var_to_array_no_dup(batch_ids,
-                                                     1UL))) {
+                                                     static_cast<uint64_t>(1)))) {
             SERVER_LOG(WARN, "Failed to add id to array no duplicate", K(ret));
           } else { }//do nothing
         }

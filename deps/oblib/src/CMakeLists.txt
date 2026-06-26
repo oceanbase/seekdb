@@ -347,7 +347,7 @@ else()
     $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>
     $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libparquet.a>
     $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<NOT:$<PLATFORM_ID:Darwin>>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
-    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd>
+    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd -lsnappy>
     $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
     ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
     $<$<BOOL:${ANDROID}>:-llog>
