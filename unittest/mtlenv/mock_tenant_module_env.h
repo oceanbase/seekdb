@@ -90,7 +90,6 @@
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"   // ObSharedMemAllocMgr
 #include "logservice/palf/log_define.h"
 #include "storage/access/ob_empty_read_bucket.h"
-#include "share/object_storage/ob_device_config_mgr.h"
 #include "share/index_usage/ob_index_usage_info_mgr.h"
 #include "observer/ob_startup_accel_task_handler.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h" // ObTenantTmpFileManager

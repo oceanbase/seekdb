@@ -42,7 +42,6 @@ let $para_name = log_disk_size;                                            # CAP
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
 let $para_name = rpc_timeout;                                              # TIME
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
---source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
 # [step 0.2] set tenant-level parameters
 let $para_name = plsql_debug;                                             # BOOL
 --source mysql_test/include/parameter_data_type/set_tenant_parameter.inc
@@ -73,7 +72,6 @@ let $para_name = default_row_format;
 let $para_name = log_disk_size;
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
 let $para_name = rpc_timeout;
---source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
 # [setp 0.3.2] check tenant-level parameters
 let $para_name = plsql_debug;

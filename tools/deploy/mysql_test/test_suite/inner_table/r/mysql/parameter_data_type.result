@@ -33,7 +33,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-name	data_type
 ========  [4] check data_tpye for __all_virtual_sys_parameter_stat  =========
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'enable_perf_event';
 name	data_type
@@ -53,7 +52,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-name	data_type
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'plsql_debug';
 name	data_type
 plsql_debug	BOOL
@@ -97,7 +95,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-name	data_type
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'plsql_debug';
 name	data_type
 plsql_debug	BOOL
@@ -209,7 +206,6 @@ log_disk_size	CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-name	data_type
 select name, data_type from V$OB_PARAMETERS where name = 'plsql_debug';
 name	data_type
 plsql_debug	BOOL
@@ -303,7 +299,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-name	data_type
 select name, data_type from __all_virtual_sys_parameter_stat where name = 'plsql_debug';
 name	data_type
 plsql_debug	BOOL
@@ -390,7 +385,6 @@ log_disk_size	CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-name	data_type
 select name, data_type from V$OB_PARAMETERS where name = 'plsql_debug';
 name	data_type
 plsql_debug	BOOL
