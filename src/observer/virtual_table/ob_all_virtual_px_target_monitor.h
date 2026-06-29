@@ -39,7 +39,7 @@ public:
   virtual int inner_close();
 private:
   int prepare_start_to_read();
-  int get_next_target_info(sql::ObPxTargetInfo &target_info);
+  int get_next_target_info(ObPxTargetInfo &target_info);
 private:
   enum TARGET_MONITOR_COLUMN
   {
@@ -52,9 +52,7 @@ private:
     LOCAL_TARGET_USED,
     LOCAL_PARALLEL_SESSION_COUNT
   };
-  common::ObSEArray<uint64_t, 4> tenand_array_;
-  uint64_t tenant_idx_;
-  common::ObSEArray<sql::ObPxTargetInfo, 10> target_info_array_;
+  common::ObSEArray<ObPxTargetInfo, 10> target_info_array_;
   uint64_t target_usage_idx_;
   char svr_ip_buff_[common::OB_IP_PORT_STR_BUFF];
   char peer_ip_buff_[common::OB_IP_PORT_STR_BUFF];

@@ -16,7 +16,7 @@
 
 #include "observer/virtual_table/ob_tenant_show_tables.h"
 
-#include "share/catalog/ob_catalog_meta_getter.h"
+#include "share/catalog/ob_cached_catalog_meta_getter.h"
 #include "share/catalog/ob_external_object_ctx.h"
 #include "sql/session/ob_sql_session_info.h"
 
@@ -245,7 +245,7 @@ int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t database_id,
   } else {
     uint64_t catalog_id = external_object->catalog_id;
     database_name = external_object->database_name;
-    ObCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
+    ObCachedCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
     if (OB_FAIL(ob_catalog_meta_getter.list_table_names(catalog_id, database_name, case_mode, tbl_names))) {
       SERVER_LOG(WARN, "list_table_names failed", K(ret), K(catalog_id), K(database_name));
     }

@@ -1101,68 +1101,6 @@ int ObDDLResolver::add_storing_column(const ObString &column_name,
   return ret;
 }
 
-
-int ObDDLResolver::resolve_file_prefix(ObString &url, ObSqlString &prefix_str, common::ObStorageType &device_type, ObResolverParams &params) {
-  int ret = OB_SUCCESS;
-  ObString tmp_url;
-  ObArenaAllocator allocator;
-  OZ (ob_write_string(allocator, url, tmp_url));
-  ObCharset::caseup(CS_TYPE_UTF8MB4_GENERAL_CI, tmp_url);
-  device_type = common::ObStorageType::OB_STORAGE_MAX_TYPE;
-  ObString tmp_prefix = tmp_url.split_on(':');
-  OZ (ob_write_string(allocator, tmp_prefix, tmp_prefix, true));
-  if (!tmp_prefix.empty()) {
-    OZ (get_storage_type_from_name(tmp_prefix.ptr(), device_type));
-  }
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE
-      && !tmp_prefix.empty() && 0 == strcmp(tmp_prefix.ptr(), "OSS")) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
-    LOG_WARN("OSS storage is not supported", K(ret));
-  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE
-      && !tmp_prefix.empty() && 0 == strcmp(tmp_prefix.ptr(), "COS")) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
-    LOG_WARN("COS storage is not supported", K(ret));
-  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE
-      && !tmp_prefix.empty() && 0 == strcmp(tmp_prefix.ptr(), "HDFS")) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
-    LOG_WARN("HDFS storage is not supported", K(ret));
-  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE) {
-    device_type = common::ObStorageType::OB_STORAGE_FILE;
-    if (url.empty()) {
-      ret = OB_DIR_NOT_EXIST;
-      LOG_USER_ERROR(OB_DIR_NOT_EXIST);
-    }
-  } else {
-    const char *ts = get_storage_type_str(device_type);
-    url += (strlen(ts) + 3);
-  }
-  if (OB_SUCC(ret)) {
-    ObString prefix;
-    const char *ts = get_storage_type_str(device_type);
-    if (OB_ISNULL(params.allocator_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("allocator is null", K(ret));
-    } else {
-      if (OB_FAIL(ob_write_string(*params.allocator_, ObString(ts), prefix))) {
-        LOG_WARN("failed to write string", K(ret));
-      } else {
-        ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, prefix);
-        if (OB_FAIL(prefix_str.append(prefix))) {
-          LOG_WARN("failed to append prefix", K(ret));
-        } else if (OB_FAIL(prefix_str.append("://"))) {
-          LOG_WARN("failed to append '://'", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool is_index_option)
 {
   int ret = OB_SUCCESS;
@@ -2241,13 +2179,9 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             duplicate_scope_ = my_duplicate_scope;
           }
           if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (!is_user_tenant()) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("not user tenant, alter table duplicate scope not supported", KR(ret));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, alter table duplicate scope");
-            } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::DUPLICATE_SCOPE))) {
-              LOG_WARN("fail to add member duplicate_scope to bitset", KR(ret));
-            }
+            ret = OB_NOT_SUPPORTED;
+            LOG_WARN("not user tenant, alter table duplicate scope not supported", KR(ret));
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, alter table duplicate scope");
           }
         }
         break;
@@ -2360,162 +2294,17 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_AVG_ROW_LENGTH: {
         break;
       }
-      case T_EXTERNAL_FILE_LOCATION: {
-        ParseNode *string_node = NULL;
-        if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid file format option", K(ret));
-        } else {
-          ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-          ObCreateTableArg &arg = create_table_stmt->get_create_table_arg();
-          if (option_node->num_child_ != 1 || OB_ISNULL(string_node = option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected child num", K(option_node->num_child_));
-          } else {
-            ObString table_location = ObString(option_node->children_[0]->str_len_,
-                                              option_node->children_[0]->str_value_).trim_space_only();
-            UNUSED(table_location);
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "external file location");
-          }
-
-          if (OB_SUCC(ret)) {
-            if (OB_ISNULL(params_.session_info_)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else {
-              ObString cur_sql = params_.session_info_->get_current_query_string();
-              ObString masked_sql;
-              if (OB_FAIL(ObDCLResolver::mask_password_for_passwd_node(
-                            params_.allocator_, cur_sql, string_node, masked_sql, true))) {
-                LOG_WARN("fail to gen masked sql", K(ret));
-              } else {
-                create_table_stmt->set_masked_sql(masked_sql);
-              }
-            }
-          }
-        }
-        break;
-      }
-      case T_LOCATION_OBJECT: {
-        if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid file format option", K(ret));
-        } else {
-          ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-          ObCreateTableArg &arg = create_table_stmt->get_create_table_arg();
-          if (option_node->num_child_ != 2 || OB_ISNULL(option_node->children_[0])) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected child num", K(option_node->num_child_));
-          } else {
-            ObString location_obj = ObString(option_node->children_[0]->str_len_,
-                                        option_node->children_[0]->str_value_).trim_space_only();
-            ObString sub_path;
-            if(OB_NOT_NULL(option_node->children_[1])) {
-              sub_path = ObString(option_node->children_[1]->str_len_,
-                          option_node->children_[1]->str_value_).trim_space_only();
-            }
-            UNUSED(location_obj);
-            UNUSED(sub_path);
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "external location object");
-            if (OB_FAIL(ret)) {
-            } else if (OB_ISNULL(params_.session_info_)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("session_info is null");
-            } else {
-              ObString cur_sql = params_.session_info_->get_current_query_string();
-              create_table_stmt->set_masked_sql(cur_sql);
-            }
-          }
-        }
-        break;
-      }
-      case T_EXTERNAL_PROPERTIES:
-      case T_EXTERNAL_FILE_FORMAT: {
-        if (OB_ISNULL(session_info_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexcepted null ptr", K(ret));
-        } else if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid file format option", K(ret));
-        } else {
-          ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
-          if (!arg.schema_.is_external_table()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "format option");
-          } else {
-            bool has_file_format = false;
-            ObExternalFileFormat format;
-            ObString format_str;
-            ObString masked_sql = params_.session_info_->get_current_query_string(); // that's create table operation stmt which has properties
-            UNUSED(format);
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "external file format");
-
-            if (OB_SUCC(ret)) {
-              if (ObExternalFileFormat::ODPS_FORMAT == format.format_type_) {
-                if (OB_FAIL(arg.schema_.set_external_properties(format_str))) {
-                  LOG_WARN("failed to set external properties", K(ret));
-                }
-              } else {
-                if (OB_FAIL(arg.schema_.set_external_file_format(format_str))) {
-                  LOG_WARN("failed to set external file format", K(ret));
-                }
-              }
-            }
-
-            for (int i = 0; OB_SUCC(ret) && i < option_node->num_child_; ++i) {
-              ObString temp_masked_sql;
-              if (OB_ISNULL(option_node->children_[i])) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("failed. get unexpected NULL ptr", K(ret), K(option_node->num_child_));
-              } else if (T_EXTERNAL_FILE_FORMAT_TYPE == option_node->children_[i]->type_ ||
-                         T_CHARSET == option_node->children_[i]->type_) {
-              } else if (OB_FAIL(mask_properties_sensitive_info(option_node->children_[i],
-                                                                masked_sql,
-                                                                allocator_,
-                                                                temp_masked_sql))) {
-                LOG_WARN("failed to mask properties sensitive info", K(ret), K(i), K(option_node->num_child_));
-              } else if (!temp_masked_sql.empty()) {
-                masked_sql = temp_masked_sql;
-              }
-            }
-            if (OB_SUCC(ret)) {
-              if (ObExternalFileFormat::ODPS_FORMAT == format.format_type_ && OB_FAIL(format.odps_format_.encrypt())) {
-                LOG_WARN("failed to encrypt odps format", K(ret));
-              } else {
-                if (OB_SUCC(ret)) {
-                  if (ObExternalFileFormat::ODPS_FORMAT == format.format_type_) {
-                    ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-                    if (OB_ISNULL(create_table_stmt)) {
-                      ret = OB_ERR_UNEXPECTED;
-                      LOG_WARN("unexcepted null ptr", K(ret));
-                    } else {
-                      create_table_stmt->set_masked_sql(masked_sql);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        break;
-      }
-      case T_EXTERNAL_FILE_PATTERN: {
-        if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
-          ret = OB_ERR_UNEXPECTED; //TODO-EXTERNAL-TABLE add new error code
-          LOG_WARN("invalid file format option", K(ret));
-        } else {
-          ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
-          ObString pattern;
-          UNUSED(option_node);
-          UNUSED(arg);
+      case T_STORAGE_CACHE_POLICY_ATTRIBUTE_LIST: {
+        if (!GCTX.is_shared_storage_mode()) {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "external file pattern");
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(arg.schema_.set_external_file_pattern(pattern))) {
-            LOG_WARN("failed to set external file pattern", K(ret), K(pattern));
-          }
+          LOG_WARN("storage cache policy is not supported in shared storage mode", K(ret));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "storage cache policy is not supported in shared storage mode");
+        } else if (OB_ISNULL(option_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "the children of option_node for storage_cache_policy is null",
+              K(option_node->children_[0]), K(ret));
+        } else if (OB_FAIL(resolve_storage_cache_attribute(option_node->children_[0], params_))) {
+          LOG_WARN("fail to resolve storage cache policy attribute", K(ret));
         }
         break;
       }
@@ -2556,29 +2345,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         ret = resolve_lob_storage_parameters(option_node);
         break;
       }
-      case T_EXTERNAL_USER_SPECIFIED_PARTITION: {
-        if (stmt::T_CREATE_TABLE != stmt_->get_stmt_type()) {
-          ret = OB_ERR_UNEXPECTED; //TODO-EXTERNAL-TABLE add new error code
-          LOG_WARN("invalid file format option", K(ret));
-        } else {
-          ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
-          if (!arg.schema_.is_external_table()) {
-            ret = OB_NOT_SUPPORTED;
-            ObSqlString err_msg;
-            err_msg.append_fmt("Using PARTITION_TYPE as a CREATE TABLE option");
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-            LOG_WARN("using PARTITION_TYPE as a table option is support in external table only", K(ret));
-          } else {
-            arg.schema_.set_user_specified_partition_for_external_table();
-            if (arg.schema_.get_external_table_auto_refresh() != 0) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("user specified partition without auto refresh off not supported", K(ret));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "user specified partition without auto refresh off");
-            }
-          }
-        }
-        break;
-      }
       case T_MICRO_INDEX_CLUSTERED: {
         if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
@@ -2614,52 +2380,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         }
         break;
-      }
-      case T_EXTERNAL_TABLE_AUTO_REFRESH: {
-         if (stmt_->get_stmt_type() == stmt::T_CREATE_TABLE) {
-           ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
-           if (!arg.schema_.is_external_table()) {
-             ret = OB_NOT_SUPPORTED;
-             ObSqlString err_msg;
-             err_msg.append_fmt("Using CREATE ON REFRESH as a CREATE TABLE option");
-             LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-             LOG_WARN("using CREATE ON REFRESH as a table option is support in external table only", K(ret));
-           } else if (option_node->num_child_ != 1 || OB_ISNULL(option_node->children_[0])) {
-             ret = OB_ERR_UNEXPECTED;
-             LOG_WARN("unexpected child num", K(option_node->num_child_));
-           } else {
-             arg.schema_.set_external_table_auto_refresh(option_node->children_[0]->value_);
-             if (arg.schema_.get_external_table_auto_refresh() != 0
-                && arg.schema_.is_user_specified_partition_for_external_table()) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_WARN("user specified partition without auto refresh off not supported", K(ret));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "user specified partition without auto refresh off");
-             }
-           }
-         } else if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
-           ObAlterTableArg &arg = static_cast<ObAlterTableStmt*>(stmt_)->get_alter_table_arg();
-           if (!arg.alter_table_schema_.is_external_table()) {
-             ret = OB_NOT_SUPPORTED;
-             ObSqlString err_msg;
-             err_msg.append_fmt("Using ALTER AUTO REFRESH as a ALTER TABLE option");
-             LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg.ptr());
-             LOG_WARN("using ALTER AUTO REFRESH as a table option is support in external table only", K(ret));
-           } else if (option_node->num_child_ != 1 || OB_ISNULL(option_node->children_[0])) {
-             ret = OB_ERR_UNEXPECTED;
-             LOG_WARN("unexpected child num", K(option_node->num_child_));
-           } else {
-             arg.alter_table_schema_.set_external_table_auto_refresh(option_node->children_[0]->value_);
-             if (arg.alter_table_schema_.get_external_table_auto_refresh() != 0
-                && arg.alter_table_schema_.is_user_specified_partition_for_external_table()) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_WARN("user specified partition without auto refresh off not supported", K(ret));
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "user specified partition without auto refresh off");
-             }
-           }
-         } else {
-           ret = OB_ERR_UNEXPECTED;
-         }
-         break;
       }
       case T_ORGANIZATION: {
         if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
@@ -2742,39 +2462,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
   return ret;
 }
 
-int ObDDLResolver::mask_properties_sensitive_info(const ParseNode *node,
-                                                  ObString &ddl_sql,
-                                                  ObIAllocator *allocator,
-                                                  ObString &masked_sql)
-  {
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || node->num_child_ != 1 || OB_ISNULL(node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse node", K(ret));
-  } else {
-    switch (node->type_) {
-      case ObItemType::T_ENDPOINT:
-      case ObItemType::T_TUNNEL_ENDPOINT:
-      case ObItemType::T_STSTOKEN:
-      case ObItemType::T_ACCESSKEY:
-      case ObItemType::T_ACCESSID: {
-        if (OB_FAIL(ObDCLResolver::mask_password_for_passwd_node(allocator,
-                                                                ddl_sql,
-                                                                node->children_[0],
-                                                                masked_sql,
-                                                                true))) {
-          LOG_WARN("fail to gen masked sql", K(ret));
-        }
-        break;
-      }
-      default: {
-        // do nothing
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDDLResolver::resolve_column_definition_ref(ObColumnSchemaV2 &column,
                                                   ParseNode *node /* column_definition_def */,
                                                   bool is_resolve_for_alter_table)
@@ -2818,41 +2505,6 @@ int ObDDLResolver::resolve_column_definition_ref(ObColumnSchemaV2 &column,
     }
   } else if (OB_FAIL(column.set_column_name(name))) {
     SQL_RESV_LOG(WARN, "fail to set column name", K(name), K(ret));
-  }
-  return ret;
-}
-
-int ObDDLResolver::check_format_valid(const ObExternalFileFormat &format, bool &is_valid)
-{
-  int ret = OB_SUCCESS;
-  if (ObExternalFileFormat::ODPS_FORMAT == format.format_type_) {
-    is_valid = true;
-  } else {
-    if (!format.csv_format_.line_term_str_.empty() && !format.csv_format_.field_term_str_.empty()) {
-      if (0 == MEMCMP(format.csv_format_.field_term_str_.ptr(),
-                      format.csv_format_.line_term_str_.ptr(),
-                      std::min(format.csv_format_.field_term_str_.length(),
-                              format.csv_format_.line_term_str_.length()))) {
-        is_valid = false;
-        LOG_USER_WARN(OB_NOT_SUPPORTED,
-            "LINE_DELIMITER or FIELD_DELIMITER cannot be a substring of the delimiter for the other");
-        LOG_WARN("LINE_DELIMITER or FIELD_DELIMITER cann't be a substring of the other's", K(ret),
-                K(format.csv_format_.line_term_str_), K(format.csv_format_.field_term_str_));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (!format.csv_format_.line_term_str_.empty()
-          && (format.csv_format_.line_term_str_[0] == format.csv_format_.field_escaped_char_
-              || format.csv_format_.line_term_str_[0] == format.csv_format_.field_enclosed_char_)) {
-        ret = OB_WRONG_FIELD_TERMINATORS;
-        LOG_WARN("invalid line terminator", K(ret));
-      } else if (!format.csv_format_.field_term_str_.empty()
-                  && (format.csv_format_.field_term_str_[0] == format.csv_format_.field_escaped_char_
-                      || format.csv_format_.field_term_str_[0] == format.csv_format_.field_enclosed_char_)) {
-        ret = OB_WRONG_FIELD_TERMINATORS;
-        LOG_WARN("invalid field terminator", K(ret));
-      }
-    }
   }
   return ret;
 }
@@ -3172,38 +2824,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
               column.add_column_flag(PAD_WHEN_CALC_GENERATED_COLUMN_FLAG);
             }
           }
-        }
-      }
-    } else if (is_external_table) {
-      //mock generated column
-      ObExternalFileFormat format;
-      format.format_type_ = external_table_format_type_;
-      if (format.format_type_ == ObExternalFileFormat::FormatType::ORC_FORMAT) {
-        ret = OB_NOT_SUPPORTED;
-      } else if (format.format_type_ == ObExternalFileFormat::FormatType::PARQUET_FORMAT) {
-        format.parquet_format_.column_index_type_ = column_index_type_;
-      }
-      ObString mock_gen_column_str;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(format.mock_gen_column_def(column, *allocator_, mock_gen_column_str))) {
-        LOG_WARN("fail to mock gen column def", K(ret));
-      } else {
-        ObObj default_value;
-        default_value.set_varchar(mock_gen_column_str);
-        default_value.set_collation_type(ObCharset::get_system_collation());
-        default_value.set_collation_level(CS_LEVEL_COERCIBLE);
-        if (OB_FAIL(column.set_cur_default_value(default_value, column.is_default_expr_v2_column()))) {
-          LOG_WARN("set current default value failed", K(ret));
-        } else {
-          column.add_column_flag(STORED_GENERATED_COLUMN_FLAG);
-          if (is_pad_char_to_full_length(session_info_->get_sql_mode())) {
-            column.add_column_flag(PAD_WHEN_CALC_GENERATED_COLUMN_FLAG);
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(mocked_external_table_column_ids_.add_member(column.get_column_id()))) {
-          LOG_WARN("fail to add bitset", K(ret));
         }
       }
     }
@@ -6414,7 +6034,7 @@ int ObDDLResolver::resolve_vec_index_constraint(
       LOG_WARN("vector index can only be built on vector column", K(ret), K(column_schema), K(ob_obj_type_class(column_schema.get_data_type())));
     } else if (!is_text_column && OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema.get_extended_type_info(), is_sparse_vec_col))) {
       LOG_WARN("fail to check is sparse vec col", K(ret));
-    } else if (!is_sparse_vec_col && !is_user_tenant()) {
+    } else if (!is_sparse_vec_col) {
 #ifndef OB_BUILD_SYS_VEC_IDX
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("sys tenant vector index not supported ", K(ret));

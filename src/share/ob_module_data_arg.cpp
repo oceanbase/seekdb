@@ -27,7 +27,6 @@ bool ObModuleDataArg::is_valid() const
 {
   return op_ > ObModuleDataArg::INVALID_OP
       && op_ < ObModuleDataArg::MAX_OP
-      && target_tenant_id_ != OB_INVALID_TENANT_ID
       && module_ > ObModuleDataArg::INVALID_MOD
       && module_ < ObModuleDataArg::MAX_MOD;
 }

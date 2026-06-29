@@ -79,12 +79,6 @@ public:
       const common::ObTabletID &tablet_id,
       const int64_t tablet_size,
       const int64_t hint_parallelism);
-  int split_task_ranges_remote(
-    const share::ObLSID &ls_id,
-    const common::ObTabletID &tablet_id,
-    const int64_t tablet_size,
-    const int64_t hint_parallelism,
-    const int64_t dest_schema_cg_cnt);
   bool is_valid() const
   {
     return true && true 

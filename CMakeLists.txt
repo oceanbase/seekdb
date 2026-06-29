@@ -159,12 +159,6 @@ cmake_dependent_option(
   "NOT OB_BUILD_PACKAGE" ON
 )
 
-# OB_BUILD_PACKAGE => build OB_BUILD_OBADMIN
-cmake_dependent_option(
-  OB_BUILD_OBADMIN "Build ob_admin" OFF
-  "NOT OB_BUILD_PACKAGE" ON
-)
-
 include(CTest)
 if (OB_BUILD_UNITTEST)
   add_subdirectory(unittest)

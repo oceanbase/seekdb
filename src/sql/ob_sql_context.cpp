@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_sql_context.h"
 
-#include "share/catalog/ob_catalog_meta_getter.h"
+#include "share/catalog/ob_cached_catalog_meta_getter.h"
 #include "share/catalog/ob_external_object_ctx.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/ob_sql_mock_schema_utils.h"
@@ -496,7 +496,7 @@ int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t catalog_id,
   if (OB_SUCC(ret) && OB_ISNULL(database_schema)) {
     // not found from local, find from catalog and push into catalog_database_schemas_
     ObDatabaseSchema tmp_schema;
-    ObCatalogMetaGetter catalog_meta_getter{*schema_guard_, allocator_};
+    ObCachedCatalogMetaGetter catalog_meta_getter{*schema_guard_, allocator_};
     // assign database id first
     tmp_schema.set_database_id(get_next_mocked_schema_id());
     if (OB_FAIL(catalog_meta_getter.fetch_namespace_schema(catalog_id, database_name, case_mode, tmp_schema))) {
@@ -564,7 +564,7 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t catalog_id,
     // not found local, fetch from remote
     ObTableSchema tmp_schema;
     int64_t schema_version = 0;
-    ObCatalogMetaGetter catalog_meta_getter{*schema_guard_, allocator_};
+    ObCachedCatalogMetaGetter catalog_meta_getter{*schema_guard_, allocator_};
     tmp_schema.set_database_id(database_id);
     tmp_schema.set_table_id(get_next_mocked_schema_id());
     if (OB_FAIL(catalog_meta_getter.fetch_table_schema(catalog_id, database_name, tbl_name, case_mode, tmp_schema))) {

@@ -420,28 +420,22 @@ private:
       const obcall::ObCreateTableArg &arg,
       share::schema::ObTableSchema &table_schema);
   int clear_special_cluster_schema_status();
-  int check_tenant_gts_config(const int64_t tenant_id, bool &tenant_gts_config_ok,
+  int check_tenant_gts_config(bool &tenant_gts_config_ok,
                               share::schema::ObSchemaGetterGuard &schema_guard);
-  int check_database_config(const int64_t tenant_id, bool &db_config_ok,
+  int check_database_config(bool &db_config_ok,
                             share::schema::ObSchemaGetterGuard &schema_guard);
-  int check_table_config(const int64_t tenant_id, bool &table_config_ok, bool &table_split_ok,
+  int check_table_config(bool &table_config_ok, bool &table_split_ok,
                          share::schema::ObSchemaGetterGuard &schema_guard,
                          const int64_t snapshot_schema_version);
-  int check_tablegroup_config(const int64_t tenant_id, bool &tablegroup_config_ok,
+  int check_tablegroup_config(bool &tablegroup_config_ok,
                               bool &tablegroup_split_ok,
                               share::schema::ObSchemaGetterGuard &schema_guard,
                               const int64_t snapshot_schema_version);
-  int check_restore_tenant_after_major_freeze(ObArray<ObString> &not_allow_reasons,
-                                              const int64_t snapshot_schema_version,
-                                              const ObArray<uint64_t> &tenant_ids);
   int get_tenants_created_after_snapshot(const int64_t snapshot_schema_version,
-                                         ObArray<uint64_t> &tenant_ids);
+                                         ObArray<uint64_t> &batch_ids);
   int query_ddl_table_after_major_freeze(int &row_cnt, int64_t &schema_version_cursor,
-                                         ObArray<uint64_t> &tenant_ids);
+                                         ObArray<uint64_t> &batch_ids);
   bool continue_check(const int ret);
-  inline static bool cmp_tenant_id(const uint64_t lhs, const uint64_t tenant_id) {
-    return lhs < tenant_id;
-  }
 
   int table_allow_ddl_operation(const obcall::ObAlterTableArg &arg);
   int get_table_schema(const common::ObString &database_name,

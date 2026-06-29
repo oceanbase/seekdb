@@ -86,8 +86,6 @@ DEF_SIMPLE_CMD_RESOLVER(ObFlushCacheResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObFlushKVCacheResolver);
 
-DEF_SIMPLE_CMD_RESOLVER(ObFlushSSMicroCacheResolver);
-
 DEF_SIMPLE_CMD_RESOLVER(ObFlushIlogCacheResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObFlushDagWarningsResolver);
@@ -95,12 +93,6 @@ DEF_SIMPLE_CMD_RESOLVER(ObFlushDagWarningsResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObAdminZoneResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObAdminMergeResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObAdminRecoveryResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObClearRootTableResolver);
-
-DEF_SIMPLE_CMD_RESOLVER(ObRefreshSchemaResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObRefreshMemStatResolver);
 
@@ -118,12 +110,8 @@ DEF_SIMPLE_CMD_RESOLVER(ObUpgradeVirtualSchemaResolver);
 
 DEF_SIMPLE_CMD_RESOLVER(ObCancelTaskResolver);
 
-DEF_SIMPLE_CMD_RESOLVER(ObDropTempTableResolver);
-DEF_SIMPLE_CMD_RESOLVER(ObRefreshTempTableResolver);
-
 DEF_SIMPLE_CMD_RESOLVER(ObAlterDiskgroupAddDiskResolver);
 DEF_SIMPLE_CMD_RESOLVER(ObAlterDiskgroupDropDiskResolver);
-DEF_SIMPLE_CMD_RESOLVER(ObCheckpointSlogResolver);
 
 class ObAlterSystemSetResolver : public ObSystemCmdResolver
 {

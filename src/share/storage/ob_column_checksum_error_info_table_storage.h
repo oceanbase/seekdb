@@ -19,8 +19,6 @@
 
 #include "share/storage/ob_sqlite_connection_pool.h"
 #include "lib/container/ob_iarray.h"
-#include "common/ob_tablet_id.h"
-#include "share/scn.h"
 
 namespace oceanbase
 {
@@ -44,8 +42,7 @@ public:
   int insert_all(const ObIArray<ObColumnChecksumErrorInfo> &error_infos);
 
   // Get column checksum error infos
-  int get(const uint64_t tenant_id,
-          const SCN &frozen_scn,
+  int get(const SCN &frozen_scn,
           const bool is_global_index,
           const int64_t data_table_id,
           const int64_t index_table_id,
@@ -54,7 +51,7 @@ public:
           ObIArray<ObColumnChecksumErrorInfo> &error_infos);
 
   // Delete expired error infos
-  int delete_expired(const uint64_t tenant_id, const SCN &frozen_scn_before, int64_t limit);
+  int delete_expired(const SCN &frozen_scn_before, int64_t limit);
 
 private:
   int create_table_if_not_exists();

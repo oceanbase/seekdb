@@ -64,7 +64,6 @@ const char* ObCacheRefHandleMgr::handle_name(const CacheRefHandleID handle_id)
     "lc_node_wr_handle",
     "lc_ref_cache_obj_stat_handle",
     "plan_baseline_handle",
-    "reserved_handle_134",
     "sql_plan_handle",
     "callstmt_handle",
     "pc_diag_handle",
@@ -84,4 +83,3 @@ const char* ObCacheRefHandleMgr::handle_name(const CacheRefHandleID handle_id)
 } // end namespace sql
 
 } // end namespace oceanbase
-

@@ -131,7 +131,6 @@ struct ObBackupEncryptionMode final
     MAX_MODE
   };
   static bool is_valid(const EncryptionMode &mode);
-  static bool is_valid_for_log_archive(const EncryptionMode &mode);
   static const char *to_str(const EncryptionMode &mode);
   static EncryptionMode parse_str(const char *str);
   static EncryptionMode parse_str(const common::ObString &str);

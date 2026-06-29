@@ -402,13 +402,6 @@ bool ObBackupEncryptionMode::is_valid(const EncryptionMode &mode)
 {
   return mode >= NONE && mode < MAX_MODE;
 }
-//TODO(yaoying.yyy): temporarily only supports tde, subsequent updates are needed
-bool ObBackupEncryptionMode::is_valid_for_log_archive(const EncryptionMode &mode)
-{
-  return (NONE == mode || TRANSPARENT_ENCRYPTION == mode);
-
-}
-
 const char *backup_encryption_strs[] =
 {
   "NONE",

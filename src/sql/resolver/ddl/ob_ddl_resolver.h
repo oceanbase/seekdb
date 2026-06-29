@@ -972,15 +972,6 @@ protected:
   int get_mv_container_table(const uint64_t mv_container_table_id,
                              const share::schema::ObTableSchema *&mv_container_table_schema,
                              common::ObString &mv_container_table_name);
-  int resolve_file_prefix(ObString &url,
-                          ObSqlString &prefix_str,
-                          common::ObStorageType &device_type,
-                          ObResolverParams &params);
-  int mask_properties_sensitive_info(const ParseNode *node,
-                                     ObString &ddl_sql,
-                                     ObIAllocator *allocator,
-                                     ObString &masked_sql);
-  int check_format_valid(const ObExternalFileFormat &format, bool &is_valid);
   static int trim_space_for_default_value(
       const bool is_mysql_mode,
       const bool is_char_type,

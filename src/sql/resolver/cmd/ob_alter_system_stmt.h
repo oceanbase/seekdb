@@ -19,7 +19,6 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_module_data_arg.h"
 #include "share/scheduler/ob_sys_task_stat.h"
 
 namespace oceanbase
@@ -135,16 +134,6 @@ public:
   int32_t file_id_;
 };
 
-class ObFlushSSMicroCacheStmt : public ObSystemCmdStmt
-{
-public:
-  ObFlushSSMicroCacheStmt() : ObSystemCmdStmt(stmt::T_FLUSH_SS_MICRO_CACHE) {}
-  virtual ~ObFlushSSMicroCacheStmt() {}
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_name));
-  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> tenant_name_;
-};
-
 class ObFlushDagWarningsStmt : public ObSystemCmdStmt
 {
 public:
@@ -164,45 +153,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
   obcall::ObAdminMergeArg rpc_arg_;
-};
-
-class ObAdminRecoveryStmt: public ObSystemCmdStmt
-{
-public:
-  ObAdminRecoveryStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RECOVERY) {}
-  virtual ~ObAdminRecoveryStmt() {}
-
-  obcall::ObAdminRecoveryArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obcall::ObAdminRecoveryArg rpc_arg_;
-};
-
-class ObClearRoottableStmt : public ObSystemCmdStmt
-{
-public:
-  ObClearRoottableStmt() : ObSystemCmdStmt(stmt::T_CLEAR_ROOT_TABLE) {}
-  virtual ~ObClearRoottableStmt() {}
-
-  obcall::ObAdminClearRoottableArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obcall::ObAdminClearRoottableArg rpc_arg_;
-};
-
-class ObRefreshSchemaStmt : public ObSystemCmdStmt
-{
-public:
-  ObRefreshSchemaStmt() : ObSystemCmdStmt(stmt::T_REFRESH_SCHEMA) {}
-  virtual ~ObRefreshSchemaStmt() {}
-
-  obcall::ObAdminRefreshSchemaArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obcall::ObAdminRefreshSchemaArg rpc_arg_;
 };
 
 class ObRefreshMemStatStmt : public ObSystemCmdStmt
@@ -404,23 +354,6 @@ public:
     {}
 };
 
-class ObCheckpointSlogStmt : public ObSystemCmdStmt
-{
-public:
-  ObCheckpointSlogStmt()
-    : ObSystemCmdStmt(stmt::T_CHECKPOINT_SLOG),
-      tenant_id_(common::OB_INVALID_TENANT_ID),
-      server_()
-  {}
-  virtual ~ObCheckpointSlogStmt() {}
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id), K_(server));
-
-  uint64_t tenant_id_;
-  common::ObAddr server_;
-};
-
-
-
 class ObResetConfigStmt : public ObSystemCmdStmt
 {
 public:
@@ -430,20 +363,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
   obcall::ObAdminSetConfigArg rpc_arg_;
-};
-
-class ObModuleDataStmt : public ObSystemCmdStmt
-{
-public:
-  ObModuleDataStmt() : ObSystemCmdStmt(stmt::T_MODULE_DATA), arg_() {}
-  virtual ~ObModuleDataStmt() {}
-
-  OB_INLINE table::ObModuleDataArg &get_arg() { return arg_; }
-  OB_INLINE const table::ObModuleDataArg &get_arg() const { return arg_; }
-  
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
-private:
-  table::ObModuleDataArg arg_;
 };
 
 } // end namespace sql

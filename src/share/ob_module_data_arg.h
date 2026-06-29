@@ -43,16 +43,14 @@ public:
   };
   ObModuleDataArg()
       : op_(ObInfoOpType::INVALID_OP),
-        target_tenant_id_(OB_INVALID_TENANT_ID),
         module_(ObExecModule::INVALID_MOD),
         file_path_()
   {}
   virtual ~ObModuleDataArg() {}
   bool is_valid() const;
-  TO_STRING_KV(K_(op), K_(target_tenant_id), K_(module), K_(file_path));
+  TO_STRING_KV(K_(op), K_(module), K_(file_path));
 
   ObInfoOpType op_;
-  uint64_t target_tenant_id_;
   ObExecModule module_;
   ObString file_path_;
 };

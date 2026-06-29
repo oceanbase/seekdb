@@ -36,14 +36,6 @@ namespace rootserver
 namespace common
 {
 
-enum ObLogArchiveKeywordIdx {
-  LOG_ARCHIVE_MANDATORY_IDX = 0,
-  LOG_ARCHIVE_OPTIONAL_IDX = 1,
-  LOG_ARCHIVE_COMPRESSION_IDX = 2,
-  LOG_ARCHIVE_ENCRYPTION_MODE_IDX = 3,
-  LOG_ARCHIVE_ENCRYPTION_ALGORITHM_IDX = 4,
-};
-
 enum ObConfigItemType{
   OB_CONF_ITEM_TYPE_UNKNOWN = -1,
   OB_CONF_ITEM_TYPE_BOOL = 0,
@@ -56,7 +48,6 @@ enum ObConfigItemType{
   OB_CONF_ITEM_TYPE_TIME = 7,
   OB_CONF_ITEM_TYPE_MOMENT = 8,
   OB_CONF_ITEM_TYPE_CAPACITY = 9,
-  OB_CONF_ITEM_TYPE_LOGARCHIVEOPT = 10,
   OB_CONF_ITEM_TYPE_VERSION = 11,
   OB_CONF_ITEM_TYPE_MODE = 12,
 };
@@ -72,7 +63,6 @@ static const char *const DATA_TYPE_INTLIST = "INT_LIST";
 static const char *const DATA_TYPE_TIME = "TIME";
 static const char *const DATA_TYPE_MOMENT = "MOMENT";
 static const char *const DATA_TYPE_CAPACITY = "CAPACITY";
-static const char *const DATA_TYPE_LOGARCHIVEOPT = "LOGARCHIVEOPT";
 static const char *const DATA_TYPE_VERSION = "VERSION";
 static const char *const DATA_TYPE_MODE = "MODE";
 
@@ -849,133 +839,6 @@ protected:
 private:
   const char *optional_values_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigStringItem);
-};
-
-//config item like "MANDATORY COMPRESSION=lz4_1.0"
-//or "MANDATORY COMPRESSION = lz4_1.0"
-
-class ObConfigLogArchiveOptionsItem
-  : public ObConfigItem
-{
-public:
-  ObConfigLogArchiveOptionsItem() {}
-  ObConfigLogArchiveOptionsItem(ObConfigContainer *container,
-                      Scope::ScopeInfo scope_info,
-                      const char *name,
-                      const char *def,
-                      const char *info,
-                      const ObParameterAttr attr = ObParameterAttr());
-  virtual ~ObConfigLogArchiveOptionsItem() {}
-
-  ObConfigLogArchiveOptionsItem &operator=(const char *str)
-  {
-    if (!set_value(str)) {
-      OB_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "obconfig log archive options item set value failed");
-    }
-    return *this;
-  }
-
-  //need reboot value need set it once startup, otherwise it will output current value
-  bool valid() const { return value_.valid_; }
-  bool is_mandatory() const {return value_.is_mandatory_;}
-  bool need_compress() const {return value_.is_compress_enabled_;}
-  common::ObCompressorType get_compressor_type() const
-  { return value_.compressor_type_; }
-
-  share::ObBackupEncryptionMode::EncryptionMode get_encryption_mode() const
-  {return value_.encryption_mode_;}
-
-  share::ObCipherOpMode get_encryption_algorithm() const
-  {return value_.encryption_algorithm_;}
-  virtual ObConfigItemType get_config_item_type() const {
-    return ObConfigItemType::OB_CONF_ITEM_TYPE_LOGARCHIVEOPT;
-  }
-public:
-  struct ObInnerConfigLogArchiveOptionsItem
-  {
-    ObInnerConfigLogArchiveOptionsItem()
-      : valid_(false), is_mandatory_(false),
-      is_compress_enabled_(false),
-      compressor_type_(common::INVALID_COMPRESSOR),
-      encryption_mode_(share::ObBackupEncryptionMode::NONE),
-      encryption_algorithm_(share::ObCipherOpMode::ob_invalid_mode)
-    {}
-    ~ObInnerConfigLogArchiveOptionsItem() {}
-
-    ObInnerConfigLogArchiveOptionsItem &operator = (const ObInnerConfigLogArchiveOptionsItem &value)
-    {
-      if (this == &value) {
-        //do nothing
-      } else {
-        valid_ = value.valid_;
-        is_mandatory_ = value.is_mandatory_;
-        is_compress_enabled_ = value.is_compress_enabled_;
-        compressor_type_ = value.compressor_type_;
-        encryption_mode_ = value.encryption_mode_;
-      }
-      return *this;
-    }
-
-    ObInnerConfigLogArchiveOptionsItem(const ObInnerConfigLogArchiveOptionsItem &value)
-    {
-      if (this == &value) {
-        //do nothing
-      } else {
-        valid_ = value.valid_;
-        is_mandatory_ = value.is_mandatory_;
-        is_compress_enabled_ = value.is_compress_enabled_;
-        compressor_type_ = value.compressor_type_;
-        encryption_mode_ = value.encryption_mode_;
-        encryption_algorithm_ = value.encryption_algorithm_;
-      }
-    }
-    TO_STRING_KV(K_(valid),
-                 K_(is_mandatory),
-                 K_(is_compress_enabled),
-                 K_(compressor_type),
-                 K_(encryption_mode),
-                 K_(encryption_algorithm));
-    int set_default_encryption_algorithm();
-    bool is_encryption_meta_valid() const;
-  public:
-    bool valid_;
-    bool is_mandatory_;
-    bool is_compress_enabled_;
-    common::ObCompressorType compressor_type_;
-    share::ObBackupEncryptionMode::EncryptionMode encryption_mode_;
-    share::ObCipherOpMode encryption_algorithm_;
-  };
-
-public:
-  static int64_t get_keywords_idx(const char *str, bool &is_key);
-  static int64_t get_compression_option_idx(const char *str);
-  static bool is_key_keyword(int64_t idx);
-  static int format_option_str(const char *src, int64_t src_len,
-                               char *dest, int64_t dest_len);
-  static bool is_valid_isolate_option(const int64_t idx);
-public:
-  struct ObInnerConfigLogArchiveOptionsItem value_;
-protected:
-  //use current value to do input operation
-  bool set(const char *str);
-
-  void process_isolated_option_(const int64_t idx);
-  void process_kv_option_(const int64_t key_idx, const char *value);
-
-  const char *value_ptr() const override
-  {
-    return value_str_;
-  }
-  uint64_t value_len() const override
-  {
-    return sizeof(value_str_);
-  }
-
-  static const uint64_t VALUE_BUF_SIZE = 2048UL;
-  char value_str_[VALUE_BUF_SIZE];
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigLogArchiveOptionsItem);
 };
 
 class ObConfigVersionItem

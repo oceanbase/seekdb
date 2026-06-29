@@ -54,6 +54,7 @@
 #include "storage/ob_file_system_router.h"
 #include "storage/tablelock/ob_table_lock_rpc_client.h"
 #include "share/stat/ob_opt_stat_manager.h" // for ObOptStatManager
+#include "share/catalog/ob_cached_catalog_meta_getter.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
 #include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
@@ -408,6 +409,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init ts mgr failed", KR(ret));
     } else if (OB_FAIL(ObTenantMutilAllocatorMgr::get_instance().init())) {
       LOG_ERROR("init ObTenantMutilAllocatorMgr failed", KR(ret));
+    } else if (OB_FAIL(ObCachedCatalogSchemaMgr::get_instance().init())) {
+      LOG_ERROR("init ObCachedCatalogSchemaMgr failed", KR(ret));
     } else if (OB_FAIL(startup_accel_handler_.init(SERVER_ACCEL))) {
       LOG_ERROR("init server startup task handler failed", KR(ret));
     } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {

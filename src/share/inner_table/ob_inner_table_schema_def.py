@@ -2868,7 +2868,7 @@ def_table_schema(
 # 396:__all_plan_baseline abandoned
 # 397:__all_plan_baseline_item abandoned
 # 398:__all_spm_config abandoned
-# 399:__all_log_archive_dest_parameter abandoned
+# 399: abandoned
 # 400:__all_backup_parameter abandoned
 # 401: __all_ls_restore_progress (abandoned)
 # 402: __all_ls_restore_history (abandoned)
@@ -7425,7 +7425,7 @@ def_table_schema(
   ('delete_row_count', 'int')
   ],  vtable_route_policy = 'local'
   )
-# 12304: __all_virtual_log_archive_dest_parameter (abandoned)
+# 12304: abandoned
 # 12305: __all_virtual_backup_parameter (abandoned)
 # 12306: __all_virtual_restore_job  (abandoned)
 # 12307: __all_virtual_restore_job_history (abandoned)

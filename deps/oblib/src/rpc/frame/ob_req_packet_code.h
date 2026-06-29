@@ -50,17 +50,7 @@ enum ObReqPacketCode : int32_t
 {
   OB_INVALID_RPC_CODE = 0,
 
-  // diagnostics placeholder (libeasy mem pool labels)
-  OB_TEST2_PCODE = 0x002,
-
-  // DDL parallel queue routing tags (ob_srv_deliver dead-path classifier)
-  OB_TRUNCATE_TABLE_V2          = 0x225,
-  OB_PARALLEL_CREATE_TABLE      = 0x276,
-  OB_PARALLEL_CREATE_INDEX      = 0x278,
-  OB_PARALLEL_DROP_TABLE        = 0x27A,
-  OB_PARALLEL_SET_COMMENT       = 0x277,
-  OB_PARALLEL_UPDATE_INDEX_STATUS = 0x279,
-  // 0x27C is reserved for a removed RPC.
+  // 0x002, 0x225, 0x276-0x27A, and 0x27C are reserved for removed packet codes.
 
   // CDC / logfetcher type-binding tags
   OB_LS_FETCH_MISSING_LOG  = 0x851,

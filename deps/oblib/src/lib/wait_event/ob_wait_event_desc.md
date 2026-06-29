@@ -204,10 +204,6 @@ The read and write operation on tenant map in global io manager instance should 
 
 The read and write operation on diagnose info in global io detector instance should be mutually exclusive.
 
-## latch: reserved lock 242
-
-Reserved for a removed latch id.
-
 ## spinlock: palf sw last submit log info lock wait
 
 The read and write operation on last submit log info in sliding window of palf should be mutually exclusive.

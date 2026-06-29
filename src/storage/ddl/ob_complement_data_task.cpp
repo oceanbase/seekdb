@@ -232,7 +232,6 @@ int ObComplementDataParam::init(const ObDDLBuildSingleReplicaRequestArg &arg)
 int ObComplementDataParam::prepare_task_ranges()
 {
   int ret = OB_SUCCESS;
-  const bool is_remote_exec = false; // task type
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -251,17 +250,11 @@ int ObComplementDataParam::prepare_task_ranges()
         concurrent_cnt_ = 1;
         LOG_INFO("succeed to to init task ranges", K(ret), K(user_parallelism_), K(concurrent_cnt_), K(ranges_));
       }
-    } else if (!is_remote_exec && OB_FAIL(split_task_ranges(task_id_,
-                                                            orig_ls_id_,
-                                                            orig_tablet_id_,
-                                                            orig_schema_tablet_size_,
-                                                            user_parallelism_))) {
-      LOG_WARN("fail to init task ranges", K(ret), KPC(this));
-    } else if (is_remote_exec && OB_FAIL(split_task_ranges_remote(orig_ls_id_,
-                                                                  orig_tablet_id_,
-                                                                  orig_schema_tablet_size_,
-                                                                  user_parallelism_,
-                                                                  dest_schema_cg_cnt_))) {
+    } else if (OB_FAIL(split_task_ranges(task_id_,
+                                         orig_ls_id_,
+                                         orig_tablet_id_,
+                                         orig_schema_tablet_size_,
+                                         user_parallelism_))) {
       LOG_WARN("fail to init task ranges", K(ret), KPC(this));
     }
   }
@@ -312,75 +305,6 @@ int ObComplementDataParam::split_task_ranges(
       if (OB_SUCC(ret)) {
         concurrent_cnt_ = ranges_.count();
         FLOG_INFO("succeed to get concurrent cnt", K(ret), K(task_id), K(tablet_id));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObComplementDataParam::split_task_ranges_remote(
-  const share::ObLSID &src_ls_id,
-  const common::ObTabletID &src_tablet_id,
-  const int64_t tablet_size,
-  const int64_t hint_parallelism,
-  const int64_t dest_schema_cg_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(false
-    ||!src_ls_id.is_valid() || !src_tablet_id.is_valid() || tablet_size <= 0 || dest_schema_cg_cnt <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(src_ls_id), K(src_tablet_id), K(tablet_size),
-      K(dest_schema_cg_cnt));
-  } else {
-    common::ObAddr src_leader_addr;
-    share::ObLocationService *location_service = nullptr;
-    obcall::ObPrepareSplitRangesArg arg;
-    obcall::ObPrepareSplitRangesRes result;
-    arg.ls_id_ = src_ls_id;
-    arg.tablet_id_ = src_tablet_id;
-    arg.user_parallelism_ = MIN(MIN(MAX(hint_parallelism, 1), MAX_RPC_STREAM_WAIT_THREAD_COUNT),
-      ObMacroDataSeq::MAX_PARALLEL_IDX + 1);
-    /* cs replica current impl is invisible for complement data dag, cs replica will reply
-     * ddl row store clog. Currently, only column store table need fill column cgroup.
-     * To avoid the issue of column store write space enlargement:
-     * Firstly, we set the parallel subtask size according to the following rules:
-     *  1.row store table min task is 2MB
-     *  2.column store table min task is 4MB * table_store_cg_cnt
-     * Secondly, we aggregated 1000000 row slice write in calc_range task. */
-     arg.schema_tablet_size_ = ROW_TABLE_PARALLEL_MIN_TASK_SIZE;
-    arg.ddl_type_ = ObDDLType::DDL_TABLE_REDEFINITION;
-    const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-    const int64_t retry_interval_us = 200 * 1000; // 200ms
-    /* recover table partition data complete: dest leader server send rpc to src leader server */
-    MOD_SCOPE {
-      if (OB_ISNULL(location_service = GCTX.location_service_)) {
-        ret = OB_ERR_SYS;
-        LOG_WARN("location_cache is null", K(ret), KP(location_service));
-      } else if (OB_FAIL(location_service->get_leader_with_retry_until_timeout(GCONF.cluster_id, src_ls_id, src_leader_addr, rpc_timeout, retry_interval_us))) {
-        LOG_WARN("fail to get ls locaiton leader", K(ret), K(src_ls_id));
-      }
-    }
-    if (OB_SUCC(ret)){
-      if (OB_ISNULL(GCTX.ob_service_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ob_service is null", K(ret));
-      } else if (OB_FAIL(ex_rpc::sync_call(rpc_timeout, [&]{
-        return GCTX.ob_service_->prepare_tablet_split_task_ranges(arg, result);
-      }))) {
-        LOG_WARN("failed to prepare tablet split task ranges", K(ret), K(arg));
-      } else if (OB_FAIL(ObTabletSplitUtil::convert_datum_rowkey_to_range(
-        allocator_, result.parallel_datum_rowkey_list_, ranges_))) {
-        LOG_WARN("convert to range failed", K(ret), "parall_info", result.parallel_datum_rowkey_list_);
-      } else if (ranges_.empty()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected range split array", K(ret), K(ranges_));
-      } else {
-        concurrent_cnt_ = ranges_.count();
-        LOG_INFO("succeed to get range and concurrent cnt", K(ret), K(hint_parallelism),
-          K(tablet_size), K(concurrent_cnt_), K(ranges_), K(result));
       }
     }
   }

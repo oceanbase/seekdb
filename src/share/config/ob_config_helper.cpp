@@ -480,88 +480,6 @@ bool ObConfigWorkAreaPolicyChecker::check(const ObConfigItem &t) const
   return ((0 == tmp_str.case_compare(MANUAL)) || (0 == tmp_str.case_compare(AUTO)));
 }
 
-bool ObConfigLogArchiveOptionsChecker::check(const ObConfigItem &t) const
-{
-  bool bret = true;
-  int ret = OB_SUCCESS;
-  SMART_VAR(char[OB_MAX_CONFIG_VALUE_LEN], tmp_str) {
-    const size_t str_len = STRLEN(t.str());
-    MEMCPY(tmp_str, t.str(), str_len);
-    tmp_str[str_len] = 0;
-    const int64_t FORMAT_BUF_LEN = str_len * 3;// '=' will be replaced with ' = '
-    char format_str_buf[FORMAT_BUF_LEN];
-    int ret = OB_SUCCESS;
-    //first replace '=' with ' = '
-    if (OB_FAIL(ObConfigLogArchiveOptionsItem::format_option_str(tmp_str,
-                                                                 str_len,
-                                                                 format_str_buf,
-                                                                 FORMAT_BUF_LEN))) {
-      bret = false;
-      OB_LOG(WARN, "failed to format_option_str", KR(bret), K(tmp_str));
-    } else {
-      char *saveptr = NULL;
-      char *s = STRTOK_R(format_str_buf, " ", &saveptr);
-      bool is_equal_sign_demanded = false;
-      int64_t key_idx = -1;
-      if (OB_LIKELY(NULL != s)) {
-        do {
-          if (is_equal_sign_demanded) {
-            if (0 == ObString::make_string("=").case_compare(s)) {
-              is_equal_sign_demanded = false;
-            } else {
-              OB_LOG(WARN, " '=' is expected", K(s));
-              bret = false;
-            }
-          } else if (key_idx < 0) {
-            int64_t idx = ObConfigLogArchiveOptionsItem::get_keywords_idx(s, is_equal_sign_demanded);
-            if (idx < 0) {
-              bret = false;
-              OB_LOG(WARN, " not expected isolate option", K(s));
-            } else if (is_equal_sign_demanded) {
-              key_idx = idx;
-            } else {
-              key_idx = -1;
-              bret = ObConfigLogArchiveOptionsItem::is_valid_isolate_option(idx);
-            }
-          } else if (LOG_ARCHIVE_COMPRESSION_IDX == key_idx) {
-            if (-1 == ObConfigLogArchiveOptionsItem::get_compression_option_idx(s)) {
-              OB_LOG(WARN, "failed to get_compression_option_idx", K(key_idx), K(s));
-              bret = false;
-            }
-            key_idx = -1;
-          } else if (LOG_ARCHIVE_ENCRYPTION_MODE_IDX == key_idx) {
-            ObBackupEncryptionMode::EncryptionMode mode = ObBackupEncryptionMode::parse_str(s);
-            if (!ObBackupEncryptionMode::is_valid_for_log_archive(mode)) {
-              OB_LOG(WARN, "invalid encrytion mode", K(mode));
-              bret = false;
-            }
-            key_idx = -1;
-          } else if (LOG_ARCHIVE_ENCRYPTION_ALGORITHM_IDX == key_idx) {
-            share::ObCipherOpMode encryption_algorithm;
-            if (OB_FAIL(ObEncryptionUtil::parse_encryption_algorithm(s, encryption_algorithm))) {
-              bret = false;
-              OB_LOG(WARN, "invalid encrytion algorithm", K(s));
-            }
-            key_idx = -1;
-          } else {
-            OB_LOG(WARN, "invalid key_idx", K(key_idx), K(s));
-            bret = false;
-          }
-        } while (OB_LIKELY(NULL != (s = STRTOK_R(NULL, " ", &saveptr))) && bret);
-
-        if (key_idx >= 0) {
-          bret = false;
-          OB_LOG(WARN, "kv option is not compelte", K(tmp_str));
-        }
-      } else {
-        bret = false;
-        OB_LOG(WARN, "invalid config value", K(tmp_str));
-      }
-    }
-  }
-  return bret;
-}
-
 bool ObConfigRpcChecksumChecker::check(const ObConfigItem &t) const
 {
   common::ObString tmp_string(t.str());
@@ -1208,14 +1126,6 @@ bool ObConfigDDLNoLoggingChecker::check(const obcall::ObAdminSetConfigItem &t) {
     is_valid = false;
   }
   return is_valid;
-}
-
-bool ObConfigArchiveLagTargetChecker::check(const ObAdminSetConfigItem &t)
-{
-  // Log archive removed, log_archive_dest can never be set
-  UNUSED(t);
-  LOG_USER_ERROR(OB_OP_NOT_ALLOW, "log_archive_dest has not been set, set archive_lag_target is");
-  return false;
 }
 
 bool ObConfigSQLSpillCompressionCodecChecker::check(const ObConfigItem &t) const

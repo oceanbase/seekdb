@@ -507,6 +507,7 @@ ob_set_subtarget(ob_share stat
 ob_set_subtarget(ob_share catalog
   catalog/ob_catalog_properties.cpp
   catalog/ob_external_catalog.cpp
+  catalog/ob_cached_catalog_meta_getter.cpp
   catalog/ob_catalog_meta_getter.cpp
   catalog/ob_catalog_utils.cpp
 )
