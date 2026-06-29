@@ -112,10 +112,6 @@ int light_backtrace(void **buffer, int size, int64_t rbp)
 #endif
 }
 
-void init_proc_map_info()
-{
-}
-
 int64_t get_rel_offset(int64_t addr)
 {
   // seekdb is built as a non-PIE (ET_EXEC) executable; backtrace addresses are

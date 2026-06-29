@@ -115,7 +115,6 @@ void  __attribute__((constructor(MALLOC_INIT_PRIORITY))) init_global_memory_pool
   in_hook()= true;
   global_default_allocator = ObMallocAllocator::get_instance();
   in_hook()= false;
-  init_proc_map_info();
 #ifdef ENABLE_SANITY
   abort_unless(init_sanity());
 #endif
