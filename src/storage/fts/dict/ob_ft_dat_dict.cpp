@@ -1,24 +1,13 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
@@ -32,6 +21,14 @@ namespace oceanbase
 namespace storage
 {
 template <typename DATA_TYPE>
+void ObFTDATBuilder<DATA_TYPE>::update_max_used_index(const size_t idx)
+{
+  if (idx > max_used_index_) {
+    max_used_index_ = idx;
+  }
+}
+
+template <typename DATA_TYPE>
 int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
 {
   int ret = OB_SUCCESS;
@@ -39,7 +36,7 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
     ret = OB_INIT_TWICE;
     LOG_WARN("Builder has already inited", K(ret));
   } else {
-    size_t map_size = ObArrayHashMap::estimate_size(trie.node_num());
+    size_t map_size = ObArrayHashMap::calc_memory_size(trie.node_num());
     size_t array_size = trie.node_num() * 6; // by experience.
     size_t base_size = array_size * sizeof(int32_t);
     size_t check_size = base_size;
@@ -57,6 +54,9 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
       map_ = dat_->get_map();
       if (OB_FAIL(map_->init(trie.node_num()))) {
         LOG_WARN("fail to init map", K(ret));
+      } else {
+        max_used_index_ = ObFTDAT::FIRST_INDEX;
+        is_inited_ = true;
       }
     }
   }
@@ -83,14 +83,14 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
     trie.root()->dat_build_info_.state_index_ = ObFTDAT::FIRST_BASE;
     dfs_queue.push_back(trie.root());
 
-    int next_base_offset = 0;
-    int level = 1;
+    size_t next_base_offset = 0;
+    int32_t level = 1;
 
     while (OB_SUCC(ret) && !dfs_queue.empty()) {
       ObFTTrieNode<DATA_TYPE> *node = dfs_queue.get_first();
       dfs_queue.pop_front();
 
-      int rootIdx = node->dat_build_info_.state_index_;
+      const int32_t rootIdx = static_cast<int32_t>(node->dat_build_info_.state_index_);
 
       // mark as leaf
       if (node->is_leaf_) {
@@ -102,56 +102,89 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
         next_base_offset = 0;
       }
 
+      update_max_used_index(static_cast<size_t>(rootIdx));
+
       if (node->is_empty()) {
         // nothing
       } else {
-        int try_base = 1;
-        try_base += next_base_offset;
-        int start = try_base;
-        bool need_code = true;
-        int try_step = 1;
+        size_t try_base = 1;
+        size_t start = 0;
+        bool slot_found = false;
+        while (OB_SUCC(ret) && !slot_found) {
+          try_base = 1;
+          try_base += next_base_offset;
+          start = try_base;
+          bool need_code = true;
+          size_t try_step = 1;
 
-        for (; try_base < dat_->array_size_; try_base += try_step) {
-          bool conflict = false;
+          for (; try_base < dat_->array_size_; try_base += try_step) {
+            bool conflict = false;
 
-          if (node->is_empty()) {
-          } else {
-            for (typename ObList<NodeIndex, ObIAllocator>::iterator iter = node->children_->begin();
-                 iter != node->children_->end();
-                 ++iter) {
-              ObFTWordCode child_code;
-              NodeIndex &child_index = *iter;
-              if (need_code) {
-                if (OB_FAIL(encode(child_index.word_.get_word(), child_code, true))) {
-                  LOG_WARN("Failed to encode");
-                  break;
+            if (node->is_empty()) {
+            } else {
+              for (typename ObList<NodeIndex, ObIAllocator>::iterator iter = node->children_->begin();
+                   iter != node->children_->end();
+                   ++iter) {
+                ObFTTokenCode child_code;
+                NodeIndex &child_index = *iter;
+                if (need_code) {
+                  if (OB_FAIL(encode(child_index.token_.get_token(), child_code))) {
+                    LOG_WARN("Failed to encode");
+                    break;
+                  }
+                  child_index.child_->dat_build_info_.code_ = child_code;
                 }
-                child_index.child_->dat_build_info_.code_ = child_code;
+                child_code = child_index.child_->dat_build_info_.code_;
+                if (try_base + child_code >= dat_->array_size_) {
+                  const size_t need_array_size = try_base + child_code + 1;
+                  if (OB_FAIL(expand(need_array_size))) {
+                    LOG_WARN("Failed to expand dat array", K(ret), K(need_array_size));
+                    break;
+                  } else {
+                    base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
+                    check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
+                  }
+                }
+                if (OB_FAIL(ret)) {
+                  break;
+                } else if (check[try_base + child_code] != 0) {
+                  conflict = true;
+                }
               }
-              child_code = child_index.child_->dat_build_info_.code_;
-              if (check[try_base + child_code] != 0) {
-                conflict = true;
+            }
+
+            if (OB_FAIL(ret)) {
+            } else {
+              need_code = false;
+
+              if (!conflict) {
+                if (node->is_leaf_) {
+                  base[rootIdx] = -static_cast<int32_t>(try_base);
+                } else {
+                  base[rootIdx] = try_base;
+                }
+                slot_found = true;
+                break;
+              }
+              try_step = MAX(1, (try_base - start) / 20);
+              if (try_step > MAX_TRY_STEP) {
+                try_step = MAX_TRY_STEP;
               }
             }
           }
 
           if (OB_FAIL(ret)) {
-          } else {
-            need_code = false;
-
-            if (!conflict) {
-              if (node->is_leaf_) {
-                base[rootIdx] = -try_base;
-              } else {
-                base[rootIdx] = try_base;
-              }
-              break;
+          } else if (!slot_found) {
+            if (OB_FAIL(expand())) {
+              LOG_WARN("Failed to expand dat array", K(ret), K(dat_->array_size_));
+            } else {
+              base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
+              check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
             }
-            try_step = MAX(1, (try_base - start) / 20);
           }
         }
 
-        if (OB_FAIL(ret) || try_base >= dat_->array_size_) {
+        if (OB_FAIL(ret)) {
           break;
         } else {
           // try_average_.add(try_base + 1 - start);
@@ -165,16 +198,25 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
                  iter != node->children_->end();
                  iter++) {
               typename ObFTTrieNode<DATA_TYPE>::NodeIndex &child_index = *iter;
-              int my_index = abs(try_base) + child_index.child_->dat_build_info_.code_;
+              const size_t my_index =
+                  try_base + child_index.child_->dat_build_info_.code_;
               // max_used = MAX(max_used, my_index);
 
               if (my_index >= dat_->array_size_) {
-                expand();
-                base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
-                check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
+                if (OB_FAIL(expand(my_index + 1))) {
+                  LOG_WARN("Failed to expand dat array", K(ret), K(my_index), K(dat_->array_size_));
+                } else {
+                  base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
+                  check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
+                }
               }
-              child_index.child_->dat_build_info_.state_index_ = my_index;
+              if (OB_FAIL(ret)) {
+                break;
+              }
+              child_index.child_->dat_build_info_.state_index_ =
+                  static_cast<uint32_t>(my_index);
               check[my_index] = rootIdx;
+              update_max_used_index(my_index);
               dfs_queue.push_back(child_index.child_);
             }
           }
@@ -185,12 +227,14 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
 
     if (OB_FAIL(ret)) {
       // already logged
-    } else if (OB_FAIL(trie.get_start_word(dat_->start_word_))) {
-      LOG_WARN("fail to get start word", K(ret));
-    } else if (OB_FAIL(trie.get_end_word(dat_->end_word_))) {
-      LOG_WARN("fail to get end word", K(ret));
+    } else if (OB_FAIL(shrink())) {
+      LOG_WARN("Failed to shrink dat mem block", K(ret));
+    } else if (OB_FAIL(trie.get_start_token(dat_->start_token_))) {
+      LOG_WARN("fail to get start token", K(ret));
+    } else if (OB_FAIL(trie.get_end_token(dat_->end_token_))) {
+      LOG_WARN("fail to get end token", K(ret));
     }
-    LOG_INFO("build dat finished", K(dat_->start_word_.get_word()), K(dat_->end_word_.get_word()));
+    LOG_INFO("finish build ft dat", K(dat_->start_token_.get_token()), K(dat_->end_token_.get_token()));
 
     dfs_queue.reset();
     alloc.reset();
@@ -200,27 +244,36 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
 }
 
 template <typename DATA_TYPE>
-int ObFTDATBuilder<DATA_TYPE>::expand()
+int ObFTDATBuilder<DATA_TYPE>::expand(const size_t min_array_size)
 {
   int ret = OB_SUCCESS;
-  size_t array_size = dat_->array_size_;
-  size_t base_inc = array_size * sizeof(int32_t);
-  size_t check_inc = array_size * sizeof(int32_t);
-  size_t buffer_size = dat_->mem_block_size_ + base_inc + check_inc;
+  const size_t array_size = dat_->array_size_;
+  size_t new_array_size = array_size * 2;
+  const size_t capped_size = array_size + MAX_EXPAND_SLOT_INCREMENT;
+  if (capped_size < new_array_size) {
+    new_array_size = capped_size;
+  }
+  if (new_array_size < min_array_size) {
+    new_array_size = min_array_size;
+  }
+  const size_t base_inc = (new_array_size - array_size) * sizeof(int32_t);
+  const size_t check_inc = (new_array_size - array_size) * sizeof(int32_t);
+  const size_t buffer_size = dat_->mem_block_size_ + base_inc + check_inc;
 
   ObFTDAT *new_dat = nullptr;
   if (OB_ISNULL(new_dat = static_cast<ObFTDAT *>(alloc_.alloc(buffer_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Failed to alloc dat mem block on expand", K(ret), K(buffer_size), K(new_array_size));
   } else {
     memset(new_dat, 0, buffer_size);
     new_dat->mem_block_size_ = buffer_size;
-    new_dat->array_size_ = array_size * 2;
+    new_dat->array_size_ = new_array_size;
     new_dat->base_offset_ = dat_->base_offset_;
     new_dat->check_offset_ = dat_->check_offset_ + base_inc;
     // map and base
-    MEMCPY(new_dat->buff, dat_->buff, dat_->check_offset_ - 0);
+    MEMCPY(new_dat->buff, dat_->buff, dat_->check_offset_);
     // check
-    size_t check_size = array_size * sizeof(int32_t);
+    const size_t check_size = array_size * sizeof(int32_t);
     MEMCPY(new_dat->buff + new_dat->check_offset_, dat_->buff + dat_->check_offset_, check_size);
     alloc_.free(dat_);
     dat_ = new_dat;
@@ -230,25 +283,65 @@ int ObFTDATBuilder<DATA_TYPE>::expand()
 }
 
 template <typename DATA_TYPE>
-int ObFTDATBuilder<DATA_TYPE>::encode(const ObString &word, ObFTWordCode &code, bool add)
+int ObFTDATBuilder<DATA_TYPE>::shrink()
 {
   int ret = OB_SUCCESS;
-  ObFTWordCode code_value;
-  ObFTSingleWord single_word;
-  single_word.set_word(word.ptr(), word.length());
-  ret = map_->find(single_word, code);
-  if (OB_ENTRY_NOT_EXIST == ret) {
-    if (add) {
-      code = next_code_++;
-      ret = map_->insert(word, code);
-      if (OB_SUCCESS != ret) {
-        LOG_WARN("fail to insert word code", K(ret));
-      }
-    } else {
-      // do nothing
-    }
+  if (OB_ISNULL(dat_) || OB_ISNULL(dat_->buff)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("dat_ or dat_->buff is null on shrink", K(ret));
   } else {
-    // nothing
+    const size_t compact_array_size = max_used_index_ + 1;
+    if (compact_array_size >= dat_->array_size_
+        || dat_->array_size_ < compact_array_size * SHRINK_WASTE_RATIO) {
+      // Trailing waste is not significant enough to pay for a copy.
+    } else {
+      const size_t map_size = dat_->base_offset_;
+      const size_t compact_base_size = compact_array_size * sizeof(int32_t);
+      const size_t compact_check_size = compact_array_size * sizeof(int32_t);
+      const size_t new_buffer_size =
+          sizeof(ObFTDAT) + map_size + compact_base_size + compact_check_size;
+      const int64_t old_mem_block_size = dat_->mem_block_size_;
+      const size_t old_array_size = dat_->array_size_;
+
+      ObFTDAT *new_dat = nullptr;
+      if (OB_ISNULL(new_dat = static_cast<ObFTDAT *>(alloc_.alloc(new_buffer_size)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("Failed to alloc shrunk dat mem block", K(ret), K(new_buffer_size));
+      } else {
+        MEMCPY(new_dat, dat_, sizeof(ObFTDAT) - 1 + map_size);
+        MEMCPY(new_dat->buff + map_size,
+               dat_->buff + dat_->base_offset_,
+               compact_base_size);
+        MEMCPY(new_dat->buff + map_size + compact_base_size,
+               dat_->buff + dat_->check_offset_,
+               compact_check_size);
+        new_dat->mem_block_size_ = static_cast<int64_t>(new_buffer_size);
+        new_dat->array_size_ = compact_array_size;
+        new_dat->base_offset_ = map_size;
+        new_dat->check_offset_ = map_size + compact_base_size;
+        alloc_.free(dat_);
+        dat_ = new_dat;
+        map_ = dat_->get_map();
+        LOG_INFO("shrink ft dat mem block",
+                 K(old_mem_block_size), K(new_dat->mem_block_size_),
+                 K(old_array_size), K(compact_array_size), K(max_used_index_));
+      }
+    }
+  }
+  return ret;
+}
+
+template <typename DATA_TYPE>
+int ObFTDATBuilder<DATA_TYPE>::encode(const ObString &single_token, ObFTTokenCode &code)
+{
+  int ret = OB_SUCCESS;
+  ret = map_->find(single_token, code);
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    code = next_code_++;
+    ret = map_->insert(single_token, code);
+    if (OB_SUCCESS != ret) {
+      LOG_WARN("fail to insert token code", K(ret));
+    }
   }
   return ret;
 }
@@ -259,16 +352,13 @@ int ObFTDATReader<DATA_TYPE>::match_with_hit(const ObString &ft_char,
                                              ObDATrieHit &hit) const
 {
   int ret = OB_SUCCESS;
-  ObFTWordCode code;
+  ObFTTokenCode code;
   hit.set_unmatch();
-  auto *map = dat_->get_map();
-  int32_t *base = reinterpret_cast<int32_t *>(dat_->buff + dat_->base_offset_);
-  int32_t *check = reinterpret_cast<int32_t *>(dat_->buff + dat_->check_offset_);
+  const int32_t *base = reinterpret_cast<const int32_t *>(dat_->buff + dat_->base_offset_);
+  const int32_t *check = reinterpret_cast<const int32_t *>(dat_->buff + dat_->check_offset_);
 
-  ObFTSingleWord word;
-  word.set_word(ft_char.ptr(), ft_char.length());
-  if (OB_FAIL(dat_->get_map()->find(word, code)) && OB_ENTRY_NOT_EXIST != ret) {
-    LOG_WARN("fail to find word code", K(ret));
+  if (OB_FAIL(map_->find(ft_char, code)) && OB_ENTRY_NOT_EXIST != ret) {
+    LOG_WARN("fail to find token code", K(ret));
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     hit.set_unmatch();
@@ -306,65 +396,65 @@ template class ObFTDATBuilder<void>;
 template class ObFTDATReader<void>;
 
 ObArrayHashMap *ObFTDAT::get_map() { return reinterpret_cast<ObArrayHashMap *>(buff); }
+const ObArrayHashMap *ObFTDAT::get_map() const { return reinterpret_cast<const ObArrayHashMap *>(buff); }
 
-int ObArrayHashMap::find(const ObFTSingleWord &word, ObFTWordCode &code) const
+int ObArrayHashMap::find(const ObString &token, ObFTTokenCode &code) const
 {
   int ret = OB_ENTRY_NOT_EXIST;
-  uint64_t hash = word.get_word().hash();
-  uint64_t index = hash % header_.capacity_;
-  while (header_.data[index].used) {
-    if (header_.data[index].word == word) {
-      code = header_.data[index].code;
+  uint64_t hash = token.hash();
+  uint64_t idx = hash & header_.locator_;
+  while (header_.data[idx].used) {
+    if (header_.data[idx].token.get_token() == token) {
+      code = header_.data[idx].code;
       ret = OB_SUCCESS;
       break;
     } else {
-      index = (index + 3) % header_.capacity_;
+      idx = (idx + 3) & header_.locator_;
     }
   }
   return ret;
 }
 
-int ObArrayHashMap::insert(const ObString &key, ObFTWordCode code)
+int ObArrayHashMap::insert(const ObString &token, ObFTTokenCode code)
 {
   int ret = OB_SUCCESS;
-  uint64_t hash = key.hash();
-  uint64_t index = hash % header_.capacity_;
+  uint64_t hash = token.hash();
+  uint64_t index = hash & header_.locator_;
   while (header_.data[index].used) {
-    index = (index + 3) % header_.capacity_;
+    index = (index + 3) & header_.locator_;
   }
-
   header_.data[index].code = code;
-  header_.data[index].word.set_word(key.ptr(), key.length());
+  header_.data[index].token.set_token(token.ptr(), token.length());
   header_.data[index].used = true;
   header_.count_++;
   return ret;
 }
 
-int ObArrayHashMap::init(size_t word_num)
+int ObArrayHashMap::init(size_t token_cnt)
 {
   int ret = OB_SUCCESS;
-  size_t capacity = estimate_capacity(word_num);
-  size_t size = estimate_size(word_num);
-
+  size_t capacity = calc_capacity(token_cnt);
+  size_t size = calc_memory_size(token_cnt);
   memset(this, 0, size);
   header_.buffer_size_ = size;
   header_.capacity_ = capacity;
   header_.count_ = 0;
+  header_.locator_ = capacity - 1;
   return OB_SUCCESS;
 }
 
-size_t ObArrayHashMap::estimate_size(size_t word_num)
+size_t ObArrayHashMap::calc_memory_size(size_t token_cnt)
 {
-  size_t capacity = estimate_capacity(word_num);
+  size_t capacity = calc_capacity(token_cnt);
   size_t size = sizeof(Header) + capacity * sizeof(Entry);
   return size;
 }
 
-size_t ObArrayHashMap::estimate_capacity(size_t word_num)
+size_t ObArrayHashMap::calc_capacity(size_t token_cnt)
 {
-  constexpr size_t MIN_CAPACITY = 101;                   // prime
-  size_t capacity = MAX(word_num * 4 / 3, MIN_CAPACITY); // 75%
-  return capacity;
+  const int64_t capacity_power = 64 - __builtin_clzll(static_cast<size_t>(token_cnt + 1));
+  return static_cast<size_t>(1) << (capacity_power + 1);
 }
+
 } //  namespace storage
 } //  namespace oceanbase

@@ -20,13 +20,14 @@
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "share/stat/ob_opt_stat_manager.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
@@ -3259,10 +3260,11 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 4> valid_index_ids; // all valid indexes
   ObSEArray<ObSEArray<uint64_t, 4>, 4> valid_index_cols; // column ids in the valid indexes
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   is_match_hint = false;
-  if (OB_ISNULL(get_plan()) || OB_UNLIKELY(!true)) {
+  if (OB_ISNULL(get_plan()) || OB_UNLIKELY(!tenant_config.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid plan or tenant config", K(ret), K(get_plan()), K(true));
+    LOG_WARN("get invalid plan or tenant config", K(ret), K(get_plan()), K(tenant_config.is_valid()));
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,
                                                    valid_index_ids,
@@ -3283,7 +3285,7 @@ int ObJoinOrder::get_candi_index_merge_trees(const uint64_t table_id,
     OPT_TRACE("generate", candi_index_trees.count(), "candi index merge trees using hint");
     LOG_TRACE("generate candi index merge trees using hint", K(table_id), K(candi_index_trees));
   } else if (get_plan()->get_log_plan_hint().is_outline_data_
-             || (!GCONF._enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
+             || (!tenant_config->_enable_index_merge && OB_LIKELY(!EN_FORCE_INDEX_MERGE_PLAN))) {
     OPT_TRACE("can not create index merge paths due to outline or tenant config");
   } else if (OB_FAIL(get_valid_index_merge_indexes(table_id,
                                                    ref_table_id,
@@ -19641,15 +19643,15 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
     const ObString &parser_properties = index_schema->get_parser_property_str();
     const ObObjMeta &key_meta = match_expr->get_search_key()->get_result_meta();
     storage::ObFTParseHelper tokenize_helper;
-    common::ObSEArray<ObFTWord, 16> tokens;
-    hash::ObHashMap<ObFTWord, int64_t> token_map;
+    common::ObSEArray<ObFTToken, 16> tokens;
+    ObFTTokenMap token_map;
     int64_t doc_length = 0;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (search_text_string.length() == 0) {
       // do nothing
-    } else if (OB_FAIL(tokenize_helper.init(allocator_, parser_name, parser_properties))) {
+    } else if (OB_FAIL(tokenize_helper.init(allocator_, parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
       LOG_WARN("failed to init tokenize helper", K(ret));
-    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+    } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
       LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            key_meta,
@@ -19659,13 +19661,13 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
                            token_map))) {
       LOG_WARN("failed to segment");
     } else {
-      for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
+      for (ObFTTokenMap::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
           ++iter) {
-        const ObFTWord &token = iter->first;
+        const ObFTToken &token = iter->first;
         ObString token_string;
         ObConstRawExpr *token_expr = NULL;
-        if (OB_FAIL(ob_write_string(*allocator_, token.get_word().get_string(), token_string))) {
+        if (OB_FAIL(ob_write_string(*allocator_, token.get_token().get_string(), token_string))) {
           LOG_WARN("failed to deep copy query token", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(
                                *OPT_CTX.get_exec_ctx()->get_expr_factory(),

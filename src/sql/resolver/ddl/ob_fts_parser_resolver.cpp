@@ -124,7 +124,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the stopword table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_stopword_table(
+          if (OB_FAIL(property.config_set_stopword_table_name(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
             LOG_WARN("fail to set stopword table", K(ret));
           }
@@ -141,7 +141,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the dict table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_dict_table(
+          if (OB_FAIL(property.config_set_dict_table_name(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
             LOG_WARN("fail to set dict table", K(ret));
           }
@@ -158,7 +158,7 @@ int ObFTParserResolverHelper::resolve_fts_index_parser_properties(
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "the quanitfier table is empty");
         } else {
           int32_t str_len = static_cast<int32_t>(node->children_[0]->str_len_);
-          if (OB_FAIL(property.config_set_quantifier_table(
+          if (OB_FAIL(property.config_set_quantifier_table_name(
                   common::ObString(str_len, node->children_[0]->str_value_)))) {
             LOG_WARN("fail to set quantifier table", K(ret));
           }

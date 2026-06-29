@@ -20,7 +20,7 @@
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "ob_das_domain_utils.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -68,7 +68,7 @@ int ObFTIndexRowCache::init(
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
     LOG_WARN("failed to create merge memctx", K(ret));
-  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties))) {
+  } else if (OB_FAIL(helper_.init(&(merge_memctx_->get_arena_allocator()), parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
     LOG_WARN("fail to init full-text parser helper", K(ret));
   } else {
     row_idx_ = 0;
@@ -318,7 +318,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  ObFTTokenMap ft_token_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -326,33 +326,33 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (OB_FAIL(ft_token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
+    LOG_WARN("fail to create ft token map", K(ret), K(ft_word_bkt_cnt));
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
                                                  ft_obj_meta,
                                                  fulltext,
                                                  doc_length,
-                                                 ft_word_map))) {
+                                                 ft_token_map))) {
     LOG_WARN("fail to segment and calculate word count", K(ret), KPC(helper),
         K(ft_obj_meta.get_collation_type()), K(fulltext));
-  } else if (0 == ft_word_map.size()) {
+  } else if (0 == ft_token_map.size()) {
     ret = OB_ITER_END;
   } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
-                           allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
+                           allocator.alloc(ft_token_map.size() * sizeof(blocksstable::ObDatumRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory for full text index rows buffer", K(ret));
   } else {
     int64_t i = 0;
-    rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
-    for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
-         OB_SUCC(ret) && iter != ft_word_map.end();
+    rows = new (rows_buf) blocksstable::ObDatumRow[ft_token_map.size()];
+    for (ObFTTokenMap::const_iterator iter = ft_token_map.begin();
+         OB_SUCC(ret) && iter != ft_token_map.end();
          ++iter) {
       if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
         LOG_WARN("init datum row failed", K(ret), K(FT_WORD_DOC_COL_CNT));
       } else {
-        const ObFTWord &ft_word = iter->first;
-        const int64_t word_cnt = iter->second;
+        const ObFTToken &ft_token = iter->first;
+        const int64_t word_cnt = iter->second.count_;
         // index row format
         //  -    FTS_INDEX: [WORD], [DOC_ID], [WORD_COUNT], [DOC_LENGTH]
         //  - FTS_DOC_WORD: [DOC_ID], [WORD], [WORD_COUNT], [DOC_LENGTH]
@@ -360,14 +360,14 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         const int64_t doc_id_idx = is_fts_index_aux ? 1 : 0;
         const int64_t word_cnt_idx = 2;
         const int64_t doc_len_idx = 3;
-        rows[i].storage_datums_[word_idx].set_datum(ft_word.get_word());
+        rows[i].storage_datums_[word_idx].set_datum(ft_token.get_token());
         rows[i].storage_datums_[doc_id_idx].shallow_copy_from_datum(doc_id_datum);
         rows[i].storage_datums_[word_cnt_idx].set_uint(word_cnt);
         rows[i].storage_datums_[doc_len_idx].set_uint(doc_length);
         if (OB_FAIL(word_rows.push_back(&rows[i]))) {
           LOG_WARN("fail to push back row", K(ret), K(rows[i]));
         } else {
-          LOG_DEBUG("succeed to add word row", K(ret), K(is_fts_index_aux), K(ft_word), K(word_cnt), K(i), K(rows[i]));
+          LOG_DEBUG("succeed to add word row", K(ret), K(is_fts_index_aux), K(ft_token), K(word_cnt), K(i), K(rows[i]));
           ++i;
         }
       }
@@ -382,7 +382,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     const common::ObObjMeta &meta,
     const ObString &fulltext,
     int64_t &doc_length,
-    ObFTWordMap &words_count)
+    ObFTTokenMap &words_count)
 {
   int ret = OB_SUCCESS;
   ObCollationType type = meta.get_collation_type();
@@ -941,13 +941,13 @@ int ObFTDMLIterator::rewind()
       const common::ObString &parser_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
       const common::ObString &parser_property_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
       bool is_same = false;
-      if (OB_FAIL(ft_parse_helper_.check_is_the_same(parser_str, parser_property_str, is_same))) {
+      if (OB_FAIL(ft_parse_helper_.check_is_the_same(parser_str, parser_property_str, share::schema::OB_FTS_INDEX_TYPE_MATCH, is_same))) {
         LOG_WARN("fail to check is the same", K(ret), K(parser_str), K(parser_property_str));
       } else if (is_same) {
         // This is the same as the parser name of the previous index.
         // nothing to do, just skip.
       } else if (FALSE_IT(ft_parse_helper_.reset())) {
-      } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+      } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
         LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
       }
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
@@ -959,7 +959,8 @@ int ObFTDMLIterator::rewind()
                                                 doc_word_info_->doc_word_ls_id_,
                                                 doc_word_info_->doc_word_tablet_id_,
                                                 &doc_word_info_->snapshot_,
-                                                doc_word_info_->doc_word_schema_version_))) {
+                                                doc_word_info_->doc_word_schema_version_,
+                                                share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
         LOG_WARN("fail to init doc word iter", K(ret), KPC(doc_word_info_));
       }
     } else {
@@ -981,7 +982,7 @@ int ObFTDMLIterator::init(
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
-        if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties))) {
+        if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_name, parser_properties, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_name), K(parser_properties));
         }
         break;
@@ -994,7 +995,8 @@ int ObFTDMLIterator::init(
                                                   doc_word_info_->doc_word_ls_id_,
                                                   doc_word_info_->doc_word_tablet_id_,
                                                   &doc_word_info_->snapshot_,
-                                                  doc_word_info_->doc_word_schema_version_))) {
+                                                  doc_word_info_->doc_word_schema_version_,
+                                                share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
           LOG_WARN("fail to init doc word iter", K(ret), KPC(doc_word_info_));
         }
         break;
@@ -1037,13 +1039,13 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
         const common::ObString &parser_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_name();
         const common::ObString &parser_property_str = das_ctdef_->table_param_.get_data_table().get_fts_parser_property();
         bool is_same = false;
-        if (OB_FAIL(ft_parse_helper_.check_is_the_same(parser_str, parser_property_str, is_same))) {
+        if (OB_FAIL(ft_parse_helper_.check_is_the_same(parser_str, parser_property_str, share::schema::OB_FTS_INDEX_TYPE_MATCH, is_same))) {
           LOG_WARN("fail to check is the same", K(ret), K(parser_str), K(parser_property_str));
         } else if (is_same) {
           // This is the same as the parser name of the previous index.
           // nothing to do, just skip.
         } else if (FALSE_IT(ft_parse_helper_.reset())) {
-        } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str))) {
+        } else if (OB_FAIL(ft_parse_helper_.init(&allocator_, parser_str, parser_property_str, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
           LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
         }
         break;
@@ -1057,7 +1059,8 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
                                                   doc_word_info_->doc_word_ls_id_,
                                                   doc_word_info_->doc_word_tablet_id_,
                                                   &doc_word_info_->snapshot_,
-                                                  doc_word_info_->doc_word_schema_version_))) {
+                                                  doc_word_info_->doc_word_schema_version_,
+                                                share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
           LOG_WARN("fail to init doc word iter", K(ret), KPC(doc_word_info_));
         }
         break;
@@ -1220,7 +1223,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     common::ObObjMeta ft_meta;
     ObDomainIndexRow rows;
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
-    if (OB_FAIL(ft_parse_helper.init(&allocator, parser_str, parser_property_str))) {
+    if (OB_FAIL(ft_parse_helper.init(&allocator, parser_str, parser_property_str, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
       LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
     } else if (!is_update_ && OB_FAIL(get_ft_and_doc_id(store_row, check_id_datum, ft, ft_meta))) {
       LOG_WARN("fail to get fulltext and doc id", K(ret), KPC(store_row));

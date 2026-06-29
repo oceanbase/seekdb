@@ -19,15 +19,15 @@
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
-#include "common/json_type/ob_json_base.h"
-#include "common/json_type/ob_json_tree.h"
+#include "lib/json_type/ob_json_base.h"
+#include "lib/json_type/ob_json_tree.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "object/ob_object.h"
 #include "plugin/sys/ob_plugin_helper.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "share/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "storage/fts/ob_fts_parser_property.h"
@@ -89,16 +89,16 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
+  ObFTTokenMap token_map;
 
   ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid output mode", K(ret), K(mode));
-  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
+  } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_, share::schema::OB_FTS_INDEX_TYPE_MATCH))) {
     LOG_WARN("Fail to init tokenize helper", K(ret));
-  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+  } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("ft_token_map")))) {
     LOG_WARN("Fail to create token map", K(ret));
   } else if (
       (0 != param.fulltext_.length())

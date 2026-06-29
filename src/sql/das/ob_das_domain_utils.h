@@ -19,7 +19,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/hash/ob_hashset.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "storage/fts/ob_fts_plugin_helper.h"
@@ -199,7 +199,7 @@ private:
       const common::ObObjMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
-      ObFTWordMap &words_count);
+      ObFTTokenMap &words_count);
   static int calc_save_rowkey_policy(
     ObIAllocator &allocator,
     const ObDASDMLBaseCtDef &das_ctdef,

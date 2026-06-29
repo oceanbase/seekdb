@@ -1,17 +1,6 @@
-/*
- * Copyright (c) 2025 OceanBase.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+/**
+ * Copyright (c) 2024 OceanBase
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _OCEANBASE_STORAGE_FTS_IK_OB_IK_ARBITRATOR_H_
@@ -37,23 +26,23 @@ public:
   int process(TokenizeContext &ctx);
 
   int output_result(TokenizeContext &ctx);
+  void reuse();
+  int prepare();
 
 private:
-  int prepare(TokenizeContext &ctx);
-
   int add_chain(ObIKTokenChain *chain);
 
   int optimize(TokenizeContext &ctx,
                ObIKTokenChain *option,
-               ObFTSortList::CellIter iter,
+               ObFTLightSortList::CellIter iter,
                int64_t fulltext_len,
                ObIKTokenChain *&best);
 
   int try_add_next_words(ObIKTokenChain *chain,
-                         ObFTSortList::CellIter iter,
+    ObFTLightSortList::CellIter iter,
                          ObIKTokenChain *option,
                          bool need_conflict,
-                         ObList<ObFTSortList::CellIter, ObIAllocator> &conflict_stack);
+                         ObList<ObFTLightSortList::CellIter, ObIAllocator> &conflict_stack);
 
   int remove_conflict(const ObIKToken &token, ObIKTokenChain *option);
 
@@ -61,7 +50,16 @@ private:
 
 private:
   ObArenaAllocator alloc_;
-  hash::ObHashMap<int64_t, ObIKTokenChain *> chains_;
+  hash::ObHashMap<
+      int64_t,
+      ObIKTokenChain *,
+      common::hash::NoPthreadDefendMode,
+      common::hash::hash_func<int64_t>,
+      common::hash::equal_to<int64_t>,
+      common::hash::SimpleAllocer<
+          typename common::hash::HashMapTypes<int64_t, ObIKTokenChain *>::AllocType,
+          common::hash::NodeNumTraits<typename common::hash::HashMapTypes<int64_t, ObIKTokenChain *>::AllocType>::NODE_NUM,
+          common::hash::NoPthreadDefendMode>> chains_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIKArbitrator);

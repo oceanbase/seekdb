@@ -191,12 +191,13 @@ LATCH_DEF(OBJECT_DEVICE_LOCK, 238, "object device lock", LATCH_FIFO, 2000, 0, tr
 LATCH_DEF(GLOBAL_IO_CONFIG_LOCK, 239, "global io config lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TENANT_IO_MANAGE_LOCK, 240, "tenant io manage lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(IO_FAULT_DETECTOR_LOCK, 241, "io fault detector lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(TABLE_API_LOCK, 242, "table api interface lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(SERVER_LOCALITY_MGR_LOCK, 243, "server locality manager lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DDL_LOCK, 244, "ddl task lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(DEADLOCK_LOCK, 245, "deadlock lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(BG_THREAD_MONITOR_LOCK, 246, "background thread monitor lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(RPC_STAT_LOCK, 247, "rpc stat lock", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(RESERVED_LOCK_248, 248, "reserved lock 248", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(DBLINK_LOCK, 248, "dblink lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(PALF_SW_SUBMIT_INFO_LOCK, 249, "palf sw last submit log info lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(PALF_SW_SLIDE_INFO_LOCK, 251, "palf sw last slide log info lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(PALF_SW_FETCH_INFO_LOCK, 252, "palf sw fetch log info lock", LATCH_FIFO, 2000, 0, true)
@@ -299,7 +300,9 @@ LATCH_DEF(STORAGE_CACHE_POLICY_TASK_LOCK, 354, "storage cache policy task lock",
 LATCH_DEF(UNIQUE_CHECKING_CONTEXT_LOCK, 355, "unique checking context lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TABLET_SPLIT_CONTEXT_LOCK, 356, "tablet split context lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(MAX_ID_CACHE_LOCK, 357, "max id cache", LATCH_FIFO, 2000, 0, true)
-LATCH_DEF(LATCH_END, 358, "latch end", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(OB_FTS_STOP_TOKEN_CHECKER_GEN_LOCK, 358, "ob fts stop token checker gen lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(OB_GEN_DIC_LOADER_LOCK, 359, "ob gen dic loader lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(LATCH_END, 360, "latch end", LATCH_FIFO, 2000, 0, true)
 
 #endif
 
