@@ -1058,7 +1058,6 @@ const char *const OB_ORA_PUBLIC_ROLE_NAME = "PUBLIC";
 const char *const OB_ORA_STANDBY_REPLICATION_ROLE_NAME = "STANDBY_REPLICATION";
 const char *const OB_RESTORE_USER_NAME = "__oceanbase_inner_restore_user";
 const char *const OB_DRC_USER_NAME = "__oceanbase_inner_drc_user";
-const uint64_t OB_SYS_TENANT_ID = 1;
 const char *const OB_SYS_TENANT_NAME = "sys";
 const char *const OB_FAKE_TENANT_NAME = "fake_tenant";
 const char *const OB_SYS_HOST_NAME = "%";

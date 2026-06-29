@@ -274,10 +274,9 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
     }
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *orig_table_schema = nullptr;
-        const ObTableSchema *hidden_table_schema = nullptr;
-        ObDDLRedefinitionSSTableBuildTask task(
-            task_id_,
-            OB_SYS_TENANT_ID,
+    const ObTableSchema *hidden_table_schema = nullptr;
+    ObDDLRedefinitionSSTableBuildTask task(
+        task_id_,
         object_id_,
         target_object_id_,
         schema_version_,

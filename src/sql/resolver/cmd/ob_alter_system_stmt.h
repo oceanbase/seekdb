@@ -40,7 +40,7 @@ public:
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
-      opt_tenant_ids_(),
+      opt_tenant_count_(0),
       opt_tablet_id_(),
       opt_ls_id_(share::ObLSID::INVALID_LS_ID),
       rebuild_column_group_(false) {}
@@ -49,7 +49,7 @@ public:
       major_freeze_(false),
       freeze_all_flag_(0),
       opt_server_list_(),
-      opt_tenant_ids_(),
+      opt_tenant_count_(0),
       opt_tablet_id_(),
       opt_ls_id_(share::ObLSID::INVALID_LS_ID),
       rebuild_column_group_(false) {}
@@ -67,7 +67,10 @@ public:
   void set_rebuild_column_group(bool rebuild_column_group) { rebuild_column_group_ = rebuild_column_group; }
   inline obcall::ObServerList &get_ignore_server_list() { return opt_server_list_; }
   inline obcall::ObServerList &get_server_list() { return opt_server_list_; }
-  inline common::ObSArray<uint64_t> &get_tenant_ids() { return opt_tenant_ids_; }
+  inline int64_t get_tenant_count() const { return opt_tenant_count_; }
+  inline int64_t &tenant_count_ref() { return opt_tenant_count_; }
+  inline void inc_tenant_count() { ++opt_tenant_count_; }
+  inline void reset_tenant_count() { opt_tenant_count_ = 0; }
   inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
   inline int64_t &get_ls_id() { return opt_ls_id_; }
@@ -76,7 +79,7 @@ public:
   }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(major_freeze), K(freeze_all_flag_), 
-               K(opt_server_list_), K(opt_tenant_ids_), K(opt_tablet_id_), K(opt_ls_id_));
+               K(opt_server_list_), K(opt_tenant_count_), K(opt_tablet_id_), K(opt_ls_id_));
 private:
   bool major_freeze_;
   // for major_freeze, it is ignore server list
@@ -85,7 +88,7 @@ private:
   // for major_freeze only
   obcall::ObServerList opt_server_list_;
   // for minor_freeze only,
-  common::ObSArray<uint64_t> opt_tenant_ids_;
+  int64_t opt_tenant_count_;
   // for minor_freeze only
   common::ObZone opt_zone_;
   

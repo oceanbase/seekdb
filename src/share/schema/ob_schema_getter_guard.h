@@ -291,18 +291,8 @@ public:
                           const uint64_t database_id,
                           const ObDatabaseSchema *&database_schema);
   int get_database_schema(
-                          const uint64_t tenant_id,
-                          const uint64_t database_id,
-                          const ObDatabaseSchema *&database_schema)
-  { UNUSED(tenant_id); return get_database_schema(database_id, database_schema); }
-  int get_database_schema(
                           const uint64_t database_id,
                           const ObSimpleDatabaseSchema *&database_schema);
-  int get_database_schema(
-                          const uint64_t tenant_id,
-                          const uint64_t database_id,
-                          const ObSimpleDatabaseSchema *&database_schema)
-  { UNUSED(tenant_id); return get_database_schema(database_id, database_schema); }
   int get_database_schema(
                           const common::ObString &database_name,
                           const ObDatabaseSchema *&database_schema);
@@ -315,11 +305,6 @@ public:
   int get_table_schema(
                        const uint64_t table_id,
                        const ObTableSchema *&table_schema);
-  int get_table_schema(
-                       const uint64_t tenant_id,
-                       const uint64_t table_id,
-                       const ObTableSchema *&table_schema)
-  { UNUSED(tenant_id); return get_table_schema(table_id, table_schema); }
   int get_table_schema(
                        const uint64_t database_id,
                        const common::ObString &table_name,

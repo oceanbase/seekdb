@@ -177,8 +177,6 @@ public:
                                   common::hash::NormalPointer,
                                   common::ObWrapperAllocator> SysVarNameValMap;
   typedef lib::ObLockGuard<common::ObRecursiveMutex> LockGuard;
-  uint64_t get_effective_tenant_id() const { return common::OB_SYS_TENANT_ID; }
-
   class TableStmtType
   {
     OB_UNIS_VERSION_V(1);

@@ -31,7 +31,6 @@ namespace sql
 
 int resolve_tenant_name(
     const ParseNode *node,
-    const uint64_t effective_tenant_id,
     ObString &tenant_name);
 
 class ObSystemCmdStmt;
@@ -50,12 +49,11 @@ public:
   // resolve opt_tenant_name
   static int resolve_tenant(const ParseNode *parse_tree,
                             common::ObFixedLengthString < common::OB_MAX_TENANT_NAME_LENGTH + 1 > &tenant_name);
-  static int resolve_tenant_id(const ParseNode *parse_tree, uint64_t &tenant_id);
   static int resolve_ls_id(const ParseNode *parse_tree, int64_t &ls_id);
 
   static int resolve_replica_type(const ParseNode *parse_tree,
                                   common::ObReplicaType &replica_type);
-  static int check_compatibility_for_replica_type(const ObReplicaType replica_type, const uint64_t tenant_id);
+  static int check_compatibility_for_replica_type(const ObReplicaType replica_type);
   static int resolve_string(const ParseNode *parse_tree, common::ObString &string);
   static int resolve_relation_name(const ParseNode *parse_tree, common::ObString &string);
   // resolve opt_server_or_zone
@@ -64,15 +62,13 @@ public:
 
 
   static int resolve_tablet_id(const ParseNode *opt_tablet_id, ObTabletID &tablet_id);
-  static int resolve_tenant(const ParseNode &tenants_node, 
-                            const uint64_t tenant_id,
-                            common::ObSArray<uint64_t> &tenant_ids,
+  static int resolve_tenant(const ParseNode &tenants_node,
+                            int64_t &out_count,
                             bool &affect_all,
                             bool &affect_all_user,
                             bool &affect_all_meta);
   static int get_and_verify_tenant_name(const ParseNode* tenant_name_node,
-                                        const uint64_t exec_tenant_id,
-                                        uint64_t &target_tenant_id);
+                                        uint64_t &out_tgt_id);
 };
 
 typedef common::ObFixedLengthString<common::OB_MAX_TRACE_ID_BUFFER_SIZE + 1> Task_Id;
@@ -170,12 +166,9 @@ public:
 private:
   int resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_tablet_id, const ParseNode *opt_rebuild_column_group);
   int resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
-                            ParseNode *opt_tenant_list_or_ls_or_tablet_id,
-                            ParseNode *opt_server_list,
-                            ParseNode *opt_zone_desc);
+                            ParseNode *opt_tenant_list_or_ls_or_tablet_id);
 
   int resolve_tenant_ls_tablet_(ObFreezeStmt *freeze_stmt, ParseNode *opt_tenant_list_or_ls_or_tablet_id);
-  int resolve_server_list_(ObFreezeStmt *freeze_stmt, ParseNode *opt_server_list);
 
 };
 

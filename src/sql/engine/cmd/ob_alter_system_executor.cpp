@@ -70,7 +70,7 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
         }
       }
     } else if (stmt.get_tablet_id().is_valid()) {
-      if (OB_UNLIKELY(stmt.get_tenant_ids().count() > 1)) {
+      if (OB_UNLIKELY(1 != stmt.get_tenant_count())) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not support schedule tablet major freeze for several tenant", K(ret), K(stmt));
       } else {
@@ -88,8 +88,7 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
       param.freeze_all_user_ = stmt.is_freeze_all_user();
       param.freeze_all_meta_ = stmt.is_freeze_all_meta();
       param.freeze_reason_ = rootserver::MF_USER_REQUEST;
-      const int64_t freeze_info_count = MAX(1, stmt.get_tenant_ids().count());
-      for (int64_t i = 0; i < freeze_info_count && OB_SUCC(ret); ++i) {
+      for (int64_t i = 0; i < stmt.get_tenant_count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(param.add_freeze_info())) {
           LOG_WARN("fail to assign", KR(ret));
         }

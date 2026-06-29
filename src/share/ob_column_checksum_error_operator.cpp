@@ -84,7 +84,7 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(min_frozen_scn));
   } else {
-    ret = storage_.delete_expired(OB_SYS_TENANT_ID, min_frozen_scn, INT64_MAX);
+    ret = storage_.delete_expired(1UL, min_frozen_scn, INT64_MAX);
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to delete expired column checksum error info", K(ret), K(min_frozen_scn));
     }

@@ -362,8 +362,6 @@ public:
   int admin_upgrade_virtual_schema();
   int run_upgrade_job(const obcall::ObUpgradeJobArg &arg);
   int admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg);
-  int admin_upgrade_cmd(const obcall::Bool &arg);
-  int admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgradeArg &arg);
   int admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg);
   int refresh_time_zone_info(const obcall::ObRefreshTimezoneArg &arg);
   int request_time_zone_info(const common::ObRequestTZInfoArg &arg, common::ObRequestTZInfoResult &result);
@@ -447,8 +445,7 @@ private:
   }
 
   int table_allow_ddl_operation(const obcall::ObAlterTableArg &arg);
-  int get_table_schema(uint64_t tenant_id,
-                       const common::ObString &database_name,
+  int get_table_schema(const common::ObString &database_name,
                        const common::ObString &table_name,
                        const bool is_index,
                        const int64_t session_id,
@@ -459,7 +456,7 @@ private:
 
   int precheck_interval_part(const obcall::ObAlterTableArg &arg);
 
-  int parallel_ddl_pre_check_(const uint64_t tenant_id);
+  int parallel_ddl_pre_check_();
   int check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item);
   int check_memstore_limit_(obcall::ObAdminSetConfigItem &item);
   int check_tenant_memstore_limit_(obcall::ObAdminSetConfigItem &item);
