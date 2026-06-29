@@ -8485,10 +8485,9 @@ int ObResolverUtils::create_values_table_query(ObSQLSessionInfo *session_info,
 int64_t ObResolverUtils::get_mysql_max_partition_num()
 {
   int64_t max_partition_num = OB_MAX_PARTITION_NUM_MYSQL;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    max_partition_num = tenant_config->max_partition_num;
-  }
+
+  max_partition_num = GCONF.max_partition_num;
+
   return max_partition_num;
 }
 

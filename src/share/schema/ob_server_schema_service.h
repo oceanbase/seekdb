@@ -741,8 +741,6 @@ public:
 
   struct AllSchemaKeys
   {
-    // tenant
-    TenantKeys new_tenant_keys_;
     // user
     UserKeys new_user_keys_;
     UserKeys del_user_keys_;
@@ -836,8 +834,7 @@ public:
     int create(int64_t bucket_size);
 
     bool need_fetch_schemas_for_data_dict() const {
-      return new_tenant_keys_.size() > 0
-             || new_table_keys_.size() > 0
+      return new_table_keys_.size() > 0
              || new_database_keys_.size() > 0;
     }
   };
@@ -1101,8 +1098,6 @@ private:
                         ObSchemaMgr &schema_mgr,
                         const int64_t schema_version,
                         AllSchemaKeys &all_keys);
-  int add_tenant_schemas_to_cache(const TenantKeys &tenant_keys,
-                                  common::ObISQLClient &sql_client);
   int add_sys_variable_schemas_to_cache(
       const SysVariableKeys &sys_variable_keys,
       common::ObISQLClient &sql_client);
@@ -1203,11 +1198,6 @@ protected:
       common::ObIArray<const ObTenantSchema *> &tenant_schemas,
       common::ObIArray<const ObDatabaseSchema *> &database_schemas,
       common::ObIArray<const ObTableSchema *> &table_schemas);
-  int fetch_increment_tenant_schemas_for_data_dict_(
-      common::ObMySQLTransaction &trans,
-      common::ObIAllocator &allocator,
-      const AllSchemaKeys &schema_keys,
-      common::ObIArray<const ObTenantSchema *> &tenant_schemas);
   int fetch_increment_database_schemas_for_data_dict_(
       common::ObMySQLTransaction &trans,
       common::ObIAllocator &allocator,
@@ -1226,7 +1216,6 @@ protected:
   static const int64_t DEFAULT_FETCH_SCHEMA_TIMEOUT_US = 2 * 1000 * 1000; // 2s
   static const int64_t MAX_FETCH_SCHEMA_TIMEOUT_US = 60 * 1000 * 1000; // 60s
   common::SpinRWLock schema_manager_rwlock_;
-  mutable lib::ObMutex mem_mgr_for_liboblog_mutex_;
   ObSchemaService *schema_service_;
   common::ObMySQLProxy *sql_proxy_;
   const common::ObCommonConfig *config_;
@@ -1253,7 +1242,6 @@ protected:
   // readers used get_refactored (deref outside the bucket) originally and keep ATOMIC_LOAD.
   common::SpinRWLock schema_mgr_for_cache_rwlock_;
   ObSchemaMemMgr* mem_mgr_ = nullptr;
-  ObSchemaMemMgr* mem_mgr_for_liboblog_ = nullptr;
 };
 
 template<typename SchemaKeys>

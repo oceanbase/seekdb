@@ -97,9 +97,8 @@ void ObTenantMetaMemMgr::RefreshConfigTask::runTimerTask()
   ObDIActionGuard ag("RefreshConfigTask");
   int ret = OB_SUCCESS;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  const int64_t mem_limit = tenant_config.is_valid()
-      ? tenant_config->_storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
+  const int64_t mem_limit = true
+      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   if (OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
     LOG_WARN("fail to set meta object memory limit", K(ret), K(mem_limit));
   }
@@ -259,12 +258,11 @@ int ObTenantMetaMemMgr::init()
 OB_WEAK_SYMBOL int ObTenantMetaMemMgr::fetch_tenant_config()
 {
   int ret = OB_SUCCESS;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (!tenant_config.is_valid()) {
+  if (!true) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tenant config", K(ret));
   } else {
-    is_tablet_leak_checker_enabled_ = tenant_config->_enable_trace_tablet_leak;
+    is_tablet_leak_checker_enabled_ = GCONF._enable_trace_tablet_leak;
     LOG_INFO("fetch tenant config", K(is_tablet_leak_checker_enabled_));
   }
   return ret;
@@ -2410,12 +2408,11 @@ int ObTenantMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
 {
   int ret = OB_SUCCESS;
   // Get tenant config
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  const int64_t config_tablet_per_gb = tenant_config.is_valid() ?
-                                          tenant_config->_max_tablet_cnt_per_gb :
+  const int64_t config_tablet_per_gb = true ?
+                                          GCONF._max_tablet_cnt_per_gb :
                                           DEFAULT_TABLET_CNT_PER_GB;
-  const int64_t config_mem_percentage = tenant_config.is_valid() ?
-                                          tenant_config->_storage_meta_memory_limit_percentage :
+  const int64_t config_mem_percentage = true ?
+                                          GCONF._storage_meta_memory_limit_percentage :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   // Calculate config constraint : (tenant_mem / 1GB) * config_tablet_per_gb
@@ -2441,12 +2438,11 @@ int ObTenantMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   int ret = OB_SUCCESS;
   int64_t cal_num = num >= 0 ? num : 0;  // We treat unexpected negative input numbers as zero.
   // Get tenant memory
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  const int64_t config_tablet_per_gb = tenant_config.is_valid() ?
-                                          tenant_config->_max_tablet_cnt_per_gb :
+  const int64_t config_tablet_per_gb = true ?
+                                          GCONF._max_tablet_cnt_per_gb :
                                           DEFAULT_TABLET_CNT_PER_GB;
-  const int64_t config_mem_percentage = tenant_config.is_valid() ?
-                                          tenant_config->_storage_meta_memory_limit_percentage :
+  const int64_t config_mem_percentage = true ?
+                                          GCONF._storage_meta_memory_limit_percentage :
                                           OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
   // Inverse calculate through config formula and memory formula
   const int64_t memory_constraint_formula_inverse =

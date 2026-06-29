@@ -40,13 +40,12 @@ MultimodeAlloctor::MultimodeAlloctor(ObArenaAllocator &arena, uint64_t type, int
       ext_used_(0)
 {
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      check_level_ = tenant_config->_multimodel_memory_trace_level;
-      if (check_level_ > 2) {
-        check_level_ = 0;
-      }
+
+    check_level_ = GCONF._multimodel_memory_trace_level;
+    if (check_level_ > 2) {
+      check_level_ = 0;
     }
+
   }
 }
 

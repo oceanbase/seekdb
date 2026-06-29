@@ -388,7 +388,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   } else if (OB_FAIL(pool->acquire(session_info, conn))) {
     LOG_WARN("failed to get conn", K(ret));
   } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s", 
-                      OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME))) {
+                      OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
     LOG_WARN("assign format failed", K(ret));
   } else {
     SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -432,7 +432,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
       ObSqlString query_virtual;
       if (OB_FAIL(query_virtual.assign_fmt(
         "select message, ori_code, sql_state from %s.%s limit %ld, 1", 
-        OB_SYS_DATABASE_NAME, OB_TENANT_VIRTUAL_WARNING_TNAME, restored_arg - 1))) {
+        OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME, restored_arg - 1))) {
         LOG_WARN("assign fmt failed", K(ret));
       } else {
         SMART_VAR(ObISQLClient::ReadResult, res) {

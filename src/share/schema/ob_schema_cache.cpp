@@ -545,19 +545,19 @@ bool ObSchemaCache::is_necessary_table(const uint64_t table_id) const
          || OB_ALL_CONSTRAINT_TID == table_id
          || OB_ALL_CONSTRAINT_HISTORY_TID == table_id
          || OB_ALL_CONSTRAINT_IDX_CST_NAME_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_IDX_TRIGGER_BASE_OBJ_ID_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_IDX_DB_TRIGGER_NAME_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_IDX_TRIGGER_NAME_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_HISTORY_IDX_TRIGGER_HIS_BASE_OBJ_ID_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_HISTORY_AUX_LOB_META_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_HISTORY_AUX_LOB_PIECE_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_HISTORY_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_AUX_LOB_META_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_AUX_LOB_PIECE_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_IDX_TRIGGER_BASE_OBJ_ID_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_IDX_DB_TRIGGER_NAME_TID == table_id
-         || OB_ALL_TENANT_TRIGGER_IDX_TRIGGER_NAME_TID == table_id
+         || OB_ALL_TRIGGER_IDX_TRIGGER_BASE_OBJ_ID_TID == table_id
+         || OB_ALL_TRIGGER_IDX_DB_TRIGGER_NAME_TID == table_id
+         || OB_ALL_TRIGGER_IDX_TRIGGER_NAME_TID == table_id
+         || OB_ALL_TRIGGER_HISTORY_IDX_TRIGGER_HIS_BASE_OBJ_ID_TID == table_id
+         || OB_ALL_TRIGGER_HISTORY_AUX_LOB_META_TID == table_id
+         || OB_ALL_TRIGGER_HISTORY_AUX_LOB_PIECE_TID == table_id
+         || OB_ALL_TRIGGER_TID == table_id
+         || OB_ALL_TRIGGER_HISTORY_TID == table_id
+         || OB_ALL_TRIGGER_AUX_LOB_META_TID == table_id
+         || OB_ALL_TRIGGER_AUX_LOB_PIECE_TID == table_id
+         || OB_ALL_TRIGGER_IDX_TRIGGER_BASE_OBJ_ID_TID == table_id
+         || OB_ALL_TRIGGER_IDX_DB_TRIGGER_NAME_TID == table_id
+         || OB_ALL_TRIGGER_IDX_TRIGGER_NAME_TID == table_id
          || OB_ALL_AUX_STAT_TID == table_id
          || OB_ALL_TABLE_STAT_TID == table_id
          || OB_ALL_COLUMN_STAT_TID == table_id

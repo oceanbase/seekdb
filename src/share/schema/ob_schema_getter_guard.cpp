@@ -2110,12 +2110,11 @@ int ObSchemaGetterGuard::check_ssl_invited_cn(SSL *ssl_st)
   } else {
     X509 *cert = NULL;
     X509_name_st *x509Name = NULL;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (OB_UNLIKELY(!tenant_config.is_valid())) {
+    if (OB_UNLIKELY(!true)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail get tenant_config", KR(ret));
     } else {
-      ObString ob_ssl_invited_common_names(tenant_config->ob_ssl_invited_common_names.str());
+      ObString ob_ssl_invited_common_names(GCONF.ob_ssl_invited_common_names.str());
       if (ob_ssl_invited_common_names.empty()) {
         ret = OB_PASSWORD_WRONG;
         LOG_WARN("ob_ssl_invited_common_names not match", "expect", ob_ssl_invited_common_names, KR(ret));
@@ -5019,15 +5018,9 @@ int ObSchemaGetterGuard::get_simple_table_schema(
   } else if (OB_FAIL(get_schema_mgr( mgr))) {
     LOG_WARN("fail to get schema mgr", KR(ret));
   } else if (OB_ISNULL(mgr)) {
-    // lazy mode
-    if (!ObSchemaService::g_liboblog_mode_) {
-      ret = OB_SCHEMA_EAGAIN;
-      LOG_WARN("only for liboblog used", KR(ret), K(table_id));
-    } else if (OB_FAIL(get_schema(TABLE_SIMPLE_SCHEMA,
-                                  table_id,
-                                  table_schema))) {
-      LOG_WARN("get table schema failed", KR(ret), K(table_id));
-    }
+    // lazy mode: only liboblog used this path; seekdb always returns EAGAIN here.
+    ret = OB_SCHEMA_EAGAIN;
+    LOG_WARN("schema mgr is null", KR(ret), K(table_id));
   } else if (OB_FAIL(mgr->get_table_schema( table_id, table_schema))) {
     LOG_WARN("get simple table failed", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {

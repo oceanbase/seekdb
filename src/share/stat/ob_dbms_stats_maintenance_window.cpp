@@ -518,8 +518,8 @@ int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLPr
                                     " %s t, (SELECT max(job) + 1 AS job FROM %s"\
                                              " WHERE job <= %ld AND job > 0) tt"\
                                     " WHERE t.job_name = '%s' AND t.job = %ld;",
-                                    share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-                                    share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
                                     dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET,
                                     opt_stats_history_manager,
                                     OPT_STATS_HISTORY_MANAGER_JOB_ID))) {
@@ -582,7 +582,7 @@ int ObDbmsStatsMaintenanceWindow::check_job_exists(common::ObMySQLProxy *sql_pro
   ObSqlString select_sql;
   int64_t row_count = 0;
   if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%s';",
-                                    share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
+                                    share::OB_ALL_SCHEDULER_JOB_TNAME,
                                     job_name))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {

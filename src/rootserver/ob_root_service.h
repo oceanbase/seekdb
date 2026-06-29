@@ -360,7 +360,6 @@ public:
   int admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCalibrationArg &arg);
   int admin_clear_merge_error(const obcall::ObAdminMergeArg &arg);
   int admin_upgrade_virtual_schema();
-  int run_upgrade_job(const obcall::ObUpgradeJobArg &arg);
   int admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg);
   int admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg);
   int refresh_time_zone_info(const obcall::ObRefreshTimezoneArg &arg);

@@ -4914,15 +4914,9 @@ bool ObLogPlan::disable_hash_groupby_in_second_stage()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info get unexpected null", K(ret), K(lbt()));
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      disable_hash_groupby_in_second = tenant_config->_sqlexec_disable_hash_based_distagg_tiv;
-      LOG_TRACE("trace disable hash groupby in second stage for three-stage",
-        K(disable_hash_groupby_in_second));
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init tenant config", K(lbt()));
-    }
+    disable_hash_groupby_in_second = GCONF._sqlexec_disable_hash_based_distagg_tiv;
+    LOG_TRACE("trace disable hash groupby in second stage for three-stage",
+      K(disable_hash_groupby_in_second));
   }
   return disable_hash_groupby_in_second;
 }
@@ -5705,18 +5699,16 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
                                                                                            has_rollup_opt_param))) {
     LOG_WARN("check and get opt param failed", K(ret));
   } else {
-    omt::ObTenantConfigGuard tenant_config(
-      TENANT_CONF());
-    rowsets_enabled = tenant_config.is_valid() && tenant_config->_rowsets_enabled;
+    rowsets_enabled = true && GCONF._rowsets_enabled;
     enable_hash_rollup = has_rollup_opt_param ?
                            (hash_rollup_policy.get_string().case_compare("auto") == 0
                            || hash_rollup_policy.get_string().case_compare("forced") == 0) :
-                           (tenant_config->_use_hash_rollup.case_compare("auto") == 0
-                           || tenant_config->_use_hash_rollup.case_compare("forced") == 0);
+                           (GCONF._use_hash_rollup.case_compare("auto") == 0
+                           || GCONF._use_hash_rollup.case_compare("forced") == 0);
     force_hash_rollup =
       enable_hash_rollup
       && (has_rollup_opt_param ? hash_rollup_policy.get_string().case_compare("forced") == 0 :
-                                 tenant_config->_use_hash_rollup.case_compare("forced") == 0);
+                                 GCONF._use_hash_rollup.case_compare("forced") == 0);
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(query_ctx->query_hint_.global_hint_.opt_params_.get_bool_opt_param(
@@ -6308,7 +6300,6 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
 {
   int ret = OB_SUCCESS;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   enable_aggr_push_down = false;
   enable_groupby_push_down = false;
   bool is_exist_hint = false;
@@ -6320,13 +6311,13 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
   } else if (OB_FAIL(global_hint.opt_params_.get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED, hint_rowsets_enable, is_exist_hint))) {
     LOG_WARN("failed to get bool opt param", K(ret));
   } else {
-    const bool rowsets_enabled = is_exist_hint ? hint_rowsets_enable : (tenant_config.is_valid() && tenant_config->_rowsets_enabled);
+    const bool rowsets_enabled = is_exist_hint ? hint_rowsets_enable : (true && GCONF._rowsets_enabled);
     if (hint_level == INT64_MAX) {
-      if (tenant_config.is_valid()) {
-        enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(tenant_config->_pushdown_storage_level);
-        enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(tenant_config->_pushdown_storage_level)
-                                  && rowsets_enabled;
-      }
+
+      enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(GCONF._pushdown_storage_level);
+      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(GCONF._pushdown_storage_level)
+                                && rowsets_enabled;
+
     } else {
       enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(hint_level);
       enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(hint_level) && rowsets_enabled;
@@ -15595,7 +15586,6 @@ int ObLogPlan::check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
   
   ObQueryCtx *query_ctx = get_optimizer_context().get_query_ctx();
   ObRawExpr* group_expr = NULL;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   const ObGlobalHint &global_hint = optimizer_context_.get_global_hint();
   bool is_exist_hint = false;
   bool hint_rowsets_enable = false;
@@ -15620,7 +15610,7 @@ int ObLogPlan::check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
     LOG_WARN("failed to get bool opt param", K(ret));
   } else {
     bool rowsets_enabled = is_exist_hint ? hint_rowsets_enable :
-                                           (tenant_config.is_valid() && tenant_config->_rowsets_enabled);
+                                           (true && GCONF._rowsets_enabled);
     can_pushdown = rowsets_enabled;
   }
     return ret;

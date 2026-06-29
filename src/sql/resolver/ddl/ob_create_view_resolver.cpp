@@ -338,7 +338,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       ObMVAdditionalInfo *mv_ainfo = NULL;
       ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
       ObSEArray<ObConstraint,4> &csts = create_table_stmt->get_create_table_arg().constraint_list_;
-      ObTenantConfigGuard tenant_config(TENANT_CONF());
       if (OB_FAIL(ObResolverUtils::check_schema_valid_for_mview(table_schema))) {
         LOG_WARN("failed to check schema valid for mview", KR(ret), K(table_schema));
       } else if (OB_FAIL(resolve_table_options(parse_tree.children_[TABLE_OPTION_NODE], false))) {
@@ -355,7 +354,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("fail do resolve for materialized view", K(ret));
       } else if (OB_FAIL(load_mview_dep_session_vars(*session_info_, select_stmt, table_schema.get_local_session_var()))) {
         LOG_WARN("fail to load mview dep session variables", K(ret));
-      } else if (!tenant_config.is_valid()) {
+      } else if (!true) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", KR(ret));
       } else if (OB_NOT_NULL(parse_tree.children_[COLUMN_GROUP_NODE])

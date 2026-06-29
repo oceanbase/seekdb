@@ -770,7 +770,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     // ----------------------------- user/role ---------------------------------------
     RECYCLE_FIRST_SCHEMA(RECYCLE_AND_COMPRESS, user, OB_ALL_USER_HISTORY_TNAME, user_id);
     // TODO: should be tested
-    //RECYCLE_SECOND_SCHEMA(role_grantee, OB_ALL_TENANT_ROLE_GRANTEE_MAP_HISTORY_TNAME, grantee_id, role_id);
+    //RECYCLE_SECOND_SCHEMA(role_grantee, OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME, grantee_id, role_id);
     ret = OB_SUCCESS; // overwrite ret
 
     // ---------------------------- outline ------------------------------------------
@@ -788,7 +788,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     RECYCLE_FIRST_SCHEMA(RECYCLE_AND_COMPRESS, udt, OB_ALL_TYPE_HISTORY_TNAME, type_id);
     RECYCLE_SECOND_SCHEMA(udt, OB_ALL_TYPE_ATTR_HISTORY_TNAME, type_id, attribute);
     RECYCLE_FIRST_SCHEMA(RECYCLE_AND_COMPRESS, udt, OB_ALL_COLL_TYPE_HISTORY_TNAME, coll_type_id);
-    RECYCLE_SECOND_SCHEMA(udt, OB_ALL_TENANT_OBJECT_TYPE_TNAME, object_type_id, type);
+    RECYCLE_SECOND_SCHEMA(udt, OB_ALL_OBJECT_TYPE_TNAME, object_type_id, type);
     ret = OB_SUCCESS; // overwrite ret
     */
 
@@ -818,7 +818,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     // 2. user object priv history will be recycled and compressed.
     {
       ObObjectPrivRecycleSchemaExecutor executor(recycle_schema_version,
-                                                 OB_ALL_TENANT_OBJAUTH_HISTORY_TNAME,
+                                                 OB_ALL_OBJAUTH_HISTORY_TNAME,
                                                  sql_proxy_,
                                                  this);
       if (OB_FAIL(executor.execute())) { // overwrite ret
@@ -849,7 +849,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     ret = OB_SUCCESS; // overwrite ret
 
     // --------------------------- location --------------------------------------------------
-    RECYCLE_FIRST_SCHEMA(RECYCLE_AND_COMPRESS, location, OB_ALL_TENANT_LOCATION_HISTORY_TNAME,
+    RECYCLE_FIRST_SCHEMA(RECYCLE_AND_COMPRESS, location, OB_ALL_LOCATION_HISTORY_TNAME,
                          location_id);
     ret = OB_SUCCESS; // overwrite ret
     
@@ -857,7 +857,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     // (RECYCLE_AND_COMPRESS)
     {
       ObObjectPrivMysqlRecycleSchemaExecutor executor(recycle_schema_version,
-                                                 OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME,
+                                                 OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
                                                  sql_proxy_,
                                                  this);
       if (OB_FAIL(executor.execute())) { // overwrite ret

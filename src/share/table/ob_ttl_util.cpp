@@ -1023,9 +1023,7 @@ int ObTTLUtil::check_task_status_from_sys_table(common::ObISQLClient& proxy,
 
 bool ObTTLUtil::is_enable_ttl()
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  return tenant_config.is_valid() &&
-         tenant_config->enable_kv_ttl;
+  return GCONF.enable_kv_ttl;
 }
 
 const char * ObTTLUtil::get_ttl_tenant_status_cstr(const ObTTLTaskStatus &status)

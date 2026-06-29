@@ -923,11 +923,10 @@ int ObTxTable::get_recycle_scn(SCN &real_recycle_scn)
 
   int64_t current_time_us = ObClockGenerator::getClock();
   int64_t tx_result_retention_s = DEFAULT_TX_RESULT_RETENTION_S;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    // use config value if config is valid
-    tx_result_retention_s = tenant_config->_tx_result_retention;
-  }
+
+  // use config value if config is valid
+  tx_result_retention_s = GCONF._tx_result_retention;
+
 
   if (current_time_us - recycle_record_.last_recycle_ts_ < MIN_INTERVAL_OF_TX_DATA_RECYCLE_US) {
     // just return an error code to avoid constructing compaction filter

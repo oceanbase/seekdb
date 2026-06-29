@@ -220,15 +220,9 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
       if (timeout > 0) {
         cond_.wait(wait_key, timeout);
       } else if (OB_UNLIKELY(INT64_MAX == timeout_)) {
-        ObTenantConfigGuard tenant_config(TENANT_CONF());
-        if (tenant_config.is_valid()) {
-          timeout_ = tenant_config->_parallel_server_sleep_time * 1000;
-          cond_.wait(wait_key, timeout_);
-          LOG_DEBUG("channel loop polling time", K(timeout_), K(timeout), K(ret));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to init tenant config", K(ret));
-        }
+        timeout_ = GCONF._parallel_server_sleep_time * 1000;
+        cond_.wait(wait_key, timeout_);
+        LOG_DEBUG("channel loop polling time", K(timeout_), K(timeout), K(ret));
       } else {
         cond_.wait(wait_key, timeout_);
       }

@@ -533,12 +533,12 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("get first statement failed", K(ret));
   } else if (table_schema.is_duplicate_table()) {
-   if (true) {
-    // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
-      LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
-    }
+
+  // TODO@jingyu_cr: make sure whether sys log stream have to be duplicated
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "create duplicate table under sys or meta tenant");
+    LOG_WARN("create dup table not supported", KR(ret), K(table_schema));
+
   }
 
   if (OB_FAIL(ret)) {
@@ -548,9 +548,8 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     const_cast<obcall::ObCreateTableArg&>(create_table_arg).ddl_stmt_str_ = first_stmt;
     bool enable_parallel_create_table = false;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      enable_parallel_create_table = tenant_config.is_valid()
-                                     && tenant_config->_enable_parallel_table_creation;
+      enable_parallel_create_table = true
+                                     && GCONF._enable_parallel_table_creation;
 
     }
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -567,9 +566,8 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       } else if (table_schema.is_view_table()) {
         is_parallel_create = false;
       } else {
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-        is_parallel_create = tenant_config.is_valid()
-                             && tenant_config->_enable_parallel_table_creation;
+        is_parallel_create = true
+                             && GCONF._enable_parallel_table_creation;
       }
       if (OB_FAIL(ret)) {
         // do nothing

@@ -749,11 +749,10 @@ int ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
   ObMultiVersionSchemaService *schema_service = NULL;
   int64_t consensus_timeout = 30 * 1000 * 1000L; // 30s
   bool is_async = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    consensus_timeout = tenant_config->_wait_interval_after_parallel_ddl;
-    is_async = (0 == tenant_config->_publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
-  }
+
+  consensus_timeout = GCONF._wait_interval_after_parallel_ddl;
+  is_async = (0 == GCONF._publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
+
   if (OB_ISNULL(session) || OB_UNLIKELY(false
       || schema_version <= 0
       || consensus_timeout < 0)) {
@@ -1559,11 +1558,10 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   int ret = OB_SUCCESS;
   is_parallel = true;
   ObParallelDDLControlMode cfg;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (OB_UNLIKELY(!tenant_config.is_valid())) {
+  if (OB_UNLIKELY(!true)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid tenant config", KR(ret));
-  } else if (OB_FAIL(tenant_config->_parallel_ddl_control.init_mode(cfg))) {
+  } else if (OB_FAIL(GCONF._parallel_ddl_control.init_mode(cfg))) {
     LOG_WARN("init mode failed", KR(ret));
   } else if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
     LOG_WARN("fail to check is parallel ddl", KR(ret), K(ddl_type));

@@ -189,13 +189,7 @@ int ObHashGroupByVecOp::inner_open()
       op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::HASH_INIT_BUCKET_COUNT;
       op_monitor_info_.otherstat_4_value_ = 0;
       op_monitor_info_.otherstat_4_id_ = ObSqlMonitorStatIds::HASH_POPULAR_MAP_SIZE;
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (tenant_config.is_valid()) {
-        force_dump_ = tenant_config->_force_hash_groupby_dump;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid tenant config", K(ret));
-      }
+      force_dump_ = GCONF._force_hash_groupby_dump;
       LOG_TRACE("trace init hash table", K(MY_SPEC.id_), K(init_size), K(MY_SPEC.est_group_cnt_), K(est_group_cnt),
         K(est_hash_mem_size), K(estimate_mem_size),
         K(profile_.get_expect_size()),

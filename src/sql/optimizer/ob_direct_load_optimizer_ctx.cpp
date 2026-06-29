@@ -268,23 +268,22 @@ void ObDirectLoadOptimizerCtx::enable_by_config(ObExecContext *exec_ctx)
     load_method_ = ObDirectLoadMethod::INCREMENTAL;
     is_optimized_by_default_load_mode_ = true;
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    const ObString &config_str = tenant_config->default_load_mode.get_value_string();
+    const ObString &config_str = GCONF.default_load_mode.get_value_string();
     need_sort_ = true;
     insert_mode_ = ObDirectLoadInsertMode::NORMAL;
-    if (tenant_config.is_valid()) {
-      if (0 == config_str.case_compare("FULL_DIRECT_WRITE")) {
-        load_method_ = ObDirectLoadMethod::FULL;
-      } else if (0 == config_str.case_compare("INC_DIRECT_WRITE")) {
-        load_method_ = ObDirectLoadMethod::INCREMENTAL;
-      } else if (0 == config_str.case_compare("INC_REPLACE_DIRECT_WRITE")) {
-        load_method_ = ObDirectLoadMethod::INCREMENTAL;
-        insert_mode_ = ObDirectLoadInsertMode::INC_REPLACE;
-      }
-      if (load_method_ != ObDirectLoadMethod::INVALID_METHOD) {
-        is_optimized_by_default_load_mode_ = true;
-      }
+
+    if (0 == config_str.case_compare("FULL_DIRECT_WRITE")) {
+      load_method_ = ObDirectLoadMethod::FULL;
+    } else if (0 == config_str.case_compare("INC_DIRECT_WRITE")) {
+      load_method_ = ObDirectLoadMethod::INCREMENTAL;
+    } else if (0 == config_str.case_compare("INC_REPLACE_DIRECT_WRITE")) {
+      load_method_ = ObDirectLoadMethod::INCREMENTAL;
+      insert_mode_ = ObDirectLoadInsertMode::INC_REPLACE;
     }
+    if (load_method_ != ObDirectLoadMethod::INVALID_METHOD) {
+      is_optimized_by_default_load_mode_ = true;
+    }
+
   }
 }
 
@@ -398,7 +397,6 @@ int ObDirectLoadOptimizerCtx::check_direct_load_allow_fallback(
   int ret = OB_SUCCESS;
   allow_fallback = true;
   ObSQLSessionInfo *session_info = nullptr;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_ISNULL(session_info = exec_ctx->get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session info is null", K(ret));
@@ -406,8 +404,8 @@ int ObDirectLoadOptimizerCtx::check_direct_load_allow_fallback(
     allow_fallback = false;
   } else if (optimize_ctx.is_insert_overwrite()) {
     allow_fallback = false;
-  } else if (tenant_config.is_valid()) {
-    allow_fallback = tenant_config->direct_load_allow_fallback;
+  } else {
+    allow_fallback = GCONF.direct_load_allow_fallback;
   }
   return ret;
 }

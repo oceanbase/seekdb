@@ -134,30 +134,6 @@ ObAllVirtualVectorIndexInfo::~ObAllVirtualVectorIndexInfo()
 int ObAllVirtualVectorIndexInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    if (ret != OB_ITER_END) {
-      SERVER_LOG(WARN, "execute fail", K(ret));
-    }
-  }
-  return ret;
-}
-void ObAllVirtualVectorIndexInfo::release_last_tenant()
-{
-  iter_.reset();
-}
-
-bool ObAllVirtualVectorIndexInfo::is_need_process()
-{
-  if (!false &&
-      (true || true)) {
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualVectorIndexInfo::process_curr_tenant(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
   row = nullptr;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
@@ -235,7 +211,6 @@ int ObAllVirtualVectorIndexInfo::process_curr_tenant(ObNewRow *&row)
 
 void ObAllVirtualVectorIndexInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   iter_.reset();
   memset(ip_buf_, 0, sizeof(ip_buf_));
   ObVirtualTableScannerIterator::reset();

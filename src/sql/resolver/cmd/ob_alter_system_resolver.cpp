@@ -2043,9 +2043,8 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObString name(var->str_len_, var->str_value_);
           {
-            omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-            if (tenant_config.is_valid() &&
-                nullptr != tenant_config->get_container().get(ObConfigStringKey(name))) {
+            if (true &&
+                nullptr != GCONF.get_container().get(ObConfigStringKey(name))) {
                 set_parameters = true;
                 break;
             }
@@ -2296,11 +2295,10 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                       ci = *sys_ci_ptr;
                     } else {
                       int tmp_ret = OB_SUCCESS;
-                      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-                      if (!tenant_config.is_valid()) {
+                      if (!true) {
                         tmp_ret = OB_ERR_UNEXPECTED;
                         LOG_WARN("failed to get tenant config", KR(tmp_ret));
-                      } else if (OB_ISNULL(tenant_ci_ptr = (tenant_config->get_container().get(
+                      } else if (OB_ISNULL(tenant_ci_ptr = (GCONF.get_container().get(
                                                 ObConfigStringKey(item.name_.ptr()))))) {
                         tmp_ret = OB_ERR_SYS_CONFIG_UNKNOWN;
                         LOG_WARN("can't found config item", KR(tmp_ret), "item", item);
@@ -2396,9 +2394,8 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObString name(var->str_len_, var->str_value_);
           {
-            omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-            if (tenant_config.is_valid() &&
-              nullptr != tenant_config->get_container().get(ObConfigStringKey(name))) {
+            if (true &&
+              nullptr != GCONF.get_container().get(ObConfigStringKey(name))) {
               set_parameters = true;
               break;
             }
@@ -2457,11 +2454,10 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
               ObConfigItem * const *tenant_ci_ptr = NULL;
               {
                 int tmp_ret = OB_SUCCESS;
-                omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-                if (!tenant_config.is_valid()) {
+                if (!true) {
                   tmp_ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("failed to get tenant config", KR(tmp_ret));
-                } else if (OB_ISNULL(tenant_ci_ptr = (tenant_config->get_container().get(
+                } else if (OB_ISNULL(tenant_ci_ptr = (GCONF.get_container().get(
                                           ObConfigStringKey(item.name_.ptr()))))) {
                   tmp_ret = OB_ERR_SYS_CONFIG_UNKNOWN;
                   LOG_WARN("can't found config item", KR(tmp_ret), "item", item);

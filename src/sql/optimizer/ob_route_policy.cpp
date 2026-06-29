@@ -379,38 +379,5 @@ int ObRoutePolicy::init()
   return ret;
 }
 
-bool ObRoutePolicy::is_same_idc(const share::ObServerLocality &locality1, const share::ObServerLocality &locality2)
-{
-  bool ret_bool = false;
-  if (locality1.get_region().is_empty() || locality2.get_region().is_empty()) {
-    // If the REGION is not set for the cluster, it is impossible to determine if they are in the same REGION
-    ret_bool = false;
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "cluster region is not set", K(locality1), K(locality2));
-  } else if (locality1.get_idc().is_empty() || locality2.get_idc().is_empty()) {
-    // If the IDC is not set for the zone, it is impossible to determine if they are in the same IDC
-    ret_bool = false;
-    LOG_TRACE("zone idc is not set", K(locality1), K(locality2));
-  } else if (locality1.get_region() == locality2.get_region()) {
-    // First determine if the region is the same, to avoid having the same name idc in different regions
-    if (locality1.get_idc() == locality2.get_idc()) {
-      ret_bool = true;
-    }
-  }
-  return ret_bool;
-}
-
-bool ObRoutePolicy::is_same_region(const share::ObServerLocality &locality1, const share::ObServerLocality &locality2)
-{
-  bool ret_bool = false;
-  if (locality1.get_region().is_empty() || locality2.get_region().is_empty()) {
-    // If the REGION is not set for the cluster, it is impossible to determine if they are in the same REGION
-    ret_bool = false;
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "cluster region is not set", K(locality1), K(locality2));
-  } else if (locality1.get_region() == locality2.get_region()) {
-    ret_bool = true;
-  }
-  return ret_bool;
-}
-
 }//sql
 }//oceanbase

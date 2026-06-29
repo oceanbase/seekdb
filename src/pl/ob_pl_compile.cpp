@@ -113,67 +113,6 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
   return ret;
 }
 
-int extract_interface_name(const ObPLFunctionAST &func_ast, ObString &interface_name)
-{
-  int ret = OB_SUCCESS;
-  interface_name.reset();
-  const ObPLStmtBlock *body = func_ast.get_body();
-  if (OB_ISNULL(body)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pl body is null", K(ret), K(func_ast.get_name()));
-  } else if (body->get_stmts().count() != 1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected interface stmt count", K(ret), K(func_ast.get_name()), "stmt_count", body->get_stmts().count());
-  } else if (OB_ISNULL(body->get_stmts().at(0))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("interface stmt is null", K(ret), K(func_ast.get_name()));
-  } else if (PL_INTERFACE != body->get_stmts().at(0)->get_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected stmt type for interface routine", K(ret), K(func_ast.get_name()), "stmt_type", body->get_stmts().at(0)->get_type());
-  } else {
-    interface_name = static_cast<const ObPLInterfaceStmt *>(body->get_stmts().at(0))->get_entry();
-    if (OB_UNLIKELY(interface_name.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("interface name is empty", K(ret), K(func_ast.get_name()));
-    }
-  }
-  return ret;
-}
-
-int init_interface_routine(const ObPLFunctionAST &func_ast, ObPLFunction &func)
-{
-  int ret = OB_SUCCESS;
-  ObString interface_name;
-  OZ (extract_interface_name(func_ast, interface_name));
-  OZ (func.set_interface_name(interface_name));
-  OZ (func.set_variables(func_ast.get_symbol_table()));
-  OZ (func.set_types(func_ast.get_user_type_table()));
-  OZ (func.get_dependency_table().assign(func_ast.get_dependency_table()));
-  OX (func.set_action((uint64_t)(&ObPL::interface_execute)));
-  OX (func.set_can_cached(func_ast.get_can_cached()));
-  OX (func.set_is_all_sql_stmt(false));
-  OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
-  OX (func.add_members(func_ast.get_flag()));
-  OX (func.set_pipelined(func_ast.get_pipelined()));
-  return ret;
-}
-
-bool need_package_level_codegen(const ObPLPackageAST &package_ast)
-{
-  const ObPLStmtBlock *body = package_ast.get_body();
-  return (OB_NOT_NULL(body) && body->get_stmts().count() > 0)
-      || !package_ast.get_obj_access_exprs().empty();
-}
-
-bool should_direct_dispatch_intf(const ObPLFunctionAST &func_ast)
-{
-  return is_embed_mode() && func_ast.get_compile_flag().compile_with_intf();
-}
-
-bool should_codegen_package(const ObPLPackageAST &package_ast)
-{
-  return !is_embed_mode() || need_package_level_codegen(package_ast);
-}
 }
 
 int ObPLCompiler::check_dep_schema(ObSchemaGetterGuard &schema_guard,
@@ -634,17 +573,7 @@ int ObPLCompiler::compile(
   LOG_INFO(">>>>>>>>Resolve Time: ", K(routine.get_routine_id()), K(routine.get_routine_name()), K(resolve_end - parse_end));
   FLT_SET_TAG(pl_compile_resolve_time, resolve_end - parse_end);
   //Step 4: Code Generator
-  // Embedded builds do not provide LLVM, so INTF routines execute via the
-  // pre-registered C interface trampoline instead of JIT codegen.
-  if (OB_SUCC(ret) && should_direct_dispatch_intf(func_ast)) {
-    OZ (init_interface_routine(func_ast, func));
-    OX (func.set_ret_type(func_ast.get_ret_type()));
-    OX (func.get_stat_for_update().schema_version_ = routine.get_schema_version());
-    OX (func.get_stat_for_update().pl_cg_mem_hold_ = 0);
-    OZ (func.set_tenant_sys_schema_version(schema_guard_));
-    OZ (check_dep_schema(schema_guard_, func.get_dependency_table()));
-  } else if (OB_SUCC(ret)) {
-
+  if (OB_SUCC(ret)) {
     {
       // Interpreter path: no LLVM codegen / JIT and no persistent DLL. Prepare the
       // routine's ObSqlExpressions + copy AST metadata onto the func; the tree-walking
@@ -956,9 +885,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
   int64_t resolve_end = ObTimeUtility::current_time();
   FLT_SET_TAG(pl_compile_resolve_time, resolve_end - compile_start);
 
-  // In embedded mode, pure INTF packages can skip LLVM entirely; non-embedded
-  // mode preserves the historical package compilation path.
-  if (OB_SUCC(ret) && should_codegen_package(package_ast)) {
+  if (OB_SUCC(ret)) {
     {
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
       // Interpreter path: prepare the package's expressions only, no LLVM codegen.
@@ -967,8 +894,6 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
       OZ (pl_finalize_expressions(session_info_, schema_guard_, package_ast, package));
       OX (package.get_stat_for_update().pl_cg_mem_hold_ = 0);
     }
-  } else if (OB_SUCC(ret)) {
-    OX (package.get_stat_for_update().pl_cg_mem_hold_ = 0);
   }
 
   OZ (generate_package(copy_exec_env, package_ast, package));
@@ -1421,35 +1346,23 @@ int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
         new (routine) ObPLFunction(compile_unit.get_mem_context());
         OZ (init_function(schema_guard, exec_env, *routine_info, *routine));
         if (OB_SUCC(ret)) {
-          // Embedded builds dispatch INTF routines directly because LLVM is
-          // unavailable; non-embedded builds intentionally keep the normal path.
-          if (should_direct_dispatch_intf(*routine_ast)) {
-            OZ (init_interface_routine(*routine_ast, *routine));
-            OX (routine->set_ret_type(routine_ast->get_ret_type()));
-            if (OB_FAIL(compile_unit.add_routine(routine))) {
-              LOG_WARN("package add routine failed", K(ret));
-            }
-          } else {
-            {
-              lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
-              // Interpreter path: prepare expressions + copy metadata + retain AST, no LLVM codegen.
-              OZ (pl_prepare_expressions(*routine_ast, *routine));
-              OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine));
-              OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
-              OZ (routine->set_variables(routine_ast->get_symbol_table()));
-              OZ (routine->set_types(routine_ast->get_user_type_table()));
-              OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
-              OZ (routine->add_members(routine_ast->get_flag()));
-              OX (routine->set_pipelined(routine_ast->get_pipelined()));
-              OX (routine->set_can_cached(routine_ast->get_can_cached()));
-              OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
-              OX (routine->set_is_all_sql_stmt(routine_ast->get_is_all_sql_stmt()));
-              OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));
-              OX (routine->set_ret_type(routine_ast->get_ret_type()));
-              OX (routine->set_ast(routine_ast));
-              OZ (compile_unit.add_routine(routine));
-            } // end of HEAP_VAR
-          }
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
+          // Interpreter path: prepare expressions + copy metadata + retain AST, no LLVM codegen.
+          OZ (pl_prepare_expressions(*routine_ast, *routine));
+          OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine));
+          OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
+          OZ (routine->set_variables(routine_ast->get_symbol_table()));
+          OZ (routine->set_types(routine_ast->get_user_type_table()));
+          OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
+          OZ (routine->add_members(routine_ast->get_flag()));
+          OX (routine->set_pipelined(routine_ast->get_pipelined()));
+          OX (routine->set_can_cached(routine_ast->get_can_cached()));
+          OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
+          OX (routine->set_is_all_sql_stmt(routine_ast->get_is_all_sql_stmt()));
+          OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));
+          OX (routine->set_ret_type(routine_ast->get_ret_type()));
+          OX (routine->set_ast(routine_ast));
+          OZ (compile_unit.add_routine(routine));
         }
       }
       if (OB_FAIL(ret) && OB_NOT_NULL(routine)) {

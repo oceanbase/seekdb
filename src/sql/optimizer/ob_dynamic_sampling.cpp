@@ -1686,13 +1686,12 @@ int64_t ObDynamicSamplingUtils::get_dynamic_sampling_max_timeout(ObOptimizerCont
   int64_t max_ds_timeout = 0;
   if (THIS_WORKER.get_timeout_remain() / 10 >= OB_DS_MIN_QUERY_TIMEOUT) {
     max_ds_timeout = THIS_WORKER.get_timeout_remain() / 10;//default ds time can't exceed 10% of current sql remain timeout
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      int64_t ds_maximum_time = tenant_config->_optimizer_ads_time_limit * 1000000;
-      if (max_ds_timeout > ds_maximum_time) {//can't exceed the max ds timeout for single table
-        max_ds_timeout = ds_maximum_time;
-      }
+
+    int64_t ds_maximum_time = GCONF._optimizer_ads_time_limit * 1000000;
+    if (max_ds_timeout > ds_maximum_time) {//can't exceed the max ds timeout for single table
+      max_ds_timeout = ds_maximum_time;
     }
+
   }
   return max_ds_timeout;
 }
@@ -1745,7 +1744,7 @@ bool ObDynamicSamplingUtils::is_ds_virtual_table(const int64_t table_id)
           table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID ||
           table_id == share::OB_ALL_VIRTUAL_DML_STATS_TID ||
           table_id == share::OB_ALL_VIRTUAL_DATA_TYPE_TID ||
-          table_id == share::OB_TENANT_VIRTUAL_COLLATION_TID);
+          table_id == share::OB_ALL_VIRTUAL_COLLATION_TID);
 }
 
 bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)

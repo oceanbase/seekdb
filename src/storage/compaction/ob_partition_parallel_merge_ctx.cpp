@@ -84,10 +84,9 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
   } else if (!merge_ctx.get_need_parallel_minor_merge()) {
     enable_parallel_minor_merge = false;
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      enable_parallel_minor_merge = tenant_config->_enable_parallel_minor_merge;
-    }
+
+    enable_parallel_minor_merge = GCONF._enable_parallel_minor_merge;
+
   }
 
   if (OB_FAIL(ret)) {

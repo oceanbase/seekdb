@@ -221,8 +221,7 @@ int ObDataDictService::resume_leader()
 
 void ObDataDictService::refresh_config_()
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  const int64_t dump_interval = tenant_config->dump_data_dictionary_to_log_interval;
+  const int64_t dump_interval = GCONF.dump_data_dictionary_to_log_interval;
   if (dump_interval != dump_interval_) {
     ATOMIC_SET(&dump_interval_, dump_interval);
     DDLOG(INFO, "modify dump_data_dictionary_to_log_interval", K_(dump_interval));

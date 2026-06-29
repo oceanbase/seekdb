@@ -340,14 +340,13 @@ int ObTenantTabletScheduler::init()
   int64_t schedule_batch_size = ObScheduleBatchSizeMgr::DEFAULT_TABLET_BATCH_CNT;
 
   {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      schedule_interval = tenant_config->ob_compaction_schedule_interval;
-      enable_adaptive_compaction = tenant_config->_enable_adaptive_compaction;
-      enable_adaptive_merge_schedule = tenant_config->_enable_adaptive_merge_schedule;
-      fast_freeze_checker_.reload_config(tenant_config->_ob_enable_fast_freeze);
-      schedule_batch_size = tenant_config->compaction_schedule_tablet_batch_cnt;
-    }
+
+    schedule_interval = GCONF.ob_compaction_schedule_interval;
+    enable_adaptive_compaction = GCONF._enable_adaptive_compaction;
+    enable_adaptive_merge_schedule = GCONF._enable_adaptive_merge_schedule;
+    fast_freeze_checker_.reload_config(GCONF._ob_enable_fast_freeze);
+    schedule_batch_size = GCONF.compaction_schedule_tablet_batch_cnt;
+
   } // end of ObTenantConfigGuard
 #ifdef ERRSIM
   schedule_interval = 1000L * 1000L; // 1s
@@ -403,14 +402,13 @@ int ObTenantTabletScheduler::reload_tenant_config()
     int64_t merge_schedule_interval = ObTenantTabletSchedulerTaskMgr::DEFAULT_COMPACTION_SCHEDULE_INTERVAL;
     int64_t schedule_batch_size = ObScheduleBatchSizeMgr::DEFAULT_TABLET_BATCH_CNT;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (tenant_config.is_valid()) {
-        merge_schedule_interval = tenant_config->ob_compaction_schedule_interval;
-        enable_adaptive_compaction = tenant_config->_enable_adaptive_compaction;
-        enable_adaptive_merge_schedule = tenant_config->_enable_adaptive_merge_schedule;
-        fast_freeze_checker_.reload_config(tenant_config->_ob_enable_fast_freeze);
-        schedule_batch_size = tenant_config->compaction_schedule_tablet_batch_cnt;
-      }
+
+      merge_schedule_interval = GCONF.ob_compaction_schedule_interval;
+      enable_adaptive_compaction = GCONF._enable_adaptive_compaction;
+      enable_adaptive_merge_schedule = GCONF._enable_adaptive_merge_schedule;
+      fast_freeze_checker_.reload_config(GCONF._ob_enable_fast_freeze);
+      schedule_batch_size = GCONF.compaction_schedule_tablet_batch_cnt;
+
     } // end of ObTenantConfigGuard
     (void) tenant_status_.refresh_tenant_config(
       enable_adaptive_compaction,
@@ -1018,10 +1016,9 @@ int ObTenantTabletScheduler::schedule_tablet_minor_merge(
     result.transfer_seq_ = tablet_handle.get_obj()->get_transfer_seq();
     int64_t minor_compact_trigger = ObPartitionMergePolicy::DEFAULT_MINOR_COMPACT_TRIGGER;
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (tenant_config.is_valid()) {
-        minor_compact_trigger = tenant_config->minor_compact_trigger;
-      }
+
+      minor_compact_trigger = GCONF.minor_compact_trigger;
+
     }
 
     ObMinorExecuteRangeMgr minor_range_mgr;

@@ -42,9 +42,8 @@ int ObMajorMergeIdling::init()
 int64_t ObMajorMergeIdling::get_idle_interval_us()
 {
   int64_t interval_us = DEFAULT_SCHEDULE_IDLE_US;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (OB_LIKELY(tenant_config.is_valid())) {
-    interval_us = tenant_config->merger_check_interval;
+  if (OB_LIKELY(true)) {
+    interval_us = GCONF.merger_check_interval;
   }
   return interval_us;
 }

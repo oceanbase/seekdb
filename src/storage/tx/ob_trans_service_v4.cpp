@@ -1399,10 +1399,9 @@ int ObTransService::wait_follower_readable_(ObLS &ls,
   int ret = OB_REPLICA_NOT_READABLE;
   int64_t compare_timeout = 0;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    compare_timeout = tenant_config->_follower_snapshot_read_retry_duration;
-  }
+
+  compare_timeout = GCONF._follower_snapshot_read_retry_duration;
+
   if (compare_timeout > 0) {
     int64_t compare_expired_time = ObClockGenerator::getClock() + compare_timeout;
     int64_t stmt_timeout = expire_ts - ObClockGenerator::getClock();

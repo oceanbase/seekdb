@@ -17,7 +17,6 @@
 #ifndef OB_ALL_VIRTUAL_OB_OBJ_LOCK_H_
 #define OB_ALL_VIRTUAL_OB_OBJ_LOCK_H_
 
-#include "observer/omt/ob_multi_tenant_operator.h"
 #include "storage/tablelock/ob_obj_lock.h"
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
@@ -27,8 +26,7 @@ namespace oceanbase
 namespace observer
 {
 
-class ObAllVirtualObjLock : public common::ObVirtualTableScannerIterator,
-                            public omt::ObMultiTenantOperator
+class ObAllVirtualObjLock : public common::ObVirtualTableScannerIterator
 {
 public:
   ObAllVirtualObjLock();
@@ -41,9 +39,6 @@ public:
     addr_ = addr;
   }
 private:
-  virtual bool is_need_process() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override;
   int get_next_ls();
   int get_next_tx_ctx(transaction::ObPartTransCtx *&tx_ctx);
   int get_next_lock_id(ObLockID &lock_id);

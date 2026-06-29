@@ -1258,10 +1258,8 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
     }
   } else {
     ObDataType scalar_data_type;
-    omt::ObTenantConfigGuard tcg(
-        TENANT_CONF());
     bool convert_real_to_decimal =
-        (tcg.is_valid() && tcg->_enable_convert_real_to_decimal);
+        (GCONF._enable_convert_real_to_decimal);
     bool enable_mysql_compatible_dates = false;
     if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(&session_info, false /*is_ddl*/,
                               enable_mysql_compatible_dates))) {
@@ -1774,7 +1772,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
         } else {
           extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
         }
-      } else if (true) {
+      } else {
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
       }
     } else if (extract_package_id(access_idxs.at(0).var_index_)
@@ -1806,7 +1804,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       } else {
         extern_type_info->type_owner_ = access_idxs.at(0).var_index_;
       }
-    } else if (true) {
+    } else {
       extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
     }
     OZ (fill_schema_obj_version(guard,

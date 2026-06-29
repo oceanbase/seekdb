@@ -950,9 +950,7 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
   } else {
     const common::ObString *ddl_id_str = tsi_value->ddl_id_str_;
     lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    if (share::schema::ObSchemaService::g_liboblog_mode_) {
-      // do nothing
-    }
+    UNUSED(compat_mode);
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(ddl_id_str)) {
         ret = new_object_name.append_fmt("__recycle_$_%lu_%ld",

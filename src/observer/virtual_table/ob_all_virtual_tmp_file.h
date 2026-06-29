@@ -19,7 +19,6 @@
 
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "common/ob_clock_generator.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
@@ -31,21 +30,17 @@ class ObTmpFileGlobal;
 namespace observer
 {
 
-class ObAllVirtualTmpFileInfo: public common::ObVirtualTableScannerIterator,
-                                 public omt::ObMultiTenantOperator
+class ObAllVirtualTmpFileInfo: public common::ObVirtualTableScannerIterator
 {
 public:
   ObAllVirtualTmpFileInfo();
   ~ObAllVirtualTmpFileInfo();
 
 public:
-  virtual int inner_get_next_row(common::ObNewRow *&row) { return execute(row);}
+  virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
 
 private:
-  virtual bool is_need_process() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override;
   int get_next_tmp_file_info_(tmp_file::ObTmpFileInfo *tmp_file_info);
   int fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_info);
   int fill_sn_column_(const uint64_t col_index, tmp_file::ObSNTmpFileInfo *tmp_file_info);

@@ -3031,9 +3031,8 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
   if (OB_SUCC(ret) && type_node != NULL) {
     ObDataType data_type;
     // session_info_ NPE check is done in up layer caller
-    omt::ObTenantConfigGuard tcg(TENANT_CONF());
     bool convert_real_to_decimal =
-        (tcg.is_valid() && tcg->_enable_convert_real_to_decimal);
+        (GCONF._enable_convert_real_to_decimal);
     bool enable_decimalint_type = false;
     bool enable_mysql_compatible_dates = false;
     if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info_, enable_decimalint_type))) {
@@ -6403,7 +6402,6 @@ int ObDDLResolver::resolve_vec_index_constraint(
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using generate column as vector index column is");
   } else {
     bool is_sparse_vec_col = false;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
     bool is_collection_column = ob_is_collection_sql_type(column_schema.get_data_type());
     // TODO(shancai): later support text and string type
@@ -9700,13 +9698,12 @@ int ObDDLResolver::resolve_auto_partition(ObPartitionedStmt *stmt, ParseNode *no
       } else {
         // user activates auto-partitioning feature without specified auto_split_size.
         // e.g. create table t1 (c1 int primary key) partition by range();
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-        if (!tenant_config.is_valid()) {
+        if (!true) {
           ret = OB_EAGAIN;
           LOG_WARN("tenant_config has not been loaded", KR(ret));
         } else {
           enable_auto_split = true;
-          auto_part_size = tenant_config->auto_split_tablet_size;
+          auto_part_size = GCONF.auto_split_tablet_size;
           const int64_t errsim_auto_part_size = OB_E(common::EventTable::EN_AUTO_SPLIT_TABLET_SIZE) 0;
           if (0 != errsim_auto_part_size) {
             auto_part_size = std::abs(errsim_auto_part_size);
@@ -9838,7 +9835,7 @@ int ObDDLResolver::resolve_presetting_partition_key(ParseNode *node, ObTableSche
   return ret;
 }
 
-// if tenant_config->enable_auto_split == true and table_schema is valid for auto-partition,
+// if GCONF.enable_auto_split == true and table_schema is valid for auto-partition,
 // enable auto-partition for the table;
 // otherwise, do nothing
 int ObDDLResolver::try_set_auto_partition_by_config(const ParseNode *node,
@@ -9854,15 +9851,14 @@ int ObDDLResolver::try_set_auto_partition_by_config(const ParseNode *node,
              !table_schema.get_part_option().is_valid_split_part_type()) {
     // do nothing
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
 
-    if (!tenant_config.is_valid()) {
+    if (!true) {
       table_schema.forbid_auto_partition();
       LOG_INFO("tenant_config has not been loaded over");
-    } else if (tenant_config->enable_auto_split) {
+    } else if (GCONF.enable_auto_split) {
       // check table
       ObPartitionFuncType unused_part_func_type = PARTITION_FUNC_TYPE_MAX;// we can make sure that the part_expre is empty so enable_auto_partition will handle this situation
-      int64_t auto_part_size = tenant_config->auto_split_tablet_size;
+      int64_t auto_part_size = GCONF.auto_split_tablet_size;
       const int64_t errsim_auto_part_size = OB_E(common::EventTable::EN_AUTO_SPLIT_TABLET_SIZE) 0;
       if (0 != errsim_auto_part_size) {
         auto_part_size = std::abs(errsim_auto_part_size);

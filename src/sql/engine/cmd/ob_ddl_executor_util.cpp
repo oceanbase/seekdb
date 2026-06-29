@@ -88,10 +88,9 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
         } else if (error_message.consensus_schema_version_ != OB_INVALID_VERSION) {
           ObTimeoutCtx ctx;
           int64_t consensus_timeout =  30 * 1000 * 1000L; // 30s;
-          omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-          if (tenant_config.is_valid()) {
-            consensus_timeout = tenant_config->_wait_interval_after_parallel_ddl;
-          }
+
+          consensus_timeout = GCONF._wait_interval_after_parallel_ddl;
+
           if (THIS_WORKER.is_timeout_ts_valid()) {
             consensus_timeout = min(consensus_timeout, THIS_WORKER.get_timeout_remain());
           }

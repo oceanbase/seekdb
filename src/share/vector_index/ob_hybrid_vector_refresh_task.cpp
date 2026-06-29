@@ -527,15 +527,8 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
   int64_t http_timeout_us = 0;
   int64_t http_max_retries = 0;
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    http_timeout_us = tenant_config->model_request_timeout;
-    http_max_retries = tenant_config->model_max_retries;
-  } else {
-    SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init model request timeout and max retries config with default value");
-    http_timeout_us = 60 * 1000 * 1000; // 60 seconds
-    http_max_retries = 2;
-  }
+  http_timeout_us = GCONF.model_request_timeout;
+  http_max_retries = GCONF.model_max_retries;
 
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;

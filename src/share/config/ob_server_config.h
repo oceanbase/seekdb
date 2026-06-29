@@ -32,8 +32,6 @@ namespace common
 class ObISQLClient;
 const char* const MIN_OBSERVER_VERSION = "min_observer_version";
 const char* const __MIN_FULL_RESOURCE_POOL_MEMORY = "__min_full_resource_pool_memory";
-const char* const ENABLE_REBALANCE = "enable_rebalance";
-const char* const ENABLE_REREPLICATION = "enable_rereplication";
 const char* const MERGER_CHECK_INTERVAL = "merger_check_interval";
 const char* const ENABLE_MAJOR_FREEZE = "enable_major_freeze";
 const char* const ENABLE_DDL = "enable_ddl";
@@ -63,8 +61,6 @@ const char* const _MDS_MEMORY_LIMIT_PERCENTAGE = "_mds_memory_limit_percentage";
 const char* const COMPATIBLE = "compatible";
 const char* const ENABLE_COMPATIBLE_MONOTONIC = "_enable_compatible_monotonic";
 const char* const WEAK_READ_VERSION_REFRESH_INTERVAL = "weak_read_version_refresh_interval";
-const char* const PARTITION_BALANCE_SCHEDULE_INTERVAL = "partition_balance_schedule_interval";
-const char* const BALANCER_IDLE_TIME = "balancer_idle_time";
 const char* const LOG_DISK_UTILIZATION_LIMIT_THRESHOLD = "log_disk_utilization_limit_threshold";
 const char* const LOG_DISK_THROTTLING_PERCENTAGE = "log_disk_throttling_percentage";
 const char* const ARCHIVE_LAG_TARGET = "archive_lag_target";
@@ -101,7 +97,6 @@ public:
   virtual int64_t update_version() { return ATOMIC_AAF(&global_version_, 1); }
   virtual ObServerRole get_server_type() const { return common::OB_SERVER; }
   virtual bool is_debug_sync_enabled() const { return static_cast<int64_t>(debug_sync_timeout) > 0; }
-  virtual bool is_rereplication_enabled() { return !in_major_version_upgrade_mode() && enable_rereplication; }
 
   virtual double user_location_cpu_quota() const { return location_cache_cpu_quota; }
   virtual double sys_location_cpu_quota() const { return std::max(1., user_location_cpu_quota() / 2); }

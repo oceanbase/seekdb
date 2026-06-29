@@ -48,7 +48,6 @@ ERRSIM_POINT_DEF(LOG_ROUTE_HANDLER_INIT_FAIL);
 ERRSIM_POINT_DEF(LOG_ROUTE_HANDLER_START_FAIL);
 #endif
 int ObLogRouteService::init(ObISQLClient *proxy,
-    const common::ObRegion &prefer_region,
     const int64_t cluster_id,
     const bool is_across_cluster,
     void *err_handler,
@@ -64,7 +63,6 @@ int ObLogRouteService::init(ObISQLClient *proxy,
 {
   int ret = OB_SUCCESS;
   UNUSED(proxy);
-  UNUSED(prefer_region);
   UNUSED(is_across_cluster);
   UNUSED(err_handler);
   UNUSED(external_server_blacklist);

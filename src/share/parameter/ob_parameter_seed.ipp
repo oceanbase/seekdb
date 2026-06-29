@@ -757,12 +757,6 @@ DEF_PARAM(_ls_gc_wait_readonly_tx_time, TIME, OB_CLUSTER_PARAMETER, "24h",
         "The maximum waiting time for residual read-only transaction before executing log stream garbage collecting。The default value is 24h. Range: [0s,  +∞)."
         "Log stream garbage collecting will no longer wait for readonly transaction when the tenant is dropped. ",
         ObParameterAttr(Section::LOGSERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(standby_db_preferred_upstream_log_region, STR, OB_CLUSTER_PARAMETER, "",
-       "The preferred upstream log region for Standby db. "
-       "The Standby db will give priority to the preferred upstream log region to fetch log. "
-       "For high availability，the Standby db will also switch to the other region "
-       "when the preferred upstream log region can not fetch log because of exception etc.",
-        ObParameterAttr(Section::LOGSERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_enable_log_cache, BOOL, OB_CLUSTER_PARAMETER, "True",
          "specifies whether allow to fill log kv cache. "
@@ -787,46 +781,6 @@ DEF_PARAM(arbitration_degradation_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER
 DEF_PARAM(resource_hard_limit, INT, OB_CLUSTER_PARAMETER, "100", "[100, 10000]",
         "system utilization should not be large than resource_hard_limit",
         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(enable_rereplication, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "specifies whether the auto-replication is turned on. "
-         "Value:  True:turned on  False: turned off",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(enable_rebalance, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "specifies whether the tenant load-balancing is turned on. "
-         "Value:  True:turned on  False: turned off",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(enable_transfer, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "controls whether transfers are allowed in the tenant. "
-         "This config does not take effect when enable_rebalance is disabled. "
-         "Value:  True:turned on  False:turned off",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(balancer_idle_time, TIME, OB_CLUSTER_PARAMETER, "10s", "[10s,]",
-         "the time interval between the schedules of the tenant load-balancing task. "
-         "Range: [10s, +∞)",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(partition_balance_schedule_interval, TIME, OB_CLUSTER_PARAMETER, "2h", "[0s,]",
-         "the time interval between generate partition balance task. "
-         "The value should be no less than balancer_idle_time to enable partition balance. "
-         "Default value 2h and the value 0s means disable partition balance. "
-         "Range: [0s, +∞)",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(balancer_tolerance_percentage, INT, OB_CLUSTER_PARAMETER, "10", "[1, 100)",
-        "specifies the tolerance (in percentage) of the unbalance of the disk space utilization "
-        "among all units. The average disk space utilization is calculated by dividing "
-        "the total space by the number of units. For example, say balancer_tolerance_percentage "
-        "is set to 10 and a tenant has two units in the system, "
-        "the average disk use for each unit should be about the same, "
-        "thus 50% of the total value. Therefore, the system will start a rebalancing task "
-        "when any unit\\'s disk space goes beyond +-10% of the average usage. "
-        "Range: [1, 100) in percentage",
-        ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(balancer_task_timeout, TIME, OB_CLUSTER_PARAMETER, "20m", "[1s,)",
-         "the time to execute the load-balancing task before it is terminated. Range: [1s, +∞)",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(balancer_log_interval, TIME, OB_CLUSTER_PARAMETER, "1m", "[1s,)",
-         "the time interval between logging the load-balancing task\\'s statistics. "
-         "Range: [1s, +∞)",
-         ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // abandoned in 4.x
 //DEF_PARAM(__balance_controller, OB_CLUSTER_PARAMETER, "",
 //        "specifies whether the balance events are turned on or turned off.",
@@ -1380,10 +1334,10 @@ DEF_PARAM(_enable_easy_keepalive, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable keepalive for each TCP connection.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_ob_ratelimit, BOOL, OB_CLUSTER_PARAMETER, "False",
-         "enable ratelimit between regions for RPC connection.",
+         "enable ratelimit for RPC connection.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(ob_ratelimit_stat_period, TIME, OB_CLUSTER_PARAMETER, "1s", "[100ms,]",
-         "the time interval to update observer's maximum bandwidth to a certain region. ",
+         "the time interval to update observer's maximum bandwidth. ",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(open_cursors, INT, OB_CLUSTER_PARAMETER, "50", "[0,65535]",
         "specifies the maximum number of open cursors a session can have at once."
@@ -1706,17 +1660,6 @@ DEF_PARAM(observer_id, INT, OB_CLUSTER_PARAMETER, "0", "[1, 18446744073709551615
 DEF_PARAM(_pipelined_table_function_memory_limit, INT, OB_CLUSTER_PARAMETER, "524288000", "[1024,18446744073709551615]",
         "pipeline table function result set memory size limit. default 524288000 (500M), Range: [1024,18446744073709551615]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_enable_balance_kill_transaction, BOOL, OB_CLUSTER_PARAMETER, "False",
-        "Specifies whether balance should actively kill transaction",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_balance_kill_transaction_threshold, TIME, OB_CLUSTER_PARAMETER, "100ms", "[1ms, 60s]",
-         "the time given to the transaction to execute when do balance"
-         "before it will be killed. Range: [1ms, 60s]",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_balance_wait_killing_transaction_end_threshold, TIME, OB_CLUSTER_PARAMETER, "100ms", "[10ms, 60s]",
-         "the threshold for waiting time after killing transactions until they end."
-         "Range: [10ms, 60s]",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_enable_hgby_skew_detection, BOOL, OB_CLUSTER_PARAMETER, "True",
          "specifies whether hgby skew detection is enabled",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -2003,11 +1946,6 @@ DEF_PARAM(_faststack_min_interval, TIME, OB_CLUSTER_PARAMETER, "30m", "[1s,)",
         "Minimum interval for OBServer to automatically collect the obstack. "
         "Default: 30min. Range: [1s,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(choose_migration_source_policy, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "region", common::ObConfigMigrationChooseSourceChecker,
-        "the policy of choose source in migration and add replica. 'idc' means firstly choose follower replica of the same idc as source, "
-        "'region' means firstly choose follower replica of the same region as source",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-        "idc, region");
 DEF_PARAM(_query_record_size_limit, INT, OB_CLUSTER_PARAMETER, "65536", "[0, 67108864] in integer",
         "set sql_audit and plan stat query sql size. Range: [0,67108864] in integer in integer.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

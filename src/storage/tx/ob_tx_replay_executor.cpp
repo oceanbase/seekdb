@@ -801,11 +801,10 @@ int ObTxReplayExecutor::replay_row_(storage::ObStoreCtx &store_ctx,
                 K(ret), K(ls_id), K(tablet_id), K(log_ts_ns_),
                 K(tx_part_log_no_), K(mmi_ptr->get_row_head()));
     } else if (OB_TABLET_NOT_EXIST == ret) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (OB_UNLIKELY(!tenant_config.is_valid())) {
+      if (OB_UNLIKELY(!true)) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "tenant config is invalid", K(ret));
-      } else if (tenant_config->_allow_skip_replay_redo_after_detete_tablet) {
+      } else if (GCONF._allow_skip_replay_redo_after_detete_tablet) {
         ret = OB_NO_NEED_UPDATE;
         TRANS_LOG(WARN, "[Replay Tx] tablet does not exist while preparing memtable for replay, allow to skip this clog replaying for emergency",
             K(ret), K(ls_id), K(tablet_id), K_(log_ts_ns));

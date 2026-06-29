@@ -24,8 +24,8 @@
  {
  namespace schema
  {
- const char *ObLocationSqlService::LOCATION_TABLES[2] = {OB_ALL_TENANT_LOCATION_TNAME,
-                                                           OB_ALL_TENANT_LOCATION_HISTORY_TNAME};
+ const char *ObLocationSqlService::LOCATION_TABLES[2] = {OB_ALL_LOCATION_TNAME,
+                                                           OB_ALL_LOCATION_HISTORY_TNAME};
  
  ObLocationSqlService::ObLocationSqlService(ObSchemaService &schema_service)
    : ObDDLSqlService(schema_service)

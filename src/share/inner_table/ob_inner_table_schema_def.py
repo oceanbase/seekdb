@@ -261,7 +261,7 @@ gen_sqlite_table_def(
   )
 
 gen_sqlite_table_def(
-    table_name = '__all_tenant_event_history',
+    table_name = '__all_event_history',
     columns = [
         ('gmt_create', 'INTEGER', 'NOT NULL', None),
         ('module', 'TEXT', 'NOT NULL', None),
@@ -1696,7 +1696,7 @@ def_table_schema(
 
 all_tenant_role_grantee_map_def = dict(
   owner = 'sean.yyj',
-  table_name = '__all_tenant_role_grantee_map',
+  table_name = '__all_role_grantee_map',
   table_id = '235',
   table_type = 'SYSTEM_TABLE',
   gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1717,7 +1717,7 @@ def_table_schema(**gen_history_table_def(236, all_tenant_role_grantee_map_def))
 
 def_table_schema(
   owner = 'jim.wjh',
-  table_name    = '__all_tenant_user_failed_login_stat',
+  table_name    = '__all_user_failed_login_stat',
   table_id      = '249',
   table_type = 'SYSTEM_TABLE',
   gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1738,7 +1738,7 @@ def_table_schema(
 
 all_trigger_def = dict(
   owner = 'webber.wb',
-  table_name    = '__all_tenant_trigger',
+  table_name    = '__all_trigger',
   table_id      = '254',
   table_type = 'SYSTEM_TABLE',
   gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1790,7 +1790,7 @@ def_table_schema(**gen_history_table_def(255, all_trigger_def))
 
 all_sysauth_def = dict(
     owner = 'sean.yyj',
-    table_name     = '__all_tenant_sysauth',
+    table_name     = '__all_sysauth',
     table_id       = '260',
     table_type = 'SYSTEM_TABLE',
     gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1810,7 +1810,7 @@ def_table_schema(**gen_history_table_def(261, all_sysauth_def))
 
 all_objauth_def = dict(
     owner = 'sean.yyj',
-    table_name     = '__all_tenant_objauth',
+    table_name     = '__all_objauth',
     table_id       = '262',
     table_type = 'SYSTEM_TABLE',
     gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1845,7 +1845,7 @@ def_table_schema(**gen_history_table_def(263, all_objauth_def))
 
 all_tenant_error_def = dict(
     owner = 'lj229669',
-    table_name = '__all_tenant_error',
+    table_name = '__all_error',
     table_id = '272',
     table_type = 'SYSTEM_TABLE',
     gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1889,7 +1889,7 @@ def_table_schema(**all_tenant_error_def)
 
 def_table_schema(
   owner = 'dachuan.sdc',
-  table_name     = '__all_tenant_time_zone',
+  table_name     = '__all_time_zone',
   table_id       = '290',
   table_type = 'SYSTEM_TABLE',
   gm_columns = [],
@@ -1906,7 +1906,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'dachuan.sdc',
-  table_name     = '__all_tenant_time_zone_name',
+  table_name     = '__all_time_zone_name',
   table_id       = '291',
   table_type = 'SYSTEM_TABLE',
   gm_columns = [],
@@ -1924,7 +1924,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'dachuan.sdc',
-  table_name     = '__all_tenant_time_zone_transition',
+  table_name     = '__all_time_zone_transition',
   table_id       = '292',
   table_type = 'SYSTEM_TABLE',
   gm_columns = [],
@@ -1943,7 +1943,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'dachuan.sdc',
-  table_name     = '__all_tenant_time_zone_transition_type',
+  table_name     = '__all_time_zone_transition_type',
   table_id       = '293',
   table_type = 'SYSTEM_TABLE',
   gm_columns = [],
@@ -1964,7 +1964,7 @@ def_table_schema(
 
 all_tenant_constraint_column_def = dict(
   owner = 'bin.lb',
-  table_name    = '__all_tenant_constraint_column',
+  table_name    = '__all_constraint_column',
   table_id      = '294',
   table_type = 'SYSTEM_TABLE',
   gm_columns = ['gmt_create', 'gmt_modified'],
@@ -1985,7 +1985,7 @@ def_table_schema(**gen_history_table_def(295,  all_tenant_constraint_column_def)
 
 all_tenant_dependency_def = dict(
   owner = 'lj229669',
-  table_name = '__all_tenant_dependency',
+  table_name = '__all_dependency',
   table_id = '297',
   table_type = 'SYSTEM_TABLE',
   gm_columns = ['gmt_create', 'gmt_modified'],
@@ -2164,7 +2164,7 @@ def_table_schema(
   ]
   )
 
-# 320: __all_region_network_bandwidth_limit (abandoned)
+# 320: (abandoned)
 # 321: __all_backup_backup_log_archive_status_v2 # abandoned in 4.0
 
 # 322: __all_deadlock_event_history # migrated to SQLite, see gen_sqlite_table_def above
@@ -2254,7 +2254,7 @@ def_table_schema(
 
 all_tenant_directory_def = dict(
     owner = 'jiahua.cjh',
-    table_name     = '__all_tenant_directory',
+    table_name     = '__all_directory',
     table_id       = '326',
     table_type     = 'SYSTEM_TABLE',
     gm_columns     = ['gmt_create', 'gmt_modified'],
@@ -2672,11 +2672,10 @@ def_table_schema(
   ]
   )
 
-# 376: __all_balance_group_ls_stat (abandoned)
 
 def_table_schema(
   owner = 'fyy280124',
-  table_name     = '__all_tenant_scheduler_job',
+  table_name     = '__all_scheduler_job',
   table_id       = '377',
   table_type     = 'SYSTEM_TABLE',
   gm_columns     = ['gmt_create', 'gmt_modified'],
@@ -2736,7 +2735,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'fyy280124',
-  table_name     = '__all_tenant_scheduler_job_run_detail',
+  table_name     = '__all_scheduler_job_run_detail',
   table_id       = '378',
   table_type     = 'SYSTEM_TABLE',
   gm_columns     = ['gmt_create', 'gmt_modified'],
@@ -2755,7 +2754,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'fyy280124',
-  table_name     = '__all_tenant_scheduler_program',
+  table_name     = '__all_scheduler_program',
   table_id       = '379',
   table_type     = 'SYSTEM_TABLE',
   gm_columns     = ['gmt_create', 'gmt_modified'],
@@ -2786,7 +2785,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'fyy280124',
-  table_name     = '__all_tenant_scheduler_program_argument',
+  table_name     = '__all_scheduler_program_argument',
   table_id       = '380',
   table_type     = 'SYSTEM_TABLE',
   gm_columns     = ['gmt_create', 'gmt_modified'],
@@ -3007,10 +3006,6 @@ def_table_schema(**gen_history_table_def(422, all_column_group_mapping))
 
 # 423: __all_transfer_task (abandoned)
 # 424: __all_transfer_task_history (abandoned)
-# 425: __all_balance_job (abandoned)
-# 426: __all_balance_job_history (abandoned)
-# 427: __all_balance_task (abandoned)
-# 428: __all_balance_task_history (abandoned)
 # 429: __all_arbitration_service (abandoned)
 # 430: __all_ls_arb_replica_task (abandoned)
 
@@ -3035,7 +3030,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'luofan.zp',
-  table_name    = '__all_tenant_rewrite_rules',
+  table_name    = '__all_rewrite_rules',
   table_id      = '443',
   table_type = 'SYSTEM_TABLE',
   gm_columns = ['gmt_create', 'gmt_modified'],
@@ -3141,7 +3136,6 @@ def_table_schema(
 # 458 : __wr_sysstat
 # __wr_sysstat # removed
 
-# 459: __all_balance_task_helper (abandoned)
 # 460: __all_tenant_snapshot (abandoned)
 # 461: __all_tenant_snapshot_ls (abandoned)
 # 462: __all_tenant_snapshot_ls_replica (abandoned)
@@ -3360,7 +3354,7 @@ def_table_schema(
 # 473 : __all_tenant_event_history 
 
 def_table_schema(
-  table_name     = '__all_tenant_scheduler_job_class',
+  table_name     = '__all_scheduler_job_class',
   owner          = 'huangrenhuang.hrh',
   table_id       = '474',
   table_type     = 'SYSTEM_TABLE',
@@ -3815,7 +3809,6 @@ all_ncomp_dll_v2 = dict(
   )
 def_table_schema(**all_ncomp_dll_v2)
 
-# 529: __all_object_balance_weight
 # __wr_sql_plan_aux_key2snapshot # removed
 
 def_table_schema(
@@ -3997,7 +3990,6 @@ def_table_schema(**all_ccl_rule_def)
 def_table_schema(**gen_history_table_def(548, all_ccl_rule_def))
 
 
-# 549: __all_balance_job_description
 
 all_ai_model_def = dict(
     owner = 'shenyunlong.syl',
@@ -4053,7 +4045,7 @@ def_table_schema(**all_ai_model_endpoint_def)
 
 all_tenant_location_def = dict(
     owner = 'cjl476581',
-    table_name     = '__all_tenant_location',
+    table_name     = '__all_location',
     table_id       = '553',
     table_type     = 'SYSTEM_TABLE',
     gm_columns     = ['gmt_create', 'gmt_modified'],
@@ -4072,7 +4064,7 @@ def_table_schema(**gen_history_table_def(554, all_tenant_location_def))
 
 all_objauth_mysql_def = dict(
     owner = 'cjl476581',
-    table_name     = '__all_tenant_objauth_mysql',
+    table_name     = '__all_objauth_mysql',
     table_id       = '555',
     table_type = 'SYSTEM_TABLE',
     gm_columns = ['gmt_create', 'gmt_modified'],
@@ -4135,7 +4127,7 @@ def_table_schema(**gen_history_table_def(556, all_objauth_mysql_def))
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_all_table',
+  table_name     = '__all_virtual_all_table',
   table_id       = '10001',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4169,7 +4161,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_table_column',
+  table_name     = '__all_virtual_table_column',
   table_id       = '10002',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4194,7 +4186,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_table_index',
+  table_name     = '__all_virtual_table_index',
   table_id       = '10003',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4227,7 +4219,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_show_create_database',
+  table_name     = '__all_virtual_show_create_database',
   table_id       = '10004',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4245,7 +4237,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_show_create_table',
+  table_name     = '__all_virtual_show_create_table',
   table_id       = '10005',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4264,7 +4256,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'xiaochu.yh',
-  table_name     = '__tenant_virtual_session_variable',
+  table_name     = '__all_virtual_session_variable',
   table_id       = '10006',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4279,7 +4271,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'sean.yyj',
-  table_name     = '__tenant_virtual_privilege_grant',
+  table_name     = '__all_virtual_privilege_grant',
   table_id       = '10007',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4347,7 +4339,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_warning',
+  table_name     = '__all_virtual_warning',
   table_id       = '10009',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4365,7 +4357,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_current_tenant',
+  table_name     = '__all_virtual_current_tenant',
   table_id       = '10010',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4381,7 +4373,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_database_status',
+  table_name     = '__all_virtual_database_status',
   table_id       = '10011',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4396,7 +4388,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_tenant_status',
+  table_name     = '__all_virtual_tenant_status',
   table_id       = '10012',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4418,7 +4410,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'xiaochu.yh',
-  table_name     = '__tenant_virtual_global_variable',
+  table_name     = '__all_virtual_global_variable',
   table_id       = '10017',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4433,7 +4425,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'bin.lb',
-  table_name     = '__tenant_virtual_show_tables',
+  table_name     = '__all_virtual_show_tables',
   table_id       = '10018',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4450,7 +4442,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'linlin.xll',
-  table_name     = '__tenant_virtual_show_create_procedure',
+  table_name     = '__all_virtual_show_create_procedure',
   table_id       = '10019',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -4698,7 +4690,6 @@ def_table_schema(
   )
 
 # 11011: __all_virtual_server_stat # abandoned in 4.0.
-# 11012: __all_virtual_rebalance_task_stat # abandoned in 4.0
 
 # 11013: __all_virtual_session_event # removed
 
@@ -4712,7 +4703,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'jingyan.kfy',
-  table_name     = '__all_virtual_tenant_memstore_info',
+  table_name     = '__all_virtual_memstore_info',
   table_id       = '11018',
   table_type = 'VIRTUAL_TABLE',
   gm_columns     = [],
@@ -4778,7 +4769,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'jingyan.kfy',
-  table_name     = '__all_virtual_memstore_info',
+  table_name     = '__all_virtual_tablet_memstore_info',
   table_id       = '11024',
   table_type = 'VIRTUAL_TABLE',
   gm_columns     = [],
@@ -5057,7 +5048,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'xiaoyi.xy',
-  table_name     = '__tenant_virtual_outline',
+  table_name     = '__all_virtual_outline',
   table_id       = '11053',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -5084,7 +5075,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'xiaoyi.xy',
-  table_name     = '__tenant_virtual_concurrent_limit_sql',
+  table_name     = '__all_virtual_concurrent_limit_sql',
   table_id       = '11054',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -5144,10 +5135,7 @@ def_table_schema(
 # 11059: __all_virtual_proxy_sub_partition (abandoned in seekdb)
 
 # 11060: __all_virtual_proxy_route # abandoned in 4.0
-# 11061: __all_virtual_rebalance_tenant_stat # abandoned in 4.0
-# 11062: __all_virtual_rebalance_unit_stat # abandoned in 4.0.
 
-# 11063: __all_virtual_rebalance_replica_stat # abandoned in 4.0
 # 11067: __all_virtual_election_event_history # abandoned in 4.0
 
 # 11069: __all_virtual_leader_stat # abandoned in 4.0
@@ -5207,8 +5195,6 @@ def_table_schema(
 # 11074: __all_virtual_rootservice_stat # abandoned in 4.0.
 
 # 11076: __all_virtual_tenant_disk_stat # abandoned in 4.0
-# 11078: __all_virtual_rebalance_map_stat # abandoned in 4.0.
-# 11079: __all_virtual_rebalance_map_item_stat # abandoned in 4.0.
 
 def_table_schema(
   owner = 'chaser.ch',
@@ -5256,8 +5242,6 @@ def_table_schema(
   vtable_route_policy = 'only_rs'
   )
 
-# 11082: __all_virtual_rebalance_unit_migrate_stat # abandoned in 4.0.
-# 11083: __all_virtual_rebalance_unit_distribution_stat # abandoned in 4.0.
 
 def_table_schema(
   owner = 'nijia.nj',
@@ -5311,7 +5295,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'yanmu.ztl',
-  table_name     = '__tenant_virtual_show_create_tablegroup',
+  table_name     = '__all_virtual_show_create_tablegroup',
   table_id       = '11087',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -5332,7 +5316,7 @@ def_table_schema(
 
 def_table_schema(
     owner = 'fyy280124',
-    table_name     = '__all_virtual_tenant_parameter_stat',
+    table_name     = '__all_virtual_parameter_stat',
     table_id       = '11092',
     table_type = 'VIRTUAL_TABLE',
     gm_columns = [],
@@ -5404,7 +5388,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'nijia.nj',
-  table_name     = '__all_virtual_dump_tenant_info',
+  table_name     = '__all_virtual_dump_info',
   table_id       = '11095',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -6015,7 +5999,7 @@ def_table_schema(
 
 def_table_schema(
     owner = 'jim.wjh',
-    table_name    = '__tenant_virtual_collation',
+    table_name    = '__all_virtual_collation',
     table_id      = '12031',
     table_type = 'VIRTUAL_TABLE',
     gm_columns = [],
@@ -6035,7 +6019,7 @@ def_table_schema(
 
 def_table_schema(
     owner = 'jim.wjh',
-    table_name    = '__tenant_virtual_charset',
+    table_name    = '__all_virtual_charset',
     table_id      = '12032',
     table_type = 'VIRTUAL_TABLE',
     in_tenant_space = True,
@@ -6052,7 +6036,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'jingyan.kfy',
-  table_name = '__all_virtual_tenant_memstore_allocator_info',
+  table_name = '__all_virtual_memstore_allocator_info',
   table_id = '12033',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -6817,7 +6801,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'dachuan.sdc',
-  table_name     = '__tenant_virtual_object_definition',
+  table_name     = '__all_virtual_object_definition',
   table_id       = '12199',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -6864,7 +6848,7 @@ def_table_schema(**gen_sqlite_virtual_table_def(
 
 def_table_schema(
   owner = 'fengshuo.fs',
-  table_name     = '__all_virtual_tenant_ctx_memory_info',
+  table_name     = '__all_virtual_ctx_memory_info',
   table_id       = '12211',
   table_type = 'VIRTUAL_TABLE',
   gm_columns     = [],
@@ -6895,27 +6879,13 @@ def_table_schema(
 
 # 12219: __all_virtual_histogram_stat # removed (single-tenant: iterate VT mechanism deleted)
 
-def_table_schema(
-  owner = 'fengshuo.fs',
-  table_name     = '__all_virtual_tenant_memory_info',
-  table_id       = '12220',
-  table_type = 'VIRTUAL_TABLE',
-  gm_columns     = [],
-  in_tenant_space = True,
-  rowkey_columns = [
-  ],
-
-  normal_columns = [
-  ('hold', 'int'),
-  ('limit', 'int')
-  ],  vtable_route_policy = 'local'
-  )
+# 12220: __all_virtual_tenant_memory_info # removed (tenant-name scrub)
 
 # 12221: TRIGGERS # abandoned in 4.0
 
 def_table_schema(
   owner = 'webber.wb',
-  table_name     = '__tenant_virtual_show_create_trigger',
+  table_name     = '__all_virtual_show_create_trigger',
   table_id       = '12222',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -7761,10 +7731,6 @@ def_table_schema(
 
 # 12342: __all_virtual_transfer_task
 # 12343: __all_virtual_transfer_task_history
-# 12344: __all_virtual_balance_job
-# 12345: __all_virtual_balance_job_history
-# 12346: __all_virtual_balance_task
-# 12347: __all_virtual_balance_task_history
 # 12358: __all_virtual_tenant_mysql_sys_agent (abandoned)
 
 def_table_schema(
@@ -8130,10 +8096,8 @@ def_table_schema(
 # 12413: __all_virtual_mview_refresh_stmt_stats # removed (single-tenant: iterate VT mechanism deleted)
 
 # 12414: __all_virtual_wr_control # removed
-# 12415: __all_virtual_tenant_event_history - migrated to SQLite, see gen_sqlite_virtual_table_def above
+# 12415: __all_virtual_event_history - migrated to SQLite, see gen_sqlite_virtual_table_def above
 
-# 12416: __all_virtual_balance_task_helper (abandoned)
-# 12417: __all_virtual_balance_group_ls_stat (abandoned)
 
 # 12418: __all_virtual_cgroup_info
 def_table_schema(
@@ -8220,7 +8184,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'fyy280124',
-  table_name     = '__all_virtual_tenant_scheduler_running_job',
+  table_name     = '__all_virtual_scheduler_running_job',
   table_id       = '12442',
   table_type     = 'VIRTUAL_TABLE',
   gm_columns     = [],
@@ -8452,7 +8416,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'yanyuan.cxf',
-  table_name     = '__all_virtual_tenant_resource_limit',
+  table_name     = '__all_virtual_resource_limit',
   table_id       = '12481',
   table_type = 'VIRTUAL_TABLE',
   gm_columns     = [],
@@ -8472,7 +8436,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'yanyuan.cxf',
-  table_name     = '__all_virtual_tenant_resource_limit_detail',
+  table_name     = '__all_virtual_resource_limit_detail',
   table_id       = '12482',
   table_type = 'VIRTUAL_TABLE',
   gm_columns     = [],
@@ -8692,7 +8656,6 @@ def_table_schema(
 # 12506: __all_virtual_ncomp_dll_v2 # removed (single-tenant: iterate VT mechanism deleted)
 # 12507: __all_virtual_logstore_service_status
 # 12508: __all_virtual_logstore_service_info
-# 12509: __all_virtual_object_balance_weight
 # 12510: __all_virtual_standby_log_transport_stat
 
 # 12511: __all_virtual_wr_sql_plan_aux_key2snapshot # removed
@@ -8782,7 +8745,7 @@ def_table_schema(
 
 def_table_schema(
   owner = 'linyi.cl',
-  table_name     = '__tenant_virtual_show_create_catalog',
+  table_name     = '__all_virtual_show_create_catalog',
   table_id       = '12526',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -8799,7 +8762,7 @@ def_table_schema(
 
 def_table_schema(
     owner = 'chendingchao.cdc',
-    table_name    = '__tenant_virtual_show_catalog_databases',
+    table_name    = '__all_virtual_show_catalog_databases',
     table_id      = '12527',
     table_type = 'VIRTUAL_TABLE',
     in_tenant_space = True,
@@ -8815,7 +8778,7 @@ def_table_schema(
 # 12530: __all_virtual_tablet_local_cache
 
 # 12531: __tenant_virtual_catalog_table_column
-# 12532: __tenant_virtual_show_create_catalog_table
+# 12532: __all_virtual_show_create_catalog_table
 
 # 12533: __all_virtual_ccl_rule # removed (single-tenant: iterate VT mechanism deleted)
 
@@ -8882,13 +8845,12 @@ def_table_schema(
 # 12537: __all_virtual_ls_migration_task
 # 12538 __all_virtual_ss_notify_tasks_stat
 # 12539 __all_virtual_ss_notify_tablets_stat
-# 12540: __all_virtual_balance_job_description
 
 # 12549: __all_virtual_ccl_rule_history # removed (single-tenant: iterate VT mechanism deleted)
 
 def_table_schema(
   owner = 'tonghui.ht',
-  table_name     = '__all_virtual_tenant_vector_mem_info',
+  table_name     = '__all_virtual_vector_mem_info',
   table_id       = '12550',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -8918,7 +8880,7 @@ def_table_schema(
 # 12557: __all_virtual_objauth_mysql_history # removed (single-tenant: iterate VT mechanism deleted)
 def_table_schema(
   owner = 'cjl476581',
-  table_name     = '__tenant_virtual_show_create_location',
+  table_name     = '__all_virtual_show_create_location',
   table_id       = '12558',
   table_type = 'VIRTUAL_TABLE',
   gm_columns = [],
@@ -8949,8 +8911,8 @@ def_table_schema(**gen_sqlite_virtual_table_def(
 
 def_table_schema(**gen_sqlite_virtual_table_def(
     table_id = '12562',
-    table_name = '__all_virtual_tenant_event_history',
-    keywords = all_def_keywords['__all_tenant_event_history']
+    table_name = '__all_virtual_event_history',
+    keywords = all_def_keywords['__all_event_history']
   ))
 
 def_table_schema(**gen_sqlite_virtual_table_def(
@@ -9016,7 +8978,6 @@ def_table_schema(
 # Oracle Virtual Table(15000,20000]
 ################################################################################
 
-# 15510: __all_virtual_balance_job_description
 # Reserved position (placeholder before this line)
 # This section defines Oracle table names which are relatively complex, generally defined using the gen_xxx_table_def() method, placeholder suggestion is to use the base table name as a placeholder
 # - Example: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
@@ -9059,52 +9020,9 @@ def_table_schema(
 # Oracle System View (25000, 30000]
 ################################################################################
 
-def_table_schema(
-  owner = 'xiaoyi.xy',
-  table_name     = 'GV$OB_PLAN_CACHE_STAT',
-  table_id       = '20001',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  view_definition = """
-  SELECT SQL_NUM,MEM_USED,MEM_HOLD,ACCESS_COUNT,
-  HIT_COUNT,HIT_RATE,PLAN_NUM,MEM_LIMIT,HASH_BUCKET,STMTKEY_NUM
-  FROM oceanbase.__all_virtual_plan_cache_stat
-""".replace("\n", " "),
+# 20001: GV$OB_PLAN_CACHE_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_stat)
 
-
-  normal_columns = [
-  ]
-  )
-
-def_table_schema(
-    owner = 'xiaoyi.xy',
-    table_name     = 'GV$OB_PLAN_CACHE_PLAN_STAT',
-    table_id       = '20002',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-    SELECT PLAN_ID,SQL_ID,TYPE,IS_BIND_SENSITIVE,IS_BIND_AWARE,
-    DB_ID,STATEMENT,QUERY_SQL,SPECIAL_PARAMS,PARAM_INFOS, SYS_VARS, CONFIGS, PLAN_HASH,
-    FIRST_LOAD_TIME,SCHEMA_VERSION,LAST_ACTIVE_TIME,AVG_EXE_USEC,SLOWEST_EXE_TIME,SLOWEST_EXE_USEC,
-    SLOW_COUNT,HIT_COUNT,PLAN_SIZE,EXECUTIONS,DISK_READS,DIRECT_WRITES,BUFFER_GETS,APPLICATION_WAIT_TIME,
-    CONCURRENCY_WAIT_TIME,USER_IO_WAIT_TIME,ROWS_PROCESSED,ELAPSED_TIME,CPU_TIME,LARGE_QUERYS,
-    DELAYED_LARGE_QUERYS,DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
-    TABLE_SCAN,EVOLUTION, EVO_EXECUTIONS, EVO_CPU_TIME, TIMEOUT_COUNT, PS_STMT_ID, SESSID,
-    TEMP_TABLES, IS_USE_JIT,OBJECT_TYPE,HINTS_INFO,HINTS_ALL_WORKED, PL_SCHEMA_ID,
-    IS_BATCHED_MULTI_STMT, RULE_NAME,
-    (CASE PLAN_STATUS WHEN 0 THEN 'ACTIVE' ELSE 'INACTIVE' END) AS PLAN_STATUS,
-    ADAPTIVE_FEEDBACK_TIMES, FIRST_GET_PLAN_TIME, FIRST_EXE_USEC
-    FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND is_in_pc=true
-""".replace("\n", " "),
-
-
-    normal_columns = [
-    ]
-  )
+# 20002: GV$OB_PLAN_CACHE_PLAN_STAT # removed (single-tenant GV/V collapse; folded into V$OB_PLAN_CACHE_PLAN_STAT)
 
 def_table_schema(
   owner = 'bin.lb',
@@ -9122,7 +9040,7 @@ def_table_schema(
          b.collation AS DEFAULT_COLLATION_NAME,
          CAST(NULL AS CHAR(512)) as SQL_PATH,
          'NO' as DEFAULT_ENCRYPTION
-  FROM oceanbase.__all_database a inner join oceanbase.__tenant_virtual_collation b ON a.collation_type = b.collation_type
+  FROM oceanbase.__all_database a inner join oceanbase.__all_virtual_collation b ON a.collation_type = b.collation_type
   WHERE in_recyclebin = 0
     and a.database_name not in ('__recyclebin', '__public')
     and 0 = sys_privilege_check('db_acc', 0, a.database_name)
@@ -9145,7 +9063,7 @@ def_table_schema(
   gm_columns = [],
   rowkey_columns = [],
   view_definition = """
-  SELECT CHARSET AS CHARACTER_SET_NAME, DEFAULT_COLLATION AS DEFAULT_COLLATE_NAME, DESCRIPTION, max_length AS MAXLEN FROM oceanbase.__tenant_virtual_charset
+  SELECT CHARSET AS CHARACTER_SET_NAME, DEFAULT_COLLATION AS DEFAULT_COLLATE_NAME, DESCRIPTION, max_length AS MAXLEN FROM oceanbase.__all_virtual_charset
 """.replace("\n", " "),
 
   in_tenant_space = True,
@@ -9164,7 +9082,7 @@ def_table_schema(
   gm_columns = [],
   rowkey_columns = [],
   view_definition = """
-  SELECT `variable_name` as VARIABLE_NAME, `value` as VARIABLE_VALUE  FROM oceanbase.__tenant_virtual_global_variable
+  SELECT `variable_name` as VARIABLE_NAME, `value` as VARIABLE_VALUE  FROM oceanbase.__all_virtual_global_variable
 """.replace("\n", " "),
 
   in_tenant_space = True,
@@ -9487,7 +9405,7 @@ def_table_schema(
                     from oceanbase.__all_table where table_mode >> 12 & 15 in (0,1) and index_attributes_set & 16 = 0) a
                     join oceanbase.__all_database b
                     on a.database_id = b.database_id
-                    join oceanbase.__tenant_virtual_collation d
+                    join oceanbase.__all_virtual_collation d
                     on a.collation_type = d.collation_type
                     left join (
                       select table_id,
@@ -9525,7 +9443,7 @@ def_table_schema(
   table_type = 'SYSTEM_VIEW',
   gm_columns = [],
   rowkey_columns = [],
-  view_definition = """select collation as COLLATION_NAME, charset as CHARACTER_SET_NAME, id as ID, `is_default` as IS_DEFAULT, is_compiled as IS_COMPILED, sortlen as SORTLEN from oceanbase.__tenant_virtual_collation
+  view_definition = """select collation as COLLATION_NAME, charset as CHARACTER_SET_NAME, id as ID, `is_default` as IS_DEFAULT, is_compiled as IS_COMPILED, sortlen as SORTLEN from oceanbase.__all_virtual_collation
 """.replace("\n", " "),
 
   in_tenant_space = True,
@@ -9543,7 +9461,7 @@ def_table_schema(
   table_type = 'SYSTEM_VIEW',
   gm_columns = [],
   rowkey_columns = [],
-  view_definition = """select collation as COLLATION_NAME, charset as CHARACTER_SET_NAME from oceanbase.__tenant_virtual_collation
+  view_definition = """select collation as COLLATION_NAME, charset as CHARACTER_SET_NAME from oceanbase.__all_virtual_collation
 """.replace("\n", " "),
 
   in_tenant_space = True,
@@ -10101,10 +10019,12 @@ def_table_schema(
 
 # 21015: GV$LATCH # removed
 
+# 21016: GV$OB_MEMORY # removed (single-tenant GV/V collapse; folded into V$OB_MEMORY)
+
 def_table_schema(
   owner = 'nijia.nj',
-  table_name      = 'GV$OB_MEMORY',
-  table_id        = '21016',
+  table_name      = 'V$OB_MEMORY',
+  table_id        = '21017',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -10124,130 +10044,17 @@ WHERE
 GROUP BY ctx_name, mod_name
 ORDER BY ctx_name, mod_name
 """.replace("\n", " ")
-  )
-
-def_table_schema(
-  owner = 'nijia.nj',
-  table_name      = 'V$OB_MEMORY',
-  table_id        = '21017',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    CTX_NAME,
-    MOD_NAME,
-    COUNT,
-    HOLD,
-    USED
-FROM
-    oceanbase.GV$OB_MEMORY
-""".replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'jingyan.kfy',
-  table_name      = 'GV$OB_MEMSTORE',
-  table_id        = '21018',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    ACTIVE_SPAN,
-    FREEZE_TRIGGER,
-    FREEZE_CNT,
-    MEMSTORE_USED,
-    MEMSTORE_LIMIT
-FROM
-    oceanbase.__all_virtual_tenant_memstore_info
-""".replace("\n", " ")
-  )
+# 21018: GV$OB_MEMSTORE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_memstore_info)
 
-def_table_schema(
-  owner = 'jingyan.kfy',
-  table_name      = 'V$OB_MEMSTORE',
-  table_id        = '21019',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    ACTIVE_SPAN,
-    FREEZE_TRIGGER,
-    FREEZE_CNT,
-    MEMSTORE_USED,
-    MEMSTORE_LIMIT
-FROM
-    OCEANBASE.GV$OB_MEMSTORE
-""".replace("\n", " ")
-  )
+# 21019: V$OB_MEMSTORE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_memstore_info)
 
-def_table_schema(
-  owner = 'jingyan.kfy',
-  table_name      = 'GV$OB_MEMSTORE_INFO',
-  table_id        = '21020',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    TABLET_ID,
-    IS_ACTIVE,
-    START_SCN,
-    END_SCN,
-    FREEZE_TS
-FROM
-    oceanbase.__all_virtual_memstore_info
-""".replace("\n", " ")
-  )
+# 21020: GV$OB_MEMSTORE_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_memstore_info)
 
-def_table_schema(
-  owner = 'jingyan.kfy',
-  table_name      = 'V$OB_MEMSTORE_INFO',
-  table_id        = '21021',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    TABLET_ID,
-    IS_ACTIVE,
-    START_SCN,
-    END_SCN,
-    FREEZE_TS
-FROM
-    OCEANBASE.GV$OB_MEMSTORE_INFO
-""".replace("\n", " ")
-  )
+# 21021: V$OB_MEMSTORE_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_memstore_info)
 
-def_table_schema(
-  owner = 'xiaoyi.xy',
-  table_name     = 'V$OB_PLAN_CACHE_STAT',
-  table_id       = '21022',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  view_definition = """
-  SELECT SQL_NUM,MEM_USED,MEM_HOLD,ACCESS_COUNT,
-  HIT_COUNT,HIT_RATE,PLAN_NUM,MEM_LIMIT,HASH_BUCKET,STMTKEY_NUM
-  FROM oceanbase.GV$OB_PLAN_CACHE_STAT
-""".replace("\n", " "),
-
-  normal_columns = [
-  ]
-  )
+# 21022: V$OB_PLAN_CACHE_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_stat)
 
 def_table_schema(
     owner = 'xiaoyi.xy',
@@ -10258,7 +10065,7 @@ def_table_schema(
     in_tenant_space = True,
     rowkey_columns = [],
     view_definition = """
-  SELECT PLAN_ID,SQL_ID,TYPE,IS_BIND_SENSITIVE,IS_BIND_AWARE,
+    SELECT PLAN_ID,SQL_ID,TYPE,IS_BIND_SENSITIVE,IS_BIND_AWARE,
     DB_ID,STATEMENT,QUERY_SQL,SPECIAL_PARAMS,PARAM_INFOS, SYS_VARS, CONFIGS, PLAN_HASH,
     FIRST_LOAD_TIME,SCHEMA_VERSION,LAST_ACTIVE_TIME,AVG_EXE_USEC,SLOWEST_EXE_TIME,SLOWEST_EXE_USEC,
     SLOW_COUNT,HIT_COUNT,PLAN_SIZE,EXECUTIONS,DISK_READS,DIRECT_WRITES,BUFFER_GETS,APPLICATION_WAIT_TIME,
@@ -10266,9 +10073,10 @@ def_table_schema(
     DELAYED_LARGE_QUERYS,DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
     TABLE_SCAN,EVOLUTION, EVO_EXECUTIONS, EVO_CPU_TIME, TIMEOUT_COUNT, PS_STMT_ID, SESSID,
     TEMP_TABLES, IS_USE_JIT,OBJECT_TYPE,HINTS_INFO,HINTS_ALL_WORKED, PL_SCHEMA_ID,
-    IS_BATCHED_MULTI_STMT, RULE_NAME, PLAN_STATUS, ADAPTIVE_FEEDBACK_TIMES,
-    FIRST_GET_PLAN_TIME, FIRST_EXE_USEC
-  FROM oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT
+    IS_BATCHED_MULTI_STMT, RULE_NAME,
+    (CASE PLAN_STATUS WHEN 0 THEN 'ACTIVE' ELSE 'INACTIVE' END) AS PLAN_STATUS,
+    ADAPTIVE_FEEDBACK_TIMES, FIRST_GET_PLAN_TIME, FIRST_EXE_USEC
+    FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND is_in_pc=true
 """.replace("\n", " "),
 
 
@@ -10276,52 +10084,9 @@ def_table_schema(
     ]
   )
 
-def_table_schema(
-    owner = 'xiaoyi.xy',
-    table_name     = 'GV$OB_PLAN_CACHE_PLAN_EXPLAIN',
-    table_id       = '21024',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-    SELECT PLAN_ID,
-           PLAN_DEPTH,
-           PLAN_LINE_ID,
-           OPERATOR,
-           NAME,
-           ROWS,
-           COST,
-           PROPERTY
-   FROM oceanbase.__all_virtual_plan_cache_plan_explain
-""".replace("\n", " "),
-    normal_columns = [
-    ]
-  )
+# 21024: GV$OB_PLAN_CACHE_PLAN_EXPLAIN # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_plan_explain)
 
-def_table_schema(
-    owner = 'xiaoyi.xy',
-    table_name     = 'V$OB_PLAN_CACHE_PLAN_EXPLAIN',
-    table_id       = '21025',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-    SELECT PLAN_ID,
-           PLAN_DEPTH,
-           PLAN_LINE_ID,
-           OPERATOR,
-           NAME,
-           ROWS,
-           COST,
-           PROPERTY FROM oceanbase.GV$OB_PLAN_CACHE_PLAN_EXPLAIN
-""".replace("\n", " "),
-
-
-    normal_columns = [
-    ]
-  )
+# 21025: V$OB_PLAN_CACHE_PLAN_EXPLAIN # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_plan_explain)
 
 # 21026: V$OB_SQL_AUDIT # removed
 
@@ -10337,10 +10102,12 @@ def_table_schema(
 # 21034: GV$SQL_MONITOR # abandoned in 4.0
 # 21035: V$SQL_MONITOR # abandoned in 4.0
 
+# 21036: GV$SQL_PLAN_MONITOR # removed (single-tenant GV/V collapse; folded into V$SQL_PLAN_MONITOR)
+
 def_table_schema(
     owner = 'xiaochu.yh',
-    table_name     = 'GV$SQL_PLAN_MONITOR',
-    table_id       = '21036',
+    table_name     = 'V$SQL_PLAN_MONITOR',
+    table_id       = '21037',
     table_type = 'SYSTEM_VIEW',
     gm_columns = [],
     in_tenant_space = True,
@@ -10436,106 +10203,6 @@ def_table_schema(
 
     normal_columns = [
     ]
-  )
-
-def_table_schema(
-    owner = 'xiaochu.yh',
-    table_name     = 'V$SQL_PLAN_MONITOR',
-    table_id       = '21037',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-    SELECT  CON_ID,
-    REQUEST_ID,
-    `KEY`,
-    STATUS,
-    TRACE_ID,
-    DB_TIME,
-    USER_IO_WAIT_TIME,
-    OTHER_WAIT_TIME,
-    FIRST_REFRESH_TIME,
-    LAST_REFRESH_TIME,
-    FIRST_CHANGE_TIME,
-    LAST_CHANGE_TIME,
-    REFRESH_COUNT,
-    SID,
-    PROCESS_NAME,
-    SQL_ID,
-    SQL_EXEC_START,
-    SQL_EXEC_ID,
-    SQL_PLAN_HASH_VALUE,
-    SQL_CHILD_ADDRESS,
-    PLAN_PARENT_ID,
-    PLAN_LINE_ID,
-    PLAN_OPERATION,
-    PLAN_OPTIONS,
-    PLAN_OBJECT_OWNER,
-    PLAN_OBJECT_NAME,
-    PLAN_OBJECT_TYPE,
-    PLAN_DEPTH,
-    PLAN_POSITION,
-    PLAN_COST,
-    PLAN_CARDINALITY,
-    PLAN_BYTES,
-    PLAN_TIME,
-    PLAN_PARTITION_START,
-    PLAN_PARTITION_STOP,
-    PLAN_CPU_COST,
-    PLAN_IO_COST,
-    PLAN_TEMP_SPACE,
-    STARTS,
-    OUTPUT_ROWS,
-    IO_INTERCONNECT_BYTES,
-    PHYSICAL_READ_REQUESTS,
-    PHYSICAL_READ_BYTES,
-    PHYSICAL_WRITE_REQUESTS,
-    PHYSICAL_WRITE_BYTES,
-    WORKAREA_MEM,
-    WORKAREA_MAX_MEM,
-    WORKAREA_TEMPSEG,
-    WORKAREA_MAX_TEMPSEG,
-    OTHERSTAT_GROUP_ID,
-    OTHERSTAT_1_ID,
-    OTHERSTAT_1_TYPE,
-    OTHERSTAT_1_VALUE,
-    OTHERSTAT_2_ID,
-    OTHERSTAT_2_TYPE,
-    OTHERSTAT_2_VALUE,
-    OTHERSTAT_3_ID,
-    OTHERSTAT_3_TYPE,
-    OTHERSTAT_3_VALUE,
-    OTHERSTAT_4_ID,
-    OTHERSTAT_4_TYPE,
-    OTHERSTAT_4_VALUE,
-    OTHERSTAT_5_ID,
-    OTHERSTAT_5_TYPE,
-    OTHERSTAT_5_VALUE,
-    OTHERSTAT_6_ID,
-    OTHERSTAT_6_TYPE,
-    OTHERSTAT_6_VALUE,
-    OTHERSTAT_7_ID,
-    OTHERSTAT_7_TYPE,
-    OTHERSTAT_7_VALUE,
-    OTHERSTAT_8_ID,
-    OTHERSTAT_8_TYPE,
-    OTHERSTAT_8_VALUE,
-    OTHERSTAT_9_ID,
-    OTHERSTAT_9_TYPE,
-    OTHERSTAT_9_VALUE,
-    OTHERSTAT_10_ID,
-    OTHERSTAT_10_TYPE,
-    OTHERSTAT_10_VALUE,
-    OTHER_XML,
-    PLAN_OPERATION_INACTIVE,
-    OUTPUT_BATCHES,
-    SKIPPED_ROWS_COUNT  FROM OCEANBASE.GV$SQL_PLAN_MONITOR
-
-""".replace("\n", " "),
-
-    normal_columns = [
-    ]
   ),
 
 # rename to DBA_RECYCLEBIN
@@ -10625,7 +10292,7 @@ def_table_schema(
   FROM OCEANBASE.__ALL_RECYCLEBIN A
   JOIN OCEANBASE.__ALL_DATABASE B
     ON A.DATABASE_ID = B.DATABASE_ID
-  JOIN OCEANBASE.__ALL_TENANT_TRIGGER C
+  JOIN OCEANBASE.__ALL_TRIGGER C
     ON A.TABLE_ID = C.TRIGGER_ID
   WHERE A.TYPE = 6
 
@@ -10673,7 +10340,7 @@ def_table_schema(
   view_definition = """
     SELECT time_zone_id as Time_zone_id,
            use_leap_seconds as Use_leap_seconds
-    FROM oceanbase.__all_tenant_time_zone
+    FROM oceanbase.__all_time_zone
 """.replace("\n", " ")
 
 )
@@ -10691,7 +10358,7 @@ def_table_schema(
   view_definition = """
     SELECT name as Name,
            time_zone_id as Time_zone_id
-    FROM oceanbase.__all_tenant_time_zone_name
+    FROM oceanbase.__all_time_zone_name
 """.replace("\n", " ")
 )
 
@@ -10709,7 +10376,7 @@ def_table_schema(
     SELECT time_zone_id as Time_zone_id,
            transition_time as Transition_time,
            transition_type_id as Transition_type_id
-    FROM oceanbase.__all_tenant_time_zone_transition
+    FROM oceanbase.__all_time_zone_transition
 """.replace("\n", " ")
 )
 
@@ -10729,14 +10396,16 @@ def_table_schema(
            offset as Offset,
            is_dst as Is_DST,
            abbreviation as Abbreviation
-    FROM oceanbase.__all_tenant_time_zone_transition_type
+    FROM oceanbase.__all_time_zone_transition_type
 """.replace("\n", " ")
 )
 
+# 21059: GV$SESSION_LONGOPS # removed (single-tenant GV/V collapse; folded into V$SESSION_LONGOPS)
+
 def_table_schema(
   owner = 'zhenjiang.xzj',
-  table_name      = 'GV$SESSION_LONGOPS',
-  table_id        = '21059',
+  table_name      = 'V$SESSION_LONGOPS',
+  table_id        = '21060',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -10753,29 +10422,6 @@ def_table_schema(
            CAST(USEC_TO_TIME(LAST_UPDATE_TIME) AS DATETIME) AS LAST_UPDATE_TIME,
            CAST(MESSAGE AS CHAR(512)) AS MESSAGE
     FROM oceanbase.__all_virtual_long_ops_status
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'zhenjiang.xzj',
-  table_name      = 'V$SESSION_LONGOPS',
-  table_id        = '21060',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT SID,
-    TRACE_ID,
-    OPNAME,
-    TARGET,
-    START_TIME,
-    ELAPSED_SECONDS,
-    TIME_REMAINING,
-    LAST_UPDATE_TIME,
-    MESSAGE FROM OCEANBASE.GV$SESSION_LONGOPS
-
 """.replace("\n", " ")
 )
 
@@ -10921,49 +10567,9 @@ WHERE T.TABLE_ID = C.TABLE_ID
   normal_columns = [ ]
   )
 
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name      = 'GV$OB_PX_WORKER_STAT',
-  table_id        = '21071',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      SESSION_ID,
-      TRACE_ID,
-      QC_ID,
-      SQC_ID,
-      WORKER_ID,
-      DFO_ID,
-      START_TIME
-    FROM oceanbase.__all_virtual_px_worker_stat
-    order by session_id
-""".replace("\n", " ")
-)
+# 21071: GV$OB_PX_WORKER_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_px_worker_stat)
 
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name      = 'V$OB_PX_WORKER_STAT',
-  table_id        = '21072',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT SESSION_ID,
-      TRACE_ID,
-      QC_ID,
-      SQC_ID,
-      WORKER_ID,
-      DFO_ID,
-      START_TIME
-    FROM oceanbase.GV$OB_PX_WORKER_STAT
-""".replace("\n", " ")
-)
+# 21072: V$OB_PX_WORKER_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_px_worker_stat)
 
 # 21073: gv$partition_audit # abandoned in 4.0
 # 21074: v$partition_audit # abandoned in 4.0
@@ -10972,93 +10578,21 @@ def_table_schema(
 # 21077: v$ob_cluster_stats # abandoned in 4.0
 # 21078: V$OB_CLUSTER_EVENT_HISTORY # abandoned in 4.0
 
-def_table_schema(
-  owner = 'xiaoyi.xy',
-  table_name     = 'GV$OB_PS_STAT',
-  table_id       = '21079',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  view_definition = """
-  SELECT
-    STMT_COUNT,
-    HIT_COUNT,
-    ACCESS_COUNT,
-    MEM_HOLD
-  FROM oceanbase.__all_virtual_ps_stat
-""".replace("\n", " "),
+# 21079: GV$OB_PS_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_ps_stat)
 
-  normal_columns = [
-  ]
-  )
+# 21080: V$OB_PS_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_ps_stat)
 
-def_table_schema(
-    owner = 'xiaoyi.xy',
-    table_name     = 'V$OB_PS_STAT',
-    table_id       = '21080',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-  SELECT
-    STMT_COUNT,
-    HIT_COUNT,
-    ACCESS_COUNT,
-    MEM_HOLD
-  FROM oceanbase.GV$OB_PS_STAT
-""".replace("\n", " "),
+# 21081: GV$OB_PS_ITEM_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_ps_item_info)
+
+# 21082: V$OB_PS_ITEM_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_ps_item_info)
 
 
-    normal_columns = [
-    ]
-  )
-
-def_table_schema(
-  owner = 'xiaoyi.xy',
-  table_name     = 'GV$OB_PS_ITEM_INFO',
-  table_id       = '21081',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  view_definition = """
-  SELECT STMT_ID,
-         DB_ID, PS_SQL, PARAM_COUNT, STMT_ITEM_REF_COUNT,
-         STMT_INFO_REF_COUNT, MEM_HOLD, STMT_TYPE, CHECKSUM, EXPIRED
-  FROM oceanbase.__all_virtual_ps_item_info
-""".replace("\n", " "),
-
-  normal_columns = [
-  ]
-  )
-
-def_table_schema(
-    owner = 'xiaoyi.xy',
-    table_name     = 'V$OB_PS_ITEM_INFO',
-    table_id       = '21082',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-  SELECT STMT_ID,
-         DB_ID, PS_SQL, PARAM_COUNT, STMT_ITEM_REF_COUNT,
-         STMT_INFO_REF_COUNT, MEM_HOLD, STMT_TYPE, CHECKSUM, EXPIRED
-  FROM oceanbase.GV$OB_PS_ITEM_INFO
-""".replace("\n", " "),
-
-
-    normal_columns = [
-    ]
-  )
-
+# 21083: GV$SQL_WORKAREA # removed (single-tenant GV/V collapse; folded into V$SQL_WORKAREA)
 
 def_table_schema(
   owner = 'longzhong.wlz',
-  table_name      = 'GV$SQL_WORKAREA',
-  table_id        = '21083',
+  table_name      = 'V$SQL_WORKAREA',
+  table_id        = '21084',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -11092,46 +10626,12 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'longzhong.wlz',
-  table_name      = 'V$SQL_WORKAREA',
-  table_id        = '21084',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT ADDRESS,
-    HASH_VALUE,
-    DB_ID,
-    SQL_ID,
-    CHILD_NUMBER,
-    WORKAREA_ADDRESS,
-    OPERATION_TYPE,
-    OPERATION_ID,
-    POLICY,
-    ESTIMATED_OPTIMAL_SIZE,
-    ESTIMATED_ONEPASS_SIZE,
-    LAST_MEMORY_USED,
-    LAST_EXECUTION,
-    LAST_DEGREE,
-    TOTAL_EXECUTIONS,
-    OPTIMAL_EXECUTIONS,
-    ONEPASS_EXECUTIONS,
-    MULTIPASSES_EXECUTIONS,
-    ACTIVE_TIME,
-    MAX_TEMPSEG_SIZE,
-    LAST_TEMPSEG_SIZE,
-    CON_ID FROM OCEANBASE.GV$SQL_WORKAREA
-
-""".replace("\n", " ")
-)
+# 21085: GV$SQL_WORKAREA_ACTIVE # removed (single-tenant GV/V collapse; folded into V$SQL_WORKAREA_ACTIVE)
 
 def_table_schema(
   owner = 'longzhong.wlz',
-  table_name      = 'GV$SQL_WORKAREA_ACTIVE',
-  table_id        = '21085',
+  table_name      = 'V$SQL_WORKAREA_ACTIVE',
+  table_id        = '21086',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -11166,47 +10666,12 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'longzhong.wlz',
-  table_name      = 'V$SQL_WORKAREA_ACTIVE',
-  table_id        = '21086',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT SQL_HASH_VALUE,
-    DB_ID,
-    SQL_ID,
-    SQL_EXEC_START,
-    SQL_EXEC_ID,
-    WORKAREA_ADDRESS,
-    OPERATION_TYPE,
-    OPERATION_ID,
-    POLICY,
-    SID,
-    QCINST_ID,
-    QCSID,
-    ACTIVE_TIME,
-    WORK_AREA_SIZE,
-    EXPECT_SIZE,
-    ACTUAL_MEM_USED,
-    MAX_MEM_USED,
-    NUMBER_PASSES,
-    TEMPSEG_SIZE,
-    TABLESPACE,
-    `SEGRFNO#`,
-    `SEGBLK#`,
-    CON_ID FROM OCEANBASE.GV$SQL_WORKAREA_ACTIVE
-
-""".replace("\n", " ")
-)
+# 21087: GV$SQL_WORKAREA_HISTOGRAM # removed (single-tenant GV/V collapse; folded into V$SQL_WORKAREA_HISTOGRAM)
 
 def_table_schema(
   owner = 'longzhong.wlz',
-  table_name      = 'GV$SQL_WORKAREA_HISTOGRAM',
-  table_id        = '21087',
+  table_name      = 'V$SQL_WORKAREA_HISTOGRAM',
+  table_id        = '21088',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -11225,179 +10690,20 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'longzhong.wlz',
-  table_name      = 'V$SQL_WORKAREA_HISTOGRAM',
-  table_id        = '21088',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT LOW_OPTIMAL_SIZE,
-      HIGH_OPTIMAL_SIZE,
-      OPTIMAL_EXECUTIONS,
-      ONEPASS_EXECUTIONS,
-      MULTIPASSES_EXECUTIONS,
-      TOTAL_EXECUTIONS,
-      CON_ID FROM OCEANBASE.GV$SQL_WORKAREA_HISTOGRAM
+# 21089: GV$OB_SQL_WORKAREA_MEMORY_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sql_workarea_memory_info)
 
-""".replace("\n", " ")
-)
+# 21090: V$OB_SQL_WORKAREA_MEMORY_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sql_workarea_memory_info)
 
-def_table_schema(
-  owner = 'longzhong.wlz',
-  table_name      = 'GV$OB_SQL_WORKAREA_MEMORY_INFO',
-  table_id        = '21089',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      MAX_WORKAREA_SIZE,
-      WORKAREA_HOLD_SIZE,
-      MAX_AUTO_WORKAREA_SIZE,
-      MEM_TARGET,
-      TOTAL_MEM_USED,
-      GLOBAL_MEM_BOUND,
-      DRIFT_SIZE,
-      WORKAREA_COUNT,
-      MANUAL_CALC_COUNT
-    FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_MEMORY_INFO
-""".replace("\n", " ")
-)
+# 21097: GV$OB_PLAN_CACHE_REFERENCE_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_stat)
 
-def_table_schema(
-  owner = 'longzhong.wlz',
-  table_name      = 'V$OB_SQL_WORKAREA_MEMORY_INFO',
-  table_id        = '21090',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT MAX_WORKAREA_SIZE,
-      WORKAREA_HOLD_SIZE,
-      MAX_AUTO_WORKAREA_SIZE,
-      MEM_TARGET,
-      TOTAL_MEM_USED,
-      GLOBAL_MEM_BOUND,
-      DRIFT_SIZE,
-      WORKAREA_COUNT,
-      MANUAL_CALC_COUNT
-    FROM OCEANBASE.GV$OB_SQL_WORKAREA_MEMORY_INFO
+# 21098: V$OB_PLAN_CACHE_REFERENCE_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plan_cache_stat)
 
-""".replace("\n", " ")
-)
-
-def_table_schema(
-owner = 'xiaoyi.xy',
-table_name      = 'GV$OB_PLAN_CACHE_REFERENCE_INFO',
-table_id        = '21097',
-table_type      = 'SYSTEM_VIEW',
-rowkey_columns  = [],
-normal_columns  = [],
-gm_columns      = [],
-in_tenant_space = True,
-view_definition = """
-SELECT
-PC_REF_PLAN_LOCAL,
-PC_REF_PLAN_REMOTE,
-PC_REF_PLAN_DIST,
-PC_REF_PLAN_ARR,
-PC_REF_PL,
-PC_REF_PL_STAT,
-PLAN_GEN,
-CLI_QUERY,
-OUTLINE_EXEC,
-PLAN_EXPLAIN,
-ASYN_BASELINE,
-LOAD_BASELINE,
-PS_EXEC,
-GV_SQL,
-PL_ANON,
-PL_ROUTINE,
-PACKAGE_VAR,
-PACKAGE_TYPE,
-PACKAGE_SPEC,
-PACKAGE_BODY,
-PACKAGE_RESV,
-GET_PKG,
-INDEX_BUILDER,
-PCV_SET,
-PCV_RD,
-PCV_WR,
-PCV_GET_PLAN_KEY,
-PCV_GET_PL_KEY,
-PCV_EXPIRE_BY_USED,
-PCV_EXPIRE_BY_MEM,
-LC_REF_CACHE_NODE,
-LC_NODE,
-LC_NODE_RD,
-LC_NODE_WR,
-LC_REF_CACHE_OBJ_STAT
-FROM oceanbase.__all_virtual_plan_cache_stat
-""".replace("\n", " ")
-)
-
-def_table_schema(
-owner = 'xiaoyi.xy',
-table_name      = 'V$OB_PLAN_CACHE_REFERENCE_INFO',
-table_id        = '21098',
-table_type      = 'SYSTEM_VIEW',
-rowkey_columns  = [],
-normal_columns  = [],
-gm_columns      = [],
-in_tenant_space = True,
-view_definition = """
-SELECT
-PC_REF_PLAN_LOCAL,
-PC_REF_PLAN_REMOTE,
-PC_REF_PLAN_DIST,
-PC_REF_PLAN_ARR,
-PC_REF_PL,
-PC_REF_PL_STAT,
-PLAN_GEN,
-CLI_QUERY,
-OUTLINE_EXEC,
-PLAN_EXPLAIN,
-ASYN_BASELINE,
-LOAD_BASELINE,
-PS_EXEC,
-GV_SQL,
-PL_ANON,
-PL_ROUTINE,
-PACKAGE_VAR,
-PACKAGE_TYPE,
-PACKAGE_SPEC,
-PACKAGE_BODY,
-PACKAGE_RESV,
-GET_PKG,
-INDEX_BUILDER,
-PCV_SET,
-PCV_RD,
-PCV_WR,
-PCV_GET_PLAN_KEY,
-PCV_GET_PL_KEY,
-PCV_EXPIRE_BY_USED,
-PCV_EXPIRE_BY_MEM,
-LC_REF_CACHE_NODE,
-LC_NODE,
-LC_NODE_RD,
-LC_NODE_WR,
-LC_REF_CACHE_OBJ_STAT
-FROM oceanbase.GV$OB_PLAN_CACHE_REFERENCE_INFO
-"""
-)
+# 21100: GV$OB_SSTABLES # removed (single-tenant GV/V collapse; folded into V$OB_SSTABLES)
 
 def_table_schema(
 owner = 'baichangmin.bcm',
-table_name      = 'GV$OB_SSTABLES',
-table_id        = '21100',
+table_name      = 'V$OB_SSTABLES',
+table_id        = '21101',
 table_type      = 'SYSTEM_VIEW',
 rowkey_columns  = [],
 normal_columns  = [],
@@ -11435,32 +10741,6 @@ FROM
 """.replace("\n", " ")
 )
 
-def_table_schema(
-owner = 'baichangmin.bcm',
-table_name      = 'V$OB_SSTABLES',
-table_id        = '21101',
-table_type      = 'SYSTEM_VIEW',
-rowkey_columns  = [],
-normal_columns  = [],
-gm_columns      = [],
-in_tenant_space = True,
-view_definition = """
-SELECT
- M.TABLE_TYPE,
- M.TABLET_ID,
- M.CG_IDX,
- M.START_LOG_SCN,
- M.END_LOG_SCN,
- M.DATA_CHECKSUM,
- M.SIZE,
- M.REF,
- M.UPPER_TRANS_VERSION,
- M.IS_ACTIVE,
- M.CONTAIN_UNCOMMITTED_ROW
-FROM OCEANBASE.GV$OB_SSTABLES M
-""".replace("\n", " ")
-)
-
 # 21102: CDB_OB_BACKUP_ARCHIVELOG_SUMMARY # abandoned in 4.0
 # 21103: CDB_OB_BACKUP_JOB_DETAILS # abandoned in 4.0
 # 21104: CDB_OB_BACKUP_SET_DETAILS # abandoned in 4.0
@@ -11472,47 +10752,9 @@ FROM OCEANBASE.GV$OB_SSTABLES M
 # 21110: CDB_OB_RESTORE_PROGRESS # abandoned
 # 21111: CDB_OB_RESTORE_JOB_HISTORY # abandoned
 
-def_table_schema(
- owner = 'yanmu.ztl',
- table_name      = 'GV$OB_SERVER_SCHEMA_INFO',
- table_id        = '21112',
- table_type      = 'SYSTEM_VIEW',
- rowkey_columns  = [],
- normal_columns  = [],
- gm_columns      = [],
- in_tenant_space = True,
- view_definition = """
-SELECT
-  REFRESHED_SCHEMA_VERSION,
-  RECEIVED_SCHEMA_VERSION,
-  SCHEMA_COUNT,
-  SCHEMA_SIZE,
-  MIN_SSTABLE_SCHEMA_VERSION
-FROM
-  oceanbase.__all_virtual_server_schema_info
-""".replace("\n", " ")
-)
+# 21112: GV$OB_SERVER_SCHEMA_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_schema_info)
 
-def_table_schema(
- owner = 'yanmu.ztl',
- table_name      = 'V$OB_SERVER_SCHEMA_INFO',
- table_id        = '21113',
- table_type      = 'SYSTEM_VIEW',
- rowkey_columns  = [],
- normal_columns  = [],
- gm_columns      = [],
- in_tenant_space = True,
- view_definition = """
-SELECT
-  REFRESHED_SCHEMA_VERSION,
-  RECEIVED_SCHEMA_VERSION,
-  SCHEMA_COUNT,
-  SCHEMA_SIZE,
-  MIN_SSTABLE_SCHEMA_VERSION
-FROM
-  oceanbase.GV$OB_SERVER_SCHEMA_INFO
-""".replace("\n", " ")
-)
+# 21113: V$OB_SERVER_SCHEMA_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_schema_info)
 
 # 21114: CDB_CKPT_HISTORY # abandoned in 4.0
 # 21115: gv$ob_trans_table_status # abandoned in 4.0
@@ -11540,28 +10782,7 @@ def_table_schema(
 """.replace("\n", " ")
   )
 
-def_table_schema(
- owner = 'lixia.yq',
- table_name      = 'GV$OB_MERGE_INFO',
- table_id        = '21118',
- table_type      = 'SYSTEM_VIEW',
- rowkey_columns  = [],
- normal_columns  = [],
- gm_columns      = [],
- in_tenant_space = True,
- view_definition = """
-    SELECT
-        TABLET_ID,
-        TYPE AS ACTION,
-        COMPACTION_SCN,
-        START_TIME,
-        FINISH_TIME AS END_TIME,
-        MACRO_BLOCK_COUNT,
-        CASE MACRO_BLOCK_COUNT WHEN 0 THEN 0.00 ELSE ROUND(MULTIPLEXED_MACRO_BLOCK_COUNT/MACRO_BLOCK_COUNT*100, 2) END AS REUSE_PCT,
-        PARALLEL_DEGREE
-    FROM oceanbase.__ALL_VIRTUAL_TABLET_COMPACTION_HISTORY
-""".replace("\n", " ")
-)
+# 21118: GV$OB_MERGE_INFO # removed (single-tenant GV/V collapse; folded into V$OB_MERGE_INFO)
 
 def_table_schema(
   owner = 'lixia.yq',
@@ -11575,15 +10796,14 @@ def_table_schema(
   view_definition = """
     SELECT
         TABLET_ID,
-        ACTION,
+        TYPE AS ACTION,
         COMPACTION_SCN,
         START_TIME,
-        END_TIME,
+        FINISH_TIME AS END_TIME,
         MACRO_BLOCK_COUNT,
-        REUSE_PCT,
+        CASE MACRO_BLOCK_COUNT WHEN 0 THEN 0.00 ELSE ROUND(MULTIPLEXED_MACRO_BLOCK_COUNT/MACRO_BLOCK_COUNT*100, 2) END AS REUSE_PCT,
         PARALLEL_DEGREE
-    FROM OCEANBASE.GV$OB_MERGE_INFO
-
+    FROM oceanbase.__ALL_VIRTUAL_TABLET_COMPACTION_HISTORY
 """.replace("\n", " ")
 )
 
@@ -11625,52 +10845,22 @@ def_table_schema(
   select
     concat('''',u.user_name,'''@''',u.host,'''') as USERHOST,
     s.failed_login_attempts as FAILED_ATTEMPTS
-  from oceanbase.__all_tenant_user_failed_login_stat s
+  from oceanbase.__all_user_failed_login_stat s
   join oceanbase.__all_user u
   on s.user_id = u.user_id
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'fengshuo.fs',
-  table_name      = 'GV$OB_TENANT_MEMORY',
-  table_id        = '21146',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-     hold AS HOLD,
-     CASE WHEN `limit` - hold > 0 THEN `limit` - hold ELSE 0 END AS FREE
-FROM
-    oceanbase.__all_virtual_tenant_memory_info
-""".replace("\n", " ")
-  )
+# 21146: GV$OB_TENANT_MEMORY # removed (single-tenant GV/V collapse; folded into V$OB_TENANT_MEMORY)
 
-def_table_schema(
-  owner = 'fengshuo.fs',
-  table_name      = 'V$OB_TENANT_MEMORY',
-  table_id        = '21147',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-       HOLD,
-       FREE
-FROM
-    oceanbase.GV$OB_TENANT_MEMORY
-""".replace("\n", " ")
-)
+# 21147: V$OB_TENANT_MEMORY # removed (tenant-name scrub)
+
+# 21148: GV$OB_PX_TARGET_MONITOR # removed (single-tenant GV/V collapse; folded into V$OB_PX_TARGET_MONITOR)
 
 def_table_schema(
     owner = 'xiaochu.yh',
-    table_name     = 'GV$OB_PX_TARGET_MONITOR',
-    table_id       = '21148',
+    table_name     = 'V$OB_PX_TARGET_MONITOR',
+    table_id       = '21149',
     table_type = 'SYSTEM_VIEW',
     rowkey_columns  = [],
     normal_columns  = [],
@@ -11687,28 +10877,6 @@ def_table_schema(
           LOCAL_TARGET_USED,
           LOCAL_PARALLEL_SESSION_COUNT
         FROM oceanbase.__all_virtual_px_target_monitor
-""".replace("\n", " ")
-)
-
-def_table_schema(
-    owner = 'xiaochu.yh',
-    table_name     = 'V$OB_PX_TARGET_MONITOR',
-    table_id       = '21149',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """SELECT
-                          IS_LEADER,
-                          VERSION,
-                          PEER_IP,
-                          PEER_PORT,
-                          PEER_TARGET,
-                          PEER_TARGET_USED,
-                          LOCAL_TARGET_USED,
-                          LOCAL_PARALLEL_SESSION_COUNT
-        FROM oceanbase.GV$OB_PX_TARGET_MONITOR
 """.replace("\n", " ")
 )
 
@@ -11811,7 +10979,7 @@ def_table_schema(
            join oceanbase.__all_database as d
            on t.database_id = d.database_id
            where t.table_mode >> 12 & 15 in (0,1) and t.index_attributes_set & 16 = 0) o
-           join oceanbase.__all_tenant_dependency d
+           join oceanbase.__all_dependency d
            on d.dep_obj_id = o.table_id) v
 
      join
@@ -11826,7 +10994,7 @@ def_table_schema(
             from oceanbase.__all_table as t
             join oceanbase.__all_database as d
             on t.database_id = d.database_id) o
-            join oceanbase.__all_tenant_dependency d
+            join oceanbase.__all_dependency d
             on d.ref_obj_id = o.table_id) t
 
     on v.dep_obj_id = t.dep_obj_id and v.ref_obj_id = t.ref_obj_id
@@ -12100,7 +11268,7 @@ def_table_schema(
          (CASE D.READ_ONLY WHEN 0 THEN 'NO' ELSE 'YES' END) AS READ_ONLY,
          D.COMMENT AS COMMENT
   FROM OCEANBASE.__ALL_DATABASE AS D
-  LEFT JOIN OCEANBASE.__TENANT_VIRTUAL_COLLATION AS C
+  LEFT JOIN OCEANBASE.__ALL_VIRTUAL_COLLATION AS C
   ON D.COLLATION_TYPE = C.COLLATION_TYPE
   """.replace("\n", " ")
   )
@@ -12374,11 +11542,11 @@ def_table_schema(
             WHEN TYPE = 2 THEN 'PACKAGE BODY'
             ELSE NULL END AS OBJECT_TYPE
       ,CASE WHEN EXISTS
-                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_TENANT_ERROR E
+                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_ERROR E
                     WHERE P.PACKAGE_ID = E.OBJ_ID AND (E.OBJ_TYPE = 3 OR E.OBJ_TYPE = 5))
                  THEN 'INVALID'
             WHEN TYPE = 2 AND EXISTS
-                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_TENANT_ERROR Eb
+                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_ERROR Eb
                     WHERE OBJ_ID IN
                             (SELECT PACKAGE_ID FROM OCEANBASE.__ALL_PACKAGE Pb
                               WHERE Pb.PACKAGE_NAME = P.PACKAGE_NAME AND Pb.DATABASE_ID = P.DATABASE_ID AND TYPE = 1)
@@ -12406,7 +11574,7 @@ def_table_schema(
             WHEN ROUTINE_TYPE = 2 THEN 'FUNCTION'
             ELSE NULL END AS OBJECT_TYPE
       ,CASE WHEN EXISTS
-                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_TENANT_ERROR E
+                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_ERROR E
                     WHERE R.ROUTINE_ID = E.OBJ_ID AND (E.OBJ_TYPE = 9 OR E.OBJ_TYPE = 12))
                  THEN 'INVALID'
             ELSE 'VALID' END AS STATUS
@@ -12430,7 +11598,7 @@ def_table_schema(
       ,NULL AS DATA_OBJECT_ID
       ,'TRIGGER' OBJECT_TYPE
       ,CASE WHEN EXISTS
-                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_TENANT_ERROR E
+                  (SELECT OBJ_ID FROM OCEANBASE.__ALL_ERROR E
                     WHERE T.TRIGGER_ID = E.OBJ_ID AND (E.OBJ_TYPE = 7))
                  THEN 'INVALID'
             ELSE 'VALID' END AS STATUS
@@ -12439,7 +11607,7 @@ def_table_schema(
       ,'N' AS SECONDARY
       , 0 AS NAMESPACE
       ,NULL AS EDITION_NAME
-      FROM OCEANBASE.__ALL_TENANT_TRIGGER T
+      FROM OCEANBASE.__ALL_TRIGGER T
 
       UNION ALL
 
@@ -13530,34 +12698,7 @@ def_table_schema(
 
 # 21216: abandoned
 
-def_table_schema(
-  owner = 'fenggu.yh',
-  table_name      = 'GV$OB_UNITS',
-  table_id        = '21217',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-           MAX_CPU,
-           MIN_CPU,
-           MEMORY_SIZE,
-           MAX_IOPS,
-           MIN_IOPS,
-           IOPS_WEIGHT,
-           MAX_NET_BANDWIDTH,
-           NET_BANDWIDTH_WEIGHT,
-           LOG_DISK_SIZE,
-           LOG_DISK_IN_USE,
-           DATA_DISK_SIZE,
-           DATA_DISK_IN_USE,
-           STATUS,
-           usec_to_time(create_time) AS CREATE_TIME
-    FROM oceanbase.__all_virtual_unit
-""".replace("\n", " ")
-)
+# 21217: GV$OB_UNITS # removed (single-tenant GV/V collapse; folded into V$OB_UNITS)
 
 def_table_schema(
   owner = 'fenggu.yh',
@@ -13583,16 +12724,17 @@ def_table_schema(
            DATA_DISK_SIZE,
            DATA_DISK_IN_USE,
            STATUS,
-           CREATE_TIME
-    FROM oceanbase.GV$OB_UNITS
-
+           usec_to_time(create_time) AS CREATE_TIME
+    FROM oceanbase.__all_virtual_unit
 """.replace("\n", " ")
 )
 
+# 21219: GV$OB_PARAMETERS # removed (single-tenant GV/V collapse; folded into V$OB_PARAMETERS)
+
 def_table_schema(
   owner = 'fyy280124',
-  table_name      = 'GV$OB_PARAMETERS',
-  table_id        = '21219',
+  table_name      = 'V$OB_PARAMETERS',
+  table_id        = '21220',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -13614,44 +12756,16 @@ SELECT
         THEN 'YES'
         ELSE 'NO'
         END AS CHAR(3)) AS ISDEFAULT
-FROM oceanbase.__all_virtual_tenant_parameter_stat
+FROM oceanbase.__all_virtual_parameter_stat
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'fyy280124',
-  table_name      = 'V$OB_PARAMETERS',
-  table_id        = '21220',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-    ZONE,
-    SCOPE,
-    NAME,
-    DATA_TYPE,
-    VALUE,
-    INFO,
-    SECTION,
-    EDIT_LEVEL,
-    DEFAULT_VALUE,
-    CAST (CASE ISDEFAULT
-          WHEN 1
-          THEN 'YES'
-          ELSE 'NO'
-          END AS CHAR(3)) AS ISDEFAULT
-    FROM oceanbase.GV$OB_PARAMETERS
-
-""".replace("\n", " ")
-)
+# 21221: GV$OB_PROCESSLIST # removed (single-tenant GV/V collapse; folded into V$OB_PROCESSLIST)
 
 def_table_schema(
   owner = 'xiaochu.yh',
-  table_name      = 'GV$OB_PROCESSLIST',
-  table_id        = '21221',
+  table_name      = 'V$OB_PROCESSLIST',
+  table_id        = '21222',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -13701,106 +12815,16 @@ FROM oceanbase.__all_virtual_processlist
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'xiaochu.yh',
-  table_name      = 'V$OB_PROCESSLIST',
-  table_id        = '21222',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-    ID,
-    USER,
-    HOST,
-    DB,
-    TENANT,
-    COMMAND,
-    TIME,
-    TOTAL_TIME,
-    STATE,
-    INFO,
-    MASTER_SESSID,
-    USER_CLIENT_IP,
-    USER_HOST,
-    RETRY_CNT,
-    RETRY_INFO,
-    SQL_ID,
-    TRANS_ID,
-    THREAD_ID,
-    SSL_CIPHER,
-    TRACE_ID,
-    TRANS_STATE,
-    ACTION,
-    MODULE,
-    CLIENT_INFO,
-    LEVEL,
-    SAMPLE_PERCENTAGE,
-    RECORD_POLICY,
-    LB_VID,
-    LB_VIP,
-    LB_VPORT,
-    IN_BYTES,
-    OUT_BYTES,
-    USER_CLIENT_PORT,
-    SERVICE_NAME,
-    cast(total_cpu_time as SIGNED) as TOTAL_CPU_TIME,
-    TOP_INFO,
-    MEMORY_USAGE
-    FROM oceanbase.GV$OB_PROCESSLIST
+# 21223: GV$OB_KVCACHE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_kvcache_info)
 
-""".replace("\n", " ")
-)
+# 21224: V$OB_KVCACHE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_kvcache_info)
 
-def_table_schema(
-  owner = 'chaser.ch',
-  table_name      = 'GV$OB_KVCACHE',
-  table_id        = '21223',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-  CACHE_NAME,
-  CACHE_SIZE,
-  HIT_RATIO,
-  TOTAL_PUT_CNT,
-  TOTAL_HIT_CNT,
-  TOTAL_MISS_CNT
-FROM oceanbase.__all_virtual_kvcache_info
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'chaser.ch',
-  table_name      = 'V$OB_KVCACHE',
-  table_id        = '21224',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-    CACHE_NAME,
-    CACHE_SIZE,
-    HIT_RATIO,
-    TOTAL_PUT_CNT,
-    TOTAL_HIT_CNT,
-    TOTAL_MISS_CNT
-    FROM oceanbase.GV$OB_KVCACHE
-
-""".replace("\n", " ")
-)
+# 21225: GV$OB_TRANSACTION_PARTICIPANTS # removed (single-tenant GV/V collapse; folded into V$OB_TRANSACTION_PARTICIPANTS)
 
 def_table_schema(
   owner = 'gjw228474',
-  table_name      = 'GV$OB_TRANSACTION_PARTICIPANTS',
-  table_id        = '21225',
+  table_name      = 'V$OB_TRANSACTION_PARTICIPANTS',
+  table_id        = '21226',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -13860,150 +12884,20 @@ def_table_schema(
 """.replace("\n", " ")
   )
 
-def_table_schema(
-  owner = 'gjw228474',
-  table_name      = 'V$OB_TRANSACTION_PARTICIPANTS',
-  table_id        = '21226',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """SELECT
-    SESSION_ID,
-    SCHEDULER_ADDR,
-    TX_TYPE,
-    TX_ID,
-    PARTICIPANTS,
-    CTX_CREATE_TIME,
-    TX_EXPIRED_TIME,
-    STATE,
-    ACTION,
-    PENDING_LOG_SIZE,
-    FLUSHED_LOG_SIZE,
-    ROLE,
-    COORD,
-    LAST_REQUEST_TIME,
-    FORMATID,
-    GLOBALID,
-    BRANCHID
-    FROM OCEANBASE.GV$OB_TRANSACTION_PARTICIPANTS
+# 21227: GV$OB_COMPACTION_PROGRESS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_compaction_progress)
 
-""".replace("\n", " ")
-  )
+# 21228: V$OB_COMPACTION_PROGRESS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_compaction_progress)
+
+# 21229: GV$OB_TABLET_COMPACTION_PROGRESS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_compaction_progress)
+
+# 21230: V$OB_TABLET_COMPACTION_PROGRESS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_compaction_progress)
+
+# 21231: GV$OB_TABLET_COMPACTION_HISTORY # removed (single-tenant GV/V collapse; folded into V$OB_TABLET_COMPACTION_HISTORY)
 
 def_table_schema(
   owner = 'lixia.yq',
-  table_name      = 'GV$OB_COMPACTION_PROGRESS',
-  table_id        = '21227',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      COMPACTION_SCN,
-      STATUS,
-      TOTAL_TABLET_COUNT,
-      UNFINISHED_TABLET_COUNT,
-      DATA_SIZE,
-      UNFINISHED_DATA_SIZE,
-      COMPRESSION_RATIO,
-      START_TIME,
-      ESTIMATED_FINISH_TIME,
-      COMMENTS
-    FROM oceanbase.__all_virtual_server_compaction_progress
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'V$OB_COMPACTION_PROGRESS',
-  table_id        = '21228',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      COMPACTION_SCN,
-      STATUS,
-      TOTAL_TABLET_COUNT,
-      UNFINISHED_TABLET_COUNT,
-      DATA_SIZE,
-      UNFINISHED_DATA_SIZE,
-      COMPRESSION_RATIO,
-      START_TIME,
-      ESTIMATED_FINISH_TIME,
-      COMMENTS
-    FROM oceanbase.GV$OB_COMPACTION_PROGRESS
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'GV$OB_TABLET_COMPACTION_PROGRESS',
-  table_id        = '21229',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      TABLET_ID,
-      COMPACTION_SCN,
-      TASK_ID,
-      STATUS,
-      DATA_SIZE,
-      UNFINISHED_DATA_SIZE,
-      PROGRESSIVE_COMPACTION_ROUND,
-      CREATE_TIME,
-      START_TIME,
-      ESTIMATED_FINISH_TIME,
-      START_CG_ID,
-      END_CG_ID
-    FROM oceanbase.__all_virtual_tablet_compaction_progress
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'V$OB_TABLET_COMPACTION_PROGRESS',
-  table_id        = '21230',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      TABLET_ID,
-      COMPACTION_SCN,
-      TASK_ID,
-      STATUS,
-      DATA_SIZE,
-      UNFINISHED_DATA_SIZE,
-      PROGRESSIVE_COMPACTION_ROUND,
-      CREATE_TIME,
-      START_TIME,
-      ESTIMATED_FINISH_TIME,
-      START_CG_ID,
-      END_CG_ID
-    FROM oceanbase.GV$OB_TABLET_COMPACTION_PROGRESS
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'GV$OB_TABLET_COMPACTION_HISTORY',
-  table_id        = '21231',
+  table_name      = 'V$OB_TABLET_COMPACTION_HISTORY',
+  table_id        = '21232',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -14051,59 +12945,12 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'V$OB_TABLET_COMPACTION_HISTORY',
-  table_id        = '21232',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TABLET_ID,
-      TYPE,
-      COMPACTION_SCN,
-      START_TIME,
-      FINISH_TIME,
-      TASK_ID,
-      OCCUPY_SIZE,
-      MACRO_BLOCK_COUNT,
-      MULTIPLEXED_MACRO_BLOCK_COUNT,
-      NEW_MICRO_COUNT_IN_NEW_MACRO,
-      MULTIPLEXED_MICRO_COUNT_IN_NEW_MACRO,
-      TOTAL_ROW_COUNT,
-      INCREMENTAL_ROW_COUNT,
-      COMPRESSION_RATIO,
-      NEW_FLUSH_DATA_RATE,
-      PROGRESSIVE_COMPACTION_ROUND,
-      PROGRESSIVE_COMPACTION_NUM,
-      PARALLEL_DEGREE,
-      PARALLEL_INFO,
-      PARTICIPANT_TABLE,
-      MACRO_ID_LIST,
-      COMMENTS,
-      START_CG_ID,
-      END_CG_ID,
-      KEPT_SNAPSHOT,
-      MERGE_LEVEL,
-      EXEC_MODE,
-      IS_FULL_MERGE,
-      IO_COST_TIME_PERCENTAGE,
-      MERGE_REASON,
-      BASE_MAJOR_STATUS,
-      CO_MERGE_TYPE,
-      MDS_FILTER_INFO,
-      EXECUTE_TIME
-    FROM oceanbase.GV$OB_TABLET_COMPACTION_HISTORY
-""".replace("\n", " ")
-)
+# 21233: GV$OB_COMPACTION_DIAGNOSE_INFO # removed (single-tenant GV/V collapse; folded into V$OB_COMPACTION_DIAGNOSE_INFO)
 
 def_table_schema(
   owner = 'lixia.yq',
-  table_name      = 'GV$OB_COMPACTION_DIAGNOSE_INFO',
-  table_id        = '21233',
+  table_name      = 'V$OB_COMPACTION_DIAGNOSE_INFO',
+  table_id        = '21234',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -14126,204 +12973,21 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'V$OB_COMPACTION_DIAGNOSE_INFO',
-  table_id        = '21234',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      TABLET_ID,
-      STATUS,
-      CREATE_TIME,
-      DIAGNOSE_INFO
-    FROM oceanbase.GV$OB_COMPACTION_DIAGNOSE_INFO
-""".replace("\n", " ")
-)
+# 21235: GV$OB_COMPACTION_SUGGESTIONS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_compaction_suggestion)
 
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'GV$OB_COMPACTION_SUGGESTIONS',
-  table_id        = '21235',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      TABLET_ID,
-      START_TIME,
-      FINISH_TIME,
-      SUGGESTION
-    FROM oceanbase.__all_virtual_compaction_suggestion
-""".replace("\n", " ")
-)
+# 21236: V$OB_COMPACTION_SUGGESTIONS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_compaction_suggestion)
 
-def_table_schema(
-  owner = 'lixia.yq',
-  table_name      = 'V$OB_COMPACTION_SUGGESTIONS',
-  table_id        = '21236',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TYPE,
-      TABLET_ID,
-      START_TIME,
-      FINISH_TIME,
-      SUGGESTION
-    FROM oceanbase.GV$OB_COMPACTION_SUGGESTIONS
-""".replace("\n", " ")
-)
+# 21237: GV$OB_DTL_INTERM_RESULT_MONITOR # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_dtl_interm_result_monitor)
 
-def_table_schema(
-    owner = 'dachuan.sdc',
-    table_name     = 'GV$OB_DTL_INTERM_RESULT_MONITOR',
-    table_id       = '21237',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """SELECT
-          TRACE_ID,
-          OWNER,
-          START_TIME,
-          EXPIRE_TIME,
-          HOLD_MEMORY,
-          DUMP_SIZE,
-          DUMP_COST,
-          DUMP_TIME,
-          DUMP_FD,
-          DUMP_DIR_ID,
-          CHANNEL_ID,
-          QC_ID,
-          DFO_ID,
-          SQC_ID,
-          BATCH_ID,
-          MAX_HOLD_MEMORY
-        FROM oceanbase.__all_virtual_dtl_interm_result_monitor
-""".replace("\n", " ")
-)
+# 21238: V$OB_DTL_INTERM_RESULT_MONITOR # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_dtl_interm_result_monitor)
 
-def_table_schema(
-    owner = 'dachuan.sdc',
-    table_name     = 'V$OB_DTL_INTERM_RESULT_MONITOR',
-    table_id       = '21238',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """
-    SELECT
-          TRACE_ID,
-          OWNER,
-          START_TIME,
-          EXPIRE_TIME,
-          HOLD_MEMORY,
-          DUMP_SIZE,
-          DUMP_COST,
-          DUMP_TIME,
-          DUMP_FD,
-          DUMP_DIR_ID,
-          CHANNEL_ID,
-          QC_ID,
-          DFO_ID,
-          SQC_ID,
-          BATCH_ID,
-          MAX_HOLD_MEMORY FROM OCEANBASE.GV$OB_DTL_INTERM_RESULT_MONITOR
+# 21239: GV$OB_IO_CALIBRATION_STATUS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_calibration_status)
 
-""".replace("\n", " ")
-)
+# 21240: V$OB_IO_CALIBRATION_STATUS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_calibration_status)
 
-def_table_schema(
-  owner             = 'jianyun.sjy',
-  table_name        = 'GV$OB_IO_CALIBRATION_STATUS',
-  table_id          = '21239',
-  table_type        = 'SYSTEM_VIEW',
-  in_tenant_space   = False,
-  gm_columns        = [],
-  rowkey_columns    = [],
-  normal_columns    = [],
-  view_definition   = """
-    SELECT
-        STORAGE_NAME,
-        STATUS,
-        START_TIME,
-        FINISH_TIME
-    FROM oceanbase.__all_virtual_io_calibration_status
-  """.replace("\n", " ")
-  )
+# 21241: GV$OB_IO_BENCHMARK # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_benchmark)
 
-def_table_schema(
-  owner             = 'jianyun.sjy',
-  table_name        = 'V$OB_IO_CALIBRATION_STATUS',
-  table_id          = '21240',
-  table_type        = 'SYSTEM_VIEW',
-  in_tenant_space   = False,
-  gm_columns        = [],
-  rowkey_columns    = [],
-  normal_columns    = [],
-  view_definition   = """
-    SELECT
-        STORAGE_NAME,
-        STATUS,
-        START_TIME,
-        FINISH_TIME FROM oceanbase.GV$OB_IO_CALIBRATION_STATUS
-  """.replace("\n", " ")
-  )
-
-def_table_schema(
-  owner             = 'jianyun.sjy',
-  table_name        = 'GV$OB_IO_BENCHMARK',
-  table_id          = '21241',
-  table_type        = 'SYSTEM_VIEW',
-  in_tenant_space   = False,
-  gm_columns        = [],
-  rowkey_columns    = [],
-  normal_columns    = [],
-  view_definition   = """
-    SELECT
-        STORAGE_NAME,
-        MODE,
-        SIZE,
-        IOPS,
-        MBPS,
-        LATENCY
-    FROM oceanbase.__all_virtual_io_benchmark
-  """.replace("\n", " ")
-  )
-
-def_table_schema(
-  owner             = 'jianyun.sjy',
-  table_name        = 'V$OB_IO_BENCHMARK',
-  table_id          = '21242',
-  table_type        = 'SYSTEM_VIEW',
-  in_tenant_space   = False,
-  gm_columns        = [],
-  rowkey_columns    = [],
-  normal_columns    = [],
-  view_definition   = """
-    SELECT
-        STORAGE_NAME,
-        MODE,
-        SIZE,
-        IOPS,
-        MBPS,
-        LATENCY FROM oceanbase.GV$OB_IO_BENCHMARK
-  """.replace("\n", " ")
-  )
+# 21242: V$OB_IO_BENCHMARK # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_io_benchmark)
 
 # 21243: GV$OB_IO_QUOTA
 # 21244: V$OB_IO_QUOTA
@@ -15009,10 +13673,12 @@ def_table_schema(
 
 # 21268: V$ACTIVE_SESSION_HISTORY # removed
 
+# 21269: GV$DML_STATS # removed (single-tenant GV/V collapse; folded into V$DML_STATS)
+
 def_table_schema(
     owner = 'jiangxiu.wt',
-    table_name     = 'GV$DML_STATS',
-    table_id       = '21269',
+    table_name     = 'V$DML_STATS',
+    table_id       = '21270',
     table_type = 'SYSTEM_VIEW',
     rowkey_columns  = [],
     normal_columns  = [],
@@ -15031,31 +13697,6 @@ def_table_schema(
           CAST(NULL AS SIGNED) AS FLAGS,
           CAST(NULL AS SIGNED) AS CON_ID
           FROM oceanbase.__all_virtual_dml_stats
-""".replace("\n", " ")
-)
-
-def_table_schema(
-    owner = 'jiangxiu.wt',
-    table_name     = 'V$DML_STATS',
-    table_id       = '21270',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """
-    SELECT
-    INST_ID,
-    OBJN,
-    INS,
-    UPD,
-    DEL,
-    DROPSEG,
-    CURROWS,
-    PAROBJN,
-    LASTUSED,
-    FLAGS,
-    CON_ID FROM oceanbase.GV$DML_STATS
 """.replace("\n", " ")
 )
 
@@ -15193,7 +13834,7 @@ def_table_schema(
     CAST(NULL AS CHAR(5)) AS RESTARTABLE,
     CAST(NULL AS CHAR(128)) AS CONNECT_CREDENTIAL_OWNER,
     CAST(NULL AS CHAR(128)) AS CONNECT_CREDENTIAL_NAME
-  FROM oceanbase.__all_tenant_scheduler_job T WHERE T.JOB_NAME != '__dummy_guard' and T.JOB > 0
+  FROM oceanbase.__all_scheduler_job T WHERE T.JOB_NAME != '__dummy_guard' and T.JOB > 0
 """.replace("\n", " ")
 )
 
@@ -15258,7 +13899,7 @@ def_table_schema(
       A.OUTLINE_SQL,
       A.SQL_ID,
       A.OUTLINE_CONTENT
-    FROM oceanbase.__tenant_virtual_outline A, oceanbase.__all_outline B
+    FROM oceanbase.__all_virtual_outline A, oceanbase.__all_outline B
     WHERE A.OUTLINE_ID = B.OUTLINE_ID AND B.FORMAT_OUTLINE = 0
 """.replace("\n", " "),
 
@@ -15287,7 +13928,7 @@ def_table_schema(
       A.SQL_TEXT,
       A.CONCURRENT_NUM,
       A.LIMIT_TARGET
-    FROM oceanbase.__tenant_virtual_concurrent_limit_sql A, oceanbase.__all_outline B
+    FROM oceanbase.__all_virtual_concurrent_limit_sql A, oceanbase.__all_outline B
     WHERE A.OUTLINE_ID = B.OUTLINE_ID
 """.replace("\n", " "),
 
@@ -15348,16 +13989,18 @@ def_table_schema(
 # 21300: DBA_OB_KV_TTL_TASKS (abandoned)
 # 21301: DBA_OB_KV_TTL_TASK_HISTORY (abandoned)
 
+# 21302: GV$OB_LOG_STAT # removed (single-tenant GV/V collapse; folded into V$OB_LOG_STAT)
+
 def_table_schema(
-  owner = 'xianlin.lh',
-  table_name     = 'GV$OB_LOG_STAT',
-  table_id       = '21302',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  rowkey_columns = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
+    owner = 'xianlin.lh',
+    table_name     = 'V$OB_LOG_STAT',
+    table_id       = '21303',
+    table_type = 'SYSTEM_VIEW',
+    gm_columns = [],
+    rowkey_columns = [],
+    normal_columns  = [],
+    in_tenant_space = True,
+    view_definition = """
   SELECT
     ROLE,
     PROPOSAL_ID,
@@ -15380,38 +14023,6 @@ def_table_schema(
     DEGRADED_LIST,
     LEARNER_LIST
   FROM oceanbase.__all_virtual_log_stat
-""".replace("\n", " ")
-  )
-
-def_table_schema(
-    owner = 'xianlin.lh',
-    table_name     = 'V$OB_LOG_STAT',
-    table_id       = '21303',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    rowkey_columns = [],
-    normal_columns  = [],
-    in_tenant_space = True,
-    view_definition = """
-  SELECT
-    ROLE,
-    PROPOSAL_ID,
-    CONFIG_VERSION,
-    ACCESS_MODE,
-    PAXOS_MEMBER_LIST,
-    PAXOS_REPLICA_NUM,
-    IN_SYNC,
-    BASE_LSN,
-    BEGIN_LSN,
-    BEGIN_SCN,
-    END_LSN,
-    END_SCN,
-    MAX_LSN,
-    MAX_SCN,
-    ARBITRATION_MEMBER,
-    DEGRADED_LIST,
-    LEARNER_LIST
-  FROM oceanbase.GV$OB_LOG_STAT
 """.replace("\n", " ")
   )
 
@@ -15656,7 +14267,7 @@ def_table_schema(
           CAST(NULL AS NUMBER) AS PARALLEL_SERVERS_ACTIVE,
           CAST(NULL AS NUMBER) AS PARALLEL_SERVERS_TOTAL,
           CAST(NULL AS CHAR(32)) AS PARALLEL_EXECUTION_MANAGED
-        FROM oceanbase.__tenant_virtual_global_variable A, oceanbase.dba_rsrc_plans B
+        FROM oceanbase.__all_virtual_global_variable A, oceanbase.dba_rsrc_plans B
         WHERE A.variable_name = 'resource_manager_plan' AND UPPER(A.value) = UPPER(B.plan)
 """.replace("\n", " ")
   )
@@ -15807,7 +14418,7 @@ def_table_schema(
     CAST(NULL AS DATETIME(6)) AS MANUAL_OPEN_TIME,
     CAST(NULL AS SIGNED) AS MANUAL_DURATION,
     CAST(T.COMMENTS AS CHAR(4000)) AS COMMENTS
-  FROM oceanbase.__all_tenant_scheduler_job T WHERE T.JOB > 0 and T.JOB_NAME in ('MONDAY_WINDOW',
+  FROM oceanbase.__all_scheduler_job T WHERE T.JOB > 0 and T.JOB_NAME in ('MONDAY_WINDOW',
     'TUESDAY_WINDOW', 'WEDNESDAY_WINDOW', 'THURSDAY_WINDOW', 'FRIDAY_WINDOW', 'SATURDAY_WINDOW', 'SUNDAY_WINDOW')
   """.replace("\n", " ")
 )
@@ -15965,112 +14576,13 @@ def_table_schema(
       CAST(T.VERSION AS SIGNED) AS VERSION,
       CAST(T.PATTERN_DIGEST AS UNSIGNED) AS PATTERN_DIGEST
     FROM
-      oceanbase.__all_tenant_rewrite_rules T
+      oceanbase.__all_rewrite_rules T
     WHERE T.STATUS != 3
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'zhenling.zzg',
-  tablegroup_id   = 'OB_INVALID_ID',
-  table_name      = 'GV$OB_SQL_PLAN',
-  table_id        = '21341',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """SELECT
-                        PLAN_ID,
-                        SQL_ID,
-                        DB_ID,
-                        PLAN_HASH,
-                        GMT_CREATE,
-                        OPERATOR,
-                        OBJECT_NODE,
-                        OBJECT_ID,
-                        OBJECT_OWNER,
-                        OBJECT_NAME,
-                        OBJECT_ALIAS,
-                        OBJECT_TYPE,
-                        OPTIMIZER,
-                        ID,
-                        PARENT_ID,
-                        DEPTH,
-                        POSITION,
-                        COST,
-                        REAL_COST,
-                        CARDINALITY,
-                        REAL_CARDINALITY,
-                        IO_COST,
-                        CPU_COST,
-                        BYTES,
-                        ROWSET,
-                        OTHER_TAG,
-                        PARTITION_START,
-                        OTHER,
-                        ACCESS_PREDICATES,
-                        FILTER_PREDICATES,
-                        STARTUP_PREDICATES,
-                        PROJECTION,
-                        SPECIAL_PREDICATES,
-                        QBLOCK_NAME,
-                        REMARKS,
-                        OTHER_XML
-                    FROM OCEANBASE.__ALL_VIRTUAL_SQL_PLAN
-""".replace("\n", " ")
-)
-def_table_schema(
-  owner = 'zhenling.zzg',
-  tablegroup_id  = 'OB_INVALID_ID',
-  table_name     = 'V$OB_SQL_PLAN',
-  table_id       = '21342',
-  gm_columns     = [],
-  normal_columns = [],
-  rowkey_columns = [],
-  table_type     = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """SELECT
-                      SQL_ID,
-                      DB_ID,
-                      PLAN_HASH,
-                      PLAN_ID,
-                      GMT_CREATE,
-                      OPERATOR,
-                      OBJECT_NODE,
-                      OBJECT_ID,
-                      OBJECT_OWNER,
-                      OBJECT_NAME,
-                      OBJECT_ALIAS,
-                      OBJECT_TYPE,
-                      OPTIMIZER,
-                      ID,
-                      PARENT_ID,
-                      DEPTH,
-                      POSITION,
-                      COST,
-                      REAL_COST,
-                      CARDINALITY,
-                      REAL_CARDINALITY,
-                      IO_COST,
-                      CPU_COST,
-                      BYTES,
-                      ROWSET,
-                      OTHER_TAG,
-                      PARTITION_START,
-                      OTHER,
-                      ACCESS_PREDICATES,
-                      FILTER_PREDICATES,
-                      STARTUP_PREDICATES,
-                      PROJECTION,
-                      SPECIAL_PREDICATES,
-                      QBLOCK_NAME,
-                      REMARKS,
-                      OTHER_XML
-    FROM OCEANBASE.GV$OB_SQL_PLAN
-
-""".replace("\n", " ")
-)
+# 21341: GV$OB_SQL_PLAN # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sql_plan)
+# 21342: V$OB_SQL_PLAN # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sql_plan)
 
 # 21343: abandoned
 # 21344: abandoned
@@ -16989,10 +15501,12 @@ def_table_schema(
   """.replace("\n", " ")
   )
 
+# 21353: GV$OB_TRANSACTION_SCHEDULERS # removed (single-tenant GV/V collapse; folded into V$OB_TRANSACTION_SCHEDULERS)
+
 def_table_schema(
   owner = 'wuyuefei.wyf',
-  table_name      = 'GV$OB_TRANSACTION_SCHEDULERS',
-  table_id        = '21353',
+  table_name      = 'V$OB_TRANSACTION_SCHEDULERS',
+  table_id        = '21354',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -17055,37 +15569,6 @@ def_table_schema(
   )
 
 def_table_schema(
-  owner = 'wuyuefei.wyf',
-  table_name      = 'V$OB_TRANSACTION_SCHEDULERS',
-  table_id        = '21354',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """SELECT 
-    SESSION_ID,
-    TX_ID,
-    STATE,
-    CLUSTER_ID,
-    COORDINATOR,
-    PARTICIPANTS,
-    ISOLATION_LEVEL,
-    SNAPSHOT_VERSION,
-    ACCESS_MODE,
-    TX_OP_SN,
-    ACTIVE_TIME,
-    EXPIRE_TIME,
-    CAN_EARLY_LOCK_RELEASE,
-    FORMATID,
-    GLOBALID,
-    BRANCHID
-    FROM OCEANBASE.GV$OB_TRANSACTION_SCHEDULERS
-
-""".replace("\n", " ")
-  )
-
-def_table_schema(
     owner           = 'webber.wb',
     tablegroup_id   = 'OB_INVALID_ID',
     table_name      = 'TRIGGERS',
@@ -17120,16 +15603,16 @@ def_table_schema(
       CAST(trg.gmt_create AS DATETIME(2)) AS CREATED,
       CAST(sql_mode_convert(trg.sql_mode) AS CHAR(8192)) AS SQL_MODE,
       CAST(trg.trigger_priv_user AS CHAR(93)) AS DEFINER,
-      CAST((select charset from oceanbase.__tenant_virtual_collation
+      CAST((select charset from oceanbase.__all_virtual_collation
           where id = substring_index(substring_index(trg.package_exec_env, ',', 2), ',', -1)) AS CHAR(32)
             ) AS CHARACTER_SET_CLIENT,
-      CAST((select collation from oceanbase.__tenant_virtual_collation
+      CAST((select collation from oceanbase.__all_virtual_collation
             where collation_type = substring_index(substring_index(trg.package_exec_env, ',', 3), ',', -1)) AS CHAR(32)
             ) AS COLLATION_CONNECTION,
-      CAST((select collation from oceanbase.__tenant_virtual_collation
+      CAST((select collation from oceanbase.__all_virtual_collation
             where collation_type = substring_index(substring_index(trg.package_exec_env, ',', 4), ',', -1)) AS CHAR(32)
             ) AS DATABASE_COLLATION
-      FROM oceanbase.__all_tenant_trigger trg
+      FROM oceanbase.__all_trigger trg
           JOIN oceanbase.__all_database db on trg.database_id = db.database_id
           JOIN oceanbase.__all_table t on trg.base_object_id = t.table_id
       WHERE db.database_name != '__recyclebin' and db.in_recyclebin = 0
@@ -17327,59 +15810,9 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'fengjingkun.fjk',
-  table_name      = 'GV$OB_TABLET_STATS',
-  table_id        = '21370',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TABLET_ID,
-      QUERY_CNT,
-      MINI_MERGE_CNT,
-      SCAN_OUTPUT_ROW_CNT,
-      SCAN_TOTAL_ROW_CNT,
-      PUSHDOWN_MICRO_BLOCK_CNT,
-      TOTAL_MICRO_BLOCK_CNT,
-      EXIST_ITER_TABLE_CNT,
-      EXIST_TOTAL_TABLE_CNT,
-      INSERT_ROW_CNT,
-      UPDATE_ROW_CNT,
-      DELETE_ROW_CNT
-    FROM oceanbase.__all_virtual_tablet_stat
-""".replace("\n", " ")
-)
+# 21370: GV$OB_TABLET_STATS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_stat)
 
-def_table_schema(
-  owner = 'fengjingkun.fjk',
-  table_name      = 'V$OB_TABLET_STATS',
-  table_id        = '21371',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-      TABLET_ID,
-      QUERY_CNT,
-      MINI_MERGE_CNT,
-      SCAN_OUTPUT_ROW_CNT,
-      SCAN_TOTAL_ROW_CNT,
-      PUSHDOWN_MICRO_BLOCK_CNT,
-      TOTAL_MICRO_BLOCK_CNT,
-      EXIST_ITER_TABLE_CNT,
-      EXIST_TOTAL_TABLE_CNT,
-      INSERT_ROW_CNT,
-      UPDATE_ROW_CNT,
-      DELETE_ROW_CNT FROM OCEANBASE.GV$OB_TABLET_STATS
-
-""".replace("\n", " ")
-)
+# 21371: V$OB_TABLET_STATS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tablet_stat)
 
 # 21372: DBA_OB_ACCESS_POINT (abandoned)
 # 21373: CDB_OB_ACCESS_POINT (abandoned)
@@ -17404,10 +15837,12 @@ def_table_schema(
   """.replace("\n", " ")
   )
 
+# 21376: GV$OB_OPT_STAT_GATHER_MONITOR # removed (single-tenant GV/V collapse; folded into V$OB_OPT_STAT_GATHER_MONITOR)
+
 def_table_schema(
     owner = 'jiangxiu.wt',
-    table_name     = 'GV$OB_OPT_STAT_GATHER_MONITOR',
-    table_id       = '21376',
+    table_name     = 'V$OB_OPT_STAT_GATHER_MONITOR',
+    table_id       = '21377',
     table_type = 'SYSTEM_VIEW',
     rowkey_columns  = [],
     normal_columns  = [],
@@ -17429,32 +15864,6 @@ def_table_schema(
           CAST(RUNNING_TABLE_DURATION_TIME AS SIGNED) AS RUNNING_TABLE_DURATION_TIME,
           CAST(SPARE2 AS CHAR(256)) AS RUNNING_TABLE_PROGRESS
           FROM oceanbase.__all_virtual_opt_stat_gather_monitor
-""".replace("\n", " ")
-)
-
-def_table_schema(
-    owner = 'jiangxiu.wt',
-    table_name     = 'V$OB_OPT_STAT_GATHER_MONITOR',
-    table_id       = '21377',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """
-    SELECT
-    SESSION_ID,
-    TRACE_ID,
-    TASK_ID,
-    TYPE,
-    TASK_START_TIME,
-    TASK_DURATION_TIME,
-    TASK_TABLE_COUNT,
-    COMPLETED_TABLE_COUNT,
-    RUNNING_TABLE_OWNER,
-    RUNNING_TABLE_NAME,
-    RUNNING_TABLE_DURATION_TIME,
-    RUNNING_TABLE_PROGRESS FROM oceanbase.GV$OB_OPT_STAT_GATHER_MONITOR
 """.replace("\n", " ")
 )
 
@@ -17535,108 +15944,17 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner           = 'fengshuo.fs',
-  table_name      = 'GV$OB_THREAD',
-  table_id        = '21380',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-       tid AS TID,
-       tname AS TNAME,
-       latch_wait AS LATCH_WAIT,
-       latch_hold AS LATCH_HOLD,
-       trace_id AS TRACE_ID,
-       cgroup_path AS CGROUP_PATH
-FROM oceanbase.__all_virtual_thread
-""".replace("\n", " ")
-  )
+# 21380: GV$OB_THREAD # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_thread)
 
-def_table_schema(
-  owner           = 'fengshuo.fs',
-  table_name      = 'V$OB_THREAD',
-  table_id        = '21381',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    TID,
-    TNAME,
-    LATCH_WAIT,
-    LATCH_HOLD,
-    TRACE_ID,
-    CGROUP_PATH
-FROM oceanbase.GV$OB_THREAD
-""".replace("\n", " ")
-  )
+# 21381: V$OB_THREAD # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_thread)
 
 # 21382: GV$OB_ARBITRATION_MEMBER_INFO (abandoned)
 # 21383: V$OB_ARBITRATION_MEMBER_INFO (abandoned)
 # 21384: DBA_OB_ZONE_STORAGE (abandoned)
 
-def_table_schema(
-  owner           = 'shifangdan.sfd',
-  table_name      = 'GV$OB_SERVER_STORAGE',
-  table_id        = '21385',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = False,
-  view_definition =
-  """
-  SELECT
-         PATH,
-         ENDPOINT,
-         USED_FOR,
-         STORAGE_ID,
-         MAX_IOPS,
-         MAX_BANDWIDTH,
-         CREATE_TIME,
-         AUTHORIZATION,
-         STATE,
-         STATE_INFO,
-         LAST_CHECK_TIMESTAMP,
-         EXTENSION
-  FROM OCEANBASE.__all_virtual_server_storage;
-  """.replace("\n", " ")
-)
+# 21385: GV$OB_SERVER_STORAGE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_storage;)
 
-def_table_schema(
-  owner           = 'shifangdan.sfd',
-  table_name      = 'V$OB_SERVER_STORAGE',
-  table_id        = '21386',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = False,
-  view_definition =
-  """
-  SELECT
-         PATH,
-         ENDPOINT,
-         USED_FOR,
-         STORAGE_ID,
-         MAX_IOPS,
-         MAX_BANDWIDTH,
-         CREATE_TIME,
-         AUTHORIZATION,
-         STATE,
-         STATE_INFO,
-         LAST_CHECK_TIMESTAMP,
-         EXTENSION
-    FROM OCEANBASE.GV$OB_SERVER_STORAGE
-
-""".replace("\n", " ")
-  )
+# 21386: V$OB_SERVER_STORAGE # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_server_storage;)
 
 # 21387: GV$OB_ARBITRATION_SERVICE_STATUS (abandoned)
 # 21388: V$OB_ARBITRATION_SERVICE_STATUS (abandoned)
@@ -17662,10 +15980,11 @@ def_table_schema(
 # 21398: V$OB_KV_CONNECTIONS abandoned
 
 
+# 21399: GV$OB_LOCKS # removed (single-tenant GV/V collapse; folded into V$OB_LOCKS)
 def_table_schema(
   owner           = 'yangyifei.yyf',
-  table_name      = 'GV$OB_LOCKS',
-  table_id        = '21399',
+  table_name      = 'V$OB_LOCKS',
+  table_id        = '21400',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -17746,37 +16065,12 @@ def_table_schema(
     FROM
     oceanbase.__ALL_VIRTUAL_OBJ_LOCK AS OBJ_LOCK
     LEFT JOIN
-    oceanbase.GV$OB_TRANSACTION_PARTICIPANTS TRX_PART
+    oceanbase.V$OB_TRANSACTION_PARTICIPANTS TRX_PART
     ON
     TRX_PART.TX_ID = OBJ_LOCK.CREATE_TRANS_ID
     WHERE
     OBJ_LOCK.OBJ_TYPE IN ('TABLE', 'TABLET', 'DBMS_LOCK') AND
     OBJ_LOCK.EXTRA_INFO LIKE '%tx_ctx%'
-""".replace("\n", " ")
-)
-def_table_schema(
-  owner           = 'yangyifei.yyf',
-  table_name      = 'V$OB_LOCKS',
-  table_id        = '21400',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-    TRANS_ID,
-    SESSION_ID,
-    TYPE,
-    ID1,
-    ID2,
-    ID3,
-    LMODE,
-    REQUEST,
-    CTIME,
-    BLOCK
-    FROM oceanbase.GV$OB_LOCKS
-
 """.replace("\n", " ")
 )
 # 21401: CDB_OB_LOG_RESTORE_SOURCE # abandoned
@@ -17824,10 +16118,12 @@ def_table_schema(
 
 # 21418: ALL_OB_EXTERNAL_TABLE_FILES # abandoned in seekdb
 
+# 21419: GV$OB_PX_P2P_DATAHUB # removed (single-tenant GV/V collapse; folded into V$OB_PX_P2P_DATAHUB)
+
 def_table_schema(
     owner = 'mingdou.tmd',
-    table_name     = 'GV$OB_PX_P2P_DATAHUB',
-    table_id       = '21419',
+    table_name     = 'V$OB_PX_P2P_DATAHUB',
+    table_id       = '21420',
     table_type = 'SYSTEM_VIEW',
     gm_columns = [],
     in_tenant_space = True,
@@ -17848,33 +16144,12 @@ def_table_schema(
     ]
   )
 
-def_table_schema(
-    owner = 'mingdou.tmd',
-    table_name     = 'V$OB_PX_P2P_DATAHUB',
-    table_id       = '21420',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-        SELECT
-              TRACE_ID,
-              DATAHUB_ID,
-              MESSAGE_TYPE,
-              HOLD_SIZE,
-              TIMEOUT_TS,
-              START_TIME FROM OCEANBASE.GV$OB_PX_P2P_DATAHUB
-
-""".replace("\n", " "),
-
-    normal_columns = [
-    ]
-  )
+# 21421: GV$SQL_JOIN_FILTER # removed (single-tenant GV/V collapse; folded into V$SQL_JOIN_FILTER)
 
 def_table_schema(
     owner = 'mingdou.tmd',
-    table_name     = 'GV$SQL_JOIN_FILTER',
-    table_id       = '21421',
+    table_name     = 'V$SQL_JOIN_FILTER',
+    table_id       = '21422',
     table_type = 'SYSTEM_VIEW',
     gm_columns = [],
     in_tenant_space = True,
@@ -17893,33 +16168,6 @@ def_table_schema(
           CAST(TRACE_ID AS CHAR(64)) as TRACE_ID
         FROM oceanbase.__all_virtual_sql_plan_monitor
         WHERE plan_operation = 'PHY_JOIN_FILTER'
-
-""".replace("\n", " "),
-
-    normal_columns = [
-    ]
-  )
-
-def_table_schema(
-    owner = 'mingdou.tmd',
-    table_name     = 'V$SQL_JOIN_FILTER',
-    table_id       = '21422',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-    SELECT
-    QC_SESSION_ID,
-    QC_INSTANCE_ID,
-    SQL_PLAN_HASH_VALUE,
-    FILTER_ID,
-    BITS_SET,
-    FILTERED,
-    PROBED,
-    ACTIVE,
-    CON_ID,
-    TRACE_ID FROM OCEANBASE.GV$SQL_JOIN_FILTER
 
 """.replace("\n", " "),
 
@@ -18097,7 +16345,7 @@ JOIN OCEANBASE.__ALL_OPTSTAT_GLOBAL_PREFS GP
 
 def_table_schema(
   owner           = 'wanhong.wwh',
-  table_name      = 'DBA_OB_TENANT_EVENT_HISTORY',
+  table_name      = 'DBA_OB_EVENT_HISTORY',
   table_id        = '21447',
   table_type      = 'SYSTEM_VIEW',
   gm_columns      = [],
@@ -18127,39 +16375,19 @@ def_table_schema(
     COST_TIME AS COST_TIME,
     RET_CODE AS RET_CODE,
     CAST(ERROR_MSG AS CHAR(512)) AS ERROR_MSG
-  FROM OCEANBASE.__ALL_VIRTUAL_TENANT_EVENT_HISTORY
+  FROM OCEANBASE.__ALL_VIRTUAL_EVENT_HISTORY
   """.replace("\n", " ")
 )
 
 # 21448: CDB_OB_TENANT_EVENT_HISTORY (abandoned)
 # 21449: GV$OB_FLT_TRACE_CONFIG
-def_table_schema(
-  owner           = 'guoyun.lgy',
-  table_name      = 'GV$OB_FLT_TRACE_CONFIG',
-  table_id        = '21449',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition =
-  """
-  SELECT
-   TYPE,
-   MODULE_NAME,
-   ACTION_NAME,
-   CLIENT_IDENTIFIER,
-   LEVEL,
-   SAMPLE_PERCENTAGE,
-   RECORD_POLICY
-  FROM OCEANBASE.__all_virtual_flt_config
-  """.replace("\n", " ")
-)
+# 21449: GV$OB_FLT_TRACE_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_flt_config)
 
+# 21459: GV$OB_SESSION # removed (single-tenant GV/V collapse; folded into V$OB_SESSION)
 def_table_schema(
   owner = 'jingfeng.jf',
-  table_name      = 'GV$OB_SESSION',
-  table_id        = '21459',
+  table_name      = 'V$OB_SESSION',
+  table_id        = '21460',
   gm_columns      = [],
   rowkey_columns  = [],
   table_type      = 'SYSTEM_VIEW',
@@ -18189,48 +16417,18 @@ def_table_schema(
 """.replace("\n", " "),
   normal_columns  = []
   )
-def_table_schema(
-  owner = 'jingfeng.jf',
-  table_name      = 'V$OB_SESSION',
-  table_id        = '21460',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """SELECT
-			id as ID,
-                         user as USER,
-                         tenant as TENANT,
-                         host as HOST,
-                         db as DB,
-                         command as COMMAND,
-                         sql_id as SQL_ID,
-                         cast(time as SIGNED) as TIME,
-                         state as STATE,
-                         info as INFO,
-                         user_client_ip as USER_CLIENT_IP,
-                         user_host as USER_HOST,
-                         trans_id as TRANS_ID,
-                         thread_id as THREAD_ID,
-                         trace_id as TRACE_ID,
-                         ref_count as REF_COUNT,
-                         backtrace as BACKTRACE,
-                         trans_state as TRANS_STATE,
-                         user_client_port as USER_CLIENT_PORT,
-                         cast(total_cpu_time as SIGNED) as TOTAL_CPU_TIME 		FROM oceanbase.gv$ob_session
-""".replace("\n", " "),
-  normal_columns  = []
-  )
 
 # 21459:GV$OB_SESSION
 # 21460:V$OB_SESSION
 # 21461: GV$OB_PL_CACHE_OBJECT
 # 21462: V$OB_PL_CACHE_OBJECT
 
+# 21461: GV$OB_PL_CACHE_OBJECT # removed (single-tenant GV/V collapse; folded into V$OB_PL_CACHE_OBJECT)
+
 def_table_schema(
     owner = 'hr351303',
-    table_name     = 'GV$OB_PL_CACHE_OBJECT',
-    table_id       = '21461',
+    table_name     = 'V$OB_PL_CACHE_OBJECT',
+    table_id       = '21462',
     table_type = 'SYSTEM_VIEW',
     gm_columns = [],
     in_tenant_space = True,
@@ -18265,48 +16463,6 @@ def_table_schema(
            OUTLINE_DATA AS CONCURRENT_DATA
     FROM oceanbase.__all_virtual_plan_stat WHERE OBJECT_STATUS = 0 AND TYPE > 5 AND TYPE < 11 AND is_in_pc=true
 """.replace("\n", " "),
-    normal_columns = [
-    ]
-  )
-
-def_table_schema(
-    owner = 'hr351303',
-    table_name     = 'V$OB_PL_CACHE_OBJECT',
-    table_id       = '21462',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-    SELECT
-           CACHE_OBJECT_ID,
-           PARAMETERIZE_TEXT,
-           OBJECT_TEXT,
-           FIRST_LOAD_TIME,
-           LAST_ACTIVE_TIME,
-           AVG_EXE_USEC,
-           SLOWEST_EXE_TIME,
-           SLOWEST_EXE_USEC,
-           HIT_COUNT,
-           CACHE_OBJ_SIZE,
-           EXECUTIONS,
-           ELAPSED_TIME,
-           OBJECT_TYPE,
-           OBJECT_ID,
-           COMPILE_TIME,
-           SCHEMA_VERSION,
-           PL_EVICT_VERSION,
-           PS_STMT_ID,
-           DB_ID,
-           PL_CG_MEM_HOLD,
-           SYS_VARS,
-           PARAM_INFOS,
-           SQL_ID,
-           OUTLINE_VERSION,
-           OUTLINE_ID,
-           CONCURRENT_DATA
-    FROM oceanbase.GV$OB_PL_CACHE_OBJECT
-""".replace("\n", " "),
 
 
     normal_columns = [
@@ -18328,132 +16484,13 @@ def_table_schema(
 # 21475: CDB_OB_IMPORT_STMT_EXEC_HISTORY
 # 21476: DBA_OB_IMPORT_STMT_EXEC_HISTORY
 
-def_table_schema(
-  owner = 'tushicheng.tsc',
-  table_name      = 'GV$OB_TENANT_RUNTIME_INFO',
-  table_id        = '21477',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  view_definition = """
-  SELECT
-    compat_mode AS COMPAT_MODE,
-    unit_min_cpu AS UNIT_MIN_CPU,
-    unit_max_cpu AS UNIT_MAX_CPU,
-    slice AS SLICE,
-    remain_slice AS REMAIN_SLICE,
-    token_cnt AS TOKEN_CNT,
-    ass_token_cnt AS ASS_TOKEN_CNT,
-    lq_tokens AS LQ_TOKENS,
-    used_lq_tokens AS USED_LQ_TOKENS,
-    stopped AS STOPPED,
-    idle_us AS IDLE_US,
-    recv_hp_rpc_cnt AS RECV_HP_RPC_CNT,
-    recv_np_rpc_cnt AS RECV_NP_RPC_CNT,
-    recv_lp_rpc_cnt AS RECV_LP_RPC_CNT,
-    recv_mysql_cnt AS RECV_MYSQL_CNT,
-    recv_task_cnt AS RECV_TASK_CNT,
-    recv_large_req_cnt AS RECV_LARGE_REQ_CNT,
-    recv_large_queries AS RECV_LARGE_QUERIES,
-    actives AS ACTIVES,
-    workers AS WORKERS,
-    lq_waiting_workers AS LQ_WAITING_WORKERS,
-    req_queue_total_size AS REQ_QUEUE_TOTAL_SIZE,
-    queue_0 AS QUEUE_0,
-    queue_1 AS QUEUE_1,
-    queue_2 AS QUEUE_2,
-    queue_3 AS QUEUE_3,
-    queue_4 AS QUEUE_4,
-    queue_5 AS QUEUE_5,
-    large_queued AS LARGE_QUEUED
-  FROM
-    oceanbase.__all_virtual_dump_tenant_info
-""".replace("\n", " ")
-  )
+# 21477: GV$OB_TENANT_RUNTIME_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_dump_info)
 
-def_table_schema(
-  owner = 'tushicheng.tsc',
-  table_name      = 'V$OB_TENANT_RUNTIME_INFO',
-  table_id        = '21478',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  view_definition = """
-  SELECT
-    COMPAT_MODE,
-    UNIT_MIN_CPU,
-    UNIT_MAX_CPU,
-    SLICE,
-    REMAIN_SLICE,
-    TOKEN_CNT,
-    ASS_TOKEN_CNT,
-    LQ_TOKENS,
-    USED_LQ_TOKENS,
-    STOPPED,
-    IDLE_US,
-    RECV_HP_RPC_CNT,
-    RECV_NP_RPC_CNT,
-    RECV_LP_RPC_CNT,
-    RECV_MYSQL_CNT,
-    RECV_TASK_CNT,
-    RECV_LARGE_REQ_CNT,
-    RECV_LARGE_QUERIES,
-    ACTIVES,
-    WORKERS,
-    LQ_WAITING_WORKERS,
-    REQ_QUEUE_TOTAL_SIZE,
-    QUEUE_0,
-    QUEUE_1,
-    QUEUE_2,
-    QUEUE_3,
-    QUEUE_4,
-    QUEUE_5,
-    LARGE_QUEUED
-  FROM
-    oceanbase.GV$OB_TENANT_RUNTIME_INFO
+# 21478: V$OB_TENANT_RUNTIME_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_dump_info)
 
-""".replace("\n", " ")
-  )
+# 21479: GV$OB_CGROUP_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_cgroup_config)
 
-def_table_schema(
-  owner           = 'huangrenhuang.hrh',
-  table_name      = 'GV$OB_CGROUP_CONFIG',
-  table_id        = '21479',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-       cfs_quota_us AS CFS_QUOTA_US,
-       cfs_period_us AS CFS_PERIOD_US,
-       shares AS SHARES,
-       cgroup_path AS CGROUP_PATH
-FROM oceanbase.__all_virtual_cgroup_config
-""".replace("\n", " ")
-  )
-
-def_table_schema(
-  owner           = 'huangrenhuang.hrh',
-  table_name      = 'V$OB_CGROUP_CONFIG',
-  table_id        = '21480',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    CFS_QUOTA_US,
-    CFS_PERIOD_US,
-    SHARES,
-    CGROUP_PATH
-FROM oceanbase.GV$OB_CGROUP_CONFIG
-""".replace("\n", " ")
-  )
+# 21480: V$OB_CGROUP_CONFIG # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_cgroup_config)
 
 # 21481: DBA_WR_SYSTEM_EVENT # removed
 # 21482: CDB_WR_SYSTEM_EVENT # removed
@@ -18481,7 +16518,7 @@ def_table_schema(
       A.OUTLINE_SQL,
       A.FORMAT_SQL_ID,
       A.OUTLINE_CONTENT
-    FROM oceanbase.__tenant_virtual_outline A, oceanbase.__all_outline B
+    FROM oceanbase.__all_virtual_outline A, oceanbase.__all_outline B
     WHERE A.OUTLINE_ID = B.OUTLINE_ID AND B.FORMAT_OUTLINE != 0
 """.replace("\n", " "),
     normal_columns = [
@@ -18514,149 +16551,8 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'yuchen.wyc',
-  tablegroup_id   = 'OB_INVALID_ID',
-  table_name      = 'GV$OB_SQLSTAT',
-  table_id        = '21487',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """SELECT
-      SQL_ID AS SQL_ID,
-      PLAN_ID AS PLAN_ID,
-      PLAN_HASH AS PLAN_HASH,
-      PLAN_TYPE AS PLAN_TYPE,
-      QUERY_SQL AS QUERY_SQL,
-      SQL_TYPE AS SQL_TYPE,
-      MODULE AS MODULE,
-      ACTION AS ACTION,
-      PARSING_DB_ID AS PARSING_DB_ID,
-      PARSING_DB_NAME AS PARSING_DB_NAME,
-      PARSING_USER_ID AS PARSING_USER_ID,
-      EXECUTIONS_TOTAL AS EXECUTIONS_TOTAL,
-      EXECUTIONS_DELTA AS EXECUTIONS_DELTA,
-      DISK_READS_TOTAL AS DISK_READS_TOTAL,
-      DISK_READS_DELTA AS DISK_READS_DELTA,
-      BUFFER_GETS_TOTAL AS BUFFER_GETS_TOTAL,
-      BUFFER_GETS_DELTA AS BUFFER_GETS_DELTA,
-      ELAPSED_TIME_TOTAL AS ELAPSED_TIME_TOTAL,
-      ELAPSED_TIME_DELTA AS ELAPSED_TIME_DELTA,
-      CPU_TIME_TOTAL AS CPU_TIME_TOTAL,
-      CPU_TIME_DELTA AS CPU_TIME_DELTA,
-      CCWAIT_TOTAL AS CCWAIT_TOTAL,
-      CCWAIT_DELTA AS CCWAIT_DELTA,
-      USERIO_WAIT_TOTAL AS USERIO_WAIT_TOTAL,
-      USERIO_WAIT_DELTA AS USERIO_WAIT_DELTA,
-      APWAIT_TOTAL AS APWAIT_TOTAL,
-      APWAIT_DELTA AS APWAIT_DELTA,
-      PHYSICAL_READ_REQUESTS_TOTAL AS PHYSICAL_READ_REQUESTS_TOTAL,
-      PHYSICAL_READ_REQUESTS_DELTA AS PHYSICAL_READ_REQUESTS_DELTA,
-      PHYSICAL_READ_BYTES_TOTAL AS PHYSICAL_READ_BYTES_TOTAL,
-      PHYSICAL_READ_BYTES_DELTA AS PHYSICAL_READ_BYTES_DELTA,
-      WRITE_THROTTLE_TOTAL AS WRITE_THROTTLE_TOTAL,
-      WRITE_THROTTLE_DELTA AS WRITE_THROTTLE_DELTA,
-      ROWS_PROCESSED_TOTAL AS ROWS_PROCESSED_TOTAL,
-      ROWS_PROCESSED_DELTA AS ROWS_PROCESSED_DELTA,
-      MEMSTORE_READ_ROWS_TOTAL AS MEMSTORE_READ_ROWS_TOTAL,
-      MEMSTORE_READ_ROWS_DELTA AS MEMSTORE_READ_ROWS_DELTA,
-      MINOR_SSSTORE_READ_ROWS_TOTAL AS MINOR_SSSTORE_READ_ROWS_TOTAL,
-      MINOR_SSSTORE_READ_ROWS_DELTA AS MINOR_SSSTORE_READ_ROWS_DELTA,
-      MAJOR_SSSTORE_READ_ROWS_TOTAL AS MAJOR_SSSTORE_READ_ROWS_TOTAL,
-      MAJOR_SSSTORE_READ_ROWS_DELTA AS MAJOR_SSSTORE_READ_ROWS_DELTA,
-      RPC_TOTAL AS RPC_TOTAL,
-      RPC_DELTA AS RPC_DELTA,
-      FETCHES_TOTAL AS FETCHES_TOTAL,
-      FETCHES_DELTA AS FETCHES_DELTA,
-      RETRY_TOTAL AS RETRY_TOTAL,
-      RETRY_DELTA AS RETRY_DELTA,
-      PARTITION_TOTAL AS PARTITION_TOTAL,
-      PARTITION_DELTA AS PARTITION_DELTA,
-      NESTED_SQL_TOTAL AS NESTED_SQL_TOTAL,
-      NESTED_SQL_DELTA AS NESTED_SQL_DELTA,
-      SOURCE_IP AS SOURCE_IP,
-      SOURCE_PORT AS SOURCE_PORT,
-      ROUTE_MISS_TOTAL AS ROUTE_MISS_TOTAL,
-      ROUTE_MISS_DELTA AS ROUTE_MISS_DELTA,
-      FIRST_LOAD_TIME AS FIRST_LOAD_TIME,
-      PLAN_CACHE_HIT_TOTAL AS PLAN_CACHE_HIT_TOTAL,
-      PLAN_CACHE_HIT_DELTA AS PLAN_CACHE_HIT_DELTA
-  FROM oceanbase.__all_virtual_sqlstat
-""".replace("\n", " "),
-  normal_columns  = []
-  )
-def_table_schema(
-  owner = 'yuchen.wyc',
-  tablegroup_id   = 'OB_INVALID_ID',
-  table_name      = 'V$OB_SQLSTAT',
-  table_id        = '21488',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  table_type      = 'SYSTEM_VIEW',
-  in_tenant_space = True,
-  view_definition = """SELECT
-SQL_ID,
-PLAN_ID,
-PLAN_HASH,
-PLAN_TYPE,
-QUERY_SQL,
-SQL_TYPE,
-MODULE,
-ACTION,
-PARSING_DB_ID,
-PARSING_DB_NAME,
-PARSING_USER_ID,
-EXECUTIONS_TOTAL,
-EXECUTIONS_DELTA,
-DISK_READS_TOTAL,
-DISK_READS_DELTA,
-BUFFER_GETS_TOTAL,
-BUFFER_GETS_DELTA,
-ELAPSED_TIME_TOTAL,
-ELAPSED_TIME_DELTA,
-CPU_TIME_TOTAL,
-CPU_TIME_DELTA,
-CCWAIT_TOTAL,
-CCWAIT_DELTA,
-USERIO_WAIT_TOTAL,
-USERIO_WAIT_DELTA,
-APWAIT_TOTAL,
-APWAIT_DELTA,
-PHYSICAL_READ_REQUESTS_TOTAL,
-PHYSICAL_READ_REQUESTS_DELTA,
-PHYSICAL_READ_BYTES_TOTAL,
-PHYSICAL_READ_BYTES_DELTA,
-WRITE_THROTTLE_TOTAL,
-WRITE_THROTTLE_DELTA,
-ROWS_PROCESSED_TOTAL,
-ROWS_PROCESSED_DELTA,
-MEMSTORE_READ_ROWS_TOTAL,
-MEMSTORE_READ_ROWS_DELTA,
-MINOR_SSSTORE_READ_ROWS_TOTAL,
-MINOR_SSSTORE_READ_ROWS_DELTA,
-MAJOR_SSSTORE_READ_ROWS_TOTAL,
-MAJOR_SSSTORE_READ_ROWS_DELTA,
-RPC_TOTAL,
-RPC_DELTA,
-FETCHES_TOTAL,
-FETCHES_DELTA,
-RETRY_TOTAL,
-RETRY_DELTA,
-PARTITION_TOTAL,
-PARTITION_DELTA,
-NESTED_SQL_TOTAL,
-NESTED_SQL_DELTA,
-SOURCE_IP,
-SOURCE_PORT,
-ROUTE_MISS_TOTAL,
-ROUTE_MISS_DELTA,
-FIRST_LOAD_TIME,
-PLAN_CACHE_HIT_TOTAL,
-PLAN_CACHE_HIT_DELTA FROM oceanbase.gv$ob_sqlstat
-""".replace("\n", " "),
-  normal_columns  = []
-  )
+# 21487: GV$OB_SQLSTAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sqlstat)
+# 21488: V$OB_SQLSTAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_sqlstat)
 # 21489: DBA_WR_SQLSTAT # removed
 # 21490: CDB_WR_SQLSTAT # removed
 # 21491: GV$OB_SESS_TIME_MODEL # removed
@@ -18793,7 +16689,7 @@ def_table_schema(
          cast(to_user.host AS char(255)) TO_HOST,
          cast(to_user.user_name AS char(128)) TO_USER,
          cast(CASE role_map.admin_option WHEN 1 THEN 'Y' ELSE 'N' END AS char(1)) WITH_ADMIN_OPTION
-  FROM oceanbase.__all_tenant_role_grantee_map role_map,
+  FROM oceanbase.__all_role_grantee_map role_map,
        oceanbase.__all_user from_user,
        oceanbase.__all_user to_user
   WHERE role_map.grantee_id = to_user.user_id
@@ -18816,7 +16712,7 @@ def_table_schema(
          cast(to_user.user_name AS char(128)) USER,
          cast(from_user.host AS char(255)) DEFAULT_ROLE_HOST,
          cast(from_user.user_name AS char(128)) DEFAULT_ROLE_USER
-  FROM oceanbase.__all_tenant_role_grantee_map role_map,
+  FROM oceanbase.__all_role_grantee_map role_map,
        oceanbase.__all_user from_user,
        oceanbase.__all_user to_user
   WHERE role_map.grantee_id = to_user.user_id
@@ -19283,99 +17179,13 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'gongyusen.gys',
-  table_name     = 'GV$OB_SESSION_PS_INFO',
-  table_id       = '21541',
-  table_type = 'SYSTEM_VIEW',
-  gm_columns = [],
-  in_tenant_space = True,
-  rowkey_columns = [],
-  view_definition = """
-SELECT
-  PROXY_SESSION_ID,
-  SESSION_ID,
-  PS_CLIENT_STMT_ID,
-  PS_INNER_STMT_ID,
-  STMT_TYPE,
-  PARAM_COUNT,
-  PARAM_TYPES,
-  REF_COUNT,
-  CHECKSUM
-FROM
-  oceanbase.__all_virtual_session_ps_info
-""".replace("\n", " "),
-  normal_columns = [
-  ]
-  )
+# 21541: GV$OB_SESSION_PS_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_session_ps_info)
 
-def_table_schema(
-    owner = 'gongyusen.gys',
-    table_name     = 'V$OB_SESSION_PS_INFO',
-    table_id       = '21542',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-  SELECT
-    PROXY_SESSION_ID,
-    SESSION_ID,
-    PS_CLIENT_STMT_ID,
-    PS_INNER_STMT_ID,
-    STMT_TYPE,
-    PARAM_COUNT,
-    PARAM_TYPES,
-    REF_COUNT,
-    CHECKSUM
-  FROM oceanbase.GV$OB_SESSION_PS_INFO
-""".replace("\n", " "),
-    normal_columns = [
-    ]
-  )
+# 21542: V$OB_SESSION_PS_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_session_ps_info)
 
-def_table_schema(
-    owner = 'fy373789',
-    table_name     = 'GV$OB_TRACEPOINT_INFO',
-    table_id       = '21543',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """SELECT
-          TP_NO,
-          TP_NAME,
-          TP_DESCRIBE,
-          TP_FREQUENCY,
-          TP_ERROR_CODE,
-          TP_OCCUR,
-          TP_MATCH
-        FROM oceanbase.__all_virtual_tracepoint_info
-""".replace("\n", " ")
-)
+# 21543: GV$OB_TRACEPOINT_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tracepoint_info)
 
-def_table_schema(
-    owner = 'fy373789',
-    table_name     = 'V$OB_TRACEPOINT_INFO',
-    table_id       = '21544',
-    table_type = 'SYSTEM_VIEW',
-    rowkey_columns  = [],
-    normal_columns  = [],
-    gm_columns      = [],
-    in_tenant_space = True,
-    view_definition = """SELECT
-          TP_NO,
-          TP_NAME,
-          TP_DESCRIBE,
-          TP_FREQUENCY,
-          TP_ERROR_CODE,
-          TP_OCCUR,
-          TP_MATCH
-    FROM OCEANBASE.GV$OB_TRACEPOINT_INFO
-
-""".replace("\n", " ")
-)
+# 21544: V$OB_TRACEPOINT_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_tracepoint_info)
 
 def_table_schema(
   owner = 'sean.yyj',
@@ -19425,82 +17235,13 @@ def_table_schema(
 # 21548: DBA_OB_SERVICES (abandoned)
 # 21549: CDB_OB_SERVICES (abandoned)
 
-def_table_schema(
-  owner = 'cxf262476',
-  table_name      = 'GV$OB_TENANT_RESOURCE_LIMIT',
-  table_id        = '21550',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-     resource_name AS RESOURCE_NAME,
-     current_utilization AS CURRENT_UTILIZATION,
-     max_utilization AS MAX_UTILIZATION,
-     reserved_value AS RESERVED_VALUE,
-     limit_value AS LIMIT_VALUE,
-     effective_limit_type AS EFFECTIVE_LIMIT_TYPE
-FROM
-    oceanbase.__all_virtual_tenant_resource_limit
-""".replace("\n", " ")
-)
+# 21550: GV$OB_TENANT_RESOURCE_LIMIT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_resource_limit)
 
-def_table_schema(
-  owner = 'cxf262476',
-  table_name      = 'V$OB_TENANT_RESOURCE_LIMIT',
-  table_id        = '21551',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
- RESOURCE_NAME, CURRENT_UTILIZATION, MAX_UTILIZATION,
-    RESERVED_VALUE, LIMIT_VALUE, EFFECTIVE_LIMIT_TYPE
-FROM
-    oceanbase.GV$OB_TENANT_RESOURCE_LIMIT
-""".replace("\n", " ")
-)
+# 21551: V$OB_TENANT_RESOURCE_LIMIT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_resource_limit)
 
-def_table_schema(
-  owner = 'cxf262476',
-  table_name      = 'GV$OB_TENANT_RESOURCE_LIMIT_DETAIL',
-  table_id        = '21552',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-     resource_name AS RESOURCE_NAME,
-     limit_type AS LIMIT_TYPE,
-     limit_value AS LIMIT_VALUE
-FROM
-    oceanbase.__all_virtual_tenant_resource_limit_detail
+# 21552: GV$OB_TENANT_RESOURCE_LIMIT_DETAIL # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_resource_limit_detail)
 
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'cxf262476',
-  table_name      = 'V$OB_TENANT_RESOURCE_LIMIT_DETAIL',
-  table_id        = '21553',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
- RESOURCE_NAME, LIMIT_TYPE, LIMIT_VALUE
-FROM
-    oceanbase.GV$OB_TENANT_RESOURCE_LIMIT_DETAIL
-""".replace("\n", " ")
-)
+# 21553: V$OB_TENANT_RESOURCE_LIMIT_DETAIL # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_resource_limit_detail)
 
 def_table_schema(
   owner           = 'yangyifei.yyf',
@@ -19609,33 +17350,6 @@ def_table_schema(
   gm_columns      = [],
   in_tenant_space = True,
   view_definition = """
-    SELECT
-      A.GROUP_ID AS GROUP_ID,
-      A.GROUP_NAME AS GROUP_NAME,
-      A.MODE AS MODE,
-      A.MIN_IOPS AS MIN_IOPS,
-      A.MAX_IOPS AS MAX_IOPS,
-      A.NORM_IOPS AS NORM_IOPS,
-      A.REAL_IOPS AS REAL_IOPS,
-      A.MAX_NET_BANDWIDTH AS MAX_NET_BANDWIDTH,
-      A.MAX_NET_BANDWIDTH_DISPLAY AS MAX_NET_BANDWIDTH_DISPLAY,
-      A.REAL_NET_BANDWIDTH AS REAL_NET_BANDWIDTH,
-      A.REAL_NET_BANDWIDTH_DISPLAY AS REAL_NET_BANDWIDTH_DISPLAY
-    FROM
-      OCEANBASE.GV$OB_GROUP_IO_STAT AS A
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner           = 'wyh329796',
-  table_name      = 'GV$OB_GROUP_IO_STAT',
-  table_id        = '21559',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
   SELECT
     A.GROUP_ID AS GROUP_ID,
     A.GROUP_NAME AS GROUP_NAME,
@@ -19652,6 +17366,8 @@ def_table_schema(
     OCEANBASE.__ALL_VIRTUAL_GROUP_IO_STAT AS A
 """.replace("\n", " ")
 )
+
+# 21559: GV$OB_GROUP_IO_STAT # removed (single-tenant GV/V collapse; folded into V$OB_GROUP_IO_STAT)
 
 # 21560: DBA_OB_STORAGE_IO_USAGE (abandoned)
 # 21561: CDB_OB_STORAGE_IO_USAGE (abandoned)
@@ -20238,27 +17954,11 @@ def_table_schema(
       CAST(NULL AS CHARACTER(32)) AS CHARACTER_SET_CLIENT,
       CAST(NULL AS CHARACTER(32)) AS COLLATION_CONNECTION,
       CAST(NULL AS CHARACTER(32)) AS DATABASE_COLLATION
-    FROM oceanbase.__all_tenant_scheduler_job T WHERE T.JOB_NAME != '__dummy_guard' AND T.JOB > 0 AND T.JOB_CLASS = 'MYSQL_EVENT_JOB_CLASS'
+    FROM oceanbase.__all_scheduler_job T WHERE T.JOB_NAME != '__dummy_guard' AND T.JOB > 0 AND T.JOB_CLASS = 'MYSQL_EVENT_JOB_CLASS'
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'gengfu.zpc',
-  table_name      = 'V$OB_NIC_INFO',
-  table_id        = '21581',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    DEVNAME,
-    SPEED_MBPS
-  FROM oceanbase.GV$OB_NIC_INFO
-
-  """.replace("\n", " ")
-)
+# 21581: V$OB_NIC_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_nic_info)
 
 def_table_schema(
   owner = 'linyi.cl',
@@ -20426,40 +18126,8 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'gengfu.zpc',
-  table_name      = 'GV$OB_NIC_INFO',
-  table_id        = '21586',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    DEVNAME,
-    SPEED_MBPS
-  FROM oceanbase.__all_virtual_nic_info
-  """.replace("\n", " ")
-)
-def_table_schema(
-  owner = 'jiajingzhe.jjz',
-  table_name      = 'GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM',
-  table_id        = '21587',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    sql_type as SQL_TYPE,
-    cast ((response_time/1000000 ) as decimal(24,6)) as RESPONSE_TIME,
-    count as COUNT,
-    cast ((total/1000000)  as decimal(24,6))  as TOTAL
-  FROM oceanbase.__all_virtual_query_response_time
-""".replace("\n", " ")
-  )
+# 21586: GV$OB_NIC_INFO # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_nic_info)
+# 21587: GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM # removed (single-tenant GV/V collapse; folded into V$OB_QUERY_RESPONSE_TIME_HISTOGRAM)
 
 def_table_schema(
   owner = 'jiajingzhe.jjz',
@@ -20472,13 +18140,11 @@ def_table_schema(
   in_tenant_space = True,
   view_definition = """
   SELECT
-    SQL_TYPE,
-    RESPONSE_TIME,
-    COUNT,
-    TOTAL
-  FROM
-    oceanbase.GV$OB_QUERY_RESPONSE_TIME_HISTOGRAM
-
+    sql_type as SQL_TYPE,
+    cast ((response_time/1000000 ) as decimal(24,6)) as RESPONSE_TIME,
+    count as COUNT,
+    cast ((total/1000000)  as decimal(24,6))  as TOTAL
+  FROM oceanbase.__all_virtual_query_response_time
 """.replace("\n", " ")
   )
 
@@ -20518,7 +18184,7 @@ def_table_schema(
                         JOB_CLASS,
                         GMT_CREATE,
                         GMT_MODIFIED
-                       FROM OCEANBASE.__ALL_TENANT_SCHEDULER_JOB_RUN_DETAIL
+                       FROM OCEANBASE.__ALL_SCHEDULER_JOB_RUN_DETAIL
 )
 UNION ALL
 (
@@ -20600,10 +18266,12 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
+# 21597: GV$OB_LOG_TRANSPORT_DEST_STAT # removed (single-tenant GV/V collapse; folded into V$OB_LOG_TRANSPORT_DEST_STAT)
+
 def_table_schema(
   owner = 'wenyue.zxl',
-  table_name     = 'GV$OB_LOG_TRANSPORT_DEST_STAT',
-  table_id       = '21597',
+  table_name     = 'V$OB_LOG_TRANSPORT_DEST_STAT',
+  table_id       = '21598',
   table_type      = 'SYSTEM_VIEW',
   rowkey_columns  = [],
   normal_columns  = [],
@@ -20649,37 +18317,6 @@ def_table_schema(
               CONCAT(AVG_LOG_TRANSPORT_BANDWIDTH, 'B/s')
           END AS AVG_LOG_TRANSPORT_BANDWIDTH
     FROM OCEANBASE.__ALL_VIRTUAL_LOG_TRANSPORT_DEST_STAT
-""".replace("\n", " ")
-)
-
-def_table_schema(
-  owner = 'wenyue.zxl',
-  table_name     = 'V$OB_LOG_TRANSPORT_DEST_STAT',
-  table_id       = '21598',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-    SELECT
-          CLIENT_IP,
-          CLIENT_PID,
-          CLIENT_TYPE,
-          START_SERVE_TIME,
-          LAST_SERVE_TIME,
-          LAST_READ_SOURCE,
-          LAST_REQUEST_TYPE,
-          LAST_REQUEST_LOG_LSN,
-          LAST_REQUEST_LOG_SCN,
-          LAST_FAILED_REQUEST,
-          AVG_REQUEST_PROCESS_TIME,
-          AVG_REQUEST_QUEUE_TIME,
-          AVG_REQUEST_READ_LOG_TIME,
-          AVG_REQUEST_READ_LOG_SIZE,
-          AVG_LOG_TRANSPORT_BANDWIDTH
-    FROM OCEANBASE.GV$OB_LOG_TRANSPORT_DEST_STAT
-
 """.replace("\n", " ")
 )
 
@@ -20791,53 +18428,9 @@ def_table_schema(
 
 # 21619: CDB_OB_KV_REDIS_TABLE abandoned
 
-def_table_schema(
-  owner           = 'zz412656',
-  table_name      = 'GV$OB_FUNCTION_IO_STAT',
-  table_id        = '21620',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    FUNCTION_NAME,
-    MODE,
-    SIZE,
-    REAL_IOPS,
-    REAL_MBPS,
-    SCHEDULE_US,
-    IO_DELAY_US,
-    TOTAL_US
-  FROM
-    oceanbase.__all_virtual_function_io_stat;
-""".replace("\n", " ")
-  )
+# 21620: GV$OB_FUNCTION_IO_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_function_io_stat;)
 
-def_table_schema(
-  owner           = 'zz412656',
-  table_name      = 'V$OB_FUNCTION_IO_STAT',
-  table_id        = '21621',
-  table_type      = 'SYSTEM_VIEW',
-  gm_columns      = [],
-  rowkey_columns  = [],
-  normal_columns  = [],
-  in_tenant_space = True,
-  view_definition = """
-  SELECT
-    FUNCTION_NAME,
-    MODE,
-    SIZE,
-    REAL_IOPS,
-    REAL_MBPS,
-    SCHEDULE_US,
-    IO_DELAY_US,
-    TOTAL_US
-  FROM
-    OCEANBASE.GV$OB_FUNCTION_IO_STAT
-""".replace("\n", " ")
-  )
+# 21621: V$OB_FUNCTION_IO_STAT # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_function_io_stat;)
 
 def_table_schema(
   owner = 'wuyuefei.wyf',
@@ -20953,58 +18546,8 @@ def_table_schema(
 """.replace("\n", " ")
   )
 
-def_table_schema(
-      owner           = 'wangyunlai.wyl',
-      tablegroup_id   = 'OB_INVALID_ID',
-      table_name      = 'GV$OB_PLUGINS',
-      table_id        = '21635',
-      table_type      = 'SYSTEM_VIEW',
-      gm_columns      = [],
-      rowkey_columns  = [],
-      normal_columns  = [],
-      in_tenant_space = True,
-      view_definition =
-      """
-        SELECT
-          NAME,
-          STATUS,
-          TYPE,
-          LIBRARY,
-          LIBRARY_VERSION,
-          LIBRARY_REVISION,
-          INTERFACE_VERSION,
-          AUTHOR,
-          LICENSE,
-          DESCRIPTION
-        FROM oceanbase.__all_virtual_plugin_info
-        """.replace("\n", " ")
-)
-def_table_schema(
-      owner = 'wangyunlai.wyl',
-      tablegroup_id   = 'OB_INVALID_ID',
-      table_name      = 'V$OB_PLUGINS',
-      table_id        = '21636',
-      table_type      = 'SYSTEM_VIEW',
-      rowkey_columns  = [],
-      normal_columns  = [],
-      gm_columns      = [],
-      in_tenant_space = True,
-      view_definition =
-      """
-        SELECT
-          NAME,
-          STATUS,
-          TYPE,
-          LIBRARY,
-          LIBRARY_VERSION,
-          LIBRARY_REVISION,
-          INTERFACE_VERSION,
-          AUTHOR,
-          LICENSE,
-          DESCRIPTION
-        FROM oceanbase.GV$OB_PLUGINS
-        """.replace("\n", " ")
-)
+# 21635: GV$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
+# 21636: V$OB_PLUGINS # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_plugin_info)
 
 # 21637: DBA_OB_TENANT_FLASHBACK_LOG_SCN
 # 21638: CDB_OB_TENANT_FLASHBACK_LOG_SCN
@@ -21113,27 +18656,7 @@ def_table_schema(
     ]
   )
 
-def_table_schema(
-    owner = 'zhl413386',
-    table_name     = 'GV$OB_SQL_CCL_STATUS',
-    table_id       = '21650',
-    table_type = 'SYSTEM_VIEW',
-    gm_columns = [],
-    in_tenant_space = True,
-    rowkey_columns = [],
-    view_definition = """
-          SELECT
-          1 as CON_ID,
-          CCL_RULE_ID,
-          FORMAT_SQLID,
-          CURRENT_CONCURRENCY,
-          MAX_CONCURRENCY
-        FROM oceanbase.__all_virtual_ccl_status
-""".replace("\n", " "),
-
-    normal_columns = [
-    ]
-  )
+# 21650: GV$OB_SQL_CCL_STATUS # removed (single-tenant GV/V collapse; folded into V$OB_SQL_CCL_STATUS)
 
 def_table_schema(
     owner = 'zhl413386',
@@ -21305,24 +18828,7 @@ def_table_schema(
 """.replace("\n", " ")
 )
 
-def_table_schema(
-  owner = 'tonghui.ht',
-  table_name      = 'GV$OB_VECTOR_MEMORY',
-  table_id        = '21661',
-  table_type      = 'SYSTEM_VIEW',
-  rowkey_columns  = [],
-  normal_columns  = [],
-  gm_columns      = [],
-  in_tenant_space = True,
-  view_definition = """
-SELECT
-    (VECTOR_MEM_HOLD + RAW_MALLOC_SIZE + INDEX_METADATA_SIZE) as VECTOR_MEM_HOLD,
-    (VECTOR_MEM_USED + RAW_MALLOC_SIZE + INDEX_METADATA_SIZE) as VECTOR_MEM_USED,
-    VECTOR_MEM_LIMIT
-FROM
-    oceanbase.__all_virtual_tenant_vector_mem_info
-""".replace("\n", " ")
-  )
+# 21661: GV$OB_VECTOR_MEMORY # removed (single-tenant GV/V collapse; folded into V$OB_VECTOR_MEMORY)
 
 def_table_schema(
   owner = 'tonghui.ht',
@@ -21335,11 +18841,11 @@ def_table_schema(
   in_tenant_space = True,
   view_definition = """
 SELECT
-    VECTOR_MEM_HOLD,
-    VECTOR_MEM_USED,
+    (VECTOR_MEM_HOLD + RAW_MALLOC_SIZE + INDEX_METADATA_SIZE) as VECTOR_MEM_HOLD,
+    (VECTOR_MEM_USED + RAW_MALLOC_SIZE + INDEX_METADATA_SIZE) as VECTOR_MEM_USED,
     VECTOR_MEM_LIMIT
 FROM
-    OCEANBASE.GV$OB_VECTOR_MEMORY
+    oceanbase.__all_virtual_vector_mem_info
 """.replace("\n", " ")
   )
 
@@ -21791,7 +19297,7 @@ def_sys_index_table(
   index_columns = ['role_id'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_role_grantee_map'])
+  keywords = all_def_keywords['__all_role_grantee_map'])
 
 def_sys_index_table(
   index_name = 'idx_grantee_his_role_id',
@@ -21799,7 +19305,7 @@ def_sys_index_table(
   index_columns = ['role_id', 'schema_version'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_role_grantee_map_history'])
+  keywords = all_def_keywords['__all_role_grantee_map_history'])
 
 def_sys_index_table(
   index_name = 'idx_trigger_base_obj_id',
@@ -21807,7 +19313,7 @@ def_sys_index_table(
   index_columns = ['base_object_id'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_trigger'])
+  keywords = all_def_keywords['__all_trigger'])
 
 def_sys_index_table(
   index_name = 'idx_db_trigger_name',
@@ -21815,7 +19321,7 @@ def_sys_index_table(
   index_columns = ['database_id', 'trigger_name'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_trigger'])
+  keywords = all_def_keywords['__all_trigger'])
 
 def_sys_index_table(
   index_name = 'idx_trigger_name',
@@ -21823,7 +19329,7 @@ def_sys_index_table(
   index_columns = ['trigger_name'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_trigger'])
+  keywords = all_def_keywords['__all_trigger'])
 
 def_sys_index_table(
   index_name = 'idx_trigger_his_base_obj_id',
@@ -21831,7 +19337,7 @@ def_sys_index_table(
   index_columns = ['base_object_id', 'schema_version'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_trigger_history'])
+  keywords = all_def_keywords['__all_trigger_history'])
 
 def_sys_index_table(
   index_name = 'idx_objauth_grantor',
@@ -21839,7 +19345,7 @@ def_sys_index_table(
   index_columns = ['grantor_id'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_objauth'])
+  keywords = all_def_keywords['__all_objauth'])
 
 def_sys_index_table(
   index_name = 'idx_objauth_grantee',
@@ -21847,7 +19353,7 @@ def_sys_index_table(
   index_columns = ['grantee_id'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_objauth'])
+  keywords = all_def_keywords['__all_objauth'])
 
 # 101062: idx_xa_trans_id (abandoned)
 
@@ -21857,7 +19363,7 @@ def_sys_index_table(
   index_columns = ['ref_obj_id', 'ref_obj_type'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_dependency'])
+  keywords = all_def_keywords['__all_dependency'])
 
 def_sys_index_table(
   index_name = 'idx_ddl_error_object',
@@ -21924,7 +19430,7 @@ def_sys_index_table(
   index_columns = ['directory_name'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_directory'])
+  keywords = all_def_keywords['__all_directory'])
 
 def_sys_index_table(
   index_name = 'idx_job_powner',
@@ -22163,21 +19669,21 @@ def_sys_index_table(
   index_columns = ['location_name'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_location'])
+  keywords = all_def_keywords['__all_location'])
 def_sys_index_table(
   index_name = 'idx_objauth_mysql_user_id',
   index_table_id = 101119,
   index_columns = ['user_id'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_objauth_mysql'])
+  keywords = all_def_keywords['__all_objauth_mysql'])
 def_sys_index_table(
   index_name = 'idx_objauth_mysql_obj_name',
   index_table_id = 101120,
   index_columns = ['obj_name'],
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
-  keywords = all_def_keywords['__all_tenant_objauth_mysql'])
+  keywords = all_def_keywords['__all_objauth_mysql'])
 
 
 # Reserved position (placeholder before this line)

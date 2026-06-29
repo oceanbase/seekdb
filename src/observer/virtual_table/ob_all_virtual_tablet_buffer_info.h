@@ -25,7 +25,6 @@
 #include "share/rc/ob_tenant_base.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 #include "share/ob_ls_id.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 
@@ -33,8 +32,7 @@ namespace oceanbase
 {
 namespace observer
 {
-class ObAllVirtualTabletBufferInfo : public common::ObVirtualTableScannerIterator,
-                                     public omt::ObMultiTenantOperator
+class ObAllVirtualTabletBufferInfo : public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
@@ -55,10 +53,6 @@ public:
 private:
   int get_tablet_pool_infos();
   int gen_row(const ObTabletBufferInfo &buffer_info, common::ObNewRow *&row);
-  virtual bool is_need_process() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override;
-
 private:
   static const int64_t STR_LEN = 128;
 private:

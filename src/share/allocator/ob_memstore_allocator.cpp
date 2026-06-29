@@ -235,16 +235,9 @@ void ObMemstoreAllocator::init_throttle_config(int64_t &resource_limit,
 
   int64_t total_memory = lib::get_tenant_memory_limit();
 
-  // Use tenant config to init throttle config
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
-    max_duration = tenant_config->writing_throttling_maximum_duration;
-  } else {
-    COMMON_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
-    trigger_percentage = MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE;
-    max_duration = MEMSTORE_THROTTLE_MAX_DURATION;
-  }
+  // init throttle config from cluster config
+  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
+  max_duration = GCONF.writing_throttling_maximum_duration;
   resource_limit = total_memory * share::g_mp->tenant_freezer()->get_memstore_limit_percentage() / 100;
 }
 

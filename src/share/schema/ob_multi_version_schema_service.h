@@ -133,8 +133,7 @@ public:
 
   int init(common::ObMySQLProxy *proxy,
       const common::ObCommonConfig *config,
-      const int64_t init_version_count,
-      const int64_t init_version_count_for_liboblog);
+      const int64_t init_version_count);
 
   void dump_schema_statistics();
 
@@ -215,7 +214,6 @@ public:
   int get_tenant_mem_info(const uint64_t &req_id, common::ObIArray<ObSchemaMemory> &tenant_mem_infos);
   int get_tenant_slot_info(common::ObIAllocator &allocator, const uint64_t &req_id,
                            common::ObIArray<ObSchemaSlot> &tenant_slot_infos);
-  int get_schema_store_tenants(common::ObIArray<uint64_t> &tenants);
 
   int get_tenant_broadcast_consensus_version(int64_t &consensus_version);
   int set_tenant_broadcast_consensus_version(const int64_t consensus_version);
@@ -303,7 +301,6 @@ public:
 
   int try_eliminate_schema_mgr();
 
-  /* new interface for liboblog */
   int get_schema_version_by_timestamp(
       const ObRefreshSchemaStatus &schema_status,
       int64_t timestamp,
@@ -356,7 +353,6 @@ private:
   int try_gc_tenant_schema_mgr_for_refresh();
   int try_gc_tenant_schema_mgr_for_fallback();
   int try_gc_tenant_schema_mgr(ObSchemaMemMgr *&mem_mgr, ObSchemaMgrCache *&schema_mgr_cache);
-  int get_gc_candidates(common::hash::ObHashSet<uint64_t> &candidates);
   // gc existed tenant schema mgr
   int try_gc_existed_tenant_schema_mgr();
   // try release exist tenant's another allocator
@@ -388,21 +384,21 @@ private:
       ObTableSchema &table_schema,
       const ObTableType table_type) override;
 
-  //for liboblog
-  int fallback_schema_mgr_for_liboblog(const ObRefreshSchemaStatus &schema_status,
-                                       const int64_t target_version,
-                                       const int64_t latest_local_version,
-                                       const ObSchemaMgr *&schema_mgr,
-                                       ObSchemaMgrHandle &handle);
-  int put_fallback_liboblog_schema_to_slot(
-      ObSchemaMgrCache &schema_mgr_cache_for_liboblog,
-      ObSchemaMemMgr &mem_mgr_for_liboblog,
-      ObSchemaMgr *&target_mgr,
-      ObSchemaMgrHandle &handle);
   int put_fallback_schema_to_slot(ObSchemaMgr *&new_mgr,
                                   ObSchemaMgrCache &schema_mgr_cache,
                                   ObSchemaMemMgr &schema_mem_mgr,
                                   ObSchemaMgrHandle &handle);
+  // Reconstruct a historical schema_mgr that has aged out of the live cache, used by
+  // FORCE_FALLBACK consumers (data dictionary dump / change stream async index) that
+  // request a schema version which may be older than the oldest cached slot. Replays
+  // increment schema operations reversely from the nearest available mgr down to
+  // target_version and puts the result into the main schema_mgr_cache.
+  int construct_fallback_schema_mgr_(ObSchemaStore *schema_store,
+                                     const ObRefreshSchemaStatus &schema_status,
+                                     const int64_t target_version,
+                                     const int64_t latest_local_version,
+                                     const ObSchemaMgr *&schema_mgr,
+                                     ObSchemaMgrHandle &handle);
   int alloc_and_put_schema_mgr_(ObSchemaMemMgr &mem_mgr,
                                 ObSchemaMgr &latest_schema_mgr,
                                 ObSchemaMgrCache &schema_mgr_cache);
@@ -421,7 +417,6 @@ private:
 
 private:
   static const int64_t MAX_VERSION_COUNT = 64;
-  static const int64_t MAX_VERSION_COUNT_FOR_LIBOBLOG = 6;
   static const int32_t MAX_RETRY_TIMES = 10;
   static const int64_t RETRY_INTERVAL_US = 1000 * 1000; //1s
   static const int64_t DEFAULT_TENANT_SET_SIZE = 64;
@@ -431,14 +426,11 @@ private:
   mutable lib::ObMutex schema_refresh_mutex_;//assert only one thread can refresh schema
   ObSchemaCache schema_cache_;
   ObSchemaMgrCache schema_mgr_cache_;
-  ObSchemaMgrCache schema_mgr_cache_for_liboblog_;
   ObSchemaFetcher schema_fetcher_;
   common::SpinRWLock schema_info_rwlock_;
   ObRefreshSchemaInfo last_refreshed_schema_info_;
   int64_t init_version_cnt_;
-  int64_t init_version_cnt_for_liboblog_;
-  ObSchemaStore *schema_store_ = nullptr;
-  int create_schema_store_(const int64_t init_version_count, const int64_t init_version_count_for_liboblog);
+  ObSchemaStore schema_store_;
   ObDDLTransController ddl_trans_controller_;
   ObDDLEpochMgr ddl_epoch_mgr_;
 

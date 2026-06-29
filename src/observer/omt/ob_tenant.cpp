@@ -434,12 +434,11 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
     mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = 3;
-    ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (OB_UNLIKELY(!tenant_config.is_valid())) {
+    if (OB_UNLIKELY(!true)) {
       ret = false ? OB_SUCCESS : OB_ENTRY_NOT_EXIST;
     } else {
-      mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = tenant_config->_log_writer_parallelism;
-      mtl_init_ctx_->palf_options_.enable_log_cache_ = tenant_config->_enable_log_cache;
+      mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = GCONF._log_writer_parallelism;
+      mtl_init_ctx_->palf_options_.enable_log_cache_ = GCONF._enable_log_cache;
     }
     LOG_INFO("construct_mtl_init_ctx success", "palf_options", mtl_init_ctx_->palf_options_.disk_options_
              );
@@ -712,8 +711,7 @@ void ObTenant::set_unit_min_cpu(double cpu)
 
 int64_t ObTenant::cpu_quota_concurrency() const
 {
-  ObTenantConfigGuard tenant_config(TENANT_CONF());
-  return static_cast<int64_t>((tenant_config.is_valid() ? tenant_config->cpu_quota_concurrency : 4));
+  return static_cast<int64_t>((true ? GCONF.cpu_quota_concurrency : 4));
 }
 
 int64_t ObTenant::min_worker_cnt() const

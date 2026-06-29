@@ -153,32 +153,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
 };
 
-class ObAdminServerStmt : public ObSystemCmdStmt
-{
-public:
-  ObAdminServerStmt()
-      : ObSystemCmdStmt(stmt::T_ADMIN_SERVER), op_(obcall::ObAdminServerArg::ADD)
-  {
-  }
-
-  ObAdminServerStmt(common::ObIAllocator *name_pool)
-      : ObSystemCmdStmt(name_pool, stmt::T_ADMIN_SERVER)
-  {
-  }
-
-  virtual ~ObAdminServerStmt() {}
-
-  inline obcall::ObServerList &get_server_list() { return server_list_; }
-  inline const common::ObZone &get_zone() const { return zone_; }
-  inline void set_zone(const common::ObZone &zone) { zone_ = zone; }
-  inline obcall::ObAdminServerArg::AdminServerOp get_op() const { return op_; }
-  inline void set_op(const obcall::ObAdminServerArg::AdminServerOp op) { op_ = op; }
-private:
-  obcall::ObAdminServerArg::AdminServerOp op_;
-  obcall::ObServerList server_list_;
-  common::ObZone zone_;
-};
-
 class ObAdminMergeStmt: public ObSystemCmdStmt
 {
 public:
@@ -314,62 +288,6 @@ class ObUpgradeVirtualSchemaStmt : public ObSystemCmdStmt
 public:
   ObUpgradeVirtualSchemaStmt() : ObSystemCmdStmt(stmt::T_UPGRADE_VIRTUAL_SCHEMA) {}
   virtual ~ObUpgradeVirtualSchemaStmt() {}
-};
-
-class ObAdminUpgradeCmdStmt : public ObSystemCmdStmt
-{
-public:
-  enum AdminUpgradeOp
-  {
-    BEGIN = 1,
-    END = 2,
-  };
-  ObAdminUpgradeCmdStmt() : ObSystemCmdStmt(stmt::T_ADMIN_UPGRADE_CMD), op_(BEGIN) {}
-  virtual ~ObAdminUpgradeCmdStmt() {}
-
-  inline const AdminUpgradeOp &get_op() const { return op_; }
-  inline void set_op(const AdminUpgradeOp op) { op_ = op; }
-private:
-  AdminUpgradeOp op_;
-};
-
-class ObAdminRollingUpgradeCmdStmt : public ObSystemCmdStmt
-{
-public:
-  enum AdminUpgradeOp
-  {
-    BEGIN = 1,
-    END = 2,
-  };
-  ObAdminRollingUpgradeCmdStmt() : ObSystemCmdStmt(stmt::T_ADMIN_ROLLING_UPGRADE_CMD), op_(BEGIN) {}
-  virtual ~ObAdminRollingUpgradeCmdStmt() {}
-
-  inline const AdminUpgradeOp &get_op() const { return op_; }
-  inline void set_op(const AdminUpgradeOp op) { op_ = op; }
-private:
-  AdminUpgradeOp op_;
-};
-
-class ObRunUpgradeJobStmt : public ObSystemCmdStmt
-{
-public:
-  ObRunUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RUN_UPGRADE_JOB) {}
-  virtual ~ObRunUpgradeJobStmt() {}
-
-  obcall::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obcall::ObUpgradeJobArg rpc_arg_;
-};
-
-class ObStopUpgradeJobStmt : public ObSystemCmdStmt
-{
-public:
-  ObStopUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_STOP_UPGRADE_JOB) {}
-  virtual ~ObStopUpgradeJobStmt() {}
-
-  obcall::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obcall::ObUpgradeJobArg rpc_arg_;
 };
 
 class ObCancelTaskStmt : public ObSystemCmdStmt

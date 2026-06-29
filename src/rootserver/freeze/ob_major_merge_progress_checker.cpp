@@ -626,12 +626,11 @@ int ObMajorMergeProgressChecker::prepare_check_progress(
     progress_.clear_before_each_loop();
     reset_uncompacted_tablets();
     if (is_extra_check_round()) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (OB_UNLIKELY(!tenant_config.is_valid())) {
+      if (OB_UNLIKELY(!true)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is not valid", KR(ret));
       } else {
-        batch_size_mgr_.set_tablet_batch_size(tenant_config->compaction_schedule_tablet_batch_cnt);
+        batch_size_mgr_.set_tablet_batch_size(GCONF.compaction_schedule_tablet_batch_cnt);
       }
     }
   }

@@ -211,11 +211,10 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
   } else {
   }
   ObTenantDDLCountGuard tenant_ddl_guard{};
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (OB_SUCC(ret)) {
-    if (tenant_config.is_valid() && tenant_config->_enable_ddl_worker_isolation
+    if (true && GCONF._enable_ddl_worker_isolation
         && ObStmt::is_ddl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()), true)) {
-      if (OB_FAIL(tenant_ddl_guard.try_inc_ddl_count(tenant_config->cpu_quota_concurrency))) {
+      if (OB_FAIL(tenant_ddl_guard.try_inc_ddl_count(GCONF.cpu_quota_concurrency))) {
         LOG_WARN("fail to inc tenant ddl count", KR(ret));
       }
     }

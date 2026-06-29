@@ -12784,11 +12784,10 @@ int ObDDLService::check_could_write_truncate_info_(
   if (!arg.is_update_global_indexes_) {
   } else {
     {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (OB_UNLIKELY(!tenant_config.is_valid())) {
+      if (OB_UNLIKELY(!true)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", K(ret));
-      } else if (!tenant_config->_ob_enable_truncate_partition_preserve_global_index) {
+      } else if (!GCONF._ob_enable_truncate_partition_preserve_global_index) {
         enable_preserve_index = false;
         LOG_INFO("_ob_enable_truncate_partition_preserve_global_index is false, need rebuild global index when truncate partition", KR(ret));
       } else {
@@ -14954,11 +14953,10 @@ int ObDDLService::check_is_offline_ddl(ObAlterTableArg &alter_table_arg,
       }
     }
     if (OB_SUCC(ret) && DDL_NORMAL_TYPE == ddl_type && has_drop_and_add_index) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (OB_UNLIKELY(!tenant_config.is_valid())) {
+      if (OB_UNLIKELY(!true)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant config is invalid", K(ret));
-      } else if (!tenant_config->_enable_drop_and_add_index) {
+      } else if (!GCONF._enable_drop_and_add_index) {
         ret = OB_OP_NOT_ALLOW;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Dropping and adding indexes at the same time is a high-risk operation, which is");
       }
@@ -17893,8 +17891,6 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_guard or schema service is null",
             K(schema_service), K(ret));
-      } else if (true) {
-        compat_mode = lib::Worker::CompatMode::MYSQL;
       } else {
         compat_mode = lib::Worker::CompatMode::MYSQL;
       }
@@ -28310,13 +28306,7 @@ int ObDDLService::notify_refresh_schema(const ObAddrIArray &addrs,
   } else if (OB_FAIL(construct_tenant_broadcast_info( schema_info))) {
     LOG_WARN("fail to construct tenant broadccast info", KR(ret));
   } else {
-    bool is_async = false;
-    if (true) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (tenant_config.is_valid()) {
-        is_async = (0 == tenant_config->_publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
-      }
-    }
+    bool is_async = (0 == GCONF._publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
     LOG_INFO("try to notify refresh schema", K(is_async), K(refreshed_schema_version), K(schema_info));
     int tmp_ret = OB_SUCCESS;
     // for improve ddl performance, the refresh_schema() is after broadcast_schema to let observer and rs could refresh schema simultaneously

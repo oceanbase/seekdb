@@ -1390,10 +1390,9 @@ int64_t ObTenantFreezer::get_freeze_trigger_percentage_()
 {
   static const int64_t DEFAULT_FREEZE_TRIGGER_PERCENTAGE = 20;
   int64_t percent = DEFAULT_FREEZE_TRIGGER_PERCENTAGE;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    percent = tenant_config->freeze_trigger_percentage;
-  }
+
+  percent = GCONF.freeze_trigger_percentage;
+
   return percent;
 }
 
@@ -1408,13 +1407,7 @@ int64_t ObTenantFreezer::get_memstore_limit_percentage_()
   const int64_t cluster_memstore_limit_percent = GCONF.memstore_limit_percentage;
   int64_t tenant_memstore_limit_percent = 0;
   int64_t percent = 0;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    tenant_memstore_limit_percent = tenant_config->_memstore_limit_percentage;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("memstore limit percentage is invalid", K(ret));
-  }
+  tenant_memstore_limit_percent = GCONF._memstore_limit_percentage;
   if (tenant_memstore_limit_percent != 0) {
     percent = tenant_memstore_limit_percent;
   } else if (cluster_memstore_limit_percent != 0) {
@@ -1624,10 +1617,9 @@ bool ObTenantFreezer::is_major_freeze_turn_()
 {
   const int64_t freeze_cnt = tenant_info_.freeze_cnt_;
   int64_t major_compact_trigger = INT64_MAX;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    major_compact_trigger = tenant_config->major_compact_trigger;
-  }
+
+  major_compact_trigger = GCONF.major_compact_trigger;
+
   return (major_compact_trigger != 0 && freeze_cnt >= major_compact_trigger);
 }
 

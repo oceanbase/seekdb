@@ -363,19 +363,13 @@ int ObSqlWorkareaUtil::get_workarea_size(const ObSqlWorkAreaType wa_type,
       LOG_WARN("unexpected status: workarea type", K(wa_type));
     }
   } else {
-    ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      if (HASH_WORK_AREA == wa_type) {
-        value = tenant_config->_hash_area_size;
-      } else if (SORT_WORK_AREA == wa_type) {
-        value = tenant_config->_sort_area_size;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected status: workarea type", K(wa_type));
-      }
+    if (HASH_WORK_AREA == wa_type) {
+      value = GCONF._hash_area_size;
+    } else if (SORT_WORK_AREA == wa_type) {
+      value = GCONF._sort_area_size;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init tenant config", K(ret));
+      LOG_WARN("unexpected status: workarea type", K(wa_type));
     }
   }
   LOG_DEBUG("debug workarea size", K(value), K(lbt()));

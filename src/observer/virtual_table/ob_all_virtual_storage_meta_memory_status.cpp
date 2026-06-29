@@ -38,7 +38,8 @@ ObAllVirtualStorageMetaMemoryStatus::~ObAllVirtualStorageMetaMemoryStatus()
 
 void ObAllVirtualStorageMetaMemoryStatus::reset()
 {
-  omt::ObMultiTenantOperator::reset();
+  pool_idx_ = 0;
+  status_arr_.reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();
 }
@@ -61,30 +62,6 @@ int ObAllVirtualStorageMetaMemoryStatus::init(ObIAllocator *allocator, common::O
 }
 
 int ObAllVirtualStorageMetaMemoryStatus::inner_get_next_row(ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
-void ObAllVirtualStorageMetaMemoryStatus::release_last_tenant()
-{
-  pool_idx_ = 0;
-  status_arr_.reset();
-}
-
-bool ObAllVirtualStorageMetaMemoryStatus::is_need_process()
-{
-  if (!false &&
-      (true || true)){
-    return true;
-  }
-  return false;
-}
-
-int ObAllVirtualStorageMetaMemoryStatus::process_curr_tenant(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!start_to_read_)) {

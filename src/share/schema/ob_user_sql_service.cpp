@@ -141,18 +141,18 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(bool is_role,
     // delete row from __all_tenant_role_grantee_map
     if (is_role) {
       if (OB_FAIL(del_sql.append_fmt("DELETE FROM %s WHERE ROLE_ID = %lu and GRANTEE_ID IN (",
-          OB_ALL_TENANT_ROLE_GRANTEE_MAP_TNAME,
+          OB_ALL_ROLE_GRANTEE_MAP_TNAME,
           ObSchemaUtils::get_extract_schema_id(user_id)))) {
         LOG_WARN("append table name failed, ", K(ret), K(user_id));
       }
     } else if (FAILEDx(del_sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %lu and ROLE_ID IN (",
-        OB_ALL_TENANT_ROLE_GRANTEE_MAP_TNAME,
+        OB_ALL_ROLE_GRANTEE_MAP_TNAME,
         ObSchemaUtils::get_extract_schema_id(user_id)))) {
       LOG_WARN("append table name failed, ", K(ret), K(user_id));
     }
 
     // insert new row into __all_tenant_role_grantee_map_history
-    if (FAILEDx(insert_sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_TENANT_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
+    if (FAILEDx(insert_sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
       LOG_WARN("append table name failed, ", K(ret));
     }
 

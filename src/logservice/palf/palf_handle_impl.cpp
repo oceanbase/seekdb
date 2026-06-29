@@ -81,7 +81,6 @@ PalfHandleImpl::PalfHandleImpl()
     chaning_config_warn_time_(OB_INVALID_TIMESTAMP),
     cached_is_in_sync_(false),
     has_higher_prio_config_change_(false),
-    last_update_region_time_us_(OB_INVALID_TIMESTAMP),
     is_inited_(false)
 {
   log_dir_[0] = '\0';
@@ -351,31 +350,6 @@ int PalfHandleImpl::get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info)
   return ret;
 }
 
-int PalfHandleImpl::update_self_region_()
-{
-  int ret = OB_SUCCESS;
-  common::ObRegion new_region, curr_region;
-  do {
-    RLockGuard guard(lock_);
-    if (OB_FAIL(config_mgr_.get_region(curr_region))) {
-      PALF_LOG(WARN, "get_region failed", K(ret), KPC(this));
-    }
-  } while (0);
-  if (OB_FAIL(ret)) {
-    PALF_LOG(WARN, "get_region failed", K(ret), KPC(this));
-  } else if (OB_FAIL(plugins_.get_server_region(self_, new_region))) {
-    PALF_LOG(WARN, "get_server_region failed", K(ret), KPC(this));
-  } else if (curr_region != new_region) {
-    WLockGuard guard(lock_);
-    if (OB_FAIL(config_mgr_.set_region(new_region))) {
-      PALF_LOG(WARN, "get_server_region failed", K(ret), K(new_region), KPC(this));
-    } else {
-      PALF_LOG(INFO, "update_self_region_ success", K(ret), K(curr_region),
-          K(new_region), KPC(this));
-    }
-  }
-  return ret;
-}
 
 int PalfHandleImpl::submit_log(
     const PalfAppendOptions &opts,
@@ -2407,35 +2381,6 @@ int PalfHandleImpl::reset_monitor_cb()
   return ret;
 }
 
-int PalfHandleImpl::set_locality_cb(palf::PalfLocalityInfoCb *locality_cb)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "not initted", KR(ret), KPC(this));
-  } else if (OB_ISNULL(locality_cb)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "locality_cb is NULL, can't register", KR(ret), KPC(this));
-  } else if (OB_FAIL(plugins_.add_plugin(locality_cb))) {
-    PALF_LOG(WARN, "add_plugin failed", KR(ret), KPC(this), KP(locality_cb), K_(plugins));
-  } else {
-    PALF_LOG(INFO, "set_locality_cb success", KPC(this), K_(plugins), KP(locality_cb));
-  }
-  return ret;
-}
-
-int PalfHandleImpl::reset_locality_cb()
-{
-  int ret = OB_SUCCESS;
-  PalfLocalityInfoCb *locality_cb = NULL;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(plugins_.del_plugin(locality_cb))) {
-    PALF_LOG(WARN, "del_plugin failed", KR(ret), KPC(this), K_(plugins));
-  }
-  return ret;
-}
-
 int PalfHandleImpl::check_and_switch_freeze_mode()
 {
   int ret = OB_SUCCESS;
@@ -2520,11 +2465,6 @@ int PalfHandleImpl::check_and_switch_state()
         FLOG_INFO("[PALF_DUMP]", K_(palf_id), K_(self), K(ack_info_list));
       }
       (void) sw_.report_log_task_trace(sw_.get_start_id());
-    }
-    if (palf_reach_time_interval(PALF_UPDATE_REGION_INTERVAL_US, last_update_region_time_us_) &&
-        OB_FAIL(update_self_region_())) {
-      // overwrite ret
-      PALF_LOG(WARN, "update_region failed", K(ret), KPC(this));
     }
   }
   return OB_SUCCESS;

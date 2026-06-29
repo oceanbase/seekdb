@@ -153,18 +153,17 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
 {
   int ret = OB_SUCCESS;
 
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(!tenant_config.is_valid())) {
+  } else if (OB_UNLIKELY(!true)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant config is not valid", KR(ret));
-  } else if (tenant_config->major_freeze_duty_time.disable()) {
+  } else if (GCONF.major_freeze_duty_time.disable()) {
     LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty");
   } else {
-    const int hour = tenant_config->major_freeze_duty_time.hour();
-    const int minute = tenant_config->major_freeze_duty_time.minute();
+    const int hour = GCONF.major_freeze_duty_time.hour();
+    const int minute = GCONF.major_freeze_duty_time.minute();
     time_t cur_time = -1;
     time(&cur_time);
     struct tm human_time;
@@ -197,7 +196,7 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
           } else {
             already_launch_ = true;
             LOG_INFO("launch major freeze by duty time",
-                     "duty_time", tenant_config->major_freeze_duty_time);
+                     "duty_time", GCONF.major_freeze_duty_time);
           }
 
           // launcher will retry when error code is OB_EAGAIN

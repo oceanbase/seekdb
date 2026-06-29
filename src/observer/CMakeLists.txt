@@ -97,12 +97,10 @@ ob_set_subtarget(ob_server omt
   omt/ob_multi_tenant.cpp
   omt/ob_retry_queue.cpp
   omt/ob_tenant.cpp
-  omt/ob_tenant_config_mgr.cpp
   omt/ob_tenant_meta.cpp
   omt/ob_tenant_timezone_mgr.cpp
   omt/ob_th_worker.cpp
   omt/ob_worker_processor.cpp
-  omt/ob_multi_tenant_operator.cpp
   omt/ob_tenant_srs.cpp
   omt/ob_tenant_ai_service.cpp
 )
@@ -296,7 +294,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tablet_compaction_progress.cpp
   virtual_table/ob_all_virtual_io_status.cpp
   virtual_table/ob_all_virtual_tenant_ctx_memory_info.cpp
-  virtual_table/ob_all_virtual_tenant_memory_info.cpp
   virtual_table/ob_all_virtual_tenant_memstore_allocator_info.cpp
   virtual_table/ob_all_virtual_tx_stat.cpp
   virtual_table/ob_all_virtual_tx_lock_stat.cpp

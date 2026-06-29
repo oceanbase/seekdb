@@ -41,7 +41,6 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   ObString first_stmt;
   obcall::ObCreateTriggerRes res;
   pl::ObPL *pl_engine = nullptr;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   CK (OB_NOT_NULL(pl_engine = ctx.get_my_session()->get_pl_engine()));
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
@@ -80,8 +79,8 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   }
   if (OB_SUCC(ret)
       && !has_error
-      && tenant_config.is_valid()
-      && tenant_config->plsql_v2_compatibility) {
+      && true
+      && GCONF.plsql_v2_compatibility) {
     OZ (ObSPIService::force_refresh_schema(res.trigger_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
           get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
@@ -127,7 +126,6 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
     const ObTriggerInfo& trigger_info = arg.trigger_infos_.at(0);
     int64_t latest_schema_version = OB_INVALID_VERSION;
     arg.ddl_stmt_str_ = first_stmt;
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
     OV (OB_NOT_NULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else if (!arg.is_alter_compile_) {
@@ -141,8 +139,8 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
       latest_schema_version = trigger_info.get_schema_version();
     }
     if (OB_SUCC(ret)
-        && tenant_config.is_valid()
-        && tenant_config->plsql_v2_compatibility) {
+        && true
+        && GCONF.plsql_v2_compatibility) {
       OZ (ctx.get_task_exec_ctx().schema_service_->
           get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
       OZ (pl::ObPLCompilerUtils::compile(ctx,

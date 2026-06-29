@@ -36,7 +36,6 @@ ObAllVirtualTabletBufferInfo::~ObAllVirtualTabletBufferInfo()
 
 void ObAllVirtualTabletBufferInfo::reset()
 {
-  omt::ObMultiTenantOperator::reset();
   addr_.reset();
   index_ = 0;
   pool_type_ = ObTabletPoolType::TP_MAX;
@@ -59,15 +58,6 @@ int ObAllVirtualTabletBufferInfo::init(common::ObAddr &addr)
   return ret;
 }
 
-int ObAllVirtualTabletBufferInfo::inner_get_next_row(common::ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(execute(row))) {
-    SERVER_LOG(WARN, "fail to execute", K(ret));
-  }
-  return ret;
-}
-
 int ObAllVirtualTabletBufferInfo::get_tablet_pool_infos()
 {
   int ret = OB_SUCCESS;
@@ -79,17 +69,7 @@ int ObAllVirtualTabletBufferInfo::get_tablet_pool_infos()
   return ret;
 }
 
-bool ObAllVirtualTabletBufferInfo::is_need_process()
-{
-  bool need_process = false;
-  if (!false &&
-    (true || true)){
-    need_process = true;
-  }
-  return need_process;
-}
-
-int ObAllVirtualTabletBufferInfo::process_curr_tenant(common::ObNewRow *&row)
+int ObAllVirtualTabletBufferInfo::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_row_.cells_)) {
@@ -105,12 +85,6 @@ int ObAllVirtualTabletBufferInfo::process_curr_tenant(common::ObNewRow *&row)
     index_++;
   }
   return ret;
-}
-
-void ObAllVirtualTabletBufferInfo::release_last_tenant()
-{
-  buffer_infos_.reset();
-  index_ = 0;
 }
 
 int ObAllVirtualTabletBufferInfo::gen_row(

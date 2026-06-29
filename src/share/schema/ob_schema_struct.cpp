@@ -10241,20 +10241,18 @@ ObObjectType IObErrorInfo::get_object_type() const
   return ObObjectType::INVALID;
 }
 
-int ObZoneRegion::assign(const ObZoneRegion &that)
+int ObZonePrimaryEntry::assign(const ObZonePrimaryEntry &that)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(zone_.assign(that.zone_.ptr()))) {
     SHARE_LOG(WARN, "fail to assign zone", K(ret));
-  } else if (OB_FAIL(region_.assign(that.region_.ptr()))) {
-    SHARE_LOG(WARN, "fail to assign region", K(ret));
   } else {
     check_zone_type_ = that.check_zone_type_;
   }
   return ret;
 }
 
-int ObZoneRegion::set_check_zone_type(const int64_t zone_type)
+int ObZonePrimaryEntry::set_check_zone_type(const int64_t zone_type)
 {
   int ret = OB_SUCCESS;
   ObZoneType my_zone_type = static_cast<ObZoneType>(zone_type);
@@ -11107,9 +11105,8 @@ bool check_can_drop_column_instant()
 {
   int ret = OB_SUCCESS;
   bool can_drop_column_instant = true;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (can_drop_column_instant && tenant_config.is_valid()) {
-    can_drop_column_instant = tenant_config->_enable_drop_column_instant;
+  if (can_drop_column_instant && true) {
+    can_drop_column_instant = GCONF._enable_drop_column_instant;
   }
   return can_drop_column_instant;
 }

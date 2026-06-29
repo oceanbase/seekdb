@@ -456,325 +456,325 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
 
     ObString host_name;
     uint64_t client_attr_cap_flags = 0;
-    if (true) {
-      // TODO, checker ret
-      if (tenant_name_.empty()) {
-        tenant_name_ = ObString::make_string(OB_SYS_TENANT_NAME);
-        OB_LOG(INFO, "no tenant name set, use default tenant name", K_(tenant_name));
-      }
 
-      if (OB_NOT_NULL(tenant_name_.find('$'))) {
-        ret = OB_ERR_INVALID_TENANT_NAME;
-        LOG_WARN("invalid tenant name. “$” is not allowed in tenant name.", K(ret), K_(tenant_name));
-      }
-      //Under the oracle tenant, db_name and user_name need to be converted, handling double quotes and case sensitivity
-      //Under the mysql tenant, no processing will be done, only a simple copy will be made~
-      if (OB_SUCC(ret)) {
-        if (db_name_.length() > OB_MAX_DATABASE_NAME_LENGTH ||
-            user_name_.length() > OB_MAX_USER_NAME_LENGTH) {
-          ret = OB_INVALID_ARGUMENT_FOR_LENGTH;
-          LOG_WARN("invalid length for db_name or user_name", K(db_name_), K(user_name_), K(ret));
-        } else {
-          MEMCPY(db_name_var_, db_name_.ptr(), db_name_.length());
-          db_name_var_[db_name_.length()] = '\0';
-          MEMCPY(user_name_var_, user_name_.ptr(), user_name_.length());
-          user_name_var_[user_name_.length()] = '\0';
-          user_name_.assign_ptr(user_name_var_, user_name_.length());
-          db_name_.assign_ptr(db_name_var_, db_name_.length());
-        }
-      }
-      share::schema::ObSessionPrivInfo session_priv;
-      EnableRoleIdArray enable_role_id_array;
-      const ObSysVariableSchema *sys_variable_schema = NULL;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(convert_oracle_object_name( user_name_))) {
-        LOG_WARN("fail to convert oracle user name", K(ret));
-      } else if (OB_FAIL(convert_oracle_object_name( db_name_))) {
-        LOG_WARN("fail to convert oracle db name", K(ret));
-      } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
-        LOG_WARN("get sys variable schema failed", K(ret));
-      } else if (OB_ISNULL(sys_variable_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sys variable schema is null", K(ret));
-      } else if (OB_FAIL(session.init_tenant(tenant_name_))) {
-          LOG_WARN("failed to init_tenant", K(ret));
-      } else if (OB_FAIL(session.load_all_sys_vars(*sys_variable_schema, false))) {
-        LOG_WARN("load system variables failed", K(ret));
+    // TODO, checker ret
+    if (tenant_name_.empty()) {
+      tenant_name_ = ObString::make_string(OB_SYS_TENANT_NAME);
+      OB_LOG(INFO, "no tenant name set, use default tenant name", K_(tenant_name));
+    }
+
+    if (OB_NOT_NULL(tenant_name_.find('$'))) {
+      ret = OB_ERR_INVALID_TENANT_NAME;
+      LOG_WARN("invalid tenant name. “$” is not allowed in tenant name.", K(ret), K_(tenant_name));
+    }
+    //Under the oracle tenant, db_name and user_name need to be converted, handling double quotes and case sensitivity
+    //Under the mysql tenant, no processing will be done, only a simple copy will be made~
+    if (OB_SUCC(ret)) {
+      if (db_name_.length() > OB_MAX_DATABASE_NAME_LENGTH ||
+          user_name_.length() > OB_MAX_USER_NAME_LENGTH) {
+        ret = OB_INVALID_ARGUMENT_FOR_LENGTH;
+        LOG_WARN("invalid length for db_name or user_name", K(db_name_), K(user_name_), K(ret));
       } else {
-        share::schema::ObUserLoginInfo login_info;
-        login_info.tenant_name_ = tenant_name_;
-        login_info.user_name_ = user_name_;
-        login_info.client_ip_ = client_ip_;
-        SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
-        const ObUserInfo *user_info = NULL;
-        // Oracle mode login default schema removed (dead code)
-        if (!db_name_.empty()) {
-          ObString db_name = db_name_;
-          ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-          bool perserve_lettercase = true;
-          ObCollationType cs_type = CS_TYPE_INVALID;
-          if (OB_FAIL(session.get_collation_connection(cs_type))) {
-            LOG_WARN("fail to get collation_connection", K(ret));
-          } else if (OB_FAIL(session.get_name_case_mode(mode))) {
-            LOG_WARN("fail to get name case mode", K(mode), K(ret));
-          } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
-          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                      cs_type, perserve_lettercase, db_name))) {
-            LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
-          } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, &session, db_name, &allocator_))) {
-            LOG_WARN("fail to convert db name to org", K(ret));
-          } else {
-            login_info.db_ = db_name;
-          }
-        }
-        LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(conn->client_type_), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));
-        if (OB_FAIL(ret)) {
-          // Do nothing
+        MEMCPY(db_name_var_, db_name_.ptr(), db_name_.length());
+        db_name_var_[db_name_.length()] = '\0';
+        MEMCPY(user_name_var_, user_name_.ptr(), user_name_.length());
+        user_name_var_[user_name_.length()] = '\0';
+        user_name_.assign_ptr(user_name_var_, user_name_.length());
+        db_name_.assign_ptr(db_name_var_, db_name_.length());
+      }
+    }
+    share::schema::ObSessionPrivInfo session_priv;
+    EnableRoleIdArray enable_role_id_array;
+    const ObSysVariableSchema *sys_variable_schema = NULL;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(convert_oracle_object_name( user_name_))) {
+      LOG_WARN("fail to convert oracle user name", K(ret));
+    } else if (OB_FAIL(convert_oracle_object_name( db_name_))) {
+      LOG_WARN("fail to convert oracle db name", K(ret));
+    } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
+      LOG_WARN("get sys variable schema failed", K(ret));
+    } else if (OB_ISNULL(sys_variable_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("sys variable schema is null", K(ret));
+    } else if (OB_FAIL(session.init_tenant(tenant_name_))) {
+        LOG_WARN("failed to init_tenant", K(ret));
+    } else if (OB_FAIL(session.load_all_sys_vars(*sys_variable_schema, false))) {
+      LOG_WARN("load system variables failed", K(ret));
+    } else {
+      share::schema::ObUserLoginInfo login_info;
+      login_info.tenant_name_ = tenant_name_;
+      login_info.user_name_ = user_name_;
+      login_info.client_ip_ = client_ip_;
+      SSL *ssl_st = SQL_REQ_OP.get_sql_ssl_st(req_);
+      const ObUserInfo *user_info = NULL;
+      // Oracle mode login default schema removed (dead code)
+      if (!db_name_.empty()) {
+        ObString db_name = db_name_;
+        ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+        bool perserve_lettercase = true;
+        ObCollationType cs_type = CS_TYPE_INVALID;
+        if (OB_FAIL(session.get_collation_connection(cs_type))) {
+          LOG_WARN("fail to get collation_connection", K(ret));
+        } else if (OB_FAIL(session.get_name_case_mode(mode))) {
+          LOG_WARN("fail to get name case mode", K(mode), K(ret));
+        } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
+        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                    cs_type, perserve_lettercase, db_name))) {
+          LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
+        } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, &session, db_name, &allocator_))) {
+          LOG_WARN("fail to convert db name to org", K(ret));
         } else {
-          login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
-          login_info.passwd_ = hsr_.get_auth_response();// Assume client is use mysql_native_password
-          bool is_empty_passwd = false;
-          if (OB_FAIL(schema_guard.is_user_empty_passwd(login_info, is_empty_passwd))) {
-            LOG_WARN("failed to check is user account is empty && login_info.passwd_ is empty", K(ret), K(login_info.passwd_));
-          } else if (!is_empty_passwd && // user account with empty password do not need auth switch, same as MySQL 5.7 and 8.x
-                    OB_CLIENT_NON_STANDARD == conn->client_type_ && // client is not OB's C/JAVA client 
-                    !hsr_.get_auth_plugin_name().empty() && // client do not use mysql_native_method
-                    hsr_.get_auth_plugin_name().compare(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD) &&
-                    GCONF._enable_auth_switch) {
-            // Client is not use mysql_native_password method,
-            // but observer only support mysql_native_password in user account's authentication, 
-            // so observer need tell client use mysql_native_password method by sending "AuthSwitchRequest"
-            LOG_TRACE("auth plugin from client is not mysql_native_password, start to auth switch request", K(ret), K(hsr_.get_auth_plugin_name()));
-            conn->set_auth_switch_phase(); // State of connection turn to auth_switch_phase
-            OMPKAuthSwitch auth_switch;
-            auth_switch.set_plugin_name(ObString(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD));
-            // "AuthSwitchRequest" carry 20 bit random salt value(MySQL call it scramble) to client which has sent in "Initial Handshake Packet"
-            auth_switch.set_scramble(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_));
-            /*-------------------START-----------------If error occur, disconnect-------------------START-----------------*/
-            if (OB_FAIL(packet_sender_.response_packet(auth_switch, &session))) {
-              RPC_LOG(WARN, "failed to send auth switch request packet, disconnect", K(auth_switch), K(ret));
-              LOG_WARN("failed to send auth switch request packet, disconnect", K(auth_switch), K(ret));
-              packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
-              disconnect();// If send "AuthSwitchRequest" failed, observer need disconnect with client
-            } else if (OB_FAIL(packet_sender_.flush_buffer(false/*is_last*/))) { // "AuthSwitchRequest" may not have been sent yet, flush the buffer to ensure it has been sent.
-              RPC_LOG(WARN, "failed to flush socket buffer while sending auth switch request packet, disconnect", K(auth_switch), K(ret));
-              LOG_WARN("failed to flush socket buffer while sending auth switch request packet, disconnect", K(auth_switch), K(ret));
-              packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
-              disconnect();// If send "AuthSwitchRequest" failed, observer need disconnect with client
-            } else {
-              LOG_TRACE("suuc to send auth switch request", K(ret));
-              obmysql::ObMySQLPacket *asr_pkt = NULL;
-              int64_t start_wait_asr_time = ObTimeUtil::current_time();
-              int receive_asr_times = 0;
-              while (OB_SUCC(ret) && OB_ISNULL(asr_pkt)) {
-                ++receive_asr_times;
-                usleep(10 * 1000); // Sleep 10 ms at every time trying receive auth-switch-response mysql pkt
-                // TO DO:
-                // In most unix system, The max TCP Retransmission Timeout is under 240 seconds, 
-                // we need to set a suitable timeout, what should this be?
-                if (ObTimeUtil::current_time() - start_wait_asr_time > 10000000) { 
-                  ret = OB_WAIT_NEXT_TIMEOUT;
-                  RPC_LOG(WARN, "read auth switch response pkt timeout, disconnect", K(ret), K(receive_asr_times));
-                  LOG_WARN("read auth switch response pkt timeout, disconnect", K(ret), K(receive_asr_times));
-                  packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
-                  disconnect(); // If receive "AuthSwitchResponse" timeout, observer need disconnect with client
-                } else if (OB_FAIL(read_packet(asr_mem_pool_, asr_pkt))) {
-                  RPC_LOG(WARN, "failed to read auth switch response pkt, disconnect", K(ret), K(receive_asr_times));
-                  LOG_WARN("failed to read auth switch response pkt, disconnect", K(ret), K(receive_asr_times));
-                  packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
-                  disconnect(); // If receive "AuthSwitchResponse" failed, observer need disconnect with client
-                } else {
-                  LOG_WARN("succ try to read auth switch response pkt", K(ret), K(receive_asr_times), KP(asr_pkt));
-                }
-              }
-              if (OB_FAIL(ret)) {
-                // Do nothing
-              } else if (OB_ISNULL(asr_pkt)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected null ptr, disconnect", K(ret));
+          login_info.db_ = db_name;
+        }
+      }
+      LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(conn->client_type_), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));
+      if (OB_FAIL(ret)) {
+        // Do nothing
+      } else {
+        login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
+        login_info.passwd_ = hsr_.get_auth_response();// Assume client is use mysql_native_password
+        bool is_empty_passwd = false;
+        if (OB_FAIL(schema_guard.is_user_empty_passwd(login_info, is_empty_passwd))) {
+          LOG_WARN("failed to check is user account is empty && login_info.passwd_ is empty", K(ret), K(login_info.passwd_));
+        } else if (!is_empty_passwd && // user account with empty password do not need auth switch, same as MySQL 5.7 and 8.x
+                  OB_CLIENT_NON_STANDARD == conn->client_type_ && // client is not OB's C/JAVA client 
+                  !hsr_.get_auth_plugin_name().empty() && // client do not use mysql_native_method
+                  hsr_.get_auth_plugin_name().compare(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD) &&
+                  GCONF._enable_auth_switch) {
+          // Client is not use mysql_native_password method,
+          // but observer only support mysql_native_password in user account's authentication, 
+          // so observer need tell client use mysql_native_password method by sending "AuthSwitchRequest"
+          LOG_TRACE("auth plugin from client is not mysql_native_password, start to auth switch request", K(ret), K(hsr_.get_auth_plugin_name()));
+          conn->set_auth_switch_phase(); // State of connection turn to auth_switch_phase
+          OMPKAuthSwitch auth_switch;
+          auth_switch.set_plugin_name(ObString(AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD));
+          // "AuthSwitchRequest" carry 20 bit random salt value(MySQL call it scramble) to client which has sent in "Initial Handshake Packet"
+          auth_switch.set_scramble(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_));
+          /*-------------------START-----------------If error occur, disconnect-------------------START-----------------*/
+          if (OB_FAIL(packet_sender_.response_packet(auth_switch, &session))) {
+            RPC_LOG(WARN, "failed to send auth switch request packet, disconnect", K(auth_switch), K(ret));
+            LOG_WARN("failed to send auth switch request packet, disconnect", K(auth_switch), K(ret));
+            packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
+            disconnect();// If send "AuthSwitchRequest" failed, observer need disconnect with client
+          } else if (OB_FAIL(packet_sender_.flush_buffer(false/*is_last*/))) { // "AuthSwitchRequest" may not have been sent yet, flush the buffer to ensure it has been sent.
+            RPC_LOG(WARN, "failed to flush socket buffer while sending auth switch request packet, disconnect", K(auth_switch), K(ret));
+            LOG_WARN("failed to flush socket buffer while sending auth switch request packet, disconnect", K(auth_switch), K(ret));
+            packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
+            disconnect();// If send "AuthSwitchRequest" failed, observer need disconnect with client
+          } else {
+            LOG_TRACE("suuc to send auth switch request", K(ret));
+            obmysql::ObMySQLPacket *asr_pkt = NULL;
+            int64_t start_wait_asr_time = ObTimeUtil::current_time();
+            int receive_asr_times = 0;
+            while (OB_SUCC(ret) && OB_ISNULL(asr_pkt)) {
+              ++receive_asr_times;
+              usleep(10 * 1000); // Sleep 10 ms at every time trying receive auth-switch-response mysql pkt
+              // TO DO:
+              // In most unix system, The max TCP Retransmission Timeout is under 240 seconds, 
+              // we need to set a suitable timeout, what should this be?
+              if (ObTimeUtil::current_time() - start_wait_asr_time > 10000000) { 
+                ret = OB_WAIT_NEXT_TIMEOUT;
+                RPC_LOG(WARN, "read auth switch response pkt timeout, disconnect", K(ret), K(receive_asr_times));
+                LOG_WARN("read auth switch response pkt timeout, disconnect", K(ret), K(receive_asr_times));
+                packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
+                disconnect(); // If receive "AuthSwitchResponse" timeout, observer need disconnect with client
+              } else if (OB_FAIL(read_packet(asr_mem_pool_, asr_pkt))) {
+                RPC_LOG(WARN, "failed to read auth switch response pkt, disconnect", K(ret), K(receive_asr_times));
+                LOG_WARN("failed to read auth switch response pkt, disconnect", K(ret), K(receive_asr_times));
                 packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
                 disconnect(); // If receive "AuthSwitchResponse" failed, observer need disconnect with client
               } else {
-              /*--------------------END------------------if error occur, disconnect--------------------END------------------*/
-                LOG_TRACE("suuc to receive auth switch response", K(ret));
-                const obmysql::ObMySQLRawPacket *asr_raw_pkt  = reinterpret_cast<const ObMySQLRawPacket*>(asr_pkt);
-                const char *auth_data = asr_raw_pkt->get_cdata();
-                const int64_t auth_data_len = asr_raw_pkt->get_clen();
-                void *auth_buf = NULL;
-                // Length of authentication response data in AuthSwitchResponse which is using mysql_native_password methon is 20 byte, 
-                // the ObSMConnection::SCRAMBLE_BUF_SIZE is 20
-                if (ObSMConnection::SCRAMBLE_BUF_SIZE != auth_data_len) { 
-                  ret = OB_PASSWORD_WRONG;
-                  LOG_WARN("invalid length of authentication response data", K(ret), K(auth_data_len), K(ObString(auth_data_len, auth_data)));
-                } else if (OB_ISNULL(auth_buf = asr_mem_pool_.alloc(auth_data_len))) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                  LOG_WARN("alloc auth data buffer for auth switch response failed", K(ret), K(auth_data_len));
-                } else {
-                  // packet_sender_.release_packet will recycle mem of auth_data, need using mem allocated by asr_mem_pool_ to save it
-                  MEMCPY(auth_buf, auth_data, auth_data_len);
-                  login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
-                  login_info.passwd_.assign_ptr(static_cast<const char*>(auth_buf), auth_data_len);
-                }
-                packet_sender_.release_packet(asr_pkt);
-                asr_pkt = NULL;
-                asr_raw_pkt = NULL;
+                LOG_WARN("succ try to read auth switch response pkt", K(ret), K(receive_asr_times), KP(asr_pkt));
               }
             }
-            conn->set_auth_phase(); // State of connection turn to auth_phase
+            if (OB_FAIL(ret)) {
+              // Do nothing
+            } else if (OB_ISNULL(asr_pkt)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected null ptr, disconnect", K(ret));
+              packet_sender_.disable_response(); // The connection is about to be closed, do not need response ok pkt or err pkt, so disable it
+              disconnect(); // If receive "AuthSwitchResponse" failed, observer need disconnect with client
+            } else {
+            /*--------------------END------------------if error occur, disconnect--------------------END------------------*/
+              LOG_TRACE("suuc to receive auth switch response", K(ret));
+              const obmysql::ObMySQLRawPacket *asr_raw_pkt  = reinterpret_cast<const ObMySQLRawPacket*>(asr_pkt);
+              const char *auth_data = asr_raw_pkt->get_cdata();
+              const int64_t auth_data_len = asr_raw_pkt->get_clen();
+              void *auth_buf = NULL;
+              // Length of authentication response data in AuthSwitchResponse which is using mysql_native_password methon is 20 byte, 
+              // the ObSMConnection::SCRAMBLE_BUF_SIZE is 20
+              if (ObSMConnection::SCRAMBLE_BUF_SIZE != auth_data_len) { 
+                ret = OB_PASSWORD_WRONG;
+                LOG_WARN("invalid length of authentication response data", K(ret), K(auth_data_len), K(ObString(auth_data_len, auth_data)));
+              } else if (OB_ISNULL(auth_buf = asr_mem_pool_.alloc(auth_data_len))) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("alloc auth data buffer for auth switch response failed", K(ret), K(auth_data_len));
+              } else {
+                // packet_sender_.release_packet will recycle mem of auth_data, need using mem allocated by asr_mem_pool_ to save it
+                MEMCPY(auth_buf, auth_data, auth_data_len);
+                login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
+                login_info.passwd_.assign_ptr(static_cast<const char*>(auth_buf), auth_data_len);
+              }
+              packet_sender_.release_packet(asr_pkt);
+              asr_pkt = NULL;
+              asr_raw_pkt = NULL;
+            }
+          }
+          conn->set_auth_phase(); // State of connection turn to auth_phase
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, ssl_st, user_info))) {
+        int inner_ret = OB_SUCCESS;
+        bool is_unlocked = false;
+        if (OB_ERR_USER_IS_LOCKED == ret) {
+          if (OB_SUCCESS != (inner_ret = unlock_user_if_time_is_up_mysql(session_priv.user_id_,
+                                                                         schema_guard,
+                                                                         is_unlocked))) {
+            LOG_WARN("fail to check user unlock", K(inner_ret));
           }
         }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv, enable_role_id_array, ssl_st, user_info))) {
-          int inner_ret = OB_SUCCESS;
-          bool is_unlocked = false;
-          if (OB_ERR_USER_IS_LOCKED == ret) {
-            if (OB_SUCCESS != (inner_ret = unlock_user_if_time_is_up_mysql(session_priv.user_id_,
-                                                                           schema_guard,
-                                                                           is_unlocked))) {
-              LOG_WARN("fail to check user unlock", K(inner_ret));
-            }
-          }
 
-          int tmp_ret = OB_SUCCESS;
-          ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
-          int64_t local_version = OB_INVALID_VERSION;
-          int64_t global_version = OB_INVALID_VERSION;
-          if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_refreshed_schema_version(local_version))) {
-            LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
-          } else if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_received_broadcast_version(global_version))) {
-            LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
-          } else if (local_version < global_version || is_unlocked) {
-            
-            LOG_INFO("try to refresh schema", K(is_unlocked),
-                     K(local_version), K(global_version));
-            if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
-              LOG_WARN("failed to refresh schema", K(tmp_ret), K(global_version));
-            } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_tenant_schema_guard(
-                                      schema_guard))) {
-              LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
-            } else if (OB_SUCCESS == inner_ret) {
-              //Schema refresh successful, and no errors occurred during internal execution, attempt to re-login
-              if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
-                    enable_role_id_array, ssl_st, user_info))) {
-                LOG_WARN("User access denied", K(login_info), K(ret));
-              }
-            }
-          }
-
-          if (OB_FAIL(ret)) {
-            if (OB_PASSWORD_WRONG == ret && is_inner_proxyro_user(*conn, user_name_)) {
-              reset_inner_proxyro_scramble(*conn, login_info);
-              int pre_ret = ret;
-              if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
-                    enable_role_id_array, ssl_st, user_info))) {
-                LOG_WARN("User access denied", K(login_info), K(pre_ret),K(ret));
-              }
-            } else {
+        int tmp_ret = OB_SUCCESS;
+        ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
+        int64_t local_version = OB_INVALID_VERSION;
+        int64_t global_version = OB_INVALID_VERSION;
+        if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_refreshed_schema_version(local_version))) {
+          LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
+        } else if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_received_broadcast_version(global_version))) {
+          LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
+        } else if (local_version < global_version || is_unlocked) {
+          
+          LOG_INFO("try to refresh schema", K(is_unlocked),
+                   K(local_version), K(global_version));
+          if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
+            LOG_WARN("failed to refresh schema", K(tmp_ret), K(global_version));
+          } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_tenant_schema_guard(
+                                    schema_guard))) {
+            LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
+          } else if (OB_SUCCESS == inner_ret) {
+            //Schema refresh successful, and no errors occurred during internal execution, attempt to re-login
+            if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
+                  enable_role_id_array, ssl_st, user_info))) {
               LOG_WARN("User access denied", K(login_info), K(ret));
             }
           }
         }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(session.on_user_connect(session_priv, user_info))) {
-            LOG_WARN("session on user connect failed", K(ret));
-          }
-        }
-      }
 
-      if (OB_SUCC(ret) || OB_PASSWORD_WRONG == ret || OB_ERR_USER_IS_LOCKED == ret) {
-        int login_ret = ret;
-        bool is_unlocked_now = false;
-        if (OB_FAIL(update_login_stat_mysql( is_valid_id(session_priv.user_id_),
-                                            schema_guard, is_unlocked_now))) {
-          LOG_WARN("fail to update login stat", K(ret));
-        } else if (OB_ERR_USER_IS_LOCKED == login_ret && is_unlocked_now) {
-          ret = OB_PASSWORD_WRONG;
-          LOG_WARN("user under connnection control and temporarily not locked",
-                   K(1UL), K(user_name_), K(ret));
-        } else {
-          ret = login_ret; // recover return code
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(check_password_expired(schema_guard, session))) {
-          LOG_WARN("fail to check password expired", K(ret));
-        }
-      }
-
-      if (OB_SUCC(ret)) {
-        // Attention!! must set session capability firstly
-        session.set_capability(hsr_.get_capability_flags());
-        session.set_user_priv_set(session_priv.user_priv_set_);
-        session.set_db_priv_set(session_priv.db_priv_set_);
-        session.set_enable_role_array(enable_role_id_array);
-        host_name = session_priv.host_name_;
-        uint64_t db_id = OB_INVALID_ID;
-        const ObTenantSchema *tenant_schema = NULL;
-        if (OB_FAIL(session.set_user(session_priv.user_name_, session_priv.host_name_, session_priv.user_id_))) {
-          LOG_WARN("failed to set_user", K(ret));
-        } else if (OB_FAIL(session.set_real_client_ip_and_port(client_ip_, client_port_))) {
-          LOG_WARN("failed to set_real_client_ip_and_port", K(ret));
-        } else if (OB_FAIL(session.set_default_database(session_priv.db_))) {
-          LOG_WARN("failed to set default database", K(ret), K(session_priv.db_));
-        } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-          LOG_WARN("get tenant info failed", K(ret));
-        } else if (OB_ISNULL(tenant_schema)) {
-          ret = OB_TENANT_NOT_EXIST;
-          LOG_WARN("tenant_schema is null", K(ret));
-        } else if (tenant_schema->is_in_recyclebin()) {
-          ret = OB_TENANT_NOT_EXIST;
-          LOG_WARN("tenant is in recyclebin", KR(ret), K(1UL));
-        } else if (tenant_schema->is_restore()) {
-          ret = OB_STATE_NOT_MATCH;
-          LOG_WARN("tenant is in restore", KR(ret), K(1UL));
-        } else if (OB_FAIL(session.update_database_variables(&schema_guard))) {
-          LOG_WARN("failed to update database variables", K(ret));
-        } else if (OB_FAIL(session.update_max_packet_size())) {
-          LOG_WARN("failed to update max packet size", K(ret));
-        } else if (OB_FAIL(get_client_attribute_capability(client_attr_cap_flags))) {
-          LOG_WARN("failed to get client attribute capability", K(ret));
-        } else if (OB_FAIL(check_update_client_capability(client_attr_cap_flags))) {
-          LOG_WARN("failed to get client attribute capability", K(ret));
-        } else {
-          session.set_client_attrbuite_capability(client_attr_cap_flags);
-        }
-
-        if (OB_SUCC(ret) && !session.get_database_name().empty()) {
-          if (OB_FAIL(schema_guard.get_database_id(session.get_database_name(),
-                                                   db_id))) {
-            int tmp_ret = OB_SUCCESS;
-            LOG_WARN("failed to get database id", K(ret), K(session.get_database_name()));
-            ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
-            int64_t local_version = OB_INVALID_VERSION;
-            int64_t global_version = OB_INVALID_VERSION;
-            
-            if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_refreshed_schema_version(local_version))) {
-              LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
-            } else if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_received_broadcast_version(global_version))) {
-              LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
-            } else if (local_version < global_version) {
-              LOG_INFO("try to refresh schema", K(1UL),
-                       K(local_version), K(global_version));
-              if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
-                LOG_WARN("failed to refresh schema", K(tmp_ret),
-                         K(1UL), K(global_version));
-              } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
-                LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
-              } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_database_id(session.get_database_name(), db_id))) {
-                LOG_WARN("failed to get database id", K(ret), K(tmp_ret));
-              } else {
-                // Only reset the error code when schema is successfully refreshed
-                ret = OB_SUCCESS;
-              }
+        if (OB_FAIL(ret)) {
+          if (OB_PASSWORD_WRONG == ret && is_inner_proxyro_user(*conn, user_name_)) {
+            reset_inner_proxyro_scramble(*conn, login_info);
+            int pre_ret = ret;
+            if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
+                  enable_role_id_array, ssl_st, user_info))) {
+              LOG_WARN("User access denied", K(login_info), K(pre_ret),K(ret));
             }
+          } else {
+            LOG_WARN("User access denied", K(login_info), K(ret));
           }
-          if (OB_SUCC(ret)) {
-            session.set_database_id(db_id);
-          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(session.on_user_connect(session_priv, user_info))) {
+          LOG_WARN("session on user connect failed", K(ret));
         }
       }
     }
+
+    if (OB_SUCC(ret) || OB_PASSWORD_WRONG == ret || OB_ERR_USER_IS_LOCKED == ret) {
+      int login_ret = ret;
+      bool is_unlocked_now = false;
+      if (OB_FAIL(update_login_stat_mysql( is_valid_id(session_priv.user_id_),
+                                          schema_guard, is_unlocked_now))) {
+        LOG_WARN("fail to update login stat", K(ret));
+      } else if (OB_ERR_USER_IS_LOCKED == login_ret && is_unlocked_now) {
+        ret = OB_PASSWORD_WRONG;
+        LOG_WARN("user under connnection control and temporarily not locked",
+                 K(1UL), K(user_name_), K(ret));
+      } else {
+        ret = login_ret; // recover return code
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(check_password_expired(schema_guard, session))) {
+        LOG_WARN("fail to check password expired", K(ret));
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      // Attention!! must set session capability firstly
+      session.set_capability(hsr_.get_capability_flags());
+      session.set_user_priv_set(session_priv.user_priv_set_);
+      session.set_db_priv_set(session_priv.db_priv_set_);
+      session.set_enable_role_array(enable_role_id_array);
+      host_name = session_priv.host_name_;
+      uint64_t db_id = OB_INVALID_ID;
+      const ObTenantSchema *tenant_schema = NULL;
+      if (OB_FAIL(session.set_user(session_priv.user_name_, session_priv.host_name_, session_priv.user_id_))) {
+        LOG_WARN("failed to set_user", K(ret));
+      } else if (OB_FAIL(session.set_real_client_ip_and_port(client_ip_, client_port_))) {
+        LOG_WARN("failed to set_real_client_ip_and_port", K(ret));
+      } else if (OB_FAIL(session.set_default_database(session_priv.db_))) {
+        LOG_WARN("failed to set default database", K(ret), K(session_priv.db_));
+      } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
+        LOG_WARN("get tenant info failed", K(ret));
+      } else if (OB_ISNULL(tenant_schema)) {
+        ret = OB_TENANT_NOT_EXIST;
+        LOG_WARN("tenant_schema is null", K(ret));
+      } else if (tenant_schema->is_in_recyclebin()) {
+        ret = OB_TENANT_NOT_EXIST;
+        LOG_WARN("tenant is in recyclebin", KR(ret), K(1UL));
+      } else if (tenant_schema->is_restore()) {
+        ret = OB_STATE_NOT_MATCH;
+        LOG_WARN("tenant is in restore", KR(ret), K(1UL));
+      } else if (OB_FAIL(session.update_database_variables(&schema_guard))) {
+        LOG_WARN("failed to update database variables", K(ret));
+      } else if (OB_FAIL(session.update_max_packet_size())) {
+        LOG_WARN("failed to update max packet size", K(ret));
+      } else if (OB_FAIL(get_client_attribute_capability(client_attr_cap_flags))) {
+        LOG_WARN("failed to get client attribute capability", K(ret));
+      } else if (OB_FAIL(check_update_client_capability(client_attr_cap_flags))) {
+        LOG_WARN("failed to get client attribute capability", K(ret));
+      } else {
+        session.set_client_attrbuite_capability(client_attr_cap_flags);
+      }
+
+      if (OB_SUCC(ret) && !session.get_database_name().empty()) {
+        if (OB_FAIL(schema_guard.get_database_id(session.get_database_name(),
+                                                 db_id))) {
+          int tmp_ret = OB_SUCCESS;
+          LOG_WARN("failed to get database id", K(ret), K(session.get_database_name()));
+          ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
+          int64_t local_version = OB_INVALID_VERSION;
+          int64_t global_version = OB_INVALID_VERSION;
+          
+          if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_refreshed_schema_version(local_version))) {
+            LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
+          } else if (OB_SUCCESS != (tmp_ret = schema_service->get_tenant_received_broadcast_version(global_version))) {
+            LOG_WARN("fail to get local version", K(ret), K(tmp_ret));
+          } else if (local_version < global_version) {
+            LOG_INFO("try to refresh schema", K(1UL),
+                     K(local_version), K(global_version));
+            if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
+              LOG_WARN("failed to refresh schema", K(tmp_ret),
+                       K(1UL), K(global_version));
+            } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
+              LOG_WARN("get schema guard failed", K(ret), K(tmp_ret));
+            } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_database_id(session.get_database_name(), db_id))) {
+              LOG_WARN("failed to get database id", K(ret), K(tmp_ret));
+            } else {
+              // Only reset the error code when schema is successfully refreshed
+              ret = OB_SUCCESS;
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          session.set_database_id(db_id);
+        }
+      }
+    }
+
     LOG_DEBUG("obmp connect info:", K(ret), K_(tenant_name), K_(user_name),
               K(host_name), K_(client_ip), "database", hsr_.get_database(),
               K(hsr_.get_capability_flags().capability_),
@@ -978,7 +978,7 @@ int ObMPConnect::get_last_failed_login_info(const uint64_t user_id,
       LOG_WARN("invalid id", K(user_id), K(ret));
     } else if (OB_FAIL(select_sql.append_fmt("SELECT failed_login_attempts, gmt_modified FROM `%s`"
                                              " WHERE user_id = %lu FOR UPDATE",
-                                             OB_ALL_TENANT_USER_FAILED_LOGIN_STAT_TNAME,
+                                             OB_ALL_USER_FAILED_LOGIN_STAT_TNAME,
                                              user_id))) {
       LOG_WARN("append string failed", K(ret));
     } else if (OB_FAIL(sql_client.read(res, select_sql.ptr()))) {
@@ -1030,7 +1030,7 @@ int ObMPConnect::clear_current_user_failed_login_num(const uint64_t user_id,
     LOG_WARN("invalid id", K(user_id), K_(user_name), K(ret));
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM `%s` "
                                     " WHERE user_id = %lu",
-                                    OB_ALL_TENANT_USER_FAILED_LOGIN_STAT_TNAME,
+                                    OB_ALL_USER_FAILED_LOGIN_STAT_TNAME,
                                     user_id))) {
     LOG_WARN("append table name failed", K(ret));
   } else if (OB_FAIL(sql_client.write(
@@ -1059,7 +1059,7 @@ int ObMPConnect::update_current_user_failed_login_num(const uint64_t user_id,
       || user_name_.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid id", K(user_id), K_(user_name), K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("INSERT INTO `%s` (", OB_ALL_TENANT_USER_FAILED_LOGIN_STAT_TNAME))) {
+  } else if (OB_FAIL(sql.assign_fmt("INSERT INTO `%s` (", OB_ALL_USER_FAILED_LOGIN_STAT_TNAME))) {
     LOG_WARN("append table name failed", K(ret));
   } else {
     SQL_COL_APPEND_VALUE(sql, values, user_id, "user_id", "%lu");
@@ -1096,11 +1096,10 @@ bool ObMPConnect::is_connection_control_enabled()
   if (true || 0 == user_name_.compare(OB_SYS_USER_NAME)) {
     // do nothing
   } else {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (tenant_config.is_valid()) {
-      int64_t threshold = tenant_config->connection_control_failed_connections_threshold;
-      is_enabled = threshold > 0;
-    }
+
+    int64_t threshold = GCONF.connection_control_failed_connections_threshold;
+    is_enabled = threshold > 0;
+
   }
   return is_enabled;
 }
@@ -1111,22 +1110,21 @@ int ObMPConnect::get_connection_control_stat(const int64_t current_failed_login_
   int ret = OB_SUCCESS;
   need_lock = false;
   is_locked = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    int64_t threshold = tenant_config->connection_control_failed_connections_threshold;
-    int64_t delay = 0;
-    int64_t min_delay = tenant_config->connection_control_min_connection_delay;
-    int64_t max_delay = tenant_config->connection_control_max_connection_delay;
-    int64_t current_gmt = ObTimeUtil::current_time();
-    if (threshold <= 0 || current_failed_login_num + 1 < threshold) {
-      // do nothing
-    } else if (current_failed_login_num + 1 == threshold) {
-      need_lock = true;
-    } else {
-      delay = MIN(MAX((current_failed_login_num + 1 - threshold) * MSECS_PER_SEC, min_delay), max_delay);
-      is_locked = current_gmt <= delay * USECS_PER_MSEC + last_failed_login_timestamp;
-    }
+
+  int64_t threshold = GCONF.connection_control_failed_connections_threshold;
+  int64_t delay = 0;
+  int64_t min_delay = GCONF.connection_control_min_connection_delay;
+  int64_t max_delay = GCONF.connection_control_max_connection_delay;
+  int64_t current_gmt = ObTimeUtil::current_time();
+  if (threshold <= 0 || current_failed_login_num + 1 < threshold) {
+    // do nothing
+  } else if (current_failed_login_num + 1 == threshold) {
+    need_lock = true;
+  } else {
+    delay = MIN(MAX((current_failed_login_num + 1 - threshold) * MSECS_PER_SEC, min_delay), max_delay);
+    is_locked = current_gmt <= delay * USECS_PER_MSEC + last_failed_login_timestamp;
   }
+
   return ret;
 }
 
@@ -1545,30 +1543,29 @@ int ObMPConnect::verify_connection() const
         check_max_sess = user_name_.compare(OB_SYS_USER_NAME) != 0;
       }
       if (OB_SUCC(ret) && check_max_sess) {
-        omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-        if (tenant_config.is_valid()) {
-          int64_t max_sess_num = 0;
-          int64_t sess_count = 0;
-          MOD_SCOPE {
-            auto *tenant_base = MTL_CTX();
-            max_sess_num = tenant_base->get_max_session_num(tenant_config->_resource_limit_max_session_num);
-          } else {
-            /*ignore fails*/
-            ret = OB_SUCCESS;
-          }
-          if (max_sess_num != 0) {
-            bool tenant_exists = false;
-            uint64_t cur_connections = 0;
-            if (OB_FAIL(gctx_.conn_res_mgr_->get_tenant_cur_connections( tenant_exists,
-                                                                        cur_connections))) {
-              LOG_WARN("fail to get session count", K(ret));
-            } else if (tenant_exists && cur_connections >= max_sess_num) {
-              ret = OB_ERR_CON_COUNT_ERROR;
-              LOG_WARN("too much sessions", K(ret), K(cur_connections), K(max_sess_num),
-                       K(tenant_name_), K(user_name_));
-            }
+
+        int64_t max_sess_num = 0;
+        int64_t sess_count = 0;
+        MOD_SCOPE {
+          auto *tenant_base = MTL_CTX();
+          max_sess_num = tenant_base->get_max_session_num(GCONF._resource_limit_max_session_num);
+        } else {
+          /*ignore fails*/
+          ret = OB_SUCCESS;
+        }
+        if (max_sess_num != 0) {
+          bool tenant_exists = false;
+          uint64_t cur_connections = 0;
+          if (OB_FAIL(gctx_.conn_res_mgr_->get_tenant_cur_connections( tenant_exists,
+                                                                      cur_connections))) {
+            LOG_WARN("fail to get session count", K(ret));
+          } else if (tenant_exists && cur_connections >= max_sess_num) {
+            ret = OB_ERR_CON_COUNT_ERROR;
+            LOG_WARN("too much sessions", K(ret), K(cur_connections), K(max_sess_num),
+                     K(tenant_name_), K(user_name_));
           }
         }
+
       }
     }
   }

@@ -20,15 +20,13 @@
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/compaction/ob_compaction_diagnose.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
-#include "observer/omt/ob_multi_tenant_operator.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-class ObAllVirtualTabletCompactionHistory : public common::ObVirtualTableScannerIterator,
-                                            public omt::ObMultiTenantOperator
+class ObAllVirtualTabletCompactionHistory : public common::ObVirtualTableScannerIterator
 {
 public:
   enum COLUMN_ID_LIST { // FARM COMPAT WHITELIST
@@ -74,13 +72,6 @@ public:
 protected:
   int fill_cells(compaction::ObSSTableMergeHistory *merge_history);
 private:
-  virtual bool is_need_process() override;
-  virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  virtual void release_last_tenant() override
-  {
-    major_merge_info_iter_.reset();
-    minor_merge_info_iter_.reset();
-  }
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   char parallel_merge_info_buf_[common::OB_PARALLEL_MERGE_INFO_LENGTH];

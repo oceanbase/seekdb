@@ -344,9 +344,8 @@ int ObSQLSessionInfo::is_force_temp_table_inline(bool &force_inline) const
   int64_t with_subquery_policy = 0;
   force_inline = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    int64_t with_subquery_policy = tenant_config->_with_subquery;
+  {
+    int64_t with_subquery_policy = GCONF._with_subquery;
     if (2 == with_subquery_policy) {
       force_inline = true;
     }
@@ -360,9 +359,8 @@ int ObSQLSessionInfo::is_force_temp_table_materialize(bool &force_materialize) c
   int64_t with_subquery_policy = 0;
   force_materialize = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    int64_t with_subquery_policy = tenant_config->_with_subquery;
+  {
+    int64_t with_subquery_policy = GCONF._with_subquery;
     if (1 == with_subquery_policy) {
       force_materialize = true;
     }
@@ -375,9 +373,8 @@ int ObSQLSessionInfo::is_temp_table_transformation_enabled(bool &transformation_
   int ret = OB_SUCCESS;
   transformation_enabled = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    transformation_enabled = tenant_config->_xsolapi_generate_with_clause;
+  {
+    transformation_enabled = GCONF._xsolapi_generate_with_clause;
   }
   return ret;
 }
@@ -387,9 +384,8 @@ int ObSQLSessionInfo::is_groupby_placement_transformation_enabled(bool &transfor
   int ret = OB_SUCCESS;
   transformation_enabled = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    transformation_enabled = tenant_config->_optimizer_group_by_placement;
+  {
+    transformation_enabled = GCONF._optimizer_group_by_placement;
   }
   return ret;
 }
@@ -398,9 +394,8 @@ bool ObSQLSessionInfo::is_in_range_optimization_enabled() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_enable_in_range_optimization;
+  {
+    bret = GCONF._enable_in_range_optimization;
   }
   return bret;
 }
@@ -409,9 +404,8 @@ int64_t ObSQLSessionInfo::get_inlist_rewrite_threshold() const
 {
   int64_t threshold = 1000;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    threshold = tenant_config->_inlist_rewrite_threshold;
+  {
+    threshold = GCONF._inlist_rewrite_threshold;
   }
   return threshold;
 }
@@ -421,9 +415,8 @@ int ObSQLSessionInfo::is_better_inlist_enabled(bool &enabled) const
   int ret = OB_SUCCESS;
   enabled = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    enabled = tenant_config->_optimizer_better_inlist_costing;
+  {
+    enabled = GCONF._optimizer_better_inlist_costing;
   }
   return ret;
 }
@@ -433,9 +426,8 @@ int ObSQLSessionInfo::is_preserve_order_for_pagination_enabled(bool &enabled) co
   int ret = OB_SUCCESS;
   enabled = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    enabled = tenant_config->_preserve_order_for_pagination;
+  {
+    enabled = GCONF._preserve_order_for_pagination;
   }
   return ret;
 }
@@ -445,9 +437,8 @@ int ObSQLSessionInfo::is_preserve_order_for_groupby_enabled(bool &enabled) const
   int ret = OB_SUCCESS;
   enabled = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    enabled = tenant_config->_preserve_order_for_groupby;
+  {
+    enabled = GCONF._preserve_order_for_groupby;
   }
   return ret;
 }
@@ -465,9 +456,8 @@ bool ObSQLSessionInfo::is_index_skip_scan_enabled() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_optimizer_skip_scan_enabled;
+  {
+    bret = GCONF._optimizer_skip_scan_enabled;
   }
   return bret;
 }
@@ -476,9 +466,8 @@ bool ObSQLSessionInfo::is_qualify_filter_enabled() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_enable_optimizer_qualify_filter;
+  {
+    bret = GCONF._enable_optimizer_qualify_filter;
   }
   return bret;
 }
@@ -488,9 +477,8 @@ int ObSQLSessionInfo::is_enable_range_extraction_for_not_in(bool &enabled) const
   int ret = OB_SUCCESS;
   enabled = true;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    enabled = tenant_config->_enable_range_extraction_for_not_in;
+  {
+    enabled = GCONF._enable_range_extraction_for_not_in;
   }
   return ret;
 }
@@ -499,9 +487,8 @@ bool ObSQLSessionInfo::is_var_assign_use_das_enabled() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_enable_var_assign_use_das;
+  {
+    bret = GCONF._enable_var_assign_use_das;
   }
   return bret;
 }
@@ -510,9 +497,8 @@ bool ObSQLSessionInfo::is_nlj_spf_use_rich_format_enabled() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_enable_nlj_spf_use_rich_format;
+  {
+    bret = GCONF._enable_nlj_spf_use_rich_format;
   }
   return bret;
 }
@@ -523,9 +509,8 @@ int ObSQLSessionInfo::is_adj_index_cost_enabled(bool &enabled, int64_t &stats_co
   enabled = false;
   stats_cost_percent = 0;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    stats_cost_percent = tenant_config->optimizer_index_cost_adj;
+  {
+    stats_cost_percent = GCONF.optimizer_index_cost_adj;
     enabled = (0 != stats_cost_percent);
   }
   return ret;
@@ -536,9 +521,8 @@ bool ObSQLSessionInfo::is_spf_mlj_group_rescan_enabled() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_enable_spf_batch_rescan;
+  {
+    bret = GCONF._enable_spf_batch_rescan;
   }
   return bret;
 }
@@ -547,9 +531,8 @@ bool ObSQLSessionInfo::enable_parallel_das_dml() const
 {
   bool bret = false;
   
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    bret = tenant_config->_enable_parallel_das_dml;
+  {
+    bret = GCONF._enable_parallel_das_dml;
   }
   return bret;
 }
@@ -601,7 +584,7 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     // The deserialized session should not do end_trans etc cleanup work
     // bug: 
     if (false == get_is_deserialized()) {
-      if (false == ObSchemaService::g_liboblog_mode_) {
+      {
         // session disconnects, call ObTransService::end_trans to roll back the transaction,
         // Here stmt_timeout = current time + statement query timeout, not the start_time of the last sql, related bug_id : 7961445
         set_query_start_time(ObTimeUtility::current_time());
@@ -1277,11 +1260,10 @@ int ObSQLSessionInfo::add_cursor(pl::ObPLCursorInfo *cursor)
 #define NEED_CHECK_SESS_OPEN_CURSORS_LIMIT(v) (0 == v ? false : true)
   int ret = OB_SUCCESS;
   bool add_cursor_success = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  CK (tenant_config.is_valid());
+  CK (true);
   CK (OB_NOT_NULL(cursor));
   if (OB_SUCC(ret)) {
-    int64_t open_cursors_limit = tenant_config->open_cursors;
+    int64_t open_cursors_limit = GCONF.open_cursors;
     if (NEED_CHECK_SESS_OPEN_CURSORS_LIMIT(open_cursors_limit)
         && open_cursors_limit <= pl_cursor_cache_.pl_cursor_map_.size()) {
       ret = OB_ERR_OPEN_CURSORS_EXCEEDED;
@@ -2377,44 +2359,43 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
     }
       // 1.Does it support external consistency
     is_external_consistent_ = transaction::ObTsMgr::get_instance().is_external_consistent();
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (OB_LIKELY(tenant_config.is_valid())) {
+    if (OB_LIKELY(true)) {
       // 2.Is batch_multi_statement allowed
-      enable_batched_multi_statement_ = tenant_config->ob_enable_batched_multi_statement;
+      enable_batched_multi_statement_ = GCONF.ob_enable_batched_multi_statement;
       // 3.Is bloom_filter allowed
-      if (tenant_config->_bloom_filter_enabled) {
+      if (GCONF._bloom_filter_enabled) {
         enable_bloom_filter_ = true;
       } else {
         enable_bloom_filter_ = false;
       }
       // 4.sort area size
-      ATOMIC_STORE(&sort_area_size_, tenant_config->_sort_area_size);
-      ATOMIC_STORE(&hash_area_size_, tenant_config->_hash_area_size);
-      ATOMIC_STORE(&enable_query_response_time_stats_, tenant_config->query_response_time_stats);
-      ATOMIC_STORE(&enable_insertup_replace_gts_opt_, tenant_config->_enable_insertup_replace_gts_opt);
-      ATOMIC_STORE(&enable_immediate_row_conflict_check_, tenant_config->_ob_immediate_row_conflict_check);
-      ATOMIC_STORE(&range_optimizer_max_mem_size_, tenant_config->range_optimizer_max_mem_size);
-      ATOMIC_STORE(&_query_record_size_limit_, tenant_config->_query_record_size_limit);
-      ATOMIC_STORE(&_ob_sqlstat_enable_, tenant_config->_ob_sqlstat_enable);
+      ATOMIC_STORE(&sort_area_size_, GCONF._sort_area_size);
+      ATOMIC_STORE(&hash_area_size_, GCONF._hash_area_size);
+      ATOMIC_STORE(&enable_query_response_time_stats_, GCONF.query_response_time_stats);
+      ATOMIC_STORE(&enable_insertup_replace_gts_opt_, GCONF._enable_insertup_replace_gts_opt);
+      ATOMIC_STORE(&enable_immediate_row_conflict_check_, GCONF._ob_immediate_row_conflict_check);
+      ATOMIC_STORE(&range_optimizer_max_mem_size_, GCONF.range_optimizer_max_mem_size);
+      ATOMIC_STORE(&_query_record_size_limit_, GCONF._query_record_size_limit);
+      ATOMIC_STORE(&_ob_sqlstat_enable_, GCONF._ob_sqlstat_enable);
       // 6. enable extended SQL syntax in the MySQL mode
-      enable_sql_extension_ = tenant_config->enable_sql_extension;
-      px_join_skew_handling_ = tenant_config->_px_join_skew_handling;
-      px_join_skew_minfreq_ = tenant_config->_px_join_skew_minfreq;
-      enable_column_store_ = tenant_config->_enable_column_store;
-      enable_decimal_int_type_ = tenant_config->_enable_decimal_int_type;
-      enable_mysql_compatible_dates_ = tenant_config->_enable_mysql_compatible_dates;
-      enable_enum_set_subschema_ = tenant_config->_enable_enum_set_subschema;
+      enable_sql_extension_ = GCONF.enable_sql_extension;
+      px_join_skew_handling_ = GCONF._px_join_skew_handling;
+      px_join_skew_minfreq_ = GCONF._px_join_skew_minfreq;
+      enable_column_store_ = GCONF._enable_column_store;
+      enable_decimal_int_type_ = GCONF._enable_decimal_int_type;
+      enable_mysql_compatible_dates_ = GCONF._enable_mysql_compatible_dates;
+      enable_enum_set_subschema_ = GCONF._enable_enum_set_subschema;
       // 7. print_sample_ppm_ for flt
-      ATOMIC_STORE(&print_sample_ppm_, tenant_config->_print_sample_ppm);
+      ATOMIC_STORE(&print_sample_ppm_, GCONF._print_sample_ppm);
       // 8. _enable_enhanced_cursor_validation
-      ATOMIC_STORE(&enable_enhanced_cursor_validation_, tenant_config->_enable_enhanced_cursor_validation);
-      ATOMIC_STORE(&force_enable_plan_tracing_, tenant_config->_force_enable_plan_tracing);
+      ATOMIC_STORE(&enable_enhanced_cursor_validation_, GCONF._enable_enhanced_cursor_validation);
+      ATOMIC_STORE(&force_enable_plan_tracing_, GCONF._force_enable_plan_tracing);
       ATOMIC_STORE(&pc_adaptive_min_exec_time_threshold_,
-                   tenant_config->_pc_adaptive_min_exec_time_threshold);
+                   GCONF._pc_adaptive_min_exec_time_threshold);
       ATOMIC_STORE(&pc_adaptive_effectiveness_ratio_threshold_,
-                   tenant_config->_pc_adaptive_effectiveness_ratio_threshold);
-      ATOMIC_STORE(&enable_adaptive_plan_cache_, tenant_config->enable_adaptive_plan_cache);
-      ATOMIC_STORE(&enable_sql_ccl_rule_, tenant_config->_enable_sql_ccl_rule);
+                   GCONF._pc_adaptive_effectiveness_ratio_threshold);
+      ATOMIC_STORE(&enable_adaptive_plan_cache_, GCONF.enable_adaptive_plan_cache);
+      ATOMIC_STORE(&enable_sql_ccl_rule_, GCONF._enable_sql_ccl_rule);
     }
     ATOMIC_STORE(&last_check_ec_ts_, cur_ts);
   }

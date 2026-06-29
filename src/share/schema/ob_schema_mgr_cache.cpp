@@ -19,8 +19,6 @@
 #include "ob_schema_mgr_cache.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_mgr.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
-
 namespace oceanbase
 {
 using namespace common;
@@ -498,23 +496,15 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
     bool is_stop = false;
     
     int64_t max_schema_slot_num = max_cached_num_;
-    if (!ObSchemaService::g_liboblog_mode_) {
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-      if (tenant_config.is_valid()) {
-        max_schema_slot_num = tenant_config->_max_schema_slot_num;
-      }
+    {
+
+      max_schema_slot_num = GCONF._max_schema_slot_num;
+
     }
     TCWLockGuard guard(lock_);
-    // 1. In order to avoid the repeated adjustment of the configuration item _max_schema_slot_num that may cause problems
-    //  that may be caused by the invisible version in the history, max_cached_num_ can only be increased during
-    //  the operation of the observer. The memory release frequency of the schema mgr is controlled by _max_schema_slot_num.
-    //  The user can reduce the _max_schema_slot_num to speed up the release of the schema mgr memory.
-    // 2. Because liboblog and agentserver cannot perceive ob configuration items, they still use startup
-    //  settings to control the number of schema slots.
-    // 3. The fallback mode has fewer usage scenarios in the OB and has nothing to do with the number of concurrent users,
-    //  and the schema_mgr memory management strategy is different from the schema refresh scenario.
-    //  In order to reduce unnecessary memory usage, a fixed number of 16 slots is also used.
-    if (!ObSchemaService::g_liboblog_mode_ && FALLBACK != mode_) {
+    // max_cached_num_ can only be increased to avoid making versions invisible.
+    // The user can reduce _max_schema_slot_num to speed up schema mgr memory release.
+    if (FALLBACK != mode_) {
       max_cached_num_ = max(max_cached_num_, max_schema_slot_num);
     }
     int64_t target_pos = -1;

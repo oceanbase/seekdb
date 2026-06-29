@@ -23,7 +23,6 @@
 #include "lib/net/ob_addr.h"
 #include "lib/compress/ob_compress_util.h"
 #include "common/ob_range.h"
-#include "common/ob_region.h"                // common::ObRegion
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row_util.h"
 #include "common/rowkey/ob_rowkey_info.h"
@@ -288,10 +287,6 @@ inline bool is_list_part(const ObPartitionFuncType part_type)
 int is_sys_table_name(uint64_t database_id, const common::ObString &table_name, bool &is_sys_table);
 
 
-// adding new table type, take care ObRootUtils::is_balance_target_schema() interface
-// This structure indicates whether the tableSchema of this type is the object of load balancing,
-// and the judgment is based on whether the table schema has physical partitions of entities,
-// and only non-system tables are load-balanced.
 enum ObTableType
 {
   SYSTEM_TABLE   = 0,
@@ -343,10 +338,6 @@ const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_
 // The max tablet count of a transfer is one data table tablet with max aux tablets bound together.
 const int64_t OB_MAX_TRANSFER_BINDING_TABLET_CNT = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1; // 518
 
-// Note: When adding new index type, you should modifiy "tools/obtest/t/quick/partition_balance.test" and
-//       "tools/obtest/t/shared_storage/local_cache/partition_balance.test" to verify that all aux tables of the new index
-//       can be properly distributed after table creation and partition rebalanceing.
-//
 //       If the new index has multiple aux tables, you need to make sure that OB_MAX_AUX_TABLE_PER_MAIN_TABLE is correct and
 //       modify "tools/obtest/t/quick/include/transfer_max_aux.test" to verify that a partition with
 //       max aux tables can be transferred.
@@ -1673,10 +1664,10 @@ struct ObZoneScore
   common::ObString zone_;
   int64_t score_;
 };
-// ObZoneRegion is used to construct the primary zone array of TableSchema/DataBaseSchema/TenantSchema.
-// It is only an intermediate variable during the construction process. ObZoneRegion will not be saved
-// in the schema eventually. This structure saves the zone and the region in which the zone is located.
-struct ObZoneRegion
+// ObZonePrimaryEntry is used to construct the primary zone array of TableSchema/DataBaseSchema/TenantSchema.
+// It is only an intermediate variable during the construction process. ObZonePrimaryEntry will not be saved
+// in the schema eventually. This structure saves the zone and its check zone type.
+struct ObZonePrimaryEntry
 {
 public:
   enum CheckZoneType
@@ -1687,32 +1678,26 @@ public:
     CZY_MAX,
   };
 public:
-  ObZoneRegion()
+  ObZonePrimaryEntry()
     : zone_(),
-      region_(),
       check_zone_type_(CZY_MAX) {}
-  ObZoneRegion(const ObZoneRegion &that)
+  ObZonePrimaryEntry(const ObZonePrimaryEntry &that)
     : zone_(that.zone_),
-      region_(that.region_),
       check_zone_type_(that.check_zone_type_) {}
-  ObZoneRegion(const common::ObZone &zone, const common::ObRegion &region)
+  explicit ObZonePrimaryEntry(const common::ObZone &zone)
     : zone_(zone),
-      region_(region),
       check_zone_type_(CZY_NO_ENCRYPTION) {}
-  ObZoneRegion(const common::ObZone &zone,
-               const common::ObRegion &region,
+  ObZonePrimaryEntry(const common::ObZone &zone,
                const CheckZoneType check_zone_type)
     : zone_(zone),
-      region_(region),
       check_zone_type_(check_zone_type) {}
-  virtual ~ObZoneRegion() {}
-  void reset() { zone_.reset(); region_.reset(); check_zone_type_ = CZY_MAX; }
-  int assign(const ObZoneRegion &that);
+  virtual ~ObZonePrimaryEntry() {}
+  void reset() { zone_.reset(); check_zone_type_ = CZY_MAX; }
+  int assign(const ObZonePrimaryEntry &that);
   int set_check_zone_type(const int64_t zone_type);
-  TO_STRING_KV(K(zone_), K(region_), K(check_zone_type_));
+  TO_STRING_KV(K(zone_), K(check_zone_type_));
 
   common::ObZone zone_;
-  common::ObRegion region_;
   CheckZoneType check_zone_type_;
 };
 

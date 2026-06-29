@@ -15,7 +15,6 @@
  */
 
 #include "ob_tx_elr_util.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
 #include "ob_trans_event.h"
 
 namespace oceanbase
@@ -35,9 +34,8 @@ void ObTxELRUtil::refresh_elr_tenant_config_()
   bool need_refresh = ObClockGenerator::getClock() - last_refresh_ts_ > REFRESH_INTERVAL;
 
   if (OB_UNLIKELY(need_refresh)) {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-    if (OB_LIKELY(tenant_config.is_valid())) {
-      can_tenant_elr_ = tenant_config->enable_early_lock_release;
+    if (OB_LIKELY(true)) {
+      can_tenant_elr_ = GCONF.enable_early_lock_release;
       last_refresh_ts_ = ObClockGenerator::getClock();
     }
     if (REACH_TIME_INTERVAL(10000000 /* 10s */)) {

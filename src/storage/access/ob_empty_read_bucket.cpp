@@ -15,8 +15,6 @@
  */
 
 #include "ob_empty_read_bucket.h"
-#include "src/observer/omt/ob_tenant_config_mgr.h"
-
 namespace oceanbase
 {
 namespace storage
