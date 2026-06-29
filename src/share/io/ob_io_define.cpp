@@ -19,6 +19,8 @@
 #include "share/io/ob_io_manager.h"
 #include "src/storage/ob_file_system_router.h"
 #include "src/observer/ob_server.h"
+#include "common/storage/ob_fd_simulator.h"
+#include "lib/restore/ob_object_device.h"
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 /******************             IOMode              **********************/
@@ -2195,7 +2197,6 @@ int64_t ObTenantIOConfig::to_string(char* buf, const int64_t buf_len) const
   J_OBJ_END();
   return pos;
 }
-
 
 
 

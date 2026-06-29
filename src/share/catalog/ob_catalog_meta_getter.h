@@ -18,6 +18,10 @@
 #define __SHARE_OB_CATALOG_META_GETTER_H__
 
 #include "share/catalog/ob_external_catalog.h"
+#include "share/schema/ob_column_schema.h"
+#include "share/schema/ob_catalog_schema_struct.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
 {
@@ -27,7 +31,7 @@ namespace share
 class ObCatalogMetaGetter final : public ObICatalogMetaGetter
 {
 public:
-  ObCatalogMetaGetter(ObSchemaGetterGuard &schema_getter_guard, ObIAllocator &allocator)
+  ObCatalogMetaGetter(schema::ObSchemaGetterGuard &schema_getter_guard, ObIAllocator &allocator)
       : schema_getter_guard_(schema_getter_guard), allocator_(allocator)
   {
   }
@@ -56,7 +60,7 @@ public:
                              ObCatalogBasicTableInfo &table_info);
 
 private:
-  ObSchemaGetterGuard &schema_getter_guard_;
+  schema::ObSchemaGetterGuard &schema_getter_guard_;
   ObIAllocator &allocator_;
 
   int get_catalog_(const uint64_t catalog_id, ObIExternalCatalog *&catalog);

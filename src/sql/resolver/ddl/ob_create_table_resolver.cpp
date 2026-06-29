@@ -548,13 +548,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
 
-    if (OB_SUCC(ret)) {
-      ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-      if (!table_schema.get_kv_attributes().empty() &&
-          OB_FAIL(ObTTLUtil::check_kv_attributes(table_schema, params_.is_htable_))) {
-        LOG_WARN("fail to check kv attributes", K(ret));
-      }
-    }
   }
   return ret;
 }

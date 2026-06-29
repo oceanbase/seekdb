@@ -263,7 +263,6 @@ int ObDDLResolver::get_part_str_with_type(
 }
 
 int ObDDLResolver::get_mv_container_table(
-    uint64_t tenant_id,
     const uint64_t mv_container_table_id,
     const share::schema::ObTableSchema *&mv_container_table_schema,
     common::ObString &mv_container_table_name)
@@ -271,17 +270,17 @@ int ObDDLResolver::get_mv_container_table(
   int ret = OB_SUCCESS;
   mv_container_table_schema = nullptr;
   mv_container_table_name.reset();
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == mv_container_table_id)) {
+  if (OB_UNLIKELY(OB_INVALID_ID == mv_container_table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mv_container_table_id));
+    LOG_WARN("invalid args", KR(ret), K(mv_container_table_id));
   } else if (OB_UNLIKELY(nullptr == schema_checker_ || nullptr == allocator_)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("schema checker or allocator can not be NULL", KR(ret), KP(schema_checker_), KP(allocator_));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, mv_container_table_id, mv_container_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(mv_container_table_id));
+  } else if (OB_FAIL(schema_checker_->get_table_schema(mv_container_table_id, mv_container_table_schema))) {
+    LOG_WARN("fail to get table schema", KR(ret), K(mv_container_table_id));
   } else if (OB_ISNULL(mv_container_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table schema is NULL", KR(ret), K(tenant_id), K(mv_container_table_id));
+    LOG_WARN("table schema is NULL", KR(ret), K(mv_container_table_id));
   } else if (OB_FAIL(ob_write_string(*allocator_, mv_container_table_schema->get_table_name(), mv_container_table_name))) {
     LOG_WARN("fail to deep copy table name", KR(ret));
   }
@@ -997,7 +996,7 @@ int ObDDLResolver::resolve_table_options(ParseNode *node, bool is_index_option)
       ObString database_name;
       uint64_t database_id = OB_INVALID_ID;
       const ObDatabaseSchema *database_schema = NULL;
-      if (OB_FAIL(schema_checker_->get_database_id(tenant_id, database_name_, database_id)))  {
+      if (OB_FAIL(schema_checker_->get_database_id(database_name_, database_id)))  {
         SQL_RESV_LOG(WARN, "fail to get database_id.", K(ret), K(database_name_), K(tenant_id));
       } else if (OB_FAIL(schema_checker_->get_database_schema(tenant_id, database_id, database_schema))) {
         LOG_WARN("failed to get db schema", K(ret), K(database_id));
@@ -1180,7 +1179,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
   CHECK_COMPATIBILITY_MODE(session_info_);
   if (OB_FAIL(ret)) {
     //do nothing
-  } else if (OB_FAIL(schema_checker_->get_database_id(tenant_id, database_name, database_id)))  {
+  } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id)))  {
     SQL_RESV_LOG(WARN, "fail to get database_id.", K(ret), K(database_name), K(tenant_id));
   }
   if (OB_SUCCESS == ret && NULL != option_node) {
@@ -1429,7 +1428,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             if (!ObStoreFormat::is_store_format_valid(store_format_)) {
               ret = OB_ERR_UNEXPECTED;
               SQL_RESV_LOG(WARN, "Unexpected invalid store format value", K_(store_format), K(ret));
-            } else if (OB_FAIL(ObDDLResolver::get_row_store_type(tenant_id, store_format_, row_store_type_))) {
+            } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
               SQL_RESV_LOG(WARN, "fail to get_row_store_type", K(tenant_id), K_(store_format), K(ret));
             }
             if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
@@ -1634,7 +1633,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             sql::ObCreateTableStmt *create_table_stmt = static_cast<sql::ObCreateTableStmt*>(stmt_);
             tbl_schema = &create_table_stmt->get_create_table_arg().schema_;
           } else if (stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-            if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, database_name_, table_name_, false, tbl_schema))) {
+            if (OB_FAIL(schema_checker_->get_table_schema(database_name_, table_name_, false, tbl_schema))) {
               LOG_WARN("table is not exist", K(tenant_id), K(database_name_), K(table_name_), K(ret));
             } else if (OB_ISNULL(tbl_schema)) {
               ret = OB_ERR_UNEXPECTED;
@@ -1646,7 +1645,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "without create table with index or create index is");
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(ObVectorIndexUtil::check_vec_index_param(tenant_id, option_node, *allocator_,
+          } else if (OB_FAIL(ObVectorIndexUtil::check_vec_index_param(option_node, *allocator_,
               *tbl_schema, index_params_, vec_column_name_, vec_index_type_, session_info_))) {
             LOG_WARN("fail to check vec index params", K(ret));
           }
@@ -1733,7 +1732,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       }
       case T_TABLE_MODE: {
         uint64_t tenant_data_version = 0;
-        if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
+        if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
           LOG_WARN("get tenant data version failed", K(ret));
         } else if (OB_ISNULL(option_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
@@ -2244,7 +2243,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             duplicate_scope_ = my_duplicate_scope;
           }
           if (OB_SUCC(ret) && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (!is_user_tenant(tenant_id)) {
+            if (!is_user_tenant()) {
               ret = OB_NOT_SUPPORTED;
               LOG_WARN("not user tenant, alter table duplicate scope not supported", KR(ret), K(tenant_id));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant, alter table duplicate scope");
@@ -2377,9 +2376,9 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           } else {
             ObString table_location = ObString(option_node->children_[0]->str_len_,
                                               option_node->children_[0]->str_value_).trim_space_only();
-            if (OB_FAIL(resolve_external_file_location(params_, arg.schema_, table_location))) {
-              LOG_WARN("failed to resolve external file location", K(ret));
-            }
+            UNUSED(table_location);
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "external file location");
           }
 
           if (OB_SUCC(ret)) {
@@ -2417,8 +2416,11 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               sub_path = ObString(option_node->children_[1]->str_len_,
                           option_node->children_[1]->str_value_).trim_space_only();
             }
-            if (OB_FAIL(resolve_external_file_location_object(params_, arg.schema_, location_obj, sub_path))) {
-              LOG_WARN("failed to set external location object", K(ret));
+            UNUSED(location_obj);
+            UNUSED(sub_path);
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "external location object");
+            if (OB_FAIL(ret)) {
             } else if (OB_ISNULL(params_.session_info_)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("session_info is null");
@@ -2448,9 +2450,9 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             ObExternalFileFormat format;
             ObString format_str;
             ObString masked_sql = params_.session_info_->get_current_query_string(); // that's create table operation stmt which has properties
-            if (OB_FAIL(resolve_external_file_format(option_node, params_, format, format_str))) {
-              LOG_WARN("failed to resolve external file format", K(ret));
-            }
+            UNUSED(format);
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "external file format");
 
             if (OB_SUCC(ret)) {
               if (ObExternalFileFormat::ODPS_FORMAT == format.format_type_) {
@@ -2508,8 +2510,11 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         } else {
           ObCreateTableArg &arg = static_cast<ObCreateTableStmt*>(stmt_)->get_create_table_arg();
           ObString pattern;
-          if (OB_FAIL(resolve_external_file_pattern(option_node, arg.schema_.is_external_table(), *allocator_, session_info_, pattern))) {
-            LOG_WARN("failed to resolve external file pattern", K(ret));
+          UNUSED(option_node);
+          UNUSED(arg);
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "external file pattern");
+          if (OB_FAIL(ret)) {
           } else if (OB_FAIL(arg.schema_.set_external_file_pattern(pattern))) {
             LOG_WARN("failed to set external file pattern", K(ret), K(pattern));
           }
@@ -3028,8 +3033,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
   if (OB_SUCC(ret) && type_node != NULL) {
     ObDataType data_type;
     // session_info_ NPE check is done in up layer caller
-    omt::ObTenantConfigGuard tcg(
-        TENANT_CONF(session_info_->get_effective_tenant_id()));
+    omt::ObTenantConfigGuard tcg(TENANT_CONF());
     bool convert_real_to_decimal =
         (tcg.is_valid() && tcg->_enable_convert_real_to_decimal);
     bool enable_decimalint_type = false;
@@ -3045,7 +3049,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
                                                    false,
                                                    false,
                                                    session_info_->get_session_nls_params(),
-                                                   session_info_->get_effective_tenant_id(),
                                                    enable_decimalint_type,
                                                    enable_mysql_compatible_dates,
                                                    convert_real_to_decimal))) {
@@ -3969,7 +3972,7 @@ int ObDDLResolver::resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
       LOG_USER_ERROR(OB_ERR_SRID_WRONG_USAGE);
     } else {
       int64_t srid = srid_node.children_[0]->value_;
-      if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(session_info_->get_effective_tenant_id(), srid))) {
+      if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(srid))) {
         SQL_RESV_LOG(WARN, "invalid srid", K(ret), K(srid));
       } else {
         column.set_srid(srid);
@@ -8641,8 +8644,7 @@ int ObDDLResolver::get_enable_split_partition(const int64_t tenant_id, bool &ena
   return ret;
 }
 
-int ObDDLResolver::get_row_store_type(const uint64_t tenant_id,
-                                      const ObStoreFormatType store_format,
+int ObDDLResolver::get_row_store_type(const ObStoreFormatType store_format,
                                       ObRowStoreType &row_store_type)
 {
   int ret = OB_SUCCESS;

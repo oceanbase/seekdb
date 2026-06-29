@@ -2435,22 +2435,21 @@ int ObDDLRedefinitionTask::check_need_check_table_empty(bool &need_check_table_e
 }
 
 int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
-    const int64_t tenant_id, 
-    const int64_t table_id, 
+    const int64_t table_id,
     ObSchemaGetterGuard &schema_guard, 
     obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
   ObRootService *root_service = GCTX.root_service_;
-  if (tenant_id == OB_INVALID_TENANT_ID || table_id == OB_INVALID_ID) {
+  if (table_id == OB_INVALID_ID) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(tenant_id), K(table_id));
+    LOG_WARN("invalid argument", K(table_id));
   } else if (OB_ISNULL(root_service)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root service must not be nullptr", K(ret));
-  } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(table_id));
+  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+    LOG_WARN("fail to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(table_id));
@@ -2467,8 +2466,8 @@ int ObDDLRedefinitionTask::generate_rebuild_index_arg_list(
         if (is_vec_index(index_infos.at(i).index_type_) && !is_vec_delta_buffer_type(index_infos.at(i).index_type_)) {
         } else if (is_fts_index(index_infos.at(i).index_type_) && !is_fts_index_aux(index_infos.at(i).index_type_)) {
         } else if (is_multivalue_index(index_infos.at(i).index_type_) && !is_multivalue_index_aux(index_infos.at(i).index_type_)) {
-        } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_id, index_schema))) {
-          LOG_WARN("fail to get index table schema", K(ret), K(tenant_id), K(index_id));
+        } else if (OB_FAIL(schema_guard.get_table_schema(index_id, index_schema))) {
+          LOG_WARN("fail to get index table schema", K(ret), K(index_id));
         } else if (OB_ISNULL(index_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected schema nullptr", K(ret), KP(index_schema));

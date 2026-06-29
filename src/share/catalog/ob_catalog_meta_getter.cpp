@@ -126,7 +126,7 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
     uint64_t COL_IDS[2] = {OB_HIDDEN_FILE_ID_COLUMN_ID, OB_HIDDEN_LINE_NUMBER_COLUMN_ID};
     const char *COL_NAMES[2] = {OB_HIDDEN_FILE_ID_COLUMN_NAME, OB_HIDDEN_LINE_NUMBER_COLUMN_NAME};
     for (int i = 0; OB_SUCC(ret) && i < array_elements(COL_IDS); i++) {
-      ObColumnSchemaV2 hidden_pk;
+      schema::ObColumnSchemaV2 hidden_pk;
       hidden_pk.reset();
       hidden_pk.set_column_id(COL_IDS[i]);
       hidden_pk.set_data_type(ObIntType);
@@ -143,7 +143,7 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
         }
       }
     }
-    table_schema.set_table_pk_exists_mode(ObTablePrimaryKeyExistsMode::TOM_TABLE_WITHOUT_PK);
+    table_schema.set_table_pk_exists_mode(schema::ObTablePrimaryKeyExistsMode::TOM_TABLE_WITHOUT_PK);
   }
   return ret;
 }
@@ -175,7 +175,7 @@ int ObCatalogMetaGetter::get_catalog_(const uint64_t catalog_id, ObIExternalCata
 {
   int ret = OB_SUCCESS;
   catalog = nullptr;
-  const ObCatalogSchema *schema = nullptr;
+  const schema::ObCatalogSchema *schema = nullptr;
   ObCatalogProperties::CatalogType catalog_type = ObCatalogProperties::CatalogType::INVALID_TYPE;
   if (OB_FAIL(schema_getter_guard_.get_catalog_schema_by_id( catalog_id, schema))) {
     LOG_WARN("failed to get catalog schema", K(ret), K(catalog_id));

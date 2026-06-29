@@ -19,8 +19,11 @@
 #include "share/table/ob_ttl_util.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/location_cache/ob_location_service.h"
+#include "lib/json/ob_json.h"
 #include "share/schema/ob_dependency_info.h"
-#include "share/ob_server_struct.h"  // GCTX
+#include "observer/ob_ex_rpc.h"
+#include "observer/ob_server_struct.h"
+#include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::table;
@@ -45,6 +48,19 @@ bool ObTTLTime::is_same_day(int64_t ttl_time1, int64_t ttl_time2)
 #endif
 
   return (tm1.tm_yday == tm2.tm_yday);
+}
+
+bool ObKVAttr::is_ttl_table() const
+{
+  bool is_ttl = false;
+  if (type_ == ObTTLTableType::REDIS) {
+    // redis ttl table has attr "isTTL: true"
+    is_ttl = is_redis_ttl_;
+  } else if (type_ == ObTTLTableType::HBASE) {
+    // htable ttl table should have at least one of max_version and time_to_live
+    is_ttl = (ttl_ > 0 || max_version_ > 0);
+  }
+  return is_ttl;
 }
 
 bool ObTTLUtil::extract_val(const char* ptr, uint64_t len, int& val)
@@ -151,8 +167,7 @@ int ObTTLUtil::transform_tenant_state(const common::ObTTLTaskStatus& tenant_stat
   return ret;
 }
 
-int ObTTLUtil::check_tenant_state(uint64_t tenant_id,
-                                  uint64_t table_id,
+int ObTTLUtil::check_tenant_state(uint64_t table_id,
                                   common::ObISQLClient& proxy,
                                   const ObTTLTaskStatus local_state,
                                   const int64_t local_task_id,
@@ -162,13 +177,13 @@ int ObTTLUtil::check_tenant_state(uint64_t tenant_id,
 
   ObTTLStatus tenant_task;
   ObTTLTaskStatus tenant_state;
-  if (OB_FAIL(ObTTLUtil::read_tenant_ttl_task(tenant_id, table_id, proxy, tenant_task, true))) {
+  if (OB_FAIL(ObTTLUtil::read_tenant_ttl_task(table_id, proxy, tenant_task, true))) {
     if (OB_ITER_END == ret) {
       // tenant task maybe remove
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("lock tenant task for update failed, tenant task maybe removed", K(ret), K(tenant_id), K(local_state));
+      LOG_WARN("lock tenant task for update failed, tenant task maybe removed", K(ret), K(local_state));
     } else {
-      LOG_WARN("failed to lock tenant task for update", KR(ret), K(tenant_id), K(local_state));
+      LOG_WARN("failed to lock tenant task for update", KR(ret), K(local_state));
     }
   } else if (local_task_id != tenant_task.task_id_) {
     ret = OB_ERR_UNEXPECTED;
@@ -178,14 +193,13 @@ int ObTTLUtil::check_tenant_state(uint64_t tenant_id,
   } else if (tenant_state != local_state) {
     ret = OB_EAGAIN;
     tenant_state_changed = true;
-    FLOG_INFO("state of tenant task is different from local task state", K(ret), K(tenant_id), K(tenant_task.task_id_ ), K(local_state));
+    FLOG_INFO("state of tenant task is different from local task state", K(ret), K(tenant_task.task_id_ ), K(local_state));
   }
 
   return ret;
 }
 
-int ObTTLUtil::insert_ttl_task(uint64_t tenant_id,
-                               const char* tname,
+int ObTTLUtil::insert_ttl_task(const char* tname,
                                common::ObISQLClient& proxy,
                                ObTTLStatus& task)
 {
@@ -194,15 +208,15 @@ int ObTTLUtil::insert_ttl_task(uint64_t tenant_id,
   int64_t affect_rows = 0;
 
   if (OB_FAIL(sql.assign_fmt("INSERT INTO %s "
-              "(gmt_create, gmt_modified, tenant_id, table_id, tablet_id, "
+              "(gmt_create, gmt_modified, table_id, tablet_id, "
               "task_id, task_start_time, task_update_time, trigger_type, status,"
               " ttl_del_cnt, max_version_del_cnt, scan_cnt, ret_code, task_type, row_key)"
               " VALUE "
-              "(now(), now(), %ld, %ld, %ld,"
+              "(now(), now(), %ld, %ld,"
               " %ld, %ld, %ld, %ld, %ld, "
               " %ld, %ld, %ld,'%.*s', %ld, ",
               tname,
-              tenant_id, task.table_id_, task.tablet_id_,
+              task.table_id_, task.tablet_id_,
               task.task_id_, task.task_start_time_, task.task_update_time_, task.trigger_type_,
               task.status_, task.ttl_del_cnt_, task.max_version_del_cnt_,
               task.scan_cnt_, task.ret_code_.length(), task.ret_code_.ptr(),
@@ -212,7 +226,7 @@ int ObTTLUtil::insert_ttl_task(uint64_t tenant_id,
     LOG_WARN("fail to append rowkey", K(ret));
   } else if (OB_FAIL(sql.append(")"))) {
     LOG_WARN("fail to append");
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affect_rows))) {
+  } else if (OB_FAIL(proxy.write(sql.ptr(), affect_rows))) {
     LOG_WARN("fail to execute sql", K(ret), K(sql));
   } else if (affect_rows != 1) {
     ret = OB_ERR_UNEXPECTED;
@@ -224,8 +238,7 @@ int ObTTLUtil::insert_ttl_task(uint64_t tenant_id,
   return ret;
 }
 
-int ObTTLUtil::update_ttl_task(uint64_t tenant_id,
-                               const char* tname,
+int ObTTLUtil::update_ttl_task(const char* tname,
                                common::ObISQLClient& proxy, 
                                ObTTLStatusKey& key,
                                ObTTLStatusFieldArray& update_fields)
@@ -277,7 +290,7 @@ int ObTTLUtil::update_ttl_task(uint64_t tenant_id,
 
   int64_t affect_rows = 0;
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affect_rows))) {
+  } else if (OB_FAIL(proxy.write(sql.ptr(), affect_rows))) {
     LOG_WARN("fail to execute sql", K(ret), K(sql));
     if (ret == OB_ERR_EXCLUSIVE_LOCK_CONFLICT) {
       FLOG_INFO("fail to execute sql, this task/rowkey is locked by other thread, pls try again", K(ret), K(sql));
@@ -292,8 +305,7 @@ int ObTTLUtil::update_ttl_task(uint64_t tenant_id,
   return ret;
 }
 
-int ObTTLUtil::update_ttl_task_all_fields(uint64_t tenant_id,
-                                          const char* tname,
+int ObTTLUtil::update_ttl_task_all_fields(const char* tname,
                                           common::ObISQLClient& proxy, 
                                           ObTTLStatus& task)
 {
@@ -315,7 +327,7 @@ int ObTTLUtil::update_ttl_task_all_fields(uint64_t tenant_id,
               " AND tablet_id = %ld AND task_id = %ld ", 
               task.table_id_, task.tablet_id_, task.task_id_))) {
     LOG_WARN("sql assign fmt failed", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affect_rows))) {
+  } else if (OB_FAIL(proxy.write(sql.ptr(), affect_rows))) {
     LOG_WARN("fail to execute sql", K(ret), K(sql));
   } else {
     LOG_INFO("success to execute sql", K(ret), K(sql));
@@ -324,8 +336,7 @@ int ObTTLUtil::update_ttl_task_all_fields(uint64_t tenant_id,
   return ret;
 }
 
-int ObTTLUtil::delete_ttl_task(uint64_t tenant_id,
-                               const char* tname,
+int ObTTLUtil::delete_ttl_task(const char* tname,
                                common::ObISQLClient& proxy,
                                ObTTLStatusKey& key,
                                int64_t &affect_rows)
@@ -340,7 +351,7 @@ int ObTTLUtil::delete_ttl_task(uint64_t tenant_id,
                              key.table_id_,
                              key.tablet_id_, key.task_id_))) {
     LOG_WARN("sql assign fmt failed", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affect_rows))) {
+  } else if (OB_FAIL(proxy.write(sql.ptr(), affect_rows))) {
     LOG_WARN("fail to execute sql", K(ret), K(sql));
   } else {
     LOG_INFO("success to execute sql", K(ret), K(sql));
@@ -349,8 +360,7 @@ int ObTTLUtil::delete_ttl_task(uint64_t tenant_id,
   return ret;
 }
 
-int ObTTLUtil::read_ttl_tasks(uint64_t tenant_id,
-                              const char* tname,
+int ObTTLUtil::read_ttl_tasks(const char* tname,
                               common::ObISQLClient& proxy,
                               ObTTLStatusFieldArray& filters, 
                               ObTTLStatusArray& result_arr,
@@ -404,7 +414,7 @@ int ObTTLUtil::read_ttl_tasks(uint64_t tenant_id,
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult* result = nullptr;
-      if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
+      if (OB_FAIL(proxy.read(res, sql.ptr()))) {
         LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -424,7 +434,7 @@ int ObTTLUtil::read_ttl_tasks(uint64_t tenant_id,
             if (OB_FAIL(result_arr.push_back(task))) {
               LOG_WARN("fail to push back task", K(ret), K(result_arr.count()));
             } else {
-              result_arr.at(idx).tenant_id_ = OB_SYS_TENANT_ID;
+              
               EXTRACT_INT_FIELD_MYSQL(*result, "table_id", result_arr.at(idx).table_id_, uint64_t);
               
               EXTRACT_INT_FIELD_MYSQL(*result, "tablet_id", result_arr.at(idx).tablet_id_, uint64_t);
@@ -478,8 +488,7 @@ int ObTTLUtil::read_ttl_tasks(uint64_t tenant_id,
   return ret;
 }
 
-int ObTTLUtil::read_tenant_ttl_task(uint64_t tenant_id,
-                                    uint64_t table_id,
+int ObTTLUtil::read_tenant_ttl_task(uint64_t table_id,
                                     common::ObISQLClient& sql_client,
                                     ObTTLStatus& ttl_record,
                                     const bool for_update,
@@ -492,40 +501,33 @@ int ObTTLUtil::read_tenant_ttl_task(uint64_t tenant_id,
 bool ObTTLUtil::check_can_do_work() {
   bool bret = true;
   int ret = OB_SUCCESS;
-  int64_t tenant_id = MTL_ID();
+  
   uint64_t tenant_data_version = 0;
   bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(tenant_id, is_primary))) {
+  if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
     bret = false;
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret), K(tenant_id));
+    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
   } else if (!is_primary) {
     bret = false;
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
+  } else if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(tenant_data_version))) {
     bret = false;
     LOG_WARN("get tenant data version failed", K(ret));
-  } else if (is_user_tenant(tenant_id)) {
-    if (OB_FAIL(GET_MIN_DATA_VERSION(gen_meta_tenant_id(tenant_id), tenant_data_version))) {
-      bret = false;
-      LOG_WARN("get tenant data version failed", K(ret));
-    }
   }
   return bret;
 }
 
 
-bool ObTTLUtil::check_can_process_tenant_tasks(uint64_t tenant_id)
+bool ObTTLUtil::check_can_process_tenant_tasks()
 {
   bool bret = false;
 
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid tenant id");
-  } else {
+  {
     int ret = OB_SUCCESS;
     bool is_restore = true;
     if (OB_FAIL(share::schema::ObMultiVersionSchemaService::get_instance().
-                  check_tenant_is_restore(NULL, tenant_id, is_restore))) {
+                  check_tenant_is_restore(NULL, is_restore))) {
       if (OB_TENANT_NOT_EXIST != ret) {
-        LOG_WARN("fail to check tenant is restore", KR(ret), K(tenant_id), K(common::lbt()));
+        LOG_WARN("fail to check tenant is restore", KR(ret), K(common::lbt()));
       } else {
         ret = OB_SUCCESS;
       }
@@ -536,20 +538,119 @@ bool ObTTLUtil::check_can_process_tenant_tasks(uint64_t tenant_id)
   return bret;
 }
 
+int ObTTLUtil::move_task_to_history_table(uint64_t task_id,
+                                          common::ObMySQLTransaction& proxy,
+                                          int64_t batch_size, int64_t &move_rows)
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+// only one record left in this situation
+int ObTTLUtil::move_tenant_task_to_history_table(const ObTTLStatusKey &key,
+                                                 common::ObMySQLTransaction& proxy)
+{
+  int ret = OB_SUCCESS;
+  return ret;
+
+}
+
+
+// for now Table attribute only supports kv_attributes = {"Table" : {}}
+int ObTTLUtil::parse_kv_attributes_table(json::Value *ast)
+{
+  int ret = OB_SUCCESS;
+  if (NULL == ast) {
+    // do nothing
+  } else if (ast->get_type() == json::JT_OBJECT) {
+    if (ast->get_object().get_size() != 0) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not supported kv attribute", K(ret), K(ast->get_object().get_size()));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not supported kv attribute", K(ret), K(ast->get_type()));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
+  }
+  return ret;
+}
+
+int ObTTLUtil::parse_kv_attributes(const ObString &kv_attributes, ObKVAttr &kv_attr)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator;
+  json::Parser json_parser;
+  json::Value *ast = nullptr;
+  if (kv_attributes.empty()) {
+    // skip
+  } else if (OB_FAIL(json_parser.init(&allocator))) {
+    LOG_WARN("failed to init json parser", K(ret));
+  } else if (OB_FAIL(json_parser.parse(kv_attributes.ptr(), kv_attributes.length(), ast))) {
+    LOG_WARN("failed to parse kv attributes", K(ret), K(kv_attributes));
+  } else if (NULL != ast
+             && ast->get_type() == json::JT_OBJECT
+             && ast->get_object().get_size() == 1) {
+    json::Pair *kv = ast->get_object().get_first();
+    if (NULL != kv && kv != ast->get_object().get_header()) {
+      if (kv->name_.case_compare("TABLE") == 0) {
+        if (OB_FAIL(parse_kv_attributes_table(kv->value_))) {
+          LOG_WARN("failed to parse table kv attributes", K(ret), K(kv_attributes));
+        } else {
+          kv_attr.type_ = ObKVAttr::TABLE;
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("not supported kv attribute", K(ret), K(kv->name_));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
+      }
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("not supported kv attribute", K(ret), K(kv_attributes), KPC(ast));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "kv attributes with wrong format");
+  }
+  return ret;
+}
+
+int ObTTLUtil::dispatch_ttl_cmd(const ObTTLParam &param)
+{
+  int ret = OB_SUCCESS;
+  int final_ret = OB_SUCCESS;
+  ObSEArray<ObSimpleTTLInfo, 32> ttl_info_array;
+  if (OB_UNLIKELY(!param.is_valid()
+                  || (!param.ttl_all_ && param.ttl_info_array_.empty()))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(param), KR(ret));
+  } else if (OB_FAIL(get_ttl_info(param, ttl_info_array))) {
+    LOG_WARN("fail to get tenant id", KR(ret), K(param));
+  } else if (!ttl_info_array.empty()) {
+    const int64_t ttl_info_count = ttl_info_array.count();
+    for (int i = 0; i < ttl_info_count && OB_SUCC(ret); ++i) {
+      
+      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, ttl_info_array.at(i)))) {
+        LOG_WARN("fail dispatch one tenant ttl", KR(ret), K(ttl_info_count), "ttl_info", ttl_info_array.at(i));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_full_column_order)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = table_schema.get_tenant_id();
+  
   bool has_datetime_col = false;
-  if (tenant_id == OB_INVALID_TENANT_ID) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
-  } else {
-    tenant_id_ = tenant_id;
+  {
+    
     ObString ttl_definition = table_schema.get_ttl_definition();
-    if (!ttl_definition.empty()) {
-      ObString right = ttl_definition;
+    if (ttl_definition.empty()) {
+      // do nothing
+    } else {
+      ObString right = ttl_definition; 
       bool is_end = false;
+      int64_t i = 0;
+      // example: "c +  INTERVAL 40 MINUTE"
       while (OB_SUCC(ret) && !is_end) {
         ObString left = right.split_on(',');
         if (left.empty()) {
@@ -557,14 +658,18 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
           is_end = true;
         }
         ObTableTTLExpr ttl_expr;
+        // example: "`column` INTERVAL 40 MINUTE" or "column INTERVAL 40 MINUTE"
         ObString column_str = left.split_on('+').trim();
         if (column_str.length() > 2 && column_str[column_str.length() - 1] == '`' && column_str[0] == '`') {
           ++column_str;
           column_str.assign(column_str.ptr(), column_str.length() - 1);
         }
+        // example: "  INTERVAL 40 MINUTE"
         left = left.trim();
-        left += strlen("INTERVAL");
+        // example: "INTERVAL 40 MINUTE"
+        left += strlen("INTERVAL"); 
         left = left.trim();
+        // example: "40  MINUTE"
         ObString interval_str = left.split_on(' ');
         ObString time_unit_str = left.trim();
 
@@ -584,9 +689,10 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
           ttl_expr.time_unit_ = ObTableTTLTimeUnit::YEAR;
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unexpected time unit", K(ret), K(time_unit_str));
+          LOG_WARN("unepxected time unit", K(ret), K(time_unit_str));
         }
 
+        // 2. get delta second and month
         int64_t nsecond = 0;
         int64_t nmonth = 0;
         if (OB_SUCC(ret)) {
@@ -650,7 +756,7 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
             }
             if (OB_SUCC(ret) && row_cell_ids_.count() != ttl_definition_.count()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("row cell ids count not match", K(ret), K(row_cell_ids_), K(ttl_definition_));
+              LOG_WARN("row cell ids count not match ttl definition count", K(ret), K(row_cell_ids_), K(ttl_definition_));
             }
           }
         }
@@ -660,23 +766,22 @@ int ObTableTTLChecker::init(const schema::ObTableSchema &table_schema, bool in_f
 
   if (OB_SUCC(ret) && has_datetime_col) {
     ObSchemaGetterGuard schema_guard;
+    ObTimeZoneInfoWrap tz_info_wrap;
     const ObSysVariableSchema *sys_variable_schema = nullptr;
     const ObSysVarSchema *system_timezone = nullptr;
     ObTZMapWrap tz_map_wrap;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(tenant_id, schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret), K(tenant_id));
-    } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
-      LOG_WARN("get sys variable schema failed", K(ret), K(tenant_id));
-    } else if (OB_ISNULL(sys_variable_schema)) {
+    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
+      LOG_WARN("get schema guard failed", K(ret));
+    } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
+      LOG_WARN("get sys variable schema failed", K(ret));
+    } else if (NULL == sys_variable_schema) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sys variable schema is NULL", K(ret));
     } else if (OB_FAIL(sys_variable_schema->get_sysvar_schema(SYS_VAR_TIME_ZONE, system_timezone))) {
       LOG_WARN("fail to get system timezone", K(ret));
-    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id, tz_map_wrap))) {
-      LOG_WARN("get tenant timezone map failed", K(ret), K(tenant_id));
-    } else if (OB_FAIL(tz_info_wrap_.init_time_zone(system_timezone->get_value(),
-                                                    OB_INVALID_VERSION,
-                                                    const_cast<ObTZInfoMap &>(*tz_map_wrap.get_tz_map())))) {
+    } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
+      LOG_WARN("get tenant timezone map failed", K(ret));
+    } else if (OB_FAIL(tz_info_wrap_.init_time_zone(system_timezone->get_value(), OB_INVALID_VERSION, const_cast<ObTZInfoMap &>(*tz_map_wrap.get_tz_map())))) {
       LOG_WARN("fail to init time zone info wrap", K(ret), K(system_timezone->get_value()));
     }
   }
@@ -695,6 +800,7 @@ int ObTableTTLChecker::check_row_expired(const common::ObNewRow &row, bool &is_e
     if (column.is_null()) {
       continue;
     } else if (column.get_type() == ObDateTimeType) {
+      // todo: get tz info from system var
       const ObTimeZoneInfo *tz_info = tz_info_wrap_.get_time_zone_info();
       if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(column_ts, tz_info, column_ts))) {
         LOG_WARN("fail to convert datetime to utc ts", K(ret));
@@ -720,37 +826,204 @@ void ObTableTTLChecker::reset()
 {
   row_cell_ids_.reset();
   ttl_definition_.reset();
-  tenant_id_ = common::OB_INVALID_TENANT_ID;
+  
   tz_info_wrap_.reset();
 }
 
-int ObTTLUtil::get_tenant_table_ids(const uint64_t tenant_id, ObIArray<uint64_t> &table_id_array)
+int ObTTLParam::add_ttl_info()
+{
+  int ret = OB_SUCCESS;
+  ObSimpleTTLInfo info;
+  if (OB_FAIL(ttl_info_array_.push_back(info))) {
+    LOG_WARN("fail to push_back", K(ret), K(info));
+  }
+  return ret;
+}
+
+int ObTTLUtil::get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &ttl_info_array)
+{
+  int ret = OB_SUCCESS;
+
+  ObArray<ObSimpleTTLInfo> tmp_info_array;
+  if (param.ttl_all_) {
+    if (OB_FAIL(get_all_user_tenant_ttl(tmp_info_array))) {
+      LOG_WARN("fail to get all tenant ttl info", KR(ret));
+    }
+  } else {
+    if (OB_FAIL(tmp_info_array.assign(param.ttl_info_array_))) {
+      LOG_WARN("fail to assign", K(param), KR(ret));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (tmp_info_array.empty()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ttl info array should not be empty", KR(ret), K(param));
+  } else {
+    const int64_t info_cnt = tmp_info_array.count();
+    bool is_primary_cluster = true;
+    for (int64_t i = 0; OB_SUCC(ret) && (i < info_cnt); ++i) {
+      bool is_restore = false;
+      
+      if (OB_FAIL(share::schema::ObMultiVersionSchemaService::get_instance().
+                  check_tenant_is_restore(NULL, is_restore))) {
+        LOG_WARN("fail to check tenant is restore", KR(ret), K(i), "ttl_info", tmp_info_array.at(i));
+      } else if (is_restore) {
+        LOG_INFO("skip restoring tenant to do ttl task");
+      } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+        LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+      } else if (!is_primary_cluster) {
+        LOG_INFO("skip do ttl task for standby tenant");
+      } else if (OB_FAIL(ttl_info_array.push_back(tmp_info_array.at(i)))) {
+        LOG_WARN("fail to push back ttl info", KR(ret), K(i), "ttl_info", tmp_info_array.at(i));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObTTLUtil::dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
+                                       const ObSimpleTTLInfo &ttl_info)
+{
+  int ret = OB_SUCCESS;
+  if (!ttl_info.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(ttl_info));
+  } else {
+    const int64_t launch_start_time = ObTimeUtility::current_time();
+    ObAddr leader;
+    obcall::ObTTLRequestArg req;
+    obcall::ObTTLResponseArg resp;
+    
+    
+    
+    req.cmd_code_ = type;
+    req.trigger_type_ = TRIGGER_TYPE::USER_TRIGGER;
+    if (OB_ISNULL(GCTX.location_service_)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid GCTX", KR(ret));
+    } else {
+      const int64_t MAX_RETRY_COUNT = 5;
+      bool ttl_done = false;
+      static const int64_t MAX_PROCESS_TIME_US = 10 * 1000 * 1000L;
+      for (int64_t i = 0; OB_SUCC(ret) && (!ttl_done) && (i < MAX_RETRY_COUNT); ++i) {
+        if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(GCONF.cluster_id, share::SYS_LS, leader))) {
+          LOG_WARN("fail to get ls locaiton leader", KR(ret), K(1UL));
+        } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+          // table_api removed from build: ObTTLService is gone, TTL task launch unsupported
+          int ret = OB_NOT_SUPPORTED;
+          resp.err_code_ = ret;
+          return ret;
+        }))) {
+          LOG_WARN("tenant ttl rpc failed", KR(ret), K(1UL), K(leader), K(ttl_info));
+        } else {
+          ret = resp.err_code_;
+        }
+        
+        if (OB_FAIL(ret)) {
+          if (OB_LEADER_NOT_EXIST == ret || OB_EAGAIN == ret) {
+            const int64_t RESERVED_TIME_US = 600 * 1000; // 600 ms
+            const int64_t timeout_remain_us = THIS_WORKER.get_timeout_remain();
+            const int64_t idle_time_us = 200 * 1000 * (i + 1);
+            if (timeout_remain_us - idle_time_us > RESERVED_TIME_US) {
+              LOG_WARN("leader may switch or ddl confilict, will retry", KR(ret), K(ttl_info),
+                "ori_leader", leader, K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
+              ob_throttle_usleep((const useconds_t)idle_time_us, ret);
+              ret = OB_SUCCESS;
+            } else {
+              LOG_WARN("leader may switch or ddl confilict, will not retry cuz timeout_remain is "
+                "not enough", KR(ret), K(ttl_info), "ori_leader", leader,
+                K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
+            }
+          }
+        } else {
+          ttl_done = true;
+        }
+      }
+
+      if (OB_SUCC(ret) && !ttl_done) {
+        ret = OB_EAGAIN;
+        LOG_WARN("fail to retry ttl cuz switching role", KR(ret), K(MAX_RETRY_COUNT));
+      }
+    }
+    
+    const int64_t launch_cost_time = ObTimeUtility::current_time() - launch_start_time;
+    LOG_INFO("do tenant ttl", KR(ret), K(leader), K(ttl_info), K(launch_cost_time));
+  }
+  return ret;
+}
+
+int ObTTLUtil::get_all_user_tenant_ttl(ObIArray<ObSimpleTTLInfo> &ttl_info_array)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(ttl_info_array);
+  // lite: no user tenant -> ttl_info_array stays empty
+  return ret;
+}
+
+int ObTTLUtil::get_tenant_table_ids(ObIArray<uint64_t> &table_id_array)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (!schema_service.is_tenant_full_schema(tenant_id)) {
+  if (!schema_service.is_tenant_full_schema()) {
     ret = OB_EAGAIN;
     LOG_INFO("tenant does not has a full schema already, maybe server is restart, need retry!");
-  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(tenant_id, table_id_array))) {
-    LOG_WARN("fail to get table ids in tenant", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(table_id_array))) {
+    LOG_WARN("fail to get table ids in tenant", KR(ret));
   }
   return ret;
 }
 
 int ObTTLUtil::check_is_normal_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table)
 {
-  is_ttl_table = table_schema.is_user_table()
-                 && !table_schema.is_in_recyclebin()
-                 && !table_schema.get_ttl_definition().empty();
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  is_ttl_table = false;
+  if (table_schema.is_user_table() && !table_schema.is_in_recyclebin()) {
+    if (!table_schema.get_ttl_definition().empty()) {
+      is_ttl_table = true;
+    }
+  }
+  return ret;
 }
 
-bool ObTTLUtil::is_enable_ttl(uint64_t tenant_id)
+int ObTTLUtil::check_is_rowkey_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table)
 {
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+  int ret = OB_SUCCESS;
+  is_ttl_table = false;
+  if (table_schema.is_user_table() && !table_schema.is_in_recyclebin()) {
+    if (OB_FAIL(check_is_htable_ttl_(table_schema, false/*allow_timeseries_table*/, is_ttl_table))) {
+      LOG_WARN("fail to check is htable ttl", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObTTLUtil::check_is_htable_ttl_(const ObTableSchema &table_schema, bool allow_timeseries_table, bool &is_ttl_table)
+{
+  int ret = OB_SUCCESS;
+  // table_api removed from build: htable(HBase-mode) TTL detection is disabled,
+  // only normal TTL definitions are recognized.
+  UNUSEDx(table_schema, allow_timeseries_table);
+  is_ttl_table = false;
+  return ret;
+}
+
+int ObTTLUtil::check_task_status_from_sys_table(common::ObISQLClient& proxy,
+                                                const uint64_t& task_id, const uint64_t& table_id,
+                                                ObTabletID& tablet_id, bool &is_exists, bool &is_end_state)
+{
+  int ret = OB_SUCCESS;
+  return ret;
+}
+
+
+bool ObTTLUtil::is_enable_ttl()
+{
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
   return tenant_config.is_valid() &&
          tenant_config->enable_kv_ttl;
 }
@@ -776,7 +1049,7 @@ const char * ObTTLUtil::get_ttl_tenant_status_cstr(const ObTTLTaskStatus &status
       status_cstr = "MOVING";
       break;
     }
-    case OB_TTL_TASK_FINISH: {
+    case OB_TTL_TASK_FINISH: { // wait
       status_cstr = "FINISHED";
       break;
     }
@@ -824,6 +1097,28 @@ bool ObTTLUtil::is_ttl_column(const ObString &orig_column_name, const ObIArray<O
     }
   }
   return bret;
+}
+
+int ObTTLUtil::check_kv_attributes(const schema::ObTableSchema &table_schema, bool by_admin)
+{
+  UNUSEDx(table_schema, by_admin);
+  return OB_SUCCESS;
+}
+
+int ObTTLUtil::check_kv_attributes(const ObString &kv_attributes,
+                                   const schema::ObTableSchema &table_schema,
+                                   ObPartitionLevel part_level,
+                                   bool by_admin)
+{
+  int ret = OB_SUCCESS;
+  ObKVAttr attr;
+  if (OB_FAIL(ObTTLUtil::parse_kv_attributes(kv_attributes, attr))) {
+    LOG_WARN("fail to parse kv attributes", K(ret));
+  } else if (attr.is_max_versions_valid()) {
+    // table_api removed from build: hbase mode-type specific max-versions
+    // restrictions are no longer checked.
+  }
+  return ret;
 }
 
 } // end namespace rootserver

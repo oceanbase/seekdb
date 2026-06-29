@@ -1,3 +1,28 @@
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(INNER_TABLE_SCRIPT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/inner_table)
+set(INNER_TABLE_GENERATOR ${INNER_TABLE_SCRIPT_DIR}/generate_inner_table_schema.py)
+set(INNER_TABLE_DEF_FILE ${INNER_TABLE_SCRIPT_DIR}/ob_inner_table_schema_def.py)
+set(INNER_TABLE_INIT_DATA ${INNER_TABLE_SCRIPT_DIR}/ob_inner_table_init_data.py)
+
+execute_process(
+  COMMAND ${Python3_EXECUTABLE} ${INNER_TABLE_GENERATOR}
+  WORKING_DIRECTORY ${INNER_TABLE_SCRIPT_DIR}
+  OUTPUT_VARIABLE INNER_TABLE_SCHEMA_CPP_RELATIVE_OUTPUT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  RESULT_VARIABLE INNER_TABLE_SCHEMA_CPP_LIST_RESULT
+)
+
+if (NOT INNER_TABLE_SCHEMA_CPP_LIST_RESULT EQUAL 0)
+  message(FATAL_ERROR "Failed to query inner table fixed schema cpp outputs")
+endif()
+
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${INNER_TABLE_GENERATOR}
+  ${INNER_TABLE_DEF_FILE}
+  ${INNER_TABLE_INIT_DATA}
+)
+
 ob_set_subtarget(ob_share_extra ALONE
   vector/ob_vector_base.cpp
   vector/vector_basic_op.cpp
@@ -108,27 +133,6 @@ ob_set_subtarget(ob_share allocator
   allocator/ob_tenant_vector_allocator.cpp
 )
 
-ob_set_subtarget(ob_share backup
-  backup/ob_archive_piece.cpp
-  backup/ob_archive_struct.cpp
-  backup/ob_archive_compatible.cpp
-  backup/ob_archive_mode.cpp
-  backup/ob_archive_persist_helper.cpp
-  backup/ob_backup_io_adapter.cpp
-  backup/ob_backup_path.cpp
-  backup/ob_backup_struct.cpp
-  backup/ob_tenant_archive_mgr.cpp
-  backup/ob_tenant_archive_round.cpp
-  backup/ob_archive_persist_helper.cpp
-  backup/ob_backup_serialize_provider.cpp
-  backup/ob_backup_store.cpp
-  backup/ob_archive_store.cpp
-  backup/ob_archive_checkpoint.cpp
-  backup/ob_archive_path.cpp
-  backup/ob_log_restore_struct.cpp
-  backup/ob_archive_checkpoint_mgr.cpp
-)
-
 ob_set_subtarget(ob_share cache
   cache/ob_kv_storecache.cpp
   cache/ob_kvcache_inst_map.cpp
@@ -167,7 +171,7 @@ ob_set_subtarget(ob_share common
   ob_kv_storage.cpp
   ob_all_tenant_info.cpp
   ob_event_history_table_operator.cpp
-  ob_tenant_id_schema_version.cpp
+  ob_schema_version_info.cpp
   ob_freeze_info_proxy.cpp
   ob_gais_client.cpp
   ob_gais_msg.cpp
@@ -181,7 +185,6 @@ ob_set_subtarget(ob_share common
   ob_fts_index_builder_util.cpp
   ob_io_device_helper.cpp
   ob_kv_parser.cpp
-  ob_log_restore_proxy.cpp
   ob_lease_struct.cpp
   ob_list_parser.cpp
   ob_local_device.cpp
@@ -199,7 +202,6 @@ ob_set_subtarget(ob_share common
   ob_resource_limit.cpp
   ob_scanner.cpp
   ob_schema_status_proxy.cpp
-  ob_server_blacklist.cpp
   ob_server_locality_cache.cpp
   ob_server_status.cpp
   ob_server_struct.cpp
@@ -224,7 +226,6 @@ ob_set_subtarget(ob_share common
   ob_time_zone_info_manager.cpp
   ob_unique_index_row_transformer.cpp
   ob_unit_getter.cpp
-  ob_upgrade_utils.cpp
   ob_virtual_table_iterator.cpp
   ob_virtual_table_projector.cpp
   ob_virtual_table_scanner_iterator.cpp
@@ -244,7 +245,6 @@ ob_set_subtarget(ob_share common
   ob_vec_index_builder_util.cpp
   ob_domain_index_builder_util.cpp
   ob_compatibility_control.cpp
-  ob_device_credential_task.cpp
   ob_dynamic_partition_manager.cpp
   ob_scheduled_manage_dynamic_partition.cpp
   ob_batch_selector.cpp
@@ -258,10 +258,6 @@ ob_set_subtarget(ob_share common
 set_source_files_properties(ob_local_device.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 ob_set_subtarget(ob_share common_mixed
-  client_feedback/ob_client_feedback_basic.cpp
-  client_feedback/ob_client_feedback_manager.cpp
-  client_feedback/ob_feedback_int_struct.cpp
-  client_feedback/ob_feedback_partition_struct.cpp
   datum/ob_datum.cpp
   datum/ob_datum_cmp_func_def.cpp
   diagnosis/ob_sql_monitor_statname.cpp
@@ -277,23 +273,6 @@ ob_set_subtarget(ob_share common_mixed
   parameter/ob_parameter_seed.ipp
   rc/ob_context.cpp
   rc/ob_tenant_base.cpp
-  restore/ob_import_table_struct.cpp
-  restore/ob_import_util.cpp
-  restore/ob_ls_restore_status.cpp
-  restore/ob_restore_type.cpp
-  restore/ob_log_restore_source.cpp
-  restore/ob_log_restore_source_mgr.cpp
-  restore/ob_recover_table_persist_helper.cpp
-  restore/ob_restore_persist_helper.cpp
-  restore/ob_import_table_persist_helper.cpp
-  restore/ob_import_item_format_provider.cpp
-  restore/ob_import_schema_item.hpp
-  restore/ob_import_partition_item.cpp
-  restore/ob_import_table_item.cpp
-  restore/ob_remap_schema_item.hpp
-  restore/ob_import_remap_arg.cpp
-  restore/ob_import_table_arg.cpp
-  restore/ob_import_arg.cpp
   sequence/ob_sequence_cache.cpp
   sequence/ob_sequence_ddl_proxy.cpp
   sequence/ob_sequence_dml_proxy.cpp
@@ -346,9 +325,7 @@ ob_set_subtarget(ob_share common_mixed
   longops_mgr/ob_longops_mgr.cpp
   throttle/ob_share_throttle_define.cpp
   throttle/ob_throttle_common.cpp
-  restore/ob_restore_data_mode.cpp
   ob_module_data_arg.cpp
-  restore/ob_restore_progress_display_mode.cpp
 )
 
 ob_set_subtarget(ob_share tablet
@@ -396,10 +373,6 @@ ob_set_subtarget(ob_share redolog
   redolog/ob_log_policy.cpp
 )
 
-ob_set_subtarget(ob_share rpc
-  rpc/ob_blacklist_proxy.cpp
-)
-
 ob_set_subtarget(ob_share resource_manager
   resource_manager/ob_cgroup_ctrl.cpp
   resource_manager/ob_resource_manager.cpp
@@ -435,7 +408,6 @@ ob_set_subtarget(ob_share schema
   schema/ob_schema_mgr.cpp
   schema/ob_schema_mgr_cache.cpp
   schema/ob_schema_printer.cpp
-  schema/ob_schema_printer_external_table.cpp
   schema/ob_schema_retrieve_utils.ipp
   schema/ob_schema_service.cpp
   schema/ob_schema_store.cpp
@@ -532,19 +504,10 @@ ob_set_subtarget(ob_share stat
   stat/ob_column_store_refine_estimator.cpp
 )
 
-ob_set_subtarget(ob_share external_table
-  external_table/ob_external_table_file_mgr.cpp
-  external_table/ob_external_table_file_task.cpp
-  external_table/ob_external_table_utils.cpp
-  external_table/ob_external_table_part_info.cpp
-  external_table/ob_external_object_ctx.cpp
-)
-
 ob_set_subtarget(ob_share catalog
   catalog/ob_catalog_properties.cpp
   catalog/ob_external_catalog.cpp
   catalog/ob_catalog_meta_getter.cpp
-  catalog/ob_cached_catalog_meta_getter.cpp
   catalog/ob_catalog_utils.cpp
 )
 
@@ -562,10 +525,6 @@ ob_set_subtarget(ob_share unit
   unit/ob_unit_config.cpp
   unit/ob_unit_resource.cpp
   unit/ob_unit_info.cpp
-)
-
-ob_set_subtarget(ob_share ncomp_dll
-  ncomp_dll/ob_flush_ncomp_dll_task.cpp
 )
 
 ob_set_subtarget(ob_share resource_limit_calculator

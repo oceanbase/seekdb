@@ -19,14 +19,12 @@
 
 #include "share/ob_define.h"
 #include "sql/resolver/cmd/ob_alter_system_stmt.h"
-#include "sql/resolver/cmd/ob_switch_role_stmt.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 class ObExecContext;
-class ObAdminServerStmt;
 class ObAdminZoneStmt;
 
 #define DEF_SIMPLE_EXECUTOR(name)                          \
@@ -50,15 +48,11 @@ DEF_SIMPLE_EXECUTOR(ObFlushIlogCache);
 
 DEF_SIMPLE_EXECUTOR(ObFlushDagWarnings);
 
-DEF_SIMPLE_EXECUTOR(ObFlushSSMicroCache);
 
 DEF_SIMPLE_EXECUTOR(ObAdminMerge);
 
-DEF_SIMPLE_EXECUTOR(ObAdminRecovery);
 
-DEF_SIMPLE_EXECUTOR(ObClearRoottable);
 
-DEF_SIMPLE_EXECUTOR(ObRefreshSchema);
 
 DEF_SIMPLE_EXECUTOR(ObRefreshMemStat);
 
@@ -72,12 +66,8 @@ DEF_SIMPLE_EXECUTOR(ObClearMergeError);
 
 DEF_SIMPLE_EXECUTOR(ObUpgradeVirtualSchema);
 
-DEF_SIMPLE_EXECUTOR(ObAdminUpgradeCmd);
 
-DEF_SIMPLE_EXECUTOR(ObAdminRollingUpgradeCmd);
 
-DEF_SIMPLE_EXECUTOR(ObRunUpgradeJob);
-DEF_SIMPLE_EXECUTOR(ObStopUpgradeJob);
 
 DEF_SIMPLE_EXECUTOR(ObSetTP);
 
@@ -85,13 +75,10 @@ DEF_SIMPLE_EXECUTOR(ObEnableSqlThrottle);
 
 DEF_SIMPLE_EXECUTOR(ObDisableSqlThrottle);
 
-DEF_SIMPLE_EXECUTOR(ObSetDiskValid);
 DEF_SIMPLE_EXECUTOR(ObAddDisk);
 DEF_SIMPLE_EXECUTOR(ObDropDisk);
 
-DEF_SIMPLE_EXECUTOR(ObSwitchRole);
 
-DEF_SIMPLE_EXECUTOR(ObCheckpointSlog);
 DEF_SIMPLE_EXECUTOR(ObResetConfig);
 
 class ObCancelTaskExecutor
@@ -115,7 +102,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCancelTaskExecutor);
 };
 
-DEF_SIMPLE_EXECUTOR(ObModuleData);
 
 #undef DEF_SIMPLE_EXECUTOR
 

@@ -21,7 +21,7 @@
 #include "share/ob_virtual_table_scanner_iterator.h"
 #include "share/ob_scanner.h"
 #include "common/row/ob_row.h"
-#include "sql/engine/px/ob_px_target_mgr.h"
+#include "sql/engine/px/ob_px_target_monitor.h"
 
 namespace oceanbase
 {

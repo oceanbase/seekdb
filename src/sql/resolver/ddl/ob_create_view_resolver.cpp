@@ -1359,8 +1359,6 @@ int ObCreateViewResolver::collect_dependency_infos(ObQueryCtx *query_ctx,
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));
-    } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*schema_guard, create_arg.dep_infos_))) {
-      LOG_WARN("failed to check htable ddl supported", K(ret), K(create_arg.dep_infos_));
     }
   }
 

@@ -322,7 +322,7 @@ ObRootService::ObRootService()
 : inited_(false), server_refreshed_(false),
     debug_(false),
     self_addr_(), config_(NULL), config_mgr_(NULL),
-    sql_proxy_(), restore_ctx_(NULL),
+    sql_proxy_(),
     schema_service_(NULL),
     root_minor_freeze_(),
     ddl_service_(),
@@ -359,7 +359,6 @@ int ObRootService::init(ObServerConfig &config,
                         ObConfigManager &config_mgr,
                         ObAddr &self,
                         ObMySQLProxy &sql_proxy,
-                        observer::ObRestoreCtx &restore_ctx,
                         ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
@@ -378,8 +377,6 @@ int ObRootService::init(ObServerConfig &config,
     config_mgr_ = &config_mgr;
 
     self_addr_ = self;
-
-    restore_ctx_ = &restore_ctx;
 
     sql_proxy_.assign(sql_proxy);
     sql_proxy_.set_inactive();
@@ -816,7 +813,7 @@ int ObRootService::reschedule_restart_timer_task_after_failure()
 
 int ObRootService::do_after_full_service() {
   int ret = OB_SUCCESS;
-  ObGlobalStatProxy global_proxy(sql_proxy_, OB_SYS_TENANT_ID);
+  ObGlobalStatProxy global_proxy(sql_proxy_);
   if (OB_FAIL(global_proxy.get_baseline_schema_version(baseline_schema_version_))) {
     LOG_WARN("fail to get baseline schema version", KR(ret));
   }
@@ -851,7 +848,7 @@ int ObRootService::execute_bootstrap()
     }
 
     BOOTSTRAP_LOG(INFO, "start to do_restart");
-    ObGlobalStatProxy global_proxy(sql_proxy_, OB_SYS_TENANT_ID);
+    ObGlobalStatProxy global_proxy(sql_proxy_);
     ObArray<ObAddr> self_addr;
     ObTimeoutCtx ctx;
     if (OB_FAIL(ret)) {
@@ -1008,14 +1005,13 @@ int ObRootService::update_baseline_schema_version()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(trans.start(&sql_proxy_, OB_SYS_TENANT_ID))) {
+  } else if (OB_FAIL(trans.start(&sql_proxy_))) {
     LOG_WARN("trans start failed", K(ret));
   } else if (OB_FAIL(ddl_service_.get_schema_service().
-                     get_tenant_refreshed_schema_version(OB_SYS_TENANT_ID,
-                                                         baseline_schema_version))) {
+                     get_tenant_refreshed_schema_version(baseline_schema_version))) {
     LOG_WARN("fail to get refreshed schema version", K(ret));
   } else {
-    ObGlobalStatProxy proxy(trans, OB_SYS_TENANT_ID);
+    ObGlobalStatProxy proxy(trans);
     if (OB_FAIL(proxy.set_baseline_schema_version(baseline_schema_version))) {
       LOG_WARN("set_baseline_schema_version failed", K(baseline_schema_version), K(ret));
     }
@@ -1038,7 +1034,6 @@ int ObRootService::finish_bootstrap()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    const int64_t tenant_id = OB_SYS_TENANT_ID;
     int64_t new_schema_version = OB_INVALID_VERSION;
     ObMultiVersionSchemaService &multi_schema_service = ddl_service_.get_schema_service();
     share::schema::ObSchemaService *tmp_schema_service = multi_schema_service.get_schema_service();
@@ -1050,15 +1045,14 @@ int ObRootService::finish_bootstrap()
       share::schema::ObDDLSqlService ddl_sql_service(*tmp_schema_service);
       share::schema::ObSchemaOperation schema_operation;
       schema_operation.op_type_ = share::schema::OB_DDL_FINISH_BOOTSTRAP;
-      schema_operation.tenant_id_ = tenant_id;
-      if (OB_FAIL(multi_schema_service.gen_new_schema_version(tenant_id, new_schema_version))) {
-        LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id), K(new_schema_version));
+      if (OB_FAIL(multi_schema_service.gen_new_schema_version(new_schema_version))) {
+        LOG_WARN("fail to gen new schema_version", K(ret), K(new_schema_version));
       } else if (OB_FAIL(ddl_sql_service.log_nop_operation(schema_operation,
                                                            new_schema_version,
                                                            schema_operation.ddl_stmt_str_,
                                                            sql_proxy))) {
         LOG_WARN("log finish bootstrap operation failed", K(ret), K(schema_operation));
-      } else if (OB_FAIL(ddl_service_.refresh_schema(OB_SYS_TENANT_ID))) {
+      } else if (OB_FAIL(ddl_service_.refresh_schema())) {
         LOG_WARN("failed to refresh_schema", K(ret));
       } else {
         LOG_INFO("finish bootstrap", K(ret), K(new_schema_version));
@@ -1172,12 +1166,12 @@ int ObRootService::parallel_ddl_pre_check_(const uint64_t tenant_id)
   } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant_id", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_service_->check_if_tenant_has_been_dropped(tenant_id, is_dropped))) {
+  } else if (OB_FAIL(schema_service_->check_if_tenant_has_been_dropped(is_dropped))) {
     LOG_WARN("fail to check if tenant has been dropped", KR(ret), K(tenant_id));
   } else if (is_dropped) {
     ret = OB_TENANT_HAS_BEEN_DROPPED;
     LOG_WARN("tenant has been dropped", KR(ret), K(tenant_id));
-  } else if (!schema_service_->is_tenant_refreshed(tenant_id)) {
+  } else if (!schema_service_->is_tenant_refreshed()) {
     // use this err to trigger DDL retry and release current thread.
     ret = OB_ERR_PARALLEL_DDL_CONFLICT;
     LOG_WARN("tenant' schema not refreshed yet, need retry", KR(ret), K(tenant_id));
@@ -1189,7 +1183,7 @@ int ObRootService::parallel_create_table(const ObCreateTableArg &arg, ObCreateTa
 {
   LOG_TRACE("receive create table arg", K(arg));
   int64_t begin_time = ObTimeUtility::current_time();
-  const uint64_t tenant_id = arg.exec_tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   int ret = OB_SUCCESS;
   bool is_parallel = arg.is_parallel_;
   if (OB_UNLIKELY(!inited_)) {
@@ -1202,14 +1196,14 @@ int ObRootService::parallel_create_table(const ObCreateTableArg &arg, ObCreateTa
     LOG_WARN("pre check failed before parallel ddl execute", KR(ret), K(tenant_id));
   } else if (arg.schema_.is_view_table()) {
     if (arg.schema_.is_materialized_view()) {
-      ObCreateMaterializedViewHelper create_mv_helper(schema_service_, tenant_id, arg, res, nullptr /*external trans*/,is_parallel);
+      ObCreateMaterializedViewHelper create_mv_helper(schema_service_, arg, res, nullptr /*external trans*/,is_parallel);
       if (OB_FAIL(create_mv_helper.init(ddl_service_))) {
         LOG_WARN("fail to init create materialized view helper", KR(ret), K(tenant_id));
       } else if (OB_FAIL(create_mv_helper.execute())) {
         LOG_WARN("fail to execute create materialized view", KR(ret), K(tenant_id));
       }
     } else {
-      ObCreateViewHelper create_view_helper(schema_service_, tenant_id, arg, res, nullptr /*external trans*/,is_parallel);
+      ObCreateViewHelper create_view_helper(schema_service_, arg, res, nullptr /*external trans*/,is_parallel);
       if (OB_FAIL(create_view_helper.init(ddl_service_))) {
         LOG_WARN("fail to init create view helper", KR(ret), K(tenant_id));
       } else if (OB_FAIL(create_view_helper.execute())) {
@@ -1217,7 +1211,7 @@ int ObRootService::parallel_create_table(const ObCreateTableArg &arg, ObCreateTa
       }
     }
   } else {
-    ObCreateTableHelper create_table_helper(schema_service_, tenant_id, arg, res);
+    ObCreateTableHelper create_table_helper(schema_service_, arg, res);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(create_table_helper.init(ddl_service_))) {
       LOG_WARN("fail to init create table helper", KR(ret), K(tenant_id));
@@ -1241,7 +1235,7 @@ int ObRootService::create_table(const ObCreateTableArg &arg, ObCreateTableRes &r
 {
   LOG_TRACE("receive create table arg", K(arg));
   int64_t begin_time = ObTimeUtility::current_time();
-  const uint64_t tenant_id = arg.exec_tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -1252,14 +1246,14 @@ int ObRootService::create_table(const ObCreateTableArg &arg, ObCreateTableRes &r
   } else if (OB_FAIL(parallel_ddl_pre_check_(tenant_id))) {
     LOG_WARN("pre check failed before parallel ddl execute", KR(ret), K(tenant_id));
   } else if (arg.schema_.is_view_table()) {
-    ObCreateViewHelper create_view_helper(schema_service_, tenant_id, arg, res, nullptr/*external trans*/, false /*is_parallel*/);
+    ObCreateViewHelper create_view_helper(schema_service_, arg, res, nullptr/*external trans*/, false /*is_parallel*/);
     if (OB_FAIL(create_view_helper.init(ddl_service_))) {
       LOG_WARN("fail to init create view helper", KR(ret), K(tenant_id));
     } else if (OB_FAIL(create_view_helper.execute())) {
       LOG_WARN("fail to execute create view", KR(ret), K(tenant_id));
     }
   } else {
-    ObCreateTableHelper create_table_helper(schema_service_, tenant_id, arg, res, nullptr/*external trans*/, false /*is_parallel*/);
+    ObCreateTableHelper create_table_helper(schema_service_, arg, res, nullptr/*external trans*/, false /*is_parallel*/);
     if (OB_FAIL(create_table_helper.init(ddl_service_))) {
       LOG_WARN("fail to init create table helper", KR(ret), K(tenant_id));
     } else if (OB_FAIL(create_table_helper.execute())) {
@@ -1287,7 +1281,7 @@ int ObRootService::generate_table_schema_in_tenant_space(
     ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.exec_tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   const uint64_t table_id = table_schema.get_table_id();
   const ObPartitionLevel part_level = table_schema.get_part_level();
   const ObPartitionFuncType part_func_type = table_schema.get_part_option().get_part_func_type();
@@ -1296,18 +1290,8 @@ int ObRootService::generate_table_schema_in_tenant_space(
     LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == table_id || !is_inner_table(table_id)) {
     // skip
-  } else if (OB_SYS_TENANT_ID != arg.exec_tenant_id_) {
-    //FIXME: this restriction should be removed later.
-    // only enable sys tenant create sys table
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("only sys tenant can create tenant space table", K(ret), K(arg));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "non-sys tenant creating system tables");
   } else if (table_schema.is_view_table()) {
     // no need specify tenant_id while specify table_id creating sys table
-    if (OB_SYS_TENANT_ID != tenant_id) {
-      ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("create sys view with ordinary tenant not allowed", K(ret), K(table_schema));
-    }
   } else if (part_level > ObPartitionLevel::PARTITION_LEVEL_ONE
              || !is_hash_like_part(part_func_type)) {
     // sys tables do not write __all_part table, so sys table only support non-partition or only level hash_like part type.
@@ -1325,7 +1309,6 @@ int ObRootService::generate_table_schema_in_tenant_space(
     LOG_WARN("sys table's database should be oceanbase", K(ret), K(arg));
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "invalid database to sys table");
   } else {
-    table_schema.set_tenant_id(tenant_id);
     table_schema.set_table_id(table_id);
     table_schema.set_tablegroup_id(OB_SYS_TABLEGROUP_ID);
     table_schema.set_tablegroup_name(OB_SYS_TABLEGROUP_NAME);
@@ -1351,7 +1334,7 @@ int ObRootService::fork_database(const obcall::ObForkDatabaseArg &arg, obcall::O
            static_cast<int>(arg.src_database_name_.length()), arg.src_database_name_.ptr(),
            static_cast<int>(arg.dst_database_name_.length()), arg.dst_database_name_.ptr());
   ROOTSERVICE_EVENT_ADD("ddl scheduler", "fork database",
-                        "tenant_id", arg.tenant_id_,
+                        "tenant_id", OB_SYS_TENANT_ID,
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", res.task_id_,
@@ -1381,7 +1364,7 @@ int ObRootService::mview_complete_refresh(const obcall::ObMViewCompleteRefreshAr
 {
   LOG_DEBUG("receive mview complete refresh arg", K(arg));
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
@@ -1390,7 +1373,7 @@ int ObRootService::mview_complete_refresh(const obcall::ObMViewCompleteRefreshAr
     LOG_WARN("invalid arg", KR(ret), K(arg));
   } else {
     ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
+    if (OB_FAIL(ddl_service_.get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
       LOG_WARN("get schema guard in inner table failed", KR(ret), K(tenant_id));
     } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
       LOG_WARN("check parallel ddl conflict failed", KR(ret), K(arg));
@@ -1535,19 +1518,19 @@ int ObRootService::parallel_create_table_like(const obcall::ObCreateTableLikeArg
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(arg));
   } else {
-    ObCreateTableLikeHelper create_table_like_helper(schema_service_, arg.tenant_id_, arg, res,
+    ObCreateTableLikeHelper create_table_like_helper(schema_service_, arg, res,
                                                      false /*enable ddl parallel*/, nullptr);
     if (OB_FAIL(create_table_like_helper.init(ddl_service_))) {
-      LOG_WARN("fail to init create view helper", KR(ret), K_(arg.tenant_id));
+      LOG_WARN("fail to init create view helper", KR(ret));
     } else if (OB_FAIL(create_table_like_helper.execute())) {
-      LOG_WARN("fail to execute create view", KR(ret), K_(arg.tenant_id));
+      LOG_WARN("fail to execute create view", KR(ret));
     }
   }
   int64_t cost = ObTimeUtility::current_time() - begin_time;
   const char* ddl_type = (true == arg.is_parallel_) ? "parallel create table like" : "create table like";
   LOG_TRACE("finish create table like", KR(ret), K(arg), K(cost));
   ROOTSERVICE_EVENT_ADD("ddl scheduler", ddl_type,
-                        "tenant_id", arg.tenant_id_,
+                        "tenant_id", OB_SYS_TENANT_ID,
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "table_id", res.table_id_,
@@ -1563,16 +1546,16 @@ int ObRootService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
   const ObAlterTableArg::AlterPartitionType op_type = arg.alter_part_type_;
   const ObSimpleTableSchemaV2 *simple_table_schema = NULL;
   const AlterTableSchema &alter_table_schema = arg.alter_table_schema_;
-  int64_t tenant_id = alter_table_schema.get_tenant_id();
+  int64_t tenant_id = OB_SYS_TENANT_ID;
 
   if (!alter_table_schema.is_interval_part()
       || obcall::ObAlterTableArg::ADD_PARTITION != op_type) {
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
+  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id,
+  } else if (OB_FAIL(schema_guard.get_simple_table_schema(
              alter_table_schema.get_table_id(), simple_table_schema))) {
     LOG_WARN("get table schema failed", KR(ret), K(tenant_id), K(alter_table_schema));
   } else if (OB_ISNULL(simple_table_schema)) {
@@ -1638,23 +1621,22 @@ int ObRootService::create_hidden_table(const obcall::ObCreateHiddenTableArg &arg
 {
   LOG_DEBUG("receive create hidden table arg", K(arg));
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.get_tenant_id();
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.get_tenant_id(), arg.task_id_, CREATE_HIDDEN_TABLE_RPC_FAILED))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, CREATE_HIDDEN_TABLE_RPC_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.get_tenant_id(), arg.task_id_, CREATE_HIDDEN_TABLE_RPC_SLOW))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, CREATE_HIDDEN_TABLE_RPC_SLOW))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
   } else if (OB_FAIL(ddl_service_.create_hidden_table(arg, res))) {
     LOG_WARN("do create hidden table in trans failed", K(ret), K(arg));
   }
   char tenant_id_buffer[128];
-  snprintf(tenant_id_buffer, sizeof(tenant_id_buffer), "orig_tenant_id:%ld, target_tenant_id:%ld",
-            arg.get_tenant_id(), arg.get_dest_tenant_id());
+  snprintf(tenant_id_buffer, sizeof(tenant_id_buffer), "tenant_id:%ld", tenant_id);
   ROOTSERVICE_EVENT_ADD("ddl scheduler", "create hidden table",
                         "tenant_id", tenant_id_buffer,
                         "ret", ret,
@@ -1671,14 +1653,14 @@ int ObRootService::update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActi
   LOG_DEBUG("receive recv ddl task status arg", K(arg));
   int ret = OB_SUCCESS;
   const int64_t task_id = arg.task_id_;
-  const uint64_t tenant_id = arg.tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::update_ddl_task_active_time(ObDDLTaskID(tenant_id, task_id)))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::update_ddl_task_active_time(ObDDLTaskID(task_id)))) {
     LOG_WARN("fail to set RegTaskTime map", K(ret), K(tenant_id), K(task_id));
   }
   return ret;
@@ -1689,22 +1671,22 @@ int ObRootService::abort_redef_table(const obcall::ObAbortRedefTableArg &arg)
   LOG_DEBUG("receive abort redef table arg", K(arg));
   int ret = OB_SUCCESS;
   const int64_t task_id = arg.task_id_;
-  const uint64_t tenant_id = arg.tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.tenant_id_, arg.task_id_, ABORT_REDEF_TABLE_RPC_FAILED))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, ABORT_REDEF_TABLE_RPC_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.tenant_id_, arg.task_id_, ABORT_REDEF_TABLE_RPC_SLOW))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, ABORT_REDEF_TABLE_RPC_SLOW))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::abort_redef_table(ObDDLTaskID(tenant_id, task_id)))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::abort_redef_table(ObDDLTaskID(task_id)))) {
     LOG_WARN("cancel task failed", K(ret), K(tenant_id), K(task_id));
   }
   ROOTSERVICE_EVENT_ADD("ddl scheduler", "abort redef table",
-                        "tenant_id", arg.tenant_id_,
+                        "tenant_id", tenant_id,
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", arg.task_id_);
@@ -1717,22 +1699,22 @@ int ObRootService::finish_redef_table(const obcall::ObFinishRedefTableArg &arg)
   LOG_DEBUG("receive finish redef table arg", K(arg));
   int ret = OB_SUCCESS;
   const int64_t task_id = arg.task_id_;
-  const uint64_t tenant_id = arg.tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.tenant_id_, arg.task_id_, FINISH_REDEF_TABLE_RPC_FAILED))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, FINISH_REDEF_TABLE_RPC_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.tenant_id_, arg.task_id_, FINISH_REDEF_TABLE_RPC_SLOW))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, FINISH_REDEF_TABLE_RPC_SLOW))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::finish_redef_table(ObDDLTaskID(tenant_id, task_id)))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::finish_redef_table(ObDDLTaskID(task_id)))) {
     LOG_WARN("failed to finish redef table", K(ret), K(task_id), K(tenant_id));
   }
   ROOTSERVICE_EVENT_ADD("ddl scheduler", "finish redef table",
-                        "tenant_id", arg.tenant_id_,
+                        "tenant_id", tenant_id,
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", arg.task_id_);
@@ -1745,7 +1727,7 @@ int ObRootService::copy_table_dependents(const obcall::ObCopyTableDependentsArg 
   LOG_INFO("receive copy table dependents arg", K(arg));
   int ret = OB_SUCCESS;
   const int64_t task_id = arg.task_id_;
-  const uint64_t tenant_id = arg.tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   const bool is_copy_indexes = arg.copy_indexes_;
   const bool is_copy_triggers = arg.copy_triggers_;
   const bool is_copy_constraints = arg.copy_constraints_;
@@ -1757,11 +1739,11 @@ int ObRootService::copy_table_dependents(const obcall::ObCopyTableDependentsArg 
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.tenant_id_, arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_FAILED))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.tenant_id_, arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_SLOW))) {
+  } else if (OB_FAIL(DDL_SIM(tenant_id, arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_SLOW))) {
     LOG_WARN("ddl sim failure", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::copy_table_dependents(ObDDLTaskID(tenant_id, task_id),
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::copy_table_dependents(ObDDLTaskID(task_id),
                                                           is_copy_constraints,
                                                           is_copy_indexes,
                                                           is_copy_triggers,
@@ -1782,7 +1764,7 @@ int ObRootService::start_redef_table(const obcall::ObStartRedefTableArg &arg, ob
 {
   LOG_DEBUG("receive start redef table arg", K(arg));
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = arg.orig_tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -1793,8 +1775,7 @@ int ObRootService::start_redef_table(const obcall::ObStartRedefTableArg &arg, ob
     LOG_WARN("start redef table failed", K(ret));
   }
   char tenant_id_buffer[128];
-  snprintf(tenant_id_buffer, sizeof(tenant_id_buffer), "orig_tenant_id:%ld, target_tenant_id:%ld",
-            arg.orig_tenant_id_, arg.target_tenant_id_);
+  snprintf(tenant_id_buffer, sizeof(tenant_id_buffer), "tenant_id:%ld", tenant_id);
   char table_id_buffer[128];
   snprintf(table_id_buffer, sizeof(table_id_buffer), "orig_table_id:%ld, target_table_id:%ld",
             arg.orig_table_id_, arg.target_table_id_);
@@ -1813,7 +1794,7 @@ int ObRootService::set_comment(const obcall::ObSetCommentArg &arg, obcall::ObPar
 {
   LOG_TRACE("receive set comment arg", K(arg));
   int64_t begin_time = ObTimeUtility::current_time();
-  const uint64_t tenant_id = arg.exec_tenant_id_;
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -1824,7 +1805,7 @@ int ObRootService::set_comment(const obcall::ObSetCommentArg &arg, obcall::ObPar
   } else if (OB_FAIL(parallel_ddl_pre_check_(tenant_id))) {
     LOG_WARN("fail to pre check parallel ddl", KR(ret), K(tenant_id));
   } else {
-    ObSetCommentHelper comment_helper(schema_service_, tenant_id, arg, res);
+    ObSetCommentHelper comment_helper(schema_service_, arg, res);
     if (OB_FAIL(comment_helper.init(ddl_service_))) {
       LOG_WARN("fail to init comment helper", KR(ret), K(tenant_id));
     } else if (OB_FAIL(comment_helper.execute())) {
@@ -1846,7 +1827,7 @@ int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlt
   LOG_DEBUG("receive alter table arg", K(arg));
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  const uint64_t tenant_id = arg.alter_table_schema_.get_tenant_id();
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
   ObAlterTableArg &nonconst_arg = const_cast<ObAlterTableArg &>(arg);
   if (!inited_) {
     ret = OB_NOT_INIT;
@@ -4949,15 +4930,6 @@ int ObRootService::get_recycle_schema_versions(
   LOG_INFO("get recycle schema versions", KR(ret), K(arg), K(result));
   return ret;
 }
-
-int ObRootService::rebuild_index_in_restore(
-    const obcall::ObRebuildIndexInRestoreArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  UNUSED(arg);
-  return ret;
-}
-
 
 void ObRootService::reset_fail_count()
 {

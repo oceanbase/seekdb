@@ -23,7 +23,6 @@
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "observer/ob_server.h"
 #include "observer/mysql/ob_query_response_time.h"
-#include "share/restore/ob_import_util.h"
 
 namespace oceanbase
 {
@@ -2468,35 +2467,6 @@ int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cancel_task->set_param(task_type, task_id_str))) {
           LOG_WARN("failed to set cancel task param", K(ret), K(task_type), K(task_id_str));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSetDiskValidResolver::resolve(const ParseNode &parse_tree)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(T_SET_DISK_VALID != parse_tree.type_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type is not T_SET_DISK_VALID", "type", get_type_name(parse_tree.type_));
-  } else {
-    ObSetDiskValidStmt *stmt = create_stmt<ObSetDiskValidStmt>();
-    if (NULL == stmt) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("create ObSetDiskValidStmt failed");
-    } else {
-      stmt_ = stmt;
-      if (OB_UNLIKELY(NULL == parse_tree.children_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("children should not be null");
-      } else {
-        if (OB_FAIL(Util::resolve_server(parse_tree.children_[0],
-                                         stmt->server_))) {
-          LOG_WARN("resolve server failed", K(ret));
-        } else {
-          // do nothing
         }
       }
     }

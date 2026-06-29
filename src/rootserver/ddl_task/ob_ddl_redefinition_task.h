@@ -31,6 +31,7 @@ class ObDDLRedefinitionSSTableBuildTask : public share::ObAsyncTask
 public:
   ObDDLRedefinitionSSTableBuildTask(
       const int64_t task_id,
+      const uint64_t tenant_id,
       const int64_t data_table_id,
       const int64_t dest_table_id,
       const int64_t schema_version,
@@ -63,6 +64,7 @@ public:
   void add_event_info(const int ret, const ObString &ddl_event_stmt);
 private:
   bool is_inited_;
+  uint64_t tenant_id_;
   int64_t task_id_;
   int64_t data_table_id_;
   int64_t dest_table_id_;
@@ -93,15 +95,18 @@ public:
   ObSyncTabletAutoincSeqCtx();
   ~ObSyncTabletAutoincSeqCtx() {}
   int init(
+      const uint64_t src_tenant_id, 
+      const uint64_t dst_tenant_id,
       int64_t src_table_id,
       int64_t dest_table_id);
   int sync();
   bool is_inited() const { return is_inited_; }
-  TO_STRING_KV(K_(is_inited), K_(is_synced), K_(orig_src_tablet_ids), K_(src_tablet_ids),
+  TO_STRING_KV(K_(is_inited), K_(is_synced), K_(src_tenant_id), K_(dst_tenant_id), K_(orig_src_tablet_ids), K_(src_tablet_ids),
                K_(dest_tablet_ids), K_(autoinc_params));
 private:
   int build_ls_to_tablet_map(
       share::ObLocationService *location_service,
+      const uint64_t tenant_id,
       const common::ObIArray<share::ObMigrateTabletAutoincSeqParam> &tablet_ids,
       const int64_t timeout,
       const bool force_renew,
@@ -118,8 +123,8 @@ private:
   bool is_inited_;
   bool is_synced_;
   bool need_renew_location_;
-  
-  
+  uint64_t src_tenant_id_;
+  uint64_t dst_tenant_id_;
   ObSEArray<ObTabletID, 1> orig_src_tablet_ids_;
   ObSEArray<ObTabletID, 1> src_tablet_ids_;
   ObSEArray<ObTabletID, 1> dest_tablet_ids_;
@@ -263,7 +268,7 @@ protected:
   int get_estimated_timeout(const share::schema::ObTableSchema *dst_table_schema, int64_t &estimated_timeout);
   int get_orig_all_index_tablet_count(ObSchemaGetterGuard &schema_guard, int64_t &all_tablet_count);
 
-  int generate_rebuild_index_arg_list(const int64_t table_id, 
+  int generate_rebuild_index_arg_list(const int64_t table_id,
                                       ObSchemaGetterGuard &schema_guard, 
                                       obcall::ObAlterTableArg &alter_table_arg);
   int64_t get_build_replica_request_time();

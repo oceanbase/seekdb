@@ -178,6 +178,7 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
 }
 
 int ObColumnChecksumErrorInfoTableStorage::get(
+    const uint64_t tenant_id,
     const SCN &frozen_scn,
     const bool is_global_index,
     const int64_t data_table_id,
@@ -187,6 +188,7 @@ int ObColumnChecksumErrorInfoTableStorage::get(
     ObIArray<ObColumnChecksumErrorInfo> &error_infos)
 {
   int ret = OB_SUCCESS;
+  UNUSED(tenant_id);
   error_infos.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
@@ -255,10 +257,12 @@ int ObColumnChecksumErrorInfoTableStorage::get(
 }
 
 int ObColumnChecksumErrorInfoTableStorage::delete_expired(
+    const uint64_t tenant_id,
     const SCN &frozen_scn_before,
     int64_t limit)
 {
   int ret = OB_SUCCESS;
+  UNUSED(tenant_id);
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));

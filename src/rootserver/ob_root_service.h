@@ -18,16 +18,16 @@
 #define OCEANBASE_ROOTSERVER_OB_ROOT_SERVICE_H_
 
 #include "lib/net/ob_addr.h"
-#include "lib/thread/ob_work_queue.h"
+#include "lib/task/ob_timer.h"
+#include "lib/thread/ob_async_task_queue.h"
 
 #include "share/object_storage/ob_object_storage_struct.h"
-#include "share/ob_tenant_id_schema_version.h"
+#include "share/ob_schema_version_info.h"
 #include "share/ob_unit_replica_counter.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_max_id_cache.h"
 
 #include "rpc/ob_packet.h"
-#include "observer/ob_restore_ctx.h"
 #include "rootserver/ob_ddl_service.h"
 #include "rootserver/ob_tenant_ddl_service.h"
 #include "rootserver/ob_root_minor_freeze.h"
@@ -35,7 +35,6 @@
 #include "rootserver/ob_root_inspection.h"
 #include "rootserver/ob_rs_event_history_table_operator.h"
 #include "rootserver/ob_snapshot_info_manager.h"
-#include "rootserver/ob_upgrade_executor.h"
 #include "rootserver/ob_schema_history_recycler.h"
 #include "rootserver/ob_catalog_ddl_service.h"
 #include "rootserver/ob_ccl_ddl_service.h"
@@ -138,7 +137,6 @@ public:
 
   int init(common::ObServerConfig &config, common::ObConfigManager &config_mgr,
            common::ObAddr &self, common::ObMySQLProxy &sql_proxy,
-           observer::ObRestoreCtx &restore_ctx,
            share::schema::ObMultiVersionSchemaService *schema_mgr_);
   inline bool is_inited() const { return inited_; }
   void destroy();
@@ -367,9 +365,6 @@ public:
   int admin_upgrade_cmd(const obcall::Bool &arg);
   int admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgradeArg &arg);
   int admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg);
-  /* physical restore */
-  int rebuild_index_in_restore(const obcall::ObRebuildIndexInRestoreArg &arg);
-  /*-----------------*/
   int refresh_time_zone_info(const obcall::ObRefreshTimezoneArg &arg);
   int request_time_zone_info(const common::ObRequestTZInfoArg &arg, common::ObRequestTZInfoResult &result);
   // async tasks and callbacks
@@ -493,7 +488,6 @@ private:
 
   common::ObMySQLProxy sql_proxy_;
   common::ObCommonSqlProxy oracle_sql_proxy_;
-  observer::ObRestoreCtx *restore_ctx_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
 
   // minor freeze

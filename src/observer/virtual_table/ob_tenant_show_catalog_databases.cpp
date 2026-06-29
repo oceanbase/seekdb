@@ -19,7 +19,7 @@
 
 #include "common/ob_range.h"
 #include "lib/container/ob_se_array.h"
-#include "share/catalog/ob_cached_catalog_meta_getter.h"
+#include "share/catalog/ob_catalog_meta_getter.h"
 
 namespace oceanbase
 {
@@ -114,7 +114,7 @@ int ObTenantShowCatalogDatabases::fill_scanner()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cur row cell is NULL", K(ret));
   } else {
-    ObCachedCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
+    ObCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
     if (OB_FAIL(ob_catalog_meta_getter.list_namespace_names(catalog_id_, db_names))) {
       LOG_WARN("list_namespace_names failed", K(ret), K(catalog_id_));
     }

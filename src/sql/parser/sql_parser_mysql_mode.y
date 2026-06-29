@@ -15628,10 +15628,6 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
   $$->value_ = $2[0];
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_STATUS, 2, $$, $4);
 }
-| SHOW TENANT opt_status
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_TENANT, 1, $3);
-}
 | SHOW create_with_opt_hint TENANT relation_name
 {
   (void)($2);
@@ -19235,12 +19231,6 @@ alter_with_opt_hint SYSTEM DISABLE SQL THROTTLE
 {
   (void)($1);
   malloc_terminal_node($$, result->malloc_pool_, T_DISABLE_SQL_THROTTLE);
-}
-|
-alter_with_opt_hint SYSTEM SET DISK VALID ip_port
-{
-  (void)($1);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SET_DISK_VALID, 1, $6);
 }
 |
 alter_with_opt_hint SYSTEM DROP TABLES IN SESSION INTNUM

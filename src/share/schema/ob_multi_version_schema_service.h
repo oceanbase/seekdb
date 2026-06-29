@@ -150,6 +150,11 @@ public:
   // 1. tenant_schema_version is the schema_version of the corresponding tenant
   // 2. sys_schema_version is the schema_version of the system tenant. For system tenants,
   //  the value will be reset to tenant_schema_version
+  int get_tenant_schema_guard(const uint64_t tenant_id,
+                              ObSchemaGetterGuard &guard,
+                              const RefreshSchemaMode refresh_schema_mode = RefreshSchemaMode::NORMAL)
+  { UNUSED(tenant_id); return get_tenant_schema_guard(guard, common::OB_INVALID_VERSION,
+                                                      common::OB_INVALID_VERSION, refresh_schema_mode); }
   virtual int get_tenant_schema_guard(ObSchemaGetterGuard &guard,
                                       int64_t tenant_schema_version = common::OB_INVALID_VERSION,
                                       int64_t sys_schema_version = common::OB_INVALID_VERSION,

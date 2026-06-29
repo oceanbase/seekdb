@@ -199,6 +199,11 @@ public:
                        const share::schema::ObTableSchema *&table_schema,
                        const bool is_built_in_index = false);
   int get_table_schema( const uint64_t table_id, const share::schema::ObTableSchema *&table_schema, bool is_link = false) const;
+  int get_table_schema(const uint64_t tenant_id,
+                       const uint64_t table_id,
+                       const share::schema::ObTableSchema *&table_schema,
+                       bool is_link = false) const
+  { UNUSED(tenant_id); return get_table_schema(table_id, table_schema, is_link); }
   //int column_can_be_droped(const uint64_t table_id, const uint64_t column_id, bool &can_be_drop) const;
   int get_column_schema( const uint64_t table_id,
                         const common::ObString &column_name,
@@ -225,6 +230,11 @@ public:
   int get_database_schema(
                           const uint64_t database_id,
                           const share::schema::ObDatabaseSchema *&database_schema);
+  int get_database_schema(
+                          const uint64_t tenant_id,
+                          const uint64_t database_id,
+                          const share::schema::ObDatabaseSchema *&database_schema)
+  { UNUSED(tenant_id); return get_database_schema(database_id, database_schema); }
   //check if there is an index on this column
   int check_column_has_index(uint64_t table_id, uint64_t column_id, bool &has_index, bool is_link = false);
   int check_if_partition_key(uint64_t table_id, uint64_t column_id, bool &is_part_key, bool is_link = false) const;
