@@ -4899,7 +4899,6 @@ int ObRootService::set_config_after_bootstrap_()
   ObSqlString sql;
 
   const char* configs[][2] = {
-    {"_use_odps_jni_connector", "true"},
     {"enable_record_trace_log", "false"},
     {"_enable_dbms_job_package", "false"},
     {"_bloom_filter_ratio", "3"},
