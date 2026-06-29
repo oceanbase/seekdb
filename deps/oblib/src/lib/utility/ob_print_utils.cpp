@@ -315,7 +315,7 @@ int64_t to_string<uint64_t>(const uint64_t &v, char *buffer, const int64_t buffe
   } else {}
   return pos;
 }
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
 template <>
 int64_t to_string<long>(const long &v, char *buffer, const int64_t buffer_size)
 {

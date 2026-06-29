@@ -50,15 +50,25 @@ enum ObReqPacketCode : int32_t
 {
   OB_INVALID_RPC_CODE = 0,
 
-  // 0x002, 0x225, 0x276-0x27A, and 0x27C are reserved for removed packet codes.
-
   // CDC / logfetcher type-binding tags
   OB_LS_FETCH_MISSING_LOG  = 0x851,
   OB_LS_FETCH_LOG2         = 0x853,
   OB_LOG_REQ_START_LSN_BY_TS = 0x855,
   OB_CDC_FETCH_RAW_LOG     = 0x863,
 
-  // 0x1101-0x1128 are reserved for removed packet codes.
+  // Table-API / Redis type-binding tags
+  OB_TABLE_API_LOGIN              = 0x1101,
+  OB_TABLE_API_EXECUTE           = 0x1102,
+  OB_TABLE_API_BATCH_EXECUTE     = 0x1103,
+  OB_TABLE_API_EXECUTE_QUERY     = 0x1104,
+  OB_TABLE_API_QUERY_AND_MUTATE  = 0x1105,
+  OB_TABLE_API_EXECUTE_QUERY_ASYNC = 0x1106,
+  OB_TABLE_API_MOVE              = 0x1124,
+  OB_TABLE_API_DIRECT_LOAD       = 0x1123,
+  OB_TABLE_API_LS_EXECUTE        = 0x1125,
+  OB_REDIS_EXECUTE               = 0x1126,
+  OB_REDIS_EXECUTE_V2            = 0x1127,
+  OB_TABLE_API_META_INFO_EXECUTE = 0x1128,
 };
 
 
@@ -68,6 +78,11 @@ enum ObReqPacketCode : int32_t
 // obcall transport header so the config path keeps compiling. The accessor names
 // keep the rpc_checksum wording because they mirror the _rpc_checksum config.
 // ---------------------------------------------------------------------------
+// `OPTIONAL` is an (empty) macro in the Windows SDK (winnt.h). Undefine it so
+// the enumerator below is not eaten by the preprocessor on MSVC/clang-cl.
+#ifdef OPTIONAL
+#undef OPTIONAL
+#endif
 enum class ObReqCheckSumCheckLevel
 {
   INVALID,

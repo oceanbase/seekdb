@@ -1850,7 +1850,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObEmptyReadBucket::mtl_init(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::mtl_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::mtl_init(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObTenantSrs::mtl_init(mods_tenant_srs_))) { SERVER_LOG(WARN, "mods_tenant_srs_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(omt::ObTenantSrs::mtl_init(mods_tenant_srs_))) { SERVER_LOG(WARN, "mods_tenant_srs_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObIndexUsageInfoMgr::mtl_init(mods_index_usage_info_mgr_))) { SERVER_LOG(WARN, "mods_index_usage_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObTabletMemtableMgrPool::mtl_init(mods_tablet_memtable_mgr_pool_))) { SERVER_LOG(WARN, "mods_tablet_memtable_mgr_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObMViewMaintenanceService::mtl_init(mods_m_view_maintenance_service_))) { SERVER_LOG(WARN, "mods_m_view_maintenance_service_ fail", KR(ret)); }

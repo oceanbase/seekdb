@@ -16,12 +16,6 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_io_adapter.h"
-#ifdef _WIN32
-#include <io.h>
-static int ob_ftruncate(int fd, long long len) {
-  return _chsize_s(fd, len) == 0 ? 0 : -1;
-}
-#endif
 #include "share/ob_local_device.h"                            // ObLocalDevice
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/io/ob_io_manager.h"                           // ObIOManager
