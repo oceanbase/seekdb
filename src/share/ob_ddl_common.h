@@ -1092,11 +1092,6 @@ public:
       schema::ObSchemaGetterGuard &schema_guard,
       const uint64_t data_table_id,
       int64_t &all_tablet_count);
-  static int get_all_indexes_tablets_count(
-      schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
-      const uint64_t data_table_id,
-      int64_t &all_tablet_count);
 
   // check if the major sstable of a table are exist in all needed replicas
   static int check_major_sstable_complete(
@@ -1146,19 +1141,8 @@ public:
       const int64_t timeout,
       share::ObLSID &ls_id,
       common::ObAddr &leader_addr);
-  static int get_tablet_leader_addr(
-      share::ObLocationService *location_service,
-      const uint64_t tenant_id,
-      const common::ObTabletID &tablet_id,
-      const int64_t timeout,
-      share::ObLSID &ls_id,
-      common::ObAddr &leader_addr);
 
   static int refresh_alter_table_arg(const int64_t orig_table_id,
-      const uint64_t foreign_key_id,
-      obcall::ObAlterTableArg &alter_table_arg);
-  static int refresh_alter_table_arg(const uint64_t tenant_id,
-      const int64_t orig_table_id,
       const uint64_t foreign_key_id,
       obcall::ObAlterTableArg &alter_table_arg);
 
@@ -1168,11 +1152,6 @@ public:
       ObSqlString &sql_string);
 
   static int generate_mview_ddl_schema_hint_str(const uint64_t mview_table_id,
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const common::ObIArray<share::schema::ObBasedSchemaObjectInfo> &based_schema_object_infos,
-      ObSqlString &sql_string);
-  static int generate_mview_ddl_schema_hint_str(const uint64_t tenant_id,
-      const uint64_t mview_table_id,
       share::schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<share::schema::ObBasedSchemaObjectInfo> &based_schema_object_infos,
       ObSqlString &sql_string);

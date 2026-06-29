@@ -83,7 +83,6 @@ public:
                ObLogExternalStorageCtxItem *&item) const;
   int get_io_fd(ObIOFd &io_fd) const;
   int get_io_device(ObIODevice *&io_device) const;
-  // inc count_ after async_pread or async_pwrite success, we need wait these async io request successfully
   int inc_count();
   int64_t get_count() const;
   bool is_valid() const;
@@ -115,11 +114,6 @@ public:
                   char *buf,
                   const int64_t read_buf_size,
                   ObLogExternalStorageCtxItem &io_ctx);
-
-  int async_pwrite(const int64_t offset,
-                   const char *buf,
-                   const int64_t write_buf_size,
-                   ObLogExternalStorageCtxItem &io_ctx);
 };
 } // end namespace logservice
 } // end namespace oceanbase

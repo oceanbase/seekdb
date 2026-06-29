@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/storage/ob_column_checksum_error_info_table_storage.h"
-#include "share/storage/ob_sqlite_connection.h"
 #include "lib/oblog/ob_log.h"
+#include "lib/string/ob_sql_string.h"
 #include "share/ob_column_checksum_error_operator.h"
-
+#include "share/storage/ob_sqlite_connection.h"
 #include "share/storage/ob_sqlite_table_schema.h"
 
 namespace oceanbase

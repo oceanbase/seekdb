@@ -265,6 +265,9 @@ ob_set_subtarget(ob_share common_mixed
   interrupt/ob_global_interrupt_call.cpp
   interrupt/ob_interrupt_message.cpp
   location_cache/ob_location_service.cpp
+  ls/ob_ls_restore_status.cpp
+  ob_sys_time_zone_util.cpp
+  ls/ob_restore_status.cpp
   location_cache/ob_location_struct.cpp
   inner_table/ob_inner_table_schema.vt.cpp
   inner_table/ob_inner_table_schema.lob.cpp
@@ -506,6 +509,7 @@ ob_set_subtarget(ob_share stat
 
 ob_set_subtarget(ob_share catalog
   catalog/ob_catalog_properties.cpp
+  catalog/ob_external_object_ctx.cpp
   catalog/ob_external_catalog.cpp
   catalog/ob_cached_catalog_meta_getter.cpp
   catalog/ob_catalog_meta_getter.cpp
@@ -514,6 +518,8 @@ ob_set_subtarget(ob_share catalog
 
 
 ob_set_subtarget(ob_share io
+  io/ob_backup_io_adapter.cpp
+  io/ob_backup_storage_info.cpp
   io/ob_io_define.cpp
   io/io_schedule/ob_io_schedule_v2.cpp
   io/ob_io_struct.cpp
@@ -551,7 +557,6 @@ ob_set_subtarget(ob_share throttle
 )
 
 ob_set_subtarget(ob_share object_storage
-  object_storage/ob_device_config_mgr.cpp
   object_storage/ob_device_config_parser.cpp
   object_storage/ob_device_connectivity.cpp
   object_storage/ob_device_manifest.cpp

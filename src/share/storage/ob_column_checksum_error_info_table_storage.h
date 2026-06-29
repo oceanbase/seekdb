@@ -17,8 +17,10 @@
 #ifndef OCEANBASE_SHARE_STORAGE_OB_COLUMN_CHECKSUM_ERROR_INFO_TABLE_STORAGE_H_
 #define OCEANBASE_SHARE_STORAGE_OB_COLUMN_CHECKSUM_ERROR_INFO_TABLE_STORAGE_H_
 
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include "common/ob_tablet_id.h"
 #include "lib/container/ob_iarray.h"
+#include "share/scn.h"
+#include "share/storage/ob_sqlite_connection_pool.h"
 
 namespace oceanbase
 {

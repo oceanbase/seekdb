@@ -24,9 +24,6 @@ namespace oceanbase
 {
 namespace table
 {
-  const ObString ObTableUtils::KV_NORMAL_TRACE_INFO = ObString::make_string("KV Operation");
-  const ObString ObTableUtils::KV_TTL_TRACE_INFO = ObString::make_string("TTL Delete");
-
   bool ObTableUtils::has_exist_in_columns(const ObIArray<ObString> &columns, const ObString &name)
   {
     bool exist = false;

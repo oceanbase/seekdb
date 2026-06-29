@@ -24,8 +24,6 @@
 #include "lib/random/ob_mysql_random.h"
 #include "lib/container/ob_iarray.h"
 
-
-#include "share/object_storage/ob_device_config_mgr.h"
 #include "share/stat/ob_opt_stat_service.h"
 #include "share/config/ob_config_manager.h"
 
@@ -330,7 +328,6 @@ private:
   ObServerReloadConfig reload_config_;
   common::ObConfigManager config_mgr_;
   omt::ObTenantTimezoneMgr &tenant_timezone_mgr_;
-  share::ObDeviceConfigMgr &device_config_mgr_;
 
   // The Oceanbase schema relating to.
   share::schema::ObMultiVersionSchemaService &schema_service_;
