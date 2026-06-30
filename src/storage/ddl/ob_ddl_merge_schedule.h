@@ -22,7 +22,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"

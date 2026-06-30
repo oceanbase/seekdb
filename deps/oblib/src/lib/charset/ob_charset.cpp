@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX LIB_CHARSET
 #include "ob_charset.h"
 #include "lib/worker.h"
-#include "sql/engine/expr/ob_expr_util.h"
 #include "lib/charset/str_uca_type.h"
 
 namespace oceanbase

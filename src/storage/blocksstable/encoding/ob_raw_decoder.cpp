@@ -18,7 +18,7 @@
 
 #include "ob_raw_decoder.h"
 #include "ob_vector_decode_util.h"
-#include "common/ob_target_specific.h"
+#include "lib/utility/ob_target_specific.h"
 
 namespace oceanbase
 {

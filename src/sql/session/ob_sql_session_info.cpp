@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sql_session_info.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/memtable/mvcc/ob_btree_iter_cache.h"
@@ -24,7 +25,7 @@
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
 #include "observer/ob_server.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "share/stat/ob_opt_stat_manager.h" // for ObOptStatManager
+#include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "ob_sess_info_verify.h"
 
 using namespace oceanbase::sql;
@@ -2669,7 +2670,7 @@ int ObErrorSyncSysVarEncoder::serialize(ObSQLSessionInfo &sess, char *buf,
                                 const int64_t length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObSysVarClassType, ObSysVarFactory::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
+  ObSEArray<ObSysVarClassType, share::ObSysVarMeta::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
   if (OB_FAIL(sess.get_error_sync_sys_vars(sys_var_delta_ids))) {
     LOG_WARN("failed to calc need serialize vars", K(ret));
   } else if (OB_FAIL(sess.serialize_sync_sys_vars(sys_var_delta_ids, buf, length, pos))) {
@@ -2699,7 +2700,7 @@ int ObErrorSyncSysVarEncoder::deserialize(ObSQLSessionInfo &sess, const char *bu
 
 int ObErrorSyncSysVarEncoder::get_serialize_size(ObSQLSessionInfo& sess, int64_t &len) const {
   int ret = OB_SUCCESS;
-  ObSEArray<ObSysVarClassType, ObSysVarFactory::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
+  ObSEArray<ObSysVarClassType, share::ObSysVarMeta::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
   if (OB_FAIL(sess.get_error_sync_sys_vars(sys_var_delta_ids))) {
     LOG_WARN("failed to calc need serialize vars", K(ret));
   } else if (OB_FAIL(sess.get_sync_sys_vars_size(sys_var_delta_ids, len))) {
@@ -2713,7 +2714,7 @@ int ObErrorSyncSysVarEncoder::get_serialize_size(ObSQLSessionInfo& sess, int64_t
 int ObErrorSyncSysVarEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const int64_t length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+  for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++j) {
     if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_LAST_SCHEMA_VERSION) {
       //need sync sys var
       if (OB_FAIL(sess.get_sys_var(j)->serialize(buf, length, pos))) {
@@ -2730,7 +2731,7 @@ int ObErrorSyncSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, i
 {
   int ret = OB_SUCCESS;
   size = 0;
-  for (int64_t j = 0; j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+  for (int64_t j = 0; j< share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++j) {
     if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_LAST_SCHEMA_VERSION) {
       // need sync sys var
       size += sess.get_sys_var(j)->get_serialize_size();
@@ -2775,7 +2776,7 @@ int ObErrorSyncSysVarEncoder::display_sess_info(ObSQLSessionInfo &sess, const ch
                                                     OB_MALLOC_NORMAL_BLOCK_SIZE);
 
   ObBasicSysVar *last_sess_sys_vars = NULL;
-  for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+  for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++j) {
     if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_LAST_SCHEMA_VERSION) {
       if (OB_FAIL(ObSessInfoVerify::create_tmp_sys_var(sess, ObSysVariables::get_sys_var_id(j),
           last_sess_sys_vars, allocator))) {
@@ -2817,7 +2818,7 @@ int ObSysVarEncoder::serialize(ObSQLSessionInfo &sess, char *buf,
                                 const int64_t length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObSysVarClassType, ObSysVarFactory::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
+  ObSEArray<ObSysVarClassType, share::ObSysVarMeta::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
   if (OB_FAIL(sess.get_sync_sys_vars(sys_var_delta_ids))) {
     LOG_WARN("failed to calc need serialize vars", K(ret));
   } else if (OB_FAIL(sess.serialize_sync_sys_vars(sys_var_delta_ids, buf, length, pos))) {
@@ -2847,7 +2848,7 @@ int ObSysVarEncoder::deserialize(ObSQLSessionInfo &sess, const char *buf,
 
 int ObSysVarEncoder::get_serialize_size(ObSQLSessionInfo& sess, int64_t &len) const {
   int ret = OB_SUCCESS;
-  ObSEArray<ObSysVarClassType, ObSysVarFactory::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
+  ObSEArray<ObSysVarClassType, share::ObSysVarMeta::ALL_SYS_VARS_COUNT> sys_var_delta_ids;
   if (OB_FAIL(sess.get_sync_sys_vars(sys_var_delta_ids))) {
     LOG_WARN("failed to calc need serialize vars", K(ret));
   } else if (OB_FAIL(sess.get_sync_sys_vars_size(sys_var_delta_ids, len))) {
@@ -2869,7 +2870,7 @@ int ObSysVarEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const in
   } else if (OB_FAIL(sys_var_in_pc_str.serialize(buf, length, pos))) {
     LOG_WARN("failed to serialize", K(ret), K(length), K(pos));
   } else {
-    for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+    for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++j) {
       if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_SERVER_UUID ||
           ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_PROXY_PARTITION_HIT ||
           ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_STATEMENT_TRACE_ID ||
@@ -2900,7 +2901,7 @@ int ObSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &s
     LOG_WARN("fail to get sys var in pc str", K(ret));
   } else {
     size += sys_var_in_pc_str.get_serialize_size();
-    for (int64_t j = 0; j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+    for (int64_t j = 0; j< share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++j) {
         if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_SERVER_UUID ||
             ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_PROXY_PARTITION_HIT ||
             ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_STATEMENT_TRACE_ID ||
@@ -2959,7 +2960,7 @@ int ObSysVarEncoder::display_sess_info(ObSQLSessionInfo &sess, const char* curre
     LOG_WARN("failed to deserialize", K(ret), K(data_len), K(pos));
   } else {
     ObBasicSysVar *last_sess_sys_vars = NULL;
-    for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+    for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++j) {
       if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_SERVER_UUID ||
           ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_PROXY_PARTITION_HIT ||
           ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_STATEMENT_TRACE_ID ||

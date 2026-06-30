@@ -1689,9 +1689,6 @@ def_table_schema(
 
 # 231: __all_partition_member_list # abandoned in 4.0
 
-# 232: __all_dblink # abandoned in seekdb
-
-
 # 234: __all_tenant_partition_meta_table # abandoned in 4.0.
 
 all_tenant_role_grantee_map_def = dict(
@@ -6381,10 +6378,6 @@ def_table_schema(
 
 # 12125: abandoned
 
-# 12126: __all_virtual_dblink (abandoned in seekdb)
-
-# 12127: __all_virtual_dblink_history (abandoned in seekdb)
-
 # 12129: __all_virtual_tenant_role_grantee_map # removed (single-tenant: iterate VT mechanism deleted)
 
 # 12130: __all_virtual_tenant_role_grantee_map_history # removed (single-tenant: iterate VT mechanism deleted)
@@ -6938,7 +6931,6 @@ def_table_schema(
 
 # 12229: __all_virtual_optstat_user_prefs # removed (single-tenant: iterate VT mechanism deleted)
 
-# 12230: __all_virtual_dblink_info (abandoned in seekdb)
 # 12231: __all_virtual_log_archive_progress # abandoned
 # 12232: __all_virtual_log_archive_history # abandoned
 # 12233: __all_virtual_log_archive_piece_files # abandoned
@@ -8037,22 +8029,6 @@ def_table_schema(
   )
 
 # 12398: __all_virtual_column_group # removed (single-tenant: iterate VT mechanism deleted)
-
-def_table_schema(
-  owner = 'huronghui.hrh',
-  table_name = '__all_virtual_storage_leak_info',
-  table_type = 'VIRTUAL_TABLE',
-  table_id='12399',
-  gm_columns = [],
-  rowkey_columns = [
-  ],
-  normal_columns = [
-    ('check_id', 'int'),
-    ('check_mod', 'varchar:OB_MAX_KVCACHE_NAME_LENGTH'),
-    ('hold_count', 'int'),
-    ('backtrace', 'varchar:DEFAULT_BUF_LENGTH')
-  ],  vtable_route_policy = 'local'
-  )
 
 # 12401: __all_virtual_tenant_parameter (abandoned)
 # 12402: __all_virtual_tenant_snapshot (abandoned)
@@ -19281,10 +19257,6 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_constraint'])
-
-# 101038: idx_owner_dblink_name on __all_dblink # abandoned in seekdb
-
-# 101039: idx_dblink_name on __all_dblink # abandoned in seekdb
 
 def_sys_index_table(
   index_name = 'idx_grantee_role_id',

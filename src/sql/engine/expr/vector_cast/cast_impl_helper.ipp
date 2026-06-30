@@ -17,7 +17,7 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/object/ob_obj_cast_util.h"
 
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 namespace oceanbase
 {
@@ -328,9 +328,9 @@ public:
     return q;
   }
 
-  ///@fn 根据传入的标记对res做舍入、溢出的处理
-  ///@description: 基于common_scale_decimalint进行的修改，保留
-  ///  common_scale_decimalint中根据cast_mode对舍入、溢出的差异化处理
+  ///@fn round and handle overflow for res according to the input flags
+  ///@description: modified from common_scale_decimalint; keep
+  ///  common_scale_decimalint's cast_mode-specific rounding and overflow handling
   ///  sizeof(calc_type) >= sizeof(out_type)
   template<typename out_type, typename calc_type>
   OB_INLINE static int decimal_overflow_roundup_check(
@@ -426,10 +426,10 @@ public:
     return ret;
   }
 
-  ///@brief common_copy_string_zf里面CM_IS_ZERO_FILL分支,
-  /// get_res_mem一次batch都是申请同一片空间，会导致向量化计算结果被覆盖，需要修改.
-  /// 此外，为了加速向量化，把非数据相关开销都尽量移出去了，并且
-  /// 该函数将仅实现将局部变量的字符串copy到str_res_mem的任务.
+  ///@brief common_copy_string_zf's CM_IS_ZERO_FILL branch,
+  /// get_res_mem allocates the same memory block for a batch, which can overwrite vectorized results and needs adjustment.
+  /// In addition, to speed up vectorization, data-independent overhead is moved out as much as possible, and
+  /// this function only copies the local string to str_res_mem.
   static inline int vector_copy_string_zf(const ObExpr &expr, ObEvalCtx &ctx, int64_t idx,
                                           int64_t in_len, const char *in_ptr, ObScale out_scale,
                                           int64_t &out_len, char *&out_ptr,

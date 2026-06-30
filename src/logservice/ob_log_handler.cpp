@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PALF
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_log_handler.h"
 #include "share/rc/ob_module_provider.h"
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS

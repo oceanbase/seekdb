@@ -24,7 +24,10 @@
 #endif
 #define private public
 #define protected public
-#include "share/scheduler/ob_partition_auto_split_helper.h"
+#include "storage/ls/ob_ls.h"
+#include "storage/tablet/ob_tablet.h"
+#include "storage/meta_mem/ob_tablet_handle.h"
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #undef private
 
 namespace oceanbase

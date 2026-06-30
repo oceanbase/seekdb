@@ -20,7 +20,7 @@
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_define.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_ls_id.h"

@@ -15,7 +15,8 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ob_relative_table.h"
 #include "storage/access/ob_single_merge.h"

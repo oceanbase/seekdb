@@ -28,10 +28,10 @@
 #include "sql/engine/ob_io_event_observer.h"
 #include "sql/ob_sql_define.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 
 namespace oceanbase
 {

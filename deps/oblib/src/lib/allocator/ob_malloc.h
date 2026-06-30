@@ -18,7 +18,7 @@
 #define OCEANBASE_COMMON_OB_MALLOC_H_
 #include <stdint.h>
 #include "lib/allocator/ob_allocator.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_tc_malloc.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/alloc/ob_malloc_allocator.h"

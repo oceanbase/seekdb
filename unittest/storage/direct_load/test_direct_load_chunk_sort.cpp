@@ -20,7 +20,7 @@
 #include "../unittest/storage/blocksstable/ob_data_file_prepare.h"
 #include "../unittest/storage/blocksstable/ob_row_generate.h"
 #include "mtlenv/mock_tenant_module_env.h"
-#include "share/ob_order_perserving_encoder.h"
+#include "storage/ob_order_perserving_encoder.h"
 #include "storage/direct_load/ob_direct_load_compare.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_external_multi_partition_row.h"

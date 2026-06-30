@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_physical_plan.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "share/ob_truncated_string.h"
 #include "sql/code_generator/ob_static_engine_cg.h"

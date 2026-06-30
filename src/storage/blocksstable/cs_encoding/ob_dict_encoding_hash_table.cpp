@@ -205,7 +205,7 @@ int ObDictEncodingHashTableBuilder::build(const ObColDatums &col_datums, const O
           row_refs_[row_idx] = NULL_REF;
         } else {
           // add to table
-          uint64_t pos = ::murmurhash2(datum.ptr_, datum.len_, 0/*seed*/);
+          uint64_t pos = common::murmurhash2(datum.ptr_, datum.len_, 0/*seed*/);
           pos = pos & mask;
           HashNode *node = buckets_[pos];
           bool is_equal = false;

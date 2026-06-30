@@ -19,7 +19,7 @@
 #include "io/easy_io.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/page_arena.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 

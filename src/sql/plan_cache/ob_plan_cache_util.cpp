@@ -19,6 +19,7 @@
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_direct_load_optimizer_ctx.h"
+#include "share/config/ob_config_helper.h"  // relocated-definition owner
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::omt;
@@ -531,3 +532,23 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
 
 }
 }
+
+// ===== definition moved from src/share/config/ob_config_helper.cpp =====
+namespace oceanbase
+{
+namespace common
+{
+
+bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
+{
+  bool is_valid = false;
+  for (int i = 0; i < ARRAYSIZEOF(sql::plan_cache_gc_confs) && !is_valid; i++) {
+    if (0 == ObString::make_string(sql::plan_cache_gc_confs[i]).case_compare(t.str())) {
+      is_valid = true;
+    }
+  }
+  return is_valid;
+}
+
+}  // namespace common
+}  // namespace oceanbase

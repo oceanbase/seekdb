@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_geomfromwkb.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/geo/ob_geo_wkb_check_visitor.h"
-#include "lib/geo/ob_wkb_byte_order_visitor.h"
-#include "lib/geo/ob_geo_3d.h"
+#include "share/geo/ob_geo_wkb_check_visitor.h"
+#include "share/geo/ob_wkb_byte_order_visitor.h"
+#include "share/geo/ob_geo_3d.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

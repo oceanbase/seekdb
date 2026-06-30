@@ -30,7 +30,7 @@
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/session/ob_session_val_map.h"
 #include "pl/ob_pl_dependency_util.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
 {

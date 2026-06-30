@@ -19,7 +19,7 @@
 
 #include "lib/hash/ob_array_index_hash_set.h"
 #include "lib/compress/ob_compressor.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_struct.h"
 #include "ob_macro_block_common_header.h"
 #include "ob_imicro_block_reader.h"

@@ -18,6 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_STORAGE_
 
 #include "lib/lock/ob_spin_lock.h" // ObSpinLock
+#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a removed include chain, make the dependency explicit
 #include "share/ob_errno.h"        // errno
 #include "log_block_header.h"      // LogBlockHeader
 #include "log_block_mgr.h"         // LogBlockMgr

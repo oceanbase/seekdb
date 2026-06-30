@@ -17,7 +17,7 @@
 #ifndef _OCEABASE_LIB_ALLOC_OBJECT_MGR_H_
 #define _OCEABASE_LIB_ALLOC_OBJECT_MGR_H_
 
-#include "lib/allocator/ob_ctx_define.h"
+#include "lib/alloc/ob_ctx_define.h"
 #include "lib/thread_local/ob_tsi_utils.h"
 #include "lib/random/ob_random.h"
 #include "lib/ob_abort.h"

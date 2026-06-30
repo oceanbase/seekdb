@@ -19,11 +19,11 @@
 
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_service.h"
-#include "share/stat/ob_dbms_stats_maintenance_window.h"
+#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
 #include "storage/ob_common_id_utils.h"
 #include "sql/session/ob_sql_session_mgr.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 
 namespace oceanbase

@@ -17,20 +17,24 @@
 #ifndef OCEANBASE_SHARE_OB_DDL_COMMON_H
 #define OCEANBASE_SHARE_OB_DDL_COMMON_H
 
+#include "storage/blocksstable/ob_macro_block_id.h"  // MacroBlockId(conf L2)
+namespace oceanbase { namespace blocksstable { struct ObMacroDataSeq; } }
+namespace oceanbase { namespace blocksstable {
+struct ObDatumRow; class ObSSTable; class ObBatchDatumRows; struct ObDatumRange; struct ObDatumRowkey;
+} namespace common { struct ObDatum; class ObIVector; } }
 #include "lib/allocator/page_arena.h"
 #include "share/config/ob_server_config.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/location_cache/ob_location_struct.h"
-#include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "share/ob_batch_selector.h"
-#include "share/ob_fork_table_util.h"
 
 namespace oceanbase
 {
 namespace obcall
 {
+class ObSrvRpcProxy;
 struct ObPartitionSplitArg;
 struct ObAlterTableArg;
 struct ObDropDatabaseArg;
@@ -66,6 +70,7 @@ class ObDDLTableSchema;
 class ObWriteMacroParam;
 class ObDirectLoadBatchRows;
 class ObITabletSliceWriter;
+class ObLS;
 struct ObDDLWriteStat;
 }
 namespace rootserver
@@ -76,6 +81,25 @@ class ObRootService;
 }
 namespace share
 {
+// the block_sstable_struct.h chain previously provided header-level using declarations for bare names; the chain is gone, so add explicit using declarations (all have fwd declarations)
+using schema::ObTableSchema;
+using schema::ObSchemaGetterGuard;
+using schema::ObSchemaService;
+using schema::ObColDesc;
+using schema::ObIndexType;
+using storage::ObTabletHandle;
+using storage::ObWriteMacroParam;
+using storage::ObCgMacroBlockWriter;
+using storage::ObLobMacroBlockWriter;
+using storage::ObColumnSchemaItem;
+using storage::ObStorageSchema;
+using storage::ObDDLTableSchema;
+using storage::ObDDLIndependentDag;
+using storage::ObDirectLoadBatchRows;
+using storage::ObITabletSliceWriter;
+using storage::ObDDLWriteStat;
+using storage::ObLS;
+using common::ObIVector;
 class ObLocationService;
 enum ObDDLType
 {
@@ -1310,6 +1334,10 @@ public:
   static int check_schema_version_refreshed(const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
   static int is_major_exist(const ObLSID &ls_id, const common::ObTabletID &tablet_id, bool &is_exist);
+#ifdef OB_BUILD_SHARED_STORAGE
+  static int upload_block_for_ss(const char* buf, const int64_t len, const blocksstable::MacroBlockId &macro_block_id);
+  static int update_tablet_gc_info(const ObTabletID &tablet_id, const int64_t pre_snapshot_version, const int64_t new_snapshot_version);
+#endif
   static int set_tablet_autoinc_seq(const ObLSID &ls_id, const ObTabletID &tablet_id, const int64_t seq_value);
   static int check_table_compaction_checksum_error(const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
@@ -1360,8 +1388,6 @@ public:
   static bool use_idempotent_mode();
   static bool need_fill_column_group(const bool is_row_store, const bool need_process_cs_replica, const int64_t data_format_version);
   static bool need_rescan_column_store(const int64_t data_format_version); // for compat old logic for fill column store
-  static int init_macro_block_seq(const int64_t parallel_idx, blocksstable::ObMacroDataSeq &start_seq);
-  static int64_t get_parallel_idx(const blocksstable::ObMacroDataSeq &start_seq);
   static bool is_mview_not_retryable(const share::ObDDLType task_type);
   static int64_t get_real_parallelism(const int64_t parallelism, const bool is_mv_refresh);
   static int get_tablet_ids(
@@ -1446,11 +1472,6 @@ public:
       rootserver::ObDDLTask &task);
 
   static bool need_reshape(const ObObjMeta &col_type);
-  static int check_null_and_length(
-      const bool is_index_table,
-      const bool has_lob_rowkey,
-      const int64_t rowkey_column_cnt,
-      const blocksstable::ObDatumRow &row_val);
   static int report_ddl_checksum_from_major_sstable(
       const ObLSID &ls_id,
       const ObTabletID &tablet_id,
@@ -1467,11 +1488,6 @@ public:
       const int64_t tenant_data_version,
       ObTabletHandle &tablet_handle,
       blocksstable::ObSSTable *first_major_sstable);
-  static int init_datum_row_with_snapshot(
-      const int64_t request_column_count,
-      const int64_t rowkey_column_count,
-      const int64_t snapshot_version,
-      blocksstable::ObDatumRow &datum_row);
   static int init_cg_macro_block_writers(
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,
@@ -1493,28 +1509,13 @@ public:
       ObLobMacroBlockWriter *&lob_writer,
       ObArenaAllocator &allocator,
       blocksstable::ObDatumRow &datum_row);
-  // ContinuousVector会被更换成DiscreteVector
-  static int handle_lob_column(
-      const ObTabletID &tablet_id,
-      const int64_t slice_idx,
-      ObWriteMacroParam &param,
-      const bool output_invalid_lob_cells, // output all lob cells, include null and nop
-      ObIArray<std::pair<char **, uint32_t *>> &lob_cells,
-      ObArenaAllocator &allocator,
-      const ObColumnSchemaItem &column_schema_item,
-      share::ObBatchSelector &selector,
-      ObIVector *&vector);
+  // ContinuousVector will be replaced with DiscreteVector
   static int handle_lob_columns(
       const ObTabletID &tablet_id,
       const int64_t slice_idx,
       ObWriteMacroParam &param,
       ObLobMacroBlockWriter *&lob_writer,
       ObArenaAllocator &allocator,
-      blocksstable::ObBatchDatumRows &batch_rows);
-  static int check_null_and_length(
-      const bool is_index_table,
-      const bool has_lob_rowkey,
-      const int64_t rowkey_column_num,
       blocksstable::ObBatchDatumRows &batch_rows);
   static int convert_to_storage_row(
       const ObTabletID &tablet_id,
@@ -1551,20 +1552,13 @@ public:
       const int64_t slice_idx,
       const int64_t range_interval,
       const int64_t slice_row_idx);
-  static int convert_to_storage_schema(
-      const ObTableSchema *table_schema,
-      ObIAllocator &allocator,
-      ObStorageSchema *&storage_schema);
 
   static int is_ls_leader(ObLS &ls, bool &is_leader);
   static int alloc_storage_macro_block_writer(
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,
       ObITabletSliceWriter *&tablet_slice_writer);
-  static int get_ddl_write_stat(
-      const ObWriteMacroParam &param,
-      const ObITable::TableKey &table_key,
-      ObDDLWriteStat *&ddl_write_stat);
+  // get_ddl_write_stat has been split to storage/ddl/ob_ddl_write_stat_util.h(ObDDLStorageWriteUtil)
 
 private:
   static int fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
@@ -1608,26 +1602,10 @@ public:
 class ObCODDLUtil
 {
 public:
-  static int need_column_group_store(const storage::ObStorageSchema &table_schema, bool &need_column_group);
   static int need_column_group_store(const schema::ObTableSchema &table_schema, bool &need_column_group);
 
-  static int get_base_cg_idx(
-      const storage::ObStorageSchema *storage_schema,
-      int64_t &base_cg_idx);
 
-  static int get_column_checksums(
-      const storage::ObCOSSTableV2 *co_sstable,
-      const storage::ObStorageSchema *storage_schema,
-      ObIArray<int64_t> &column_checksums);
 
-  static int is_rowkey_based_co_sstable(
-      const storage::ObCOSSTableV2 *co_sstable,
-      const storage::ObStorageSchema *storage_schema,
-      bool &is_rowkey_based);
-  static int get_co_column_checksums_if_need(
-      const ObTabletHandle &tablet_handle,
-      const blocksstable::ObSSTable *sstable,
-      ObIArray<int64_t> &column_checksum_array);
 };
 
 

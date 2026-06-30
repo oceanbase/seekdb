@@ -28,7 +28,7 @@ MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row.h"
 #include "share/ob_i_tablet_scan.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/ob_i_table.h"
 #include "storage/access/ob_table_read_info.h"
@@ -36,7 +36,6 @@ MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #include "storage/ob_table_store_stat_mgr.h"
 #include "storage/memtable/mvcc/ob_mvcc_acc_ctx.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
-#include "share/ob_fork_table_util.h"
 #include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase
@@ -576,4 +575,17 @@ OB_INLINE bool ObStoreRow::is_valid() const
 
 } // storage
 } // oceanbase
+
+// demoted from ObTableSchema free function declaration(defined in ob_i_store.cpp; correctly nested in global scope, do not put it inside a storage block)
+namespace oceanbase
+{
+namespace share { namespace schema { class ObTableSchema; } }
+namespace storage
+{
+int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
+                         const common::ObIArray<share::schema::ObColDesc> &column_ids,
+                         blocksstable::ObDatumRow &default_row);
+}  // namespace storage
+}  // namespace oceanbase
+
 #endif // OCEANBASE_STORAGE_I_OB_STORE_H_

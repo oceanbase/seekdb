@@ -20,8 +20,8 @@
 #include "sql/printer/ob_raw_expr_printer.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/stat/ob_stat_define.h"
-#include "share/stat/ob_opt_ds_stat_cache.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
 namespace oceanbase {
 namespace sql {
 class ObRawExpr;

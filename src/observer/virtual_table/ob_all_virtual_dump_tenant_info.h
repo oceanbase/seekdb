@@ -16,7 +16,7 @@
 
 #ifndef OB_ALL_VIRTUAL_DUMP_TENANT_INFO_H_
 #define OB_ALL_VIRTUAL_DUMP_TENANT_INFO_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {

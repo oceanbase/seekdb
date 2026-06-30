@@ -16,10 +16,10 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/stat/ob_stat_item.h"
-#include "share/table/ob_table_load_dml_stat.h"
-#include "share/table/ob_table_load_sql_statistics.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "sql/optimizer/stat/ob_stat_item.h"
+#include "storage/direct_load/ob_table_load_dml_stat.h"
+#include "storage/direct_load/ob_table_load_sql_statistics.h"
 #include "storage/direct_load/ob_direct_load_origin_table.h"
 #include "storage/direct_load/ob_direct_load_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"

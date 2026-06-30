@@ -21,7 +21,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "ob_tablet_merge_task.h"
 #include "lib/list/ob_dlist.h"
-#include "share/scheduler/ob_diagnose_config.h"
+#include "observer/scheduler/ob_diagnose_config.h"
 #include "storage/compaction/ob_compaction_tablet_diagnose.h"
 #include "share/compaction/ob_compaction_info_param.h"
 

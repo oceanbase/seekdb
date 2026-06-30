@@ -19,7 +19,7 @@
 #include "gmock/gmock.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "deps/oblib/src/lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
 {

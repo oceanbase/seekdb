@@ -15,7 +15,7 @@
  */
 
 #include "ob_async_log_struct.h"
-#include "deps/oblib/src/lib/allocator/ob_slice_alloc.h"
+#include "lib/allocator/ob_slice_alloc.h"
 #ifdef _WIN32
 #include <fcntl.h>
 #endif

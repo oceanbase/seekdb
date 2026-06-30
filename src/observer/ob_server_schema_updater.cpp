@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_schema_updater.h"
 #include "observer/ob_server.h"
 

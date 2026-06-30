@@ -19,7 +19,7 @@
 #include "lib/container/ob_vector.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "common/ob_field.h"
 #include "sql/ob_sql_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"

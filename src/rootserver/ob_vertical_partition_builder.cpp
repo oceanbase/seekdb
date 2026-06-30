@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_vertical_partition_builder.h"
-#include "share/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
 
 namespace oceanbase
 {

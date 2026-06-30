@@ -16,6 +16,7 @@
 
 #define private public
 #define protected public
+#include "share/rc/ob_tenant_base.h"
 #include "logservice/ob_log_external_storage_handler.h"
 #include "logservice/ob_log_external_storage_utils.h"
 #include "share/io/ob_backup_io_adapter.h"

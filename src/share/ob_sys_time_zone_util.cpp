@@ -18,8 +18,8 @@
 #include "share/ob_sys_time_zone_util.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_server_struct.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "lib/timezone/ob_timezone_info.h"
+#include "share/ob_tenant_timezone_mgr.h"
+#include "common/timezone/ob_timezone_info.h"
 namespace oceanbase
 {
 using namespace common;
@@ -29,10 +29,10 @@ int ObSysTimeZoneUtil::get_tenant_sys_time_zone_wrap(ObFixedLengthString<common:
     ObTimeZoneInfoWrap &time_zone_info_wrap)
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = nullptr;
+  schema::ObMultiVersionSchemaService *schema_service = nullptr;
   ObSchemaGetterGuard schema_guard;
   ObTZMapWrap tz_map_wrap;
-  const ObSysVarSchema *var_schema = nullptr;
+  const schema::ObSysVarSchema *var_schema = nullptr;
   ObTimeZoneInfoManager *tz_info_mgr = nullptr;
   if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;

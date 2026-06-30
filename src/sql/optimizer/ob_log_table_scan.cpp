@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/domain_id/ob_domain_id.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

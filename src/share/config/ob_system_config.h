@@ -19,7 +19,7 @@
 
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_array.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/config/ob_system_config_key.h"
 #include "share/config/ob_system_config_value.h"
 

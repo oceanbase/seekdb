@@ -15,7 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_time_convert.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;

@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_STMT_H_
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "lib/string/ob_string.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/resolver/ob_stmt.h"
@@ -29,7 +29,7 @@
 #include "sql/resolver/dml/ob_raw_expr_sets.h"
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
-#include "share/vector_index/ob_vector_index_param.h"
+#include "observer/vector_index/ob_vector_index_param.h"
 
 namespace oceanbase
 {

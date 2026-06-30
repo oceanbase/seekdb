@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tenant_checkpoint_slog_handler.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/slog_ckpt/ob_tablet_replay_create_handler.h"

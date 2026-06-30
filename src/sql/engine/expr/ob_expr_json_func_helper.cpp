@@ -2732,3 +2732,14 @@ int ObJsonDeltaLob::deserialize_lob_diffs(char* buf, const int64_t buf_len, stor
 
 }
 }
+
+
+// ── share/object obj_cast json max-depth hook registration ──
+#include "share/object/ob_obj_cast_hooks.h"
+namespace oceanbase {
+namespace sql {
+static const bool g_reg_obj_cast_json_depth_hook =
+    (common::g_obj_cast_json_max_depth =
+         &ObJsonExprHelper::get_json_max_depth_config, true);
+}  // namespace sql
+}  // namespace oceanbase

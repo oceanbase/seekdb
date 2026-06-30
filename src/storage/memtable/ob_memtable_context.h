@@ -23,7 +23,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_small_spin_lock.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "share/ob_define.h"
 #include "storage/ob_memtable_ctx_obj_pool.h"
 #include "storage/memtable/ob_memtable_interface.h"

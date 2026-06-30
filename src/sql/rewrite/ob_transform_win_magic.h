@@ -21,7 +21,7 @@
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 
 namespace oceanbase
 {

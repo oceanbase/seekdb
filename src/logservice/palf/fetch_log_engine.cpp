@@ -15,6 +15,7 @@
  */
 
 #include "fetch_log_engine.h"
+#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
 #include "palf_handle_impl_guard.h"
 #include "palf_env_impl.h"
 

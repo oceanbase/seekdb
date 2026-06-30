@@ -215,11 +215,11 @@ public:
                               share::schema::ObTableSchema &inc_table_schema,
                               share::schema::ObTableSchema &new_table_schema,
                               common::ObMySQLTransaction &trans);
-  int alter_policy_table_partitions(const ObTableSchema &orig_table_schema,
-      ObTableSchema &inc_table_schema, ObTableSchema &new_table_schema, ObMySQLTransaction &trans);
+  int alter_policy_table_partitions(const share::schema::ObTableSchema &orig_table_schema,
+      share::schema::ObTableSchema &inc_table_schema, share::schema::ObTableSchema &new_table_schema, common::ObMySQLTransaction &trans);
 
-  int alter_policy_table_subpartitions(const ObTableSchema &orig_table_schema,
-      ObTableSchema &inc_table_schema, ObTableSchema &new_table_schema, ObMySQLTransaction &trans);
+  int alter_policy_table_subpartitions(const share::schema::ObTableSchema &orig_table_schema,
+      share::schema::ObTableSchema &inc_table_schema, share::schema::ObTableSchema &new_table_schema, common::ObMySQLTransaction &trans);
   int get_part_array_from_table(const share::schema::ObTableSchema &orig_table_schema,
                                 const share::schema::ObTableSchema &inc_table_schema,
                                 common::ObIArray<share::schema::ObPartition*> &part_array);
@@ -229,8 +229,8 @@ public:
                                           const ObIArray<uint64_t> &column_ids,
                                           const share::schema::ObColumnGroupSchema &column_group);
   int update_origin_column_group_with_new_schema(ObMySQLTransaction &trans, 
-                                                const ObTableSchema &origin_table_schema, 
-                                                const ObTableSchema &new_table_schema);
+                                                const share::schema::ObTableSchema &origin_table_schema, 
+                                                const share::schema::ObTableSchema &new_table_schema);
   int insert_single_column(common::ObMySQLTransaction &trans,
                            const share::schema::ObTableSchema &new_table_schema,
                            share::schema::ObColumnSchemaV2 &new_column);
@@ -485,7 +485,7 @@ public:
   virtual int switch_mlog_status(const share::schema::ObTableSchema &data_table_schema,
                                  const uint64_t old_mlog_id,
                                  const uint64_t new_mlog_id,
-                                 ObSchemaGetterGuard &schema_guard,
+                                 share::schema::ObSchemaGetterGuard &schema_guard,
                                  common::ObMySQLTransaction &trans);
 
   //----Functions for managing privileges----

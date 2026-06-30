@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_MONITOR_H
 #define OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_MONITOR_H
 #include "lib/container/ob_se_array.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
-#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
+#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
 
 namespace oceanbase
 {

@@ -24,7 +24,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
-#include "lib/allocator/ob_libeasy_mem_pool.h"
+#include "rpc/ob_libeasy_mem_pool.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
 #include "observer/ob_command_line_parser.h"
@@ -411,11 +411,11 @@ static void print_args(int argc, char *argv[])
 }
 
 /**
- * 解析命令行参数
- * @details 解析命令行参数，并初始化ObServerOptions。
- * @param argc 命令行参数个数
- * @param argv 命令行参数
- * @param opts 配置选项
+ * Parse command-line arguments
+ * @details Parse command-line arguments，and initialize ObServerOptions。
+ * @param argc number of command-line arguments
+ * @param argv command-line arguments
+ * @param opts config options
  */
 static int parse_args(int argc, char *argv[], ObServerOptions &opts)
 {
@@ -424,7 +424,7 @@ static int parse_args(int argc, char *argv[], ObServerOptions &opts)
   ObCommandLineParser parser;
   bool config_file_exists = false;
 
-  // 解析参数，结果直接设置到opts中
+  // Parse arguments and write the results directly into opts
   if (OB_FAIL(parser.parse_args(argc, argv, opts))) {
     MPRINT("Failed to parse command line arguments, ret=%d", ret);
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {

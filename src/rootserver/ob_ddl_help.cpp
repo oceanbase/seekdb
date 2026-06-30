@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_ddl_help.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_ddl_service.h"
-#include "share/schema/ob_schema_service_sql_impl.h"
 namespace oceanbase
 {
 using namespace common;

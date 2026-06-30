@@ -21,7 +21,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/blocksstable/ob_storage_datum.h"
-#include "share/vector_index/ob_vector_embedding_handler.h"
+#include "observer/vector_index/ob_vector_embedding_handler.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/atomic/ob_atomic.h"
 

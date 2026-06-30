@@ -15,13 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "logservice/ob_log_service.h" // ObLogService
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_module_provider.h" // for share::g_mp
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_global_stat_proxy.h" // for ObGlobalStatProxy
 #include "share/schema/ob_schema_struct.h" // for ObTenantSchema
-#include "storage/tx/ob_ts_mgr.h" // for OB_TS_MGR
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
+#include "share/io/ob_io_manager.h"  // OB_IO_MANAGER, previously hidden behind a removed include chain, make the dependency explicit
+#include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
 
 namespace oceanbase
 {
@@ -156,6 +156,22 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
   } else {
     LOG_TRACE("set_default_timeout_ctx success", K(abs_timeout_ts),
         K(ctx_timeout_ts), K(worker_timeout_ts), K(default_timeout));
+  }
+  return ret;
+}
+
+int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
+{
+  int ret = OB_SUCCESS;
+  int64_t DEFAULT_TIMEOUT_US = GCONF.rpc_timeout; // default is 2s
+#ifdef __APPLE__
+  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
+  // Increase the default timeout to 10s to avoid bootstrap failure.
+  DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL); 
+#endif
+
+  if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
+    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   }
   return ret;
 }
@@ -385,80 +401,14 @@ ObReplicaType ObShareUtil::string_to_replica_type(const ObString &str)
   return replica_type;
 }
 
-int ObShareUtil::get_sys_ls_readable_scn(SCN &readable_scn)
-{
-  int ret = OB_SUCCESS;
-  ObLSService *ls_svr = share::g_mp->ls_service();
-  ObLSHandle ls_handle;
-  ObLS *ls = nullptr;
-  share::SCN offline_scn;
-  if (OB_ISNULL(ls_svr)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("pointer is null", KR(ret), KP(ls_svr));
-  } else if (OB_FAIL(ls_svr->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
-      LOG_WARN("get log stream failed", KR(ret));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream is null", KR(ret), K(ls_handle));
-  } else if (OB_FAIL(ls->get_max_decided_scn(readable_scn))) {
-    LOG_WARN("failed to get_max_decided_scn", KR(ret), KPC(ls));
-  }
-  return ret;
-}
+// get_sys_ls_readable_scn moved definition to storage/tx_storage/ob_ls_service.cpp(real user ObLSService/ObLS complete type, previously hidden behind a removed include chain)
+// Note: master tenant-elim changed the original body(MTL(ObLSService*) -> share::g_mp->ls_service()), HOST must be synced (see routing item)
 
-int ObShareUtil::check_clog_disk_full_or_hang(
-    bool &clog_disk_is_full,
-    bool &clog_disk_is_hang)
-{
-  int ret = OB_SUCCESS;
-  clog_disk_is_full = false;
-  clog_disk_is_hang = false;
-  int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
-  const int64_t now = ObTimeUtility::current_time();
-  bool is_disk_enough = true;
-  logservice::ObLogService *log_service = share::g_mp->log_service();
-  if (OB_ISNULL(log_service)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(log_service));
-  } else if (OB_FAIL(log_service->get_io_start_time(clog_disk_last_working_time))) {
-    LOG_WARN("get_io_start_time failed", KR(ret));
-  } else if (OB_FAIL(log_service->check_disk_space_enough(is_disk_enough))) {
-    LOG_WARN("check_disk_space_enough failed", KR(ret));
-  } else {
-    clog_disk_is_full = !is_disk_enough;
-    clog_disk_is_hang = OB_INVALID_TIMESTAMP != clog_disk_last_working_time
-                        && now - clog_disk_last_working_time > GCONF.log_storage_warning_tolerance_time;
-  }
-  return ret;
-}
+// check_clog_disk_full_or_hang moved definition to logservice/ob_log_service.cpp(removes share→logservice dependency, declaration remains in this class header)
+// Note: master tenant-elim changed the original body(MTL(logservice::ObLogService*) -> share::g_mp->log_service()), HOST must be synced (see routing item)
 
-int ObShareUtil::get_tenant_gts(SCN &gts_scn)
-{
-  int ret = OB_SUCCESS;
-  {
-    ret = OB_EAGAIN;
-    const transaction::MonotonicTs stc = transaction::MonotonicTs::current_time();
-    transaction::MonotonicTs unused_ts(0);
-    const int64_t start_time = ObTimeUtility::fast_current_time();
-    const int64_t TIMEOUT = GCONF.rpc_timeout;
-    while (OB_EAGAIN == ret) {
-      if (ObTimeUtility::fast_current_time() - start_time > TIMEOUT) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("stmt is timeout", KR(ret), K(start_time), K(TIMEOUT));
-      } else if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL,
-                                           gts_scn, unused_ts))) {
-        if (OB_EAGAIN != ret) {
-          LOG_WARN("failed to get gts", KR(ret));
-        } else {
-          // waiting 10ms
-          ob_usleep(10L * 1000L);
-        }
-      }
-    }
-  }
-  LOG_INFO("get tenant gts", KR(ret), K(gts_scn));
-  return ret;
-}
+// get_tenant_gts moved definition to storage/tx/ob_ts_mgr.cpp(removes share→storage dependency, declaration remains in this class header)
+// Note: master tenant-elim changed the original body(removed the tenant_id parameter, OB_TS_MGR.get_gts removed the tenant_id argument), HOST must be synced (see routing item)
 
 int ObShareUtil::gen_sys_unit(ObUnit &unit)
 {

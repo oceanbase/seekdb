@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_ZONE_MERGE_MANAGER_
 
 #include "share/ob_zone_merge_info.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/scn.h"
 
 namespace oceanbase

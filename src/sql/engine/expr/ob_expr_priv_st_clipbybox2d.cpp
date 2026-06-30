@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_clipbybox2d.h"
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

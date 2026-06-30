@@ -16,9 +16,9 @@
  
 #include <gtest/gtest.h>
 #define private public
-#include "lib/json_type/ob_json_common.h"
-#include "lib/geo/ob_s2adapter.h"
-#include "lib/utility/ob_test_util.h"
+#include "common/json_type/ob_json_common.h"
+#include "share/geo/ob_s2adapter.h"
+#include "lib/thread/ob_test_util.h"
 
 #undef private
 

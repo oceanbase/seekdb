@@ -18,8 +18,8 @@
 #define OCEANBASE_DAS_DML_VEC_ITER_H
 
 #include "src/sql/das/ob_das_domain_utils.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_index/ob_vector_embedding_handler.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_vector_embedding_handler.h"
 
 namespace oceanbase
 {

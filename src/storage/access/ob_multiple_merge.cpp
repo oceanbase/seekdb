@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_multiple_merge.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_aggregated_store.h"
@@ -25,7 +26,7 @@
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
-#include "share/ob_partition_split_query.h"
+#include "storage/ob_partition_split_query.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 
 namespace oceanbase

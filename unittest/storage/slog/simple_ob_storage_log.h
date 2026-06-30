@@ -23,7 +23,7 @@
 #include "lib/file/file_directory_utils.h"
 #include "lib/file/ob_file.h"
 #include "lib/random/ob_random.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "storage/slog/ob_storage_log_struct.h"
 
 namespace oceanbase

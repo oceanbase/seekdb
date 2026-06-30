@@ -29,8 +29,8 @@
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "src/share/vector_index/ob_plugin_vector_index_adaptor.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 using oceanbase::common::ObString;
 using oceanbase::share::ObVecIdxExtraInfo;

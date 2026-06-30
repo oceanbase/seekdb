@@ -743,6 +743,7 @@ TEST_F(ObTestRedoFill, serial_logging_fill_from_one_list_OTHERS_IS_EMPTY)
 } // memtable
 } // oceanbase
 
+using namespace oceanbase;
 int main(int argc, char **argv)
 {
   const char *log_name = "test_trans_callback_mgr_fill_redo.log";

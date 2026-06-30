@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
 #define OCEANBASE_STORAGE_OB_DDL_REDO_LOG_WRITER_H
 #include "common/ob_tablet_id.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "share/scn.h"
 #include "share/ob_ls_id.h"
 #include "storage/ddl/ob_ddl_clog.h"

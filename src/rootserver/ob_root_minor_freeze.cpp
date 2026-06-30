@@ -1,4 +1,4 @@
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *

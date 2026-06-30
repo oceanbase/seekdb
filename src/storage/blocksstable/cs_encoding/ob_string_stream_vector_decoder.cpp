@@ -484,12 +484,16 @@ private:
   {
     bool operator()()
     {
+      static constexpr bool use_need_copy =
+          std::is_same<VectorType, ObFixedLengthFormat<ValueType>>::value;
+      static constexpr int32_t convert_need_copy_V = use_need_copy ? need_copy_V : false;
       ObStrVecDecodeDispatcher<VectorType, ValueType>::convert_to_vec_funcs_
                                [offset_width_V]
                                [ref_width_V]
                                [null_flag_V]
                                [need_copy_V]
-        = &(ConvertStringToVec_T<VectorType, ValueType, offset_width_V, ref_width_V, null_flag_V, need_copy_V>::process);
+        = &(ConvertStringToVec_T<VectorType, ValueType, offset_width_V, ref_width_V, null_flag_V,
+            convert_need_copy_V>::process);
       return true;
     }
   };

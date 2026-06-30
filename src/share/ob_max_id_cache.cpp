@@ -16,9 +16,10 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "lib/alloc/alloc_struct.h"
+#include "lib/utility/ob_mod_define.h"
 #include "ob_max_id_cache.h"
-#include "src/observer/ob_server_struct.h"
-#include "rootserver/ob_root_service.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -138,7 +139,7 @@ int ObMaxIdCache::fetch_max_id(const ObMaxIdType max_id_type,
   return ret;
 }
 
-ObMaxIdCacheMgr::ObMaxIdCacheMgr() : attr_(ObLabel("MaxIdCache")), allocator_(attr_),
+ObMaxIdCacheMgr::ObMaxIdCacheMgr() : attr_(lib::ObLabel("MaxIdCache")), allocator_(attr_),
   inited_(false), sql_proxy_(nullptr)
 {
 }
@@ -190,51 +191,8 @@ int ObMaxIdCacheMgr::remove_cache_(ObMaxIdCache *cache)
   return ret;
 }
 
-int ObMaxIdCacheMgr::fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
-    const uint64_t size, bool init_tenant_if_not_exist)
-{
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  ObMaxIdCache *cache = nullptr;
-  bool tenant_not_inited = false;
-  if (OB_ISNULL(GCTX.root_service_))  {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(GCTX.root_service_));
-  } else if (!GCTX.root_service_->in_service()) {
-    ret = OB_RS_SHUTDOWN;
-    LOG_WARN("rs is shutdown", KR(ret));
-  } else if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("max id cache mgr is not inited", KR(ret), K(inited_));
-  } else {
-    ObLatchRGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
-    if (OB_ISNULL(tenant_cache_)) {
-      ret = OB_HASH_NOT_EXIST;
-      LOG_WARN("failed to get tenant cache", KR(ret), K(init_tenant_if_not_exist));
-      tenant_not_inited = true;
-    } else if (FALSE_IT(cache = tenant_cache_)) {
-    } else if (OB_ISNULL(cache)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", KR(ret), KP(cache));
-    } else if (OB_FAIL(cache->fetch_max_id(max_id_type, id, size, sql_proxy_))) {
-      LOG_WARN("failed to fetch max id", KR(ret), K(max_id_type), K(size));
-    }
-  }
-  if (OB_HASH_NOT_EXIST == ret && tenant_not_inited && init_tenant_if_not_exist) {
-    ret = OB_SUCCESS;
-    {
-      ObLatchWGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
-      if (OB_TMP_FAIL(add_tenant_())) {
-        // other thread may init this tenant, ignore error
-        LOG_WARN("failed to init new tenant", KR(tmp_ret));
-      }
-    }
-    if (OB_FAIL(fetch_max_id(max_id_type, id, size, false/*init_tenant_if_not_exist*/))) {
-      LOG_WARN("failed to fetch max id", KR(ret), K(max_id_type), K(size));
-    }
-  }
-  return ret;
-}
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state) -> src/rootserver/ob_root_utils.cpp
+// Note: master tenant-elim changed the original body(removed the tenant_id parameter, tenant_caches_->tenant_cache_), HOST(ob_root_utils.cpp) must be synced (see routing item)
 
 int ObMaxIdCacheMgr::add_tenant_()
 {

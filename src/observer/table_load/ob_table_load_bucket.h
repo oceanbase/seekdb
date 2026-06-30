@@ -17,7 +17,7 @@
 #pragma once
 
 #include "lib/net/ob_addr.h"
-#include "share/table/ob_table_load_row_array.h"
+#include "observer/table_load/ob_table_load_row_array.h"
 #include "common/row/ob_row.h"
 
 namespace oceanbase

@@ -23,8 +23,10 @@
 #define private public
 // #define unittest
 #define unittest_bloom_filter
+#include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
 #include "src/sql/engine/expr/ob_expr_in.h"
+#include "sql/engine/px/p2p_datahub/ob_small_hashset.h"
 
 using namespace std;
 namespace oceanbase

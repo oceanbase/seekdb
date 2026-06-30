@@ -26,7 +26,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "share/schema/ob_dependency_info.h"      // ObReferenceObjTable
-#include "lib/allocator/ob_pooled_allocator.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 namespace oceanbase
 {
 namespace sql

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_BASIC_OB_COMPACT_ROW_H_
 #define OCEANBASE_SQL_ENGINE_BASIC_OB_COMPACT_ROW_H_
 
-#include "share/vector/ob_i_vector.h"
+#include "sql/engine/vector/ob_i_vector.h"
 #include "lib/allocator/ob_allocator.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/ob_bit_vector.h"

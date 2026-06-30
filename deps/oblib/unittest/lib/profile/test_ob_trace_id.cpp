@@ -15,7 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "deps/oblib/src/lib/thread/thread.h"
+#include "lib/thread/thread.h"
+#include "lib/profile/ob_trace_id.h"
 
 using namespace oceanbase::common;
 class TestTraceID: public ::testing::Test

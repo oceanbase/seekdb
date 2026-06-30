@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_sub_column_path.h"
 #include "lib/utility/ob_fast_convert.h"
-#include "lib/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_tree.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase

@@ -22,7 +22,7 @@
 #include "ob_px_coord_op.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

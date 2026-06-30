@@ -16,7 +16,7 @@
 
 #define private public
 #define protected public
-#include "deps/oblib/src/common/storage/ob_device_common.h"
+#include "lib/restore/ob_device_common.h"
 #undef private
 #include "./blocksstable/ob_data_file_prepare.h"
 #include "mtlenv/mock_tenant_module_env.h"

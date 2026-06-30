@@ -19,8 +19,8 @@
 
 #include "common/row/ob_row.h"
 #include "observer/omt/ob_multi_tenant.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "storage/ls/ob_ls.h"
 
 namespace oceanbase

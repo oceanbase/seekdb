@@ -18,13 +18,14 @@
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
-#include "share/ob_index_builder_util.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/session/ob_local_session_var.h"
 #include "sql/resolver/mv/ob_alter_mview_utils.h"
 #include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_partition_exchange.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -1578,7 +1579,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
 
             if (OB_SUCC(ret)) {
               create_index_arg->sql_mode_ = session_info_->get_sql_mode();
-              if (OB_FAIL(create_index_arg->local_session_var_.load_session_vars(session_info_))) {
+              if (OB_FAIL(ObLocalSessionVarHelper::load_session_vars(session_info_, create_index_arg->local_session_var_))) {
                 LOG_WARN("fail to fill session info into local_session_var", K(ret));
               }
             }

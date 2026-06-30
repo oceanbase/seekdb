@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_EXECUTOR_OB_EXECUTE_RESULT_
 
 #include "common/row/ob_row.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "sql/engine/ob_operator.h"
 
 namespace oceanbase

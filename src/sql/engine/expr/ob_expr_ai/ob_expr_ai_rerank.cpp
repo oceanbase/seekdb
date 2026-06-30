@@ -18,7 +18,7 @@
 #include "ob_expr_ai_rerank.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/utility/utility.h"
-#include "lib/json_type/ob_json_common.h"
+#include "common/json_type/ob_json_common.h"
 #include "observer/omt/ob_tenant_ai_service.h"
  
 using namespace oceanbase::common;

@@ -15,7 +15,7 @@
  */
 #ifndef OB_SHARE_COMPACTION_COMPACTION_TIMER_TASK_MGR_H_
 #define OB_SHARE_COMPACTION_COMPACTION_TIMER_TASK_MGR_H_
-#include "deps/oblib/src/lib/task/ob_timer.h"
+#include "lib/task/ob_timer.h"
 namespace oceanbase
 {
 namespace compaction

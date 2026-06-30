@@ -23,7 +23,7 @@
 #include "sql/rewrite/ob_query_range_provider.h"
 #include "sql/optimizer/ob_opt_default_stat.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
-#include "share/stat/ob_opt_ds_stat.h"
+#include "sql/optimizer/stat/ob_opt_ds_stat.h"
 
 namespace oceanbase
 {

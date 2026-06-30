@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "share/interrupt/ob_global_interrupt_call.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 
 namespace oceanbase {
 namespace common {

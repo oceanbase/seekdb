@@ -17,16 +17,17 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_direct_load_struct.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_ddl_error_message_table_operator.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
 #include "storage/ob_storage_schema_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_direct_load_mgr_agent.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
@@ -3061,7 +3062,7 @@ int ObDirectLoadSliceWriter::report_unique_key_dumplicated(
     ObDatumRowkey index_key;
     ObDDLErrorMessageTableOperator::ObDDLErrorInfo error_info;
     index_key.assign(datum_row.storage_datums_, rowkey_column_num);
-    if (OB_FAIL(ObDDLErrorMessageTableOperator::extract_index_key(*table_schema, index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {   // read the unique key that violates the unique constraint
+    if (OB_FAIL(ObDDLStorageUtil::extract_index_key(*table_schema, index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {   // read the unique key that violates the unique constraint
       LOG_WARN("extract unique index key failed", K(ret), K(index_key), K(index_key_buffer));
     } else if (OB_FAIL(ObDDLErrorMessageTableOperator::get_index_task_info(*GCTX.sql_proxy_, *table_schema, error_info))) {
       LOG_WARN("get task id of index table failed", K(ret), K(task_id), K(table_schema));
@@ -3175,7 +3176,7 @@ int ObDirectLoadSliceWriter::report_unique_key_dumplicated(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObDDLErrorMessageTableOperator::extract_index_key(*table_schema, *index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {   // read the unique key that violates the unique constraint
+    } else if (OB_FAIL(ObDDLStorageUtil::extract_index_key(*table_schema, *index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {   // read the unique key that violates the unique constraint
       LOG_WARN("extract unique index key failed", K(ret), KPC(index_key), K(index_key_buffer));
     } else if (OB_FAIL(ObDDLErrorMessageTableOperator::get_index_task_info(*GCTX.sql_proxy_, *table_schema, error_info))) {
       LOG_WARN("get task id of index table failed", K(ret), K(task_id), K(table_schema));
@@ -5109,7 +5110,7 @@ int ObDDLTabletMergeDagParamV2::init(const bool for_major,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObCODDLUtil::get_base_cg_idx(tablet_param->storage_schema_, base_cg_idx))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(tablet_param->storage_schema_, base_cg_idx))) {
       LOG_WARN("get base cg idx failed", K(ret));
     } else {
       table_key_.column_group_idx_ = static_cast<uint16_t>(base_cg_idx);

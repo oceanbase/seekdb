@@ -25,7 +25,7 @@
 #endif
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_utility.h"
 #include "lib/lock/ob_spin_lock.h"

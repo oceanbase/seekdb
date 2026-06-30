@@ -17,9 +17,9 @@
 #include <gtest/gtest.h>
 #define private public
 #define protected public
-#include "lib/geo/ob_wkt_parser.h"
-#include "lib/geo/ob_geo_ibin.h"
-#include "lib/geo/ob_geo_3d.h"
+#include "share/geo/ob_wkt_parser.h"
+#include "share/geo/ob_geo_ibin.h"
+#include "share/geo/ob_geo_3d.h"
 #undef private
 #undef protected
 

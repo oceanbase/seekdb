@@ -20,8 +20,8 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include "lib/string/ob_string.h"
-#include "lib/timezone/ob_timezone_info.h"
-#include "rpc/obmysql/ob_mysql_global.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "common/object/ob_object.h"
 #include "common/ob_accuracy.h"

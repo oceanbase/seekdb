@@ -17,8 +17,8 @@
 #ifndef SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MACRO_BLOCK_MARKER_STATUS_H_
 #define SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MACRO_BLOCK_MARKER_STATUS_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 namespace oceanbase

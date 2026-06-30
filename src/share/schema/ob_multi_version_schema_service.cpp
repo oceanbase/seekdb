@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 // for materialized view
 #include "ob_multi_version_schema_service.h"
-#include "observer/ob_server.h"
-#include "observer/ob_service.h"
 #include "share/rc/ob_tenant_base.h"
+#include "share/rc/ob_context.h"  // CREATE_WITH_TEMP_ENTITY_P/RESOURCE_OWNER(previously hidden behind a transitive include)
+#include "share/ob_schema_status_proxy.h"  // previously hidden behind the ob_server.h include chain,make the dependency explicit
+#include "lib/atomic/atomic128.h"  // types::uint128_t/LOAD128/CAS128, previously hidden behind the ob_service.h include chain, make the dependency explicit
+#include "lib/stat/ob_diagnostic_info_guard.h"  // ObASHSetInnerSqlWaitGuard, previously hidden behind the same include chain, make the dependency explicit
 #ifdef __APPLE__
 #include <unistd.h> // For useconds_t on macOS
 #endif
@@ -35,6 +37,12 @@ namespace share
 {
 namespace schema
 {
+// defined in observer/omt/ob_multi_tenant.cpp(reads the _max_schema_slot_num tenant config)
+// master tenant-elim: helper dropped tenant_id, uses TENANT_CONF()
+int64_t get_max_schema_slot_num_for_add_schema(const int64_t default_val);
+
+// master tenant-elim: fn-ptr dropped tenant_id (lambda assigned in observer/ob_service.cpp must match)
+int (*g_submit_async_refresh_schema_task_fn)(const int64_t schema_version) = nullptr;
 
 
 const char *ObMultiVersionSchemaService::print_refresh_schema_mode(const RefreshSchemaMode mode)
@@ -1964,10 +1972,12 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
             }
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(GCTX.ob_service_)) {
+          } else if (OB_ISNULL(g_submit_async_refresh_schema_task_fn)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("observice is null", K(ret));
-          } else if (OB_FAIL(GCTX.ob_service_->submit_async_refresh_schema_task(schema_version))) {
+          // uses function-pointer indirection(defined in observer/ob_service.cpp), share must not depend upward on observer
+          // master tenant-elim'd async_refresh_schema (dropped tenant_id); fn-ptr type must drop tenant_id too
+          } else if (OB_FAIL(g_submit_async_refresh_schema_task_fn(schema_version))) {
             if (OB_EAGAIN == ret || OB_SIZE_OVERFLOW == ret) {
               ret = OB_SUCCESS;
             } else {
@@ -3508,87 +3518,7 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
 }
 
 // cal purge recyclebin need timeout
-int ObMultiVersionSchemaService::cal_purge_need_timeout(
-    const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg,
-    int64_t &cal_timeout)
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_timeout = 0;
-  int64_t total_purge_count = 0;
-  ObArray<ObRecycleObject> recycle_objs;
-  int64_t purge_num = purge_recyclebin_arg.purge_num_;
-  
-  const int64_t expire_time = purge_recyclebin_arg.expire_time_;
-  if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is NULL", KR(ret));
-  } else if (OB_ISNULL(sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is NULL", KR(ret));
-  } else {
-    rootserver::ObDDLOperator ddl_operator(*this, *sql_proxy_);
-    if (OB_FAIL(ddl_operator.fetch_expire_recycle_objects(expire_time, recycle_objs))) {
-      LOG_WARN("fail to get fetch expire recycle objects", KR(ret), K(purge_recyclebin_arg));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < recycle_objs.count() && total_purge_count < purge_num; i++) {
-      const ObRecycleObject &recycle_obj = recycle_objs.at(i);
-      switch(recycle_obj.get_type()) {
-          case ObRecycleObject::VIEW:
-          case ObRecycleObject::TABLE: {
-            int64_t cal_table_timeout = 0;
-            const uint64_t table_id = recycle_obj.get_table_id();
-            if (OB_FAIL(cal_purge_table_timeout_(table_id, cal_table_timeout, total_purge_count))) {
-              LOG_WARN("fail to cal purge table timeout", KR(ret), K(table_id));
-            } else {
-              tmp_timeout += cal_table_timeout;
-            }
-            break;
-          }
-          case ObRecycleObject::DATABASE: {
-            int64_t cal_database_timeout = 0;
-            const int64_t database_id = recycle_obj.get_database_id();
-            if (OB_FAIL(cal_purge_database_timeout_(database_id, cal_database_timeout, total_purge_count))) {
-              LOG_WARN("fail to cal purge database timeout", KR(ret));
-            } else {
-              tmp_timeout += cal_database_timeout;
-            }
-            break;
-          }
-          case ObRecycleObject::TENANT: {
-            tmp_timeout += GCONF.rpc_timeout;
-            total_purge_count++;
-            break;
-          }
-          case ObRecycleObject::TRIGGER:
-          case ObRecycleObject::INDEX:
-          case ObRecycleObject::AUX_LOB_META:
-          case ObRecycleObject::AUX_LOB_PIECE:
-          case ObRecycleObject::AUX_VP: {
-            continue;
-          }
-          default: {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unknown recycle object type", K(recycle_obj));
-          }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    int64_t high_bound_timeout = 0;
-    int64_t low_bound_timeout = 10 * GCONF.rpc_timeout;
-    if (0 == total_purge_count) {
-      cal_timeout = 0;
-    // if this worker or ctxs' timeout not be set, use ddl timeout as high bound value
-    } else if (OB_FAIL(ObShareUtil::get_ctx_timeout(GCONF._ob_ddl_timeout, high_bound_timeout))) {
-      LOG_WARN("fail to set timeout", KR(ret));
-    } else {
-      // to prevent tmp_timeout is too small, use low_bound_timeout to compare
-      tmp_timeout = std::max(low_bound_timeout, tmp_timeout);
-      cal_timeout = std::min(high_bound_timeout, tmp_timeout);
-    }
-  }
-  return ret;
-}
+// moved definition to rootserver/ob_ddl_operator.cpp(real upper-layer symbol user, previously hidden by a unity-build dependency)
 
 int ObMultiVersionSchemaService::cal_purge_table_timeout_(
     const uint64_t &table_id,

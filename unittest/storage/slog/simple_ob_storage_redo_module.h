@@ -22,7 +22,7 @@
 #include "lib/file/file_directory_utils.h"
 #include "lib/file/ob_file.h"
 #include "lib/random/ob_random.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "storage/slog/ob_storage_log_struct.h"
 #include "src/storage/meta_mem/ob_tablet_map_key.h"
 #include "src/storage/ob_super_block_struct.h"

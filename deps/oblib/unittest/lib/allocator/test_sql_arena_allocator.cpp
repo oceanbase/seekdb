@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "deps/oblib/src/lib/alloc/ob_tenant_ctx_allocator.h"
+#include "lib/alloc/ob_tenant_ctx_allocator.h"
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 

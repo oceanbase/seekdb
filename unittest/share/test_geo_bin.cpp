@@ -20,20 +20,20 @@
 #define USING_LOG_PREFIX LIB
 #include <boost/geometry.hpp>
 #define private public
-#include "lib/geo/ob_geo_bin_traits.h"
-#include "lib/geo/ob_geo_tree_traits.h"
-#include "lib/geo/ob_geo_wkb_visitor.h"
-#include "lib/geo/ob_geo_wkb_size_visitor.h"
-#include "lib/geo/ob_geo_longtitude_correct_visitor.h"
-#include "lib/geo/ob_geo_reverse_coordinate_visitor.h"
-#include "lib/geo/ob_geo_segment_collect_visitor.h"
-#include "lib/geo/ob_geo_vertex_collect_visitor.h"
-#include "lib/geo/ob_geo_3d.h"
+#include "share/geo/ob_geo_bin_traits.h"
+#include "share/geo/ob_geo_tree_traits.h"
+#include "share/geo/ob_geo_wkb_visitor.h"
+#include "share/geo/ob_geo_wkb_size_visitor.h"
+#include "share/geo/ob_geo_longtitude_correct_visitor.h"
+#include "share/geo/ob_geo_reverse_coordinate_visitor.h"
+#include "share/geo/ob_geo_segment_collect_visitor.h"
+#include "share/geo/ob_geo_vertex_collect_visitor.h"
+#include "share/geo/ob_geo_3d.h"
 #include "src/share/schema/ob_server_schema_service.h"
-#include "lib/geo/ob_wkb_to_json_visitor.h"
-#include "lib/geo/ob_wkb_byte_order_visitor.h"
-#include "lib/geo/ob_geo_interior_point_visitor.h"
-#include "lib/geo/ob_geo_mvt_encode_visitor.h"
+#include "share/geo/ob_wkb_to_json_visitor.h"
+#include "share/geo/ob_wkb_byte_order_visitor.h"
+#include "share/geo/ob_geo_interior_point_visitor.h"
+#include "share/geo/ob_geo_mvt_encode_visitor.h"
 #undef private
 
  

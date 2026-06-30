@@ -20,7 +20,7 @@
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_exchange.h"
 #include "sql/optimizer/ob_log_join.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 using namespace oceanbase;
 using namespace oceanbase::sql;

@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/hash/ob_link_hashmap.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "share/sequence/ob_sequence_dml_proxy.h"
 #include "share/sequence/ob_sequence_option.h"
 

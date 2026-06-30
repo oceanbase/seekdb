@@ -914,7 +914,7 @@ private:
 
 
   static int set_variable(pl::ObPLExecCtx *ctx,
-                          const share::ObSetVar::SetScopeType scope,
+                          const sql::ObSetVar::SetScopeType scope,
                           const ObString &name,
                           const ObObjParam &value,
                           bool is_default = false);

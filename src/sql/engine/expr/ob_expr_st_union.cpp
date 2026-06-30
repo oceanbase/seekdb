@@ -18,8 +18,8 @@
 
 #include "ob_expr_st_union.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/geo/ob_geo_elevation_visitor.h"
-#include "lib/geo/ob_geo_func_utils.h"
+#include "share/geo/ob_geo_elevation_visitor.h"
+#include "share/geo/ob_geo_func_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

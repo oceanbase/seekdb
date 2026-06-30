@@ -18,6 +18,7 @@
 #define OCEANBASE_ROOTSERVICE_OB_DDL_SINGLE_REPLICA_EXECUTOR_H
 
 #include "lib/container/ob_array.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_rpc_struct.h"

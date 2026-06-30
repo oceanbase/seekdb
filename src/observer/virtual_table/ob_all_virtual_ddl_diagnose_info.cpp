@@ -17,14 +17,14 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_all_virtual_ddl_diagnose_info.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_ddl_common.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_ddl_sim_point_define.h"
-#include "deps/oblib/src/lib/string/ob_string.h"
-#include "deps/oblib/src/lib/utility/ob_macro_utils.h"
-#include "deps/oblib/src/lib/alloc/alloc_assist.h"
+#include "lib/string/ob_string.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/alloc_assist.h"
 
 
 namespace oceanbase

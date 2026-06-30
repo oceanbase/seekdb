@@ -18,6 +18,8 @@
 #include "ob_expr_func_part_hash.h"
 #include "sql/resolver/ob_resolver_utils.h"
 
+#include "sql/engine/expr/ob_wide_integer_partition_hash.h"
+
 namespace oceanbase
 {
 using namespace common;

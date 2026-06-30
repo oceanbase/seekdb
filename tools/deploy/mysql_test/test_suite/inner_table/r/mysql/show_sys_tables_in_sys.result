@@ -5014,13 +5014,6 @@ id	field	type	length	precision	nullable
 19	hold_size	5	0	20	0
 20	timeout_ts	18	0	25	0
 21	start_time	18	0	25	0
-table oceanbase.__all_virtual_storage_leak_info column_count 4 table_id 12399
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12399 order by column_id;
-id	field	type	length	precision	nullable
-16	check_id	5	0	20	0
-17	check_mod	22	128	-1	0
-18	hold_count	5	0	20	0
-19	backtrace	22	4096	-1	0
 table oceanbase.__all_virtual_tablet_buffer_info column_count 6 table_id 12405
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12405 order by column_id;
 id	field	type	length	precision	nullable

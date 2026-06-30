@@ -21,7 +21,7 @@
 #include "sql/resolver/cmd/ob_cmd_stmt.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/resolver/dml/ob_hint.h"
-#include "share/io/ob_backup_storage_info.h"
+#include "sql/resolver/cmd/ob_load_dup_action_type.h"
 
 namespace oceanbase
 {
@@ -29,12 +29,6 @@ namespace sql
 {
 class ObDirectLoadOptimizerCtx;
 
-enum class ObLoadDupActionType {
-  LOAD_STOP_ON_DUP = 0, //stop when going to insert duplicated key
-  LOAD_REPLACE, //replace into table when the rowkey is already existed
-  LOAD_IGNORE, //skip this line, when the rowkey is already existed
-  LOAD_INVALID_MODE
-};
 
 enum class ObLoadFileLocation {
   SERVER_DISK = 0,

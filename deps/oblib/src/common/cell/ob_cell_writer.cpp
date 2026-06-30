@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/cell/ob_cell_writer.h"
+#include "common/timezone/ob_time_convert.h"
 #include "common/object/ob_object.h"
 namespace oceanbase
 {

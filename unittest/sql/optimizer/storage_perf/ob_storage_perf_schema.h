@@ -26,7 +26,7 @@
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "sql/parser/parse_node.h"
 #include "storage/ob_partition_storage.h"
 #include "storage/mockcontainer/ob_restore_schema.h"

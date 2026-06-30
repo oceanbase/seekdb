@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tx_storage/ob_empty_shell_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/literals/ob_literals.h"    // ObLSIterator
@@ -335,7 +336,7 @@ int ObTabletEmptyShellHandler::check_transfer_out_deleted_tablet_(
 int ObTabletEmptyShellHandler::get_readable_scn(share::SCN &readable_scn)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObShareUtil::get_sys_ls_readable_scn(readable_scn))) {
+  if (OB_FAIL(storage::get_sys_ls_readable_scn(readable_scn))) {
     LOG_WARN("failed to get_max_decided_scn", KR(ret));
   }
   return ret;

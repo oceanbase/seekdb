@@ -19,7 +19,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include <math.h>
 #include "sql/engine/expr/ob_expr_equal.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/charset/ob_dtoa.h"
 #include "share/object/ob_obj_cast.h"

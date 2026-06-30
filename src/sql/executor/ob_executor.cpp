@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_executor.h"
 #include "sql/executor/ob_remote_scheduler.h"
 #include "sql/executor/ob_task_spliter.h"

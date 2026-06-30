@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sstable_row_multi_getter.h"
 
 namespace oceanbase {

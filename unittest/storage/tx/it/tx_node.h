@@ -39,8 +39,8 @@
 #include "../mock_utils/msg_bus.h"
 #include "../mock_utils/basic_fake_define.h"
 #include "../mock_utils/ob_fake_tx_rpc.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 
 namespace oceanbase {

@@ -22,13 +22,18 @@
 namespace oceanbase
 {
 
-namespace sql
-{
-  struct ObDiagnosisManager;
-}
-
 namespace common
 {
+
+class ObRowDiagnosisInfo
+{
+public:
+  virtual ~ObRowDiagnosisInfo() {}
+  virtual void set_cur_file_url(ObString file_url) = 0;
+  virtual ObString get_cur_file_url() const = 0;
+  virtual void set_cur_line_number(int64_t line_number) = 0;
+  virtual int64_t get_cur_line_number() const = 0;
+};
 
 class ObNewRowIterator
 {
@@ -45,7 +50,7 @@ public:
   ObNewRowIterator() : type_(Other) {}
   explicit ObNewRowIterator(const IterType type) : type_(type) {}
   virtual ~ObNewRowIterator() {}
-  virtual int get_diagnosis_info(sql::ObDiagnosisManager* diagnosis_manager) { return OB_SUCCESS; };
+  virtual int get_diagnosis_info(ObRowDiagnosisInfo *diagnosis_info) { UNUSED(diagnosis_info); return OB_SUCCESS; }
   /**
    * get the next row and move the cursor
    *

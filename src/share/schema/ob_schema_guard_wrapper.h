@@ -19,7 +19,7 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_latest_schema_guard.h"
-#include "rootserver/ob_ddl_service.h"
+namespace oceanbase { namespace rootserver { class ObDDLService; } }
 namespace oceanbase
 {
 namespace common

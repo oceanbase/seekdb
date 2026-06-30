@@ -18,7 +18,7 @@
 
 #include <gtest/gtest.h>
 #define private public
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 
 using namespace oceanbase;
 using namespace common;

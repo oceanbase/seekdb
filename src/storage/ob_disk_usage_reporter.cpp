@@ -15,6 +15,7 @@
  */
 
 #include "storage/ob_disk_usage_reporter.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 
 

@@ -20,6 +20,7 @@
 #include "lib/task/ob_timer_monitor.h"       // ObTimerMonitor
 #include "lib/thread/thread_mgr.h"           // get_tenant_tg_helper
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/profile/ob_trace_id.h"
 
 // Weak fallback; strong definition in share/rc/ob_tenant_base.cpp.
 void __attribute__((weak, noinline)) lib_mtl_switch(::oceanbase::lib::IRunWrapper *run_wrapper, std::function<void()> fn)

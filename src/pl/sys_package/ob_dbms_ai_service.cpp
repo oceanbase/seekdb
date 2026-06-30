@@ -19,8 +19,8 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_dbms_ai_service.h"
-#include "share/ai_service/ob_ai_service_executor.h"
-#include "share/ai_service/ob_ai_service_struct.h"
+#include "observer/ai_service/ob_ai_service_executor.h"
+#include "observer/ai_service/ob_ai_service_struct.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_rpc_struct.h"
 #include "src/pl/ob_pl.h"

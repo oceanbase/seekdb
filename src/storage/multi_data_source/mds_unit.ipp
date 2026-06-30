@@ -19,7 +19,7 @@
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "observer/virtual_table/ob_mds_event_buffer.h"
 #include "share/ob_errno.h"
 #include "runtime_utility/mds_retry_control.h"
@@ -249,9 +249,6 @@ int MdsUnit<K, V>::insert_empty_kv_to_list_(const K &key, KvPair<K, Row<K, V>> *
   #define PRINT_WRAPPER KR(ret), K(key), K(typeid(K).name()), K(typeid(V).name())
   int ret = OB_SUCCESS;
   MDS_TG(1_ms);
-  set_mds_mem_check_thread_local_info(p_mds_table->ls_id_,
-                                      p_mds_table->tablet_id_,
-                                      typeid(p_kv).name());
   if (MDS_FAIL(MdsFactory::create(p_kv))) {
     MDS_LOG_SET(WARN, "MdsUnit create kv pair failed");
   } else if (FALSE_IT(p_kv->v_.p_mds_unit_ = this)) {
@@ -268,7 +265,6 @@ int MdsUnit<K, V>::insert_empty_kv_to_list_(const K &key, KvPair<K, Row<K, V>> *
       p_kv = nullptr;
     }
   }
-  reset_mds_mem_check_thread_local_info();
   return ret;
   #undef PRINT_WRAPPER
 }

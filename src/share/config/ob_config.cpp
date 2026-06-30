@@ -15,6 +15,8 @@
  */
 
 #include "ob_config.h"
+#include "share/config/ob_tenant_config_mgr.h"
+
 #include "share/config/ob_server_config.h"
 #include "share/ob_task_define.h"
 #include "share/ob_cluster_version.h"

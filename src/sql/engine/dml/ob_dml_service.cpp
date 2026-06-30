@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/dml/ob_dml_service.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_insert_op.h"
 #include "sql/das/ob_das_delete_op.h"
@@ -24,12 +25,12 @@
 #include "sql/das/ob_das_utils.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "sql/engine/dml/ob_err_log_service.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "pl/ob_pl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 namespace oceanbase
 {
 using namespace common;
@@ -135,7 +136,7 @@ int ObDMLService::check_column_null(
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("dml with ignore not supported with cascaded column", KPC(expr));
         LOG_USER_ERROR(OB_BAD_NULL_ERROR, column_info.column_name_.length(), column_info.column_name_.ptr());
-      } else if (OB_FAIL(ObObjCaster::get_zero_value(
+      } else if (OB_FAIL(sql::get_obj_zero_value(
           expr->obj_meta_.get_type(),
           expr->obj_meta_.get_collation_type(),
           zero_obj))) {

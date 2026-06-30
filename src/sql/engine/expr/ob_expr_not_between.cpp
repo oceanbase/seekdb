@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_not_between.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 
 namespace oceanbase
 {

@@ -17,7 +17,7 @@
 #ifndef _OB_RS_TEST_UTILS_H
 #define _OB_RS_TEST_UTILS_H 1
 #include <gtest/gtest.h>
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #include "rootserver/ob_root_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/json/ob_json.h"

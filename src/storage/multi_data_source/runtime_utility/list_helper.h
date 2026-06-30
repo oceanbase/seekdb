@@ -23,7 +23,7 @@
 #include "lib/utility/utility.h"
 #include "share/ob_errno.h"
 #include "src/share/ob_delegate.h"
-#include "deps/oblib/src/common/meta_programming/ob_type_traits.h"
+#include "common/meta_programming/ob_type_traits.h"
 #include "common_define.h"
 
 namespace oceanbase

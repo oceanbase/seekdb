@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_SCHEMA_DB_INITIALIZER_H_
 #define OCEANBASE_SCHEMA_DB_INITIALIZER_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/mysqlclient/ob_single_mysql_connection_pool.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_single_mysql_connection_pool.h"
 #include "share/config/ob_server_config.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include <string>

@@ -18,7 +18,7 @@
 #define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_MONITOR_H_
 
 #include "sql/engine/ob_exec_context.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 using namespace oceanbase::common::number;
 

@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 #include "lib/allocator/ob_malloc.h"
 #define TEST_SMART_VAR
-#include "common/ob_smart_var.h"
+#include "lib/utility/ob_smart_var.h"
 #undef TEST_SMART_VAR
 
 const int64_t s_size = 2 << 20;

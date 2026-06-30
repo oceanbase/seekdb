@@ -26,7 +26,7 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/config/ob_server_config.h"
 
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {

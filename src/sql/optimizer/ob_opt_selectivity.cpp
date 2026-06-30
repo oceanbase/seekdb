@@ -18,8 +18,8 @@
 #include "ob_opt_selectivity.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "share/stat/ob_opt_stat_manager.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
 using namespace oceanbase::common;

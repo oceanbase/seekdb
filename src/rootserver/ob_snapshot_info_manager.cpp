@@ -15,10 +15,11 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_snapshot_info_manager.h"
 #include "share/ob_ddl_common.h"
 #include "common/ob_timeout_ctx.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "ob_rs_event_history_table_operator.h"
 
 using namespace oceanbase::common;

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_routine_sql_service.h"
-#include "pl/ob_pl_stmt.h"
+#include "pl/ob_pl_object_id_util.h"  // uses only get_tenant_id_by_object_id, use the pure header
 
 namespace oceanbase
 {

@@ -233,7 +233,7 @@ int ObExprGetSysVar::get_sys_var_disp_obj(common::ObIAllocator &allocator,
   SMART_VAR(ObSysVarFactory, sysvar_fac) {
     if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(&session, allocator, var_name, value))) {
       LOG_WARN("get sys var disp obj failed", K(ret));
-    } else if (SYS_VAR_INVALID == (sys_var_id = ObSysVarFactory::find_sys_var_id_by_name(var_name, false))) {
+    } else if (SYS_VAR_INVALID == (sys_var_id = share::ObSysVarMeta::find_sys_var_id_by_name(var_name, false))) {
       ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
       LOG_WARN("unknown system variable", K(var_name));
     } else if (OB_FAIL(sysvar_fac.create_sys_var(sys_var_id, sys_var))) {

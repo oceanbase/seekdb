@@ -41,7 +41,7 @@
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_template_utils.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 
 #define LOG_N_TRUE "true"
 #define LOG_N_FLASE "false"

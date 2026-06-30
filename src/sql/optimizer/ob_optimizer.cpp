@@ -20,7 +20,7 @@
 #include "sql/optimizer/ob_explain_note.h"
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
-#include "src/share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "src/sql/engine/px/ob_dfo_scheduler.h"
 
 using namespace oceanbase;

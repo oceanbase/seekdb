@@ -19,7 +19,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"

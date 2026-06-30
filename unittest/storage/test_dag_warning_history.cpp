@@ -19,7 +19,8 @@
 #define private public
 #define protected public
 
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/ob_unit_getter.h"
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase

@@ -1,3 +1,4 @@
+alter system set _enable_add_fulltext_index_to_existing_table = false;
 drop database if exists post_create_vec;
 create database post_create_vec;
 use post_create_vec;

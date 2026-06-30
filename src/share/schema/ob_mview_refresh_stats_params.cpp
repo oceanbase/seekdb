@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "share/schema/ob_mview_refresh_stats_params.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_vectors_buffer.h"
-#include "share/vector/ob_uniform_base.h"
-#include "share/vector/ob_discrete_base.h"
-#include "share/vector/ob_continuous_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
+#include "sql/engine/vector/ob_discrete_base.h"
+#include "sql/engine/vector/ob_continuous_base.h"
 #include "src/share/ob_define.h"
 
 using namespace oceanbase::common;

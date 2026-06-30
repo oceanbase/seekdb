@@ -21,6 +21,7 @@
 #include "pl/ob_pl_user_type.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "pl/ob_pl_object_id_util.h"
 
 namespace oceanbase {
 namespace sql {
@@ -1138,7 +1139,6 @@ public:
     LOCAL_TYPE,         // local custom type
     PKG_TYPE,           // custom type in the package
     SELF_ATTRIBUTE,
-    DBLINK_PKG_NS,      // dblink package
     UDT_MEMBER_ROUTINE, //
     TRIGGER,            // Trigger
     SEQUENCE            // Sequence
@@ -2629,8 +2629,7 @@ public:
         subprogram_path_(allocator),
         params_(allocator),
         nocopy_params_(allocator),
-        route_sql_(),
-        dblink_id_(common::OB_INVALID_ID) {}
+        route_sql_() {}
   virtual ~ObPLCallStmt() {}
 
   int accept(ObPLStmtVisitor &visitor) const;
@@ -2664,8 +2663,7 @@ public:
                K_(is_object_udf),
                K_(params),
                K_(nocopy_params),
-               K_(route_sql),
-               K_(dblink_id));
+               K_(route_sql));
 
 private:
   uint64_t invoker_id_;
@@ -2676,7 +2674,6 @@ private:
   ObPLSEArray<InOutParam> params_;
   ObPLSEArray<int64_t> nocopy_params_;
   common::ObString route_sql_;
-  uint64_t dblink_id_;
 };
 
 class ObPLInnerCallStmt : public ObPLStmt

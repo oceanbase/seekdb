@@ -124,7 +124,6 @@ static int pl_execute_callee_seh(
     int *status,
     bool in_function,
     uint64_t loc,
-    uint64_t dblink_id,
     share::schema::ObSchemaGetterGuard *old_schema_guard)
 {
   int ret = OB_SUCCESS;
@@ -142,8 +141,7 @@ static int pl_execute_callee_seh(
                      true,
                      in_function,
                      loc,
-                     false,
-                     dblink_id);
+                     false);
   } __finally {
     // Restore unconditionally — covers normal exit, error-code exit, and
     // SEH unwind. force_restore_pl_stack_ctx is itself a no-op when the
@@ -165,8 +163,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
                        uint64_t loc,
                        int64_t argc,
                        common::ObObjParam **argv,
-                       int64_t *nocopy_argv,
-                       uint64_t dblink_id)
+                       int64_t *nocopy_argv)
 {
   int ret = OB_SUCCESS;
   lib::MemoryContext mem_context;
@@ -248,8 +245,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
                                     package_id, proc_id, path_array,
                                     proc_params, nocopy_params,
                                     *ctx.result_, ctx.status_,
-                                    ctx.in_function_, loc, dblink_id,
-                                    old_schema_guard);
+                                    ctx.in_function_, loc, old_schema_guard);
         if (OB_FAIL(ret)) {
           LOG_WARN("failed to execute pl", K(ret), K(package_id), K(proc_id), K(ctx.in_function_));
         }
@@ -267,8 +263,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
                                  true,
                                  ctx.in_function_,
                                  loc,
-                                 false,
-                                 dblink_id))) {
+                                 false))) {
             LOG_WARN("failed to execute pl", K(ret), K(package_id), K(proc_id), K(ctx.in_function_));
           }
         } catch (...) {
@@ -426,8 +421,7 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
                        ObExecContext &ctx,
                        ObPLFunction *routine,
                        bool is_function_or_trigger,
-                       ObIAllocator *allocator,
-                       const bool is_dblink)
+                       ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
 
@@ -437,12 +431,10 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
 
   int64_t pl_block_timeout = 0;
   int64_t query_start_time = session_info.get_query_start_time();
-  if (!is_dblink) {
-    CK (OB_NOT_NULL(routine));
-    OX (is_function_or_trigger |= routine->is_function());
-    OX (is_autonomous_ = routine->is_autonomous());
-    OX (is_function_or_trigger_ = is_function_or_trigger);
-  }
+  CK (OB_NOT_NULL(routine));
+  OX (is_function_or_trigger |= routine->is_function());
+  OX (is_autonomous_ = routine->is_autonomous());
+  OX (is_function_or_trigger_ = is_function_or_trigger);
   if (OB_SUCC(ret) && OB_NOT_NULL(ObCurTraceId::get_trace_id())) {
     trace_id_.set(*ObCurTraceId::get_trace_id());
   }
@@ -761,7 +753,6 @@ void ObPLContext::destory(
     session_info_ = NULL;
 
     IGNORE_RETURN ObPLContext::debug_stop(&session_info);
-#undef IS_DBLINK_TRANS
   } else if (is_function_or_trigger_) {
     // Non-nested scenario: The inner udf must be inside the expression, submission is guaranteed by spi_calc_expr
     // Nested scenario: Inner UDF is triggered by DML statement, rollback or commit is guaranteed by the outer DML statement
@@ -2008,9 +1999,7 @@ int ObPL::execute(ObExecContext &ctx,
                   bool inner_call,
                   bool in_function,
                   uint64_t loc,
-                  bool is_called_from_sql,
-                  uint64_t dblink_id,
-                  const ObRoutineInfo *dblink_routine_info)
+                  bool is_called_from_sql)
 {
   int ret = OB_SUCCESS;
   FLTSpanGuard(pl_entry);
@@ -2027,7 +2016,6 @@ int ObPL::execute(ObExecContext &ctx,
   }
   FLT_SET_TAG(pl_entry_package_id, package_id);
   FLT_SET_TAG(pl_entry_routine_id, routine_id);
-  FLT_SET_TAG(pl_entry_dblink_id, dblink_id);
   bool debug_mode = false;
   ObPLFunction *routine = NULL;
   ObPLFunction *local_routine = NULL;
@@ -2042,17 +2030,14 @@ int ObPL::execute(ObExecContext &ctx,
   SMART_VAR(ObPLContext, stack_ctx) {
     if (OB_ISNULL(ctx.get_my_session()->get_pl_context())) {
       // set work timeout for compile it only top level store routine
-      // needn't set timeout for execute dblink
-      if (!is_valid_id(dblink_id)) {
-        int64_t pl_block_timeout = 0;
-        int64_t query_start_time = ctx.get_my_session()->get_query_start_time();
-        old_worker_timeout_ts = THIS_WORKER.get_timeout_ts();
-        OZ (ctx.get_my_session()->get_pl_block_timeout(pl_block_timeout));
-        if (OB_SUCC(ret) && pl_block_timeout > OB_MAX_USER_SPECIFIED_TIMEOUT) {
-          pl_block_timeout = OB_MAX_USER_SPECIFIED_TIMEOUT;
-        }
-        OX (THIS_WORKER.set_timeout_ts(query_start_time + pl_block_timeout));
+      int64_t pl_block_timeout = 0;
+      int64_t query_start_time = ctx.get_my_session()->get_query_start_time();
+      old_worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+      OZ (ctx.get_my_session()->get_pl_block_timeout(pl_block_timeout));
+      if (OB_SUCC(ret) && pl_block_timeout > OB_MAX_USER_SPECIFIED_TIMEOUT) {
+        pl_block_timeout = OB_MAX_USER_SPECIFIED_TIMEOUT;
       }
+      OX (THIS_WORKER.set_timeout_ts(query_start_time + pl_block_timeout));
     } else {
       ObPLContext *curr = ctx.get_my_session()->get_pl_context()->get_top_stack_ctx();
       parent_trace_id.set(curr->get_trace_id());
@@ -2071,7 +2056,7 @@ int ObPL::execute(ObExecContext &ctx,
     // NOTE: need save current stmt type to avoid PL build corrupting session.stmt_type
     auto saved_stmt_type = ctx.get_my_session()->get_stmt_type();
     if (OB_FAIL(ret)) {
-    } else if (!is_valid_id(dblink_id)) {
+    } else {
       OZ (get_pl_function(ctx,
                           *ctx.get_package_guard(),
                           package_id,
@@ -2164,9 +2149,8 @@ int ObPL::execute(ObExecContext &ctx,
                       in_function
                       || (package_id != OB_INVALID_ID
                           && ObTriggerInfo::is_trigger_package_id(package_id)),
-                      &allocator,
-                      is_valid_id(dblink_id)));
-    if (OB_SUCC(ret) && !is_valid_id(dblink_id)) {
+                      &allocator));
+    if (OB_SUCC(ret)) {
       OZ (stack_ctx.inc_and_check_depth(package_id, routine_id, routine->is_function()));
       OZ (stack_ctx.set_exec_env(*routine));
       OZ (stack_ctx.set_default_database(*routine, *(ctx.get_sql_ctx()->schema_guard_)));
@@ -2175,12 +2159,10 @@ int ObPL::execute(ObExecContext &ctx,
 
 #define UNPREPARE() \
     if (stack_ctx.is_inited()) { \
-      if (!is_valid_id(dblink_id)) { \
-        stack_ctx.reset_exec_env(ret); \
-        stack_ctx.reset_default_database(ret); \
-        stack_ctx.reset_role_id_array(ret); \
-        stack_ctx.dec_and_check_depth(package_id, routine_id, ret); \
-      } \
+      stack_ctx.reset_exec_env(ret); \
+      stack_ctx.reset_default_database(ret); \
+      stack_ctx.reset_role_id_array(ret); \
+      stack_ctx.dec_and_check_depth(package_id, routine_id, ret); \
       stack_ctx.destory(*ctx.get_my_session(), ctx, ret); \
     } \
     if (NULL != routine) routine->clean_debug_priv(); \

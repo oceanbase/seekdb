@@ -18,8 +18,9 @@
 #define OCEANBASE_STORAGE_OB_TABLET_SPLIT_TASK_H
 
 #include "share/ob_ddl_common.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/ob_storage_rpc_arg.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "storage/access/ob_table_param.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"

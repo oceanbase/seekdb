@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cg_scanner.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
 

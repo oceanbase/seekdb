@@ -15,7 +15,7 @@
  */
 
 #include "lib/container/ob_bitmap.h"
-#include "common/ob_target_specific.h"
+#include "lib/utility/ob_target_specific.h"
 
 #if OB_USE_MULTITARGET_CODE
 #include <immintrin.h>

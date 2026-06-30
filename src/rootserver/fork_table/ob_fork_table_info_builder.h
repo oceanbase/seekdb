@@ -18,7 +18,7 @@
 #define OB_FORK_TABLE_INFO_BUILDER_H
 
 #include "lib/hash/ob_hashmap.h"
-#include "share/ob_fork_table_util.h" // ObForkTableInfo/ObForkTabletInfo/ObForkTableUtil
+#include "rootserver/fork_table/ob_fork_table_util.h" // ObForkTableInfo/ObForkTabletInfo/ObForkTableUtil
 #include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase

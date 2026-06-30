@@ -24,7 +24,7 @@
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_root_service.h"
 #include "storage/ddl/ob_ddl_lock.h"
-#include "share/ob_vec_index_builder_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 
 using namespace oceanbase::share;
 

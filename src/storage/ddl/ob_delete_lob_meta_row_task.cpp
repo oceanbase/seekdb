@@ -18,7 +18,7 @@
 #include "ob_delete_lob_meta_row_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_root_service.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
 namespace oceanbase

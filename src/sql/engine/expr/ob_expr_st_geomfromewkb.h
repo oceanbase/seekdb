@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_ST_GEOMFROMTEWKB
 #define OCEANBASE_SQL_OB_EXPR_ST_GEOMFROMTEWKB
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 
 
 namespace oceanbase

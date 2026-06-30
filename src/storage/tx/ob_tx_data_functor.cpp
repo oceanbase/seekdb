@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_data_functor.h"
+#include "logservice/ob_log_service.h"  // logservice::check_clog_disk_full_or_hang
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_service.h"
 #include "observer/virtual_table/ob_all_virtual_tx_data.h"
@@ -435,7 +436,7 @@ int LockForReadFunctor::check_clog_disk_full_()
   int ret = OB_SUCCESS;
   bool clog_is_full = false;
   bool clog_is_hang = false;
-  if (OB_FAIL(ObShareUtil::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+  if (OB_FAIL(logservice::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
     TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
   } else if (clog_is_full) {
     ret = OB_LOG_OUTOF_DISK_SPACE;

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_OB_TRANS_DEADLOCK_ADAPTER_H_
 #define OCEANBASE_TRANSACTION_OB_TRANS_DEADLOCK_ADAPTER_H_
 
-#include "share/deadlock/ob_deadlock_detector_mgr.h"
+#include "storage/deadlock/ob_deadlock_detector_mgr.h"
 #include "storage/tx/ob_trans_define.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "ob_trans_define_v4.h"

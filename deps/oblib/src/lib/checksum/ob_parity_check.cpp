@@ -15,7 +15,7 @@
  */
 
 #include "ob_parity_check.h"
-#include "deps/oblib/src/lib/ob_define.h"
+#include "lib/ob_define.h"
 
 namespace oceanbase
 {

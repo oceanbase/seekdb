@@ -19,7 +19,7 @@
 #include "observer/ob_server.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 using namespace oceanbase::observer;
 //c funcs
 namespace test

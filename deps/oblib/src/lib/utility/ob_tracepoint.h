@@ -26,11 +26,11 @@
 #include <string.h>
 #include <stdio.h>
 #include "lib/oblog/ob_log.h"
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/coro/co_var.h"
 #include "lib/time/ob_tsc_timestamp.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "lib/utility/ob_macro_utils.h"
 
 #define TP_COMMA(x) ,

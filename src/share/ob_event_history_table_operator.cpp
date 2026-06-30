@@ -17,10 +17,27 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_event_history_table_operator.h"
+
+#include <stddef.h>
+#include <new>
+
 #include "share/config/ob_server_config.h"
-#include "share/deadlock/ob_deadlock_inner_table_service.h"
 #include "share/ob_debug_sync.h"
-#include "share/ob_server_struct.h"
+#include "lib/alloc/alloc_struct.h"
+#include "lib/guard/ob_unique_guard.h"
+#include "lib/stat/ob_latch_define.h"
+#include "lib/string/ob_string_holder.h"
+#include "lib/time/ob_time_utility.h"
+#include "lib/utility/ob_mod_define.h"
+#include "mysqlclient/ob_isql_client.h"
+#include "mysqlclient/ob_mysql_proxy.h"
+#include "share/ob_debug_sync_point.h"
+
+namespace oceanbase {
+namespace share {
+class ObSQLiteConnectionPool;
+}  // namespace share
+}  // namespace oceanbase
 
 namespace oceanbase
 {

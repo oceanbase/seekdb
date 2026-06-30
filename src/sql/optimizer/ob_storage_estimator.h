@@ -16,7 +16,7 @@
 
 #ifndef OB_STORAGE_ESTIMATOR_H
 #define OB_STORAGE_ESTIMATOR_H
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 namespace oceanbase
 {
 using namespace common;

@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_pl_ddl_service.h"
-#include "common/ob_smart_call.h"
+#include "rootserver/ob_dependency_ddl_helper.h"
+#include "lib/utility/ob_smart_call.h"
 #include "rootserver/ob_ddl_service.h"
 #include "share/schema/ob_error_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -300,7 +301,7 @@ int ObPLDDLService::alter_routine(const ObRoutineInfo &routine_info,
       LOG_WARN("failed to get tenant schema version", KR(ret));
     } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
       LOG_WARN("start transaction failed!", KR(ret), K(refreshed_schema_version));
-    } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
+    } else if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans,
                                                                 routine_info.get_routine_id(),
                                                                 pl_operator,
                                                                 *ddl_service.schema_service_))) {
@@ -449,7 +450,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
       LOG_WARN("failed to get tenant schema version", KR(ret));
     } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
       LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
-    } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
+    } else if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans,
                                                                routine_info.get_routine_id(),
                                                                pl_operator,
                                                                *ddl_service.schema_service_))) {

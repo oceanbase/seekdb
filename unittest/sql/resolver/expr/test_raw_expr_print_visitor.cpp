@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #include "sql/resolver/expr/ob_raw_expr_print_visitor.h"
 
 using namespace oceanbase::common;

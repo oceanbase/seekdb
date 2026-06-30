@@ -36,7 +36,7 @@
 #include "sql/engine/ob_des_exec_context.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 
 namespace oceanbase
 {

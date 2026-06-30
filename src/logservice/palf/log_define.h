@@ -39,7 +39,7 @@
 #include "lib/utility/ob_print_utils.h"                  // databuff_printf
 #include "lib/container/ob_fixed_array.h"                // ObFixedArray
 #include "share/ob_force_print_log.h"                    // force_print
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {

@@ -50,7 +50,7 @@ OB_RESOURCE_FUNCTION_TYPE_DEF(REPLAY_HIGH)
 #define OB_SHARE_RESOURCE_MANAGER_OB_PLAN_INFO_H_
 
 #include "lib/utility/ob_macro_utils.h"
-#include "common/data_buffer.h"
+#include "lib/utility/data_buffer.h"
 #include "lib/string/ob_string.h"
 
 namespace oceanbase

@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ddl_pipeline.h"
 #include "share/rc/ob_module_provider.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_index/ob_plugin_vector_index_utils.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_direct_load_struct.h"

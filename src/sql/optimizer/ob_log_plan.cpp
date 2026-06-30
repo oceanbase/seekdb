@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_log_plan.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_join_filter.h"
 #include "sql/optimizer/ob_log_sort.h"
@@ -44,9 +44,9 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_explain_note.h"
 #include "sql/optimizer/ob_log_values_table_access.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/optimizer/ob_log_expand.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/optimizer/ob_log_insert.h"
 
 using namespace oceanbase;

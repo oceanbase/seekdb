@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "storage/slog/ob_storage_logger_manager.h"
 #include "observer/omt/ob_tenant_meta.h"
 #include "observer/ob_server_struct.h" 

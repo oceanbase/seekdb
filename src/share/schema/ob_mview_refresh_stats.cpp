@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "share/schema/ob_mview_refresh_stats.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

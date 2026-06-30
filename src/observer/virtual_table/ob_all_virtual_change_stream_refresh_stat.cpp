@@ -19,8 +19,8 @@
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/change_stream/ob_change_stream_mgr.h"
-#include "share/change_stream/ob_change_stream_fetcher.h"
+#include "observer/change_stream/ob_change_stream_mgr.h"
+#include "observer/change_stream/ob_change_stream_fetcher.h"
 #include "share/rc/ob_tenant_base.h"
 #include "lib/oblog/ob_log_module.h"
 

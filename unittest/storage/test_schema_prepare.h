@@ -21,7 +21,7 @@
 
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_column_schema.h"
-#include "src/share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 
 namespace oceanbase
 {

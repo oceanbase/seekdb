@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_backup_io_adapter.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_device_manager.h"

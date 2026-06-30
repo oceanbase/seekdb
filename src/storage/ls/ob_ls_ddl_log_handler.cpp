@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ls_ddl_log_handler.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_schedule_dag_func.h"

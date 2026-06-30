@@ -104,7 +104,7 @@ struct VecCastFormatWrapper
 #define CHOOSE_OUT_FMT(in_vector, out_fmt)                                                         \
   switch (out_fmt) {                                                                               \
   case VEC_UNIFORM: {                                                                              \
-    if (is_uniform_vec(out_tc)) {                                                                  \
+    if constexpr (is_uniform_vec(out_tc)) {                                                        \
       ret = CasterImpl<in_vector, ObUniformFormat<false>>::eval_vector(expr, ctx, skip, bound);    \
     } else {                                                                                       \
       ret = OB_ERR_UNEXPECTED;                                                                     \
@@ -112,7 +112,7 @@ struct VecCastFormatWrapper
     break;                                                                                         \
   }                                                                                                \
   case VEC_UNIFORM_CONST: {                                                                        \
-    if (is_uniform_vec(out_tc)) {                                                                  \
+    if constexpr (is_uniform_vec(out_tc)) {                                                        \
       ret = CasterImpl<in_vector, ObUniformFormat<true>>::eval_vector(expr, ctx, skip, bound);     \
     } else {                                                                                       \
       ret = OB_ERR_UNEXPECTED;                                                                     \
@@ -120,7 +120,7 @@ struct VecCastFormatWrapper
     break;                                                                                         \
   }                                                                                                \
   case VEC_FIXED: {                                                                                \
-    if (is_fixed_length_vec(out_tc)) {                                                             \
+    if constexpr (is_fixed_length_vec(out_tc)) {                                                   \
       ret = CasterImpl<in_vector, ObFixedLengthFormat<RTCType<out_tc>>>::eval_vector(expr, ctx,    \
                                                                                      skip, bound); \
     } else {                                                                                       \
@@ -129,7 +129,7 @@ struct VecCastFormatWrapper
     break;                                                                                         \
   }                                                                                                \
   case VEC_DISCRETE: {                                                                             \
-    if (is_discrete_vec(out_tc)) {                                                                 \
+    if constexpr (is_discrete_vec(out_tc)) {                                                       \
       ret = CasterImpl<in_vector, ObDiscreteFormat>::eval_vector(expr, ctx, skip, bound);          \
     } else {                                                                                       \
       ret = OB_ERR_UNEXPECTED;                                                                     \
@@ -137,7 +137,7 @@ struct VecCastFormatWrapper
     break;                                                                                         \
   }                                                                                                \
   case VEC_CONTINUOUS: {                                                                           \
-    if (is_continuous_vec(out_tc)) {                                                               \
+    if constexpr (is_continuous_vec(out_tc)) {                                                     \
       ret = CasterImpl<in_vector, ObContinuousFormat>::eval_vector(expr, ctx, skip, bound);        \
     } else {                                                                                       \
       ret = OB_ERR_UNEXPECTED;                                                                     \
@@ -156,7 +156,7 @@ struct VecCastFormatWrapper
       VectorFormat out_fmt = expr.get_format(ctx);
       switch (in_fmt) {
       case common::VEC_UNIFORM: {
-        if (is_uniform_vec(in_tc)) {
+        if constexpr (is_uniform_vec(in_tc)) {
           CHOOSE_OUT_FMT(ObUniformFormat<false>, out_fmt);
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -164,7 +164,7 @@ struct VecCastFormatWrapper
         break;
       }
       case common::VEC_UNIFORM_CONST: {
-        if (is_uniform_vec(in_tc)) {
+        if constexpr (is_uniform_vec(in_tc)) {
           CHOOSE_OUT_FMT(ObUniformFormat<true>, out_fmt);
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -172,7 +172,7 @@ struct VecCastFormatWrapper
         break;
       }
       case common::VEC_FIXED: {
-        if (is_fixed_length_vec(in_tc)) {
+        if constexpr (is_fixed_length_vec(in_tc)) {
           CHOOSE_OUT_FMT(ObFixedLengthFormat<RTCType<in_tc>>, out_fmt);
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -180,7 +180,7 @@ struct VecCastFormatWrapper
         break;
       }
       case common::VEC_DISCRETE: {
-        if (is_discrete_vec(in_tc)) {
+        if constexpr (is_discrete_vec(in_tc)) {
           CHOOSE_OUT_FMT(ObDiscreteFormat, out_fmt);
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -188,7 +188,7 @@ struct VecCastFormatWrapper
         break;
       }
       case common::VEC_CONTINUOUS: {
-        if (is_continuous_vec(in_tc)) {
+        if constexpr (is_continuous_vec(in_tc)) {
           CHOOSE_OUT_FMT(ObContinuousFormat, out_fmt);
         } else {
           ret = OB_ERR_UNEXPECTED;

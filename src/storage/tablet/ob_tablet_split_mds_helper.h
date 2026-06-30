@@ -17,11 +17,13 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_SPLIT_MDS_HELPER
 #define OCEANBASE_STORAGE_OB_TABLET_SPLIT_MDS_HELPER
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "common/ob_tablet_id.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "common/rowkey/ob_rowkey.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_serialization.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
 #include "src/share/ob_tablet_autoincrement_param.h"

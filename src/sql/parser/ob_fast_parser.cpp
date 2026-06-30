@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "ob_fast_parser.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_define.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/worker.h"

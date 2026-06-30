@@ -20,6 +20,8 @@
 #include "share/schema/ob_table_schema.h"
 #include "logservice/palf/palf_base_info.h"
 #include "share/scn.h"
+#include "share/schema/ob_column_schema.h"
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 namespace oceanbase
 {
 namespace storage
@@ -28,7 +30,7 @@ namespace storage
 int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table_schema, uint64_t table_id, const char* table_name)
 {
   int ret = OB_SUCCESS;
-  ObColumnSchemaV2 column;
+  share::schema::ObColumnSchemaV2 column;
   table_schema.reset();
   table_schema.set_table_name(table_name);
   table_schema.set_tablegroup_id(1);

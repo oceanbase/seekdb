@@ -210,7 +210,6 @@ struct ObEvalNegFuncIniter
 static bool init_ret = ObArrayConstIniter<ObMaxTC, ObEvalNegFuncIniter>::init();
 
 static_assert(ObMaxTC == sizeof(eval_neg_funcs) / sizeof(void *), "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_NEG_EVAL, eval_neg_funcs, ARRAYSIZEOF(eval_neg_funcs));
 
 
 ObExprNeg::ObExprNeg(ObIAllocator &alloc)

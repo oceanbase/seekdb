@@ -18,12 +18,12 @@
 #define OCEANBASE_SHARE_OB_TABLET_META_TABLE_COMPACTION_OPERATOR_
 
 #include "lib/container/ob_iarray.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "common/ob_zone.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_ls_id.h"
 #include "share/tablet/ob_tablet_info.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "storage/compaction/ob_ckm_error_tablet_info.h"
 
 namespace oceanbase

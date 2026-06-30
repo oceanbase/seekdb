@@ -22,8 +22,8 @@
 #include "common/ob_tablet_id.h"
 #include "share/ob_ls_id.h"
 #include "storage/access/ob_dml_param.h"
-#include "share/domain_id/ob_domain_id.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "sql/das/ob_domain_id.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {

@@ -25,7 +25,6 @@
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/string/ob_string_buffer.h"
-#include "share/rc/ob_tenant_base.h"
 #include "lib/restore/ob_storage_info.h"
 namespace oceanbase
 {

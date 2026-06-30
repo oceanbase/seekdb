@@ -45,11 +45,6 @@ class ObTableSchema;
 }
 }
 
-namespace sql
-{
-class ObLocalSessionVar;
-}
-
 namespace datadict
 {
 
@@ -302,8 +297,8 @@ public:
   OB_INLINE uint64_t get_udt_set_id() const { return udt_set_id_; }
   OB_INLINE uint64_t get_sub_data_type() const { return sub_type_; }
   OB_INLINE uint64_t get_srs_id() const { return srs_id_; }
-  OB_INLINE sql::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
-  OB_INLINE sql::ObLocalSessionVar const &get_local_session_var() const { return local_session_vars_; }
+  OB_INLINE share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
+  OB_INLINE share::ObLocalSessionVar const &get_local_session_var() const { return local_session_vars_; }
   OB_INLINE bool is_udt_column() const { return udt_set_id_ > 0 && OB_INVALID_ID != udt_set_id_; }
 
   OB_INLINE bool is_collection() const { return meta_type_.is_collection_sql_type(); }
@@ -370,7 +365,7 @@ private:
   uint64_t udt_set_id_;
   uint64_t sub_type_;
   uint64_t srs_id_;
-  sql::ObLocalSessionVar local_session_vars_;
+  share::ObLocalSessionVar local_session_vars_;
 }; // end of ObDictColumnMeta
 
 class ObDictTableMeta

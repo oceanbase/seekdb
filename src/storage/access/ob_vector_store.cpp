@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_vector_store.h"
 #include "ob_aggregated_store_vec.h"
 #include "storage/blocksstable/ob_micro_block_row_scanner.h"

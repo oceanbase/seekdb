@@ -33,6 +33,7 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#include "share/ob_io_device_helper.h"  // ObIODeviceLocalFileOp/BlockFileAttr, previously hidden behind the storage include chain(free within share)
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #include <unistd.h>
@@ -204,8 +205,6 @@ static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io
 }
 #endif
 #include "share/ob_resource_limit.h"
-#include "storage/slog/ob_storage_logger_manager.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
 
 using namespace oceanbase::common;
 
@@ -1507,33 +1506,7 @@ int ObLocalDevice::check_write_limited() const
   return ret;
 }
 
-int ObLocalDevice::get_data_disk_used_percentage_(
-    const int64_t required_size,
-    int64_t &percent) const
-{
-  int ret = OB_SUCCESS;
-  int64_t reserved_size = ObStorageLoggerManager::RESERVED_DISK_SIZE;
-
-  if (OB_UNLIKELY(!is_marked_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been marked", K(ret));
-  } else if (OB_UNLIKELY(required_size < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid argument", K(ret), K(required_size));
-  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-    SHARE_LOG(WARN, "Fail to get reserved size", K(ret));
-  } else {
-    int64_t max_block_cnt = get_max_block_count(reserved_size);
-    int64_t actual_free_block_cnt = free_block_cnt_;
-    if (max_block_cnt > total_block_cnt_) {  // auto extend is on
-      actual_free_block_cnt = max_block_cnt - total_block_cnt_ + free_block_cnt_;
-    }
-    const int64_t required_count = required_size / block_size_;
-    const int64_t free_count = actual_free_block_cnt - required_count;
-    percent = 100 - 100 * free_count / total_block_cnt_;
-  }
-  return ret;
-}
+// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
 
 int ObLocalDevice::resize_block_file(const int64_t new_size)
 {

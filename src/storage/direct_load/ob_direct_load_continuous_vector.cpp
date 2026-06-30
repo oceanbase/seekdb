@@ -18,8 +18,8 @@
 
 #include "storage/direct_load/ob_direct_load_continuous_vector.h"
 #include "share/rc/ob_tenant_base.h"
-#include "share/vector/ob_discrete_base.h"
-#include "share/vector/ob_uniform_base.h"
+#include "sql/engine/vector/ob_discrete_base.h"
+#include "sql/engine/vector/ob_uniform_base.h"
 
 namespace oceanbase
 {

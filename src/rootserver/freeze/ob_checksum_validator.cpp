@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_checksum_validator.h"
 #include "rootserver/freeze/ob_major_merge_progress_checker.h"
 #include "storage/compaction/ob_medium_compaction_func.h"

@@ -30,7 +30,7 @@
 #include "sql/engine/aggregate/ob_scalar_aggregate.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/worker.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::share;

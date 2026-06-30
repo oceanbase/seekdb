@@ -18,10 +18,10 @@
 #define OCEANBASE_LOGSERVICE_FIXED_SLIDING_WINDOW_
 
 #include "share/ob_define.h"                                      // OB_SUCC ...
-#include "share/allocator/ob_tenant_mutil_allocator.h"            // ObILogAllocator
+#include "logservice/ob_tenant_mutil_allocator.h"            // ObILogAllocator
 #include "lib/lock/ob_tc_rwlock.h"                                // RWLock
 #include "lib/lock/ob_small_spin_lock.h"                          // ObByteLock
-#include "common/ob_clock_generator.h"                            // ObClockGenerator
+#include "lib/time/ob_clock_generator.h"                            // ObClockGenerator
 
 namespace oceanbase
 {

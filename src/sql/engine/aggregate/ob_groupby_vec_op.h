@@ -17,7 +17,7 @@
 #define OCEANBASE_BASIC_OB_GROUPBY_VEC_OP_H_
 
 #include "sql/engine/aggregate/ob_groupby_op.h"
-#include "share/aggregate/processor.h"
+#include "sql/engine/aggregate/processor.h"
 
 
 namespace oceanbase

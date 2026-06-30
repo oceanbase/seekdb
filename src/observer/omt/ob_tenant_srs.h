@@ -20,12 +20,12 @@
 #include "share/ob_define.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/rc/ob_tenant_base.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/hash/ob_pointer_hashmap.h"
 #include "lib/container/ob_vector.h"
 #include "lib/allocator/page_arena.h"
-#include "lib/geo/ob_srs_wkt_parser.h"
-#include "lib/geo/ob_srs_info.h"
+#include "share/geo/ob_srs_wkt_parser.h"
+#include "share/geo/ob_srs_info.h"
 #include "lib/lock/ob_mutex.h"
 
 namespace oceanbase

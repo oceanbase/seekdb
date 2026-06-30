@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/column_store/ob_i_cg_iterator.h"
 #define USING_LOG_PREFIX STORAGE
 #include "ob_co_sstable_row_scanner.h"

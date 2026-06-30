@@ -20,8 +20,8 @@
 #define protected public
 #define private public
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase

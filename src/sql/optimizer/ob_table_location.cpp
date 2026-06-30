@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_log_plan.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "sql/rewrite/ob_transform_utils.h"
 
 using namespace oceanbase::transaction;

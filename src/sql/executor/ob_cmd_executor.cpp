@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
+#include "observer/scheduler/ob_tenant_ddl_count_guard.h"  // ObTenantDDLCountGuard (relocated L9)
 #include "share/ob_cluster_version.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"

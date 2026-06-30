@@ -18,6 +18,8 @@
 #define OCEANBASE_SCHEMA_TABLE_SCHEMA
 
 #include <string.h>
+#include "share/session/ob_local_session_var.h"
+#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a removed include chain, make the dependency explicit(free within share)
 #include <stdlib.h>
 #include <assert.h>
 #include <algorithm>
@@ -787,7 +789,6 @@ public:
   void reset();
   virtual void reset_partition_schema();
   bool is_valid() const;
-  bool is_link_valid() const;
   int64_t get_convert_size() const;
   
   
@@ -1024,16 +1025,6 @@ public:
                                  const common::ObString &constraint_name);
   int set_simple_constraint_info_array(const common::ObIArray<ObSimpleConstraintInfo> &simple_cst_info_array);
   inline const common::ObIArray<ObSimpleConstraintInfo> &get_simple_constraint_info_array() const { return simple_constraint_info_array_; }
-  // dblink.
-  inline void save_local_schema_version(const int64_t local_version)
-  {
-    link_schema_version_ = schema_version_;
-    schema_version_ = local_version;
-  }
-  inline int set_link_database_name(const common::ObString &database_name)
-  { return deep_copy_str(database_name, link_database_name_); }
-  inline const common::ObString &get_link_database_name() const { return link_database_name_; }
-
   // only index table schema can invoke this function
   int get_index_name(common::ObString &index_name) const;
   int get_mlog_name(common::ObString &mlog_name) const;
@@ -1259,14 +1250,6 @@ protected:
   share::ObDuplicateReadConsistency duplicate_read_consistency_;
   int64_t truncate_version_;
 
-
-  // dblink.
-  // No serialization required
-  uint64_t dblink_id_;
-  uint64_t link_table_id_;
-  int64_t link_schema_version_;
-  common::ObString link_database_name_;
-  // TODO(jiuren): need link_table_name_?
   int64_t max_dependency_version_;
   uint64_t association_table_id_;
   bool in_offline_ddl_white_list_;
@@ -1619,7 +1602,7 @@ public:
   uint64 get_index_attributes_set() { return index_attributes_set_; }
 
   bool has_depend_table(uint64_t table_id) const;
-  int get_orig_default_row(const common::ObIArray<share::schema::ObColDesc> &column_ids, blocksstable::ObDatumRow &default_row) const;
+  // get_orig_default_row has been demoted to storage::get_orig_default_row free function(storage/ob_i_store.h)
   int get_cur_default_row(const common::ObIArray<share::schema::ObColDesc> &column_ids,
       common::ObNewRow &default_row) const;
   void reset_column_info();
@@ -1818,7 +1801,6 @@ public:
   int check_rowkey_cover_partition_keys(const common::ObPartitionKeyInfo &part_key);
   int check_index_table_cover_partition_keys(const common::ObPartitionKeyInfo &part_key) const;
   int check_create_index_on_hidden_primary_key(const ObTableSchema &index_table) const;
-  int check_skip_index_valid() const;
 
   int get_subpart_ids(const int64_t part_id, common::ObIArray<int64_t> &subpart_ids) const;
 
@@ -2017,8 +1999,8 @@ public:
   uint64_t get_mlog_tid() const { return mlog_tid_; }
   void set_tmp_mlog_tid(const uint64_t& table_id) { tmp_mlog_tid_ = table_id; }
   uint64_t get_tmp_mlog_tid() const { return tmp_mlog_tid_; }
-  inline sql::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
-  inline const sql::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
+  inline share::ObLocalSessionVar &get_local_session_var() { return local_session_vars_; }
+  inline const share::ObLocalSessionVar &get_local_session_var() const { return local_session_vars_; }
   inline void set_mv_mode(const int64_t mv_mode) { mv_mode_.mode_ = mv_mode; }
   inline int64_t get_mv_mode() const { return mv_mode_.mode_; }
   
@@ -2257,7 +2239,7 @@ protected:
   CgIdHashArray *cg_id_hash_arr_;
   CgNameHashArray *cg_name_hash_arr_;
   uint64_t mlog_tid_;
-  sql::ObLocalSessionVar local_session_vars_;
+  share::ObLocalSessionVar local_session_vars_;
   // vector index
   common::ObString index_params_;
   // exec_env

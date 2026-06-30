@@ -913,8 +913,7 @@ public:
            sql::ObExecContext &ctx,
            ObPLFunction *routine,
            bool is_function_or_trigger,
-           ObIAllocator *allocator = NULL,
-           const bool is_dblink = false);
+           ObIAllocator *allocator = NULL);
   void destory(sql::ObSQLSessionInfo &session_info, sql::ObExecContext &ctx, int &ret);
 
   inline ObPLCursorInfo& get_cursor_info() { return cursor_info_; }
@@ -1156,9 +1155,7 @@ public:
               bool inner_call = false,
               bool in_function = false,
               uint64_t loc = 0,
-              bool is_called_from_sql = false,
-              uint64_t dblink_id = OB_INVALID_ID,
-              const ObRoutineInfo *dblink_routine_info = NULL);
+              bool is_called_from_sql = false);
   int check_exec_priv(sql::ObExecContext &ctx,
                       const ObString &database_name,
                       ObPLFunction *routine);
@@ -1220,8 +1217,7 @@ public:
                           uint64_t line_num, /* call position line number, for call_stack info*/
                           int64_t argc,
                           common::ObObjParam **argv,
-                          int64_t *nocopy_argv,
-                          uint64_t dblink_id);
+                          int64_t *nocopy_argv);
 
   static int set_user_type_var(ObPLExecCtx *ctx,
                                int64_t var_index,

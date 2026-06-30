@@ -17,6 +17,7 @@
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
 #include "storage/tablelock/ob_lock_executor.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/session/ob_local_session_var.h"
 
 namespace oceanbase
 {
@@ -133,7 +134,7 @@ void ObAlterTableStmt::set_table_id(const uint64_t table_id)
 
 int ObAlterTableStmt::fill_session_vars(const ObBasicSessionInfo &session) {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(alter_table_arg_.local_session_var_.load_session_vars(&session))) {
+  if (OB_FAIL(ObLocalSessionVarHelper::load_session_vars(&session, alter_table_arg_.local_session_var_))) {
     SQL_RESV_LOG(WARN, "load local session vars failed", K(ret));
   }
   return ret;

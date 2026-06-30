@@ -1,4 +1,6 @@
 ob_set_subtarget(oblib_rpc common
+  ob_lib_rpc_shims.cpp
+  ob_libeasy_mem_pool.cpp
   ob_lock_wait_node.cpp
   ob_request.cpp
   ob_req_operator.cpp
@@ -22,6 +24,7 @@ ob_set_subtarget(oblib_rpc frame
 )
 
 ob_set_subtarget(oblib_rpc obmysql
+  obmysql/ob_proto_trans_util.cpp
   obmysql/ob_2_0_protocol_processor.cpp
   obmysql/ob_2_0_protocol_utils.cpp
   obmysql/ob_easy_sql_request_operator.cpp

@@ -3145,19 +3145,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "_set_reverse_dblink_infos": {
-    "id": 10139,
-    "name": "_set_reverse_dblink_infos",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "used in the dblink write transaction, the TM side informs the RM side of the necessary information about establishing a reverse dblink by setting system variables",
-    "flags": "SESSION | ORACLE_ONLY",
-    "publish_version": "410",
-    "info_cn": "用于dblink写事务中, TM端通过设置系统变量的方式告知RM端关于建立反向dblink的必要信息",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "_force_order_preserve_set": {
     "id": 10140,
     "name": "_force_order_preserve_set",

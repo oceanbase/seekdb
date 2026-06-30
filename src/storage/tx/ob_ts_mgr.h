@@ -162,6 +162,9 @@ public:
 public:
   TO_STRING_KV("ts_source", "GTS");
 public:
+  // get current tenant GTS as archive start snapshot (retry up to 10s).
+  // relocated from share::ObBackupUtils::get_backup_scn (module-boundary: share must not depend on storage/tx)
+  static int get_backup_scn(const uint64_t &tenant_id, share::SCN &scn);
   static ObTsMgr &get_instance();
 private:
 private:
@@ -181,5 +184,14 @@ private:
 
 }
 }//end of namespace oceanbase
+
+namespace oceanbase
+{
+namespace transaction
+{
+// demoted from share::ObShareUtil(GTS query convenience wrapper, uses OB_TS_MGR.get_gts plus waiting internally)
+int get_tenant_gts(share::SCN &gts_scn);
+}
+}
 
 #endif //OCEANBASE_TRANSACTION_OB_TS_MGR_

@@ -33,8 +33,9 @@
 #include "sql/das/ob_das_context.h"
 #include "sql/engine/cmd/ob_table_direct_insert_ctx.h"
 #include "pl/ob_pl_package_guard.h"
-#include "lib/udt/ob_udt_type.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_udt_type.h"
+#include "common/udt/ob_collection_type.h"
+#include "common/row/ob_row_iterator.h"
 #include "sql/plan_cache/ob_adaptive_auto_dop.h"
 
 #define GET_PHY_PLAN_CTX(ctx) ((ctx).get_physical_plan_ctx())
@@ -114,7 +115,7 @@ struct ObOperatorKit
   ObOpInput *input_;
 };
 
-struct ObDiagnosisManager
+struct ObDiagnosisManager : public common::ObRowDiagnosisInfo
 {
   ObDiagnosisManager() : cur_file_url_(NULL), cur_line_number_(0)
   {
@@ -125,10 +126,10 @@ struct ObDiagnosisManager
     allocator_.set_attr(attr);
   }
 
-  void set_cur_file_url(ObString file_url) { cur_file_url_ = file_url; }
-  ObString get_cur_file_url() { return cur_file_url_; }
-  void set_cur_line_number(int64_t line_number) { cur_line_number_  = line_number; }
-  int64_t get_cur_line_number() { return cur_line_number_; }
+  void set_cur_file_url(ObString file_url) override { cur_file_url_ = file_url; }
+  ObString get_cur_file_url() const override { return cur_file_url_; }
+  void set_cur_line_number(int64_t line_number) override { cur_line_number_ = line_number; }
+  int64_t get_cur_line_number() const override { return cur_line_number_; }
   int do_diagnosis(ObBitVector &skip, int64_t limit_num);
   int add_warning_info(int err_ret, int line_idx);
 

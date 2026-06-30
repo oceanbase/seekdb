@@ -32,7 +32,6 @@ bf_cache_miss_count_threshold
 bf_cache_priority
 builtin_db_data_verify_cycle
 cache_wash_threshold
-clog_io_isolation_mode
 clog_sync_time_warn_threshold
 cluster
 cluster_id
@@ -79,7 +78,6 @@ enable_adaptive_plan_cache
 enable_async_syslog
 enable_auto_split
 enable_cgroup
-enable_dblink
 enable_ddl
 enable_early_lock_release
 enable_global_background_resource_isolation
@@ -326,7 +324,6 @@ _enable_constant_type_demotion
 _enable_convert_real_to_decimal
 _enable_das_batch_rescan_flag
 _enable_das_keep_order
-_enable_dblink_reuse_connection
 _enable_dbms_job_package
 _enable_dbms_lob_partial_update
 _enable_ddl_worker_isolation
@@ -433,7 +430,6 @@ _lob_rowsets_max_rows
 _log_writer_parallelism
 _ls_gc_wait_readonly_tx_time
 _ls_migration_wait_completing_timeout
-_max_dblink_conn_per_observer
 _max_elr_dependent_trx_count
 _max_ls_cnt_per_server
 _max_malloc_sample_interval
@@ -542,7 +538,6 @@ _ss_new_leader_overwrite_delay
 _ss_old_ver_retention_time
 _stall_threshold_for_dynamic_worker
 _standby_max_replay_gap_time
-_storage_leak_check_mod
 _storage_meta_memory_limit_percentage
 _storage_stream_rpc_buffer_size
 _stream_rpc_max_wait_timeout

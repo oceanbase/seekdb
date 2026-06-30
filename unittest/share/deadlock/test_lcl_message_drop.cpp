@@ -16,7 +16,7 @@
 #include <gmock/gmock.h>
 #define private public
 #define protected public
-#include "share/deadlock/ob_deadlock_detector_mgr.h"
+#include "storage/deadlock/ob_deadlock_detector_mgr.h"
 
 namespace oceanbase {
 namespace unittest {

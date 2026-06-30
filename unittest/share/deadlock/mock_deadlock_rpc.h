@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "share/deadlock/ob_deadlock_detector_rpc.h"
-#include "share/deadlock/ob_deadlock_detector_mgr.h"
+#include "storage/deadlock/ob_deadlock_detector_rpc.h"
+#include "storage/deadlock/ob_deadlock_detector_mgr.h"
 
 namespace oceancase
 {

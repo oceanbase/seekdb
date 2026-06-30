@@ -25,7 +25,7 @@
 #include "../share/schema/db_initializer.h"
 #include "rpc/mock_ob_common_rpc_proxy.h"
 #include "lib/container/ob_array_iterator.h"
-#include "rootserver/ob_freeze_info_manager.h"
+#include "share/ob_freeze_info_manager.h"
 
 using ::testing::_;
 using ::testing::Assign;

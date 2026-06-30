@@ -17,9 +17,10 @@
 #ifndef OB_ALL_VIRTUAL_ACTIVITY_METRICS_H_
 #define OB_ALL_VIRTUAL_ACTIVITY_METRICS_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "share/ob_define.h"
 

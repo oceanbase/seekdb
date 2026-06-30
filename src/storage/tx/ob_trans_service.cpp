@@ -16,10 +16,13 @@
 
 
 #include "ob_trans_service.h"
+#include "storage/ob_storage_rpc.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_functor.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/ob_srv_network_frame.h"
+#include "storage/tx/ob_tx_result_struct.h"
 
 namespace oceanbase
 {

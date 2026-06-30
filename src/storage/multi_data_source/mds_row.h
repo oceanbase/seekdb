@@ -26,11 +26,11 @@
 #include "runtime_utility/common_define.h"
 #include "mds_node.h"
 #include "mds_ctx.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "storage/multi_data_source/mds_table_base.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
 #include <utility>
-#include "deps/oblib/src/common/meta_programming/ob_meta_copy.h"
+#include "common/meta_programming/ob_meta_copy.h"
 #include "runtime_utility/mds_retry_control.h"
 
 namespace oceanbase

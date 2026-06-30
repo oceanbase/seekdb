@@ -15,6 +15,7 @@
  */
 
 #include "ob_tx_elr_util.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "ob_trans_event.h"
 
 namespace oceanbase

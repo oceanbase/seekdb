@@ -1,4 +1,5 @@
 ob_set_subtarget(ob_rootserver ALONE
+  ob_debug_sync_rs.cpp
   ob_ddl_service.cpp
   ob_ddl_service_launcher.cpp
   ob_root_service.cpp
@@ -7,15 +8,21 @@ ob_set_subtarget(ob_rootserver ALONE
 )
 
 ob_set_subtarget(ob_rootserver common
+  ddl_task/ob_ddl_common_rs_impl.cpp
+  ob_snapshot_table_proxy.cpp
+  ddl_task/ob_ddl_longops.cpp
+  ob_sequence_ddl_proxy.cpp
   ob_bootstrap.cpp
   ob_ddl_help.cpp
   ob_ddl_operator.cpp
+  ob_dependency_ddl_helper.cpp
   ob_ddl_sql_generator.cpp
   ob_index_builder.cpp
   ob_mlog_builder.cpp
   ob_partition_creator.cpp
   ob_root_minor_freeze.cpp
   ob_root_utils.cpp
+  ob_dynamic_partition_manager.cpp
   ob_root_inspection.cpp
   ob_rs_event_history_table_operator.cpp
   ob_tenant_event_history_table_operator.cpp
@@ -141,6 +148,8 @@ ob_set_subtarget(ob_rootserver direct_load
 ob_set_subtarget(ob_rootserver fork_table
   fork_table/ob_fork_table_info_builder.cpp
   fork_table/ob_fork_table_helper.cpp
+  fork_table/ob_fork_table_util.cpp
+  ob_domain_index_builder_util.cpp
   fork_table/ob_fork_table_service.cpp
   fork_table/ob_fork_table_task.cpp
 )

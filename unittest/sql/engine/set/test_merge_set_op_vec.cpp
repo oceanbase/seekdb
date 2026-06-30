@@ -25,13 +25,13 @@
 #include "sql/engine/set/ob_merge_intersect_op.h"
 #include "sql/engine/set/ob_merge_except_op.h"
 #include "sql/engine/aggregate/ob_merge_distinct_op.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
 #include "sql/engine/table/ob_fake_table.h"
 #include "set_data_op_generator.h"
 #include "sql/ob_sql_init.h"
 #include "share/ob_cluster_version.h"
-#include "observer/omt/ob_tenant_config_mgr.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase

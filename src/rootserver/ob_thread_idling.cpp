@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_thread_idling.h"
-#include "deps/oblib/src/lib/container/ob_array.h"
+#include "lib/container/ob_array.h"
 
 namespace oceanbase
 {

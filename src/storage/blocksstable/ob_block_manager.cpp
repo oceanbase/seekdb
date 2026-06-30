@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 #include "ob_block_manager.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
@@ -25,6 +26,8 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
+#include "share/io/ob_io_calibration.h"  // relocated-definition owner
+#include "share/io/ob_io_struct.h"  // relocated-definition owner
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
@@ -1874,3 +1877,240 @@ ObServerBlockManager &ObServerBlockManager::get_instance() {
 
 } // namespace blocksstable
 } // namespace oceanbase
+
+// ===== definition moved from share/io/ob_io_calibration.cpp(IO benchmark family) =====
+namespace oceanbase
+{
+namespace common
+{
+
+int ObIOBenchRunner::init(const int64_t block_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret), K(is_inited_));
+  } else if (OB_UNLIKELY(block_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(block_count));
+  } else if (OB_ISNULL(write_buf_ = static_cast<char *>(ob_malloc(OB_DEFAULT_MACRO_BLOCK_SIZE, "io_bench_write")))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate write memory failed", K(ret));
+  } else if (OB_ISNULL(read_buf_ = static_cast<char *>(ob_malloc(OB_DEFAULT_MACRO_BLOCK_SIZE, "io_bench_read")))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate read memory failed", K(ret));
+  } else {
+    if (!false) {
+      // prepare macro blocks
+      for (int64_t i = 0; OB_SUCC(ret) && i < block_count; ++i) {
+        blocksstable::ObMacroBlockHandle block_handle;
+        if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_block(block_handle))) {
+          LOG_WARN("alloc macro block failed", K(ret), K(block_count), K(i));
+        } else if (OB_FAIL(block_handles_.push_back(block_handle))) {
+          LOG_WARN("push back block handle failed", K(ret), K(block_count), K(i), K(block_handle));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_inited_ = true;
+      block_count_ = block_count;
+    }
+  }
+  if (OB_UNLIKELY(!is_inited_)) {
+    destroy();
+  }
+  return ret;
+}
+
+
+void ObIOBenchRunner::run1()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(is_inited_));
+  } else if (OB_UNLIKELY(block_count_ <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("block not ready", K(ret), K_(block_count));
+  } else {
+    ObIOInfo io_info;
+    io_info.size_ = load_.size_;
+    io_info.buf_ = ObIOMode::READ == load_.mode_ ? nullptr : write_buf_;
+    io_info.user_data_buf_ = ObIOMode::READ == load_.mode_ ? read_buf_ : nullptr;
+    io_info.flag_.set_mode(load_.mode_);
+    io_info.flag_.set_sys_module_id(ObIOModule::CALIBRATION_IO);
+    io_info.flag_.set_wait_event(ObIOMode::READ == load_.mode_ ?
+        ObWaitEventIds::DB_FILE_DATA_READ : ObWaitEventIds::DB_FILE_COMPACT_WRITE);
+    io_info.flag_.set_unlimited(true);
+    io_info.flag_.set_unsealed();
+    ObIOHandle io_handle;
+    while (!has_set_stop()) {
+      io_handle.reset();
+      const int64_t block_idx = ObRandom::rand(0, block_count_ - 1);
+      io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
+      io_info.offset_ = ObRandom::rand(0, OB_DEFAULT_MACRO_BLOCK_SIZE - load_.size_);
+      io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
+#ifdef OB_BUILD_SHARED_STORAGE
+      if (false) {
+        io_info.fd_.first_id_ = ObIOFd::NORMAL_FILE_ID; // first_id is not used in shared storage mode;
+        io_info.fd_.second_id_ = OB_SERVER_FILE_MGR.get_io_calibration_fd();
+        io_info.offset_ += block_idx * OB_DEFAULT_MACRO_BLOCK_SIZE;
+      } else {
+        io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
+        io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
+      } 
+#else
+      io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
+      io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
+#endif
+
+      if (ObIOMode::WRITE == load_.mode_) {
+        io_info.offset_ = lower_align(io_info.offset_, DIO_READ_ALIGN_SIZE);
+      }
+      const int64_t begin_ts = ObTimeUtility::fast_current_time();
+      if (ObIOMode::READ == load_.mode_) {
+        if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
+          LOG_WARN("io benchmark read failed", K(ret), K(io_info));
+        }
+      } else {
+        if (OB_FAIL(OB_IO_MANAGER.write(io_info))) {
+          LOG_WARN("io benchmark write failed", K(ret), K(io_info));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        const int64_t rt = ObTimeUtility::fast_current_time() - begin_ts;
+        ATOMIC_INC(&io_count_);
+        ATOMIC_AAF(&rt_us_, rt);
+      }
+    }
+  }
+}
+
+
+void ObIOBenchController::run1()
+{
+  int ret = OB_SUCCESS;
+  ObMutexGuard guard(running_mutex_);
+  ObIOBenchRunner runner;
+  start_ts_ = ObTimeUtility::fast_current_time();
+  finish_ts_ = 0;
+  ret_code_ = OB_SUCCESS;
+  
+  // prepare io bench runner
+  const double MIN_FREE_SPACE_PERCENTAGE = 0.1; // if auto extend is on, _datafile_usage_upper_bound_percentage maybe less than (1 - 0.1 = 0.9), may cause OB_SERVER_OUTOF_DISK_SPACE
+  const int64_t MIN_CALIBRATION_BLOCK_COUNT = 1024L * 1024L * 1024L / OB_DEFAULT_MACRO_BLOCK_SIZE;
+  const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
+  int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
+  int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
+#ifdef OB_BUILD_SHARED_STORAGE
+  if (false) {
+    const int64_t free_disk_size = OB_SERVER_DISK_SPACE_MGR.get_free_disk_size();
+    free_block_count = free_disk_size / OB_DEFAULT_MACRO_BLOCK_SIZE;
+    total_block_count = free_block_count;
+  }
+#endif
+
+  if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT
+      || 1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
+    ret = OB_SERVER_OUTOF_DISK_SPACE;
+    LOG_WARN("out of space", K(ret), K(free_block_count), K(total_block_count));
+  } else {
+    int64_t benchmark_block_count = free_block_count * 0.2;
+    benchmark_block_count = min(benchmark_block_count, MAX_CALIBRATION_BLOCK_COUNT);
+    benchmark_block_count = max(benchmark_block_count, MIN_CALIBRATION_BLOCK_COUNT);
+    if (OB_FAIL(runner.init(benchmark_block_count))) {
+      LOG_WARN("init benchmark runner failed", K(ret), K(benchmark_block_count));
+    }
+#ifdef OB_BUILD_SHARED_STORAGE
+    if (OB_SUCC(ret)) {
+      if (false && OB_FAIL(OB_SERVER_FILE_MGR.create_io_calibration_file(
+          benchmark_block_count))) {
+        LOG_WARN("fail to create io calibration file", KR(ret), K(benchmark_block_count));
+      }
+    }
+#endif
+  }
+
+  // execute io benchmark
+  const int64_t bench_start_size = 4096;
+  const int64_t bench_thread_count = 16;
+  ObIOAbility io_ability;
+  // The target file is pre-allocated using fallocate. Due to the initial presence of file holes
+  // in ext4 and xfs file systems, read operations are optimized by the system to immediately return 
+  // with no content. This optimization leads to unrepresentative read performance metrics.
+  // To ensure the validity of our performance testing, the sequence of operations has been adjusted
+  // to perform write operations first, thereby filling the file. This adjustment allows for the 
+  // acquisition of more accurate read and write performance metrics.
+  for (int64_t i = static_cast<int64_t>(ObIOMode::MAX_MODE) - 1; OB_SUCC(ret) && !has_set_stop() && i >= 0; --i) {
+    for (int64_t size = bench_start_size; OB_SUCC(ret) && !has_set_stop() && size <= OB_DEFAULT_MACRO_BLOCK_SIZE; size *= 2) {
+      LOG_INFO("execute disk io benchmark", K(size), "mode", i);
+      ObIOBenchLoad load;
+      load.mode_ = static_cast<ObIOMode>(i);
+      load.size_ = size;
+      ObIOBenchResult result;
+      if (OB_FAIL(runner.do_benchmark(load, bench_thread_count, result))) {
+        LOG_WARN("run io benchmark failed", K(ret), K(load), K(bench_thread_count), K(result));
+      } else if (OB_UNLIKELY(!result.is_valid())) {
+        ret = OB_ERR_SYS;
+        LOG_WARN("benchmark result it invalid", K(ret), K(result));
+      } else if (OB_FAIL(io_ability.add_measure_item(result))) {
+        LOG_WARN("add benchmark result failed", K(ret), K(result));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !io_ability.is_valid()) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("io ability from benchmark is invalid", K(ret), K(io_ability));
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObIOCalibration::get_instance().update_io_ability(io_ability))) {
+      LOG_WARN("update io ability failed", K(ret));
+    }
+  }
+
+#ifdef OB_BUILD_SHARED_STORAGE
+  int tmp_ret = OB_SUCCESS;
+  if (false && OB_TMP_FAIL(OB_SERVER_FILE_MGR.delete_io_calibration_file())) {
+    LOG_ERROR("fail to delete io calibration file", KR(tmp_ret));
+  }
+#endif
+
+  ret_code_ = ret;
+  finish_ts_ = ObTimeUtility::fast_current_time();
+}
+
+
+}  // namespace common
+}  // namespace oceanbase
+
+// ===== definition moved from share/io/ob_io_struct.cpp(IO probe task) =====
+namespace oceanbase
+{
+namespace common
+{
+
+int ObIOTuner::send_detect_task()
+{
+  int ret = OB_SUCCESS;
+  ObArray<blocksstable::MacroBlockId> macro_ids;
+  macro_ids.set_attr(ObMemAttr("back_io_detect"));
+  if (!OB_SERVER_BLOCK_MGR.is_started() || 0 == OB_SERVER_BLOCK_MGR.get_used_macro_block_count()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("block manager not init", K(ret));
+  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.get_limited_iter_macro_ids(macro_ids, 128))) {
+    LOG_WARN("fail to get macro ids", K(ret), K(macro_ids));
+  } else if (OB_UNLIKELY(0 == macro_ids.count())) {
+    // skip
+  } else {
+    MacroBlockId &rand_id = macro_ids.at(ObRandom::rand(0, macro_ids.count() - 1));
+    if (OB_FAIL(
+            OB_IO_MANAGER.get_device_health_detector().record_timing_task(rand_id.first_id(), rand_id.second_id()))) {
+      LOG_WARN("fail to record timing task", K(ret), K(rand_id));
+    }
+  }
+  return ret;
+}
+
+
+}  // namespace common
+}  // namespace oceanbase

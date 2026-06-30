@@ -18,11 +18,11 @@
 #define _OCEABASE_LIB_ALLOC_OBJECT_SET_H_
 
 #include "alloc_struct.h"
-#include "alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "abit_set.h"
 #include "block_set.h"
 #include "lib/lock/ob_mutex.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/time/ob_time_utility.h"
 
 namespace oceanbase

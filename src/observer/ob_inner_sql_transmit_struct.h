@@ -18,7 +18,7 @@
 #define OBDEV_SRC_OBSERVER_OB_INNER_SQL_TRANSMIT_STRUCT_H_
 #include "lib/container/ob_array.h"
 #include "share/ob_define.h"
-#include "share/ob_scanner.h"
+#include "sql/ob_scanner.h"
 #include "rpc/frame/ob_result_code.h"
 #include "observer/ob_server_struct.h"
 #include "sql/resolver/ob_stmt_type.h"

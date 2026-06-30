@@ -16,17 +16,20 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tenant_freezer.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/ob_running_mode.h"
 #include "observer/ob_srv_network_frame.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "storage/tx_storage/ob_tenant_freezer_rpc.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/multi_data_source/runtime_utility/mds_tenant_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
+#include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
+#include "storage/memtable/ob_memtable.h"  // needed by relocated functions
 
 namespace oceanbase
 {
@@ -1908,3 +1911,234 @@ void ObTenantFreezerStatHistory::reset()
 
 }
 }
+
+namespace oceanbase
+{
+namespace storage
+{
+// share/throttle hook registration(avoids share->storage dependency, predecessor ob_tenant_srs.cpp)
+static struct ObMemstoreLimitPctFnRegister
+{
+  ObMemstoreLimitPctFnRegister()
+  {
+    share::g_memstore_limit_percentage_fn = []() -> int64_t {
+      return share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
+    };
+  }
+} g_memstore_limit_pct_fn_register;
+}  // namespace storage
+}  // namespace oceanbase
+
+// ===== definition moved from storage/allocator/ob_memstore_allocator.cpp(Memtable/Freezer real user) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int FrozenMemstoreInfoLogger::operator()(ObDLink* link)
+{
+  int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ObMemstoreAllocator::AllocHandle* handle = CONTAINER_OF(link, ObMemstoreAllocator::AllocHandle, total_list_);
+#else
+  ObMemstoreAllocator::AllocHandle* handle = CONTAINER_OF(link, typeof(*handle), total_list_);
+#endif
+  memtable::ObMemtable& mt = handle->mt_;
+  if (handle->is_frozen()) {
+    if (OB_FAIL(databuff_print_obj(buf_, limit_, pos_, mt))) {
+    } else {
+      ret = databuff_printf(buf_, limit_, pos_, ",");
+    }
+  }
+  return ret;
+}
+
+
+int ActiveMemstoreInfoLogger::operator()(ObDLink* link)
+{
+  int ret = OB_SUCCESS;
+#ifdef _WIN32
+  ObMemstoreAllocator::AllocHandle* handle = CONTAINER_OF(link, ObMemstoreAllocator::AllocHandle, total_list_);
+#else
+  ObMemstoreAllocator::AllocHandle* handle = CONTAINER_OF(link, typeof(*handle), total_list_);
+#endif
+  memtable::ObMemtable& mt = handle->mt_;
+  if (handle->is_active()) {
+    if (OB_FAIL(databuff_print_obj(buf_, limit_, pos_, mt))) {
+    } else {
+      ret = databuff_printf(buf_, limit_, pos_, ",");
+    }
+  }
+  return ret;
+}
+
+
+void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_t expire_ts)
+{
+  int ret = OB_SUCCESS;
+  int64_t align_size = upper_align(size, sizeof(int64_t));
+
+  bool is_out_of_mem = false;
+  if (!handle.is_id_valid()) {
+    COMMON_LOG(TRACE, "MTALLOC.first_alloc", KP(&handle.mt_));
+    LockGuard guard(lock_);
+    if (handle.is_frozen()) {
+      ret = OB_EAGAIN;
+      if (!handle.mt_.get_offlined()) {
+        COMMON_LOG(ERROR, "cannot alloc because allocator is frozen", K(ret), K(handle.mt_));
+      } else {
+        COMMON_LOG(WARN, "cannot alloc because allocator is frozen", K(ret), K(handle.mt_));
+      }
+    } else if (!handle.is_id_valid()) {
+      handle.set_clock(arena_.retired());
+      hlist_.set_active(handle);
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    storage::ObTenantFreezer *freezer = nullptr;
+    if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
+    } else if (OB_FAIL(freezer->check_memstore_full_internal(is_out_of_mem))) {
+      COMMON_LOG(ERROR, "fail to check tenant out of mem limit", K(ret), K(1UL));
+    }
+  }
+
+  void *res = nullptr;
+  if (OB_FAIL(ret) || is_out_of_mem) {
+    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      STORAGE_LOG(WARN, "this tenant is already out of memstore limit or some thing wrong.", K(1UL));
+    }
+    res = nullptr;
+  } else {
+    bool is_throttled = false;
+    (void)throttle_tool_->alloc_resource<ObMemstoreAllocator>(align_size, expire_ts, is_throttled);
+    if (is_throttled) {
+      share::memstore_throttled_alloc() += align_size;
+    }
+    const int64_t effective_group_id = handle.mt_.is_inner_tablet() ? 0 : handle.id_;
+    res = arena_.alloc(effective_group_id, handle.arena_handle_, align_size);
+  }
+  return res;
+}
+
+
+int ObMemstoreAllocator::set_memstore_threshold_without_lock()
+{
+  int ret = OB_SUCCESS;
+  int64_t memstore_threshold = INT64_MAX;
+
+  storage::ObTenantFreezer *freezer = nullptr;
+  if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
+  } else if (OB_FAIL(freezer->get_tenant_memstore_limit(memstore_threshold))) {
+    COMMON_LOG(WARN, "failed to get_tenant_memstore_limit", K(ret));
+  } else {
+    throttle_tool_->set_resource_limit<ObMemstoreAllocator>(memstore_threshold);
+  }
+  return ret;
+}
+
+
+void ObMemstoreAllocator::init_throttle_config(int64_t &resource_limit,
+                                               int64_t &trigger_percentage,
+                                               int64_t &max_duration)
+{
+  // define some default value
+  const int64_t MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE = 60;
+  const int64_t MEMSTORE_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
+
+  int64_t total_memory = lib::get_tenant_memory_limit();
+
+  // Use tenant config to init throttle config
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
+  if (tenant_config.is_valid()) {
+    trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
+    max_duration = tenant_config->writing_throttling_maximum_duration;
+  } else {
+    COMMON_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
+    trigger_percentage = MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE;
+    max_duration = MEMSTORE_THROTTLE_MAX_DURATION;
+  }
+  resource_limit = total_memory * share::g_mp->tenant_freezer()->get_memstore_limit_percentage() / 100;
+}
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== allocator_mgr.cpp freezer fn =====
+namespace oceanbase
+{
+namespace share
+{
+
+void ObSharedMemAllocMgr::update_throttle_config()
+{
+  
+
+  int64_t total_memory = lib::get_tenant_memory_limit();
+  int64_t hard_memory_limit = lib::get_hard_memory_limit();
+  common::ObServerConfig *tenant_config = &GCONF;
+  {
+    int64_t share_mem_limit_percentage = tenant_config->_tx_share_memory_limit_percentage;
+    int64_t tenant_memstore_limit_percentage = share::g_mp->tenant_freezer()->get_memstore_limit_percentage();
+    int64_t tx_data_limit_percentage = tenant_config->_tx_data_memory_limit_percentage;
+    int64_t mds_limit_percentage = tenant_config->_mds_memory_limit_percentage;
+    int64_t trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
+    int64_t max_duration = tenant_config->writing_throttling_maximum_duration;
+    int64_t tenant_vector_limit_percentage = ObTenantVectorAllocator::get_vector_mem_limit_percentage(tenant_config);
+    if (0 == share_mem_limit_percentage) {
+      // 0 means use (max(memstore_limit, vector_limit + 5) + 10)
+      share_mem_limit_percentage = MAX(tenant_memstore_limit_percentage, tenant_vector_limit_percentage + 5) + 10;
+    }
+
+    int64_t share_mem_limit = hard_memory_limit / 100 * share_mem_limit_percentage;
+    int64_t memstore_limit = total_memory / 100 * tenant_memstore_limit_percentage;
+    int64_t tx_data_limit = total_memory / 100 * tx_data_limit_percentage;
+    int64_t mds_limit = total_memory / 100 * mds_limit_percentage;
+    int64_t vector_limit = hard_memory_limit / 100 * tenant_vector_limit_percentage;
+
+    bool share_config_changed = false;
+    (void)share_resource_throttle_tool_.update_throttle_config<FakeAllocatorForTxShare>(
+        share_mem_limit, trigger_percentage, max_duration, share_config_changed);
+
+    bool memstore_config_changed = false;
+    (void)share_resource_throttle_tool_.update_throttle_config<ObMemstoreAllocator>(
+        memstore_limit, trigger_percentage, max_duration, memstore_config_changed);
+
+    bool tx_data_config_changed = false;
+    (void)share_resource_throttle_tool_.update_throttle_config<ObTenantTxDataAllocator>(
+        tx_data_limit, trigger_percentage, max_duration, tx_data_config_changed);
+
+    bool mds_config_changed = false;
+    (void)share_resource_throttle_tool_.update_throttle_config<ObTenantMdsAllocator>(
+        mds_limit, trigger_percentage, max_duration, mds_config_changed);
+
+    bool vector_config_changed = false;
+    (void)share_resource_throttle_tool_.update_throttle_config<ObTenantVectorAllocator>(
+        vector_limit, trigger_percentage, max_duration, vector_config_changed);
+
+    if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed ||
+        vector_config_changed) {
+      SHARE_LOG(INFO,
+                "[Throttle] Update Config",
+                K(total_memory),
+                K(share_mem_limit_percentage),
+                K(share_mem_limit),
+                K(tenant_memstore_limit_percentage),
+                K(memstore_limit),
+                K(tx_data_limit_percentage),
+                K(tx_data_limit),
+                K(mds_limit_percentage),
+                K(mds_limit),
+                K(trigger_percentage),
+                K(max_duration),
+                K(tenant_vector_limit_percentage),
+                K(vector_limit));
+
+    }
+  }
+}
+
+
+}  // namespace share
+}  // namespace oceanbase

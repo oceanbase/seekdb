@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/utl_file/ob_utl_file_handler.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/ob_io_device_helper.h"
 
 using namespace oceanbase::common;

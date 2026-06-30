@@ -15,18 +15,20 @@
  */
 #define USING_LOG_PREFIX SHARE
 
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_schema_utils.h"
 #include "ob_config_helper.h"
 #include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
 #include "share/ob_resource_limit.h"
 #include "share/table/ob_ttl_util.h"
-#include "src/observer/ob_server.h"
-#include "plugin/sys/ob_plugin_load_param.h"
+#include "share/io/ob_backup_storage_info.h"
+#include "share/table/ob_table_config_util.h"
 
 namespace oceanbase
 {
+using namespace oceanbase::share::schema;
 using namespace share;
 using namespace obcall;
-using namespace plugin;
 
 namespace common
 {
@@ -694,16 +696,6 @@ bool ObConfigUpgradeStageChecker::check(const ObConfigItem &t) const
          && obcall::OB_UPGRADE_STAGE_MAX > stage;
 }
 
-bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
-{
-  bool is_valid = false;
-  for (int i = 0; i < ARRAYSIZEOF(sql::plan_cache_gc_confs) && !is_valid; i++) {
-    if (0 == ObString::make_string(sql::plan_cache_gc_confs[i]).case_compare(t.str())) {
-      is_valid = true;
-    }
-  }
-  return is_valid;
-}
 
 bool ObConfigSTScredentialChecker::check(const ObConfigItem &t) const
 {
@@ -1259,23 +1251,6 @@ bool ObConfigPxNodePolicyChecker::check(const ObConfigItem &t) const
   bret = (0 == tmp_str.case_compare("data")
           || 0 == tmp_str.case_compare("zone")
           || 0 == tmp_str.case_compare("cluster"));
-  return bret;
-}
-
-bool ObConfigPluginsLoadChecker::check(const ObConfigItem& t) const
-{
-  bool bret = false;
-  ObString plugins_load(t.str());
-  ObArray<ObPluginLoadParam> plugin_load_params;
-  ObMemAttr mem_attr("Config");
-  plugin_load_params.set_attr(mem_attr);
-  int ret = ObPluginLoadParamParser::parse(plugins_load, plugin_load_params);
-  if (OB_FAIL(ret)) {
-    OB_LOG_RET(WARN, OB_INVALID_CONFIG, "failed to parse plugins load config", K(plugins_load));
-    bret = false;
-  } else {
-    bret = true;
-  }
   return bret;
 }
 

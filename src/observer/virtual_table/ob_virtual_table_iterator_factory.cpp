@@ -150,7 +150,6 @@
 #include "observer/virtual_table/ob_tenant_virtual_privilege.h"
 #include "observer/virtual_table/ob_all_virtual_kvcache_store_memblock.h"
 #include "observer/virtual_table/ob_information_query_response_time.h"
-#include "observer/virtual_table/ob_all_virtual_storage_leak_info.h"
 #include "observer/virtual_table/ob_all_virtual_schema_memory.h"
 #include "observer/virtual_table/ob_all_virtual_schema_slot.h"
 #include "observer/virtual_table/ob_virtual_show_trace.h"
@@ -1171,16 +1170,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             } else {
               cache_table->set_addr(addr_);
               vt_iter = static_cast<ObVirtualTableIterator *>(cache_table);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_STORAGE_LEAK_INFO_TID: {
-            ObAllVirtualStorageLeakInfo *storage_leak_info_table = nullptr;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualStorageLeakInfo, storage_leak_info_table))) {
-              SERVER_LOG(ERROR, "Fail to create __all_virtual_storage_leak_info table", K(ret));
-            } else {
-              storage_leak_info_table->set_addr(addr_);
-              vt_iter = static_cast<ObVirtualTableIterator *>(storage_leak_info_table);
             }
             break;
           }

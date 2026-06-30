@@ -18,8 +18,8 @@
 #define private public
 #define protected public
 #include "lib/hash/ob_hashset.h"
-#include "lib/udt/ob_array_utils.h"
-#include "sql/engine/expr/ob_array_cast.h"
+#include "common/udt/ob_array_utils.h"
+#include "share/object/ob_array_cast.h"
 #undef private
 #undef protected
 

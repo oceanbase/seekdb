@@ -17,13 +17,12 @@
 #ifndef _OB_TENANT_CTX_ALLOCATOR_H_
 #define _OB_TENANT_CTX_ALLOCATOR_H_
 
-#include "lib/allocator/ob_allocator.h"
+#include "lib/alloc/ob_iallocator.h"
 #include "lib/queue/ob_link.h"
 #include "lib/alloc/object_mgr.h"
 #include "lib/alloc/alloc_failed_reason.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/resource/ob_resource_mgr.h"
-#include "lib/allocator/ob_tc_malloc.h"
 #include "lib/alloc/memory_sanity.h"
 #include "lib/alloc/alloc_func.h"
 #include <signal.h>

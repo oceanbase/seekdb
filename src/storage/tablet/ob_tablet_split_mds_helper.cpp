@@ -18,8 +18,8 @@
 
 
 #include "ob_tablet_split_mds_helper.h"
+#include "share/ob_ex_rpc.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/ob_ex_rpc.h"
 #include "storage/tablet/ob_tablet_split_replay_executor.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"

@@ -20,9 +20,9 @@
 #include "sql/engine/ob_exec_context.h"
 #include "pl/ob_pl_type.h"
 #include "lib/ob_define.h"
-#include "share/stat/ob_opt_table_stat.h"
-#include "share/stat/ob_opt_column_stat.h"
-#include "share/stat/ob_opt_column_stat_cache.h"
+#include "sql/optimizer/stat/ob_opt_table_stat.h"
+#include "sql/optimizer/stat/ob_opt_column_stat.h"
+#include "sql/optimizer/stat/ob_opt_column_stat_cache.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
 
 namespace oceanbase

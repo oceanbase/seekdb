@@ -16,19 +16,24 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "observer/ob_service.h"
 #include <algorithm>
+#include "rootserver/ob_dependency_ddl_helper.h"
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "share/ob_ddl_common.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/schema/ob_schema_printer.h"
-#include "share/schema/ob_schema_service_sql_impl.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/ob_index_builder_util.h"
-#include "share/sequence/ob_sequence_ddl_proxy.h"
+#include "sql/printer/ob_schema_printer.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "storage/blocksstable/index_block/ob_index_block_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
+#include "sql/session/ob_local_session_var.h"
+#include "sql/engine/cmd/ob_partition_executor_utils.h"
+#include "rootserver/ob_sequence_ddl_proxy.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/ob_fork_table_util.h"
+#include "rootserver/fork_table/ob_fork_table_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_modify_column_name.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -41,7 +46,7 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "rootserver/ob_tenant_thread_helper.h"//get_zone_priority
 #include "src/sql/engine/px/ob_dfo.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_tablet_drop.h"
 #include "share/schema/ob_context_ddl_proxy.h"
@@ -59,25 +64,30 @@
 #include "rootserver/mview/ob_mview_dependency_service.h"
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
 #include "storage/ddl/ob_ddl_alter_auto_part_attr.h"
-#include "src/share/ob_vec_index_builder_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "rootserver/direct_load/ob_direct_load_partition_exchange.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
 #include "share/schema/ob_mview_info.h"
 #include "sql/resolver/mv/ob_mv_provider.h"
+#include "sql/resolver/mv/ob_mv_dep_utils.h"
 #include "rootserver/mview/ob_mview_alter_service.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
-#include "share/ob_dynamic_partition_manager.h"
+#include "rootserver/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ddl/ob_storage_cache_ddl_util.h"
 #include "share/storage_cache_policy/ob_storage_cache_common.h"
 #include "rootserver/ob_alter_table_constraint_checker.h"
-#include "share/ob_domain_index_builder_util.h"
+#include "rootserver/ob_domain_index_builder_util.h"
 #include "rootserver/ob_objpriv_mysql_ddl_service.h"
 #include "share/location_cache/ob_location_service.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "share/ob_autoincrement_service.h"
 #include "storage/ob_micro_block_format_version_helper.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
+#include "share/schema/ob_schema_guard_wrapper.h"  // relocated-definition owner
+#include "share/schema/ob_ddl_trans_controller.h"  // relocated-definition owner
+#include "share/schema/ob_sequence_sql_service.h"  // relocated-definition owner
+#include "observer/ob_srv_network_frame.h"  // relocated clean_sequence_cache needs net_frame complete type
 
 namespace oceanbase
 {
@@ -8670,7 +8680,7 @@ int ObDDLService::update_generated_column_schema(
     const ObColumnSchemaV2 &orig_column_schema,
     const ObTableSchema &origin_table_schema,
     const ObTimeZoneInfoWrap &tz_info_wrap,
-    const sql::ObLocalSessionVar *local_session_var,
+    const share::ObLocalSessionVar *local_session_var,
     ObTableSchema &new_table_schema,
     const bool need_update_default_value,
     const bool need_update_session_var,
@@ -8808,7 +8818,7 @@ int ObDDLService::modify_generated_column_local_vars(ObColumnSchemaV2 &generated
                                                     const ObObjType origin_type,
                                                     const AlterColumnSchema &new_column_schema,
                                                     const ObTableSchema &table_schema,
-                                                    const sql::ObLocalSessionVar *local_session_var) {
+                                                    const share::ObLocalSessionVar *local_session_var) {
   int ret = OB_SUCCESS;
   if (generated_column.is_generated_column()
       && origin_type != new_column_schema.get_data_type()) {
@@ -8836,7 +8846,7 @@ int ObDDLService::modify_generated_column_local_vars(ObColumnSchemaV2 &generated
       } else if (OB_FAIL(default_session.load_default_configs_in_pc())) {
         LOG_WARN("session load default configs failed", K(ret));
       } else if (NULL != local_session_var
-                 && OB_FAIL(local_session_var->update_session_vars_with_local(default_session))) {
+                 && OB_FAIL(sql::ObLocalSessionVarHelper::update_session_vars_with_local(*local_session_var, default_session))) {
         LOG_WARN("fail to update session vars", K(ret));
       } else if (FALSE_IT(exec_ctx.set_physical_plan_ctx(&phy_plan_ctx))) {
       } else if (FALSE_IT(exec_ctx.set_my_session(&default_session))) {
@@ -10142,7 +10152,7 @@ int ObDDLService::add_new_column_to_table_schema(
     const AlterTableSchema &alter_table_schema,
     const common::ObTimeZoneInfoWrap &tz_info_wrap,
     const common::ObString &nls_formats,
-    sql::ObLocalSessionVar &local_session_var,
+    share::ObLocalSessionVar &local_session_var,
     obcall::ObSequenceDDLArg &sequence_ddl_arg,
     common::ObIAllocator &allocator,
     ObTableSchema &new_table_schema,
@@ -11316,7 +11326,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
     } else if (OB_FAIL(add_column_to_column_group(origin_table_schema,
         alter_table_schema, new_table_schema, ddl_operator, trans))) {
       LOG_WARN("fail to add_column_to_column_group", K(ret), K(alter_table_schema), K(new_table_schema));
-    } else if (OB_FAIL(new_table_schema.check_skip_index_valid())) {
+    } else if (OB_FAIL(blocksstable::check_skip_index_valid(new_table_schema))) {
       LOG_WARN("failed to check new table schema skip index", K(ret));
     } else if (OB_FAIL(new_table_schema.check_row_length())) {
       LOG_WARN("failed to check_row_length", K(ret), K(new_table_schema));
@@ -11375,11 +11385,22 @@ int ObDDLService::create_aux_lob_table_if_need(ObTableSchema &data_table_schema,
     int64_t last_schema_version = OB_INVALID_VERSION;
     is_add_lob = true;
     if (OB_FAIL(get_last_schema_version(last_schema_version))) {
-      LOG_WARN("fail to get last schema version", KR(ret));
-    } else if (OB_FAIL(ObDDLLock::lock_for_add_lob_in_trans(data_table_schema, trans))) {
-      LOG_WARN("failed to add lock online ddl lock", K(ret));
-    } else if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
-      LOG_WARN("fail to init table creator", KR(ret));
+      if (OB_ERR_UNEXPECTED == ret && is_hybrid_vector_column
+          && OB_INVALID_VERSION != data_table_schema.get_schema_version()) {
+        // Post-create hybrid vector index builds LOB aux tables before the
+        // generated column schema is written, so TSILastOper may still be empty.
+        ret = OB_SUCCESS;
+        last_schema_version = data_table_schema.get_schema_version();
+      } else {
+        LOG_WARN("fail to get last schema version", KR(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(ObDDLLock::lock_for_add_lob_in_trans(data_table_schema, trans))) {
+        LOG_WARN("failed to add lock online ddl lock", K(ret));
+      } else if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
+        LOG_WARN("fail to init table creator", KR(ret));
+      }
     }
 
     ObSEArray<const ObTableSchema*, 2> schemas;
@@ -13930,7 +13951,7 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
         LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
       // All alter table behaviors will cause the status to change, which is not as fine as oracle
       } else if (need_modify_dep_obj_status(alter_table_arg)
-                 && OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
+                 && OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans,
                                                                     orig_table_schema->get_table_id(),
                                                                     ddl_operator, *schema_service_))) {
         LOG_WARN("failed to modify obj status", K(ret));
@@ -15328,7 +15349,7 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
       // TODO yiren, refactor it, create user hidden table after alter index/column/part/cst...
       if (OB_FAIL(ret)) {
       } else if (need_modify_dep_obj_status(alter_table_arg)
-                 && OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans, orig_table_schema->get_table_id(),
+                 && OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans, orig_table_schema->get_table_id(),
                                                       ddl_operator, *schema_service_))) {
         LOG_WARN("failed to modify obj status", K(ret));
       } else if (OB_FAIL(check_ddl_with_primary_key_operation(alter_table_arg,
@@ -15688,7 +15709,7 @@ int ObDDLService::add_not_null_column_to_table_schema(
     } else if (OB_FAIL(add_column_to_column_group(origin_table_schema,
         alter_table_schema, new_table_schema, ddl_operator, trans))) {
       LOG_WARN("fail to add_column_to_column_group", K(ret), K(alter_table_schema), K(new_table_schema));
-    } else if (OB_FAIL(new_table_schema.check_skip_index_valid())) {
+    } else if (OB_FAIL(blocksstable::check_skip_index_valid(new_table_schema))) {
       LOG_WARN("failed to check new table schema skip index", K(ret));
     } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
       LOG_WARN("fail to gen new schema_version", K(ret));
@@ -16471,7 +16492,7 @@ int ObDDLService::check_alter_set_interval(const share::schema::ObTableSchema &o
   } else if (OB_ISNULL(part_array[part_num - 1])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the last part is null", K(orig_table_schema), K(alter_table_schema), KR(ret));
-  } else if (OB_FAIL(ObPartitionUtils::check_interval_partition_table(part_array[part_num - 1]->get_high_bound_val(),
+  } else if (OB_FAIL(sql::ObPartitionExecutorUtils::check_interval_partition_table(part_array[part_num - 1]->get_high_bound_val(),
                      alter_table_schema.get_interval_range()))) {
     LOG_WARN("fail to check_interval_partition_table", KR(ret));
   }
@@ -18191,7 +18212,7 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
           }
         } // end for
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(ObDependencyInfo::modify_all_obj_status(all_dep_objs, trans, ddl_operator,
+          if (OB_FAIL(ObDependencyDDLHelper::modify_all_obj_status(all_dep_objs, trans, ddl_operator,
                                                               *schema_service_))) {
             LOG_WARN("failed to modify all obj status", K(ret));
           }
@@ -18994,7 +19015,7 @@ int ObDDLService::process_schema_object_dependency(const ObReferenceObjTable::De
     switch (op) {
     case ObReferenceObjTable::INSERT_OP:
     case ObReferenceObjTable::UPDATE_OP:
-      OZ (ObReferenceObjTable::batch_execute_insert_or_update_obj_dependency(new_schema_version, dep_objs, trans, schema_guard, ddl_operator));
+      OZ (ObDependencyDDLHelper::batch_execute_insert_or_update_obj_dependency(new_schema_version, dep_objs, trans, schema_guard, ddl_operator));
       break;
     case ObReferenceObjTable::DELETE_OP:
       OZ (ObReferenceObjTable::batch_execute_delete_obj_dependency(dep_objs, trans));
@@ -19243,6 +19264,7 @@ int ObDDLService::rebuild_hidden_table_priv(const ObTableSchema &orig_table_sche
 {
   int ret = OB_SUCCESS;
   ObArray<ObObjPriv> orig_obj_privs_ora;
+  const ObDatabaseSchema *database_schema = nullptr;
   if (OB_FAIL(get_obj_privs_ora(
                                 orig_table_schema.get_table_id(),
                                 static_cast<uint64_t>(ObObjectType::TABLE),
@@ -19250,13 +19272,18 @@ int ObDDLService::rebuild_hidden_table_priv(const ObTableSchema &orig_table_sche
                                 orig_obj_privs_ora))) {
     LOG_WARN("fail to get obj privs ora", KR(ret),
              K(orig_table_schema.get_table_id()));
+  } else if (OB_FAIL(schema_guard.get_database_schema(orig_table_schema.get_database_id(), database_schema))) {
+    LOG_WARN("fail to get database schema", K(ret), K(orig_table_schema.get_database_id()));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("database schema is null", K(ret), K(orig_table_schema.get_database_id()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < orig_obj_privs_ora.count(); i++) {
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(restore_obj_privs_for_table(hidden_table_schema.get_table_id(),
-                                                 hidden_table_schema.get_link_database_name(),
+                                                 database_schema->get_database_name_str(),
                                                  hidden_table_schema.get_table_name_str(),
                                                  ddl_operator,
                                                  trans,
@@ -21810,7 +21837,7 @@ int ObDDLService::swap_orig_and_hidden_table_state(obcall::ObAlterTableArg &alte
               mview_info.set_last_refresh_time((ObTimeUtil::current_time() - start_time) / 1000 / 1000);
               if (OB_FAIL(mview_info.set_last_refresh_trace_id(ObCurTraceId::get_trace_id_str()))) {
                 LOG_WARN("fail to set last refresh trace id", KR(ret));
-              } else if (OB_FAIL(ObMViewInfo::update_mview_data_attr(trans,
+              } else if (OB_FAIL(sql::ObMVDepUtils::update_mview_data_attr(trans,
                                  refresh_scn_val, target_data_sync_scn_val, mview_info))) {
                 LOG_WARN("fail to update mview data scn", KR(ret), K(mview_info),
                          K(refresh_scn_val));
@@ -31694,7 +31721,7 @@ int ObDDLService::drop_user_defined_function(const obcall::ObDropUserDefinedFunc
       LOG_WARN("start transaction failed", KR(ret));
     } else {
       ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-      if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans, udf_id,
+      if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans, udf_id,
                                                       ddl_operator, *schema_service_))) {
         LOG_WARN("failed to modify obj status", K(ret));
       } else if (OB_FAIL(ddl_operator.drop_user_defined_function(name, trans, &drop_func_arg.ddl_stmt_str_))) {
@@ -34314,5 +34341,203 @@ int ObDDLService::submit_drop_lob_task_(ObMySQLTransaction &trans,
   return ret;
 }
 
+
+
+
+
+
+
+
+
 } // end namespace rootserver
 } // end namespace oceanbase
+
+// ===== definition moved from share/schema/ob_schema_guard_wrapper.cpp =====
+// real user rootserver::ObDDLService complete type(the caller is already rootserver code that passes the pointer); declaration remains in share header(transitional state)
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+int ObSchemaGuardWrapper::init(rootserver::ObDDLService *ddl_service)
+{
+  int ret = OB_SUCCESS;
+  if (is_local_guard_) {
+    if (OB_ISNULL(ddl_service)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("ddl_service is null", KR(ret));
+    } else {
+      if (OB_FAIL(ddl_service->get_tenant_schema_guard_with_version_in_inner_table(
+                  local_schema_guard_))) {
+        LOG_WARN("fail to get tenant schema guard with version in inner table",
+                 KR(ret));
+      } else {
+        LOG_INFO("get local schema guard success");
+      }
+    }
+  }
+  return ret;
+}
+
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share/schema/ob_ddl_trans_controller.cpp(deeply RS-coupled function) =====
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share/schema/ob_sequence_sql_service.cpp(RPC send function) =====
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share/ob_ddl_common.cpp(omt real user) =====
+#include "observer/omt/ob_multi_tenant.h"
+#include "share/config/ob_tenant_config_mgr.h"  // TENANT_CONF(this repository keeps it in share, so it is legal)
+namespace oceanbase
+{
+namespace share
+{
+
+int ObDDLUtil::check_local_is_sys_leader()
+{
+  int ret = OB_SUCCESS;
+  common::ObRole role;
+  int64_t proposal_id = 0;
+  if (OB_ISNULL(GCTX.omt_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.omt_));
+  } else if (OB_UNLIKELY(!GCTX.omt_->has_tenant())) {
+    ret = OB_TENANT_NOT_EXIST;
+    LOG_WARN("local server does not have SYS tenant resource", KR(ret));
+  } else if (OB_FAIL(get_sys_log_handler_role_and_proposal_id(role, proposal_id))) {
+    LOG_WARN("fail to get role and proposal id", KR(ret), K(role), K(proposal_id));
+  } else if (!is_strong_leader(role)) {
+    ret = OB_LS_NOT_LEADER;
+    LOG_WARN("current server not leader of SYS tenant", KR(ret), K(role));
+  }
+  return ret;
+}
+
+}  // namespace share
+}  // namespace oceanbase
+
+// definition moved from share/schema/ob_schema_utils.cpp: reads OMT tenant config, share must not depend upward on observer
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+// is_parallel_ddl_enable moved back to share(ob_schema_utils.cpp; correction for over-migration, body uses only share/config)
+
+void ObDDLTransController::run1()
+{
+  ObDIActionGuard ag("DDLService", "DDLTransCtr", "detect task");
+  lib::set_thread_name("DDLTransCtr");
+  while (!has_set_stop()) {
+    bool need_refresh = false;
+    {
+      SpinWLockGuard guard(lock_);
+      need_refresh = need_refresh_;
+      need_refresh_ = false;
+    }
+    if (need_refresh) {
+      int ret = OB_SUCCESS;
+      LOG_INFO("refresh_schema for sys tenant");
+      if (OB_ISNULL(GCTX.root_service_)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_));
+      } else {
+        ObArray<ObAddr> server_list;
+        int64_t refreshed_schema_version = OB_INVALID_VERSION;
+        int64_t start_time = ObTimeUtility::current_time();
+        ObCurTraceId::init(GCONF.self_addr_);
+        ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control tenant[T_%ld]", OB_SERVER_TENANT_ID);
+
+        if (OB_FAIL(server_list.push_back(GCTX.self_addr()))) {
+          LOG_WARN("fail to push self addr", KR(ret));
+        }
+        if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(server_list, refreshed_schema_version))) {
+          LOG_WARN("fail to publish_schema", KR(ret));
+        } else if (OB_FAIL(broadcast_consensus_version(refreshed_schema_version, server_list))) {
+          LOG_WARN("fail to broadcast consensus version", KR(ret), K(refreshed_schema_version));
+        } else {
+          int64_t end_time = ObTimeUtility::current_time();
+          LOG_INFO("refresh_schema", KR(ret), K(end_time - start_time), K(refreshed_schema_version));
+        }
+      }
+    } else {
+      wait_cond_.wait();
+    }
+  }
+}
+
+int ObDDLTransController::broadcast_consensus_version(const int64_t schema_version,
+                                                      const ObArray<ObAddr> &server_list)
+{
+  int ret = OB_SUCCESS;
+  obcall::ObBroadcastConsensusVersionArg arg;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLTransController", KR(ret));
+  } else if (OB_ISNULL(schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObDDLTransController", KR(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", KR(ret));
+  } else if (OB_ISNULL(GCTX.root_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("rootservice is null", KR(ret));
+  } else if (OB_INVALID_VERSION == schema_version) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid schema_version", KR(ret), K(schema_version));
+  } else if (OB_FAIL(schema_service_->set_tenant_broadcast_consensus_version(schema_version))) {
+    LOG_WARN("fail to set tenant broadcast consensus_version", KR(ret));
+  } else {
+    arg.set_consensus_version(schema_version);
+    obcall::ObBroadcastConsensusVersionRes result;
+    FOREACH_X(s, server_list, OB_SUCC(ret)) {
+      if (OB_ISNULL(s)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("s is null", KR(ret));
+      } else {
+        // Direct call — seekdb has no remote servers.
+        UNUSED(*s);
+        int tmp_ret = GCTX.ob_service_->broadcast_consensus_version(arg, result);
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("broadcast consensus version failed", KR(tmp_ret),
+              K(schema_version), K(arg));
+        }
+      }
+    }
+  }
+  LOG_INFO("broadcast consensus version finished", KR(ret), K(schema_version), K(arg), K(server_list));
+  return ret;
+}
+
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase

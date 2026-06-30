@@ -20,7 +20,7 @@
 #include "lib/literals/ob_literals.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {

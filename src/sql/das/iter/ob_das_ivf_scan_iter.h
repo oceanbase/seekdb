@@ -22,7 +22,7 @@
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
 {

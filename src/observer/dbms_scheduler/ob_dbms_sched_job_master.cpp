@@ -18,7 +18,7 @@
 
 #include "ob_dbms_sched_job_master.h"
 #include "ob_dbms_sched_job_executor.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "rootserver/ob_root_service.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 #include "sql/session/ob_basic_session_info.h"

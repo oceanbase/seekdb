@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_TRANSACTION_OB_TRANS_RPC_
 #define OCEANBASE_TRANSACTION_OB_TRANS_RPC_
 
-#include "common/ob_queue_thread.h"
+#include "lib/thread/ob_queue_thread.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/utility.h"
 #include "share/ob_define.h"

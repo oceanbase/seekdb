@@ -23,7 +23,7 @@
 #include "share/storage/ob_zone_merge_info_table_storage.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
 #include "lib/string/ob_sql_string.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

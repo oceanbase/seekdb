@@ -21,7 +21,7 @@
 #include <stddef.h>
 
 #include "lib/alloc/alloc_struct.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/lock/ob_futex.h"
 #include "lib/queue/ob_fixed_queue.h"
 

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "lib/ob_name_id_def.h"
+#include "lib/json/ob_yson.h"
 #include "ob_mock_tx_log_adapter.h"
 #include "storage/tx/ob_trans_ctx_mgr.h"
 #include <gtest/gtest.h>

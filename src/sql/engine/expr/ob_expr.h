@@ -20,14 +20,16 @@
 #include "lib/container/ob_2d_array.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/oblog/ob_log.h"
-#include "share/datum/ob_datum.h"
-#include "share/vector/ob_fixed_length_base.h"
-#include "share/vector/ob_vector_define.h"
+#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum_funcs.h"
+#include "sql/engine/vector/ob_fixed_length_base.h"
+#include "sql/engine/vector/ob_vector_define.h"
 #include "sql/engine/ob_serializable_function.h"
 #include "sql/parser/ob_item_type.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 #include "sql/ob_eval_bound.h"
+#include "sql/engine/expr/ob_expr_basic_funcs.h"  // function-pointer table has been made layer-neutral(conf L2), backfill
 
 namespace oceanbase
 {
@@ -293,71 +295,6 @@ private:
 };
 
 
-typedef int (*ObExprHashFuncType)(const common::ObDatum &datum, const uint64_t seed, uint64_t &res);
-
-// batch datum hash functions, %seeds, %hash_values may be the same.
-typedef void (*ObBatchDatumHashFunc)(uint64_t *hash_values,
-                                     common::ObDatum *datums,
-                                     const bool is_batch_datum,
-                                     const ObBitVector &skip,
-                                     int64_t size,
-                                     const uint64_t *seeds,
-                                     const bool is_batch_seed);
-
-typedef int (*ObExprCmpFuncType)(const common::ObDatum &datum1, const common::ObDatum &datum2, int& cmp_ret);
-typedef int (*NullSafeRowCmpFunc) (const ObObjMeta &l_meta, const ObObjMeta &r_meta,
-                                   const void *l_data, const int32_t l_len, const bool l_null,
-                                   const void *r_data, const int32_t r_len, const bool r_null,
-                                   int &cmp_ret);
-typedef int (*RowCmpFunc) (const ObObjMeta &l_meta, const ObObjMeta &r_meta,
-                           const void *l_data, const int32_t l_len,
-                           const void *r_data, const int32_t r_len,
-                           int &cmp_ret);
-struct ObExprBasicFuncs
-{
-  // Default hash method:
-  //    murmur for non string tyeps
-  //    mysql string hash for string types
-  // Try not to use it unless you need to be compatible with ObObj::hash()/ObObj::varchar_hash(),
-  // use murmur_hash_ instead.
-  ObExprHashFuncType default_hash_;
-  ObBatchDatumHashFunc default_hash_batch_;
-  // For murmur/xx/wy functions, the specified hash method is used for all types.
-  ObExprHashFuncType murmur_hash_;
-  ObBatchDatumHashFunc murmur_hash_batch_;
-  ObExprHashFuncType xx_hash_;
-  ObBatchDatumHashFunc xx_hash_batch_;
-  ObExprHashFuncType wy_hash_;
-  ObBatchDatumHashFunc wy_hash_batch_;
-
-  ObExprCmpFuncType null_first_cmp_;
-  ObExprCmpFuncType null_last_cmp_;
-
-  /* murmur_hash_v2_ is more efficient than murmur_hash_
-     If there is no problem of compatibility, use hash_v2_ is a better choice
-
-     For example, if we calc hash of NUMBER,
-
-      murmur_hash_ calcs like that :
-          if (datum.is_null()) {
-            const int null_type = ObNullType;
-            v = murmurhash64A(&null_type, sizeof(null_type), seed);
-          } else {
-            uint64_t tmp_v = murmurhash64A(datum.get_number_desc().se_, 1, seed);
-            v = murmurhash64A(datum.get_number_digits(), static_cast<uint64_t>(sizeof(uint32_t)* datum.get_number_desc().len_), tmp_v);
-          }
-
-      murmur_hash_v2_ calc like that :
-          v =  murmurhash64A(datum.ptr_, datum.len_, seed);
-  */
-  ObExprHashFuncType murmur_hash_v2_;
-  ObBatchDatumHashFunc murmur_hash_v2_batch_;
-
-  // null first/last cmp funcs for vector engine 2.0
-  NullSafeRowCmpFunc row_null_first_cmp_;
-  NullSafeRowCmpFunc row_null_last_cmp_;
-  RowCmpFunc row_cmp_;
-};
 
 
 struct ObDynReserveBuf

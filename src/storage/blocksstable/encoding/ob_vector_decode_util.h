@@ -1061,6 +1061,20 @@ ObLoadVarByteAlignedVecDataDispatcher<VectorType, ValueType, DataLocator> &ObLoa
 #define OB_VEC_KW_C extern template class
 #define OB_VEC_FNKW_C extern template
 #endif
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_D)
+#define OB_VEC_KW_D template class
+#define OB_VEC_FNKW_D template
+#else
+#define OB_VEC_KW_D extern template class
+#define OB_VEC_FNKW_D extern template
+#endif
+#if defined(OB_VEC_DECODE_DO_INSTANTIATE) || defined(OB_VEC_INST_E)
+#define OB_VEC_KW_E template class
+#define OB_VEC_FNKW_E template
+#else
+#define OB_VEC_KW_E extern template class
+#define OB_VEC_FNKW_E extern template
+#endif
 
 #define DECLARE_INTEGER_VEC_DISPATCHER(c_type, locator_type) \
 OB_VEC_TMPL_KW ObLoadIntegerVecDataDispatcher<ObFixedLengthFormat<c_type>, c_type, locator_type>; \
@@ -1106,8 +1120,14 @@ DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(ObFixedDictDataLocator_T<uint16
 // Group C
 #define OB_VEC_TMPL_KW OB_VEC_KW_C
 DECLARE_BYTE_ALIGNED_VEC_DATA_DISPATCHER_LOCATOR(DataConstLoactor);
+#undef OB_VEC_TMPL_KW
+// Group D
+#define OB_VEC_TMPL_KW OB_VEC_KW_D
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_1_1);
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_1_2);
+#undef OB_VEC_TMPL_KW
+// Group E
+#define OB_VEC_TMPL_KW OB_VEC_KW_E
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_2_1);
 DECLARE_BYTE_ALIGNED_VAR_VEC_DISPATCHER(ObVarDictDataLocator_T_2_2);
 #undef OB_VEC_TMPL_KW
@@ -1456,8 +1476,14 @@ DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObFixedDictDataLocator_T<uint16_t>)
 // Group C
 #define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_C
 DECLARE_LOAD_BYTE_ALIGNED_VECTOR(DataConstLoactor)
+#undef OB_VEC_FN_TMPL_KW
+// Group D
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_D
 DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_1_1)
 DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_1_2)
+#undef OB_VEC_FN_TMPL_KW
+// Group E
+#define OB_VEC_FN_TMPL_KW OB_VEC_FNKW_E
 DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_2_1)
 DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_2_2)
 #undef OB_VEC_FN_TMPL_KW
@@ -1465,9 +1491,13 @@ DECLARE_LOAD_BYTE_ALIGNED_VECTOR(ObVarDictDataLocator_T_2_2)
 #undef OB_VEC_KW_A
 #undef OB_VEC_KW_B
 #undef OB_VEC_KW_C
+#undef OB_VEC_KW_D
+#undef OB_VEC_KW_E
 #undef OB_VEC_FNKW_A
 #undef OB_VEC_FNKW_B
 #undef OB_VEC_FNKW_C
+#undef OB_VEC_FNKW_D
+#undef OB_VEC_FNKW_E
 
 } // namesapce blocksstable
 } // namespace oceanbase

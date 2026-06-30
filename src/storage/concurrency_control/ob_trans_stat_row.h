@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_CONCURRENCY_CONTROL_OB_TRANS_STAT_ROW
 
 #include "share/scn.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "storage/access/ob_table_access_param.h"
 
 namespace oceanbase

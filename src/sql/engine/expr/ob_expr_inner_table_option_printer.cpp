@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_inner_table_option_printer.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 
 
 namespace oceanbase

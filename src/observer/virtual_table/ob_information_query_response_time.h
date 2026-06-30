@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_QUERY_RESPONSE_TIME_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_QUERY_RESPONSE_TIME_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/ob_tenant_mgr.h"
 #include "observer/mysql/ob_query_response_time.h"
 

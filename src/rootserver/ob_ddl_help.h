@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_ROOTSERVER_OB_DDL_HELP_H
 #define OCEANBASE_ROOTSERVER_OB_DDL_HELP_H
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/ob_rpc_struct.h"

@@ -18,8 +18,8 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "sql/session/ob_sess_info_verify.h"
-#include "observer/ob_sql_client_decorator.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_sql_client_decorator.h"
+#include "share/ob_ex_rpc.h"
 
 namespace oceanbase
 {
@@ -334,7 +334,7 @@ void ObSessInfoVerify::veri_err_injection(sql::ObSQLSessionInfo &sess)
   int64_t code = 0;
   code = OB_E(EventTable::EN_SESS_INFO_VERI_SYS_VAR_ERROR) OB_SUCCESS;
   if (code < 0) {
-    share::ObBasicSysVar *sys_var = NULL;
+    sql::ObBasicSysVar *sys_var = NULL;
     sys_var = sess.get_sys_var(100);
     sys_var->set_value(ObObj(2000000000));
   }
@@ -429,13 +429,13 @@ int ObSessInfoVerify::sql_port_to_rpc_port(sql::ObSQLSessionInfo &sess,
 }
 // use for display sys var error message.
 int ObSessInfoVerify::create_tmp_sys_var(sql::ObSQLSessionInfo &sess,
-                    share::ObSysVarClassType sys_var_id, share::ObBasicSysVar *&sys_var,
+                    share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&sys_var,
                     common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  share::ObBasicSysVar *sys_var_ptr = NULL;
+  sql::ObBasicSysVar *sys_var_ptr = NULL;
   if (OB_ISNULL(sys_var_ptr)) {
-    share::ObSysVarFactory::create_sys_var(allocator,
+    sql::ObSysVarFactory::create_sys_var(allocator,
                     sys_var_id, sys_var_ptr);
   }
   if (OB_SUCC(ret)) {

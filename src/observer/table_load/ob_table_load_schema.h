@@ -19,7 +19,7 @@
 #include "common/object/ob_obj_type.h"
 #include "lib/string/ob_string.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/table/ob_table_load_array.h"
 #include "share/table/ob_table_load_define.h"

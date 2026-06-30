@@ -1231,6 +1231,22 @@ public:
     return 0 == STRCASECMP(PARALLEL_DDL_THREAD_NAME, ob_get_origin_thread_name());
   }
 };
+
+// factory injection: implementation ObSchemaServiceSQLImpl now lives in the observer layer(can legally call sql),
+// observer registers creator/destroyer early during startup, so share-layer ObServerSchemaService does not need to
+// directly name the concrete class(avoids share->observer inversion)。
+typedef ObSchemaService *(*ObSchemaServiceCreator)();
+typedef void (*ObSchemaServiceDestroyer)(ObSchemaService *schema_service);
+class ObSchemaServiceFactory
+{
+public:
+  static void register_creator(ObSchemaServiceCreator creator, ObSchemaServiceDestroyer destroyer);
+  static ObSchemaService *create();
+  static void destroy(ObSchemaService *schema_service);
+private:
+  static ObSchemaServiceCreator creator_;
+  static ObSchemaServiceDestroyer destroyer_;
+};
 }//namespace schema
 }//namespace share
 }//namespace oceanbase

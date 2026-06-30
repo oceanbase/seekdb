@@ -483,8 +483,7 @@ int ObBuildMViewTask::enable_mview()
     } else {
       ObUpdateMViewStatusArg arg;
       arg.mview_table_id_ = mview_schema->get_table_id();
-      arg.mv_available_flag_ = ObMVAvailableFlag::IS_MV_AVAILABLE;
-      
+      arg.mv_available_flag_ = share::schema::ObMVAvailableFlag::IS_MV_AVAILABLE;
       arg.in_offline_ddl_white_list_ = mview_schema->get_table_state_flag() != TABLE_STATE_NORMAL;
       int64_t ddl_rpc_timeout = 0;
       if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(mview_schema->get_table_id(), ddl_rpc_timeout))) {

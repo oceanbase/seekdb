@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TX_DATA_OP
 
 #include "share/scn.h"
-#include "share/allocator/ob_tx_data_allocator.h"
+#include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_tx_data_define.h"
 

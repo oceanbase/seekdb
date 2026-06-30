@@ -18,7 +18,7 @@
 #define _OB_COLUMN_INDEX_PROVIDER_H
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_se_array.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 
 namespace oceanbase
 {

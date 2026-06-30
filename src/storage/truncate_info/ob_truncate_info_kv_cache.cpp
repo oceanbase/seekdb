@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/truncate_info/ob_truncate_info_kv_cache.h"
 #include "storage/truncate_info/ob_truncate_info.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"

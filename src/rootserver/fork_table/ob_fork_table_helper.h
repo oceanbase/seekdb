@@ -17,20 +17,22 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
 #define OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
 
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_table_schema.h"
 #include "share/ob_autoincrement_service.h"
-#include "share/ob_fork_table_util.h"
+#include "rootserver/fork_table/ob_fork_table_util.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase {
 namespace rootserver {
 
-int check_fork_table_supported(const ObTableSchema &src_table_schema,
-                               ObSchemaGetterGuard &schema_guard,
-                               const ObForkTableArg *fork_table_arg = nullptr);
+int check_fork_table_supported(const share::schema::ObTableSchema &src_table_schema,
+                               share::schema::ObSchemaGetterGuard &schema_guard,
+                               const obcall::ObForkTableArg *fork_table_arg = nullptr);
 
-int check_has_async_vector_index(const ObTableSchema &src_table_schema,
-                                 ObSchemaGetterGuard &schema_guard,
+int check_has_async_vector_index(const share::schema::ObTableSchema &src_table_schema,
+                                 share::schema::ObSchemaGetterGuard &schema_guard,
                                  bool &has_async_vec_index);
 
 // Helper class for fork table operations

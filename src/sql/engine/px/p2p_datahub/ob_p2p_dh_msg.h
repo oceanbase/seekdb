@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObDynamicFilterExecutor;
 
 class ObBatchRows;
 class ObPxQueryRangeInfo;

@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include "share/scn.h"
-#include "share/throttle/ob_share_throttle_define.h"
+#include "storage/throttle/ob_share_throttle_define.h"
 
 namespace oceanbase
 {

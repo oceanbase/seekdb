@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #define private public
-#include "deps/oblib/src/lib/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_base.h"
 #undef private
 
 using namespace oceanbase::common;

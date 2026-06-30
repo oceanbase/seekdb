@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
-#include "share/ob_fts_index_builder_util.h"
-#include "share/ob_vec_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "sql/session/ob_local_session_var.h"
 #include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
@@ -421,7 +422,7 @@ int ObCreateIndexResolver::fill_session_info_into_arg(const sql::ObSQLSessionInf
     arg.nls_date_format_ = session->get_local_nls_date_format();
     arg.nls_timestamp_format_ = session->get_local_nls_timestamp_format();
     arg.nls_timestamp_tz_format_ = session->get_local_nls_timestamp_tz_format();
-    if (OB_FAIL(arg.local_session_var_.load_session_vars(session))) {
+    if (OB_FAIL(ObLocalSessionVarHelper::load_session_vars(session, arg.local_session_var_))) {
       LOG_WARN("fail to fill session info into local_session_var", K(ret));
     }
   }

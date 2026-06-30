@@ -21,7 +21,7 @@
 #define private public
 
 #include "lib/allocator/page_arena.h"
-#include "common/data_buffer.h"
+#include "lib/utility/data_buffer.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #define USING_LOG_PREFIX SQL
 

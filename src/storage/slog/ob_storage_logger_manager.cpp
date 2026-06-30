@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_REDO
 #ifndef _WIN32
 #include <sys/statvfs.h>
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #endif
 #include "ob_storage_logger_manager.h"

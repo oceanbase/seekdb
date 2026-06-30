@@ -37,7 +37,7 @@
 #include "storage/ddl/ob_cg_macro_block_write_op.h"
 #include "storage/ddl/test_batch_rows_generater.h"
 #include "storage/ddl/ob_pipeline.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/init_basic_struct.h"
 #include "storage/test_tablet_helper.h"
 #include "share/schema/ob_schema_utils.h"

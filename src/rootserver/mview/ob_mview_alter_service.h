@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace rootserver
 {
+class ObDDLOperator;
 class ObMviewAlterService
 {
 public:

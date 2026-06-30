@@ -3,7 +3,13 @@ ob_set_subtarget(ob_server ALONE
   ob_service.cpp
 )
 
+ob_set_subtarget(ob_server schema
+  schema/ob_schema_service_sql_impl.cpp
+  schema/ob_schema_retrieve_utils.ipp
+)
+
 ob_set_subtarget(ob_server common
+  ob_standby_schema_refresh_trigger.cpp
   ob_dump_task_generator.cpp
   ob_inner_sql_transmit_struct.cpp
   ob_inner_sql_connection.cpp
@@ -18,8 +24,8 @@ ob_set_subtarget(ob_server common
   ob_server_schema_updater.cpp
   ob_server_utils.cpp
   ob_signal_handle.cpp
-  ob_sql_client_decorator.cpp
   ob_srv_deliver.cpp
+  ob_thread_mgr.cpp
   ob_srv_network_frame.cpp
   ob_srv_xlator.cpp
   ob_ex_rpc.cpp
@@ -98,11 +104,58 @@ ob_set_subtarget(ob_server omt
   omt/ob_retry_queue.cpp
   omt/ob_tenant.cpp
   omt/ob_tenant_meta.cpp
-  omt/ob_tenant_timezone_mgr.cpp
   omt/ob_th_worker.cpp
   omt/ob_worker_processor.cpp
   omt/ob_tenant_srs.cpp
   omt/ob_tenant_ai_service.cpp
+)
+
+ob_set_subtarget(ob_server ai_service
+  ai_service/ob_ai_service_struct.cpp
+  ai_service/ob_ai_service_proxy.cpp
+  ai_service/ob_ai_service_executor.cpp
+)
+
+ob_set_subtarget(ob_server change_stream
+  change_stream/ob_change_stream_fetcher.cpp
+  change_stream/ob_change_stream_dispatcher.cpp
+  change_stream/ob_change_stream_worker.cpp
+  change_stream/ob_change_stream_plugin.cpp
+  change_stream/ob_change_stream_mgr.cpp
+  change_stream/ob_cs_plugin_async_index.cpp
+)
+
+ob_set_subtarget(ob_server scheduler
+  scheduler/ob_dag_warning_history_mgr.cpp
+  scheduler/ob_independent_dag.cpp
+  scheduler/ob_partition_auto_split_helper.cpp
+  scheduler/ob_scheduled_manage_dynamic_partition.cpp
+  scheduler/ob_sys_task_stat.cpp
+  scheduler/ob_tenant_dag_scheduler.cpp
+  scheduler/ob_tenant_ddl_count_guard.cpp
+)
+
+ob_set_subtarget(ob_server vector_index
+  vector_index/ob_hybrid_vector_refresh_task.cpp
+  vector_index/ob_ivf_async_task.cpp
+  vector_index/ob_ivf_async_task_executor.cpp
+  vector_index/ob_json_helper.cpp
+  vector_index/ob_plugin_vector_index_adaptor.cpp
+  vector_index/ob_plugin_vector_index_scheduler.cpp
+  vector_index/ob_plugin_vector_index_serialize.cpp
+  vector_index/ob_plugin_vector_index_service.cpp
+  vector_index/ob_plugin_vector_index_util.cpp
+  vector_index/ob_plugin_vector_index_utils.cpp
+  vector_index/ob_tenant_vector_index_async_task.cpp
+  vector_index/ob_vector_embedding_handler.cpp
+  vector_index/ob_vector_index_async_task.cpp
+  vector_index/ob_vector_index_async_task_util.cpp
+  vector_index/ob_vector_index_i_task_executor.cpp
+  vector_index/ob_vector_index_ivf_cache_mgr.cpp
+  vector_index/ob_vector_index_ivf_cache_util.cpp
+  vector_index/ob_vector_index_param.cpp
+  vector_index/ob_vector_index_util.cpp
+  vector_index/ob_vector_kmeans_ctx.cpp
 )
 
 ob_set_subtarget(ob_server table_load
@@ -213,6 +266,7 @@ ob_set_subtarget(ob_server table_load
   table_load/ob_table_load_trans_store.cpp
   table_load/ob_table_load_unique_index_row_handler.cpp
   table_load/ob_table_load_utils.cpp
+  table_load/ob_table_load_row.cpp
 )
 
 ob_set_subtarget(ob_server virtual_table
@@ -313,7 +367,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_information_columns_table.cpp
   virtual_table/ob_information_global_status_table.cpp
   virtual_table/ob_information_kvcache_table.cpp
-  virtual_table/ob_all_virtual_storage_leak_info.cpp
   virtual_table/ob_information_parameters_table.cpp
   virtual_table/ob_information_partitions_table.cpp
   virtual_table/ob_information_referential_constraints_table.cpp
@@ -361,7 +414,10 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_virtual_sql_monitor_statname.cpp
   virtual_table/ob_virtual_sql_plan_monitor.cpp
   virtual_table/ob_virtual_sql_plan_statistics.cpp
+  virtual_table/ob_virtual_table_iterator.cpp
   virtual_table/ob_virtual_table_iterator_factory.cpp
+  virtual_table/ob_virtual_table_projector.cpp
+  virtual_table/ob_virtual_table_scanner_iterator.cpp
   virtual_table/ob_all_virtual_dml_stats.cpp
   virtual_table/ob_virtual_span_info.cpp
   virtual_table/ob_virtual_show_trace.cpp

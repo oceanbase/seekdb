@@ -768,9 +768,6 @@ static int exec_sql(ObPLExecCtx *ctx, const ObPLSqlStmt *s)
 // IN actuals (and out-to-external targets, which this path does not yet copy back)
 // keep the evaluate-into-temp behavior.
 //
-// NB: dblink_id MUST be OB_INVALID_ID -- ObPL::execute gates local routine loading
-// on !is_valid_id(dblink_id); passing 0 makes it look like a dblink call and leaves
-// `routine` NULL (segfault at the definer-priv check).
 static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
 {
   int ret = OB_SUCCESS;
@@ -849,7 +846,7 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
     const ObIArray<int64_t> &subpath = s->get_subprogram_path();
     int64_t *path = subpath.count() > 0 ? const_cast<int64_t *>(&subpath.at(0)) : NULL;
     OZ (ObPL::execute_proc(*ctx, s->get_package_id(), s->get_proc_id(), path,
-          subpath.count(), 0 /*line_num*/, argc, argv, nocopy, OB_INVALID_ID /*dblink_id*/));
+          subpath.count(), 0 /*line_num*/, argc, argv, nocopy));
   }
   // Copy each OUT/INOUT result from its temp back into the caller's local slot.
   for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {

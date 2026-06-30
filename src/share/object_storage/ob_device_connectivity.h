@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONNECTIVITY_H_
 #define OCEANBASE_SHARE_DEVICE_OB_DEVICE_CONNECTIVITY_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "common/storage/ob_device_common.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/restore/ob_device_common.h"
 
 namespace oceanbase
 {

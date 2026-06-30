@@ -23,7 +23,7 @@
 #include "sql/resolver/dml/ob_sql_hint.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_query_range.h"
 #include "sql/optimizer/ob_log_set.h"
-#include "src/share/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
 
 namespace oceanbase
 {

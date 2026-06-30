@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_asgeojson.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/geo/ob_wkb_to_json_bin_visitor.h"
+#include "share/geo/ob_wkb_to_json_bin_visitor.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

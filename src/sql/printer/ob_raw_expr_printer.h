@@ -19,7 +19,7 @@
 
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "lib/string/ob_sql_string.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/ob_sql_utils.h"
 namespace oceanbase
 {

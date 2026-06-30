@@ -23,7 +23,7 @@
 #include "ob_log_print_kv.h"
 #include "lib/hash/fnv_hash.h"
 #include "ob_log_time_fmt.h"
-#include "share/ob_errno.h"
+#include "lib/oblog/ob_log_user_msg.h"
 
 namespace oceanbase
 {

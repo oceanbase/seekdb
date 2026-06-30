@@ -29,7 +29,7 @@
 #include "share/schema/ob_schema_utils.h"
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/expr/ob_expr_info_flag.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "share/schema/ob_udf.h"
 #include "lib/worker.h"
 #include "sql/parser/parse_node.h"

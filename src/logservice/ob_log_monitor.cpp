@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_log_monitor.h"
 #include "observer/ob_server_event_history_table_operator.h"   // SERVER_EVENT_ADD_WITH_RETRY
 

@@ -18,8 +18,7 @@
 
 #include "ob_rpc_struct.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/tx/ob_trans_service.h"
-#include "src/share/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -33,6 +32,10 @@ using namespace transaction::tablelock;
 using namespace table;
 namespace obcall
 {
+OB_SERIALIZE_MEMBER((ObContextDDLArg, ObDDLArg),
+                    stmt_type_,
+                    ctx_schema_,
+                    or_replace_);
 OB_SERIALIZE_MEMBER(Bool, v_);
 OB_SERIALIZE_MEMBER(Int64, v_);
 OB_SERIALIZE_MEMBER(UInt64, v_);
@@ -2697,14 +2700,7 @@ bool ObCheckFrozenScnArg::is_valid() const
 
 
 
-DEF_TO_STRING(ObCreateTabletBatchInTransRes)
-{
-  int64_t pos = 0;
-  J_KV(K_(ret), K_(tx_result));
-  return pos;
-}
 
-OB_SERIALIZE_MEMBER(ObCreateTabletBatchInTransRes, ret_, tx_result_);
 
 
 
@@ -3730,7 +3726,6 @@ OB_SERIALIZE_MEMBER((ObAlterTriggerArg, ObDDLArg), trigger_database_,
 
 
 
-
 OB_SERIALIZE_MEMBER(ObCancelTaskArg, task_id_);
 OB_SERIALIZE_MEMBER(ObReportSingleReplicaArg, ls_id_);
 
@@ -4057,44 +4052,6 @@ int ObCheckServerEmptyResult::init(const bool &server_empty, const ObZone &zone)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 OB_SERIALIZE_MEMBER(CheckLeaderRpcIndex, switchover_timestamp_, epoch_,
                     ml_pk_index_, pkey_info_start_index_);
 
@@ -4123,101 +4080,11 @@ void CheckLeaderRpcIndex::reset()
 OB_SERIALIZE_MEMBER(ObRefreshTimezoneArg);
 
 
-OB_DEF_SERIALIZE(ObDDLBuildSingleReplicaRequestArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, source_tablet_id_, dest_tablet_id_,
-    source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
-    parallelism_, tablet_task_id_, data_format_version_, consumer_group_id_,
-    dest_ls_id_, dest_schema_version_,
-    compaction_scn_, can_reuse_macro_block_, split_sstable_type_,
-    lob_col_idxs_, parallel_datum_rowkey_list_, is_no_logging_,
-    min_split_start_scn_);
-  return ret;
-}
 
-OB_DEF_DESERIALIZE(ObDDLBuildSingleReplicaRequestArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, ls_id_, source_tablet_id_, dest_tablet_id_,
-      source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
-      parallelism_, tablet_task_id_, data_format_version_, consumer_group_id_,
-      dest_ls_id_, dest_schema_version_,
-      compaction_scn_, can_reuse_macro_block_, split_sstable_type_,
-      lob_col_idxs_);
-  if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
-        rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
-  }
 
-  if (OB_SUCC(ret)) {
-    LST_DO_CODE(OB_UNIS_DECODE, is_no_logging_, min_split_start_scn_);
-  }
-  return ret;
-}
 
-OB_DEF_SERIALIZE_SIZE(ObDDLBuildSingleReplicaRequestArg)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, source_tablet_id_, dest_tablet_id_,
-    source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
-    parallelism_, tablet_task_id_, data_format_version_, consumer_group_id_,
-    dest_ls_id_, dest_schema_version_,
-    compaction_scn_, can_reuse_macro_block_, split_sstable_type_,
-    lob_col_idxs_, parallel_datum_rowkey_list_, is_no_logging_,
-    min_split_start_scn_);
-  return len;
-}
 
-bool ObDDLBuildSingleReplicaRequestArg::is_valid() const
-{
-  bool is_valid = ls_id_.is_valid() && source_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
-               && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_
-               && schema_version_ > 0 && snapshot_version_ > 0 && task_id_ > 0 && parallelism_ > 0
-               && tablet_task_id_ > 0 && data_format_version_ > 0 && consumer_group_id_ >= 0
-               && dest_ls_id_.is_valid() && dest_schema_version_ > 0;
-  return is_valid;
-}
 
-int ObDDLBuildSingleReplicaRequestArg::assign(const ObDDLBuildSingleReplicaRequestArg &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!other.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(other));
-  } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
-    LOG_WARN("failed to assign to lob col idxs", K(ret));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) { // shallow copy.
-    LOG_WARN("assign failed", K(ret));
-  } else {
-    
-    ls_id_ = other.ls_id_;
-    
-    dest_ls_id_ = other.dest_ls_id_;
-    source_tablet_id_ = other.source_tablet_id_;
-    dest_tablet_id_ = other.dest_tablet_id_;
-    source_table_id_ = other.source_table_id_;
-    dest_schema_id_ = other.dest_schema_id_;
-    schema_version_ = other.schema_version_;
-    dest_schema_version_ = other.dest_schema_version_;
-    snapshot_version_ = other.snapshot_version_;
-    ddl_type_ = other.ddl_type_;
-    task_id_ = other.task_id_;
-    parallelism_ = other.parallelism_;
-    execution_id_ = other.execution_id_;
-    tablet_task_id_ = other.tablet_task_id_;
-    data_format_version_ = other.data_format_version_;
-    consumer_group_id_ = other.consumer_group_id_;
-    compaction_scn_ = other.compaction_scn_;
-    can_reuse_macro_block_ = other.can_reuse_macro_block_;
-    split_sstable_type_ = other.split_sstable_type_;
-    min_split_start_scn_ = other.min_split_start_scn_;
-    is_no_logging_ = other.is_no_logging_;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObDDLBuildSingleReplicaRequestResult, ret_code_, row_inserted_, row_scanned_, physical_row_count_);
 
 
 OB_SERIALIZE_MEMBER(ObDDLBuildSingleReplicaResponseArg, ls_id_, tablet_id_,
@@ -4227,141 +4094,20 @@ OB_SERIALIZE_MEMBER(ObDDLBuildSingleReplicaResponseArg, ls_id_, tablet_id_,
 
 
 // === Functions for tablet split start. ===
-OB_SERIALIZE_MEMBER(ObPrepareSplitRangesArg, ls_id_, tablet_id_,
-    user_parallelism_, schema_tablet_size_, ddl_type_);
-OB_DEF_SERIALIZE(ObPrepareSplitRangesRes)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, parallel_datum_rowkey_list_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObPrepareSplitRangesRes)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSplitUtil::deserializ_parallel_datum_rowkey(
-      rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObPrepareSplitRangesRes)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, parallel_datum_rowkey_list_);
-  return len;
-}
-
-bool ObTabletSplitArg::is_valid() const
-{
-  bool is_valid = ls_id_.is_valid() && OB_INVALID_ID != table_id_
-      && schema_version_ > 0 && task_id_ > 0
-      && source_tablet_id_.is_valid() && dest_tablets_id_.count() > 0
-      && compaction_scn_ > 0
-      && data_format_version_ > 0 && consumer_group_id_ >= 0
-      && split_sstable_type_ >= share::ObSplitSSTableType::SPLIT_BOTH
-      && split_sstable_type_ <= share::ObSplitSSTableType::SPLIT_MINOR;
-  if (!lob_col_idxs_.empty()) {
-    is_valid = is_valid && (OB_INVALID_ID != lob_table_id_);
-  }
-  return is_valid;
-}
-
-int ObTabletSplitArg::assign(const ObTabletSplitArg &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!other.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(other));
-  } else if (OB_FAIL(dest_tablets_id_.assign(other.dest_tablets_id_))) {
-    LOG_WARN("assign failed", K(ret), K(other));
-  } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
-    LOG_WARN("assign failed", K(ret));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) { // shallow cpy.
-    LOG_WARN("assign failed", K(ret), K(other));
-  } else {
-    ls_id_                 = other.ls_id_;
-    table_id_              = other.table_id_;
-    lob_table_id_          = other.lob_table_id_;
-    schema_version_        = other.schema_version_;
-    task_id_               = other.task_id_;
-    source_tablet_id_      = other.source_tablet_id_;
-    compaction_scn_        = other.compaction_scn_;
-    data_format_version_   = other.data_format_version_;
-    consumer_group_id_     = other.consumer_group_id_;
-    can_reuse_macro_block_ = other.can_reuse_macro_block_;
-    split_sstable_type_    = other.split_sstable_type_;
-    min_split_start_scn_   = other.min_split_start_scn_;
-  }
-  return ret;
-}
-
-bool ObTabletSplitStartArg::is_valid() const
-{
-  bool is_valid = true;
-  for (int64_t i = 0; is_valid && i < split_info_array_.count(); i++) {
-    is_valid = is_valid && split_info_array_.at(i).is_valid();
-  }
-  return is_valid;
-}
 
 
 
-bool ObTabletSplitFinishArg::is_valid() const
-{
-  bool is_valid = true;
-  for (int64_t i = 0; is_valid && i < split_info_array_.count(); i++) {
-    is_valid = is_valid && split_info_array_.at(i).is_valid();
-  }
-  return is_valid;
-}
 
 
 
-OB_DEF_SERIALIZE(ObTabletSplitArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, table_id_, lob_table_id_,
-    schema_version_, task_id_, source_tablet_id_,
-    dest_tablets_id_, compaction_scn_, data_format_version_,
-    consumer_group_id_, can_reuse_macro_block_, split_sstable_type_,
-    lob_col_idxs_, parallel_datum_rowkey_list_, min_split_start_scn_);
-  return ret;
-}
 
-OB_DEF_DESERIALIZE(ObTabletSplitArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, ls_id_, table_id_, lob_table_id_,
-    schema_version_, task_id_, source_tablet_id_,
-    dest_tablets_id_, compaction_scn_, data_format_version_,
-    consumer_group_id_, can_reuse_macro_block_, split_sstable_type_,
-    lob_col_idxs_);
-  if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
-      rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
-  } else {
-    LST_DO_CODE(OB_UNIS_DECODE, min_split_start_scn_);
-  }
-  return ret;
-}
 
-OB_DEF_SERIALIZE_SIZE(ObTabletSplitArg)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, table_id_, lob_table_id_,
-    schema_version_, task_id_, source_tablet_id_,
-    dest_tablets_id_, compaction_scn_, data_format_version_,
-    consumer_group_id_, can_reuse_macro_block_, split_sstable_type_,
-    lob_col_idxs_, parallel_datum_rowkey_list_, min_split_start_scn_);
-  return len;
-}
 
-OB_SERIALIZE_MEMBER(ObTabletSplitStartArg, split_info_array_);
-OB_SERIALIZE_MEMBER(ObTabletSplitStartResult, ret_codes_, min_split_start_scn_);
-OB_SERIALIZE_MEMBER(ObTabletSplitFinishArg, split_info_array_);
-OB_SERIALIZE_MEMBER(ObTabletSplitFinishResult, ret_codes_);
+
+
+
+
+
 
 
 OB_SERIALIZE_MEMBER(ObFreezeSplitSrcTabletArg, ls_id_, tablet_ids_);
@@ -4797,374 +4543,7 @@ OB_SERIALIZE_MEMBER(ObCreateTabletExtraInfo,
                     split_src_tablet_id_,
                     split_can_reuse_macro_block_);
 
-bool ObBatchCreateTabletArg::is_inited() const
-{
-  return id_.is_valid() && major_frozen_scn_.is_valid();
-}
-
-bool ObBatchCreateTabletArg::is_valid() const
-{
-  bool valid = true;
-  if (is_inited() && tablets_.count() > 0 && (create_tablet_schemas_.count() > 0 || table_schemas_.count() > 0)) {
-    for (int64_t i = 0; valid && i < tablets_.count(); ++i) {
-      const ObCreateTabletInfo &info = tablets_[i];
-      const common::ObSArray<int64_t> &table_schema_index = info.table_schema_index_;
-      if (!info.is_valid()) {
-        valid = false;
-      }
-
-      for (int64_t j = 0; valid && j < table_schema_index.count(); ++j) {
-        const int64_t index = table_schema_index[j];
-        if (index < 0 || (index >= create_tablet_schemas_.count() && index >= table_schemas_.count())) {
-          valid = false;
-        }
-      }
-    }
-  } else {
-    valid = false;
-  }
-  return valid;
-}
-
-void ObBatchCreateTabletArg::reset()
-{
-  id_.reset();
-  major_frozen_scn_.reset();
-  tablets_.reset();
-  table_schemas_.reset();
-  need_check_tablet_cnt_ = false;
-  is_old_mds_ = false;
-  for (int64_t i = 0; i < create_tablet_schemas_.count(); ++i) {
-    create_tablet_schemas_[i]->~ObCreateTabletSchema();
-  }
-  create_tablet_schemas_.reset();
-  allocator_.reset();
-  tablet_extra_infos_.reset();
-  clog_checkpoint_scn_.reset();
-  mds_checkpoint_scn_.reset();
-  create_type_ = ObTabletMdsUserDataType::CREATE_TABLET;
-}
-
-int ObBatchCreateTabletArg::assign(const ObBatchCreateTabletArg &arg)
-{
-  int ret = OB_SUCCESS;
-  const common::ObSArray<storage::ObCreateTabletSchema*> &create_tablet_schemas = arg.create_tablet_schemas_;
-  if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("arg is invalid", KR(ret), K(arg));
-  } else if (OB_FAIL(tablets_.assign(arg.tablets_))) {
-    LOG_WARN("failed to assign tablets", KR(ret), K(arg));
-  } else if (OB_FAIL(table_schemas_.assign(arg.table_schemas_))) {
-    LOG_WARN("failed to assign table schema", KR(ret), K(arg));
-  } else if (OB_FAIL(tablet_extra_infos_.assign(arg.tablet_extra_infos_))) {
-    LOG_WARN("failed to assign tablet extra infos", K(ret), K(arg));
-  } else if (OB_FAIL(create_tablet_schemas_.reserve(create_tablet_schemas.count()))) {
-    STORAGE_LOG(WARN, "Fail to reserve schema array", K(ret), K(create_tablet_schemas.count()));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas.count(); ++i) {
-      if (OB_ISNULL(create_tablet_schemas[i])) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), K(i), KPC(this));
-      } else {
-        ObCreateTabletSchema *create_tablet_schema = NULL;
-        void *create_tablet_schema_ptr = allocator_.alloc(sizeof(ObCreateTabletSchema));
-        if (OB_ISNULL(create_tablet_schema_ptr)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate storage schema", KR(ret));
-        } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
-        } else if (OB_FAIL(create_tablet_schema->init(allocator_, *create_tablet_schemas[i]))) {
-          create_tablet_schema->~ObCreateTabletSchema();
-          STORAGE_LOG(WARN,"Fail to init create_tablet_schema", K(ret));
-        } else if (OB_FAIL(create_tablet_schemas_.push_back(create_tablet_schema))) {
-          create_tablet_schema->~ObCreateTabletSchema();
-          STORAGE_LOG(WARN, "Fail to add schema", K(ret));
-        }
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-    reset();
-  } else {
-    id_ = arg.id_;
-    major_frozen_scn_ = arg.major_frozen_scn_;
-    need_check_tablet_cnt_ = arg.need_check_tablet_cnt_;
-    is_old_mds_ = arg.is_old_mds_;
-    clog_checkpoint_scn_ = arg.clog_checkpoint_scn_;
-    mds_checkpoint_scn_ = arg.mds_checkpoint_scn_;
-    create_type_ = arg.create_type_;
-  }
-  return ret;
-}
-
-bool ObBatchCreateTabletArg::set_binding_info_outside_create() const
-{
-  int bool_ret = false;
-  uint64_t min_data_version = UINT64_MAX;
-  for (int64_t i = 0; i < tablet_extra_infos_.count(); i++) {
-    min_data_version = std::min(min_data_version, tablet_extra_infos_.at(i).tenant_data_version_);
-  }
-  if (UINT64_MAX != min_data_version) {
-    bool_ret = true;
-  }
-  return bool_ret;
-}
-
-OB_SERIALIZE_MEMBER((ObContextDDLArg, ObDDLArg),
-                    stmt_type_,
-                    ctx_schema_,
-                    or_replace_);
-
-
-int ObBatchCreateTabletArg::init_create_tablet(
-  const share::ObLSID &id,
-  const SCN &major_frozen_scn,
-  const bool need_check_tablet_cnt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!id.is_valid() || !major_frozen_scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(id), K(major_frozen_scn));
-  } else {
-    id_ = id;
-    /*
-      To fix issue 2025022400107312907
-      major in new tablet should be larger than last freeze info
-      to disable checksum validation between global index with truncate info and truncated tablet in data table
-    */
-    if (major_frozen_scn.get_val_for_tx() > 1) {
-      major_frozen_scn_ = SCN::scn_inc(major_frozen_scn);
-    } else {
-      major_frozen_scn_ = major_frozen_scn;
-    }
-    need_check_tablet_cnt_ = need_check_tablet_cnt;
-  }
-  return ret;
-}
-
-int64_t ObBatchCreateTabletArg::get_tablet_count() const
-{
-  int64_t cnt = 0;
-  for (int64_t i = 0; i < tablets_.count(); ++i) {
-    const ObCreateTabletInfo &info = tablets_[i];
-    cnt += info.get_tablet_count();
-  }
-  return cnt;
-}
-
-int ObBatchCreateTabletArg::serialize_for_create_tablet_schemas(char *buf,
-    const int64_t data_len,
-    int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(serialization::encode_vi64(buf, data_len, pos, create_tablet_schemas_.count()))) {
-    STORAGE_LOG(WARN, "failed to encode schema count", K(ret));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas_.count(); ++i) {
-    if (OB_ISNULL(create_tablet_schemas_.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null tx service ptr", KR(ret), K(i), KPC(this));
-    } else if (OB_FAIL(create_tablet_schemas_.at(i)->serialize(buf, data_len, pos))) {
-      STORAGE_LOG(WARN, "failed to serialize schema", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObBatchCreateTabletArg::skip_unis_array_len(const char *buf,
-    int64_t data_len,
-    int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  int64_t count = 0;
-  if (pos > data_len) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos));
-  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    TRANS_LOG(WARN, "failed to decode array count", K(ret), KP(buf), K(data_len));
-  } else if (count < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos), K(count));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
-      int64_t version = 0;
-      int64_t len = 0;
-      OB_UNIS_DECODE(version);
-      OB_UNIS_DECODE(len);
-      CHECK_VERSION_LENGTH(1, version, len);
-      pos += len;
-    }
-  }
-  return ret;
-}
-
-int64_t ObBatchCreateTabletArg::get_serialize_size_for_create_tablet_schemas() const
-{
-  int ret = OB_SUCCESS;
-  int64_t len = 0;
-  len += serialization::encoded_length_vi64(create_tablet_schemas_.count());
-  for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas_.count(); ++i) {
-    if (OB_ISNULL(create_tablet_schemas_.at(i))) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("create_tablet_schema is NULL", KR(ret), K(i), KPC(this));
-    } else {
-      len += create_tablet_schemas_.at(i)->get_serialize_size();
-    }
-  }
-  return len;
-}
-
-int ObBatchCreateTabletArg::deserialize_create_tablet_schemas(const char *buf,
-    const int64_t data_len,
-    int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  int64_t count = 0;
-  if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0) || OB_UNLIKELY(pos > data_len)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(buf), K(data_len), K(pos), K(ret));
-  } else if (pos == data_len) {
-    //do nothing
-  } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    STORAGE_LOG(WARN, "failed to decode schema count", K(ret));
-  } else if (count < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "count invalid", KR(ret), K(buf), K(data_len), K(pos), K(count));
-  } else if (count == 0) {
-    STORAGE_LOG(INFO, "upgrade, count is 0", KR(ret), K(buf), K(data_len), K(pos), K(count));
-  } else if (OB_FAIL(create_tablet_schemas_.reserve(count))) {
-    STORAGE_LOG(WARN, "failed to reserve schema array", K(ret), K(count), K(buf), K(data_len), K(pos));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      ObCreateTabletSchema *create_tablet_schema = NULL;
-      void *create_tablet_schema_ptr = allocator_.alloc(sizeof(ObCreateTabletSchema));
-      if (OB_ISNULL(create_tablet_schema_ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate storage schema", KR(ret));
-      } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
-      } else if (OB_FAIL(create_tablet_schema->deserialize(allocator_, buf, data_len, pos))) {
-        create_tablet_schema->~ObCreateTabletSchema();
-        STORAGE_LOG(WARN,"failed to deserialize schema", K(ret), K(i), K(count), K(buf), K(data_len), K(pos));
-      } else if (OB_FAIL(create_tablet_schemas_.push_back(create_tablet_schema))) {
-        create_tablet_schema->~ObCreateTabletSchema();
-        STORAGE_LOG(WARN, "failed to add schema", K(ret));
-      }
-    }
-    if (OB_FAIL(ret)) {
-      reset();
-    }
-  }
-  return ret;
-}
-
-int ObBatchCreateTabletArg::is_old_mds(const char *buf,
-    int64_t data_len,
-    bool &is_old_mds)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  is_old_mds = false;
-  int64_t version = 0;
-  int64_t len = 0;
-  share::ObLSID id;
-  share::SCN major_frozen_scn;
-  bool need_check_tablet_cnt = false;
-
-  if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len));
-  } else {
-    LST_DO_CODE(OB_UNIS_DECODE, version, len, id, major_frozen_scn);
-    if (OB_FAIL(ret)) {
-    }
-    // tablets array
-    else if (OB_FAIL(skip_unis_array_len(buf, data_len, pos))) {
-      TRANS_LOG(WARN, "failed to skip_unis_array_len", K(ret), KP(buf), K(data_len), K(pos));
-    }
-    // schema array
-    else if (OB_FAIL(skip_unis_array_len(buf, data_len, pos))) {
-      TRANS_LOG(WARN, "failed to skip_unis_array_len", K(ret), KP(buf), K(data_len), K(pos));
-    } else {
-      LST_DO_CODE(OB_UNIS_DECODE, need_check_tablet_cnt, is_old_mds);
-    }
-  }
-
-  return ret;
-}
-
-DEF_TO_STRING(ObBatchCreateTabletArg)
-{
-  int64_t pos = 0;
-  J_KV(K_(id), K_(major_frozen_scn), K_(need_check_tablet_cnt), K_(is_old_mds), K_(tablets), K_(tablet_extra_infos), K_(clog_checkpoint_scn), K_(create_type), K_(mds_checkpoint_scn));
-  return pos;
-}
-
-OB_DEF_SERIALIZE(ObBatchCreateTabletArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, id_, major_frozen_scn_, tablets_, table_schemas_, need_check_tablet_cnt_, is_old_mds_);
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(serialize_for_create_tablet_schemas(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize_for_create_tablet_schemas", KR(ret), KPC(this));
-  } else {
-    OB_UNIS_ENCODE_ARRAY(tablet_extra_infos_, tablet_extra_infos_.count());
-  }
-  LST_DO_CODE(OB_UNIS_ENCODE, clog_checkpoint_scn_, create_type_, mds_checkpoint_scn_);
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObBatchCreateTabletArg)
-{
-  int len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, id_, major_frozen_scn_, tablets_, table_schemas_, need_check_tablet_cnt_, is_old_mds_);
-  len += get_serialize_size_for_create_tablet_schemas();
-  OB_UNIS_ADD_LEN_ARRAY(tablet_extra_infos_, tablet_extra_infos_.count());
-  LST_DO_CODE(OB_UNIS_ADD_LEN, clog_checkpoint_scn_, create_type_, mds_checkpoint_scn_);
-  return len;
-}
-
-OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, id_, major_frozen_scn_, tablets_, table_schemas_, need_check_tablet_cnt_);
-  if (OB_SUCC(ret)) {
-    if (pos == data_len) {
-      is_old_mds_ = true;
-    } else {
-      LST_DO_CODE(OB_UNIS_DECODE, is_old_mds_);
-      if (OB_FAIL(ret)) {
-      } else if (pos == data_len) {
-      } else if (OB_FAIL(deserialize_create_tablet_schemas(buf, data_len, pos))) {
-        LOG_WARN("failed to deserialize_for_create_tablet_schemas", KR(ret));
-      } else {
-        int64_t tablet_extra_infos_count = 0;
-        OB_UNIS_DECODE(tablet_extra_infos_count);
-        if (tablet_extra_infos_count > 0 && OB_FAIL(tablet_extra_infos_.prepare_allocate(tablet_extra_infos_count))) {
-          LOG_WARN("prepare allocate failed", K(ret), K(tablet_extra_infos_count));
-        } else {
-          OB_UNIS_DECODE_ARRAY(tablet_extra_infos_, tablet_extra_infos_count);
-        }
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && tablet_extra_infos_.empty()) {
-    // process the compatibility of the ObCreateTabletExtraInfo.
-    const int64_t schemas_count = create_tablet_schemas_.empty() ? table_schemas_.count() : create_tablet_schemas_.count();
-    if (OB_UNLIKELY(schemas_count <= 0)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arg", K(ret), K(schemas_count), K(table_schemas_), K(create_tablet_schemas_));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < schemas_count; i++) {
-        obcall::ObCreateTabletExtraInfo create_tablet_extra_info; // placeholder.
-        if (OB_FAIL(tablet_extra_infos_.push_back(create_tablet_extra_info))) {
-          LOG_WARN("failed to push back create tablet extra info", K(ret));
-        }
-      }
-    }
-  }
-  LST_DO_CODE(OB_UNIS_DECODE, clog_checkpoint_scn_, create_type_, mds_checkpoint_scn_);
-  return ret;
-}
+// ObBatchCreateTabletArg implementation moved to storage/tablet/ob_batch_create_tablet_arg.cpp
 
 bool ObFetchTabletSeqArg::is_valid() const
 {
@@ -5207,245 +4586,24 @@ DEF_TO_STRING(ObFetchTabletSeqRes)
 
 OB_SERIALIZE_MEMBER(ObFetchTabletSeqRes, cache_interval_);
 
-ObCallRemoteWriteDDLRedoLogArg::ObCallRemoteWriteDDLRedoLogArg()
-  : ls_id_(), redo_info_(), task_id_(0)
-{}
-
-int ObCallRemoteWriteDDLRedoLogArg::init(const share::ObLSID &ls_id,
-                                        const storage::ObDDLMacroBlockRedoInfo &redo_info,
-                                        const int64_t task_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || task_id == 0 || !ls_id.is_valid() || !redo_info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("args are not valid", K(ret), K(task_id), K(ls_id), K(redo_info));
-  } else {
-    
-    ls_id_ = ls_id;
-    redo_info_ = redo_info;
-    task_id_ = task_id;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLRedoLogArg, ls_id_, redo_info_, task_id_);
-
-ObCallRemoteWriteDDLCommitLogArg::ObCallRemoteWriteDDLCommitLogArg()
-  : ls_id_(), table_key_(), start_scn_(SCN::min_scn()),
-    table_id_(0), execution_id_(-1), ddl_task_id_(0)
-{}
-
-int ObCallRemoteWriteDDLCommitLogArg::init(const share::ObLSID &ls_id,
-                                          const storage::ObITable::TableKey &table_key,
-                                          const SCN &start_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !ls_id.is_valid() || !table_key.is_valid() || !start_scn.is_valid_and_not_min())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablet id is not valid", K(ret), K(ls_id), K(table_key), K(start_scn));
-  } else {
-    
-    ls_id_ = ls_id;
-    table_key_ = table_key;
-    start_scn_ = start_scn;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLCommitLogArg, ls_id_, table_key_, start_scn_,
-                    table_id_, execution_id_, ddl_task_id_);
-
-
-ObCallRemoteWriteDDLIncCommitLogArg::ObCallRemoteWriteDDLIncCommitLogArg()
-  : ls_id_(), tablet_id_(), lob_meta_tablet_id_(), tx_desc_(nullptr), need_release_(false)
-{}
-
-ObCallRemoteWriteDDLIncCommitLogArg::~ObCallRemoteWriteDDLIncCommitLogArg()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(release())) {
-    LOG_WARN("fail to release tx_desc", K(ret));
-  }
-}
-
-int ObCallRemoteWriteDDLIncCommitLogArg::init(const share::ObLSID &ls_id,
-                                             const common::ObTabletID tablet_id,
-                                             const common::ObTabletID lob_meta_tablet_id,
-                                             transaction::ObTxDesc *tx_desc)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() ||
-                  OB_ISNULL(tx_desc) || !tx_desc->is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tablet id is not valid", K(ret), K(ls_id), K(tablet_id), K(lob_meta_tablet_id), KPC(tx_desc));
-  } else if (OB_FAIL(release())) {
-    LOG_WARN("fail to release tx_desc", K(ret));
-  } else {
-    
-    ls_id_ = ls_id;
-    tablet_id_ = tablet_id;
-    lob_meta_tablet_id_ = lob_meta_tablet_id;
-    tx_desc_ = tx_desc;
-  }
-  return ret;
-}
-
-int ObCallRemoteWriteDDLIncCommitLogArg::release()
-{
-  int ret = OB_SUCCESS;
-  if (tx_desc_ != nullptr && need_release_) {
-    ObTransService *tx_svc = MTL_WITH_CHECK(ObTransService *);
-    if (OB_ISNULL(tx_svc)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null tx service ptr", K(ret));
-    } else if (OB_FAIL(tx_svc->release_tx(*tx_desc_))) {
-      LOG_WARN("release tx fail", K(ret));
-    } else {
-      need_release_ = false;
-      tx_desc_ = nullptr;
-    }
-  }
-
-  return ret;
-}
-
-OB_DEF_SERIALIZE(ObCallRemoteWriteDDLIncCommitLogArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, tablet_id_, lob_meta_tablet_id_);
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(tx_desc_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tx_desc_ is nullptr", K(ret));
-    } else {
-      LST_DO_CODE(OB_UNIS_ENCODE, *tx_desc_);
-    }
-  }
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObCallRemoteWriteDDLIncCommitLogArg)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, ls_id_, tablet_id_, lob_meta_tablet_id_);
-  if (OB_SUCC(ret)) {
-    ObTransService *tx_svc = nullptr;
-    if (OB_FAIL(release())) {
-      LOG_WARN("fail to release tx_desc", K(ret));
-    } else if (OB_ISNULL(tx_svc = MTL_WITH_CHECK(ObTransService *))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null tx service ptr", KR(ret));
-    } else if (OB_FAIL(tx_svc->acquire_tx(buf, data_len, pos, tx_desc_))) {
-      LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), KR(ret));
-    } else {
-      need_release_ = true;
-    }
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObCallRemoteWriteDDLIncCommitLogArg)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, tablet_id_, lob_meta_tablet_id_);
-  if (tx_desc_ != nullptr) {
-    LST_DO_CODE(OB_UNIS_ADD_LEN, *tx_desc_);
-  }
-  return len;
-}
-
-OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLIncCommitLogRes, tx_result_);
-
-ObRegisterTxDataArg::ObRegisterTxDataArg()
-  : tx_desc_(nullptr),
-    ls_id_(),
-    type_(transaction::ObTxDataSourceType::UNKNOWN),
-    buf_(),
-    seq_no_(),
-    request_id_(0),
-    register_flag_()
-{
-}
-
-
-int ObRegisterTxDataArg::init(const ObTxDesc &tx_desc,
-                              const ObLSID &ls_id,
-                              const ObTxDataSourceType &type,
-                              const ObString &buf,
-                              const transaction::ObTxSEQ seq_no,
-                              const int64_t base_request_id,
-                              const transaction::ObRegisterMdsFlag &register_flag)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(false || !tx_desc.is_valid() || !ls_id.is_valid()
-                  || type == ObTxDataSourceType::UNKNOWN || !seq_no.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tx_desc), K(ls_id), K(type), K(seq_no));
-  } else {
-    
-    tx_desc_ = const_cast<ObTxDesc *>(&tx_desc);
-    ls_id_ = ls_id;
-    type_ = type;
-    buf_ = buf;
-    seq_no_ = seq_no;
-    request_id_ = base_request_id;
-    register_flag_ = register_flag;
-  }
-  return ret;
-}
-
-
-void ObRegisterTxDataArg::inc_request_id(const int64_t base_request_id)
-{
-  if (-1 != base_request_id) {
-    request_id_ = base_request_id + 1;
-  } else {
-    request_id_++;
-  }
-}
-
-OB_DEF_SERIALIZE(ObRegisterTxDataArg)
-{
-  int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE(*tx_desc_);
-  LST_DO_CODE(OB_UNIS_ENCODE, ls_id_, type_, buf_, request_id_, register_flag_, seq_no_);
-  return ret;
-}
-OB_DEF_DESERIALIZE(ObRegisterTxDataArg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_SUCC(ret)) {
-    ObTransService *tx_svc = MTL_WITH_CHECK(ObTransService *);
-    if (OB_ISNULL(tx_svc)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null tx service ptr", KR(ret));
-    } else if (OB_FAIL(tx_svc->acquire_tx(buf, data_len, pos, tx_desc_))) {
-      LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), KR(ret));
-    } else {
-      LST_DO_CODE(OB_UNIS_DECODE, ls_id_, type_, buf_, request_id_, register_flag_, seq_no_);
-      LOG_INFO("deserialize txDesc from session", KPC_(tx_desc), KPC(this));
-    }
-  }
-  return ret;
-}
-OB_DEF_SERIALIZE_SIZE(ObRegisterTxDataArg)
-{
-  int64_t len = 0;
-  OB_UNIS_ADD_LEN(*tx_desc_);
-  LST_DO_CODE(OB_UNIS_ADD_LEN, ls_id_, type_, buf_, request_id_, register_flag_, seq_no_);
-  return len;
-}
 
 
 
-void ObRegisterTxDataResult::reset()
-{
-  result_ = OB_SUCCESS;
-  tx_result_.reset();
-  return;
-}
 
-OB_SERIALIZE_MEMBER(ObRegisterTxDataResult, result_, tx_result_);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 OB_SERIALIZE_MEMBER(ObSwitchSchemaResult, ret_);
 
@@ -5661,7 +4819,6 @@ int ObBatchGetTabletBindingArg::init(const share::ObLSID &ls_id, const ObIArray<
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObBatchGetTabletBindingRes, binding_datas_);
 
 
 OB_SERIALIZE_MEMBER(ObBatchGetTabletSplitArg, ls_id_, tablet_ids_, check_committed_);
@@ -5687,7 +4844,6 @@ int ObBatchGetTabletSplitArg::init(const share::ObLSID &ls_id, const ObIArray<Ob
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObBatchGetTabletSplitRes, split_datas_);
 
 OB_SERIALIZE_MEMBER(ObSessInfoVerifyArg, sess_id_, proxy_sess_id_);
 
@@ -5947,6 +5103,8 @@ int ObTTLRequestArg::assign(const ObTTLRequestArg &other)
 
   return ret;
 }
+
+OB_SERIALIZE_MEMBER(ObBroadcastConsensusVersionRes, ret_);
 
 
 

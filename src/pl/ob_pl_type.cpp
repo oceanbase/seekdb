@@ -24,6 +24,7 @@
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "pl/ob_pl_dependency_util.h"
+#include "share/schema/ob_routine_info.h"  // relocated-definition owner
 namespace oceanbase
 {
 using namespace common;
@@ -2050,4 +2051,58 @@ int ObPLCursorInfo::set_current_position(int64_t position) {
 }
 
 }  // namespace pl
+}  // namespace oceanbase
+
+// ===== definition moved from share/schema/ob_routine_info.h(previously OB_INLINE, constructs ObPLDataType by value) =====
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+pl::ObPLDataType ObRoutineParam::get_pl_data_type() const
+  {
+    pl::ObPLDataType type;
+    if (is_pl_integer_type()) {
+      type.set_pl_integer_type(get_pl_integer_type(), get_param_type());
+      pl::ObPLIntegerType pls_type = type.get_pl_integer_type();
+      switch (pls_type) {
+        case pl::PL_PLS_INTEGER:
+        case pl::PL_BINARY_INTEGER:
+        case pl::PL_SIMPLE_INTEGER: {
+          type.set_range(-2147483648, 2147483647);
+          type.set_not_null(pl::PL_SIMPLE_INTEGER == pls_type);
+        }
+        break;
+        case pl::PL_NATURAL:
+        case pl::PL_NATURALN: {
+          type.set_range(0, 2147483647);
+          type.set_not_null(pl::PL_NATURALN == pls_type);
+        }
+        break;
+        case pl::PL_POSITIVE:
+        case pl::PL_POSITIVEN: {
+          type.set_range(1, 2147483647);
+          type.set_not_null(pl::PL_POSITIVEN == pls_type);
+        }
+        break;
+        case pl::PL_SIGNTYPE: {
+          type.set_range(-1, 1);
+        }
+        break;
+        default: // do nothing ...
+        break;
+      }
+    } else if (is_sys_refcursor_type()) {
+      type.set_type(pl::PL_REF_CURSOR_TYPE);
+      type.set_type_from(pl::PL_TYPE_SYS_REFCURSOR);
+    } else {
+      type.set_data_type(get_param_type());
+    }
+    return type;
+  }
+
+}  // namespace schema
+}  // namespace share
 }  // namespace oceanbase

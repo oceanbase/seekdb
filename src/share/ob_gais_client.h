@@ -20,7 +20,6 @@
 #include "lib/net/ob_addr.h"
 #include "share/ob_gais_msg.h"
 #include "share/ob_gais_rpc.h"
-#include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
 {

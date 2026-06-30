@@ -18,7 +18,7 @@
 #define private public
 #include "logservice/palf/fixed_sliding_window.h"
 #undef private
-#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
+#include "logservice/ob_tenant_mutil_allocator_mgr.h"
 
 
 namespace oceanbase

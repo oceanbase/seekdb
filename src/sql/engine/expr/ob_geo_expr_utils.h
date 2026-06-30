@@ -19,9 +19,9 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/string/ob_string.h"
-#include "lib/geo/ob_geo.h"
-#include "lib/geo/ob_geo_utils.h"
-#include "lib/geo/ob_geo_common.h"
+#include "share/geo/ob_geo.h"
+#include "share/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_common.h"
 #include "sql/engine/expr/ob_expr.h" // for ObExpr
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"

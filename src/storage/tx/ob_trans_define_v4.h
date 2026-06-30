@@ -142,7 +142,6 @@ public:
   _XX(END_STMT_FAIL)                                    \
   _XX(EXPLICIT_ROLLBACK)                                \
   _XX(CREATE_SAVEPOINT_FAIL)                            \
-  // used for dblink create savepoint
 
 enum ObTxAbortCause
 {
@@ -577,7 +576,7 @@ protected:
   uint32_t sess_id_;                   // sesssion id of txn start, for XA it is XA_START session id
   uint32_t assoc_sess_id_;             // the session which associated with
   uint32_t client_sid_;                // client session id, which is produced by proxy
-  ObGlobalTxType global_tx_type_;      // global trans type, i.e., xa or dblink
+  ObGlobalTxType global_tx_type_;      // global trans type
 
   uint64_t op_sn_;                     // Tx level operation sequence No
 
@@ -903,7 +902,6 @@ public:
   void release_implicit_savepoint(const ObTxSEQ savepoint);
   ObTransTraceLog &get_tlog() { return tlog_; }
   bool is_xa_terminate_state_() const;
-  // for dblink
   ObGlobalTxType get_global_tx_type(const ObXATransID &xid) const;
   void set_global_tx_type(const ObGlobalTxType global_tx_type)
   { global_tx_type_ = global_tx_type; }

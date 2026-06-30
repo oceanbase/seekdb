@@ -17,13 +17,14 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_tablet_dml.h"
+#include "storage/ob_table_dml_param.h"
 #include "share/rc/ob_module_provider.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/lob/ob_lob_locator_struct.h"
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/memtable/ob_memtable_context.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 
 namespace oceanbase
 {

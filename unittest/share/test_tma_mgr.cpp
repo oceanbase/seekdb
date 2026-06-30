@@ -15,8 +15,8 @@
  */
 
 #include <gtest/gtest.h>
-#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
-#include "share/allocator/ob_tenant_mutil_allocator.h"
+#include "logservice/ob_tenant_mutil_allocator_mgr.h"
+#include "logservice/ob_tenant_mutil_allocator.h"
 
 namespace oceanbase
 {

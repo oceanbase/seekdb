@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_EXPR_RESULT_TYPE_UTIL_
 #define OCEANBASE_SQL_ENGINE_EXPR_RESULT_TYPE_UTIL_
 
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "lib/container/ob_bit_set.h"
 #include "common/object/ob_obj_type.h"
 #include "common/expression/ob_expr_string_buf.h"

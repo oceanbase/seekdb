@@ -31,7 +31,7 @@
 #include "lib/time/ob_cur_time.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "lib/hash/ob_link_hashmap.h"
-#include "lib/mysqlclient/ob_server_connection_pool.h"
+#include "common/mysqlclient/ob_server_connection_pool.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "sql/ob_sql_config_provider.h"

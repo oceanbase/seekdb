@@ -17,7 +17,7 @@
 #ifndef SRC_STORAGE_COMPACTION_OB_COMPACTION_TABLET_DIAGNOSE_H_
 #define SRC_STORAGE_COMPACTION_OB_COMPACTION_TABLET_DIAGNOSE_H_
 
-#include "share/scheduler/ob_diagnose_config.h"
+#include "observer/scheduler/ob_diagnose_config.h"
 
 namespace oceanbase
 {

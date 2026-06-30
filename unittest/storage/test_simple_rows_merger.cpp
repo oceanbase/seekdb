@@ -17,6 +17,7 @@
 #include "storage/access/ob_simple_rows_merger.h"
 #include <gtest/gtest.h>
 using namespace oceanbase::storage;
+using namespace oceanbase::common;
 
 class ObSimpleRowsMergerTest: public ::testing::Test
 {

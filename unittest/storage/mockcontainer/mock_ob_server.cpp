@@ -19,7 +19,7 @@
 #define private public
 #include "mock_ob_server.h"
 
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "share/ob_device_manager.h" 
 
 namespace oceanbase

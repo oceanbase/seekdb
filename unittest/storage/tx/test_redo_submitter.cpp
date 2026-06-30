@@ -676,6 +676,7 @@ TEST_F(ObTestRedoSubmitter, submit_ROW_SIZE_TOO_LARGE)
 } // transaction
 } // oceanbase
 
+using namespace oceanbase;
 int main(int argc, char **argv)
 {
   const char *log_name = "test_redo_submitter.log";

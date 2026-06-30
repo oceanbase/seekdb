@@ -19,6 +19,9 @@
 #define protected public
 #define private public
 #include "mtlenv/mock_tenant_module_env.h"
+#include "share/schema/ob_schema_getter_guard.h"
+using namespace oceanbase::share;
+using namespace oceanbase::share::schema;
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 
 namespace oceanbase

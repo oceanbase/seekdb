@@ -21,7 +21,7 @@
 #include "lib/file/ob_file.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/ob_define.h"
-#include "common/data_buffer.h"
+#include "lib/utility/data_buffer.h"
 #include "common/log/ob_log_entry.h"
 
 namespace oceanbase

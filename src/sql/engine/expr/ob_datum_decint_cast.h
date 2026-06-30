@@ -1,3 +1,4 @@
+#include "share/object/ob_decint_scale_util.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -1250,12 +1251,6 @@ static ObExpr::EvalBatchFunc g_decimalint_cast_batch_functions[] = {
   decimalint_fast_batch_cast<int512_t, int512_t, false, false>,
 };
 
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_CAST_EXPR_EVAL, g_decimalint_cast_functions,
-                   ARRAYSIZEOF(g_decimalint_cast_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_CAST_EXPR_EVAL_BATCH, g_decimalint_cast_batch_functions,
-                   ARRAYSIZEOF(g_decimalint_cast_batch_functions));
-
 int eval_questionmark_decint2nmb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
@@ -1301,7 +1296,7 @@ static int _eval_questionmark_nmb2decint(const ObExpr &expr, ObEvalCtx &ctx, ObD
     int32_t int_bytes = 0;
     if (OB_FAIL(wide::from_number(in_nmb, tmp_alloc, in_scale, decint, int_bytes))) {
       LOG_WARN("from number failed", K(ret));
-    } else if (OB_FAIL(scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
+    } else if (OB_FAIL(common::decint_scale::scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cm, res_val))) {
       LOG_WARN("scale const decimal int failed", K(ret));
     } else {
       expr_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());

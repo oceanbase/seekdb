@@ -18,7 +18,7 @@
 #define OB_INV_IDX_PARAM_ESTIMATOR_H_
 
 #include "share/ob_define.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 namespace oceanbase
 {

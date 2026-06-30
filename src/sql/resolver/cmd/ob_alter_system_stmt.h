@@ -19,7 +19,8 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
-#include "share/scheduler/ob_sys_task_stat.h"
+#include "observer/scheduler/ob_sys_task_stat.h"
+#include "sql/engine/cmd/ob_redis_importer.h"
 
 namespace oceanbase
 {

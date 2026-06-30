@@ -24,8 +24,9 @@
 #include "rpc/obmysql/packet/ompk_ok.h"
 #include "share/ob_define.h"
 #include "share/system_variable/ob_sys_var_class_type.h"
-#include "share/system_variable/ob_system_variable_factory.h"
+#include "sql/session/ob_system_variable_factory.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "share/system_variable/ob_sys_var_meta.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
@@ -88,7 +89,7 @@ void assert_sys_var_show_str_eq(const ObIArray<ObStringKV> &vars,
                                 const ObString &expected)
 {
   ObString actual;
-  ASSERT_TRUE(find_sys_var_value(vars, ObSysVarFactory::get_sys_var_name_by_id(sys_var_id), actual));
+  ASSERT_TRUE(find_sys_var_value(vars, ObSysVarMeta::get_sys_var_name_by_id(sys_var_id), actual));
   ASSERT_EQ(expected, actual);
   ASSERT_FALSE(is_digits_only(actual));
 }

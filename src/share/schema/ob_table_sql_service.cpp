@@ -18,8 +18,7 @@
 #include "ob_table_sql_service.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_partition_sql_helper.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "src/share/vector_index/ob_vector_index_util.h"
+#include "share/ob_tenant_timezone_mgr.h"
 #include "share/storage_cache_policy/ob_storage_cache_partition_sql_helper.h"
 
 namespace oceanbase
@@ -3106,7 +3105,7 @@ int ObTableSqlService::gen_table_dml_without_check(
   const char *ttl_definition = table.get_ttl_definition().empty() ?
     "" : table.get_ttl_definition().ptr();
   const char *storage_cache_policy = table.get_storage_cache_policy().empty() ?
-      OB_DEFAULT_STORAGE_CACHE_POLICY_STR : table.get_storage_cache_policy().ptr();
+      storage::OB_DEFAULT_STORAGE_CACHE_POLICY_STR : table.get_storage_cache_policy().ptr();
   ObString index_params = table.get_index_params().empty() ? empty_str : table.get_index_params();
   const ObString parser_properties = table.get_parser_property_str().empty() ? empty_str : table.get_parser_property_str();
   const char *dynamic_partition_policy = table.get_dynamic_partition_policy().empty() ? 

@@ -16,7 +16,7 @@
 
 #ifndef OB_STORAGE_COLUMN_STORE_CO_MERGE_DAG_H_
 #define OB_STORAGE_COLUMN_STORE_CO_MERGE_DAG_H_
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tablet_merge_task.h"
 #include "storage/compaction/ob_partition_merger.h"

@@ -35,7 +35,7 @@
 #include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx/ob_trans_id_service.h"
 #include "share/ob_thread_mgr.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "src/observer/table_load/resource/ob_table_load_resource_manager.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"

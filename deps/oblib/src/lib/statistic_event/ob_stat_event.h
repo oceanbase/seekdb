@@ -133,17 +133,6 @@ STAT_EVENT_ADD_DEF(XA_INNER_RPC_TOTAL_COUNT, "inner rpc total count in xa statem
 STAT_EVENT_ADD_DEF(XA_INNER_RPC_TEN_MS_COUNT, "total count of inner rpc (latency >= 10ms) in xa statement", ObStatClassIds::TRANS, 30228, false, true, true)
 STAT_EVENT_ADD_DEF(XA_INNER_RPC_TWENTY_MS_COUNT, "total count of inner rpc (latency >= 20ms) in xa statement", ObStatClassIds::TRANS, 30229, false, true, true)
 STAT_EVENT_ADD_DEF(XA_INNER_RPC_TOTAL_USED_TIME, "inner rpc total used time in xa statement", ObStatClassIds::TRANS, 30230, false, true, true)
-// DBLINK TRANS
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_COUNT, "dblink trans total count", ObStatClassIds::TRANS, 30231, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_FAIL_COUNT, "failed dblink trans total count", ObStatClassIds::TRANS, 30232, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_PROMOTION_COUNT, "dblink trans promotion total count", ObStatClassIds::TRANS, 30233, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_CALLBACK_COUNT, "dblink trans callback total count", ObStatClassIds::TRANS, 30234, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_COMMIT_COUNT, "dblink trans commit total count", ObStatClassIds::TRANS, 30235, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_COMMIT_USED_TIME, "dblink trans commit total used time", ObStatClassIds::TRANS, 30236, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_COMMIT_FAIL_COUNT, "failed dblink trans commit total count", ObStatClassIds::TRANS, 30237, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_ROLLBACK_COUNT, "dblink trans rollback total count", ObStatClassIds::TRANS, 30238, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_ROLLBACK_USED_TIME, "dblink trans rollback total used time", ObStatClassIds::TRANS, 30239, false, true, true)
-STAT_EVENT_ADD_DEF(DBLINK_TRANS_ROLLBACK_FAIL_COUNT, "failed dblink trans rollback total count", ObStatClassIds::TRANS, 30240, false, true, true)
 
 // SQL
 STAT_EVENT_ADD_DEF(SQL_SELECT_COUNT, "sql select count", ObStatClassIds::SQL, 40000, false, true, true)

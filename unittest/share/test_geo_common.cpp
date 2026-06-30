@@ -15,7 +15,7 @@
  */
  
 #include <gtest/gtest.h>
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "src/pl/ob_pl.h"
 #include "src/sql/engine/expr/ob_expr_sql_udt_utils.h"
 #define private public

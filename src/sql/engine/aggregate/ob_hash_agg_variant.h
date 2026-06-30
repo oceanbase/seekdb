@@ -17,7 +17,7 @@
 #ifndef SQL_ENGINE_AGGREGATE_OB_HASH_VARIANT
 #define SQL_ENGINE_AGGREGATE_OB_HASH_VARIANT
 #include "ob_exec_hash_struct_vec.h"
-#include "share/aggregate/processor.h"
+#include "sql/engine/aggregate/processor.h"
 #include <boost/variant/variant.hpp>
 
 namespace oceanbase

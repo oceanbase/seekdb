@@ -20,10 +20,10 @@
 #include "common/object/ob_object.h"
 #include "common/ob_accuracy.h"
 #include "common/ob_zerofill_info.h"
-#include "lib/timezone/ob_timezone_info.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_time_convert.h"
 #include "lib/charset/ob_charset.h"
-#include "lib/geo/ob_geo_common.h"
+#include "share/geo/ob_geo_common.h"
 #include "share/ob_errno.h"
 
 namespace oceanbase
@@ -422,7 +422,7 @@ public:
                      const ObObj &in_obj, ObObj &out_obj);
   static int to_type(const ObObjType expect_type, ObCollationType expect_cs_type,
                      ObCastCtx &cast_ctx, const ObObj &in_obj, ObObj &out_obj);
-  static int get_zero_value(const ObObjType expect_type, ObCollationType expect_cs_type, ObObj &zero_obj);
+  // get_zero_value has been demoted to sql::get_obj_zero_value(ob_datum_cast.h; kept in sql because it uses the SET_RES macro)
   static int to_type(const ObExpectType &expect_type, ObCastCtx &cast_ctx, const ObObj &in_obj, ObObj &out_obj);
   static int is_cast_monotonic(ObObjType t1, ObObjType t2, bool &is_monotonic);
   static int is_order_consistent(const ObObjMeta &from,
@@ -433,9 +433,7 @@ public:
                                  const ObObjType calc_type,
                                  const ObCollationType calc_collation,
                                  bool &result);
-  static int is_injection(const ObObjMeta &from,
-                          const ObObjMeta &to,
-                          bool &result);
+  // is_injection: orphan declaration removed
   // for resource management.
   static int get_obj_param_text(const ObObjParam &obj_param,
                                 const common::ObString raw_text,

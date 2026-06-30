@@ -20,7 +20,7 @@
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
 #include "lib/string/ob_string.h"
 #include <gtest/gtest.h>
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 #include "../test_sql_utils.h"
 #include "lib/allocator/page_arena.h"
 #include <fstream>

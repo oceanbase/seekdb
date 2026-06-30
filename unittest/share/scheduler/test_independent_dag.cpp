@@ -20,7 +20,7 @@
 #define protected public
 #define private public
 #include "share/scheduler/test_dag_common.h"
-#include "share/scheduler/ob_independent_dag.h"
+#include "observer/scheduler/ob_independent_dag.h"
 #include "lib/random/ob_random.h"
 
 const int64_t STRESS_ROUND_CNT = 32;

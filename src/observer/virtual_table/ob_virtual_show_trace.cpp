@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SERVER
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 #include "observer/virtual_table/ob_virtual_show_trace.h"
 #include "sql/session/ob_sql_session_info.h"
 

@@ -16,9 +16,9 @@
 
 #ifndef OB_ALL_VIRTUAL_DAG_H_
 #define OB_ALL_VIRTUAL_DAG_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/container/ob_array.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 
 namespace oceanbase
 {

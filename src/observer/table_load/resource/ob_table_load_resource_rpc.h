@@ -18,7 +18,7 @@
 
 #include "ob_table_load_resource_rpc_struct.h"
 #include "observer/table_load/ob_table_load_rpc_executor.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 
 namespace oceanbase
 {

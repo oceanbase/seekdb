@@ -18,8 +18,8 @@
 #define OCEANBASE_SQL_OB_EXPR_JSON_SEARCH_H_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/json_type/ob_json_tree.h"
-#include "lib/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_base.h"
 
 using namespace oceanbase::common;
 

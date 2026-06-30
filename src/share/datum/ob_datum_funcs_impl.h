@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_DATUM_FUNCS_UTIL_H_
 
 #include "share/ob_lob_access_utils.h"
+#include "sql/engine/expr/ob_expr_basic_funcs.h"  // ObExprBasicFuncs pure function-pointer table(conf L2)
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase

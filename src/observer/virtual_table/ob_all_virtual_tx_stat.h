@@ -17,15 +17,15 @@
 #ifndef OB_ALL_VIRTUAL_TX_STAT_H_
 #define OB_ALL_VIRTUAL_TX_STAT_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_simple_iterator.h"
 #include "storage/tx/ob_trans_ctx.h"
 #include "storage/tx/ob_tx_ls_log_writer.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "storage/tx/ob_tx_stat.h"
 
 namespace oceanbase

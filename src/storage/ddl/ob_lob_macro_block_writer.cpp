@@ -15,12 +15,13 @@
  */
 
 #include "storage/ddl/ob_lob_macro_block_writer.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/lob/ob_lob_access_param.h"
 #include "storage/ddl/ob_cg_macro_block_writer.h"
 #include "share/ob_ddl_common.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -195,7 +196,7 @@ int ObLobMacroBlockWriter::transform_lob_meta_row(ObLobMetaWriteResult &lob_meta
     if (OB_UNLIKELY(!lob_meta_row_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid lob meta row", KR(ret), K(lob_meta_row_));
-    } else if (OB_FAIL(ObDDLUtil::check_null_and_length(false/*is_index_table*/,
+    } else if (OB_FAIL(ObDDLStorageUtil::check_null_and_length(false/*is_index_table*/,
                                                         false/*has_lob_rowkey*/,
                                                         ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT,
                                                         lob_meta_row_))) {
@@ -221,18 +222,18 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
   if (OB_SUCC(ret) && OB_UNLIKELY(!macro_block_writer_->is_inited())) {
     ObITable::TableKey lob_table_key;
     lob_table_key.tablet_id_ = lob_meta_tablet_id_;
-    if (is_incremental_minor_direct_load(param_.direct_load_type_)) { // 增量
+    if (is_incremental_minor_direct_load(param_.direct_load_type_)) { // incremental
       lob_table_key.table_type_ = ObITable::MINI_SSTABLE;
       lob_table_key.scn_range_.start_scn_.convert_for_tx(1);
       lob_table_key.scn_range_.end_scn_.convert_for_tx(param_.snapshot_version_); // for logic version
-    } else if (is_incremental_major_direct_load(param_.direct_load_type_)) { // 增量
+    } else if (is_incremental_major_direct_load(param_.direct_load_type_)) { // incremental
       lob_table_key.table_type_ = ObITable::INC_MAJOR_SSTABLE;
       lob_table_key.column_group_idx_ = 0;
       // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable
       lob_table_key.slice_range_.start_slice_idx_ = 0;
       lob_table_key.slice_range_.end_slice_idx_ = 0;
       lob_table_key.version_range_.snapshot_version_ = param_.snapshot_version_;
-    } else { // 全量
+    } else { // full
       lob_table_key.table_type_ = ObITable::MAJOR_SSTABLE;
       lob_table_key.column_group_idx_ = 0;
       // slice idx is not the same order with the rowkey of lob. set slice idx 0 here to compare rowkey when merge major sstable

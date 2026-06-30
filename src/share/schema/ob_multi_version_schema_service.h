@@ -49,6 +49,9 @@ namespace share
 namespace schema
 {
 
+// hook: observer side registers submit_async_refresh_schema_task, removes share/schema → observer dependency
+extern int (*g_submit_async_refresh_schema_task_fn)(const int64_t schema_version);
+
 static const int64_t MAX_CACHED_VERSION_NUM = 4;
 
 // singleton class

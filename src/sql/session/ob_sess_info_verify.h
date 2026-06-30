@@ -32,12 +32,12 @@ namespace oceanbase
 {
 
 namespace share {
-  class ObBasicSysVar;
   enum ObSysVarClassType;
 }
 
 namespace sql
 {
+class ObBasicSysVar;
 
 
 // proxy -> server sess info verification.
@@ -99,7 +99,7 @@ public:
   static int sql_port_to_rpc_port(sql::ObSQLSessionInfo &sess,
                       SessionInfoVerifacation &sess_info_verification);
   static int create_tmp_sys_var(sql::ObSQLSessionInfo &sess,
-        share::ObSysVarClassType sys_var_id, share::ObBasicSysVar *&sys_var,
+        share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&sys_var,
         common::ObIAllocator &allocator);
   static int sess_veri_control(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo *&session);
 };

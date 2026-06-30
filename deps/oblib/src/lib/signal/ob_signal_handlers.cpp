@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 #define _GNU_SOURCE 1
 #include "ob_signal_handlers.h"
+#include "lib/profile/ob_trace_id.h"
 #include "lib/signal/ob_signal_struct.h"
 #ifndef _WIN32
 #include <dirent.h>
@@ -25,7 +26,7 @@
 #include "lib/utility/utility.h"
 #include "lib/signal/ob_libunwind.h"
 #include "lib/utility/ob_hang_fatal_error.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 #include "lib/signal/ob_signal_utils.h"
 #else
 #include <windows.h>

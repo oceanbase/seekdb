@@ -20,7 +20,7 @@
 #include "ob_tenant_errsim_module_mgr.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/errsim_module/ob_tenant_errsim_event.h"
+#include "lib/errsim_module/ob_tenant_errsim_event.h"
 
 
 namespace oceanbase

@@ -17,10 +17,11 @@
 #ifndef OB_ALL_VIRTUAL_TX_SCHEDULER_STAT_H_
 #define OB_ALL_VIRTUAL_TX_SCHEDULER_STAT_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx/ob_trans_define_v4.h"
 #include "storage/tx/ob_tx_stat.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 
 namespace oceanbase
 {

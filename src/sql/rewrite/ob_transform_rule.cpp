@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "ob_transform_rule.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer.h"
 #include "sql/optimizer/ob_optimizer_context.h"
 #include "sql/rewrite/ob_transformer_impl.h"
@@ -140,7 +140,6 @@ const char* ObTransformerCtx::get_trans_type_string(uint64_t trans_type)
     TRANS_TYPE_TO_STR(SIMPLIFY_ORDERBY)
     TRANS_TYPE_TO_STR(SIMPLIFY_WINFUNC)
     TRANS_TYPE_TO_STR(SELECT_EXPR_PULLUP)
-    TRANS_TYPE_TO_STR(PROCESS_DBLINK)
     TRANS_TYPE_TO_STR(DECORRELATE)
     TRANS_TYPE_TO_STR(CONDITIONAL_AGGR_COALESCE)
     TRANS_TYPE_TO_STR(MV_REWRITE)

@@ -19,7 +19,7 @@
 #include "ob_load_inner_table_schema_executor.h"
 
 #include "share/inner_table/ob_load_inner_table_schema.h"
-#include "deps/oblib/src/lib/utility/utility.h"
+#include "lib/utility/utility.h"
 #include "share/ob_server_struct.h"
 #include "share/location_cache/ob_location_service.h"
 #include "share/ob_global_stat_proxy.h"

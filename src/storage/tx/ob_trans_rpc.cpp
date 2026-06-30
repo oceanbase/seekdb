@@ -17,7 +17,7 @@
 #include "ob_trans_rpc.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_service.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 
 namespace oceanbase
 {

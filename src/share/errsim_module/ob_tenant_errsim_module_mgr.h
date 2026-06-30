@@ -19,7 +19,7 @@
 
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/errsim_module/ob_errsim_module_type.h"
+#include "lib/errsim_module/ob_errsim_module_type.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_bucket_lock.h"

@@ -1,26 +1,20 @@
 ob_set_subtarget(oblib_common common
-  data_buffer.cpp
+  ob_obj_deep_copy.cpp
+  ob_hex_utils_base.cpp
   ob_accuracy.cpp
-  ob_balance_filter.cpp
-  ob_clock_generator.cpp
-  ob_common_utility.cpp
   ob_field.cpp
   ob_file_common_header.cpp
   ob_member.cpp
   ob_member_list.ipp
   ob_learner_list.ipp
-  ob_queue_thread.cpp
   ob_range.cpp
   ob_record_header.cpp
   ob_role.cpp
   ob_server_ext.cpp
-  ob_smart_call.cpp
-  ob_smart_var.cpp
   ob_store_format.cpp
   ob_store_range.cpp
   ob_string_buf.ipp
   ob_tablet_id.cpp
-  ob_target_specific.cpp
   ob_timeout_ctx.cpp
   ob_zone_type.cpp
   ob_version_def.cpp
@@ -55,18 +49,102 @@ ob_set_subtarget(oblib_common log
 )
 
 ob_set_subtarget(oblib_common storage
-  storage/ob_fd_simulator.cpp
   storage/ob_freeze_define.cpp
-  storage/ob_io_device.cpp
   storage/ob_sequence.cpp
 )
 
-if (OB_ERRSIM)
-  ob_set_subtarget(oblib_common errsim_module
-    errsim_module/ob_errsim_module_type.cpp
-    errsim_module/ob_tenant_errsim_event.cpp
-    errsim_module/ob_errsim_module_interface.cpp
-  )
-endif()
+
+
+ob_set_subtarget(oblib_common reloc_enumset
+  enumset/ob_enum_set_meta.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_wide_integer
+  wide_integer/ob_wide_integer.cpp
+  wide_integer/ob_wide_integer_cmp_funcs.cpp
+  wide_integer/ob_wide_integer_str_funcs.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_udt
+  udt/ob_udt_type.cpp
+  udt/ob_collection_type.cpp
+  udt/ob_array_type.cpp
+  udt/ob_array_binary.cpp
+  udt/ob_array_nested.cpp
+  udt/ob_array_utils.cpp
+  udt/ob_vector_type.cpp
+  udt/ob_map_type.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_json_type
+  json_type/ob_json_path.cpp
+  json_type/ob_json_tree.cpp
+  json_type/ob_json_bin.cpp
+  json_type/ob_json_base.cpp
+  json_type/ob_json_parse.cpp
+  json_type/ob_json_schema.cpp
+  json_type/ob_json_diff.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_number
+  number/ob_number_v2.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_lob
+  lob/ob_lob_base.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_xml
+  xml/ob_mul_mode_reader.cpp
+  xml/ob_xml_parser.cpp
+  xml/ob_libxml2_sax_handler.cpp
+  xml/ob_tree_base.cpp
+  xml/ob_xml_tree.cpp
+  xml/ob_xml_util.cpp
+  xml/ob_xpath.cpp
+  xml/ob_multi_mode_bin.cpp
+  xml/ob_xml_bin.cpp
+  xml/ob_multi_mode_interface.cpp
+  xml/ob_path_parser.cpp
+  xml/ob_binary_aggregate.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_datum
+  datum/ob_datum.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_timezone
+  timezone/ob_oracle_format_models.cpp
+  timezone/ob_time_convert.cpp
+  timezone/ob_timezone_info.cpp
+)
+
+ob_set_subtarget(oblib_common ALONE
+  timezone/ob_timezone_util.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_mysqlclient
+  mysqlclient/ob_isql_client.cpp
+  mysqlclient/ob_mysql_connection.cpp
+  mysqlclient/ob_mysql_connection_pool.cpp
+  mysqlclient/ob_mysql_prepared_param.cpp
+  mysqlclient/ob_mysql_prepared_result.cpp
+  mysqlclient/ob_mysql_prepared_statement.cpp
+  mysqlclient/ob_mysql_proxy.cpp
+  mysqlclient/ob_mysql_proxy_util.cpp
+  mysqlclient/ob_mysql_result.cpp
+  mysqlclient/ob_mysql_result_impl.cpp
+  mysqlclient/ob_mysql_statement.cpp
+  mysqlclient/ob_mysql_transaction.cpp
+  mysqlclient/ob_server_connection_pool.cpp
+  mysqlclient/ob_single_connection_proxy.cpp
+  mysqlclient/ob_single_mysql_connection_pool.cpp
+)
+
+ob_set_subtarget(oblib_common reloc_geo
+)
+
+ob_set_subtarget(oblib_common ALONE
+)
 
 ob_lib_add_target(oblib_common)

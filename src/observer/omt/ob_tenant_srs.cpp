@@ -15,13 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
-#include "ob_tenant_srs.h"
-#include "observer/ob_sql_client_decorator.h"
-#include "src/share/ob_server_struct.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "share/ob_srs_importer.h"
+#include "ob_tenant_srs.h"
+#include "share/ob_sql_client_decorator.h"
+#include "src/share/ob_server_struct.h"
+#include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -490,3 +490,30 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
 
 }  // omt
 }  // oceanbase
+
+
+// ── share/object obj_cast SRS hook registration(see share/object/ob_obj_cast_hooks.h)──
+#include "share/object/ob_obj_cast_hooks.h"
+namespace oceanbase {
+namespace omt {
+static int obj_cast_get_srs_item_impl(uint64_t srid, const common::ObSrsItem *&srs,
+                                      common::ObSrsGuardErased &guard)
+{
+  int ret = common::OB_SUCCESS;
+  ObSrsCacheGuard *g = new (std::nothrow) ObSrsCacheGuard();
+  if (nullptr == g) {
+    ret = common::OB_ALLOCATE_MEMORY_FAILED;
+  } else if (common::OB_SUCCESS != (ret = OTSRS_MGR->get_tenant_srs_guard(*g))) {
+    delete g;
+  } else if (common::OB_SUCCESS != (ret = g->get_srs_item(srid, srs))) {
+    delete g;
+  } else {
+    guard.impl_ = g;
+    guard.release_ = [](void *p) { delete static_cast<ObSrsCacheGuard *>(p); };
+  }
+  return ret;
+}
+static const bool g_reg_obj_cast_srs_hook =
+    (common::g_obj_cast_get_srs_item = obj_cast_get_srs_item_impl, true);
+}  // namespace omt
+}  // namespace oceanbase

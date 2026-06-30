@@ -33,6 +33,7 @@ namespace rootserver
 {
 class ObDDLSQLTransaction;
 class ObDDLService;
+class ObDDLOperator;
 
 class ObPLDDLService
 {

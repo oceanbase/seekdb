@@ -22,7 +22,7 @@
 #include "rootserver/ob_root_service.h"
 #include "share/ob_max_id_cache.h"
 #include "share/ob_max_id_fetcher.h"
-#include "deps/oblib/src/lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 
 #define ASSERT_SUCCESS(x) ASSERT_EQ((x), OB_SUCCESS)
 

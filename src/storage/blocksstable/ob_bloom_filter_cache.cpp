@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_bloom_filter_cache.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_index_tree_prefetcher.h"

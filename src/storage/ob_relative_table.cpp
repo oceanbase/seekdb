@@ -19,7 +19,7 @@
 #include "storage/ob_relative_table.h"
 
 #include "share/ob_unique_index_row_transformer.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 
 namespace oceanbase
