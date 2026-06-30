@@ -652,7 +652,6 @@ bool ObBasicTabletMergeCtx::need_swap_tablet(
   int ret = OB_E(EventTable::EN_SWAP_TABLET_IN_COMPACTION) OB_SUCCESS;
   if (OB_FAIL(ret)) {
     ret = OB_SUCCESS;
-    STORAGE_LOG(INFO, "ERRSIM EN_SWAP_TABLET_IN_COMPACTION");
     bret = true;
   }
 #endif

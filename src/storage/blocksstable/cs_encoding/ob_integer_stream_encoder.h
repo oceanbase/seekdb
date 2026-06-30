@@ -99,15 +99,6 @@ private:
     } else {
       int64_t char_len = out_pos;
 
-      STORAGE_LOG(DEBUG, "after encoding integer stream", K(ctx_), K(arr_count),
-                  "type", ObIntegerStream::get_encoding_type_name(ctx_->meta_.get_encoding_type()),
-                  "ratio", ((0 == out_pos) ? 0 : (in_len * 100 / out_pos)),
-                  K(is_detected),
-                  "orig_len", in_len,
-                  "encoded_len", out_pos,
-                  K(sizeof(T)),
-                  "uint width", ctx_->meta_.width_,
-                  "attr", ctx_->meta_.attr_);
       if (OB_FAIL(buf_writer.advance(char_len))) {
         STORAGE_LOG(ERROR, "unexpected out_len", KR(ret), K(char_len), K(remain_len), K(buf_writer));
         abort();
@@ -252,7 +243,6 @@ private:
     }
 
     if (OB_SUCC(ret) && need_encode_with_raw) {
-      STORAGE_LOG(INFO, "need encode with raw", K(remain_size), K(raw_encoding_len), K(curr_encoding_len), K(ctx_->meta_));
       if (OB_UNLIKELY(ObIntegerStream::EncodingType::RAW == ctx_->meta_.type_)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "the previously choosed type must be not RAW", KR(ret), KPC(ctx_));
@@ -371,11 +361,6 @@ private:
           }
           ctx_->meta_.set_encoding_type(best_codec.type_);
 
-          STORAGE_LOG(INFO, "detect codec",
-                      "best_codec", ObIntegerStream::get_encoding_type_name(best_codec.type_),
-                      "best_codec_space_cost", best_codec.space_cost_,
-                      "cost_list", ObArrayWrap<ObCodecCost>(cost_arr, candidate_count),
-                      KPC(ctx_), K(arr_count), K(sample_count));
         }
       }
     }

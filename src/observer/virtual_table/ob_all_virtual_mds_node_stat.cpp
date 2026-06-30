@@ -93,7 +93,6 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
       char *temp_buffer = nullptr;
       if (OB_ISNULL(temp_buffer = (char *)mtl_malloc(BUFFER_SIZE, "VirMdsStat"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        MDS_LOG(WARN, "fail to alloc buffer", K(*this));
       } else {
         ApplyOnTabletOp apply_on_table_op(this, temp_buffer);
         ApplyOnLSOp apply_on_ls_op(this, apply_on_table_op);

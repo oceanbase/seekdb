@@ -141,7 +141,6 @@ int MdsTableBase::unregister_from_mds_table_mgr()
   } else if (!ls_id_.is_valid() || !tablet_id_.is_valid()) {
     MDS_LOG(INFO, "no need unregister from mds_table_mgr cause invalid id", KR(ret), K(*this));
   } else if (MDS_FAIL(mgr_handle_.get_mds_table_mgr()->unregister_from_mds_table_mgr(this))) {
-    MDS_LOG(ERROR, "fail to unregister mds table", K(*this));
   } else {
     report_destruct_event_();
   }

@@ -167,7 +167,6 @@ public:
     int ret = OB_SUCCESS;
     ObMemAttr attr(ObModIds::OB_QUERY_ALLOCATOR);
     if (OB_UNLIKELY(free_count_ != alloc_count_)) {
-      TRANS_LOG(ERROR, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
     }
     if (IS_NOT_INIT) {
       if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
@@ -256,7 +255,6 @@ public:
     int ret = OB_SUCCESS;
     ObMemAttr attr(ObModIds::OB_MEMTABLE_CALLBACK, ObCtxIds::TX_CALLBACK_CTX_ID);
     if (OB_UNLIKELY(free_count_ != alloc_count_)) {
-      TRANS_LOG(ERROR, "callback memory leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
     }
     if (IS_NOT_INIT) {
       if (OB_FAIL(allocator_.init(NULL,

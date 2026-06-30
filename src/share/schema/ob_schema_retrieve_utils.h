@@ -652,7 +652,6 @@ public:
     while (OB_SUCC(ret) && !is_break) {
       if (cur_idx_ >= routine_infos_.count() || cur_idx_ < 0) {
         ret = common::OB_ERR_UNEXPECTED;
-        SHARE_SCHEMA_LOG(WARN, "current index is out of range", K_(cur_idx), K(routine_infos_.count()));
       } else if (routine_param.get_routine_id() == routine_infos_.at(cur_idx_).get_routine_id()) {
         if (OB_FAIL(routine_infos_.at(cur_idx_).add_routine_param(routine_param))) {
         } else {

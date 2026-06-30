@@ -684,7 +684,6 @@ int ObKVCacheMap::replace_fragment_node(int64_t &start_pos, int64_t &replace_nod
             prev = iter;
             iter = iter->next_;
             if (common::ObClockGenerator::getClock() - start >= 1 * 1000 * 1000) {
-                  COMMON_LOG(INFO, "replace map node cost too much time", K(node_count), K(replace_node_count), K(replace_start_pos), K(i));
               break;
             }
           }
@@ -860,7 +859,6 @@ void ObKVCacheMap::Node::retire()
   if (OB_NOT_NULL(inst_) && OB_NOT_NULL(inst_->node_allocator_)) {
     inst_->node_allocator_->free(this);
   } else {
-    _OB_LOG(ERROR, "Invalid node allocator when retire, inst=%p, node=%p", inst_, this);
   }
 }
 

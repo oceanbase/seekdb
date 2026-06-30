@@ -155,7 +155,6 @@ SCN SCN::minus(const SCN &ref, uint64_t delta)
   SCN result;
   if (OB_UNLIKELY(delta >= OB_MAX_SCN_TS_NS || !ref.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(delta), K(ref), K(lbt()));
   } else if (OB_UNLIKELY(ref.val_ < delta)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "new_val is not valid", K(delta), K(ret), K(lbt()));
@@ -301,7 +300,6 @@ int SCN::convert_for_tx(int64_t val)
     val_ = OB_MAX_SCN_TS_NS;
   } else if (OB_UNLIKELY(val < 0 || OB_MAX_SCN_TS_NS < val)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(val), K(lbt()));
   } else {
     val_ = val;
   }

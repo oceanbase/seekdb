@@ -787,10 +787,6 @@ int ObIHashPartInfrastructure::finish_insert_row()
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(cur_dumped_parts_)) {
     for (int64_t i = 0; i < est_part_cnt_ && OB_SUCC(ret); ++i) {
-      SQL_ENG_LOG(TRACE, "trace dumped partition",
-        K(cur_dumped_parts_[i]->store_.get_row_cnt_in_memory()),
-        K(cur_dumped_parts_[i]->store_.get_row_cnt_on_disk()),
-        K(i), K(est_part_cnt_), K(cur_dumped_parts_[i]->part_key_));
       if (OB_FAIL(cur_dumped_parts_[i]->store_.dump(true))) {
       } else if (OB_FAIL(cur_dumped_parts_[i]->store_.finish_add_row(true))) {
       }
@@ -806,7 +802,6 @@ bool ObIHashPartInfrastructure::is_equal_hash_infras(
   bool is_equal = true;
   if (OB_ISNULL(exprs_)) {
     is_equal = false;
-    SQL_ENG_LOG(TRACE, "exprs is null");
   } else if (exprs_->count() != compare_exprs.count()) {
     is_equal = false;
   } else {
@@ -840,7 +835,6 @@ int ObIHashPartInfrastructure::get_next_left_partition()
 int ObIHashPartInfrastructure::get_next_right_partition()
 {
   int ret = OB_SUCCESS;
-  SQL_ENG_LOG(TRACE, "trace right part count", K(right_part_list_.get_size()));
   cur_right_part_ = right_part_list_.remove_last();
   if (OB_NOT_NULL(cur_right_part_)) {
     ObIntraPartition *tmp_part = nullptr;
@@ -1000,7 +994,6 @@ int ObIHashPartInfrastructure::get_next_partition(InputSide input_side)
   } else if (is_left()) {
     if (OB_FAIL(get_next_left_partition())) {
       if (OB_ITER_END != ret) {
-        SQL_ENG_LOG(WARN, "failed to get next left partition");
       }
     } else if (OB_ISNULL(cur_left_part_)
         || InputSide::LEFT != cur_left_part_->part_key_.nth_way_) {
@@ -1012,7 +1005,6 @@ int ObIHashPartInfrastructure::get_next_partition(InputSide input_side)
   } else {
     if (OB_FAIL(get_next_right_partition())) {
       if (OB_ITER_END != ret) {
-        SQL_ENG_LOG(WARN, "failed to get next right partition");
       }
     } else if (OB_ISNULL(cur_right_part_)
         || InputSide::RIGHT != cur_right_part_->part_key_.nth_way_) {
@@ -1073,7 +1065,6 @@ int ObIHashPartInfrastructure::get_left_next_batch(
     SQL_ENG_LOG(WARN, "hash values vector is not init", K(ret));
   } else if (OB_ISNULL(cur_left_part_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_left_part_));
   } else if (OB_FAIL(left_row_store_iter_.get_next_batch(exprs,
                                                          *eval_ctx_,
                                                          max_row_cnt,
@@ -1101,7 +1092,6 @@ int ObIHashPartInfrastructure::get_right_next_batch(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_right_part_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_right_part_));
   } else if (OB_FAIL(right_row_store_iter_.get_next_batch(exprs, *eval_ctx_, max_row_cnt, read_rows))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));

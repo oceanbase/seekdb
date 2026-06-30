@@ -228,7 +228,6 @@ namespace sql
             FLTDrvSpan drv_span;
             if (OB_FAIL(drv_span.deserialize(buf, pos+v_len, pos))) {
             } else {
-              _FLT_LOG(INFO, "%s", drv_span.span_info_.ptr());
             }
             break;
           }

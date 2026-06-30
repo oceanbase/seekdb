@@ -68,7 +68,6 @@ int LogWriteBuf::merge(const LogWriteBuf &rhs, bool &has_merged)
   } else {
     write_buf_[0].buf_len_ += rhs_size;
     has_merged = true;
-    PALF_LOG(TRACE, "merge success", KPC(this), K(rhs), K(has_merged));
   }
   return ret;
 }

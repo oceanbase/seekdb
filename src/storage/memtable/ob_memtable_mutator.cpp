@@ -104,7 +104,6 @@ int ObMemtableMutatorMeta::serialize(char *buf, const int64_t buf_len, int64_t &
   int ret = OB_SUCCESS;
   const int32_t meta_size = static_cast<int32_t>(get_serialize_size());
   if (OB_ISNULL(buf) || pos + meta_size > buf_len) {
-    TRANS_LOG(WARN, "invalid param", KP(buf), K(meta_size), K(buf_len));
     ret = OB_INVALID_ARGUMENT;
   } else {
     MEMCPY(buf + pos, this, meta_size);
@@ -126,13 +125,10 @@ int ObMemtableMutatorMeta::deserialize(const char *buf, const int64_t data_len, 
     MEMCPY(this, buf + pos, min_meta_size);
     if (!check_magic()) {
       ret = OB_INVALID_LOG;
-      TRANS_LOG(WARN, "invalid log: check_magic fail", K(*this));
     } else if (calc_meta_crc(buf + pos) != meta_crc_) {
       ret = OB_INVALID_LOG;
-      TRANS_LOG(WARN, "invalid log: check_meta_crc fail", K(*this));
     } else if (pos + meta_size_ > data_len) {
       ret = OB_BUF_NOT_ENOUGH;
-      TRANS_LOG(WARN, "buf not enough", K(pos), K(meta_size_), K(data_len));
     } else {
       MEMCPY(this, buf + pos, min(sizeof(*this), static_cast<uint64_t>(meta_size_)));
       pos += meta_size_;
@@ -160,7 +156,6 @@ int ObMemtableMutatorMeta::set_flags(const uint8_t row_flag)
   int ret = OB_SUCCESS;
 
   if (!ObTransRowFlag::is_valid_row_flag(row_flag)) {
-    TRANS_LOG(WARN, "invalid argument", K(row_flag));
     ret = OB_INVALID_ARGUMENT;
   } else {
     flags_ = row_flag;
@@ -520,7 +515,6 @@ int ObMutatorTableLock::serialize(
 {
   int ret = OB_SUCCESS;
   int64_t new_pos = pos + encoded_length_i32(0);
-  TRANS_LOG(DEBUG, "ObMutatorTableLock::serialize");
   if (OB_ISNULL(buf) || pos < 0 || pos > buf_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(lock_id_.serialize(buf, buf_len, new_pos)) ||
@@ -598,9 +592,7 @@ int ObMutatorWriter::set_buffer(char *buf, const int64_t buf_len)
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (buf_len < meta_size) {
     ret = OB_BUF_NOT_ENOUGH;
-    TRANS_LOG(WARN, "buf not enough", K(buf_len), K(meta_size));
   } else if (!buf_.set_data(buf, buf_len)) {
-    TRANS_LOG(WARN, "set_data fail", KP(buf), K(buf_len));
   } else {
     buf_.get_position() = meta_size;
     row_capacity_ = buf_len;
@@ -821,10 +813,8 @@ int ObMutatorWriter::serialize(const uint8_t row_flag, int64_t &res_len)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret));
   } else if (0 >= meta_.get_row_count()) {
-    TRANS_LOG(DEBUG, "no row exist");
     ret = OB_ENTRY_NOT_EXIST;
   } else if (!ObTransRowFlag::is_valid_row_flag(row_flag)) {
-    TRANS_LOG(WARN, "invalid argument", K(row_flag));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(meta_.set_flags(row_flag))) {
   } else if (OB_FAIL(meta_.fill_header(buf_.get_data() + meta_size,
@@ -873,13 +863,11 @@ int ObMemtableMutatorIterator::deserialize(const char *buf, const int64_t data_l
   int64_t end_pos = pos;
 
   if (OB_ISNULL(buf) || (data_len - pos) <= 0 || data_len < 0) {
-    TRANS_LOG(WARN, "invalid argument", KP(buf), K(data_len), K(pos));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(meta_.deserialize(buf, data_len, data_pos))) {
     TRANS_LOG(WARN, "decode meta fail", K(ret), KP(buf), K(data_len), K(data_pos));
     ret = (OB_SUCCESS == ret) ? OB_INVALID_DATA : ret;
   } else if (!buf_.set_data(const_cast<char *>(buf + pos), meta_.get_total_size())) {
-    TRANS_LOG(WARN, "set_data fail", KP(buf), K(pos), K(meta_.get_total_size()));
   } else if (FALSE_IT(end_pos += meta_.get_total_size())) {
   } else {
     pos = end_pos;
@@ -924,7 +912,6 @@ int ObMemtableMutatorIterator::iterate_next_row()
       break;
     }
     case MutatorType::MUTATOR_ROW_EXT_INFO: {
-      TRANS_LOG(DEBUG, "deserialize row ext info");
       row_.reset();
       if (OB_FAIL(row_.deserialize(
               buf_.get_data(), buf_.get_limit(), buf_.get_position(),

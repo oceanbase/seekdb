@@ -249,7 +249,6 @@ int ObRawExprResolverImpl::process_node_with_children(const ParseNode *node,
   if (OB_ISNULL(node) || OB_ISNULL(node->children_)
       || children_num <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(node), K(children_num));
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, raw_expr))) {
   } else if (OB_FAIL(raw_expr->init_param_exprs(children_num))) {
   } else {

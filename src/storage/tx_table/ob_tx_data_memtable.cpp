@@ -151,7 +151,6 @@ int ObTxDataMemtable::insert(ObTxData *tx_data)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "tx data memtable is not init");
   } else if (OB_UNLIKELY(ObTxDataMemtable::State::FROZEN <= get_state())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR,
@@ -177,15 +176,6 @@ int ObTxDataMemtable::insert(ObTxData *tx_data)
     ATOMIC_INC(&inserted_cnt_);
     if (OB_UNLIKELY(tx_data->op_guard_.is_valid() && tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ >= 10)) {
       if (tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ == 10 || tx_data->op_guard_->get_undo_status_list().undo_node_cnt_ % 100 == 0) {
-        STORAGE_LOG(INFO,
-                    "attention! this tx write too many rollback to savepoint log",
-                    "ls_id", get_ls_id(),
-                    "tx_id", tx_data->tx_id_,
-                    "state", ObTxData::get_state_string(tx_data->state_),
-                    "undo_node_cnt", tx_data->op_guard_->get_undo_status_list().undo_node_cnt_,
-                    "newest_undo_node", tx_data->op_guard_->get_undo_status_list().head_,
-                    K(tx_data->start_scn_),
-                    K(tx_data->end_scn_));
       }
     }
   }
@@ -220,7 +210,6 @@ int ObTxDataMemtable::get_tx_data(const ObTransID &tx_id, ObTxDataGuard &tx_data
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "tx data memtable is not init");
   } else if (OB_FAIL(tx_data_map_->get(tx_id, tx_data_guard))) {
     // This tx data is not in this tx data memtable
     if (OB_ENTRY_NOT_EXIST != ret) {
@@ -243,7 +232,6 @@ int ObTxDataMemtable::pre_process_for_merge()
   if (State::FROZEN != state_) {
     // only do pre process for frozen tx data memtable
   } else if (pre_process_done_) {
-    STORAGE_LOG(INFO, "call pre process more than once. skip pre process.");
   } else if (OB_FAIL(memtable_mgr_->get_tx_data_table()->alloc_tx_data(fake_tx_data_guard, false /* enable_throttle */))) {
   } else if (OB_FAIL(prepare_tx_data_list())) {
   } else if (OB_FAIL(do_sort_by_start_scn_())) {
@@ -275,7 +263,6 @@ int ObTxDataMemtable::prepare_tx_data_list()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Trying to dump a non-frozen tx data memtable.", KR(ret), KP(this));
   } else if (construct_list_done_) {
-    STORAGE_LOG(INFO, "construct list more than once. skip this time", KP(this));
   } else if (OB_FAIL(construct_list_for_sort_())) {
   } else {
     construct_list_done_ = true;
@@ -336,8 +323,6 @@ int ObTxDataMemtable::pre_process_commit_version_row_(ObTxData *fake_tx_data)
   } else {
     do_recycle_ = true;
   }
-  STORAGE_LOG(
-      INFO, "pre-process commit versions row", K(get_ls_id()), K(do_recycle_), K(current_time), K(prev_recycle_time));
 
   if (OB_FAIL(fill_in_cur_commit_versions_(cur_commit_versions)/*step 1*/)) {
   } else if (OB_FAIL(get_past_commit_versions_(past_commit_versions)/*step 2*/)) {
@@ -421,7 +406,6 @@ int ObTxDataMemtable::periodical_get_next_commit_version_(ProcessCommitVersionDa
 
     if (process_data.DEBUG_last_start_scn_ > tx_data->start_scn_) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(ERROR, "unexpected start log ts order", K(DEBUG_last_start_scn_), KPC(tx_data));
       break;
     } else {
       process_data.DEBUG_last_start_scn_ = tx_data->start_scn_;
@@ -505,7 +489,6 @@ int ObTxDataMemtable::get_past_commit_versions_(ObCommitVersionsArray &past_comm
 void ObTxDataMemtable::clear_fake_node_if_exist_(ObCommitVersionsArray &past_commit_versions)
 {
   if (1 == past_commit_versions.array_.count() && past_commit_versions.array_.at(0).commit_version_.is_max()) {
-    STORAGE_LOG(INFO, "clear fake commit version node", K(past_commit_versions));
     past_commit_versions.reset();
   }
 }
@@ -524,13 +507,6 @@ int ObTxDataMemtable::merge_cur_and_past_commit_verisons_(const SCN recycle_scn,
   int64_t past_size = past_commit_versions.get_serialize_size();
   int64_t step_len = 1;
   if (cur_size + past_size > common::OB_MAX_VARCHAR_LENGTH) {
-    STORAGE_LOG(INFO,
-                "Too Much Pre-Process Data to Desirialize",
-                K(recycle_scn),
-                K(past_size),
-                K(cur_size),
-                "past_array_count", past_commit_versions.array_.count(),
-                "cur_array_count", cur_commit_versions.array_.count());
     step_len = step_len + ((cur_size + past_size) / OB_MAX_VARCHAR_LENGTH);
   }
 
@@ -546,17 +522,9 @@ int ObTxDataMemtable::merge_cur_and_past_commit_verisons_(const SCN recycle_scn,
   } else if (0 == merged_arr.count()) {
     if (OB_FAIL(merged_arr.push_back(ObCommitVersionsArray::Node(SCN::max_scn(), SCN::max_scn())))) {
     } else {
-      STORAGE_LOG(INFO, "push back an INT64_MAX node for upper trans version calculation", K(merged_arr));
     }
   }
 
-  STORAGE_LOG(INFO,
-              "genenrate commit versions array finish.",
-              K(recycle_scn),
-              K(step_len),
-              "past_array_count", past_commit_versions.array_.count(),
-              "cur_array_count", cur_commit_versions.array_.count(),
-              "merged_array_count", merged_commit_versions.array_.count());
 
   return ret;
 }
@@ -867,32 +835,18 @@ bool ObTxDataMemtable::ready_for_flush()
   if (OB_UNLIKELY(ObTxDataMemtable::State::RELEASED == state_
                   || ObTxDataMemtable::State::ACTIVE == state_
                   || ObTxDataMemtable::State::INVALID == state_)) {
-    STORAGE_LOG(WARN, "call ready_for_flush() function on an incorrect state tx data memtable.",
-                KPC(this));
   } else if (ObTxDataMemtable::State::FROZEN == state_) {
     bool_ret = true;
-    STORAGE_LOG(INFO, "memtable is frozen yet.", KP(this));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(max_consequent_callbacked_scn))) {
   } else if (max_consequent_callbacked_scn >= key_.scn_range_.end_scn_) {
     state_ = ObTxDataMemtable::State::FROZEN;
-    STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable is frozen", K(get_ls_id()), KP(this));
     set_snapshot_version(get_min_tx_scn());
     bool_ret = true;
     stat_change_ts_.ready_for_flush_time_ = ObTimeUtil::fast_current_time();
   } else if (REACH_TIME_INTERVAL(1 * 1000 * 1000 /* one second */)) {
     const SCN &freeze_scn = key_.scn_range_.end_scn_;
     if (ObTimeUtil::fast_current_time() - stat_change_ts_.frozen_time_ > 60 * 1000 * 1000 /* 60 seconds */) {
-      STORAGE_LOG(WARN,
-                  "tx data metmable is not ready for flush",
-                  K(max_consequent_callbacked_scn),
-                  K(freeze_scn),
-                  K(stat_change_ts_));
     } else {
-      STORAGE_LOG(INFO,
-                  "tx data metmable is not ready for flush",
-                  K(max_consequent_callbacked_scn),
-                  K(freeze_scn),
-                  K(stat_change_ts_));
     }
   }
 
@@ -1050,21 +1004,16 @@ share::ObLSID ObTxDataMemtable::get_ls_id() const
 int ObTxDataMemtable::dump2text(const char *fname)
 {
   int ret = OB_SUCCESS;
-  STORAGE_LOG(INFO, "start dump tx data memtable");
   char real_fname[OB_MAX_FILE_NAME_LENGTH];
   FILE *fd = NULL;
 
-  STORAGE_LOG(INFO, "dump2text", K_(key));
   if (OB_ISNULL(fname)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "fanme is NULL");
   } else if (snprintf(real_fname, sizeof(real_fname), "%s.%ld", fname,
                       ::oceanbase::common::ObTimeUtility::current_time()) >= (int64_t)sizeof(real_fname)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "fname too long", K(fname));
   } else if (NULL == (fd = fopen(real_fname, "w"))) {
     ret = OB_IO_ERROR;
-    STORAGE_LOG(WARN, "open file fail:", K(fname));
   } else {
     int64_t ls_id = freezer_->get_ls_id().id();
     
@@ -1152,7 +1101,6 @@ int ObTxDataMemtable::DEBUG_fake_calc_upper_trans_version(const SCN sstable_end_
   if (0 == array.count() || !array.at(l).commit_version_.is_valid()) {
     upper_trans_version = SCN::max_scn();
     ret = OB_ERR_UNDEFINED;
-    STORAGE_LOG(WARN, "unexpected array count or commit version", K(array.count()), K(array.at(l)));
   } else {
     upper_trans_version = array.at(l).commit_version_;
   }
@@ -1168,7 +1116,6 @@ void ObTxDataMemtable::DEBUG_print_start_scn_list_(const char* fname)
 
   if (NULL == (fd = fopen(real_fname, "w"))) {
     ret = OB_IO_ERROR;
-    STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
     
     ObTxData *cur_node = get_sorted_list_head()->next_;
@@ -1207,7 +1154,6 @@ void ObTxDataMemtable::DEBUG_print_merged_commit_versions_(ObCommitVersionsArray
 
   if (NULL == (fd = fopen(real_fname, "w"))) {
     ret = OB_IO_ERROR;
-    STORAGE_LOG(WARN, "open file fail:", K(real_fname));
   } else {
     
     for (int i = 0; i < array.count(); i++) {

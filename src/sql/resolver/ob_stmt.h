@@ -325,6 +325,7 @@ public:
             // package
             || stmt_type == stmt::T_CREATE_PACKAGE
             || stmt_type == stmt::T_CREATE_PACKAGE_BODY
+            || stmt_type == stmt::T_ALTER_PACKAGE
             || stmt_type == stmt::T_DROP_PACKAGE
 
             // trigger
@@ -717,7 +718,6 @@ public:
     stmt = NULL;
     if (OB_UNLIKELY(NULL == ptr)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SQL_RESV_LOG(ERROR, "no more memory to stmt");
     } else {
       stmt = new(ptr) StmtType();
       if (OB_FAIL(stmt_store_.store_obj(stmt))) {

@@ -554,7 +554,6 @@ public:
             lib::ContextParam().set_mem_attr(ObModIds::OB_PL)))) {
         } else if (OB_ISNULL(mem_context_)) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_ENG_LOG(WARN, "null memory entity returned");
         } else if (!pl_cursor_map_.created() &&
                    OB_FAIL(pl_cursor_map_.create(common::hash::cal_next_prime(32),
                                                  ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
@@ -598,7 +597,6 @@ public:
             }
           } else if (OB_FAIL(session.close_cursor(cursor->get_id()))) {
           } else {
-            SQL_ENG_LOG(INFO, "clsoe session cursor implicit successed!", K(cursor->get_id()));
           }
         }
         if (pl_cursor_map_.size() > 0) {
@@ -614,7 +612,6 @@ public:
         int ret = OB_SUCCESS;
         if (pl_cursor_map_.size() != 0) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_ENG_LOG(ERROR, "session cursor map not empty, cursor leaked", K(pl_cursor_map_.size()));
         }
         pl_cursor_map_.reuse();
         pl_non_session_cursor_map_.reuse();
@@ -1662,15 +1659,9 @@ inline bool ObSQLSessionInfo::is_terminate(int &ret) const
   bool bret = false;
   if (QUERY_KILLED == get_session_state()) {
     bret = true;
-    SQL_ENG_LOG(WARN, "query interrupted session",
-                "query", get_current_query_string(),
-                "key", get_server_sid());
     ret = common::OB_ERR_QUERY_INTERRUPTED;
   } else if (QUERY_DEADLOCKED == get_session_state()) {
     bret = true;
-    SQL_ENG_LOG(WARN, "query deadlocked",
-                "query", get_current_query_string(),
-                "key", get_server_sid());
     ret = common::OB_DEAD_LOCK;
   } else if (SESSION_KILLED == get_session_state()) {
     bret = true;

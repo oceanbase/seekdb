@@ -115,7 +115,6 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
             medium_info_list->gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
             table_store->get_major_ckm_info().gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
             cur_row_.cells_[i].set_varchar(medium_info_buf_);
-            SERVER_LOG(DEBUG, "get medium info mgr", KPC(medium_info_list), K(medium_info_buf_));
           } else {
             cur_row_.cells_[i].set_varchar("");
           }

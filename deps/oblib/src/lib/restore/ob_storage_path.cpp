@@ -78,7 +78,6 @@ int ObStoragePath::init(const common::ObString &uri)
       uri.length(), uri.ptr()))) {
   } else if (OB_FAIL(trim_right_delim())) {
   }
-  OB_LOG(DEBUG, "", KCSTRING(path_), K(cur_pos_));
   return ret;
 }
 
@@ -99,7 +98,6 @@ int ObStoragePath::join(const common::ObString &path)
       static_cast<int>(path.length() - left_delim_pos), path.ptr() + left_delim_pos))) {
   } else if (OB_FAIL(trim_right_delim())) {
   }
-  OB_LOG(DEBUG, "", KCSTRING(path_), K(cur_pos_));
   return ret;
 }
 

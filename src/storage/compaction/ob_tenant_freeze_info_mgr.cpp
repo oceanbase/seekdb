@@ -106,7 +106,6 @@ int ObTenantFreezeInfoMgr::mtl_init(ObTenantFreezeInfoMgr* &freeze_info_mgr)
     STORAGE_LOG(WARN, "failed to get sql proxy from GCTX, cannot init FreezeInfoMgr", K(ret));
   } else if (OB_FAIL(freeze_info_mgr->init(*GCTX.sql_proxy_))) {
   } else {
-    STORAGE_LOG(INFO, "success to init TenantFreezeInfoMgr");
   }
   return ret;
 }
@@ -626,22 +625,13 @@ int ObTenantFreezeInfoMgr::inner_update_info(
         (0 != snapshot_gc_ts && 1 != snapshot_gc_ts)) {
       if (REACH_THREAD_TIME_INTERVAL(60L * 1000L * 1000L)) {
         // ignore ret
-        STORAGE_LOG(WARN, "snapshot_gc_ts not refresh too long",
-                    K(snapshot_gc_ts), K(new_snapshots), K(last_change_ts_),
-                    K(last_not_change_interval_us));
       }
     } else if (FLUSH_GC_SNAPSHOT_TS_REFRESH_TS <= last_not_change_interval_us) {
-      STORAGE_LOG(WARN, "snapshot_gc_ts not refresh too long",
-                  K(snapshot_gc_ts), K(new_snapshots), K(last_change_ts_),
-                  K(last_not_change_interval_us));
     }
   }
-  STORAGE_LOG(DEBUG, "reload freeze info and snapshots", K(snapshot_gc_ts), K(new_snapshots));
 
   if (OB_SUCC(ret)) {
     if (REACH_THREAD_TIME_INTERVAL(20 * 1000 * 1000 /*20s*/)) {
-      STORAGE_LOG(INFO, "ObTenantFreezeInfoMgr success to update infos",
-          K(new_snapshot_gc_scn), K(new_freeze_infos), K(new_snapshots), K(freeze_info_mgr_));
     }
   }
   return ret;
@@ -716,7 +706,6 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
     } // end of while
   }
   cost_ts = ObTimeUtility::fast_current_time() - cost_ts;
-  STORAGE_LOG(INFO, "update reserved snapshot finished", K(cost_ts), K(reserved_snapshot));
   return ret;
 }
 

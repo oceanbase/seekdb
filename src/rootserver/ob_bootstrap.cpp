@@ -197,7 +197,6 @@ int ObBootstrap::execute_bootstrap()
   begin_ts_ = ObTimeUtility::current_time();
   ObPartitionCreator partition_creator;
 
-  BOOTSTRAP_LOG(INFO, "start do execute_bootstrap");
 
   if (OB_FAIL(check_inner_stat())) {
   } else if (OB_FAIL(check_is_already_bootstrap(already_bootstrap))) {

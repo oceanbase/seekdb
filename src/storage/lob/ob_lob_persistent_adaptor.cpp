@@ -37,7 +37,6 @@ ObPersistentLobApator::~ObPersistentLobApator()
 
 void ObPersistentLobApator::destroy()
 {
-  STORAGE_LOG(INFO, "[LOB] destroy lob persist");
   if (OB_NOT_NULL(meta_table_param_)) {
     meta_table_param_->reset();
     meta_table_param_->~ObTableParam();

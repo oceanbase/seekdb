@@ -1563,7 +1563,6 @@ int ObTableLockService::pack_and_call_rpc_(RpcProxy &proxy_batch,
   } else if (OB_FAIL(rpc_call_(proxy_batch, addr, ctx.get_rpc_timeoutus(), request))) {
   } else {
     retry_ctx.send_rpc_count_++;
-    ALLOW_NEXT_LOG();
     LOG_INFO("send table lock rpc", KR(ret), K(retry_ctx.send_rpc_count_), K(addr), "request", request);
   }
   return ret;
@@ -1583,7 +1582,6 @@ int ObTableLockService::pack_and_call_rpc_(observer::ObLocalBatchLockProxy<ObLoc
   } else if (OB_FAIL(rpc_call_(proxy_batch, addr, ctx.get_rpc_timeoutus(), request))) {
   } else {
     retry_ctx.send_rpc_count_++;
-    ALLOW_NEXT_LOG();
     LOG_INFO("send table lock rpc", KR(ret), K(retry_ctx.send_rpc_count_), K(addr), "request", request);
   }
   return ret;

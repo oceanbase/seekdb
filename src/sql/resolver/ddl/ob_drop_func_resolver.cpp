@@ -67,7 +67,6 @@ int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
       // dll udf
       if (OB_ISNULL(drop_func_stmt = create_stmt<ObDropFuncStmt>())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        SQL_RESV_LOG(ERROR, "create drop func stmt failed");
       }
       //stmt_ = drop_func_stmt;
     } else {

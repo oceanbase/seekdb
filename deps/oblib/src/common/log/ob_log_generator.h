@@ -85,7 +85,6 @@ int generate_log(char *buf, const int64_t len, int64_t &pos, ObLogCursor &cursor
   } else if (OB_FAIL(data.serialize(buf, len, end_pos))) {
     if (entry.get_serialize_size() + data.get_serialize_size() > len) {
       ret = OB_LOG_TOO_LARGE;
-      _OB_LOG(WARN, "log too large(size=%ld, limit=%ld)", data.get_serialize_size(), len);
     } else {
       ret = OB_BUF_NOT_ENOUGH;
     }
@@ -110,8 +109,6 @@ int ObLogGenerator::write_log(const LogCommand cmd, T &data)
   } else if (is_frozen_) {
     ret = OB_STATE_NOT_MATCH;
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "log_generator is frozen, cursor=[%s,%s]", helper.convert(start_cursor_),
-            helper.convert(end_cursor_));
   } else if (OB_FAIL(generate_log(log_buf_, log_buf_len_ - ObLogConstants::LOG_BUF_RESERVED_SIZE, 
                                   pos_, end_cursor_, cmd, data))
              && OB_BUF_NOT_ENOUGH != ret) {

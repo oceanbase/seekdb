@@ -2928,7 +2928,6 @@ int ObTableSchema::add_column_group_to_hash_array(
           if (OB_SUCC(ret)) {
             if (common::OB_SUCCESS != (hash_ret = new_array->set_refactored(key, column_group))) {
               ret = hash_ret;
-              SHARE_SCHEMA_LOG(WARN, "fail to add column_group into hash array", KR(hash_ret), KPC(column_group));
             } else {
               // free old hash array
               free(array);

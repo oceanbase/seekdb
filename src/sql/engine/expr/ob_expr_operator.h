@@ -225,12 +225,10 @@ public:
     int ret = common::OB_SUCCESS;
     if (expr_id >= iter_expr_ctxs_.count()) {
       ret = common::OB_INVALID_ARGUMENT;
-      SQL_ENG_LOG(WARN, "invalid expr id", K(expr_id), K(iter_expr_ctxs_.count()));
     } else {
       void *ptr = allocator_.alloc(sizeof(T));
       if (NULL == ptr) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        SQL_ENG_LOG(WARN, "allocate memory for expr op ctx failed");
       } else {
         op_ctx = new(ptr) T();
         iter_expr_ctxs_.at(expr_id) = op_ctx;
@@ -1673,7 +1671,6 @@ protected:
       result.set_null();
       is_finish = true;
     }
-    SQL_LOG(DEBUG, "finish get_arith_operand", KPC(expr.args_[0]), KPC(expr.args_[1]), K(is_finish));
     return ret;
   }
 

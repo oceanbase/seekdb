@@ -73,7 +73,6 @@ int FileDirectoryUtils::check_directory_mode(const char *file_path, int mode, bo
     if (0 == access(file_path, mode)) {
       result = true;
     } else {
-      LIB_LOG(WARN, "access file failed", KERRMSG, K(file_path));
     }
   }
   return ret;
@@ -517,7 +516,6 @@ int FileDirectoryUtils::delete_tmp_file_or_directory_at(const char *path)
   struct dirent *entry = nullptr;
   if (NULL == (dir = opendir(path))) {
     ret = OB_ERR_SYS;
-    LIB_LOG(WARN, "opendir failed", K(path), K(errno), KERRMSG);
   } else {
     auto check_is_tmp_file = [](const char* file_name) -> bool {
       return NULL != strstr(file_name, ".tmp");
@@ -563,7 +561,6 @@ int FileDirectoryUtils::fsync_dir(const char *dir_path)
   } else {
     if (!FlushFileBuffers(hDir)) {
       // FlushFileBuffers on directories may fail on some filesystems; treat as non-fatal
-      LIB_LOG(DEBUG, "FlushFileBuffers for dir returned error (non-fatal)", K(dir_path), K(GetLastError()));
     }
     CloseHandle(hDir);
   }
@@ -594,7 +591,6 @@ int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
 #else
     if (NULL == realpath(dir.ptr(), real_path)) {
 #endif
-      LIB_LOG(WARN, "Failed to get absolute path", K(dir), KCSTRING(strerror(errno)));
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dir.assign(real_path))) {
     }

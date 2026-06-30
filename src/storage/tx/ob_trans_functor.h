@@ -91,8 +91,6 @@ public:
       int64_t cur_time = ObTimeUtility::fast_current_time();
       if (cur_time - single_begin_time_ > single_expired_limit_) {
         single_expired_cnt_++;
-        TRANS_LOG(INFO, "single tx cost too much time", K_(functor_name), K(tx_id), K(ls_id),
-                  "cost_time", cur_time - single_begin_time_, K(single_begin_time_));
       }
     }
   }
@@ -103,10 +101,8 @@ public:
     }
     if (iter_cnt_ > 0) {
       if (force_print) {
-        TRANS_LOG(INFO, "ls trans functor stat", K_(functor_name), K_(ls_id), KPC(this));
       } else if (total_expired_limit_ != INT_MAX
                  && finish_time_ - begin_time_ >= total_expired_limit_) {
-        TRANS_LOG(INFO, "ls trans functor stat", K_(functor_name), K_(ls_id), KPC(this));
       }
     }
   }
@@ -232,14 +228,12 @@ public:
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret_ = ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       ++count_;
       if ((count_ % BATCH_CHECK_COUNT) == 0) {
         const int64_t now = ObTimeUtility::current_time();
         if (now >= abs_expired_time_) {
           ret_ = ret = OB_TIMEOUT;
-          TRANS_LOG(WARN, "switch to follower gracefully timeout");
         }
       }
     }
@@ -279,7 +273,6 @@ public:
     bool bool_ret = false;
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else if (OB_FAIL(tx_ctx->resume_leader(start_working_ts_))) {
     } else {
       bool_ret = true;
@@ -337,13 +330,10 @@ public:
     int tmp_ret = common::OB_SUCCESS;
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
       tmp_ret = common::OB_INVALID_ARGUMENT;
     } else {
       if (OB_SUCC(tx_ctx->kill(arg_, cb_list_))) {
-        TRANS_LOG(INFO, "kill transaction success", K(tx_id), K_(arg));
       } else if (common::OB_TRANS_CANNOT_BE_KILLED == ret) {
-        TRANS_LOG(INFO, "transaction can not be killed", K(tx_id), "context", *tx_ctx);
       } else {
         TRANS_LOG(WARN, "kill transaction error", "ret", ret, K(tx_id), "context", *tx_ctx);
       }
@@ -372,7 +362,6 @@ public:
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret_ = ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       ++count_;
     }
@@ -408,7 +397,6 @@ public:
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret_ = ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       ++count_;
     }
@@ -449,14 +437,12 @@ public:
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret_ = ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       ++count_;
       if ((count_ % BATCH_CHECK_COUNT) == 0) {
         const int64_t now = ObTimeUtility::current_time();
         if (now >= abs_expired_time_) {
           ret_ = ret = OB_TIMEOUT;
-          TRANS_LOG(WARN, "wait tx write end timeout", K(count_));
         }
       }
     }
@@ -499,7 +485,6 @@ public:
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret_ = ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       ret = OB_NOT_SUPPORTED;
       TRANS_LOG(WARN, "collect_tx_ctx", KR(ret), K(*tx_ctx));
@@ -724,7 +709,6 @@ public:
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       if (OB_FAIL(tx_ctx->check_modify_schema_elapsed(tablet_id_,
                                                       schema_version_))) {
@@ -768,7 +752,6 @@ public:
     bool bool_ret = false;
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
       ret = OB_INVALID_ARGUMENT;
     } else {
       if (OB_FAIL(tx_ctx->check_modify_time_elapsed(tablet_id_,
@@ -843,7 +826,6 @@ public:
     int ret = OB_SUCCESS;
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
     } else {
       share::SCN log_ts = tx_ctx->get_min_undecided_log_ts();
       if (log_ts_ > log_ts) {
@@ -1033,7 +1015,6 @@ public:
     bool bool_ret = false;
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
       ret = OB_INVALID_ARGUMENT;
     } else {
       rec_log_ts_ = share::SCN::min(rec_log_ts_, tx_ctx->get_rec_log_ts());
@@ -1059,7 +1040,6 @@ public:
     bool bool_ret = false;
 
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
-      TRANS_LOG(WARN, "invalid argument", K(tx_id), "ctx", OB_P(tx_ctx));
       ret = OB_INVALID_ARGUMENT;
     } else {
       if (OB_FAIL(tx_ctx->on_tx_ctx_table_flushed())) {
@@ -1179,7 +1159,6 @@ public:
     if (!tx_id.is_valid() || OB_ISNULL(tx_ctx)) {
       TRANS_LOG_RET(WARN, common::OB_INVALID_ARGUMENT, "invalid argument", K(tx_id), KP(tx_ctx));
     } else if (print_count_++ < max_print_count_) {
-      TRANS_LOG(INFO, "hashmap item", K(tx_id), "context", *tx_ctx);
       bool_ret = true;
       if (verbose_) {
         tx_ctx->print_trace_log();
@@ -1375,7 +1354,6 @@ public:
     } else {
       // logic for get min_start_scn
       if (tx_ctx->is_decided()) {
-        TRANS_LOG(DEBUG, "skip record committed tx", KPC(tx_ctx));
       } else if (tx_ctx->get_start_log_ts().is_valid()) {
         has_start_scn_ctx_cnt_++;
         min_start_scn_ = MIN(min_start_scn_, tx_ctx->get_start_log_ts());
@@ -1415,12 +1393,6 @@ public:
       }
     }
 
-    TRANS_LOG(DEBUG,
-              "get min start status",
-              K(first_err_code_),
-              K(has_start_scn_ctx_cnt_),
-              K(min_start_scn_),
-              K(start_status));
     return start_status;
   }
 

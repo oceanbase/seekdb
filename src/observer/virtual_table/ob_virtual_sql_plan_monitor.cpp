@@ -105,7 +105,6 @@ int ObVirtualSqlPlanMonitor::set_ip(const common::ObAddr &addr)
   if (!addr.is_valid()){
     ret = OB_ERR_UNEXPECTED;
   } else if (!addr.ip_to_string(server_ip_, sizeof(server_ip_))) {
-    SERVER_LOG(ERROR, "ip to string failed");
     ret = OB_ERR_UNEXPECTED;
   } else {
     ipstr_ = ObString::make_string(server_ip_);
@@ -284,7 +283,6 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
         }
 
         if (nullptr == cur_mysql_req_mgr_) {
-          SERVER_LOG(DEBUG, "req manager doest not exist");
           continue;
         } else if (OB_SUCC(ret)) {
           start_id_ = INT64_MIN;
@@ -293,7 +291,6 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
           bool is_req_valid = true;
           if (OB_FAIL(extract_request_ids(start_id_, end_id_, is_req_valid))) {
           } else if (!is_req_valid) {
-            SERVER_LOG(DEBUG, "invalid query range", K(key_ranges_));
             ret = OB_ITER_END;
           } else {
             int64_t start_idx = cur_mysql_req_mgr_->get_start_idx();
@@ -314,7 +311,6 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
               if (need_rt_node_) {
                 break;
               } else {
-                SERVER_LOG(DEBUG, "cur_mysql_req_mgr_ iter end", K(start_id_), K(end_id_));
                 prev_req_mgr = cur_mysql_req_mgr_;
                 cur_mysql_req_mgr_ = nullptr;
               }
@@ -323,9 +319,6 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
             } else {
               cur_id_ = start_id_;
             }
-            SERVER_LOG(DEBUG, "start to get rows from inner table",
-                       K(start_id_), K(end_id_), K(cur_id_),
-                       K(start_idx), K(end_idx));
           }
         }
       }
@@ -356,7 +349,6 @@ int ObVirtualSqlPlanMonitor::extract_request_ids(int64_t &start_id,
   if (key_ranges_.count() >= 1) {
     for (int i = 0; OB_SUCC(ret) && is_valid && i < key_ranges_.count(); i++) {
       ObNewRange &req_id_range = key_ranges_.at(i);
-      SERVER_LOG(DEBUG, "extracting request id for tenant", K(req_id_range));
       if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() < 1
                       || req_id_range.get_end_key().get_obj_cnt() < 1)
                       || OB_ISNULL(req_id_range.get_start_key().get_obj_ptr())

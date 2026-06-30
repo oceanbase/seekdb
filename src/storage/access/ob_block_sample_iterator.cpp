@@ -387,7 +387,6 @@ int ObBlockSampleRangeIterator::init_and_push_endkey_iterator(ObGetTableParam &g
 
   if (OB_UNLIKELY(!get_table_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "Invalid argument", K(get_table_param));
   } else {
     get_table_param.tablet_iter_.table_iter()->resume();
     while (OB_SUCC(ret)) {
@@ -408,7 +407,6 @@ int ObBlockSampleRangeIterator::init_and_push_endkey_iterator(ObGetTableParam &g
         STORAGE_LOG(WARN, "Unexpected null sstable", K(ret), KP(table), KP(sample_range_), KP(allocator_));
       } else if (FALSE_IT(sstable = static_cast<ObSSTable*>(table))) {
       } else if (sstable->is_empty()) {
-        STORAGE_LOG(DEBUG, "Skip empty sstable", KPC(sstable));
       } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObBlockSampleSSTableEndkeyIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "Fail to allocate memory for ObBlockSampleSSTableEndkeyIterator", K(ret));
@@ -696,7 +694,6 @@ int ObBlockSampleIterator::get_next_row(blocksstable::ObDatumRow *&row)
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "range is null", K(ret), K(block_num_));
         } else if (return_this_sample(block_num_++)) {
-          STORAGE_LOG(DEBUG, "open a range", K(*range), K_(block_num));
           ++sample_block_cnt_;
           micro_range_.reset();
           micro_range_ = *range;
@@ -783,7 +780,6 @@ int ObBlockSampleIterator::get_next_rows(int64_t &count, int64_t capacity)
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "range is null", K(ret), K(block_num_));
         } else if (return_this_sample(block_num_++)) {
-          STORAGE_LOG(DEBUG, "open a range", K(*range), K_(block_num));
           micro_range_.reset();
           micro_range_ = *range;
           if (OB_FAIL(open_range(micro_range_))) {

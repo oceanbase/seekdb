@@ -157,7 +157,6 @@ public:
     new_estimator = NULL;
     if (OB_ISNULL(ptr)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SQL_OPT_LOG(ERROR, "no more memory to create estimator");
     } else {
       new_estimator = new (ptr) EstimatorType();
       if (OB_FAIL(estimator_store_.store_obj(new_estimator))) {

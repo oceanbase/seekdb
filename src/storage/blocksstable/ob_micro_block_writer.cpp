@@ -166,7 +166,6 @@ int ObMicroBlockWriter::process_out_row_columns(const ObDatumRow &row)
         } else {
           const ObLobCommon &lob_common = datum.get_lob_data();
           has_lob_out_row_ = !lob_common.in_row_;
-          STORAGE_LOG(DEBUG, "chaser debug lob out row", K(has_lob_out_row_), K(lob_common), K(datum));
         }
       }
     }
@@ -203,8 +202,6 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
             K(row), K(OB_P(data_buffer_.remain())), K(pos));
       }
     } else if (is_exceed_limit()) {
-      STORAGE_LOG(DEBUG, "micro block exceed limit", K(pos),
-          K(get_header(data_buffer_)->row_count_), K(get_block_size()), K(micro_block_size_limit_));
       data_buffer_.pop_back(pos);
       ret = OB_BUF_NOT_ENOUGH;
     } else if (OB_FAIL(try_to_append_row())) {
@@ -243,7 +240,6 @@ int ObMicroBlockWriter::build_block(char *&buf, int64_t &size)
     ObMicroBlockHeader *header = get_header(data_buffer_);
     if (last_rows_count_ == header->row_count_) {
       header->single_version_rows_ = 1;
-      STORAGE_LOG(DEBUG, "all rows are single version", K(last_rows_count_));
     }
     header->row_index_offset_ = static_cast<int32_t>(data_buffer_.length());
     header->contain_uncommitted_rows_ = contain_uncommitted_row_;

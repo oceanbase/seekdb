@@ -47,7 +47,6 @@ int ObExprRandstr::calc_result_type2(ObExprResType &type,
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(
                 common::ObCharset::get_default_collation(common::ObCharset::get_default_charset()), mbmaxlen))) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "fail to get mbmaxlen");
     } else if (0 == mbmaxlen){
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mb maxlen invalid");

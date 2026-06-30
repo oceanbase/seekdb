@@ -288,9 +288,6 @@ bool LogModeMgr::is_state_changed() const
         const bool is_epoch_changed = !state_mgr_->check_epoch_is_same_with_election(leader_epoch_);
         bool_ret = (is_reach_majority || is_need_retry || is_epoch_changed);
         if (true == bool_ret) {
-          PALF_LOG(INFO, "is_state_changed", K_(palf_id), K_(self), "state", state2str_(state_),
-              K(is_reach_majority), K(is_need_retry), K(is_epoch_changed), K_(follower_list),
-              K_(majority_cnt), K_(ack_list), K_(last_submit_req_ts));
         }
         break;
       }
@@ -318,8 +315,6 @@ bool LogModeMgr::can_finish_change_mode_() const
   bool_ret = sw_->is_all_committed_log_slided_out(last_slide_lsn, unused_id, committed_end_lsn) &&
       (committed_end_lsn >= max_lsn);
   if (false == bool_ret && palf_reach_time_interval(500 * 1000, wait_committed_log_slide_warn_ts_)) {
-    PALF_LOG(INFO, "wait is_all_committed_log_slided_out", K(bool_ret), K(last_slide_lsn),
-        K(committed_end_lsn), K(max_lsn));
   }
   return bool_ret;
 }
@@ -372,12 +367,8 @@ int LogModeMgr::change_access_mode(
   } else if (OB_FAIL(can_change_access_mode_(mode_version))) {
   } else if (applied_mode_meta_.access_mode_ == access_mode) {
     ret = OB_SUCCESS;
-    PALF_LOG(INFO, "don't need change access_mode to self", K_(palf_id), K_(self),
-        K(access_mode), K_(applied_mode_meta));
   } else if (false == can_switch_access_mode_(applied_mode_meta_.access_mode_, access_mode)) {
     ret = OB_STATE_NOT_MATCH;
-    PALF_LOG(WARN, "can not switch access_mode", K_(palf_id), K_(self),
-        K(access_mode), K_(applied_mode_meta));
   } else {
     const bool is_reconfirm = false;
     ret = switch_state_(access_mode, ref_scn, is_reconfirm);
@@ -502,7 +493,6 @@ int LogModeMgr::switch_state_(const AccessMode &access_mode,
     default:
     {
       ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "Invalid ModeChangeState", K_(palf_id), K_(self), K_(state));
       break;
     }
   }

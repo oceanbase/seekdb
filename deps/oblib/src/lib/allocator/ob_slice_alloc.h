@@ -322,7 +322,6 @@ public:
     : nway_(1), bsize_(block_size), isize_(size), attr_(attr),
       blk_alloc_(blk_alloc), tmallocator_(tmallocator) {
       slice_limit_ = block_size - (int32_t)sizeof(Block) - (int32_t)sizeof(Block::Item);
-      LIB_LOG(INFO, "ObSliceAlloc init finished", K(bsize_), K(isize_), K(slice_limit_), KP(tmallocator_));
     }
   ~ObSliceAlloc() {
     destroy();
@@ -519,7 +518,6 @@ public:
   {
     new (this) ObSliceAlloc(isize_ + 128, attr_, bsize_, blk_alloc_, NULL);
     is_leak_debug_ = true;
-    LIB_LOG(INFO, "leak debug mode! allocate extra 128 bytes memory for lbt record", K(is_leak_debug_));
   }
 
   void *alloc(const bool record_alloc_lbt)

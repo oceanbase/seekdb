@@ -88,6 +88,7 @@ class ObTenantMdsService;
   namespace checkpoint {
     class ObCheckPointService;
     class ObTabletGCService;
+    class ObCheckpointDiagnoseMgr;
   }
   class ObLobManager;
   class ObTableScanIterator;
@@ -530,7 +531,6 @@ public:
   void set_tenant_role(const share::ObTenantRole::Role tenant_role_value)
   {
     if (get_tenant_role() != tenant_role_value) {
-      SHARE_LOG(INFO, "set tenant role", K(tenant_role_value), K(tenant_role_value_));
     }
     (void)ATOMIC_STORE(&tenant_role_value_, tenant_role_value);
   }
@@ -560,7 +560,6 @@ public:
   {
     int64_t cached_switchover_epoch = get_switchover_epoch();
     if (OB_INVALID_VERSION != switchover_epoch && cached_switchover_epoch < switchover_epoch) {
-      SHARE_LOG(INFO, "try set switchover_epoch", K(switchover_epoch), K(cached_switchover_epoch));
       ATOMIC_BCAS(&switchover_epoch_, cached_switchover_epoch, switchover_epoch);
     }
   }

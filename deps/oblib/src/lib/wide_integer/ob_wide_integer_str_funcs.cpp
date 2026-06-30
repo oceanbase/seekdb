@@ -386,7 +386,6 @@ int from_string(const char *buf, const int64_t length, ObIAllocator &allocator,
         }
       } else {
         ret = OB_INVALID_NUMERIC;
-        COMMON_LOG(WARN, "unexpected char", K(buf[pos]));
       }
     } // for end
     tmp_res = tmp_res * pows[i] + tmp_sum;

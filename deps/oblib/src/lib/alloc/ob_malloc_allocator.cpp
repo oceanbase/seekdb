@@ -161,7 +161,6 @@ int ObMallocAllocator::with_resource_handle_invoke(InvokeFunc func)
       resource_handle))) {
   } else if (!resource_handle.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "resource_handle is invalid");
   } else {
     ret = func(resource_handle.get_memory_mgr());
   }

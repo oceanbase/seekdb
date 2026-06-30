@@ -154,7 +154,6 @@ int CheckRowLockedFunctor::operator() (const ObTxData &tx_data, ObTxCCCtx *tx_cc
     break;
   default:
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "wrong state", K(tx_data), KPC(tx_cc_ctx));
     break;
   }
   }
@@ -356,7 +355,6 @@ int LockForReadFunctor::inner_lock_for_read(const ObTxData &tx_data, ObTxCCCtx *
     default:
       // unexpected case
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected state", K(tx_data), KPC(tx_cc_ctx), K(lock_for_read_arg_));
       break;
   }
 

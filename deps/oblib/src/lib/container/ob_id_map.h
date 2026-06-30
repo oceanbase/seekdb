@@ -117,14 +117,11 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::init(const ID_TYPE num)
 {
   int ret = OB_SUCCESS;
   if (NULL != array_) {
-    _OB_LOG(WARN, "have inited");
     ret = OB_INIT_TWICE;
   } else if (0 >= num) {
-    _OB_LOG(WARN, "invalid param num=%lu", (uint64_t)num);
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == (array_ = (Node *)common::ob_malloc((num + 1) * sizeof(Node),
                                                          memattr_))) {
-    _OB_LOG(WARN, "malloc array fail num=%lu", (uint64_t)(num + 1));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_SUCCESS != (ret = free_list_.init(num))) {
   } else {
@@ -165,11 +162,9 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::assign(T *value, ID_TYPE &id)
   int ret = OB_SUCCESS;
   Node *node = NULL;
   if (NULL == array_) {
-    _OB_LOG(WARN, "have not inited");
     ret = OB_NOT_INIT;
   } else if (OB_SUCCESS != (ret = free_list_.pop(node))
              || NULL == node) {
-    _OB_LOG(WARN, "no more id free list size=%ld", free_list_.get_total());
     ret = (OB_SUCCESS == ret) ? OB_ALLOCATE_MEMORY_FAILED : ret;
   } else {
     id = node->id;
@@ -185,7 +180,6 @@ int ObIDMap<T, ID_TYPE, TSI_HOLD_NUM>::get(const ID_TYPE id, T *&value) const
   int ret = OB_SUCCESS;
   ID_TYPE pos = id % num_;
   if (NULL == array_) {
-    _OB_LOG(WARN, "have not inited");
     ret = OB_NOT_INIT;
   } else {
     T *retv = NULL;

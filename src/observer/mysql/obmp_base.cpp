@@ -603,7 +603,6 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
   ObSMConnection *conn = NULL;
   if (OB_ISNULL(session) || OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN,"invalid argument", K(session), K(gctx_.schema_service_));
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null conn", K(ret));

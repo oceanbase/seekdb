@@ -68,9 +68,6 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
       if (OB_SUCC(ret)) {
         if (!ObCharset::is_valid_connection_collation(collation_type)) {
           ret = OB_NOT_SUPPORTED;
-          SQL_ENG_LOG(WARN, "collation type not supported",
-                      "charset type", ObCharset::charset_name(cs_type),
-                      "collation type", ObCharset::collation_name(collation_type));
         }
       }
       if (OB_SUCC(ret)) {
@@ -104,9 +101,6 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
             ObCharsetType charset_connection = ObCharset::charset_type_by_coll(collation_connection);
             if (!ObCharset::is_valid_connection_collation(collation_connection)) {
               ret = OB_NOT_SUPPORTED;
-              SQL_ENG_LOG(WARN, "connection collation type not supported",
-                  "charset type", ObCharset::charset_name(charset_connection),
-                  "collation type", ObCharset::collation_name(collation_connection));
             }
           }
           if (OB_SUCC(ret)) {
@@ -143,13 +137,11 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
     SQL_ENG_LOG(ERROR, "session is NULL", K(ret), K(ctx));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(ERROR, "schema service is null");
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
               schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_CHARACTER_SET_CLIENT, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(&allocator,
                                            ObBasicSessionInfo::create_dtc_params(session),
                                            value))) {

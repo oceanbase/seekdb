@@ -361,7 +361,6 @@ int ObMicroBlockRowGetter::inner_get_row(
       if (OB_BEYOND_THE_RANGE == ret) {
         if (OB_FAIL(get_not_exist_row(rowkey, row))) {
         }
-        STORAGE_LOG(DEBUG, "get not exist row", K(rowkey), K(macro_id));
       } else {
         LOG_WARN("Fail to get row", K(ret), K(rowkey), K(block_data), KPC_(read_info),
                  KPC_(param), KPC_(context), K(macro_id));

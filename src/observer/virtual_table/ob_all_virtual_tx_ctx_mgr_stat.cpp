@@ -45,8 +45,6 @@ int ObGVTxCtxMgrStat::prepare_start_to_read_()
   ObObj *cells = NULL;
 
   if (NULL == allocator_ || NULL == trans_service_) {
-    SERVER_LOG(WARN, "invalid argument, allocator_ or trans_service_ is null", "allocator",
-        OB_P(allocator_), "trans_service", OB_P(trans_service_));
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == (cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -77,7 +75,6 @@ int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "tx_ctx_mgr_stat_iter_ get next error", K(ret));
     } else {
-      SERVER_LOG(DEBUG, "tx_ctx_mgr_stat_iter_ end success");
     }
   } else {
     // Column order after removing svr_ip and svr_port:

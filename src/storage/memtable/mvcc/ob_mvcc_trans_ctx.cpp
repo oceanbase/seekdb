@@ -389,8 +389,6 @@ int ObTransCallbackMgr::append(ObITransCallback *node)
           // to avoid it calculate checksum includes those callbacks
           callback_list_.inc_update_checksum_scn(SCN::scn_inc(serial_final_scn_));
           ATOMIC_STORE(&has_branch_replayed_into_first_list_, true);
-          TRANS_LOG(INFO, "replay log before serial final when reach serial final",
-                    KPC(this), KPC(get_trans_ctx()), KPC(node));
         }
       }
       slot = 0;
@@ -485,8 +483,6 @@ int ObTransCallbackMgr::append(ObITransCallback *head,
             // to avoid it calculate checksum includes those callbacks
             callback_list_.inc_update_checksum_scn(SCN::scn_inc(serial_final_scn_));
             ATOMIC_STORE(&has_branch_replayed_into_first_list_, true);
-            TRANS_LOG(INFO, "replay log before serial final when reach serial final",
-                      KPC(this), KPC(get_trans_ctx()), KPC(head));
           }
         }
         slot = 0;
@@ -598,8 +594,6 @@ int ObTransCallbackMgr::rollback_to(const ObTxSEQ to_seq_no,
           && OB_UNLIKELY(has_branch_replayed_into_first_list_)
           && to_seq_no.get_seq() <= serial_final_seq_no_.get_seq()) {
         ret = callback_list_.remove_callbacks_for_rollback_to(to_seq_no, from_seq_no, replay_scn);
-        TRANS_LOG(INFO, "replay branch savepoint cross serial final",
-                  KPC(this), KPC(get_trans_ctx()), K(replay_scn), K(to_seq_no), K(from_seq_no));
       }
     }
   } else if (!for_replay_) {
@@ -777,7 +771,6 @@ void ObTransCallbackMgr::calc_list_fill_log_epoch_(const int list_idx, int64_t &
       int64_t epoch_i = list->get_log_epoch();
       if (epoch_i < this_epoch) {
         no_result = true;
-        TRANS_LOG(TRACE, "no_result", K(epoch_i), K(i), K(this_epoch));
         break;
       }
       if (epoch_i < other_min) {
@@ -915,8 +908,6 @@ int ObTransCallbackMgr::get_log_guard(const transaction::ObTxSEQ &write_seq,
       ret = OB_EAGAIN;
       storage::ObIMemtable *to_log_memtable = list->get_log_cursor()->get_memtable();
       if (TC_REACH_TIME_INTERVAL(1_s)) {
-        TRANS_LOG(WARN, "has smaller epoch unlogged", KPC(this),
-                  K(list_idx), K(write_seq), K(my_epoch), K(min_epoch), K(min_epoch_idx), KP(to_log_memtable));
       }
     } else {
       ret_list_idx = list_idx;
@@ -931,7 +922,6 @@ int ObTransCallbackMgr::get_log_guard(const transaction::ObTxSEQ &write_seq,
         // lock conflict, acquired by others
       } else {
         if (REACH_TIME_INTERVAL(1_s)) {
-          TRANS_LOG(INFO, "decide to flush callback list with min_epoch", KPC(this), K(min_epoch), K(min_epoch_idx));
         }
         ret_list_idx = min_epoch_idx;
         lock_guard.set(log_lock);
@@ -1082,7 +1072,6 @@ int ObTransCallbackMgr::fill_from_all_list(ObTxFillRedoCtx &ctx, ObITxFillRedoFu
         ctx.cur_epoch_ = epoch_to;
         try_other_lists = true;
       } else {
-        TRANS_LOG(WARN, "fill redo from list fail", K(fill_ret), K(index));
         ret = fill_ret;
       }
       // when parallel logging, seperate log-entry for each callback-list
@@ -1499,7 +1488,6 @@ void ObTransCallbackMgr::print_callbacks()
   RDLockGuard guard(rwlock_);
   int ret = OB_SUCCESS;
   CALLBACK_LISTS_FOREACH(idx, list) {
-    _TRANS_LOG(INFO, "print callback at CallbackList[%d]:", idx);
     list->tx_print_callback();
   }
 }
@@ -1588,8 +1576,6 @@ bool ObMvccRowCallback::is_logging_blocked() const
     ObTransID trans_id;
     if (OB_FAIL(get_trans_id(trans_id))) {
     } else if (REACH_TIME_INTERVAL(1000000)) {
-      TRANS_LOG(WARN, "block logging", K_(epoch), K(is_blocked), KP(memtable_),
-                K(memtable_->get_key().get_tablet_id()), K(trans_id));
     }
   }
   return is_blocked;
@@ -1649,7 +1635,6 @@ int ObMvccRowCallback::print_callback()
 {
   ObRowLatchGuard guard(value_.latch_);
 
-  TRANS_LOG(INFO, "print callback", K(*this));
   return OB_SUCCESS;
 }
 
@@ -1806,7 +1791,6 @@ int ObMvccRowCallback::checkpoint_callback()
 
   if (need_submit_log_) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "checkpoint never called on submitted callback", KPC(this));
   } else if (OB_FAIL(value_.remove_callback(*this))) {
   } else if (OB_NOT_NULL(tnode_)) {
     (void)value_.update_dml_flag_(get_dml_flag(), tnode_->get_scn());
@@ -1899,7 +1883,6 @@ int ObMvccRowCallback::trans_commit()
               && NULL != memtable_
               && !memtable_->has_hotspot_row()) {
             memtable_->set_contain_hotspot_row();
-            TRANS_LOG(INFO, "[FF] trans commit and set hotspot row success", K_(*memtable), K_(value), K_(ctx), K(*this));
           }
           (void)ATOMIC_FAA(&value_.update_since_compact_, 1);
           if (value_.need_compact(for_read, ctx_.is_for_replay(), memtable_->is_delete_insert_table())) {
@@ -1963,7 +1946,6 @@ int ObMvccRowCallback::wakeup_row_waiter_if_need_()
     ObLockWaitMgr *p_lwm = share::g_mp->lock_wait_mgr();
     if (OB_ISNULL(p_lwm)) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "lock wait mgr is nullptr", K(*this));
     } else {
       p_lwm->reset_hash_holder(get_tablet_id(), key_, ctx_.get_tx_id());
     }

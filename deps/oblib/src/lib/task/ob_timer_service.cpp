@@ -38,7 +38,6 @@ using namespace lib;
 uint64_t OB_WEAK_SYMBOL mtl_get_id()
 {
   int ret = OB_SUCCESS;
-  OB_LOG(WARN, "call weak mtl_get_id");
   return OB_SERVER_TENANT_ID;
 }
 
@@ -243,7 +242,6 @@ int ObTimerService::start()
     } else {
       is_never_started_ = false;
       monitor_.notify_all();
-      OB_LOG(INFO, "ObTimerService start success", KP(this), KCSTRING(lbt()));
     }
     if (OB_FAIL(ret)) {
       is_stopped_ = true;
@@ -292,14 +290,12 @@ void ObTimerService::stop()
   // STEP6: stop worker threads and the scheduling thread
   worker_thread_pool_.stop();
   ThreadPool::stop();
-  OB_LOG(INFO, "ObTimerService stop success", KP(this));
 }
 
 void ObTimerService::wait()
 {
   worker_thread_pool_.wait();
   ThreadPool::wait();
-  OB_LOG(INFO, "ObTimerService wait success", KP(this));
 }
 
 void ObTimerService::destroy()
@@ -312,7 +308,6 @@ void ObTimerService::destroy()
   wait();
   worker_thread_pool_.destroy();
   ThreadPool::destroy();
-  OB_LOG(INFO, "ObTimerService destroyed", KP(this));
 }
 
 int ObTimerService::schedule_task(
@@ -573,8 +568,6 @@ void ObTimerService::run1()
 {
   int64_t thread_id = GETTID();
   set_thread_name("TimerSvr");
-  OB_LOG(INFO, "TimerService thread started",
-      KP(this), K(thread_id), KCSTRING(lbt()));
 
   while(true) {
     IGNORE_RETURN lib::Thread::update_loop_ts();
@@ -620,7 +613,6 @@ void ObTimerService::run1()
       }
     }  // unlock
   }
-  OB_LOG(INFO, "TimerService thread exit", KP(this), K(thread_id));
 }
 
 bool ObTimerService::has_same_task_and_timer(
@@ -686,11 +678,8 @@ void ObTimerService::delete_token(TaskToken *&token)
 
 void ObTimerService::dump_info()
 {
-  OB_LOG(INFO, "dump info [summary]",
-      KP(this), KPC(this));
   for (int idx = 0; idx < priority_task_queue_.size(); ++idx) {
     TaskToken *token = priority_task_queue_.at(idx);
-    OB_LOG(INFO, "dump queue token", KP(this), KPC(token));
   }
 }
 

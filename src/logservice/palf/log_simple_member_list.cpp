@@ -142,7 +142,6 @@ int LogAckList::add_server(const common::ObAddr &server)
   const int64_t count = get_count();
   if (!server.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "add_server unexpected server");
   } else {
     for (int64_t i = 0; i < count; i++) {
       if (server_[i] == server) {
@@ -156,7 +155,6 @@ int LogAckList::add_server(const common::ObAddr &server)
         server_[count] = server;
       }
     }
-    PALF_LOG(INFO, "add_server success", K(count), K(server), K(count));
   }
   return ret;
 }

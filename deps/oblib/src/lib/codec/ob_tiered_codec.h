@@ -91,7 +91,6 @@ class ObTiredCodec : public ObCodec
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY((get_block_size() != codec1_.get_block_size()) || (get_block_size() != codec2_.get_block_size()))) {
       ret = OB_INVALID_ARGUMENT;
-      LIB_LOG(WARN, "invalid argument", K(get_block_size()), K(codec1_.get_block_size()), K(codec2_.get_block_size()));
     } else {
       int64_t alloc_len = codec1_.get_max_encoding_size(in, in_len);
       char *t_buf = nullptr;
@@ -133,7 +132,6 @@ class ObTiredCodec : public ObCodec
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY((get_block_size() != codec1_.get_block_size()) || (get_block_size() != codec2_.get_block_size()))) {
       ret = OB_INVALID_ARGUMENT;
-      LIB_LOG(WARN, "invalid argument", K(get_block_size()), K(codec1_.get_block_size()), K(codec2_.get_block_size()));
     } else {
       int64_t alloc_len = 0;
       char *t_buf = nullptr;

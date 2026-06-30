@@ -170,7 +170,6 @@ public:
         if (flag_type_ == DF_TYPE_INSERT_DELETE) {
           flag_type_ = input_flag.flag_type_;
         } else {
-          STORAGE_LOG(DEBUG, "unexpected pure delete row", KPC(this), K(input_flag));
         }
       }
     }

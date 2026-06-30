@@ -234,7 +234,6 @@ class ObPieceCache {
           lib::ContextParam().set_mem_attr(ObModIds::OB_PL_TEMP)))) {
       } else if (OB_ISNULL(mem_context_)) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_ENG_LOG(WARN, "null memory entity returned");
       } else if (!piece_map_.created() &&
                   OB_FAIL(piece_map_.create(common::hash::cal_next_prime(32),
                                             ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {

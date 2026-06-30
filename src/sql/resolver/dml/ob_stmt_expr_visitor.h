@@ -126,7 +126,6 @@ int ObStmtExprVisitor::visit(T *&expr,
                (!std::is_same<T, ObRawExpr>::value &&
                 OB_UNLIKELY(tmp->get_expr_class() != expr->get_expr_class()))) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "expr class is changed", K(tmp->get_expr_class()), K(expr->get_expr_class()));
     }
   }
   return ret;
@@ -148,7 +147,6 @@ int ObStmtExprVisitor::visit(common::ObIArray<T *> &exprs,
                    (!std::is_same<T, ObRawExpr>::value &&
                     OB_UNLIKELY(tmp->get_expr_class() != exprs.at(i)->get_expr_class()))) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "expr class is changed", K(tmp->get_expr_class()), K(exprs.at(i)->get_expr_class()));
         }
       }
     }

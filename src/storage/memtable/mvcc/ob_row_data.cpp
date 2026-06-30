@@ -28,7 +28,6 @@ static int serialize_data(char *buf, const int64_t len, int64_t &pos, const char
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || (OB_ISNULL(data) && data_len != 0) || pos < 0 || data_len < 0 || pos > len) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KP(buf), KP(data), K(data_len), K(pos));
   } else if (NULL == data) {
     // no need to copy
   } else if (pos + data_len > len) {
@@ -46,12 +45,10 @@ static int deserialize_data(const char *buf, const int64_t len, int64_t &pos, co
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || pos < 0 || data_len < 0 || pos > len) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid_argument", K(OB_P(buf)), K(pos), K(data_len), K(len));
   } else if (0 == data_len) {
     data = NULL;
   } else if (pos + data_len > len) {
     ret = OB_BUF_NOT_ENOUGH;
-    TRANS_LOG(WARN, "buf not enough", KP(buf), KP(data), K(data_len), K(pos));
   } else {
     data = buf + pos;
     pos += data_len;

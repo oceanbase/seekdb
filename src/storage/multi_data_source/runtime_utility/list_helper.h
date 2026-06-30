@@ -200,7 +200,6 @@ public:
       const T *data = static_cast<const T *>(iter);
       if (OB_ISNULL(data)) {
         ret = OB_ERR_UNEXPECTED;
-        MDS_LOG(ERROR, "downcast failed", KP(iter), KP(data), KP(this), KP(list_head_), KP(list_tail_));
       } else {
         const ListNode<T> *temp_iter_next = static_cast<const ListNode<T> *>(iter->next_);
         if (func(*data)) {
@@ -220,7 +219,6 @@ public:
       const T *data = static_cast<const T *>(iter);
       if (OB_ISNULL(data)) {
         ret = OB_ERR_UNEXPECTED;
-        MDS_LOG(ERROR, "downcast failed", KP(iter), KP(data), KP(this), KP(list_head_), KP(list_tail_));
       } else {
         const ListNode<T> *temp_iter_prev = static_cast<const ListNode<T> *>(iter->prev_);
         if (func(*data)) {
@@ -240,7 +238,6 @@ public:
       const T *data = static_cast<const T *>(iter);
       if (OB_ISNULL(data)) {
         ret = OB_ERR_UNEXPECTED;
-        MDS_LOG(ERROR, "downcast failed", KP(iter), KP(data), KP(this), KP(list_head_), KP(list_tail_));
       } else {
         const ListNode<T> *temp_iter_next = static_cast<const ListNode<T> *>(iter->next_);
         if (OB_FAIL(func(*data))) {
@@ -264,7 +261,6 @@ public:
       const T *data = static_cast<const T *>(iter);
       if (OB_ISNULL(data)) {
         ret = OB_ERR_UNEXPECTED;
-        MDS_LOG(ERROR, "downcast failed", KP(iter), KP(data), KP(this), KP(list_head_), KP(list_tail_));
       } else {
         const ListNode<T> *temp_iter_prev = static_cast<const ListNode<T> *>(iter->prev_);
         if (OB_FAIL(func(*data))) {

@@ -63,7 +63,6 @@ int ObExpVisitor::add_row(const Op &cur_op)
           }
           if (OB_UNLIKELY(0 > snprintf(buf + pos, buf_len - pos, "%s", cur_op.get_name()))) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to gen operator name");
           } else {
             cells[i].set_varchar(buf);
             cells[i].set_collation_type(ObCharset::get_default_collation(

@@ -148,7 +148,6 @@ private:
     int ret = OB_SUCCESS;
     if (is_valid_()) {
       ret = OB_INIT_TWICE;
-      MDS_LOG(WARN, "this event has been valid", PRINT_WRAPPER, K(*this));
     }
     if (OB_SUCC(ret) && !info_str.empty()) {
       char *ptr = nullptr;

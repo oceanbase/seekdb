@@ -255,7 +255,6 @@ void errsim_set_prallel_cnt(const int64_t parallel_merge_cnt, int64_t &concurren
   if (OB_FAIL(ret)) {
     concurrent_cnt = MIN(-ret, parallel_merge_cnt);
     ret = OB_SUCCESS;
-    STORAGE_LOG(INFO, "ERRSIM EN_FORCE_PARALLEL_MINI_MERGE, force set parallel degree for mini merge", K(concurrent_cnt));
   }    
 }
 #endif
@@ -370,7 +369,6 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
       reset();
       if (OB_FAIL(init_serial_merge())) {
       } else {
-        STORAGE_LOG(INFO, "parallel minor merge back to serialize merge");
       }
     } else {
       concurrent_cnt_ = split_ranges.count();
@@ -382,7 +380,6 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
         } else if (OB_FAIL(range_array_.push_back(split_ranges.at(i).at(0)))) {
         }
       }
-      STORAGE_LOG(INFO, "Succ to get parallel mini minor merge ranges", K_(concurrent_cnt), K_(range_array));
     }
   }
   return ret;
@@ -412,8 +409,6 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
       parallel_degree = MAX(parallel_degree / 2, 2); // fix the parallel degree
     }
 
-    STORAGE_LOG(INFO, "[ADAPTIVE_SCHED] calc adaptive parallel degree", K(prio), K(tenant_free_mem_byte), K(mem_per_thread),
-                K(dag_worker_limit), K(origin_degree), K(mem_allow_max_thread_cnt), K(parallel_degree));
   }
 }
 

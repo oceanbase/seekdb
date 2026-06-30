@@ -159,7 +159,6 @@ int ObPxTargetCond::wait(const int64_t wait_time_us)
 {
   int ret = OB_SUCCESS; 
   if (wait_time_us < 0) {
-    TRANS_LOG(WARN, "invalid argument", K(wait_time_us));
     ret = OB_INVALID_ARGUMENT;
   } else {
     THIS_WORKER.sched_wait();

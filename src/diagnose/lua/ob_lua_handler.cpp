@@ -148,13 +148,10 @@ int ObLuaHandler::process(const char* lua_code)
     }
     const char* code_;
   };
-  OB_LOG(INFO, "Lua code was executed", K(alloc_count_), K(free_count_), K(alloc_size_), K(free_size_));
   LuaExec func(lua_code);
   do_with_crash_restore(func, has_segv);
   if (has_segv) {
-    _OB_LOG(INFO, "restore from sigsegv, coredump during lua code execution at %s\n", crash_restore_buffer);
   } else {
-    OB_LOG(INFO, "Lua code was executed successfully", K(alloc_count_), K(free_count_), K(alloc_size_), K(free_size_));
   }
 
   struct LuaGC {
@@ -170,9 +167,7 @@ int ObLuaHandler::process(const char* lua_code)
   LuaGC gc(destructors_);
   do_with_crash_restore(gc, has_segv);
   if (has_segv) {
-    _OB_LOG(INFO, "restore from sigsegv, coredump during lua gc at %s\n", crash_restore_buffer);
   } else {
-    OB_LOG(INFO, "Lua gc successfully", K(alloc_count_), K(free_count_), K(alloc_size_), K(free_size_));
   }
   return OB_SUCCESS;
 }
@@ -183,20 +178,17 @@ void ObUnixDomainListener::run1()
 #ifdef __APPLE__
   // macOS doesn't support SOCK_NONBLOCK, use fcntl instead
   if ((listen_fd_ = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
-    OB_LOG(ERROR, "ObUnixDomainListener socket init failed", K(errno));
     ret = OB_ERR_UNEXPECTED;
   } else {
     // Set non-blocking mode using fcntl
     int flags = fcntl(listen_fd_, F_GETFL, 0);
     if (flags < 0 || fcntl(listen_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
-      OB_LOG(ERROR, "ObUnixDomainListener set non-blocking failed", K(errno));
       close(listen_fd_);
       listen_fd_ = -1;
       ret = OB_ERR_UNEXPECTED;
     }
 #else
   if ((listen_fd_ = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
-    OB_LOG(ERROR, "ObUnixDomainListener socket init failed", K(errno));
     ret = OB_ERR_UNEXPECTED;
   } else {
 #endif
@@ -209,16 +201,12 @@ void ObUnixDomainListener::run1()
     listen_ev.events = EPOLLIN;    
     listen_ev.data.fd = listen_fd_;
     if (bind(listen_fd_, (struct sockaddr *)&s, sizeof(s)) < 0) {
-      OB_LOG(ERROR, "ObUnixDomainListener bind failed", K(listen_fd_), K(errno));
       ret = OB_ERR_UNEXPECTED;
     } else if (listen(listen_fd_, MAX_CONNECTION_QUEUE_LENGTH) < 0) {
-      OB_LOG(ERROR, "ObUnixDomainListener listen failed", K(listen_fd_), K(errno));
       ret = OB_ERR_UNEXPECTED;
     } else if (epoll_fd < 0) {
-      OB_LOG(ERROR, "ObUnixDomainListener create epoll failed", K(errno));
       ret = OB_ERR_UNEXPECTED;
     } else if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd_, &listen_ev) < 0) {
-      OB_LOG(ERROR, "ObUnixDomainListener add listen to epoll failed", K(errno));
       ret = OB_ERR_UNEXPECTED;
     } else {
       lib::set_thread_name("LuaHandler");
@@ -238,7 +226,6 @@ void ObUnixDomainListener::run1()
           if (EINTR == errno) {
             // timeout, ignore
           } else {
-            OB_LOG(ERROR, "ObUnixDomainListener epoll wait failed", K(epoll_fd), K(errno));
           }
         }
         for (int64_t i = 0; i < event_cnt; ++i) {
@@ -246,13 +233,11 @@ void ObUnixDomainListener::run1()
             if ((conn_fd = accept(listen_fd_, NULL, NULL)) < 0) {
               if (EAGAIN != errno) {
                 ret = OB_ERR_UNEXPECTED;
-                OB_LOG(ERROR, "ObUnixDomainListener accept failed", K(listen_fd_), K(errno));
               }
             } else {    
               conn_ev.events = EPOLLIN;    
               conn_ev.data.fd = conn_fd;
               if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_fd, &conn_ev) < 0) {
-                OB_LOG(ERROR, "ObUnixDomainListener add event to epoll failed", K(epoll_fd), K(conn_fd), K(errno));
               }
             }
           } else if (events[i].events & EPOLLIN) {
@@ -265,7 +250,6 @@ void ObUnixDomainListener::run1()
               size -= rbytes;
             }
             if (rbytes < 0) {
-              OB_LOG(ERROR, "ObUnixDomainListener read from socket failed", K(errno));
             } else if (FALSE_IT(APIRegister::get_instance().set_fd(events[i].data.fd))) {
               // do nothing
             } else if (OB_FAIL(ObLuaHandler::get_instance().process(code_buffer))) {
@@ -274,12 +258,10 @@ void ObUnixDomainListener::run1()
               // do nothing
             }
             if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, events[i].data.fd, nullptr) < 0) {
-              OB_LOG(ERROR, "ObUnixDomainListener del failed", K(errno));
             }
             close(events[i].data.fd);
             APIRegister::get_instance().set_fd(-1);
           } else {
-            OB_LOG(ERROR, "unexpected type");
           }
         }
       }
@@ -287,7 +269,6 @@ void ObUnixDomainListener::run1()
       close(listen_fd_);
       listen_fd_ = -1;
       close(epoll_fd);
-      OB_LOG(INFO, "ObUnixDomainListener running");
     }
   }
 }

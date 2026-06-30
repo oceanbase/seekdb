@@ -1201,10 +1201,8 @@ inline int ObChunkDatumStore::BlockBuffer::advance(int64_t size)
   if (size < -cur_pos_) {
     //overflow
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(size), K_(cur_pos));
   } else if (size > remain()) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    SQL_ENG_LOG(WARN, "buffer not enough", K(size), "remain", remain());
   } else {
     cur_pos_ += size;
   }
@@ -1262,8 +1260,6 @@ int ObChunkDatumStore::StoredRow::to_expr(
           dst = src;
         }
         expr->set_evaluated_projected(ctx);
-        SQL_ENG_LOG(DEBUG, "succ to_expr", K(cnt_), K(exprs.count()),
-                  KPC(exprs.at(i)), K(cells()[i]), K(lbt()));
       }
     }
   }
@@ -1359,7 +1355,6 @@ int ObChunkDatumStore::Iterator::get_next_batch(
   }
   if (OB_SUCC(ret) && max_rows > max_batch_size) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(max_rows), K(max_batch_size));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_next_batch(srows, max_rows, read_rows))) {
@@ -1410,7 +1405,6 @@ void ObChunkDatumStore::Iterator::attach_rows(
             ObDatum &dst = datums[i];
             dst.pack_ = src.pack_;
             MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-            SQL_ENG_LOG(DEBUG, "from datum store", K(src), K(dst), K(col_idx), K(i), K(read_rows));
           }
         }
       }

@@ -755,7 +755,6 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
   }
   if (OB_SUCC(ret)) {
     ObCStringHelper helper;
-    _OB_LOG(DEBUG, "resolve default value: %s", helper.convert(default_value));
   }
   return ret;
 }
@@ -3994,8 +3993,6 @@ int ObDDLResolver::check_default_value_length(const bool is_mysql_mode,
       }
       if (OB_SUCC(ret) && strlen > column.get_data_length()) {
         ret = OB_INVALID_DEFAULT;
-        SQL_RESV_LOG(WARN, "Invalid default value: length is larger than data length",
-                     "default_value", str, "length", strlen, "data_length", column.get_data_length());
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
       }
     }
@@ -6746,7 +6743,6 @@ int ObDDLResolver::resolve_check_cst_state_node_mysql(
     cst.set_validate_flag(CST_FK_NO_VALIDATE);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "constraint type not support");
   }
   return ret;
 }
@@ -8706,7 +8702,6 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
         } else if (OB_FAIL(stmt->get_part_values_exprs().assign(range_values_exprs))) {
         }
       }
-      SQL_RESV_LOG(DEBUG, "succ to resolve_partition_range", KPC(stmt), K(part_func_exprs), K(range_values_exprs));
     }
   }
   return ret;
@@ -8887,7 +8882,6 @@ int ObDDLResolver::resolve_auto_partition(ObPartitionedStmt *stmt, ParseNode *no
       if (OB_FAIL(ret)) {
       } else if (SET_AUTO_PARTITION_SIZE) {
         if (auto_part_size == 0) {
-          SQL_RESV_LOG(INFO, "the auto split tablet size is configured as unlimited");
           enable_auto_split = false;
         } else {
           enable_auto_split = true;
@@ -9270,7 +9264,6 @@ int ObDDLResolver::resolve_partition_list(ObPartitionedStmt *stmt,
        } else if (OB_FAIL(stmt->get_part_values_exprs().assign(list_values_exprs))) {
        }
      }
-    SQL_RESV_LOG(DEBUG, "succ to resolve_partition_list", KPC(stmt), K(part_func_exprs), K(list_values_exprs));
   }
   return ret;
 }

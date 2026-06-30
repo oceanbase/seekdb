@@ -416,7 +416,6 @@ OB_DEF_DESERIALIZE(ObTableLoadSqlStatistics)
     if (OB_ISNULL(osg_col_stat = ObOptOSGColumnStat::create_new_osg_col_stat(allocator_)) ||
         OB_ISNULL(osg_col_stat->col_stat_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OB_LOG(WARN, "failed to create col stat");
     } else if (OB_FAIL(osg_col_stat->deserialize(buf, data_len, pos))) {
     } else if (OB_FAIL(osg_col_stat->deep_copy(*osg_col_stat))) {
     } else if (OB_FAIL(col_stat_array_.push_back(osg_col_stat))) {

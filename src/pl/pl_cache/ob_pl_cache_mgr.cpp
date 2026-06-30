@@ -130,7 +130,6 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
                 !guard.get_cache_obj()->is_anon() &&
                 guard.get_cache_obj()->get_ns() != ObLibCacheNameSpace::NS_CALLSTMT)) {
       ret = OB_ERR_UNEXPECTED;
-      PL_CACHE_LOG(WARN, "cache obj is invalid", KPC(guard.get_cache_obj()));
     }
 
     if (OB_FAIL(ret) && OB_NOT_NULL(guard.get_cache_obj())) {
@@ -162,7 +161,6 @@ int ObPLCacheMgr::get_pl_cache(ObPlanCache *lib_cache, ObCacheObjGuard& guard, O
   } else if (OB_FAIL(get_pl_object(lib_cache, pc_ctx, guard))) {
   } else if (OB_ISNULL(guard.get_cache_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    PL_CACHE_LOG(WARN, "cache obj is invalid", KPC(guard.get_cache_obj()));
   } else {
     // update pl func/package stat
     pl::PLCacheObjStat *stat = NULL;
@@ -330,7 +328,6 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
 int ObPLCacheMgr::cache_evict_all_pl(ObPlanCache *lib_cache)
 {
   int ret = OB_SUCCESS;
-  PL_CACHE_LOG(TRACE, "cache evict all pl cache start");
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
@@ -339,7 +336,6 @@ int ObPLCacheMgr::cache_evict_all_pl(ObPlanCache *lib_cache)
     ObGetPLKVEntryOp get_ids_op(&to_evict_keys, PCV_GET_PL_KEY_HANDLE);
     if (OB_FAIL(lib_cache->foreach_cache_evict(get_ids_op))) {
     }
-    PL_CACHE_LOG(TRACE, "cache evict all pl end");
   }
 
   return ret;
@@ -349,7 +345,6 @@ template<typename GETPLKVEntryOp, typename EvictAttr>
 int ObPLCacheMgr::cache_evict_pl_cache_single(ObPlanCache *lib_cache, uint64_t db_id, EvictAttr &attr)
 {
   int ret = OB_SUCCESS;
-  PL_CACHE_LOG(TRACE, "cache evict single plan start");
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
@@ -359,7 +354,6 @@ int ObPLCacheMgr::cache_evict_pl_cache_single(ObPlanCache *lib_cache, uint64_t d
     if (OB_FAIL(lib_cache->foreach_cache_evict(get_ids_op))) {
     }
   }
-  PL_CACHE_LOG(TRACE, "cache evict single plan end");
   return ret;
 }
 

@@ -89,7 +89,6 @@ public:
     new_key = NULL;
     if (OB_ISNULL(key)) {
       ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid args", KP(key));
     } else if (OB_ISNULL(new_key = (ObStoreRowkey *)alloc.alloc(sizeof(ObStoreRowkey)))
                || OB_ISNULL(new(new_key) ObStoreRowkey())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -113,7 +112,6 @@ public:
     data_size = 0;
     if (data->buf_len_ <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "buf_len is invalid", KP(data));
     } else {
       data_size = data->dup_size();
     }
@@ -132,7 +130,6 @@ public:
     } else if (OB_ISNULL(new_node = (ObMvccTransNode *)allocator.alloc(sizeof(ObMvccTransNode) + data_size))
                || OB_ISNULL(new(new_node) ObMvccTransNode())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "alloc ObMvccTransNode fail", K(data_size));
     } else if (OB_FAIL(ObMemtableDataHeader::build(reinterpret_cast<ObMemtableDataHeader *>(new_node->buf_), data))) {
     }
     return ret;

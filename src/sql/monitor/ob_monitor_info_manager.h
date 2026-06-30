@@ -85,11 +85,6 @@ public:
   int64_t get_count() { return slow_query_queue_.get_size(); }
   void print_memory_size()
   {
-    SQL_MONITOR_LOG(INFO, "print memory size, ", K(get_start_index()),
-                    K(get_size()),
-                    K(allocator_. allocated()),
-                    K(allocator_.hold()),
-                    K(operator_info_size_));
   }
   int gc();
   static const int64_t OB_MAX_QUEUE_SIZE = 100000;

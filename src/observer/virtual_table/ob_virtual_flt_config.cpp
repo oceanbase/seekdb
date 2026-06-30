@@ -89,7 +89,6 @@ int ObVirtualFLTConfig::get_row_from_specified_tenant(bool &is_end)
     while (OB_SUCC(ret) && false == is_filled && false == is_end) {
       if (rec_array_idx_ < 0) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid rec list index", K(rec_array_idx_));
       } else if (rec_array_idx_ >= rec_list_.count()) {
         is_end = true;
         rec_array_idx_ = OB_INVALID_ID;
@@ -132,7 +131,6 @@ int ObVirtualFLTConfig::fill_cells(ObFLTConfRec &record)
 
   if (OB_ISNULL(cells)) {
     ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(cells));
   } else {
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
       uint64_t col_id = output_column_ids_.at(cell_idx);

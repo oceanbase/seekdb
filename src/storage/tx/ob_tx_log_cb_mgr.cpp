@@ -553,8 +553,6 @@ int ObTxLogCbPoolMgr::print_sync_size_history_()
     }
   }
 
-  _TRANS_LOG(INFO, "[LogCbPool Adjust] print sync size history <ls_id:%ld> : { %s }", ls_id_.id(),
-             sync_size_his_print_buf);
 
   return ret;
 }

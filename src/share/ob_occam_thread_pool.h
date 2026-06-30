@@ -118,7 +118,6 @@ public:
     return ret;
   }
   void stop() {
-    OCCAM_LOG(INFO, "occam thread marked stopped", K(this), K_(id));
     ATOMIC_SET(&is_stopped_, true);
     share::ObThreadPool::stop();
   }
@@ -135,7 +134,6 @@ public:
   void run1() {
     lib::set_thread_name(thread_name_);
     if (func_.is_valid()) {
-      OCCAM_LOG(INFO, "thread is running function");
       func_();
     }
   }
@@ -339,7 +337,6 @@ public:
       ret = OB_NOT_INIT;
     } else {
       using result_type = typename std::invoke_result<F, Args...>::type;
-      OCCAM_LOG(DEBUG, "commit task");
       ObPromise<result_type> promise;
       if (OB_FAIL(promise.init())) {
       } else {
@@ -391,17 +388,14 @@ private:
               ObThreadCondGuard guard(cv_);
               total_task_count_--;
             }
-            OCCAM_LOG(DEBUG, "successfully fetch a task", K(thread_id));
             break; // break the fetch loop to execute the task
           }
         }
         // process with the task
         if (OB_SUCC(ret)) { // do the task
           if (OB_UNLIKELY(!function.is_valid())) {
-            OCCAM_LOG(ERROR, "fetch a invalid task", K(thread_id), K(function));
           } else {
             function();
-            OCCAM_LOG(DEBUG, "execute task done", K(thread_id), K(function));
           }
           function.reset();
         } else if (ret == OB_EAGAIN) { // all queue empty, waiting for someone commit task
@@ -435,7 +429,6 @@ private:
       mask_value_ = queue_size - 1;
       if (OB_ISNULL(buffer_ = (ObFunction<void()> *)DEFAULT_ALLOCATOR.alloc(sizeof(ObFunction<void()>) * queue_size_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        OCCAM_LOG(WARN, "alloc buffer memory failed", K(lbt()));
       } else {
         for (int64_t idx = 0; idx < queue_size_; ++idx) {
           new(&buffer_[idx]) ObFunction<void()>();
@@ -468,9 +461,7 @@ private:
         // OCCAM_LOG(WARN, "no task in queue", K_(head), K(tail_), K(thread_id));
       } else if (OB_SUCC(function.assign(std::move((buffer_[head_ & mask_value_]))))) {
         ++head_;
-        OCCAM_LOG(DEBUG, "fetch task success", KP(this), K_(head), K(tail_), K(thread_id), K(function), K(queue_size_));
       } else {
-        OCCAM_LOG(WARN, "fetch task failed", K_(head), K(tail_), K(thread_id));
       }
       return ret;
     }
@@ -487,7 +478,6 @@ private:
         OCCAM_LOG(WARN, "invalid argument", K(ret), K_(head), K_(tail), K(lbt()), K(function));
       } else if (OB_SUCC(buffer_[tail_ & mask_value_].assign(function))) {
         ++tail_;
-        OCCAM_LOG(DEBUG, "push task success", KP(this), K_(head), K_(tail), K(function), K(queue_size_));
       } else {
         OCCAM_LOG(WARN, "push task failed", K(ret), K_(head), K_(tail), K(lbt()));
       }
@@ -527,11 +517,7 @@ public:
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(thread_pool_->init(thread_num, queue_size_square_of_2, thread_name))) {
       thread_pool_.reset();
-      OCCAM_LOG(WARN, "thread_pool_ init failed",
-                  K(thread_pool_), K(thread_num_), K(queue_size_square_of_2_));
     } else {
-      OCCAM_LOG(INFO, "thread_pool_ init success",
-                  K(thread_pool_), K(thread_num_), K(queue_size_square_of_2_));
     }
     return ret;
   }
@@ -545,7 +531,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_LIKELY(!thread_pool_.is_valid())) {
       ret = OB_NOT_INIT;
-      OCCAM_LOG(WARN, "thread_pool_ not valid", K(thread_pool_), K(lbt()));
     } else if (OB_FAIL(thread_pool_->commit_task<PRIORITY>(future,
                                                            std::forward<F>(f),
                                                            std::forward<Args>(args)...))) {

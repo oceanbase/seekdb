@@ -39,7 +39,6 @@ int ObEmptyReadBucket::init(const int64_t lower_bound)
   while (size <= lower_bound) {
     size <<= 1;
   }
-  STORAGE_LOG(DEBUG, "bucket number, ", K(size));
   if (OB_UNLIKELY(size <= 0 || (size & (size - 1)))) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "ObBloomFilterCache bucket size should be > 0 and 2^n ", K(size), K(ret));
@@ -59,7 +58,6 @@ int ObEmptyReadBucket::mtl_init(ObEmptyReadBucket *&bucket)
   int64_t global_mem_limit = GMEMCONF.get_server_memory_avail();
   if (global_mem_limit <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Global memory should be greater than 0, ", K(global_mem_limit));
   } else {
     int64_t bucket_num_lower_bound = common::calculate_scaled_value_by_memory(BUCKET_SIZE_LOWER_LIMIT, BUCKET_SIZE_LIMIT);
     if(OB_FAIL(bucket->init(bucket_num_lower_bound))) {

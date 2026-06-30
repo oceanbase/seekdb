@@ -467,7 +467,6 @@ int ObDefaultValueUtils::resolve_column_ref_in_insert(const ColumnItem *column, 
     }
   }
   if (OB_SUCC(ret)) {
-    SQL_RESV_LOG(DEBUG, "resolve column ref in insert", K(*expr));
   }
   return ret;
 }
@@ -547,7 +546,6 @@ int ObDefaultValueUtils::get_default_type_for_default_function_static(
     op = OB_NORMAL_DEFAULT_OP;
   }
   if (OB_SUCC(ret)) {
-    SQL_RESV_LOG(DEBUG, "get default type for default function", K(*column_schema), K(op));
   }
   return ret;
 }
@@ -581,7 +579,6 @@ int ObDefaultValueUtils::get_default_type_for_default_function(const ColumnItem 
     op = OB_NORMAL_DEFAULT_OP;
   }
   if (OB_SUCC(ret)) {
-    SQL_RESV_LOG(DEBUG, "get default type for default function", K(*column), K(op), K(scope));
   }
   return ret;
 }
@@ -615,7 +612,6 @@ int ObDefaultValueUtils::get_default_type_for_default_expr(const ColumnItem *col
     op = OB_NOT_STRICT_DEFAULT_OP;
   }
   if (OB_SUCC(ret)) {
-    SQL_RESV_LOG(DEBUG, "get default type for default expr", K(*column), K(op), K(scope));
   }
   return ret;
 }

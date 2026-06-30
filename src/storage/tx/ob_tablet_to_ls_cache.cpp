@@ -44,7 +44,6 @@ void ObTabletToLSCache::destroy()
     map_.destroy();
     tx_ctx_mgr_ = NULL;
     is_inited_ = false;
-    TRANS_LOG(INFO, "ObTabletToLSCache destroy");
   }
 }
 

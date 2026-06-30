@@ -70,7 +70,6 @@ int ObLSAdapter::replay(ObLogReplayTask *replay_task)
     CLOG_LOG(ERROR, " log stream not exist", KPC(replay_task), K(ret));
   } else if (ObLogBaseType::PADDING_LOG_BASE_TYPE == replay_task->log_type_) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "padding log entry can't be replayed, unexpected error", KPC(replay_task));
   } else if (OB_FAIL(ls->replay(replay_task->log_type_,
                                 replay_task->get_replay_payload(),
                                 replay_task->get_replay_payload_size(),

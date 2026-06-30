@@ -54,7 +54,6 @@ int ObTenantMutilAllocatorMgr::delete_tenant_log_allocator()
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_tenant_mutil_allocator_())) {
   } else {
-    OB_LOG(INFO, "delete_tenant_mutil_allocator_ success");
   }
   return ret;
 }
@@ -117,7 +116,6 @@ int ObTenantMutilAllocatorMgr::construct_allocator_(TMA *&out_allocator)
     } else {
       TMA *allocator = new (buf) TMA{};
       out_allocator = allocator;
-      OB_LOG(INFO, "ObTenantMutilAllocator init success");
     }
   }
   return ret;
@@ -202,7 +200,6 @@ int ObTenantMutilAllocatorMgr::update_tenant_mem_limit(const share::ObUnitInfoGe
         // the reserved memory of memstore
         if (OB_TMP_FAIL(get_tenant_memstore_limit_percent_(cur_memstore_limit_percent))) {
         } else if (cur_memstore_limit_percent > 100 || cur_memstore_limit_percent <= 0) {
-          OB_LOG(WARN, "memstore_limit_percentage val is unexpected", K(cur_memstore_limit_percent));
         } else {
           new_tma_limit = memory_size / 100 * ( 100 - cur_memstore_limit_percent);
         }
@@ -210,7 +207,6 @@ int ObTenantMutilAllocatorMgr::update_tenant_mem_limit(const share::ObUnitInfoGe
       ObTenantMutilAllocator *tma= NULL;
       if (OB_TMP_FAIL(get_tenant_mutil_allocator_(tma))) {
       } else if (NULL == tma) {
-        OB_LOG(WARN, "get_tenant_mutil_allocator_ failed");
       } else {
         tma->set_nway(nway);
         int64_t pre_tma_limit = tma->get_limit();

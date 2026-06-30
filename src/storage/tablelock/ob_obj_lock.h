@@ -597,7 +597,6 @@ private:
     bool operator()(ObOBJLock *obj_lock)
     {
       bool bool_ret = true;
-      TABLELOCK_LOG(INFO, "LockID: ", "lock_id", obj_lock->get_lock_id());
       obj_lock->print();
       return bool_ret;
     }

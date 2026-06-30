@@ -42,7 +42,6 @@ int ExampleUserHelperFunction1::on_register(const char* buf,
   if (OB_FAIL(serialization::decode(buf, len, pos, test_value))) {
     MDS_LOG(ERROR, "[UNITTEST] ExampleUserHelperFunction1 fail to deserialize", KR(ret));
   } else {
-    MDS_LOG(INFO, "[UNITTEST] ExampleUserHelperFunction1 call on_register with helper", K(test_value));
   }
   return ret;
 }
@@ -95,7 +94,6 @@ int ExampleUserHelperFunction2::on_register(const char* buf,
     if (OB_FAIL(TestMdsTable.set(data, mds_ctx))) {
       MDS_LOG(ERROR, "[UNITTEST] ExampleUserHelperFunction2 fail to set mdstable", KR(ret));
     } else {
-      MDS_LOG(INFO, "[UNITTEST] ExampleUserHelperFunction2 call on_register with helper", K(test_value));
     }
   }
   return ret;
@@ -120,7 +118,6 @@ int ExampleUserHelperFunction3::on_register(const char* buf,
   if (OB_FAIL(serialization::decode(buf, len, pos, test_value))) {
     MDS_LOG(ERROR, "[UNITTEST] ExampleUserHelperFunction3 fail to deserialize", KR(ret));
   } else {
-    MDS_LOG(INFO, "[UNITTEST] ExampleUserHelperFunction3 call on_register with helper", K(test_value));
   }
   return ret;
 }
@@ -136,27 +133,22 @@ int ExampleUserHelperFunction3::on_replay(const char* buf,
 
 void ExampleUserHelperCtx::on_redo(const share::SCN &)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_redo with ctx", K(++call_times_));
 }
 
 void ExampleUserHelperCtx::before_prepare()
 {
-  MDS_LOG(INFO, "[UNITTEST] call before_prepare with ctx", K(++call_times_));
 }
 
 void ExampleUserHelperCtx::on_prepare(const share::SCN &prepare_version)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_prepare with ctx", K(++call_times_), K(prepare_version));
 }
 
 void ExampleUserHelperCtx::on_commit(const share::SCN &commit_version, const share::SCN &)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_commit with ctx", K(++call_times_));
 }
 
 void ExampleUserHelperCtx::on_abort(const share::SCN &end_scn)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_abort with ctx", K(++call_times_), K(end_scn));
 }
 
 

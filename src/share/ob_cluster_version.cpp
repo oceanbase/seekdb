@@ -32,10 +32,8 @@ static int parse_version(const char *str, uint64_t *versions, const int64_t size
   const int64_t LAST_VERSION_ITEM = VERSION_ITEM - 1;
 
   if (NULL == str || NULL == versions || VERSION_ITEM > size) {
-    COMMON_LOG(WARN, "invalid argument", KP(str), KP(versions), K(size));
     ret = OB_INVALID_ARGUMENT;
   } else if (strlen(str) >= sizeof(buf)) {
-    COMMON_LOG(WARN, "invalid version", "version", str);
     ret = OB_INVALID_ARGUMENT;
   } else {
     strncpy(buf, str, sizeof(buf) - 1);
@@ -91,7 +89,6 @@ int ObClusterVersion::init(const uint64_t cluster_version)
     COMMON_LOG(ERROR, "cluster version init twice", KR(ret), K(cluster_version));
   } else {
     ATOMIC_SET(&cluster_version_, cluster_version);
-    COMMON_LOG(INFO, "cluster version inited success", K(cluster_version));
     is_inited_ = true;
   }
 
@@ -111,7 +108,6 @@ int ObClusterVersion::init(const ObServerConfig *config)
   } else if (OB_FAIL(refresh_cluster_version(config->min_observer_version.str()))) {
   } else {
     config_ = config;
-    COMMON_LOG(INFO, "cluster version inited success", K_(cluster_version));
     is_inited_ = true;
   }
 
@@ -170,7 +166,6 @@ int ObClusterVersion::refresh_cluster_version(const char *verstr)
                                          items[ObClusterVersion::MAJOR_PATCH_POS],
                                          items[ObClusterVersion::MINOR_PATCH_POS]);
     ATOMIC_SET(&cluster_version_, version);
-    COMMON_LOG(INFO, "refresh cluster version", "cluster_version", *this);
   }
 
   return ret;
@@ -181,7 +176,6 @@ int ObClusterVersion::reload_config()
   int ret = OB_SUCCESS;
 
   if (NULL == config_) {
-    COMMON_LOG(WARN, "config is null", KP_(config));
     ret = OB_ERR_UNEXPECTED;
   } else {
     ret = refresh_cluster_version(config_->min_observer_version.str());

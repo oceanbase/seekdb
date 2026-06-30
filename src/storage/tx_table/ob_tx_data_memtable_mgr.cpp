@@ -129,8 +129,6 @@ int ObTxDataMemtableMgr::release_head_memtable_(ObIMemtable *imemtable,
 {
   int ret = OB_SUCCESS;
   ObTxDataMemtable *memtable = static_cast<ObTxDataMemtable *>(imemtable);
-  STORAGE_LOG(INFO, "tx data memtable mgr release head memtable", K(get_memtable_count_()),
-              KPC(memtable));
 
   if (OB_LIKELY(get_memtable_count_() > 0)) {
     const int64_t idx = get_memtable_idx(memtable_head_);
@@ -140,7 +138,6 @@ int ObTxDataMemtableMgr::release_head_memtable_(ObIMemtable *imemtable,
       if (true == memtable->do_recycled()) {
         mini_merge_recycle_commit_versions_ts_ = ObClockGenerator::getClock();
       }
-      STORAGE_LOG(INFO, "[TX DATA MERGE]tx data memtable mgr release head memtable", K(ls_id_), KP(memtable), KPC(memtable));
       release_head_memtable();
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -208,7 +205,6 @@ int ObTxDataMemtableMgr::create_memtable_(const SCN clog_checkpoint_scn,
 int ObTxDataMemtableMgr::freeze()
 {
   int ret = OB_SUCCESS;
-  STORAGE_LOG(INFO, "start freeze tx data memtable", K(ls_id_));
 
   if (IS_NOT_INIT) {
     ret = OB_ERR_UNEXPECTED;
@@ -326,13 +322,6 @@ int ObTxDataMemtableMgr::calc_new_memtable_buckets_cnt_(const double load_factor
   }
 
   new_buckets_cnt = expect_buckets_cnt;
-  STORAGE_LOG(INFO,
-              "finish calculate new tx data memtable buckets cnt",
-              K(ls_id_),
-              K(load_factory),
-              K(old_buckets_cnt),
-              K(new_buckets_cnt),
-              K(remain_memory));
   return OB_SUCCESS;
 }
 
@@ -442,7 +431,6 @@ int ObTxDataMemtableMgr::flush_all_frozen_memtables_(ObTableHdlArray &memtable_h
     } else if (memtable->get_state() != ObTxDataMemtable::State::FROZEN
                && !memtable->ready_for_flush()) {
       // on need return error
-      STORAGE_LOG(INFO, "the tx data memtable is not frozen", KPC(memtable));
     } else if (OB_FAIL(memtable->flush(trace_id))) {
     }
   }
@@ -460,11 +448,8 @@ int ObTxDataMemtableMgr::flush(SCN recycle_scn, const int64_t trace_id, bool nee
     TxDataMemtableMgrFreezeGuard freeze_guard;
     SCN rec_scn = get_rec_scn();
     if (rec_scn >= recycle_scn) {
-      STORAGE_LOG(INFO, "no need freeze", K(recycle_scn), K(rec_scn));
     } else if (OB_FAIL(freeze_guard.init(this))) {
     } else if (!freeze_guard.can_freeze()) {
-      STORAGE_LOG(INFO, "there is a freeze task is running. skip once.", K(recycle_scn),
-                  K(rec_scn));
     } else if(OB_FAIL(freeze())) {
     }
   }
@@ -473,7 +458,6 @@ int ObTxDataMemtableMgr::flush(SCN recycle_scn, const int64_t trace_id, bool nee
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_all_memtables(memtable_handles))) {
   } else if (memtable_handles.count() == 0) {
-    STORAGE_LOG(INFO, "memtable handles is empty. skip flush once.");
   } else if (OB_FAIL(flush_all_frozen_memtables_(memtable_handles, trace_id))) {
   } else if (OB_NOT_NULL(tx_data_table_) && OB_FAIL(tx_data_table_->update_memtables_cache())) {
     STORAGE_LOG(WARN, "update memtables cache failed.", KR(ret), KP(this));

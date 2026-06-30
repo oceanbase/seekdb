@@ -129,11 +129,9 @@ int ObLCLBatchSenderThread::insert_or_merge_(const ObDependencyResource &key,
     if (can_insert) {// try insert first, if exist, try update merge then
       if (OB_SUCC(lcl_msg_map_.insert(key, lcl_message))) {
       } else if (OB_ENTRY_EXIST != ret) {
-        DETECT_LOG(WARN, "this error can't handle", PRINT_WRAPPER);
         break;
       } else if (OB_SUCC(lcl_msg_map_.operate(key, op))) {
       } else if (OB_ENTRY_NOT_EXIST != ret) {
-        DETECT_LOG(WARN, "this error can't handle", PRINT_WRAPPER);
       }
     } else {// just try update merge
       if (OB_FAIL(lcl_msg_map_.operate(key, op))) {
@@ -152,13 +150,11 @@ void ObLCLBatchSenderThread::stop()
 {
   ObThreadPool::stop();
   ATOMIC_STORE(&is_running_, false);
-  DETECT_LOG(INFO, "ObLCLBatchSenderThread stop");
 }
 
 void ObLCLBatchSenderThread::wait()
 {
   ObThreadPool::wait();
-  DETECT_LOG(INFO, "ObLCLBatchSenderThread wait");
 }
 
 void ObLCLBatchSenderThread::destroy()
@@ -188,9 +184,6 @@ void ObLCLBatchSenderThread::record_summary_info_and_logout_when_necessary_(int6
     int64_t total_constructed_detector = ATOMIC_LOAD(&ObIDeadLockDetector::total_constructed_count);
     int64_t total_destructed_detector = ATOMIC_LOAD(&ObIDeadLockDetector::total_destructed_count);
     int64_t total_alived_detector = total_constructed_detector - total_destructed_detector;
-    DETECT_LOG(INFO, "ObLCLBatchSenderThread periodic report summary info", K(duty_ratio_percentage),
-                      K(total_constructed_detector), K(total_destructed_detector),
-                      K(total_alived_detector), K(_lcl_op_interval), K(lcl_msg_map_.count()), K(*this));
     total_record_time_ = 0;
     total_busy_time_ = 0;
     over_night_times_ = 0;
@@ -238,7 +231,6 @@ void ObLCLBatchSenderThread::run1()
             DETECT_LOG(WARN, "send LCL msg failed", KR(ret), K(msg));
             CLICK();
           } else {
-            DETECT_LOG(DEBUG, "send LCL msg success", K(msg));
           }
         }
       }
@@ -253,7 +245,6 @@ void ObLCLBatchSenderThread::run1()
       // DETECT_LOG(DEBUG, "scan done", K(diff), K(*this));
     }
   }
-  DETECT_LOG(INFO, "ObLCLBatchSenderThread not running anymore");
 }
 
 }

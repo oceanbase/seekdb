@@ -61,9 +61,7 @@ int LogLoopThread::init(IPalfEnvImpl *palf_env_impl)
 void LogLoopThread::destroy()
 {
   stop();
-  PALF_LOG(INFO, "runlin trace stop");
   wait();
-  PALF_LOG(INFO, "runlin trace wait");
   is_inited_ = false;
   palf_env_impl_ = NULL;
 }
@@ -72,7 +70,6 @@ void LogLoopThread::run1()
 {
   lib::set_thread_name("LogLoop");
   log_loop_();
-  PALF_LOG(INFO, "log_loop_thread will stop");
 }
 
 void LogLoopThread::log_loop_()
@@ -102,12 +99,10 @@ void LogLoopThread::log_loop_()
       if (any_in_period_freeze_mode) {
         if (run_interval_ > LOG_LOOP_INTERVAL_FOR_PERIOD_FREEZE_US) {
           run_interval_ = LOG_LOOP_INTERVAL_FOR_PERIOD_FREEZE_US;
-          PALF_LOG(INFO, "LogLoopThread switch run_interval(us)", K_(run_interval), K(any_in_period_freeze_mode));
         }
       } else {
         if (run_interval_ < DEFAULT_LOG_LOOP_INTERVAL_US) {
           run_interval_ = DEFAULT_LOG_LOOP_INTERVAL_US;
-          PALF_LOG(INFO, "LogLoopThread switch run_interval(us)", K_(run_interval), K(any_in_period_freeze_mode));
         }
       }
     }
@@ -125,7 +120,6 @@ void LogLoopThread::log_loop_()
     ob_usleep(sleep_ts, true/*is_idle_sleep*/);
 
     if (REACH_THREAD_TIME_INTERVAL(5 * 1000 * 1000)) {
-      PALF_LOG(INFO, "LogLoopThread round_cost_time(us)", K(round_cost_time));
     }
   }
 }

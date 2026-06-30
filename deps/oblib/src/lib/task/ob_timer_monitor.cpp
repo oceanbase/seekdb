@@ -196,10 +196,6 @@ void ObTimerMonitor::dump(const bool print_trace)
 
     if (print_trace) {
       int64_t avg_time = 0 == record.task_cnt_ ? 0 : record.cost_time_ / record.task_cnt_;
-      OB_LOG(INFO, "TIMER THREAD STAT: ",
-             "thread_id", record.thread_id_,
-             "task_cnt", record.task_cnt_,
-             "avg_time", avg_time);
 
       records_[i].task_cnt_ = 0;
     }

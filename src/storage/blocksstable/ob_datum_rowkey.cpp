@@ -141,7 +141,6 @@ OB_DEF_SERIALIZE(ObDatumRowkey)
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "datum row key is invalid", KPC(this));
   } else {
     OB_UNIS_ENCODE_ARRAY(datums_, datum_cnt_);
   }

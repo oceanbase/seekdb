@@ -75,7 +75,6 @@ int ObLogHandler::init(const int64_t id,
              OB_ISNULL(rpc_proxy) ||
              OB_ISNULL(alloc_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid arguments", K(id), KP(palf_env), KP(lc_cb), KP(rpc_proxy), KP(alloc_mgr));
   } else if (OB_FAIL(apply_service->get_apply_status(ls_id, guard))) {
   } else if (NULL == (apply_status_ = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
@@ -84,7 +83,6 @@ int ObLogHandler::init(const int64_t id,
     CLOG_LOG(WARN, "open palf failed", K(ret), K(id));
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
   } else if (OB_FAIL(compressor_wrapper_.init(id, alloc_mgr))) {
-    CLOG_LOG(WARN, "failed to init compressor_wrapper_", K(id));
 #endif
   } else {
     get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
@@ -218,7 +216,6 @@ int ObLogHandler::append(const void *buffer,
   int ret = OB_SUCCESS;
   if (nbytes > MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "nbytes is greater than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn))) {
   }
   return ret;
@@ -236,7 +233,6 @@ int ObLogHandler::append_big_log(const void *buffer,
   int ret = OB_SUCCESS;
   if (nbytes <= MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "nbytes is smaller than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn))) {
   }
   return ret;
@@ -318,7 +314,6 @@ int ObLogHandler::seek(const LSN &lsn, PalfBufferIterator &iter)
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
   } else {
-    CLOG_LOG(TRACE, "seek success", KP(palf_env_), K(id_), K(lsn));
   }
   return ret;
 }
@@ -331,7 +326,6 @@ int ObLogHandler::seek(const LSN &lsn, PalfGroupBufferIterator &iter)
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
   } else {
-    CLOG_LOG(TRACE, "seek success", KP(palf_env_), K(id_), K(lsn));
   }
   return ret;
 }
@@ -681,7 +675,6 @@ int ObLogHandler::force_set_member_list(const common::ObMemberList &new_member_l
     LogConfigChangeCmdResp resp;
     if (OB_FAIL(cmd_handler.handle_config_change_cmd(req, resp))) {
     } else {
-      CLOG_LOG(INFO, "force_set_member_list success", K_(id), K_(self), K(new_member_list), K(new_replica_num), K(resp));
     }
   }
 
@@ -1154,8 +1147,6 @@ int ObLogHandler::append_(const void *buffer,
         cb->__set_lsn(lsn);
         cb->__set_scn(scn);
         ret = apply_status_->push_append_cb(cb);
-        CLOG_LOG(TRACE, "palf_handle_ push_append_cb success", K(lsn), K(scn), K(log_compressed),
-                 K(nbytes), K(final_nbytes), K(id_));
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
         //add stat event
         EVENT_ADD(LOG_STORAGE_COMPRESS_ORIGINAL_SIZE, nbytes);
@@ -1253,7 +1244,6 @@ int ObLogHandler::get_member_gc_stat(const common::ObAddr &addr,
       CLOG_LOG(INFO, "role changed during is_valid_member", K(ret), KPC(this), K(role),
                K(new_role), K(proposal_id), K(new_proposal_id));
     }
-    CLOG_LOG(INFO, "get_member_gc_stat", K(is_valid_member), K(stat), K(member_list), K(learner_list), K(addr), KPC(this));
   }
   return ret;
 }
@@ -1356,7 +1346,6 @@ int ObLogHandler::get_max_decided_scn(SCN &scn)
     ret = OB_STATE_NOT_MATCH;
   } else if (is_offline()) {
     ret = OB_STATE_NOT_MATCH;
-    CLOG_LOG(WARN, "log handle is offline", K(id_));
   } else if (FALSE_IT(id = id_)) {
   } else if (OB_FAIL(apply_service_->get_max_applied_scn(id, max_applied_scn))) {
   } else if (OB_FAIL(replay_service_->get_max_replayed_scn(id, max_replayed_scn))) {
@@ -1580,10 +1569,8 @@ int __get_log_handler(const ObLSID &ls_id,
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::LOG_MOD))) {
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "unexpected error!!! ls must not nullptr", K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "unexpected error!!! ls must not nullptr", K(ls_id));
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
   } else {}

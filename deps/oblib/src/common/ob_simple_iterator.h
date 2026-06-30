@@ -59,7 +59,6 @@ int ObSimpleIterator<T, LABEL, LOCAL_ARRAY_SIZE>::push(const T &item)
   int ret = OB_SUCCESS;
 
   if (is_ready_) {
-    OB_LOG(WARN, "ObSimpleIterator already ready, cannot push element");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(item_arr_.push_back(item))) {
   } else {
@@ -75,7 +74,6 @@ int ObSimpleIterator<T, LABEL, LOCAL_ARRAY_SIZE>::set_ready()
   int ret = OB_SUCCESS;
 
   if (is_ready_) {
-    OB_LOG(WARN, "ObSimpleIterator is already ready");
     ret = OB_ERR_UNEXPECTED;
   } else {
     is_ready_ = true;
@@ -96,7 +94,6 @@ int ObSimpleIterator<T, LABEL, LOCAL_ARRAY_SIZE>::get_next(T &item)
   int ret = OB_SUCCESS;
 
   if (!is_ready_) {
-    OB_LOG(WARN, "ObSimpleIterator is not ready");
     ret = OB_ERR_UNEXPECTED;
   } else if (item_arr_.end() == it_) {
 //    OB_LOG(DEBUG, "array iterate end", "part_cnt", item_arr_.count(),

@@ -34,7 +34,6 @@ ObReqTimeInfo::~ObReqTimeInfo()
   if (OB_FAIL(ObGlobalReqTimeService::get_instance().rm_req_time_info(this))) {
   }
   if (0 != reentrant_cnt_) {
-    SERVER_LOG(ERROR, "invalid reentrant cnt", K(reentrant_cnt_));
   }
   start_time_ = 0;
   end_time_ = 0;

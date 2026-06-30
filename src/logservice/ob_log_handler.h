@@ -857,7 +857,6 @@ struct LogDestroyIteratorStorageFunctor {
   void operator()()
   {
     if (NULL != palf_env_) {
-      CLOG_LOG(TRACE, "close palf handle success", KP(palf_env_), K(handle_));
       palf_env_->close(handle_);
       palf_env_ = NULL;
     }
@@ -878,7 +877,6 @@ int seek_log_iterator_no_shared_storage(palf::PalfEnv *palf_env,
   bool need_release_palf_handle = true;
   if (NULL == palf_env || !palf::is_valid_palf_id(palf_id) || !start_point.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", KP(palf_env), K(palf_id), K(start_point));
   } else if (OB_FAIL(palf_env->open(palf_id, palf_handle))) {
   } else if (OB_FAIL(palf_handle.seek(start_point, iterator))) {
   } else if (first_inited) {
@@ -923,7 +921,6 @@ int init_log_iterator(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(log_handler) || palf::MAX_LOG_BUFFER_SIZE > suggested_read_buf_size || !start_point.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", KP(log_handler), K(start_point));
   } else if (OB_FAIL(log_handler->seek_log_iterator_dispatch_(start_point, suggested_read_buf_size, iterator))) {
   } else {}
   return ret;

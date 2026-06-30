@@ -199,8 +199,6 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
         long double speed = (cost_time <= 0) ? 0 :
                         (long double) write_size * 1000.0 * 1000.0 / 1024.0 / 1024.0 / cost_time;
         long double total_write = (long double) write_offset_ / 1024.0 / 1024.0;
-        _OB_LOG(TRACE, "write oss stat, time:%ld write_size:%ld speed:%.2Lf MB/s total_write:%.2Lf MB",
-                cost_time, write_size, speed, total_write);
       }
     }
   }

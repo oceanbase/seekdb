@@ -322,7 +322,6 @@ public:
       }
     }
     if (tg.get_diff() > 100000) {
-      COMMON_LOG(INFO, "ObLinkHashMap insert and get cost too much time", K(tg));
     }
     return err_code_map(hash_ret);
   }

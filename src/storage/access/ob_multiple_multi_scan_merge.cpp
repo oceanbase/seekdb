@@ -171,8 +171,6 @@ int ObMultipleMultiScanMerge::construct_iters()
     STORAGE_LOG(WARN, "iter cnt is not equal to table cnt", K(ret), "iter cnt", iters_.count(),
                 "di_base_iter cnt", di_base_iters_.count(), "table cnt", tables_.count(), KP(this));
   } else if (tables_.count() > 0) {
-    STORAGE_LOG(TRACE, "construct iters begin", K(tables_.count()), K(iters_.count()), K(di_base_iters_.count()),
-                K(access_param_->iter_param_.is_delete_insert_), KPC_(ranges), KPC_(di_base_ranges), K_(access_ctx_->trans_version_range), K_(tables), KPC_(access_param));
     ObITable *table = NULL;
     ObStoreRowIterator *iter = NULL;
     const ObTableIterParam *iter_param = NULL;
@@ -196,7 +194,6 @@ int ObMultipleMultiScanMerge::construct_iters()
         } else if (OB_FAIL(iter->init(*iter_param, *access_ctx_, table, di_base_ranges_))) {
         }
         if (OB_SUCC(ret)) {
-          STORAGE_LOG(DEBUG, "add di base iter for consumer", KPC(table));
         }
       }
     }
@@ -228,7 +225,6 @@ int ObMultipleMultiScanMerge::construct_iters()
 
         if (OB_SUCC(ret)) {
           consumers_[consumer_cnt_++] = i - di_base_cnt;
-          STORAGE_LOG(DEBUG, "add iter for consumer", K(i), KPC(table));
         }
       }
     }
@@ -258,7 +254,6 @@ int ObMultipleMultiScanMerge::inner_get_next_row(blocksstable::ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (OB_SUCC(ObMultipleScanMerge::inner_get_next_row(row))) {
     row.group_idx_ = ranges_->at(row.scan_index_).get_group_idx();
-    STORAGE_LOG(DEBUG, "multi_scan_merge: get_next_row", K(row), KPC_(ranges), KPC_(di_base_ranges));
   } else {
     STORAGE_LOG(DEBUG, "Failed to get next row from iterator", K(ret), KPC_(ranges), KPC_(di_base_ranges));
   }
@@ -279,13 +274,11 @@ int ObMultipleMultiScanMerge::pause(bool& do_pause)
     // current range has been added in ObMultipleScanMerge::pause
     for (int64_t i = curr_scan_index_ + 1; i < ranges_->count(); ++i) {
       if (OB_FAIL(scan_resume_point->add_range(*read_info, ranges_->at(i)))) {
-        STORAGE_LOG(WARN, "failed to add range");
         break;
       }
     }
 
     if (OB_SUCC(ret)) {
-      STORAGE_LOG(INFO, "success to stop scan and save remain ranges", K(curr_rowkey_));
     } else {
       scan_resume_point->reset_ranges();
     }

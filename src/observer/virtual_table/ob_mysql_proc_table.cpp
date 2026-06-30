@@ -143,7 +143,6 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                     if (nullptr != create_node) {
                       if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_ && OB_ISNULL(create_node->children_[2])) {
                         ret = OB_ERR_UNEXPECTED;
-                        SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
                       } else {
                         ParseNode *param_node = create_node->children_[2];
                         ObString value_str;
@@ -305,12 +304,10 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                       ParseNode *body_node = nullptr;
                       if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_) {
                         ret = OB_ERR_UNEXPECTED;
-                        SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
                       } else if (FALSE_IT(body_node = create_node->type_ == T_SP_CREATE ? create_node->children_[4] : create_node->children_[5])) {
                         // do nothing
                       } else if (OB_ISNULL(body_node) || OB_ISNULL(body_node->raw_text_)) {
                         ret = OB_ERR_UNEXPECTED;
-                        SERVER_LOG(WARN, "unexpected empty routine body", K(routine_info->get_routine_body()));
                       } else {
                         ObString value_str;
                         if (OB_FAIL(ob_write_string(*allocator_,
@@ -404,8 +401,6 @@ int ObMySQLProcTable::extract_create_node_from_routine_info(ObIAllocator &alloc,
   char *stmt_buf = static_cast<char *>(alloc.alloc(buf_sz));
   if (OB_ISNULL(stmt_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SERVER_LOG(WARN, "failed to allocate memory for routine body buffer",
-               K(buf_sz));
   } else {
     MEMCPY(stmt_buf, prefix, prefix_len);
     MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
@@ -425,7 +420,6 @@ int ObMySQLProcTable::extract_create_node_from_routine_info(ObIAllocator &alloc,
     } else {
       create_node = nullptr;
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node of mysql routine body", K(routine_info), K(routine_body), K(parse_result.result_tree_));
     }
   }
 
@@ -467,7 +461,6 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
     
       if (OB_LIKELY(OB_ITER_END == ret)) {
         ret = OB_SUCCESS;
-        SERVER_LOG(INFO, "get null info from all_routine", K(col_name));
       } else {
         SERVER_LOG(WARN, "fail to fill table statstistics", K(ret));
       }

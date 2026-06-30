@@ -84,8 +84,6 @@ int ObDtlLinkedBuffer::deserialize_msg_header(const ObDtlLinkedBuffer &buffer,
   } else if (OB_FAIL(serialization::decode(buf, size, pos, header))) {
   } else if (header.type_ >= static_cast<int16_t>(ObDtlMsgType::MAX)) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_DTL_LOG(WARN, "channel has received message with unknown type",
-                K(header), K(size), K(pos));
   }
   if (keep_pos) {
     buffer.pos() = old_pos;
@@ -245,13 +243,11 @@ OB_DEF_SERIALIZE_SIZE(ObDtlLinkedBuffer)
   if (PX_VECTOR == msg_type_) {
     int64_t new_size  = get_serialize_vector_size();
     if (OB_UNLIKELY(size_ < new_size)) {
-      SQL_DTL_LOG(TRACE, "unexpected encode leads size overflow", K(size_), K(new_size));
     }
     const_cast<int64_t &> (size_) = new_size;
   } else if (PX_VECTOR_FIXED == msg_type_) {
     int64_t new_size = get_serialize_fixed_vector_size();
     if (OB_UNLIKELY(size_ < new_size)) {
-      SQL_DTL_LOG(TRACE, "unexpected encode leads size overflow", K(size_), K(new_size));
     }
     const_cast<int64_t &> (size_) = new_size;
   }

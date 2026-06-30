@@ -194,7 +194,6 @@ OB_DEF_SERIALIZE(ObTxRedoLog)
   int64_t tmp_pos = pos;
   if (mutator_size_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "INVALID mutator_buf_");
   } else if (OB_FAIL(ctx_redo_info_.serialize(buf, buf_len, tmp_pos))) {
   } else if ((tmp_size = static_cast<uint32_t>(mutator_size_))
              && OB_FAIL(serialization::encode_i32(buf, buf_len, tmp_pos, tmp_size))) {
@@ -596,7 +595,6 @@ int ObTxRedoLog::set_mutator_buf(char *buf)
   int ret = OB_SUCCESS;
   if (nullptr == buf || mutator_size_ >= 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid mutator buf", KP(buf), K(mutator_size_));
   } else {
     mutator_buf_ = buf;
   }
@@ -609,8 +607,6 @@ int ObTxRedoLog::set_mutator_size(const int64_t size, const bool after_fill)
   if (size < 0 || OB_ISNULL(mutator_buf_) || (!after_fill && mutator_size_ >= 0)
       || (after_fill && mutator_size_ < size)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument when set mutator size", K(after_fill), K(size),
-               K(mutator_size_), KP(mutator_buf_));
   } else if (!after_fill) {
     int len = 0;
     SERIALIZE_SIZE_HEADER(UNIS_VERSION);
@@ -618,7 +614,6 @@ int ObTxRedoLog::set_mutator_size(const int64_t size, const bool after_fill)
     len = len + MUTATOR_SIZE_NEED_BYTES + ctx_redo_info_.get_serialize_size();
     if (size <= len) {
       ret = OB_SIZE_OVERFLOW;
-      TRANS_LOG(WARN, "mutator buf is not enough", K(len), K(size));
     } else {
       mutator_size_ = size - len;
       mutator_buf_ = mutator_buf_ + len;
@@ -650,8 +645,6 @@ int ObTxRedoLog::ob_admin_dump(memtable::ObMemtableMutatorIterator *iter_ptr,
   if (OB_ISNULL(iter_ptr) || OB_ISNULL(arg.writer_ptr_) || OB_ISNULL(arg.buf_)
       || OB_NOT_NULL(mutator_buf_) || OB_ISNULL(replay_mutator_buf_)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KP(iter_ptr), KP(arg.writer_ptr_), KP(arg.buf_),
-              KP(mutator_buf_), KP(replay_mutator_buf_));
   } else if (OB_FAIL(iter_ptr->deserialize(replay_mutator_buf_, mutator_size_, pos))) {
   } else {
     bool has_output = false;
@@ -686,7 +679,6 @@ int ObTxRedoLog::ob_admin_dump(memtable::ObMemtableMutatorIterator *iter_ptr,
       // arg.writer_ptr_->start_object();
       if (arg.filter_.is_tablet_id_valid()) {
         if (arg.filter_.get_tablet_id() != iter_ptr->get_row_head().tablet_id_) {
-          TRANS_LOG(INFO, "just skip according to tablet_id", K(arg), K(iter_ptr->get_row_head()));
           continue;
         } else if (!has_dumped_meta_info) {
           arg.writer_ptr_->dump_string(arg.buf_);
@@ -871,7 +863,6 @@ int ObTxMultiDataSourceLog::fill_MDS_data(const ObTxBufferNode &node)
 
   } else if (node.get_serialize_size() + data_.get_serialize_size() >= MAX_MDS_LOG_SIZE) {
     ret = OB_SIZE_OVERFLOW;
-    TRANS_LOG(WARN, "MDS log is overflow", K(*this), K(node));
   }
   //   } else {
   // #endif
@@ -897,7 +888,6 @@ int ObTxDLIncLogBuf::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
   int64_t tmp_pos = pos;
   if (OB_ISNULL(submit_buf_) || dli_buf_size_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KP(submit_buf_), K(dli_buf_size_));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, tmp_pos, dli_buf_size_))) {
   } else if (tmp_pos + dli_buf_size_ > buf_len) {
     ret = OB_SIZE_OVERFLOW;
@@ -1328,7 +1318,6 @@ int ObTxLogBlock::init_for_fill(const int64_t suggested_buf_size)
   const int64_t buf_size = suggested_buf_size;
   if (OB_NOT_NULL(replay_buf_) || !header_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this), K_(header));
   } else if (OB_FAIL(fill_buf_.init(buf_size))) {
   } else {
     len_ = fill_buf_.get_length();
@@ -1351,7 +1340,6 @@ int ObTxLogBlock::init_for_replay(const char *buf, const int64_t &size)
       || OB_ISNULL(buf)
       || size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", KP(buf), K(size), K(*this));
   } else {
     replay_buf_ = buf;
     len_ = size;
@@ -1373,7 +1361,6 @@ int ObTxLogBlock::init_for_replay(const char *buf, const int64_t &size, int skip
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(buf) || size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", KP(buf), K(size), K(*this));
   } else {
     replay_buf_ = buf;
     len_ = size;
@@ -1463,7 +1450,6 @@ int ObTxLogBlock::serialize_log_block_header_()
     // do nothing
   } else if (OB_ISNULL(serialize_buf)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "unexpected empty serialize_buf", K(*this));
   } else if (OB_FAIL(log_base_header_.serialize(serialize_buf, len_, pos_))) {
   } else if (OB_FAIL(header_.before_serialize())) {
   } else if (OB_FAIL(header_.serialize(serialize_buf, len_, pos_))) {
@@ -1495,7 +1481,6 @@ int ObTxLogBlock::get_next_log(ObTxLogHeader &header,
 
   if (OB_ISNULL(replay_buf_)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
   } else if (OB_SUCC(update_next_log_pos_())) {
     if (OB_FAIL(header.deserialize(replay_buf_, len_, pos_))) {
     } else {
@@ -1544,7 +1529,6 @@ int ObTxLogBlock::get_next_log(ObTxLogHeader &header,
         }
       }
     }
-    TRANS_LOG(DEBUG, "[TxLogBlock] get_next_log in replay",K(cur_log_type_), K(len_), K(pos_));
   }
   return ret;
 }
@@ -1555,7 +1539,6 @@ int ObTxLogBlock::prepare_mutator_buf(ObTxRedoLog &redo)
   char *tmp_buf = get_buf();
   if (OB_ISNULL(tmp_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
   } else if (ObTxLogType::UNKNOWN != cur_log_type_) {
     ret = OB_EAGAIN;
     TRANS_LOG(WARN, "MutatorBuf is using", K(ret), KPC(this));
@@ -1576,10 +1559,8 @@ int ObTxLogBlock::finish_mutator_buf(ObTxRedoLog &redo, const int64_t &mutator_s
   ObTxLogHeader header(ObTxLogType::TX_REDO_LOG);
   if (OB_ISNULL(tmp_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
   } else if (ObTxLogType::TX_REDO_LOG != cur_log_type_) {
     ret = OB_EAGAIN;
-    TRANS_LOG(WARN, "MutatorBuf not prepare");
   } else if (0 == mutator_size) {
     cur_log_type_ = ObTxLogType::UNKNOWN;
     redo.reset_mutator_buf();
@@ -1617,8 +1598,6 @@ int ObTxLogBlock::update_next_log_pos_()
     } else if (OB_FAIL(serialization::decode(replay_buf_, len_, tmp_pos, body_size))) {
     } else if (tmp_pos + body_size > len_) {
       ret = OB_SIZE_OVERFLOW;
-      TRANS_LOG(WARN, "has not enough space for deserializing tx_log_body", K(body_size),
-                K(tmp_pos), K(*this));
     } else {
       // skip log_body if cur_log_type_ isn't UNKNOWN
       // if deserialize_log_body success, cur_log_type_ will be UNKNOWN

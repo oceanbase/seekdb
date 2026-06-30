@@ -156,7 +156,6 @@ int ObTenantVirtualWarning::fill_scanner()
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               } else {
                 ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "unknown warning type");
               }
               break;
             }

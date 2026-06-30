@@ -967,9 +967,7 @@ public:
         ObIAllocator *allocator = adapter_->get_allocator();
         if (OB_ISNULL(allocator)) {
           const int ret = OB_ERR_UNEXPECTED;
-          OB_LOG(WARN, "null allocator", KPC(adapter_));
         } else {
-          OB_LOG(INFO, "adatper released", KPC(adapter_), K(lbt()));
           adapter_->~ObPluginVectorIndexAdaptor();
           allocator->free(adapter_);
         }
@@ -985,7 +983,6 @@ public:
     int ret = OB_SUCCESS;
     if (is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "vector index adapter guard can only set once", KPC(adapter_), KPC(adapter));
     } else {
       adapter_ = adapter;
       (void)adapter_->inc_ref();

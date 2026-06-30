@@ -91,7 +91,6 @@ int ObLogService::mtl_init(ObLogService* &logservice)
                                       net_keepalive_adapter))) {
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
   } else {
-    CLOG_LOG(INFO, "ObLogService mtl_init success");
   }
   if (OB_FAIL(ret) && NULL != net_keepalive_adapter) {
     MTL_DELETE(ObNetKeepAliveAdapter, "logservice", net_keepalive_adapter);
@@ -127,7 +126,6 @@ int ObLogService::start()
 void ObLogService::stop()
 {
   is_running_ = false;
-  CLOG_LOG(INFO, "begin to stop ObLogService");
   (void)apply_service_.stop();
   (void)replay_service_.stop();
   (void)role_change_service_.stop();
@@ -484,7 +482,6 @@ int ObLogService::update_log_disk_usage_limit_size(const int64_t log_disk_usage_
   } else if (FALSE_IT(palf_opts.disk_options_.log_disk_usage_limit_size_ = log_disk_usage_limit_size)) {
   } else if (OB_FAIL(palf_env_->update_options(palf_opts))) {
   } else {
-    CLOG_LOG(INFO, "update_log_disk_usage_limit_size success", K(log_disk_usage_limit_size));
   }
   return ret;
 }
@@ -687,7 +684,6 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
     ObSharedGuard<ObLSIterator> iterator;
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
-      CLOG_LOG(ERROR, "ObLSService is nullptr", KP(ls_service));
     } else if (OB_FAIL(ls_service->get_ls_iter(iterator, ObLSGetMod::LOG_MOD))) {
     } else {
       ObLS *ls = NULL;
@@ -701,7 +697,6 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
         need_do_checkpoint = (unrecycable_log_disk_size * 100 >= total_size * CHECKPOINT_PERCENTAGE);
-        CLOG_LOG(TRACE, "check_need_do_checkpoint", K(unrecycable_log_disk_size), K(total_size), K(need_do_checkpoint));
       }
     }
   }
@@ -716,16 +711,13 @@ int ObLogService::GetUnrecycableLogDiskSizeFunctor::operator()(ObLS *ls)
   LSN base_lsn;
   if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "unexpected error, ObLS is nullptr", KP(ls));
   } else if (FALSE_IT(log_handler = ls->get_log_handler())) {
   } else if (OB_ISNULL(log_handler)) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "unexpected error, ObLogHandler is nullptr", KP(ls));
   } else if (FALSE_IT(base_lsn = ls->get_clog_base_lsn())) {
   } else if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
   } else if (end_lsn < base_lsn) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "end_lsn is smaller than base_lsn", K(lbt()), K(end_lsn), K(base_lsn));
   } else {
     unrecycable_log_disk_size_ += (end_lsn - base_lsn);
   }

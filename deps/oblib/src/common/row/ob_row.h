@@ -181,11 +181,9 @@ int ob_write_row(AllocatorT &allocator, const ObNewRow &src, ObNewRow &dst)
     dst.projector_ = NULL;
   } else if (OB_ISNULL(ptr1 = allocator.alloc(sizeof(ObObj) * src.count_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    _OB_LOG(ERROR, "out of memory");
   } else if (NULL != src.projector_
       && OB_ISNULL(ptr2 = allocator.alloc(sizeof(int32_t) * src.projector_size_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    _OB_LOG(ERROR, "out of memory");
   } else {
     if (NULL != src.projector_) {
       MEMCPY(ptr2, src.projector_, sizeof(int32_t) * src.projector_size_);

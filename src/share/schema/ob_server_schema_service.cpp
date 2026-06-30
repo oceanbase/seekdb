@@ -2694,7 +2694,6 @@ int ObServerSchemaService::apply_tenant_schema_to_cache(
   if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_mgr.add_tenants(simple_incre_schemas.simple_tenant_schemas_))) {
     }
-    ALLOW_NEXT_LOG();
     LOG_INFO("add tenants finish",
              "schemas", simple_incre_schemas.simple_tenant_schemas_, K(ret));
   }

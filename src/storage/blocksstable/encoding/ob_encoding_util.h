@@ -327,7 +327,6 @@ OB_INLINE static int get_uint_data_datum_len(
   }
   default: {
     ret = common::OB_NOT_SUPPORTED;
-    STORAGE_LOG(WARN, "Unexpected datum obj mapping type for uint data", K(datum_type));
   }
   }
   return ret;

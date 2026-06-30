@@ -151,7 +151,6 @@ void ObDataBlockCachePreWarmer::inner_update_rest()
   rest_size_ = free_memory / 100 * warm_size_percentage_;
   calculate_base_percentage(free_memory);
   update_step_ = 0;
-  COMMON_LOG(DEBUG, "pre warmer update rest", K(rest_size_), K(base_percentage_), K(free_memory));
 }
 
 void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t free_memory)
@@ -168,8 +167,6 @@ bool ObDataBlockCachePreWarmer::warm_block_for_memory(const int64_t level)
     if (100 > threshold) {
       bret = random_value <= threshold;
     }
-    COMMON_LOG(DEBUG, "block cache pre warmer filter", K(bret), K(base_percentage_), K(level), K(update_step_),
-                                                       K(random_value), K(threshold));
   }
   return bret;
 }
@@ -178,7 +175,6 @@ bool ObDataBlockCachePreWarmer::warm_block_for_percentage()
 {
   const int64_t random_value = ObRandom::rand(0, 99);
   const bool bret = random_value < fixed_percentage_;
-  COMMON_LOG(DEBUG, "warm block for percentage", K(bret), K(random_value), K_(fixed_percentage));
   return bret;
 }
 

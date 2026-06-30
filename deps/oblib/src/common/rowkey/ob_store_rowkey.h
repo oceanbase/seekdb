@@ -57,7 +57,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(nullptr == ptr || cnt <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(ERROR, "Invalid argument to assign store rowkey", KP(ptr), K(cnt));
     } else {
       key_.assign(ptr, cnt);
       hash_ = 0;

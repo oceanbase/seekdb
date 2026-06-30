@@ -378,7 +378,6 @@ int print_to_client(lua_State* L)
     } else if (lua_isnil(L, i)) {
       ret = APIRegister::get_instance().append("NULL");
     } else {
-      OB_LOG(ERROR, "arg was not convertible", K(i));
     }
     APIRegister::get_instance().append(" ");
   }
@@ -423,7 +422,6 @@ int get_tenant_sysstat_by_id(lua_State* L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (2 != argc) {
-    OB_LOG(ERROR, "call get_tenant_sysstat_by_id() failed, bad arguments count, should be 2.");
     ret = OB_INVALID_ARGUMENT;
   } else {
     luaL_checktype(L, 1, LUA_TNUMBER);
@@ -453,7 +451,6 @@ int get_tenant_sysstat_by_name(lua_State* L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (2 != argc) {
-    OB_LOG(ERROR, "call get_tenant_sysstat_by_name() failed, bad arguments count, should be 2.");
     ret = OB_INVALID_ARGUMENT;
   } else {
     luaL_checktype(L, 1, LUA_TNUMBER);
@@ -484,7 +481,6 @@ int set_log_probe(lua_State* L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (1 != argc) {
-    OB_LOG(ERROR, "call set_log_probe() failed, bad arguments count, should be 1.");
     ret = OB_INVALID_ARGUMENT;
   } else {
     luaL_checktype(L, 1, LUA_TSTRING);
@@ -494,7 +490,6 @@ int set_log_probe(lua_State* L)
     DEFER(if (ptr) diagnose::free(ptr););
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OB_LOG(ERROR, "alloc memory failed", K(len));
     } else {
       memcpy(ptr, arg, len);
       ptr[len] = '\0';
@@ -663,7 +658,6 @@ int select_processlist(lua_State* L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_processlist() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
     std::vector<const char*> columns = {
@@ -707,7 +701,6 @@ int select_sysstat(lua_State* L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_sysstat() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
     std::vector<const char*> columns = {
@@ -730,7 +723,6 @@ int select_memory_info(lua_State *L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_memory_info() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else {
     std::vector<const char*> columns = {
@@ -837,10 +829,8 @@ int select_trans_stat(lua_State *L)
   ObArray<uint64_t> batch_ids;
   ObTxStat tx_stat;
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_trans_stat() failed, bad arguments count, should be 0.");
     lua_pushnil(L);
   } else if (OB_ISNULL(GCTX.omt_)) {
-    OB_LOG(ERROR, "omt is nullptr");
     lua_pushnil(L);
   } else if (OB_FAIL(batch_ids.push_back(0/*single*/))) {
     OB_LOG(ERROR, "failed to get batch_ids", K(ret));
@@ -971,10 +961,8 @@ int select_sql_workarea_active(lua_State *L)
   int ret = OB_SUCCESS;
   int argc = lua_gettop(L);
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_sql_workarea_active() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else if (OB_ISNULL(GCTX.omt_)) {
-    OB_LOG(ERROR, "GCTX.omt_ is NULL");
     lua_pushnil(L);
   } else {
     common::ObSEArray<sql::ObSqlWorkareaProfileInfo, 20> wa_actives;
@@ -1053,13 +1041,11 @@ int select_sys_task_status(lua_State *L)
   int argc = lua_gettop(L);
   HEAP_VAR(share::ObSysStatMgrIter, iter) {
     if (argc > 1) {
-      OB_LOG(ERROR, "call select_sys_task_status() failed, bad arguments count, should be less than 2.");
       lua_pushnil(L);
     } else if (OB_FAIL(SYS_TASK_STATUS_MGR.get_iter(iter))) {
       OB_LOG(ERROR, "failed to get iter", K(ret));
       lua_pushnil(L);
     } else if (!iter.is_ready()) {
-      OB_LOG(ERROR, "iter not ready");
     } else {
       share::ObSysTaskStat status;
       std::vector<const char*> columns = {
@@ -1081,7 +1067,6 @@ int select_sys_task_status(lua_State *L)
           char task_id[common::OB_TRACE_STAT_BUFFER_SIZE];
           int64_t n = status.task_id_.to_string(task_id, sizeof(task_id));
           if (n < 0 || n >= sizeof(task_id)) {
-            OB_LOG(ERROR, "buffer not enough");
             gen.next_column();
           } else {
             gen.next_column(task_id);
@@ -1106,10 +1091,8 @@ int select_dump_tenant_info(lua_State *L)
   int argc = lua_gettop(L);
   auto *omt = GCTX.omt_;
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_dump_tenant_info() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else if (OB_ISNULL(omt)) {
-    OB_LOG(ERROR, "omt is nullptr");
     lua_pushnil(L);
   } else {
     auto *omt = GCTX.omt_;
@@ -1225,7 +1208,6 @@ int select_disk_stat(lua_State *L)
   ObDeviceHealthStatus dhs = DEVICE_HEALTH_NORMAL;
   int64_t data_disk_abnormal_time = 0;
   if (argc > 1) {
-    OB_LOG(ERROR, "call select_disk_stat() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else if (OB_FAIL(ObIOManager::get_instance().get_device_health_status(dhs,
                      data_disk_abnormal_time))) {
@@ -1722,7 +1704,6 @@ int APIRegister::flush()
     print_buffer_[print_offset_++] = '\0';
     if (send(conn_fd_, print_buffer_, print_offset_, 0) < 0) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(ERROR, "failed to send", K(errno));
     }
     print_offset_ = 0;
     memset(print_buffer_, 0, print_capacity_);

@@ -169,7 +169,6 @@ private:
     int ret = common::OB_SUCCESS;
     if (!resource_handle_.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "resource_handle is invalid");
     } else {
       ret = func(resource_handle_.get_memory_mgr());
     }

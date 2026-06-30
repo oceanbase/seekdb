@@ -43,7 +43,6 @@ void ObQueryEngine::check_cleanout(bool &is_all_cleanout,
   iter.reset();
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
   } else if (OB_FAIL(keybtree_.set_key_range(iter.get_read_handle(),
                                              scan_start_key_wrapper,
                                              true, /*start_exclusive*/
@@ -79,7 +78,6 @@ void ObQueryEngine::dump2text(FILE* fd)
   iter.reset();
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
   } else if (OB_FAIL(keybtree_.set_key_range(iter.get_read_handle(),
                                              scan_start_key_wrapper,
                                              true, /*start_exclusive*/
@@ -122,10 +120,8 @@ int ObQueryEngine::dump_keyhash(FILE *fd) const
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "not init", "this", this);
   } else if (OB_ISNULL(fd)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid param", KP(fd));
   } else {
     keyhash_.dump_hash(fd,
                        print_bucket_node,
@@ -166,7 +162,6 @@ int ObQueryEngine::init()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
-    TRANS_LOG(WARN, "init twice", K(this));
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(keybtree_.init())) {
   } else {
@@ -198,7 +193,6 @@ int ObQueryEngine::set(const ObMemtableKey *key, ObMvccRow *value)
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(key) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
@@ -229,11 +223,9 @@ int ObQueryEngine::get(const ObMemtableKey *parameter_key,
   row = nullptr;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", K(this));
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(parameter_key)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid param", KP(parameter_key));
   } else {
     const ObStoreRowkeyWrapper parameter_key_wrapper(parameter_key->get_rowkey());
     const ObStoreRowkeyWrapper *copy_inner_key_wrapper = nullptr;
@@ -262,7 +254,6 @@ int ObQueryEngine::ensure(const ObMemtableKey *key, ObMvccRow *value)
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(key) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
@@ -296,12 +287,10 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
   Iterator<BtreeIterator> *iter = nullptr;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else {
     void *buf = btree_iter_alloc(sizeof(Iterator<BtreeIterator>));
     if (OB_ISNULL(buf)) {
-      TRANS_LOG(WARN, "alloc iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       iter = new (buf) Iterator<BtreeIterator>();
@@ -317,9 +306,6 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "set key range to btree scan handle fail", KR(ret));
     }
-    TRANS_LOG(DEBUG, "[BTREE_SCAN_PARAM]",
-              "start_key", start_key, "start_exclude", start_exclude,
-              "end_key", end_key, "end_exclude", end_exclude);
   }
 
   if (OB_FAIL(ret)) {
@@ -364,7 +350,6 @@ int ObQueryEngine::sample_rows(Iterator<BtreeRawIterator> *iter,
   ratio = 1.5;
   ObStoreRowkeyWrapper scan_start_key_wrapper(start_key->get_rowkey());
   ObStoreRowkeyWrapper scan_end_key_wrapper(end_key->get_rowkey());
-  TRANS_LOG(DEBUG, "estimate row count, key range", K(*start_key), K(*end_key));
   iter->reset();
 
   if (OB_FAIL(keybtree_.set_key_range(iter->get_read_handle(),
@@ -379,7 +364,6 @@ int ObQueryEngine::sample_rows(Iterator<BtreeRawIterator> *iter,
           TRANS_LOG(WARN, "query engine iter next fail", KR(ret));
         }
       } else if (OB_ISNULL(value = iter->get_value())) {
-        TRANS_LOG(ERROR, "unexpected value null pointer");
         ret = OB_ERR_UNEXPECTED;
       } else {
         ++sample_row_count;
@@ -430,12 +414,10 @@ int ObQueryEngine::init_raw_iter_for_estimate(Iterator<BtreeRawIterator>*& iter,
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else {
     void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr("BtreeRawIter"));
     if (OB_ISNULL(buf)) {
-      TRANS_LOG(WARN, "alloc raw iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       iter = new (buf) Iterator<BtreeRawIterator>();
@@ -508,7 +490,6 @@ int ObQueryEngine::split_range(const ObMemtableKey *start_key,
             WARN, "range too small, not enough rows ro split", K(ret), K(*start_key), K(*end_key), K(range_count));
       } else if (btree_node_count < range_count) {
         ret = OB_ENTRY_NOT_EXIST;
-        TRANS_LOG(WARN, "branch fan out less than range count", K(btree_node_count), K(range_count));
       } else if (OB_FAIL(init_raw_iter_for_estimate(iter, start_key, end_key))) {
       } else if (NULL == iter) {
         ret = OB_ERR_UNEXPECTED;
@@ -660,7 +641,6 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
   physical_row_count = 0;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(start_key) || OB_ISNULL(end_key)) {
     ret = OB_INVALID_ARGUMENT;
@@ -668,7 +648,6 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
   } else {
     void *buf = ob_malloc(sizeof(Iterator<BtreeRawIterator>), ObMemAttr("BtreeRawIter"));
     if (OB_ISNULL(buf)) {
-      TRANS_LOG(WARN, "alloc raw iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       iter = new (buf) Iterator<BtreeRawIterator>();
@@ -699,7 +678,6 @@ int ObQueryEngine::estimate_row_count(const transaction::ObTransID &tx_id,
       if (OB_ITER_END != ret) {
         TRANS_LOG(WARN, "estimate row count fail", KR(ret));
       } else {
-        TRANS_LOG(DEBUG, "estimate_element_count result", K(remaining_row_count), K(element_count));
         // logical row count should be calculated with btree element count
         logical_row_count = static_cast<int64_t>(static_cast<double>(logical_row_count)
             * (static_cast<double>(element_count + MAX_SAMPLE_ROW_COUNT)

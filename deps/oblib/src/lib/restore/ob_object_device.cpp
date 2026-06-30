@@ -79,7 +79,6 @@ void ObObjectDevice::destroy()
 ObObjectDevice::~ObObjectDevice()
 {
   destroy();
-  OB_LOG(INFO, "destory the device!", KP(storage_info_str_));
 }
 
 int ObObjectDevice::setup_storage_info(const ObIODOpts &opts)
@@ -147,7 +146,6 @@ int ObObjectDevice::get_access_type(ObIODOpts *opts, ObStorageAccessType& access
   get_opt_value(opts, "AccessType", access_type);
 
   if (NULL == access_type) {
-    OB_LOG(WARN, "can not find access type!");
   } else if (0 == STRCMP(access_type , OB_STORAGE_ACCESS_TYPES_STR[OB_STORAGE_ACCESS_READER])) {
     access_type_flag = OB_STORAGE_ACCESS_READER;
   } else if (0 == STRCMP(access_type , OB_STORAGE_ACCESS_TYPES_STR[OB_STORAGE_ACCESS_NOHEAD_READER])) {
@@ -166,7 +164,6 @@ int ObObjectDevice::get_access_type(ObIODOpts *opts, ObStorageAccessType& access
     access_type_flag = OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER;
   } else {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invaild access type!", KCSTRING(access_type));
   }
   return ret;
 }
@@ -350,7 +347,6 @@ int ObObjectDevice::release_res(void *ctx, const ObIOFd &fd, ObStorageAccessType
   /*release the ctx*/
   if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "ctx is null, invald para!");
   } else {
     if (OB_STORAGE_ACCESS_APPENDER == access_type) {
       ObStorageAppender *appender = static_cast<ObStorageAppender*>(ctx);
@@ -474,7 +470,6 @@ int ObObjectDevice::open(const char *pathname, const int flags, const mode_t mod
     }
   } else {
     fd.device_handle_ = static_cast<ObIODevice *>(this);
-    OB_LOG(DEBUG, "success to open file !", KCSTRING(pathname), K(access_type));
   }
 
   return ret;
@@ -489,7 +484,6 @@ int ObObjectDevice::complete(const ObIOFd &fd)
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -522,7 +516,6 @@ int ObObjectDevice::abort(const ObIOFd &fd)
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -593,7 +586,6 @@ int ObObjectDevice::seal_for_adaptive(const ObIOFd &fd)
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -757,7 +749,6 @@ int ObObjectDevice::pread(const ObIOFd &fd, const int64_t offset, const int64_t 
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -831,7 +822,6 @@ int ObObjectDevice::pwrite(const ObIOFd &fd, const int64_t offset, const int64_t
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -871,7 +861,6 @@ int ObObjectDevice::upload_part(
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -910,7 +899,6 @@ int ObObjectDevice::buf_append_part(
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -941,7 +929,6 @@ int ObObjectDevice::get_part_id(
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -971,7 +958,6 @@ int ObObjectDevice::get_part_size(const ObIOFd &fd, const int64_t part_id, int64
   fd_mng_.get_fd_flag(fd, flag);
   if (!fd_mng_.validate_fd(fd, true)) {
     ret = OB_NOT_INIT;
-    OB_LOG(WARN, "fd is not init!", K(fd.first_id_), K(fd.second_id_));
   } else if (OB_FAIL(fd_mng_.fd_to_ctx(fd, ctx))) {
   } else if (OB_ISNULL(ctx)) {
     ret = OB_INVALID_ARGUMENT;

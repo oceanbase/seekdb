@@ -1603,8 +1603,6 @@ void ObSQLSessionInfo::set_early_lock_release(bool enable)
 {
   enable_early_lock_release_ = enable;
   if (enable) {
-    SQL_SESSION_LOG(DEBUG, "set early lock release success",
-        "sessid", get_server_sid());
   }
 }
 

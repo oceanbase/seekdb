@@ -522,7 +522,6 @@ int PalfHandle::unregister_file_size_cb()
   int ret = OB_SUCCESS;
   CHECK_VALID;
   if (NULL == fs_cb_) {
-    PALF_LOG(TRACE, "no need unregister_file_size_cb", K(fs_cb_));
   } else if (OB_FAIL(palf_handle_impl_->unregister_file_size_cb(fs_cb_))) {
   } else {
     MTL_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
@@ -561,7 +560,6 @@ int PalfHandle::unregister_role_change_cb()
   int ret = OB_SUCCESS;
   CHECK_VALID;
   if (NULL == rc_cb_) {
-    PALF_LOG(TRACE, "no need unregister_role_change_cb", K(rc_cb_));
   } else if (OB_FAIL(palf_handle_impl_->unregister_role_change_cb(rc_cb_))) {
   } else {
     MTL_DELETE(PalfRoleChangeCbNode, "PalfRCCbNode", rc_cb_);

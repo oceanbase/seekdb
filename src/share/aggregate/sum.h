@@ -79,7 +79,6 @@ public:
     columns.get_payload(row_num, param_payload, param_len);
     const ParamType *lparam = reinterpret_cast<const ParamType *>(param_payload);
     const ResultType &rparam = *reinterpret_cast<const ResultType *>(agg_cell);
-    SQL_LOG(DEBUG, "sum add row", K(agg_col_id));
     if ((is_decint_vec(in_tc) && is_decint_vec(out_tc)) // sum(int64/int32) -> int128
         || (in_tc == VEC_TC_INTEGER && out_tc == VEC_TC_INTEGER)) { // count_sum
       ret = add_values(*lparam, rparam, agg_cell, sizeof(ResultType));
@@ -102,7 +101,6 @@ public:
     columns.get_payload(row_num, param_payload, param_len);
     const ParamType *lparam = reinterpret_cast<const ParamType *>(param_payload);
     const ResultType &rparam = *reinterpret_cast<const ResultType *>(agg_cell);
-    SQL_LOG(DEBUG, "sum sub row", K(agg_col_id));
     ret = sub_values(rparam, *lparam, agg_cell, sizeof(ResultType));
     if (OB_FAIL(ret)) {
     }
@@ -375,7 +373,6 @@ public:
       const ParamType *row_param = reinterpret_cast<const ParamType *>(data);
       TmpStore *tmp_res = reinterpret_cast<TmpStore *>(get_tmp_res(agg_ctx, agg_col_idx, agg_cell));
       TmpStore copied_tmp_res = *tmp_res;
-      SQL_LOG(DEBUG, "sum with tmp::add_one_row ", K(*row_param), K(*tmp_res), K(batch_idx));
       ret = add_overflow(*row_param, copied_tmp_res, reinterpret_cast<char *>(tmp_res),
                          sizeof(TmpStore));
       if (OB_FAIL(ret)) {
@@ -421,7 +418,6 @@ public:
     TmpStore &tmp_res = *reinterpret_cast<TmpStore *>(tmp_res_ptr);
     TmpStore copied_tmp_res = tmp_res;
 
-    SQL_LOG(DEBUG, "sum add row", K(row_param), K(row_num), K(tmp_res));
     ret = add_overflow(*row_param, copied_tmp_res, reinterpret_cast<char *>(&tmp_res),
                        sizeof(TmpStore));
     if (OB_FAIL(ret)) {

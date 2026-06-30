@@ -56,7 +56,6 @@ ObTabletMemtableMgr::~ObTabletMemtableMgr()
 
 void ObTabletMemtableMgr::destroy()
 {
-  STORAGE_LOG(DEBUG, "destroy tablet memtable mgr", KP(this), KPC(this));
   MemMgrWLockGuard lock_guard(lock_);
   // release memtable
   ObIMemtable *imemtable = nullptr;
@@ -178,10 +177,6 @@ int ObTabletMemtableMgr::try_resolve_boundary_on_create_memtable_for_leader_(
     // write on the new memtable before finishing the write on the frozen
     // memtable and cause the writes and callbacks on memtable_ctx out of order.
     ret = OB_EAGAIN;
-    TRANS_LOG(WARN,
-              "last frozen's write flag is not 0 during create new memtable",
-              KPC(last_frozen_tablet_memtable),
-              KPC(new_tablet_memtable));
   } else if (can_resolve) {
     SCN new_start_scn;
     last_frozen_tablet_memtable->resolve_right_boundary();
@@ -197,8 +192,6 @@ int ObTabletMemtableMgr::try_resolve_boundary_on_create_memtable_for_leader_(
               K(new_start_scn), KPC(last_frozen_tablet_memtable), KPC(new_tablet_memtable));
   } else if (unsubmitted_cnt > 0) {
     new_tablet_memtable->set_logging_blocked();
-    TRANS_LOG(INFO, "set new memtable logging blocked", KPC(last_frozen_tablet_memtable),
-              KPC(new_tablet_memtable));
   }
   return ret;
 }
@@ -377,8 +370,6 @@ int ObTabletMemtableMgr::resolve_data_memtable_boundary_(ObITabletMemtable *froz
                         new_tablet_memtable->get_start_scn())))) {
       }
     }
-    TRANS_LOG(INFO, "[resolve_right_boundary] in create_memtable on replay",
-              KPC(frozen_tablet_memtable), KPC(new_tablet_memtable), K(arg));
   } else if (OB_FAIL(try_resolve_boundary_on_create_memtable_for_leader_(
                        frozen_tablet_memtable, new_tablet_memtable))) {
   }
@@ -395,7 +386,6 @@ int ObTabletMemtableMgr::resolve_direct_load_memtable_boundary_(ObITabletMemtabl
   SCN new_memtable_start_scn;
   if (frozen_tablet_memtable->get_end_scn().is_max()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "frozen direct load memtable must have a valid end_scn", KPC(frozen_tablet_memtable));
   } else if (active_tablet_memtable != frozen_tablet_memtable) {
     new_memtable_start_scn =
       MAX(frozen_tablet_memtable->get_end_scn(), active_tablet_memtable->get_start_scn());
@@ -662,7 +652,6 @@ int ObTabletMemtableMgr::set_is_tablet_freeze_for_active_memtable(
   } else {
     handle.reset();
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
-    TRANS_LOG(INFO, "not set is_tablet_freeze because the memtable cannot be freezed", KPC(active_tablet_memtable));
   }
 
   return ret;
@@ -985,7 +974,6 @@ int ObTabletMemtableMgr::set_frozen_for_all_memtables()
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "memtable is nullptr", K(ret), K(ls_id), KP(memtable), K(i));
       } else {
-        STORAGE_LOG(INFO, "set frozen for offline", K(ls_id), K(i), KPC(memtable));
         memtable->set_offlined();
         memtable->set_frozen();
       }
@@ -1020,16 +1008,10 @@ int ObTabletMemtableMgr::freeze_direct_load_memtable(ObITabletMemtable *tablet_m
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "tablet memtable is unexpected null", KR(ret));
   } else if (tablet_memtable != boundary_memtable || !(tablet_memtable->get_end_scn().is_max())) {
-    STORAGE_LOG(INFO, "this direct load memtable already freezed", KPC(tablet_memtable), KPC(boundary_memtable));
   } else if (!tablet_memtable->is_direct_load_memtable()) {
     STORAGE_LOG(WARN, "not direct load memtable", KR(ret), KPC(tablet_memtable));
   } else if (!tablet_memtable->allow_freeze()) {
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
-    STORAGE_LOG(WARN,
-                "active direct load memtable is not allowd freeze",
-                K(get_memtable_count_()),
-                K(tables_),
-                KPC(tablet_memtable));
   } else {
     const int64_t FREEZE_DIRECT_LOAD_MEMTABLE_WARN_INTERVAL = 100LL * 1000LL;
     int64_t start_ts = ObClockGenerator::getClock();
@@ -1049,7 +1031,6 @@ int ObTabletMemtableMgr::freeze_direct_load_memtable(ObITabletMemtable *tablet_m
     (void)tablet_memtable->set_freeze_state(TabletMemtableFreezeState::FREEZING);
     (void)tablet_memtable->set_frozen_time(ObClockGenerator::getClock());
 
-    STORAGE_LOG(INFO, "finish freeze direct load memtable", KP(this), KPC(tablet_memtable));
   }
 
   return ret;

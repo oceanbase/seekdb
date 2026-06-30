@@ -274,7 +274,6 @@ int ObVirtualTableIteratorFactory::revert_virtual_table_iterator(ObVirtualTableI
 int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == vt_iter)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "vt_iter is NULL, can not free it");
   } else {
     vt_iter->~ObVirtualTableIterator();
     vt_iter = NULL;
@@ -307,7 +306,6 @@ int ObVTIterCreator::get_latest_expected_schema(
             || OB_UNLIKELY(table_version != t_schema->get_schema_version())) {
     ret = OB_SCHEMA_ERROR;
     if (NULL != t_schema) {
-      SERVER_LOG(WARN, "current schema version", K(t_schema->get_schema_version()));
     }
     t_schema = NULL;
   }
@@ -720,7 +718,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObGVTxCtxMgrStat *gv_tx_ctx_mgr_stat = NULL;
             transaction::ObTransService *txs = share::g_mp->trans_service();
             if (OB_UNLIKELY(NULL == txs)) {
-              SERVER_LOG(WARN, "invalid argument", KP(txs));
               ret = OB_INVALID_ARGUMENT;
             } else if (OB_FAIL(NEW_VIRTUAL_TABLE(ObGVTxCtxMgrStat,
                                                  gv_tx_ctx_mgr_stat, txs))) {
@@ -734,9 +731,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               bool is_index = false;
               if (OB_FAIL(check_is_index(*index_schema, "i1", is_index))) {
               } else if (is_index) {
-                SERVER_LOG(DEBUG,
-                            "scan __all_virtual_plan_cache_stat table",
-                            K(pure_tid));
                 if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllPlanCacheStatI1, pcs))) {
                 }
               } else {

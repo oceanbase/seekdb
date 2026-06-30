@@ -1214,7 +1214,6 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::RENAME_INDEX) {
       ObRenameIndexArg *rename_index_arg = static_cast<ObRenameIndexArg *>(index_arg);
-      SHARE_LOG(WARN, "serialize rename index arg!", K(rename_index_arg->origin_index_name_), K(rename_index_arg->new_index_name_));
 
       if (OB_UNLIKELY(NULL == rename_index_arg)) {
         ret = OB_INVALID_ARGUMENT;

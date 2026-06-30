@@ -111,7 +111,6 @@ int ObFuseRowCacheFetcher::put_fuse_row_cache(const ObDatumRowkey &rowkey, ObDat
     if (OB_SUCCESS != (tmp_ret = row_cache_value.init(row, read_snapshot_version_))) {
     } else if (OB_SUCCESS != (tmp_ret = ObStorageCacheSuite::get_instance().get_multi_version_fuse_row_cache().put_row(cache_key, row_cache_value))) {
     } else {
-      STORAGE_LOG(DEBUG, "update multi version fuse row cache", K(cache_key), K(row_cache_value), K(row), KPC(read_info_));
     }
   } else {
     // update row cache
@@ -121,7 +120,6 @@ int ObFuseRowCacheFetcher::put_fuse_row_cache(const ObDatumRowkey &rowkey, ObDat
     if (OB_SUCCESS != (tmp_ret = row_cache_value.init(row, read_snapshot_version_))) {
     } else if (OB_SUCCESS != (tmp_ret = ObStorageCacheSuite::get_instance().get_fuse_row_cache().put_row(cache_key, row_cache_value))) {
     } else {
-      STORAGE_LOG(DEBUG, "update fuse row cache", K(cache_key), K(row_cache_value), K(row), KPC(read_info_));
     }
   }
 

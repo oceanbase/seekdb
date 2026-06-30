@@ -387,7 +387,6 @@ int ObLockRowChecker::check_lock_row_valid(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row.get_column_count() < rowkey_cnt)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "row count is less than rowkey count", K(row), K(rowkey_cnt));
   } else if (row.is_uncommitted_row() || is_memtable_iter_row_check) {
     bool pure_empty_row = true;
     for (int i = rowkey_cnt; pure_empty_row && i < row.get_column_count(); ++i) {

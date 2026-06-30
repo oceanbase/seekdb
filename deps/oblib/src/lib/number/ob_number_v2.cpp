@@ -482,7 +482,6 @@ int ObNumber::from_v1_(const char *str, const int64_t length, IAllocator &alloca
     LIB_LOG(WARN,  "out of range, ret = %d , length = %d",
                   K(ret), K(nb.number_.d_.len_));
   } else if (OB_ISNULL(digits_ = alloc_(allocator, nb.number_.d_.len_, attr))) {
-    _OB_LOG(WARN, "alloc digits fail, length=%hhu", nb.number_.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits_, nb.number_.get_digits(), nb.number_.d_.len_ * ITEM_SIZE(digits_));
@@ -518,7 +517,6 @@ int ObNumber::from_v2_(const char *str, const int64_t length, IAllocator &alloca
     ret = OB_ERROR_OUT_OF_RANGE;
     LIB_LOG(WARN,  "out of range", K(ret), K(nb.number_.d_.len_));
   } else if (OB_ISNULL(digits_ = alloc_(allocator, nb.number_.d_.len_, attr))) {
-    _OB_LOG(WARN, "alloc digits fail, length=%hhu", nb.number_.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits_, nb.number_.get_digits(), nb.number_.d_.len_ * ITEM_SIZE(digits_));
@@ -668,7 +666,6 @@ int ObNumber::construct_digits_(const char *str, const int64_t start_idx,
     --curr_digit;
   }
   len = (curr_digit >= digits ? (curr_digit - digits + 1) : 0);
-  LIB_LOG(DEBUG, "succ to construct_digits_", K(exp), K(len));
   return ret;
 }
 
@@ -708,7 +705,6 @@ int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &alloca
     /* Step 5: construct ObNumber */
     } else if (OB_ISNULL(digits_ = alloc_(allocator, d.len_, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      _OB_LOG(ERROR, "alloc digits fail, length=%hhu", d.len_);
     } else {
       MEMCPY(digits_, digits, d.len_ * sizeof(uint32_t));
 
@@ -791,7 +787,6 @@ int ObNumber::from_(const ObNumber &other, IAllocator &allocator)
     _OB_LOG(WARN, "out of range, ret = %d , length = %d",
                   ret, (int)other.d_.len_);
   } else if (OB_ISNULL(digits_ = alloc_(allocator, other.d_.len_))) {
-    _OB_LOG(DEBUG, "alloc digits fail, length=%hhu", other.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits_, other.digits_, other.d_.len_ * ITEM_SIZE(digits_));
@@ -814,14 +809,12 @@ int ObNumber::deep_copy(const ObNumber &other, IAllocator &allocator)
     _OB_LOG(WARN, "out of range, ret = %d , length = %d",
                   ret, (int)other.d_.len_);
   } else if (OB_ISNULL(digits = alloc_(allocator, other.d_.len_))) {
-    _OB_LOG(DEBUG, "alloc digits fail, length=%hhu", other.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits, other.digits_, other.d_.len_ * ITEM_SIZE(digits));
     d_ = other.d_;
     d_.reserved_ = 0;
     digits_ = digits;
-    OB_LOG(DEBUG, "deep_copy", K(other));
   }
   return ret;
 }
@@ -839,7 +832,6 @@ int ObNumber::deep_copy_v3(const ObNumber &other, ObIAllocator &allocator)
     _OB_LOG(WARN, "out of range, ret = %d , length = %d",
                   ret, (int)other.d_.len_);
   } else if (OB_ISNULL(digits = (uint32_t *)allocator.alloc(sizeof(uint32_t) * other.d_.len_))) {
-    _OB_LOG(DEBUG, "alloc digits fail, length=%hhu", other.d_.len_);
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(digits, other.digits_, other.d_.len_ * ITEM_SIZE(digits));
@@ -1296,8 +1288,6 @@ int ObNumber::check_precision_(const int64_t precision, const int64_t scale)
       }
       if (OB_UNLIKELY(integer_counter > limit)) {
         ObCStringHelper helper;
-        _OB_LOG(WARN, "Precision=%ld scale=%ld integer_number=%ld precision overflow %s",
-                  precision, scale, integer_counter, helper.convert(*this));
         ret = OB_INTEGER_PRECISION_OVERFLOW;
         break;
       }
@@ -2464,8 +2454,6 @@ int ObNumber::rebuild_digits_(
   if (NULL != integer_digits
       && 0 < integer_length) {
     if (OB_UNLIKELY(MAX_CALC_LEN <= (length + integer_length))) {
-      _OB_LOG(WARN, "buffer size overflow, cap=%ld length=%ld integer_length=%ld",
-                MAX_CALC_LEN, length, integer_length);
       ret = OB_NUMERIC_OVERFLOW;
     } else {
       MEMCPY(digits, integer_digits, integer_length * ITEM_SIZE(digits_));
@@ -2476,8 +2464,6 @@ int ObNumber::rebuild_digits_(
       && NULL != decimal_digits
       && 0 < decimal_length) {
     if (OB_UNLIKELY(MAX_CALC_LEN <= (length + decimal_length))) {
-      _OB_LOG(WARN, "buffer size overflow, cap=%ld length=%ld decimal_length=%ld",
-                MAX_CALC_LEN, length, decimal_length);
       ret = OB_NUMERIC_OVERFLOW;
     } else {
       MEMCPY(&digits[length], decimal_digits, decimal_length * ITEM_SIZE(digits));
@@ -2487,7 +2473,6 @@ int ObNumber::rebuild_digits_(
   if (OB_SUCC(ret)) {
     ret = normalize_(digits, length);
   }
-  OB_LOG(DEBUG, "succ to rebuild_digits_", K(integer_length), K(decimal_length), K(length), KPC(this));
   return ret;
 }
 
@@ -4376,7 +4361,6 @@ int ObNumber::negate_(ObNumber &value, IAllocator &allocator) const
       ++res.d_.exp_;
 
       if (OB_ISNULL(res.digits_ = res.alloc_(allocator, size2alloc))) {
-        _OB_LOG(WARN, "alloc digits fail, length=%ld", size2alloc);
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(res.normalize_(cv.get_digits(), cv.size()))) {
         ObCStringHelper helper;
@@ -4770,7 +4754,6 @@ int ObNumber::div_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   LOG_DEBUG("div_v2_", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "[%s] div zero [%s]", helper.convert(*this), helper.convert(other));
     ret = OB_DIVISION_BY_ZERO;
   } else if (is_zero()) {
     res.set_zero();
@@ -4849,7 +4832,6 @@ int ObNumber::div_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   LOG_DEBUG("div_v3_", K(ret), KPC(this), K(other));
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "[%s] div zero [%s]", helper.convert(*this), helper.convert(other));
     ret = OB_DIVISION_BY_ZERO;
   } else if (is_zero()) {
     res.set_zero();
@@ -5033,7 +5015,6 @@ int ObNumber::rem_v2_(const ObNumber &other, ObNumber &value, IAllocator &alloca
   int cmp_ret = 0;
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "[%s] div zero [%s]", helper.convert(*this), helper.convert(other));
     ret = OB_DIVISION_BY_ZERO;
   } else if (is_zero()) {
     res.set_zero();
@@ -5117,7 +5098,6 @@ int ObNumber::rem_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
   int cmp_ret = 0;
   if (OB_UNLIKELY(other.is_zero())) {
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "[%s] div zero [%s]", helper.convert(*this), helper.convert(other));
     ret = OB_DIVISION_BY_ZERO;
   } else if (is_zero()) {
     res.set_zero();
@@ -5938,7 +5918,6 @@ int64_t ObNumber::get_digit_len_v2(const uint32_t d)
 {
   int64_t ret = 0;
   if (OB_UNLIKELY(BASE <= d)) {
-    LIB_LOG(ERROR, "d is out of range");
   } else {
     ret = ob_fast_digits10(d);
   }
@@ -7093,7 +7072,6 @@ int ObNumberBuilder::find_point_(
           case '.':
             if (dot_appeared) {
               ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error:dot appeared more than one time");
             } else {
               if (!digit_appeared) {
                 //".95" means "0.95"
@@ -7108,7 +7086,6 @@ int ObNumberBuilder::find_point_(
           case ',':
             if (dot_appeared) {
               ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error:comma appears at decimal part");
             } else if (fmt->has_comma_) {
               new_str[new_len++] = ',';
               ++b_comma_cnt;
@@ -7119,7 +7096,6 @@ int ObNumberBuilder::find_point_(
           case '$':
             if (dollar_appeared || dot_appeared || digit_appeared) {
               ret = OB_INVALID_NUMERIC;
-              LIB_LOG(WARN, "ObNumber got format error:$ can only be the first valid character");
             } else {
               dollar_appeared = true;
             }
@@ -7163,13 +7139,8 @@ int ObNumberBuilder::find_point_(
             || (fmt->has_x_ && new_len > fmt->fmt_len_)
             || (dot_appeared && ((new_len - decimal_start) >
                     (fmt->dc_position_ > 0 ? (fmt->fmt_len_ - fmt->dc_position_ - 1) : 0)))) {
-          LIB_LOG(WARN, "ObNumber got error according to fmt", K(integer_end), K(integer_start),
-              K(fmt->dc_position_), K(dot_appeared), K(new_len), K(decimal_start),
-              K(fmt->fmt_len_), K(fmt->dc_position_), K(comma_cnt));
           ret = OB_INVALID_NUMERIC;
         }
-        LIB_LOG(DEBUG, "ObNumber process fmt success", KCSTRING(new_str), K(length), K(new_len),
-            K(dot_appeared));
         length = new_len;
       }
     }
@@ -7251,13 +7222,11 @@ ObCalcVector::~ObCalcVector()
 
 ObCalcVector::ObCalcVector(const ObCalcVector &other)
 {
-  LIB_LOG(DEBUG, "copy assignment invoked");
   *this = other;
 }
 
 ObCalcVector &ObCalcVector::operator =(const ObCalcVector &other)
 {
-  LIB_LOG(DEBUG, "operator = invoked");
   if (this != &other) {
     base_ = other.base_;
     length_ = other.length_;

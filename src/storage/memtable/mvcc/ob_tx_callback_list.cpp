@@ -325,7 +325,6 @@ int ObTxCallbackList::callback_(ObITxCallbackFunctor &functor,
         } else {
           if (removed_ && (removed_ % 10000 == 0)) {
             uint64_t checksum_now = batch_checksum_.calc();
-            TRANS_LOG(INFO, "[CallbackList] remove-callback", K(checksum_now), KPC(this));
           }
           // the del operation must serialize with append operation
           // if it is operating on the list tail
@@ -368,8 +367,6 @@ int ObTxCallbackList::callback_(ObITxCallbackFunctor &functor,
       }
     }
     if ((++traverse_count & 0xFFFFF) == 0) {
-      TRANS_LOG(WARN, "memtable fifo callback too long",
-                K(traverse_count), K(remove_count), K(functor));
     }
   }
   functor.set_statistics(traverse_count, remove_count);
@@ -473,8 +470,6 @@ int ObTxCallbackList::remove_callbacks_for_remove_memtable(
     callback_mgr_.add_release_memtable_callback_remove_cnt(functor.get_remove_cnt());
     ensure_checksum_(functor.get_checksum_last_scn());
     if (functor.get_remove_cnt() > 0) {
-      TRANS_LOG(INFO, "remove callbacks for remove memtable", KP(memtable_set),
-                K(functor.get_remove_cnt()), K(stop_scn), K(right_bound), K(functor), K(*this));
     }
   }
 
@@ -531,7 +526,6 @@ int ObTxCallbackList::remove_callbacks_for_rollback_to(const transaction::ObTxSE
     }
     callback_mgr_.add_rollback_to_callback_remove_cnt(removed);
     ensure_checksum_(functor.get_checksum_last_scn());
-    TRANS_LOG(TRACE, "remove callbacks for rollback to", K(to_seq), K(from_seq), K(removed), K(functor), K(*this));
   }
   return ret;
 }
@@ -608,7 +602,6 @@ int ObTxCallbackList::sync_log_fail(const ObCallbackScope &callbacks,
   LockGuard guard(*this, LOCK_MODE::LOCK_ALL);
   if (OB_FAIL(callback_(functor, callbacks, guard.state_))) {
   } else {
-    TRANS_LOG(INFO, "handle sync log fail success", K(functor), K(*this));
   }
   removed_cnt = functor.get_remove_cnt();
   return ret;
@@ -624,7 +617,6 @@ int ObTxCallbackList::clean_unlog_callbacks(int64_t &removed_cnt, common::ObFunc
     // empty set, all were logged
   } else if (OB_FAIL(callback_(functor, log_cursor_->get_prev(), &head_, guard.state_))) {
   } else {
-    TRANS_LOG(INFO, "clean unlog callbacks", K(functor), K(*this));
   }
   removed_cnt = functor.get_remove_cnt();
   return ret;
@@ -654,7 +646,6 @@ int ObTxCallbackList::tx_calc_checksum_before_scn(const SCN scn)
   if (OB_FAIL(callback_(functor, guard.state_))) {
   } else {
     ensure_checksum_(functor.get_checksum_last_scn());
-    TRANS_LOG(INFO, "calc checksum before log ts", K(scn), K(stop_scn), K(functor), KPC(this));
   }
 
   return ret;
@@ -808,9 +799,6 @@ int ObTxCallbackList::replay_fail(const SCN scn, const bool serial_replay)
   }
   if (OB_FAIL(callback_(functor, start_pos, end_pos, guard.state_))) {
   } else {
-    TRANS_LOG(INFO, "replay log failed, revert its callbacks done",
-              KP(start_pos), KP(end_pos),
-              K(functor), K(*this), K(scn));
   }
   // revert counters when replay fail
   ATOMIC_SAF(&appended_, functor.get_remove_cnt());
@@ -834,7 +822,6 @@ void ObTxCallbackList::get_checksum_and_scn(uint64_t &checksum, SCN &checksum_sc
   if (checksum_scn.is_max() && checksum == 0) {
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "checksum should not be 0 if checksum_scn is max", KPC(this));
   }
-  TRANS_LOG(INFO, "get checksum and checksum_scn", KPC(this), K(checksum), K(checksum_scn));
 }
 
 void ObTxCallbackList::update_checksum(const uint64_t checksum, const SCN checksum_scn)
@@ -850,7 +837,6 @@ void ObTxCallbackList::update_checksum(const uint64_t checksum, const SCN checks
   }
   batch_checksum_.set_base(checksum);
   checksum_scn_.atomic_set(checksum_scn);
-  TRANS_LOG(INFO, "update checksum and checksum_scn", KPC(this), K(checksum), K(checksum_scn));
 }
 
 void ObTxCallbackList::ensure_checksum_(const SCN scn)

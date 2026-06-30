@@ -99,7 +99,6 @@ public:
                                    curr_lsn,
                                    write_buf);
       ret = post_request_to_member_list_(member_list, push_log_req);
-      PALF_LOG(TRACE, "post_request_to_member_list_ success", K(member_list), K(push_log_req));
     }
     return ret;
   }

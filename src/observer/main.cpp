@@ -465,9 +465,7 @@ static void print_limit(const char *name, const int resource)
   struct rlimit limit;
   if (0 == getrlimit(resource, &limit)) {
     if (RLIM_INFINITY == limit.rlim_cur) {
-      _OB_LOG(INFO, "[%s] %-24s = %s", __func__, name, "unlimited");
     } else {
-      _OB_LOG(INFO, "[%s] %-24s = %ld", __func__, name, limit.rlim_cur);
     }
   }
   if (RLIMIT_CORE == resource) {
@@ -477,7 +475,6 @@ static void print_limit(const char *name, const int resource)
 
 static void print_all_limits()
 {
-  OB_LOG(INFO, "============= *begin server limit report * =============");
   print_limit("RLIMIT_CORE",RLIMIT_CORE);
   print_limit("RLIMIT_CPU",RLIMIT_CPU);
   print_limit("RLIMIT_DATA",RLIMIT_DATA);
@@ -491,7 +488,6 @@ static void print_all_limits()
   print_limit("RLIMIT_NOFILE",RLIMIT_NOFILE);
   print_limit("RLIMIT_NPROC",RLIMIT_NPROC);
   print_limit("RLIMIT_STACK",RLIMIT_STACK);
-  OB_LOG(INFO, "============= *stop server limit report* ===============");
 }
 #else
 static void print_all_limits()

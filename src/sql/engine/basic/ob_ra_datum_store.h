@@ -460,10 +460,8 @@ inline int ObRADatumStore::ShrinkBuffer::fill_head(int64_t size)
   int ret = common::OB_SUCCESS;
   if (size < -head_) {
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(size), K_(head));
   } else if (size > remain()) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    SQL_ENG_LOG(WARN, "buffer not enough", K(size), "remain", remain());
   } else {
     head_ += size;
   }
@@ -475,10 +473,8 @@ inline int ObRADatumStore::ShrinkBuffer::fill_tail(int64_t size)
   int ret = common::OB_SUCCESS;
   if (size < -tail_size()) {
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(size), "tail_size", tail_size());
   } else if (size > remain()) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    SQL_ENG_LOG(WARN, "buffer not enough", K(size), "remain", remain());
   } else {
     tail_ -= size;
   }

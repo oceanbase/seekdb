@@ -443,7 +443,6 @@ public:
     ObDecimalIntWideType dec_type = get_decimalint_type(precision);
     if (OB_UNLIKELY(dec_type == DECIMAL_INT_MAX)) {
       ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(WARN, "invalid precision", K(precision));
     } else {
       decint = ZERO_VALUES[dec_type];
       int_bytes = ((int32_t(1)) << dec_type) * sizeof(int32_t);

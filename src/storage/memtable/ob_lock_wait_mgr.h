@@ -66,7 +66,6 @@ public:
   void dump_mapper_info() const {
     int64_t count = map_.count();
     int64_t bkt_cnt = map_.get_bkt_cnt();
-    TRANS_LOG(INFO, "report RowHolderMapper summary info", K(count), K(bkt_cnt));
   }
   void clear() { map_.clear(); }
 private:

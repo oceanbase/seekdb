@@ -118,7 +118,6 @@ int ObTxLSLogCb::on_success()
 
   if (OB_ISNULL(base_wr_)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[TxLsLogWriter] invalid arguments", KP(base_wr_));
   } else if (OB_FAIL(base_wr_->on_success(this))) {
   }
   return ret;
@@ -130,7 +129,6 @@ int ObTxLSLogCb::on_failure()
 
   if (OB_ISNULL(base_wr_)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[TxLsLogWriter] invalid arguments", KP(base_wr_));
   } else if (OB_FAIL(base_wr_->on_failure(this))) {
   }
   return ret;
@@ -169,7 +167,6 @@ int ObTxLSLogWriter::init(const ObLSID &ls_id,
     ret = OB_INIT_TWICE;
   } else if (!ls_id.is_valid() || OB_ISNULL(adapter) || OB_ISNULL(ctx_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[TxLsLogWriter] invalid arguments", K(ls_id), KP(adapter), KP(ctx_mgr));
   } else {
     
     ls_id_ = ls_id;
@@ -259,7 +256,6 @@ int ObTxLSLogWriter::on_success(ObTxLSLogCb *cb)
   }
   // TODO, other types
   default: {
-    TRANS_LOG(WARN, "unknown log type", K(log_type));
   }
   }
   return_log_cb_(cb);
@@ -284,7 +280,6 @@ int ObTxLSLogWriter::on_failure(ObTxLSLogCb *cb)
   }
   // TODO, other types
   default: {
-    TRANS_LOG(WARN, "unknown log type", K(log_type));
   }
   }
   TRANS_LOG(INFO, "[TxLsLogWriter] on failure", KR(ret), K(cb->get_log_type()),
@@ -300,7 +295,6 @@ int ObTxLSLogWriter::get_log_cb_(const ObTxLogType &log_type, ObTxLSLogCb *&cb)
 
   if (nullptr == (tmp_cbs = get_target_cbs_(log_type))) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[TxLsLogWriter] INVALID LOG TYPE", K(log_type));
   } else if (reach_parallel_cbs_limit_(log_type, tmp_cbs->get_size())) {
     ret = OB_TX_NOLOGCB;
     TRANS_LOG(INFO, "[TxLsLogWriter] reach max parallel limit, need retry", KR(ret), K(log_type),
@@ -329,14 +323,11 @@ int ObTxLSLogWriter::return_log_cb_(ObTxLSLogCb *cb)
 
   if (nullptr == cb || nullptr == (tmp_cbs = get_target_cbs_(cb->get_log_type()))) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[TxLsLogWriter] INVALID LOG TYPE", K(cb->get_log_type()));
   } else {
     tmp_cbs->remove(cb);
     cb->reuse();
     free_cbs_.add_first(cb);
 
-    TRANS_LOG(DEBUG, "[TxLsLogWriter] success return log_cb", K(cb->get_log_type()),
-              K(tmp_cbs->get_size()), K(free_cbs_.get_size()));
   }
   return ret;
 }

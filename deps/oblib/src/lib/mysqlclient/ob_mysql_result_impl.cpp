@@ -634,7 +634,6 @@ int ObMySQLResultImpl::get_ob_type(ObObjType &ob_type, obmysql::EMySQLFieldType 
       ob_type = ObExtendType;
       break;
     default:
-      _OB_LOG(WARN, "unsupport MySQL type %d", mysql_type);
       ret = OB_OBJ_TYPE_ERROR;
   }
   return ret;

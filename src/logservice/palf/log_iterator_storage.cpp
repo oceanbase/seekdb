@@ -50,7 +50,6 @@ int IteratorStorage::init(
     log_storage_ = log_storage;
     get_file_end_lsn_ = get_file_end_lsn;
     is_inited_ = true;
-    PALF_LOG(TRACE, "IteratorStorage init success", KPC(this));
   }
   if (OB_SUCC(ret) && !get_file_end_lsn_.is_valid()) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -97,7 +96,6 @@ int IteratorStorage::pread(
     PALF_LOG(WARN, "invalid argument", K(ret), K(pos), K(in_read_size), KPC(this));
   } else if (pos > get_valid_data_len_()) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "want to read position is greater than max valid data len", K(pos), KPC(this));
   } else if (0 == real_in_read_size) {
     ret = OB_ITER_END;
     PALF_LOG(WARN, "IteratorStorage has iterate end", K(ret), KPC(this));
@@ -162,11 +160,9 @@ int IteratorStorage::ensure_memory_layout_correct_(
       PALF_LOG(TRACE, "need alloc read buf", K(ret), KPC(this), K(tmp_read_buf));
     }
     if (OB_SUCC(ret)) {
-      PALF_LOG(TRACE, "before ensure_memory_layout_correct_", KPC(this), K(in_read_size), K(remain_valid_data_size));
       // memmove tail valid part data to header
       do_memove_(tmp_read_buf, pos, remain_valid_data_size);
       read_buf_ = tmp_read_buf;
-      PALF_LOG(TRACE, "after ensure_memory_layout_correct_", KPC(this), K(in_read_size), K(remain_valid_data_size));
     }
   }
   return ret;
@@ -178,13 +174,10 @@ void IteratorStorage::do_memove_(ReadBuf &dst, const int64_t pos, int64_t &valid
   OB_ASSERT(valid_tail_part_size >= 0);
   if (false == read_buf_.is_valid()) {
     // do nothing
-    PALF_LOG(TRACE, "src is invalid, no need memove", K(dst), K(read_buf_), KPC(this), K(pos));
   } else {
     OB_ASSERT(valid_tail_part_size < dst.buf_len_);
     MEMMOVE(dst.buf_, read_buf_.buf_ + pos, valid_tail_part_size);
-    PALF_LOG(TRACE, "do_memove_ success", K(dst), KPC(this), K(valid_tail_part_size), K(pos));
     if (read_buf_ != dst) {
-      PALF_LOG(TRACE, "src is not same as dst, need free src", K(dst), KPC(this));
       free_read_buf(read_buf_);
     }
   }

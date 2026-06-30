@@ -474,7 +474,6 @@ public:
   void reset();
   TO_STRING_KV(K_(incomplete), K_(parts), K_(touched_ls_list), K_(conflict_txs));
   void set_incomplete() {
-    TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
     incomplete_ = true;
   }
   int merge_cflict_txs(const common::ObIArray<ObTransIDAndAddr> &txs);

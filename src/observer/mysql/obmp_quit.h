@@ -57,7 +57,6 @@ int ObMPQuit::process()
     revert_session(session);
   }
   disconnect();
-  SERVER_LOG(INFO, "quit");
   return ret;
 }
 

@@ -125,10 +125,8 @@ int ObTabletMemberWrapper<T, U>::get_member(const T *&t) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ERROR;
-    STORAGE_LOG(WARN, "tablet member wrapper is not valid");
   } else if (OB_ISNULL(ptr_)) {
     ret = OB_ERR_NULL_VALUE;
-    STORAGE_LOG(WARN, "tablet member wrapper pointer is nullptr");
   } else {
     t = ptr_;
   }

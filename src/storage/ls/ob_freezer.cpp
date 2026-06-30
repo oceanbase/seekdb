@@ -558,12 +558,6 @@ int ObFreezer::wait_ls_freeze_finish()
     PendTenantReplayHelper pend_replay_helper(*this, ls_);
     (void)pend_replay_helper.set_skip_throttle_flag();
 
-    TRANS_LOG(INFO,
-              "[Freezer] wait freeze : Logstream ",
-              K(ls_id),
-              K(freeze_clock),
-              K(throttle_is_skipping_),
-              K(tenant_replay_is_pending_));
 
     // wait till all memtables are moved from frozen_list to prepare_list
     // this means that all memtables can be dumped
@@ -647,8 +641,6 @@ struct AsyncFreezeFunctor {
     if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
     } else {
       // freezer_ cannot be nullptr because AsyncFreezeFunctor is constructed by ObFreezer::this pointer
-      STORAGE_LOG(
-          INFO, "[Freezer] An Async Freeze Task Start", K(trace_id_), K(ls_id_), K(is_ls_freeze_), KP(freezer_));
       if (is_ls_freeze_) {
         common::ObDIActionGuard(common::ObDIActionGuard::NS_ACTION, "LSFreeze:%ld", ls_id_.id());
         (void)freezer_->async_ls_freeze_consumer(trace_id_);
@@ -707,12 +699,6 @@ void ObFreezer::submit_an_async_freeze_task(const int64_t trace_id, const bool i
   }
 
   if (!submit_succ && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
-    TRANS_LOG(INFO,
-              "async freeze task already exists, skip submitting one task",
-              K(ls_id),
-              K(is_ls_freeze),
-              K(is_async_tablet_freeze_task_existing_),
-              K(is_async_ls_freeze_task_existing_));
   }
 }
 
@@ -751,7 +737,6 @@ void ObFreezer::async_ls_freeze_consumer(const int64_t trace_id)
 void ObFreezer::async_tablet_freeze_consumer(const int64_t trace_id)
 {
   const int64_t start_time = ObClockGenerator::getClock();
-  STORAGE_LOG(INFO, "Async Tablet Freeze Task Start", K(get_ls_id()));
 
   ObSEArray<ObTabletID, 128> tablet_ids;
   tablet_ids.reuse();
@@ -775,7 +760,6 @@ void ObFreezer::async_tablet_freeze_consumer(const int64_t trace_id)
   // print some debug info
   const int64_t end_time = ObClockGenerator::getClock();
   const int64_t spend_time_ms = (end_time - start_time) / 1000;
-  STORAGE_LOG(INFO, "Async Tablet Freeze Task finish", K(get_ls_id()), K(spend_time_ms));
 
   // NOTE : reset task existing flag before submit another task
   ATOMIC_STORE(&is_async_tablet_freeze_task_existing_, false);
@@ -1296,12 +1280,6 @@ int ObFreezer::wait_memtable_ready_for_flush_(ObITabletMemtable *tablet_memtable
     PendTenantReplayHelper pend_replay_helper(*this, ls_);
     (void)pend_replay_helper.set_skip_throttle_flag();
 
-    TRANS_LOG(INFO,
-              "[Freezer] wait freeze : Tablet",
-              K(ls_id),
-              KP(tablet_memtable),
-              K(throttle_is_skipping_),
-              K(tenant_replay_is_pending_));
 
     int64_t time_counter = 0;
     do {
@@ -1368,7 +1346,6 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
       ObLSLockGuard lock_ls(ls_, ls_->lock_, read_lock, write_lock);
       if (OB_FAIL(check_ls_state())) {
         // ls has died, we need break the loop for submitting log
-        TRANS_LOG(WARN, "ls state has die", K(ls_id));
         break;
       }
     }
@@ -1432,7 +1409,6 @@ int ObFreezer::loop_set_freeze_flag(const int64_t max_loop_time)
 
   const int64_t LOG_WARN_TIME = 10LL * 1000LL * 1000LL;  // 10 seconds
   if (cost_time > LOG_WARN_TIME) {
-    TRANS_LOG(WARN, "[Freezer] wait the running freeze too long time", K(ls_id), K(cost_time));
   }
   return ret;
 }
@@ -1632,7 +1608,6 @@ void ObFreezer::print_freezer_statistics()
 {
   // print every 10s
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-    TRANS_LOG(INFO, "[Freezer] empty table statistics: ", K(get_ls_id()), K(get_empty_memtable_cnt()));
     clear_empty_memtable_cnt();
   }
 }
@@ -1749,7 +1724,6 @@ public:
     bool is_erased = false;
     AsyncFreezeTabletInfo &tablet_info = kv.first;
     if (ls_epoch_ != tablet_info.epoch_) {
-      STORAGE_LOG(INFO, "this tablet no need merge because ls epoch has changed", K(ls_epoch_), K(tablet_info));
       need_erase = true;
     } else if (OB_FAIL(tablet_ids_.push_back(tablet_info.tablet_id_))) {
     } else {
@@ -1856,7 +1830,6 @@ void ObFreezer::PendTenantReplayHelper::set_skip_throttle_flag()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(current_freeze_ls_)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "invalid ls pointer", KP(current_freeze_ls_));
   } else if (current_ls_is_leader_()){
     // leader do not need skip throttle
   } else {
@@ -1910,7 +1883,6 @@ bool ObFreezer::PendTenantReplayHelper::remain_memory_is_exhausting_() {
   const bool has_triggered_throttle = throttle_tool.has_triggered_throttle<ObMemstoreAllocator>();
   const bool remain_memory_is_exhausting =
       has_triggered_throttle || share::g_mp->tenant_freezer()->memstore_remain_memory_is_exhausting();
-  STORAGE_LOG(INFO, "finish check remain memory", K(has_triggered_throttle), K(remain_memory_is_exhausting));
 
   return remain_memory_is_exhausting;
 }
@@ -1945,11 +1917,6 @@ void ObFreezer::PendTenantReplayHelper::pend_tenant_replay_()
     // only skip throttle when pend all ls replay successfully, or reset this guard to restore replay
     if (iterate_ls_count == pend_ls_replay_count) {
       (void)host_.set_tenant_replay_is_pending();
-      STORAGE_LOG(INFO,
-                  "pend replay finish",
-                  K(pend_ls_replay_count),
-                  K(host_.throttle_is_skipping()),
-                  K(host_.tenant_replay_is_pending()));
     } else {
       (void)restore_tenant_replay_();
     }
@@ -1968,11 +1935,6 @@ void ObFreezer::PendTenantReplayHelper::restore_tenant_replay_()
     }
   }
   host_.unset_tenant_replay_is_pending();
-  STORAGE_LOG(INFO,
-              "restore tenant replay",
-              K(ls_handle_array_.count()),
-              K(host_.tenant_replay_is_pending()),
-              K(host_.throttle_is_skipping()));
   ls_handle_array_.reuse();
 }
 

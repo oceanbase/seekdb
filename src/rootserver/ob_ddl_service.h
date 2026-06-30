@@ -2647,7 +2647,6 @@ int ObDDLService::check_partition_name_valid(const SCHEMA &orig_schema,
         } else if (ObCharset::case_insensitive_equal(orig_part_array[i]->get_part_name(),
                                                      part_name)) {
           valid = false;
-          RS_LOG(INFO, "partition name not valid", K(part_name), K(orig_part_array));
           break;
         }
       }

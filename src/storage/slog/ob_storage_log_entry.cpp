@@ -114,7 +114,6 @@ int ObStorageLogEntry::check_entry_integrity(bool dump_content) const
     STORAGE_REDO_LOG(WARN, "Checksum error", K(ret), K_(entry_checksum));
   }
   if (OB_FAIL(ret) && dump_content) {
-    STORAGE_REDO_LOG(WARN, "check_entry_integrity error: ", K(*this));
   }
 
   return ret;
@@ -131,8 +130,6 @@ int ObStorageLogEntry::check_data_integrity(const char *log_data, bool dump_cont
     int64_t crc_check_sum = calc_data_checksum(log_data, data_len_);
     if (OB_UNLIKELY(crc_check_sum != data_checksum_)) {
       if (dump_content) {
-        STORAGE_REDO_LOG(WARN, "Entry: ", K(*this), K(crc_check_sum));
-        STORAGE_REDO_LOG(WARN, "Body: ");
         hex_dump(log_data, data_len_, true, OB_LOG_LEVEL_ERROR);
       }
       ret = OB_CHECKSUM_ERROR;

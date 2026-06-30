@@ -202,7 +202,6 @@ int ObDatumRowStore::add_row(const ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(0 < col_count_) && OB_UNLIKELY(row.count_ != col_count_)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "all rows should have the same columns", K(col_count_), K(row.count_));
   } else {
     int64_t length = row.get_serialize_size();
     BlockInfo *block = blocks_.get_last();

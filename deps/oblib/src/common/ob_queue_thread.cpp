@@ -184,9 +184,6 @@ void *S2MQueueThread::rebalance_(int64_t &idx, const ThreadConf &cur_thread)
       idx = try_queue_idx;
       each_queue_len_[idx].inc(-1);
       if (0 == (rebalance_counter++ % 10000)) {
-        _OB_LOG(INFO,
-                  "task has been rebalance between threads rebalance_counter=%ld cur_idx=%ld balance_idx=%ld",
-                  *(&rebalance_counter), cur_thread.index, balance_idx);
       }
       break;
     }

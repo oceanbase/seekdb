@@ -55,8 +55,6 @@ int ObGVTxStat::prepare_start_to_read_()
   int ret = OB_SUCCESS;
   tx_stat_iter_.reset();
   if (NULL == allocator_) {
-    SERVER_LOG(WARN, "invalid argument, allocator_ or txs_ is null", "allocator",
-        OB_P(allocator_));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = fill_ids_())) {
   } else {
@@ -134,7 +132,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "ObGVTxStat iter error", K(ret));
     } else {
-      SERVER_LOG(DEBUG, "ObGVTxStat iter end success");
     }
   } else {
     const int64_t col_count = output_column_ids_.count();

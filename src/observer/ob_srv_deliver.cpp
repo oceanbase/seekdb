@@ -279,7 +279,6 @@ int ObSrvDeliver::init()
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_queue_threads())) {
   } else {
-    SERVER_LOG(INFO, "init ObSrvDeliver done");
     is_inited_ = true;
     stop_ = false;
   }

@@ -239,7 +239,6 @@ int FixedTinyAllocator<T>::alloc(SList<T>& list, int64_t num)
 
   if (list.get_size() > 0 || num <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "head or tail is not null", K(list), K(num));
   } else {
     do {
       list = avai_list_.pop_ts(num);
@@ -327,7 +326,6 @@ void FixedTinyAllocator<T>::wash()
   int64_t wash_time_us = last_wash_time_us_ - start_time_us;
   memory_efficiency_ =
       (blocks_.get_size_ts() * Block::MAX_NUM - unused_obj_num) / double(blocks_.get_size_ts() * Block::MAX_NUM);
-  COMMON_LOG(INFO, "allocator wash time ", K(wash_time_us), K(freed_blocks_num), K_(memory_efficiency));
 }
 
 template <typename T>
@@ -339,7 +337,6 @@ int FixedTinyAllocator<T>::for_each(F& func)
   FOREACH(iter, blocks_)
   {
     if (OB_FAIL(iter->for_each(func))) {
-      COMMON_LOG(WARN, "failed to call func", K(typeid(F).name()));
       break;
     }
   }
@@ -428,7 +425,6 @@ int HazardDomain::reclaim(F func)
         } while (tail->next_ != (retire_list = ATOMIC_VCAS(&retire_list_, retire_list, reclaim_list)));
       }
       ATOMIC_SAF(&retired_memory_size_, reclaimed_memory_size);
-      COMMON_LOG(INFO, "[KV_CACHE_HAZARD_DOMAIN] finish reclaim", K(retired_memory_size_), K(reclaimed_memory_size));
     }
   }
 

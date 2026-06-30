@@ -204,7 +204,6 @@ int ObAllVirtualPluginInfo::inner_get_next_row(ObNewRow *&row)
         } break;
 
         default: {
-          SERVER_LOG(WARN, "unknown cell id", K(i));
           cells[i].set_null();
         }
       }

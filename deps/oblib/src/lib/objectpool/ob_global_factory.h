@@ -163,7 +163,6 @@ inline ObTCBlock::ObTCBlock(int32_t obj_size)
     freelist_push(ptr);
   }
   if (OB_UNLIKELY(0 == obj_count)) {
-    LIB_LOG(ERROR, "object too large", K(obj_size), K(aligned_obj_size));
   } else {}
 }
 
@@ -241,8 +240,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(range.get_size() > num_to_move)) {
       ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "range size is larger than number to move",
-              K(range.get_size()), K(num_to_move));
     } else {
       ObRecursiveMutexGuard guard(lock_);
       if (num == num_to_move) {
@@ -263,20 +260,11 @@ public:
   void stat()
   {
     ObRecursiveMutexGuard guard(lock_);
-    LIB_LOG(INFO, "[GFACTORY_STAT] freelist next_cache_line",
-            "next_cache_line", next_cache_line_);
-    LIB_LOG(INFO, "[GFACTORY_STAT] freelist empty_blocks_num",
-            "empty_blocks_num", empty_blocks_.get_size());
-    LIB_LOG(INFO, "[GFACTORY_STAT] freelist nonempty_blocks_num",
-            "nonempty_blocks_num", nonempty_blocks_.get_size());
     DLIST_FOREACH_NORET(blk, nonempty_blocks_) {
       if (OB_ISNULL(blk)) {
         LIB_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "nonempty_block is NULL");
       } else {
         const int32_t obj_size = blk->get_obj_size();
-        LIB_LOG(INFO, "[GFACTORY_STAT] nonempty_block",
-                K(obj_size), "in_use_count", blk->get_in_use_count(),
-                "total", blk->get_obj_num_by_obj_size(obj_size));
       }
     }
   }
@@ -509,10 +497,6 @@ void ObGlobalFactory<T, MAX_CLASS_NUM, LABEL>::stat()
   int ret = OB_SUCCESS;
   for (int32_t type_id = 0; OB_SUCC(ret) && type_id < MAX_CLASS_NUM; ++type_id) {
     if (NULL != create_methods_[type_id]) {
-      LIB_LOG(INFO, "[GFACTORY_STAT]", K(type_id),
-              "obj_size", obj_size_[type_id],
-              "batch_count", batch_count_[type_id],
-              "creator", create_methods_[type_id]);
       freelists_[type_id].stat();
     }
   }

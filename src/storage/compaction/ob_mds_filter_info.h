@@ -139,7 +139,6 @@ ObMdsFilterInfo::ObFilterInfoArray<T, type>::~ObFilterInfoArray()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(array_)) {
     ret = OB_ERR_SYS;
-    STORAGE_LOG(ERROR, "exist unfree buf", "filter_info_type", filter_info_type_to_str(type), K_(cnt), KP_(array));
   }
 }
 

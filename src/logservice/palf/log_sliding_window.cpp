@@ -299,8 +299,6 @@ bool LogSlidingWindow::can_receive_larger_log_(const int64_t log_id) const
     // because it is updated after the last slid log_task's ref_cnt decrease to 0.
     bool_ret = false;
     if (palf_reach_time_interval(5 * 1000 * 1000, larger_log_warn_time_)) {
-      PALF_LOG(INFO, "sw is full, cannot submit larger log", K_(palf_id), K_(self), K(start_log_id), \
-          K(sw_end_log_id), K(log_id));
     }
   }
   return bool_ret;
@@ -325,8 +323,6 @@ bool LogSlidingWindow::leader_can_submit_larger_log_(const int64_t log_id) const
     // because sliding window is full.
     bool_ret = false;
     if (palf_reach_time_interval(5 * 1000 * 1000, larger_log_warn_time_)) {
-      PALF_LOG(INFO, "sw is full, cannot submit larger log", K_(palf_id), K_(self), K(start_log_id), \
-          K(sw_end_log_id), K(log_id));
     }
   }
   return bool_ret;
@@ -463,8 +459,6 @@ int LogSlidingWindow::submit_log(const char *buf,
               NULL, padding_entry_body_size, is_need_handle))) {
       } else if (is_need_handle && FALSE_IT(is_need_handle_next |= is_need_handle)) {
       } else {
-        PALF_LOG(INFO, "generate_new_group_log_ for padding log success", K_(palf_id), K_(self), K(log_id),
-            K(padding_size), K(tmp_lsn), K(scn), K(is_need_handle), K(is_need_handle_next));
         // after gen padding_entry, update lsn to next block
         tmp_lsn.val_ += padding_size;
         log_id++;  // inc log_id for following new log
@@ -483,8 +477,6 @@ int LogSlidingWindow::submit_log(const char *buf,
                 buf, buf_len, is_need_handle))) {
         } else if (is_need_handle && FALSE_IT(is_need_handle_next |= is_need_handle)) {
         } else {
-          PALF_LOG(TRACE, "generate_new_group_log_ success", K_(palf_id), K_(self), K(log_id), K(lsn), K(scn),
-              K(valid_log_size), K(is_need_handle), K(is_need_handle_next));
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = try_feedback_freeze_log_task_(log_id))) {
           }
@@ -494,8 +486,6 @@ int LogSlidingWindow::submit_log(const char *buf,
         if (OB_FAIL(append_to_group_log_(lsn, log_id, scn, valid_log_size, buf, buf_len, is_need_handle))) {
         } else if (is_need_handle && FALSE_IT(is_need_handle_next |= is_need_handle)) {
         } else {
-          PALF_LOG(TRACE, "append_to_group_log_ success", K_(palf_id), K_(self), K(log_id), K(lsn), K(scn),
-              K(valid_log_size), K(is_need_handle), K(is_need_handle_next));
         }
       }
       // inc append count
@@ -524,7 +514,6 @@ int LogSlidingWindow::try_freeze_prev_log_(const int64_t next_log_id, const LSN 
     PALF_LOG(WARN, "invalid argumetns", K(ret), K_(palf_id), K_(self), K(next_log_id), K(lsn));
   } else if (FIRST_VALID_LOG_ID == next_log_id) {
     // prev log_id is 0, skip
-    PALF_LOG(INFO, "next log_id is 1, no need freeze prev log", K_(palf_id), K_(self), K(next_log_id), K(lsn));
   } else {
     const int64_t log_id = next_log_id - 1;
     LogTask *log_task = NULL;
@@ -576,7 +565,6 @@ int LogSlidingWindow::wait_group_buffer_ready_(const LSN &lsn, const int64_t dat
       sleep_us = MAX_SLEEP_US;
     }
     ob_usleep(sleep_us);
-    PALF_LOG(WARN, "usleep wait", K_(palf_id), K_(self), K(lsn), K(data_len), K(curr_committed_end_lsn));
     get_committed_end_lsn_(curr_committed_end_lsn);
   }
   return ret;
@@ -738,8 +726,6 @@ int LogSlidingWindow::handle_committed_log_()
       LSN committed_end_lsn;
       if (is_all_committed_log_slided_out_(unused_lsn, unused_id, unused_start_lsn, committed_end_lsn)) {
         // all logs have slided out, no need continue
-        PALF_LOG(TRACE, "is_all_committed_log_slided_out_ returns true", K_(palf_id), K_(self),
-            K(committed_end_lsn));
       } else {
         LSN max_flushed_end_lsn;
         bool need_check_next = true;
@@ -775,8 +761,6 @@ int LogSlidingWindow::handle_committed_log_()
             log_end_lsn = log_task->get_begin_lsn() + LogGroupEntryHeader::HEADER_SER_SIZE + data_len;
             log_task->unlock();
 
-            PALF_LOG(TRACE, "handle_committed_log", K_(palf_id), K_(self), K(log_end_lsn), K(committed_end_lsn),
-                K(max_flushed_end_lsn), K(tmp_log_id), KPC(log_task), K(need_check_next), "can_slide_sw", state_mgr_->can_slide_sw());
 
             if (is_freezed
                 && max_flushed_end_lsn >= log_end_lsn
@@ -941,16 +925,10 @@ int LogSlidingWindow::handle_next_submit_log_(bool &is_committed_lsn_updated)
             log_task->unlock();
             if (OB_UNLIKELY(last_submit_end_lsn != begin_lsn)) {
               ret = OB_ERR_UNEXPECTED;
-              PALF_LOG(ERROR, "Current log's begin_lsn is not continuous with last_submit_end_lsn, unexpected",
-                  K_(palf_id), K_(self), K(prev_lsn), K(last_submit_log_id), K(last_submit_lsn),
-                  K(last_submit_end_lsn), K(last_submit_log_pid), K(tmp_log_id), KPC(log_task));
             } else if (!state_mgr_->is_leader_active()
                 && tmp_log_id > FIRST_VALID_LOG_ID  // the first log doesn't need check prev_proposal_id
                 && (last_submit_lsn != prev_lsn || last_submit_log_pid != prev_log_pid)) {
               ret = OB_STATE_NOT_MATCH;
-              PALF_LOG(WARN, "prev_proposal_id does not match, cannot submit this log", K_(palf_id), K_(self),
-                  K(prev_lsn), K(prev_log_pid), K(last_submit_log_id), K(last_submit_lsn), K(last_submit_log_pid),
-                  K(tmp_log_id), KPC(log_task));
             } else if (OB_FAIL(generate_group_entry_header_(tmp_log_id, log_task, group_entry_header,
                     group_log_data_checksum, is_accum_checksum_acquired))) {
             } else {
@@ -1032,8 +1010,6 @@ int LogSlidingWindow::handle_next_submit_log_(bool &is_committed_lsn_updated)
                 if (total_group_log_cnt > 0) {
                   const int64_t avg_log_batch_cnt = total_log_cnt / total_group_log_cnt;
                   const int64_t avg_group_log_size = total_group_log_size / total_group_log_cnt;
-                  PALF_LOG(INFO, "[PALF STAT GROUP LOG INFO]", K_(palf_id), K_(self), "role", role_to_string(role),
-                      K(total_group_log_cnt), K(avg_log_batch_cnt), K(total_group_log_size), K(avg_group_log_size));
                 }
                 ATOMIC_STORE(&accum_log_cnt_, 0);
                 ATOMIC_STORE(&accum_group_log_size_, 0);
@@ -1183,8 +1159,6 @@ int LogSlidingWindow::try_freeze_last_log_task_(const int64_t expected_log_id,
         + log_task->get_data_len();
       if (!log_task->is_valid()) {
         if (palf_reach_time_interval(1 * 1000 * 1000, cannot_freeze_log_warn_time_)) {
-          PALF_LOG(INFO, "this log_task is invalid, cannot freeze", K_(palf_id), K_(self),
-              K(expected_log_id), K(expected_end_lsn), KPC(log_task));
         }
       } else if (log_end_lsn > expected_end_lsn) {
         ret = OB_ERR_UNEXPECTED;
@@ -1217,7 +1191,6 @@ int LogSlidingWindow::feedback_freeze_last_log_()
   bool is_need_handle = false;
   if (FEEDBACK_FREEZE_MODE != freeze_mode_) {
     // Only FEEDBACK_FREEZE_MODE need exec this fucntion
-    PALF_LOG(TRACE, "current freeze mode is not feedback", K_(palf_id), K_(self), "freeze_mode", freeze_mode_2_str(freeze_mode_));
   } else if (OB_FAIL(lsn_allocator_.try_freeze(last_log_end_lsn, last_log_id))) {
   } else if (last_log_id <= 0) {
     // no log, no need freeze
@@ -1278,16 +1251,13 @@ int LogSlidingWindow::check_and_switch_freeze_mode()
   if (FEEDBACK_FREEZE_MODE == freeze_mode_) {
     if (total_append_cnt >= APPEND_CNT_LB_FOR_PERIOD_FREEZE) {
       freeze_mode_ = PERIOD_FREEZE_MODE;
-      PALF_LOG(INFO, "switch freeze_mode to period", K_(palf_id), K_(self), K(total_append_cnt));
     }
   } else if (PERIOD_FREEZE_MODE == freeze_mode_) {
     if (total_append_cnt < APPEND_CNT_LB_FOR_PERIOD_FREEZE) {
       freeze_mode_ = FEEDBACK_FREEZE_MODE;
-      PALF_LOG(INFO, "switch freeze_mode to feedback", K_(palf_id), K_(self), K(total_append_cnt));
       (void) feedback_freeze_last_log_();
     }
   } else {}
-  PALF_LOG(TRACE, "finish check_and_switch_freeze_mode", K_(palf_id), K_(self), K(total_append_cnt), "freeze_mode", freeze_mode_2_str(freeze_mode_));
   return ret;
 }
 
@@ -1299,7 +1269,6 @@ int LogSlidingWindow::period_freeze_last_log()
   bool is_need_handle = false;
   if (PERIOD_FREEZE_MODE != freeze_mode_) {
     // Only PERIOD_FREEZE_MODE need exec this fucntion
-    PALF_LOG(TRACE, "current freeze mode is not period", K_(palf_id), K_(self), "freeze_mode", freeze_mode_2_str(freeze_mode_));
   } else if (OB_FAIL(lsn_allocator_.try_freeze(last_log_end_lsn, last_log_id))) {
   } else if (last_log_id <= 0) {
     // no log, no need freeze
@@ -1341,7 +1310,6 @@ int LogSlidingWindow::after_truncate(const TruncateLogCbCtx &truncate_cb_ctx)
 {
   // Caller holds palf_handle_impl's wrlock.
   int ret = OB_SUCCESS;
-  PALF_LOG(INFO, "after_truncate begin", K_(palf_id), K_(self), K(truncate_cb_ctx));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (!truncate_cb_ctx.is_valid()) {
@@ -1359,7 +1327,6 @@ int LogSlidingWindow::after_truncate(const TruncateLogCbCtx &truncate_cb_ctx)
     (void) group_buffer_.truncate(last_truncate_lsn_);
     last_truncate_lsn_.reset();
     is_truncating_ = false;
-    PALF_LOG(INFO, "after_truncate success", K_(palf_id), K_(self), K(truncate_cb_ctx));
   }
   return ret;
 }
@@ -1373,7 +1340,6 @@ int LogSlidingWindow::after_flush_log(const FlushLogCbCtx &flush_cb_ctx)
   const int64_t cb_begin_ts = ObTimeUtility::current_time();
   bool is_fetch_log = false;
   bool need_reply_ack = true;
-  PALF_LOG(TRACE, "after_flush_log begin", K_(palf_id), K_(self), K(flush_cb_ctx));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (!flush_cb_ctx.is_valid()) {
@@ -1396,8 +1362,6 @@ int LogSlidingWindow::after_flush_log(const FlushLogCbCtx &flush_cb_ctx)
       log_task->lock();
       if (!log_task->is_valid()) {
         can_exec_cb = false;
-        PALF_LOG(WARN, "log_task is invalid, it may be truncated, skip flush_cb", K_(palf_id), K_(self),
-            K(log_id), KPC(log_task));
       } else if (log_task->get_proposal_id() != flush_cb_ctx.log_proposal_id_) {
         ret = OB_STATE_NOT_MATCH;
         PALF_LOG(WARN, "proposal_id of log_task has changed", K(ret), K_(palf_id), K_(self), K(flush_cb_ctx),
@@ -1638,8 +1602,6 @@ int LogSlidingWindow::set_last_submit_log_info_(const LSN &lsn,
     ATOMIC_STORE(&last_submit_end_lsn_.val_, end_lsn.val_);
     last_submit_log_id_ = log_id;
     last_submit_log_pid_ = log_proposal_id;
-    PALF_LOG(TRACE, "set_last_submit_log_info_ success", K_(palf_id), K_(self), K(old_submit_log_id), K(lsn), K(log_id), \
-        K(log_proposal_id));
   }
   return ret;
 }
@@ -1668,8 +1630,6 @@ int LogSlidingWindow::try_update_last_slide_log_info_(
     last_slide_end_lsn_ = end_lsn;
     last_slide_log_pid_ = proposal_id;
     last_slide_log_accum_checksum_ = accum_checksum;
-    PALF_LOG(TRACE, "try_update_last_slide_log_info_ success", K_(palf_id), K_(self), K(log_id), K(scn),
-        K(lsn), K(end_lsn), K(proposal_id), K(accum_checksum));
   }
   return ret;
 }
@@ -1684,7 +1644,6 @@ int LogSlidingWindow::try_advance_committed_lsn_(const LSN &end_lsn)
   int ret = OB_SUCCESS;
   if (!end_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argumetns", K_(palf_id), K_(self), K(end_lsn));
   } else {
     LSN old_committed_end_lsn;
     get_committed_end_lsn_(old_committed_end_lsn);
@@ -1695,11 +1654,9 @@ int LogSlidingWindow::try_advance_committed_lsn_(const LSN &end_lsn)
         get_committed_end_lsn_(old_committed_end_lsn);
       }
     }
-    PALF_LOG(TRACE, "try_advance_committed_lsn_ success", K_(palf_id), K_(self), K_(committed_end_lsn));
     if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, end_lsn_stat_time_us_)) {
       LSN curr_end_lsn;
       get_committed_end_lsn_(curr_end_lsn);
-      PALF_LOG(INFO, "[PALF STAT COMMITTED LOG SIZE]", K_(palf_id), K_(self), "committed size", curr_end_lsn.val_ - last_record_end_lsn_.val_);
       last_record_end_lsn_ = curr_end_lsn;
     }
   }
@@ -1725,21 +1682,16 @@ int LogSlidingWindow::inc_update_max_flushed_log_info_(const LSN &lsn,
   get_max_flushed_end_lsn(curr_max_flushed_end_lsn);
   if (!lsn.is_valid() || !end_lsn.is_valid() || INVALID_PROPOSAL_ID == proposal_id) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argumetns", K_(palf_id), K_(self), K(lsn), K(end_lsn), K(proposal_id));
   } else if (curr_max_flushed_end_lsn.is_valid() && curr_max_flushed_end_lsn >= end_lsn) {
     // no need update max_flushed_end_lsn_
   } else {
     common::ObSpinLockGuard guard(max_flushed_info_lock_);
     // double check
     if (max_flushed_end_lsn_.is_valid() && max_flushed_end_lsn_ >= end_lsn) {
-      PALF_LOG(WARN, "arg end lsn is not larger than current, no need update", K_(palf_id), K_(self),
-          K_(max_flushed_lsn), K_(max_flushed_end_lsn), K(lsn), K(end_lsn), K(proposal_id));
     } else {
       max_flushed_lsn_ = lsn;
       ATOMIC_STORE(&max_flushed_end_lsn_.val_, end_lsn.val_);
       max_flushed_log_pid_ = proposal_id;
-      PALF_LOG(TRACE, "inc_update_max_flushed_log_info_ success", K_(palf_id), K_(self), K(lsn), K(end_lsn),
-          K(proposal_id), K(max_flushed_end_lsn_));
     }
   }
   return ret;
@@ -1760,7 +1712,6 @@ int LogSlidingWindow::truncate_max_flushed_log_info_(const LSN &lsn,
     max_flushed_lsn_ = lsn;
     max_flushed_end_lsn_ = end_lsn;
     max_flushed_log_pid_ = proposal_id;
-    PALF_LOG(INFO, "truncate_max_flushed_log_info_ success", K_(palf_id), K_(self), K(lsn), K(end_lsn), K(proposal_id));
   }
   return ret;
 }
@@ -1778,8 +1729,6 @@ void LogSlidingWindow::try_reset_last_fetch_log_info_(const LSN &expected_end_ls
 {
   ObSpinLockGuard guard(fetch_info_lock_);
   if (expected_end_lsn.is_valid() && expected_end_lsn != last_fetch_end_lsn_) {
-    PALF_LOG(INFO, "last_fetch_end_lsn_ has changed, skip reset", K_(palf_id), K_(self),
-        K(expected_end_lsn), K_(last_fetch_end_lsn));
   } else if (log_id <= last_fetch_max_log_id_) {
     // If it receives push log whose end_lsn AND log_id is less than or equal to last_fetch_info,
     // which means it can receive other logs from leader, so reset last fetch info.
@@ -1788,7 +1737,6 @@ void LogSlidingWindow::try_reset_last_fetch_log_info_(const LSN &expected_end_ls
     last_fetch_committed_end_lsn_.reset();
     last_fetch_max_log_id_ = OB_INVALID_LOG_ID;
     last_fetch_trigger_type_ = FetchTriggerType::LOG_LOOP_TH;
-    PALF_LOG(INFO, "reset last fetch log info", K_(palf_id), K_(self), K(expected_end_lsn));
   } else {
     // do nothing
   }
@@ -1822,9 +1770,6 @@ void LogSlidingWindow::try_update_committed_lsn_for_fetch_(
   if (need_update) {
     ObSpinLockGuard guard(fetch_info_lock_);
     if (last_fetch_committed_end_lsn_.is_valid()) {
-      PALF_LOG(INFO, "last_fetch_committed_end_lsn_ has been set, skip update", K_(palf_id), K_(self),
-          K(log_id), K_(last_fetch_max_log_id), K_(last_fetch_end_lsn),
-          K_(last_fetch_committed_end_lsn));
     } else if (last_fetch_end_lsn == last_fetch_end_lsn_
                || last_fetch_max_log_id == last_fetch_max_log_id_) {
       LSN committed_end_lsn;
@@ -1843,12 +1788,7 @@ void LogSlidingWindow::try_update_committed_lsn_for_fetch_(
           && last_slide_end_lsn >= log_committed_end_lsn) {
         is_need_fetch = true;
       }
-      PALF_LOG(INFO, "update last fetch log info", K_(palf_id), K_(self), K(last_fetch_end_lsn), K(log_id),
-          K_(last_fetch_end_lsn), K_(last_fetch_committed_end_lsn), K(committed_end_lsn), K(last_slide_end_lsn));
     } else {
-      PALF_LOG(INFO, "last_fetch_max_log_id_ has changed, skip update", K_(palf_id), K_(self),
-          K(last_fetch_end_lsn), K(log_id), K_(last_fetch_max_log_id), K_(last_fetch_end_lsn),
-          K_(last_fetch_committed_end_lsn));
     }
   }
 }
@@ -1990,7 +1930,6 @@ int LogSlidingWindow::do_fetch_log_(const FetchTriggerType &trigger_type,
   int ret = OB_SUCCESS;
   if (false == state_mgr_->is_sync_enabled()) {
     if (palf_reach_time_interval(1 * 1000 * 1000, cannot_fetch_log_warn_time_)) {
-      PALF_LOG(INFO, "sync is disabled, cannot fetch log", K_(palf_id), K_(self));
     }
   } else if (!dest.is_valid() || !fetch_start_lsn.is_valid() || fetch_start_log_id <= 0
       || fetch_log_size <= 0) {
@@ -2114,8 +2053,6 @@ bool LogSlidingWindow::is_all_committed_log_slided_out_(
     bool_ret = true;
   } else {
     bool_ret = false;
-    PALF_LOG(TRACE, "is_all_committed_log_slided_out_ false", K_(palf_id), K_(self), K(bool_ret), K(committed_end_lsn),
-        K(last_slide_end_lsn), K(last_slide_log_id));
   }
   prev_lsn = last_slide_lsn;
   prev_log_id = last_slide_log_id;
@@ -2198,9 +2135,6 @@ int LogSlidingWindow::sliding_cb(const int64_t sn, const FixedSlidingWindowSlot 
           const int64_t avg_log_gen_to_submit_time = total_log_gen_to_submit_cost / total_slide_log_cnt;
           const int64_t avg_log_submit_to_flush_time = total_log_submit_to_flush_cost / total_slide_log_cnt;
           const int64_t avg_log_submit_to_slide_time = total_log_submit_to_slide_cost / total_slide_log_cnt;
-          PALF_LOG(INFO, "[PALF STAT LOG TASK TIME]", K_(palf_id), K_(self), K(total_slide_log_cnt),
-              K(avg_log_gen_to_freeze_time), K(avg_log_gen_to_submit_time), K(avg_log_submit_to_flush_time),
-              K(avg_log_submit_to_slide_time));
           ATOMIC_STORE(&accum_slide_log_cnt_, 0);
           ATOMIC_STORE(&accum_log_gen_to_freeze_cost_, 0);
           ATOMIC_STORE(&accum_log_gen_to_submit_cost_, 0);
@@ -2284,7 +2218,6 @@ bool LogSlidingWindow::is_all_log_flushed_()
   } else {
     bool_ret = true;
   }
-  PALF_LOG(INFO, "is_all_log_flushed_", K(bool_ret), K_(palf_id), K_(self), K(curr_end_lsn), K(max_flushed_end_lsn));
   return bool_ret;
 }
 
@@ -2662,10 +2595,8 @@ int LogSlidingWindow::get_ack_info_array(LogMemberAckInfoList &ack_info_array) c
         ack_info.last_ack_time_us_ = tmp_val.last_ack_time_us_;
         ack_info.last_flushed_end_lsn_ = tmp_val.lsn_;
         ack_info_array.push_back(ack_info);
-        PALF_LOG(TRACE, "push ack info for match_lsn_map_ success", K(ack_info));
       }
     }
-    PALF_LOG(TRACE, "begin push ack info for degraded_learner_list", K(degraded_learner_list));
     for (int64_t i = 0; OB_SUCC(ret) && i < degraded_learner_list.get_member_number(); ++i) {
       tmp_server.reset();
       if (OB_FAIL(degraded_learner_list.get_learner(i, tmp_server))) {
@@ -2678,7 +2609,6 @@ int LogSlidingWindow::get_ack_info_array(LogMemberAckInfoList &ack_info_array) c
         ack_info.last_ack_time_us_ = tmp_val.last_ack_time_us_;
         ack_info.last_flushed_end_lsn_ = tmp_val.lsn_;
         ack_info_array.push_back(ack_info);
-        PALF_LOG(TRACE, "push ack info for degraded_learner_list success", K(ack_info), K(degraded_learner_list));
       }
     }
   }
@@ -2722,7 +2652,6 @@ int LogSlidingWindow::get_majority_lsn_(const ObMemberList &member_list,
       } else if (OB_TMP_FAIL(match_lsn_map_.get(tmp_server, tmp_val))) {
       } else {
         lsn_array[valid_member_cnt++] = tmp_val.lsn_;
-        PALF_LOG(TRACE, "current matched lsn", K_(palf_id), K_(self), "server:", tmp_server, "lsn:", tmp_val.lsn_);
       }
     }
   } while(0);
@@ -2764,8 +2693,6 @@ int LogSlidingWindow::truncate_for_rebuild(const PalfBaseInfo &palf_base_info)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (new_start_log_id <= start_log_id) {
-    PALF_LOG(INFO, "new_start_log_id is smaller than start_log_id, do nothing", K_(palf_id), K_(self),
-        K(new_start_log_id), K(start_log_id), K(max_log_id), K(palf_base_info));
   // 1) check previous log_tasks
   } else {
     if (max_log_id >= prev_log_info.log_id_) {
@@ -2948,8 +2875,6 @@ int LogSlidingWindow::truncate(const TruncateLogInfo &truncate_log_info, const L
           (void) set_last_submit_log_info_(prev_lsn, truncate_begin_lsn, prev_log_id, prev_proposal_id);
           // reset accum_checksum only when last_submit_log_id >= log_id (larger than prev_log_id)
           checksum_.set_accum_checksum(prev_accum_checksum);
-          PALF_LOG(INFO, "truncate last_submit_log_info_ and accum_checksum", K_(palf_id), K_(self), K(truncate_log_info), K(last_submit_log_id),
-              K(prev_accum_checksum));
         }
         // truncate max_flushed_log info
         // Considering there might be holes before the truncate point in sw, we need to compare it with the current max_flushed_end_lsn here
@@ -2959,8 +2884,6 @@ int LogSlidingWindow::truncate(const TruncateLogInfo &truncate_log_info, const L
           // flush point has been pushed, need to truncate
           (void) truncate_max_flushed_log_info_(prev_lsn, truncate_begin_lsn, prev_proposal_id);
           (void) group_buffer_.truncate(truncate_begin_lsn);
-          PALF_LOG(INFO, "truncate max_flushed_log_info_", K_(palf_id), K_(self), K(truncate_log_info), K(log_end_lsn),
-              "old flushed_end_lsn", max_flushed_end_lsn);
         }
         PALF_LOG(INFO, "truncate success", K(ret), K_(palf_id), K_(self), K(truncate_log_info), "max_log_id", get_max_log_id(),
             K(log_begin_lsn), K(expected_prev_lsn), K(expected_prev_log_pid), K(prev_accum_checksum));
@@ -3089,8 +3012,6 @@ int LogSlidingWindow::receive_log(const common::ObAddr &src_server,
     if (OB_SUCC(ret)) {
       bool is_local_log_valid = false;
       if (!need_update_log_task_(group_entry_header, log_task, need_send_ack, is_local_log_valid, is_log_pid_match)) {
-        PALF_LOG(INFO, "no need update log", K(log_id), K_(palf_id), K_(self), K(need_send_ack), K(is_log_pid_match),
-            K(is_local_log_valid), K(is_prev_log_exist), K(is_prev_log_match), K(group_entry_header), KPC(log_task));
         if (false == is_local_log_valid) {
           // local log_task is invalid, and it does not need update, this means that it's maybe in PRE_FILL state.
         } else if (false == is_log_pid_match) {
@@ -3450,8 +3371,6 @@ bool LogSlidingWindow::need_update_log_task_(LogGroupEntryHeader &header,
         if (max_flushed_end_lsn >= log_end_lsn) {
           need_send_ack = true;
         }
-        PALF_LOG(INFO, "receive log with same proposal_id", K(bool_ret), K_(palf_id), K_(self), K(log_id), K(log_end_lsn),
-            K(need_send_ack), K(old_pid), KPC(log_task), K(header), K(max_flushed_end_lsn), KPC(log_task));
       } else if (old_pid > new_pid) {
         // Received a log with a smaller proposal_id, which should not happen.
         // Here it indirectly depends on: follower can only return committed logs when responding to fetch log requests, therefore under the same proposal_id,
@@ -3459,8 +3378,6 @@ bool LogSlidingWindow::need_update_log_task_(LogGroupEntryHeader &header,
         PALF_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "receive log with smaller proposal_id, unexpected error", K_(palf_id), K_(self), K(log_id),
                    K(new_pid), KPC(log_task), K(header), KPC(log_task));
       } else {
-        PALF_LOG(INFO, "receive log with larger proposal_id, maybe need truncate", K_(palf_id), K_(self), K(log_id),
-                   K(new_pid), K(header), KPC(log_task));
       }
     }
   }
@@ -3577,8 +3494,6 @@ bool LogSlidingWindow::pre_check_for_config_log(const int64_t &msg_proposal_id,
       //    it's impossible in our consensus protocol.
       //    Therefore only case 1 is possible, we can receive this config log safely.
       bool_ret = true;
-      PALF_LOG(INFO, "last_slide_log_pid matches with arg or lsn has slid", K(bool_ret), K_(palf_id), K_(self), K(msg_proposal_id),
-          K(last_slide_lsn), K(last_slide_log_pid), K(lsn), K(log_proposal_id));
     } else if (last_slide_lsn > lsn && last_slide_log_pid < log_proposal_id) {
       // 3. When last_slide_lsn > lsn, and log_proposal_id of last_slide_log < log_proposal_id
       //    that means more old/new logs with smaller/begger proposal_id have been committed,
@@ -3667,8 +3582,6 @@ bool LogSlidingWindow::pre_check_for_config_log(const int64_t &msg_proposal_id,
     } else {
       log_task->lock();
       if (!log_task->is_valid()) {
-        PALF_LOG(INFO, "next log_task is invalid, no need truncate", K(next_log_id),
-            K_(palf_id), K_(self), KPC(log_task));
       } else if (log_task->get_proposal_id() < msg_proposal_id) {
         truncate_log_info.truncate_type_ = TRUNCATE_LOG;
         truncate_log_info.truncate_log_id_ = next_log_id;
@@ -3685,8 +3598,6 @@ bool LogSlidingWindow::pre_check_for_config_log(const int64_t &msg_proposal_id,
         PALF_LOG_RET(WARN, OB_ERR_UNEXPECTED, "next log proposal_id is less than msg_proposal_id, need truncate", K_(palf_id), K_(self),
             K(next_log_id), K(msg_proposal_id), K(truncate_log_info), KPC(log_task));
       } else {
-        PALF_LOG(INFO, "next log proposal_id is not less than msg_proposal_id, no need truncate",
-            K_(palf_id), K_(self), K(next_log_id), K(msg_proposal_id), KPC(log_task), K(truncate_log_info));
       }
       log_task->unlock();
     }
@@ -3712,8 +3623,6 @@ bool LogSlidingWindow::is_prev_log_pid_match(const int64_t log_id,
     PALF_LOG_RET(WARN, OB_INVALID_ARGUMENT, "invalid argumetns", K(log_id), K_(palf_id), K_(self), K(lsn));
   } else if (FIRST_VALID_LOG_ID == log_id) {
     bool_ret = true;
-    PALF_LOG(INFO, "this is the first log, no need check prev log proposal_id", K(log_id),
-        K_(palf_id), K_(self), K(lsn), K(prev_log_pid));
   } else if (OB_SUCCESS != (tmp_ret = get_prev_log_info_(log_id, local_prev_lsn, local_prev_end_lsn,
           local_prev_scn, local_prev_log_pid, local_prev_log_accum_checksum))) {
     if (REACH_TIME_INTERVAL(100 * 1000)) {
@@ -4106,8 +4015,6 @@ int LogSlidingWindow::report_log_task_trace(const int64_t log_id)
   } else if (OB_SUCC(guard.get_log_task(log_id, log_task))) {
     LogMemberAckInfoList ack_info_list;
     get_ack_info_array(ack_info_list);
-    PALF_LOG(INFO, "current log_task status", K_(palf_id), K_(self), K(log_id), KPC(log_task),
-        K(ack_info_list));
   } else {
     // do nothing
   }

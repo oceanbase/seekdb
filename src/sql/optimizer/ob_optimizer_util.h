@@ -1733,8 +1733,6 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
       }
     }
   }
-  SQL_OPT_LOG(DEBUG, "succeed to choose random members",
-      K(choose_cnt), KPC(priority_indices), K(output_array));
   return ret;
 }
 

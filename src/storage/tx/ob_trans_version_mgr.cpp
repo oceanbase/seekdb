@@ -26,7 +26,6 @@ namespace transaction
 
 void ObTransVersionMgr::destroy()
 {
-  TRANS_LOG(INFO, "ObTransVersionMgr destroyed");
 }
 
 void ObTransVersionMgr::reset()
@@ -63,7 +62,6 @@ int ObTransVersionMgr::update_local_trans_version(const int64_t local_trans_vers
   int ret = OB_SUCCESS;
 
   if (!ObTransVersion::is_valid(local_trans_version)) {
-    TRANS_LOG(WARN, "invalid argument", K(local_trans_version));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(update_local_trans_version_(local_trans_version))) {
   } else {
@@ -85,7 +83,6 @@ int ObTransVersionMgr::update_publish_version(const int64_t publish_version)
   int ret = OB_SUCCESS;
 
   if (!ObTransVersion::is_valid(publish_version)) {
-    TRANS_LOG(WARN, "invalid arugment", K(publish_version));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(update_local_trans_version_(publish_version))) {
   } else if (OB_FAIL(update_publish_version_(publish_version))) {

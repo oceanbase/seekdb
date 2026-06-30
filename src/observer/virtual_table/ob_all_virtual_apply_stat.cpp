@@ -34,13 +34,11 @@ int ObAllVirtualApplyStat::inner_get_next_row(common::ObNewRow *&row)
       } else if (OB_FAIL(insert_stat_(apply_stat))) {
       } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
       } else {
-        SERVER_LOG(INFO, "iter apply stat succ", K(apply_stat));
       }
       return ret;
     };
     logservice::ObLogService *log_service = share::g_mp->log_service();
     if (NULL == log_service) {
-      SERVER_LOG(INFO, "tenant has no ObLogService");
     } else if (OB_FAIL(log_service->iterate_apply(func_iter_ls))) {
     } else {
       SERVER_LOG(INFO, "iter ls succ", K(ret));
@@ -89,7 +87,6 @@ int ObAllVirtualApplyStat::insert_stat_(logservice::LSApplyStat &apply_stat)
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unkown column");
         break;
     }
   }

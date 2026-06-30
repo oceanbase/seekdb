@@ -161,7 +161,6 @@ int ObAllVirtualPsItemInfo::get_next_row_from_specified_tenant(bool &is_end)
     while (OB_SUCC(ret) && false == is_filled && false == is_end) {
       if (stmt_id_array_idx_ < 0) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid plan_stat_array index", K(stmt_id_array_idx_));
       } else if (stmt_id_array_idx_ >= stmt_id_array_.count()) {
         is_end = true;
         stmt_id_array_idx_ = OB_INVALID_ID;

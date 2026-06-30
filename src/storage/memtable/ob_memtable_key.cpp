@@ -28,7 +28,6 @@ int ObMemtableKeyGenerator::init()
     TRANS_LOG(WARN, "init ObMemtableKeyGenerator twice", K(ret));
   } else if (columns_.count() < rowkey_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "rowkey number mismatched", K(columns_.count()), K(rowkey_cnt_));
   } else if (OB_FAIL(obj_buf_.init(&allocator_))) {
   } else if (OB_FAIL(obj_buf_.reserve(rowkey_cnt_))) {
   } else {

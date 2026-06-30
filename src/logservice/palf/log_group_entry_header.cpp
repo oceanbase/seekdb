@@ -126,7 +126,6 @@ int LogGroupEntryHeader::calculate_log_checksum_(const bool is_padding_log,
     PALF_LOG(ERROR, "Invalid arguments", K(ret), K(log_write_buf), K(data_len), K(is_padding_log));
   } else if (is_padding_log) {
     data_checksum = PADDING_LOG_DATA_CHECKSUM;
-    PALF_LOG(INFO, "This is a padding log, set log data checksum to 0", K(data_checksum), K(data_len));
   } else {
     const int64_t total_buf_len = data_len + LogGroupEntryHeader::HEADER_SER_SIZE;
     ob_assert(total_buf_len == log_write_buf.get_total_size());
@@ -255,7 +254,6 @@ void LogGroupEntryHeader::update_header_checksum_()
 {
   reset_header_checksum_();
   flag_ = (flag_ | calculate_header_checksum_());
-  PALF_LOG(TRACE, "update_header_checksum_ finished", KPC(this));
 }
 
 LogGroupEntryHeader& LogGroupEntryHeader::operator=(const LogGroupEntryHeader &header)
@@ -312,7 +310,6 @@ bool LogGroupEntryHeader::check_integrity(const char *buf,
   } else {
     bool_ret = true;
   }
-  PALF_LOG(TRACE, "check_integrity", K(bool_ret), K(group_log_checksum), KPC(this));
   return bool_ret;
 }
 
@@ -445,7 +442,6 @@ bool LogGroupEntryHeader::check_log_checksum_(const char *buf,
   } else if (is_padding_log()) {
     bool_ret = true;
     group_data_checksum = PADDING_LOG_DATA_CHECKSUM;
-    PALF_LOG(INFO, "This is a padding log, no need check log checksum", K(bool_ret), K(data_len));
   } else {
     int64_t pos = 0;
     LogEntry log_entry;
@@ -495,7 +491,6 @@ int LogGroupEntryHeader::truncate(const char *buf,
       group_size_ = 0;
       update_header_checksum();
     }
-    PALF_LOG(INFO, "This is a padding log", K(data_len), K(cut_scn), K(pre_accum_checksum), KPC(this));
   } else {
     SCN tmp_max_scn;
     int64_t pos = 0;
@@ -515,7 +510,6 @@ int LogGroupEntryHeader::truncate(const char *buf,
         if (!tmp_max_scn.is_valid() || log_entry_header.get_scn() > tmp_max_scn) {
           tmp_max_scn = log_entry_header.get_scn();
         }
-        PALF_LOG(INFO, "each log in truncate", K(log_entry_header), K(buf));
       }
     }
     if (OB_SUCC(ret)) {

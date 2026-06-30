@@ -13754,7 +13754,6 @@ int otimestamp_scale_check(ObObjCastParams &params, const ObAccuracy &accuracy, 
       buf_obj.set_otimestamp_value(obj.get_type(), ot_data);
       buf_obj.set_scale(scale);
     } else {
-      OB_LOG(DEBUG, "invalid otimestamp, set it null ", K(ot_data), K(scale), "orig_date", obj.get_otimestamp_value());
       buf_obj.set_null();
     }
     res_obj = &buf_obj;
@@ -13900,7 +13899,6 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
       if (OB_UNLIKELY(0 == max_accuracy_len && str_len_byte > 0)) {
         cast_ret = OB_ERR_DATA_TOO_LONG;
         str_len_char = obj.is_lob() ? str_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-        OB_LOG(WARN, "char type length is too long", K(obj), K(max_accuracy_len), K(str_len_char));
       }
     } else {
       int32_t trunc_len_byte = -1;
@@ -13976,7 +13974,6 @@ int string_length_check_only(const ObAccuracy &accuracy, const ObCollationType c
     if (OB_UNLIKELY(0 == max_len_char && str_len_byte > 0)) {
       const int32_t str_len_char = static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
       ret = OB_ERR_DATA_TOO_LONG;
-      OB_LOG(WARN, "char type length is too long", K(obj), K(max_len_char), K(str_len_char));
     }
   } else {
     if (str_len_byte <= max_len_char) {

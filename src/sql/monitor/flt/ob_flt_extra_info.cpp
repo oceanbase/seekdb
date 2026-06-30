@@ -49,7 +49,6 @@ int FLTExtraInfo::deserialize(const char *buf, const int64_t len, int64_t &pos)
   while (OB_SUCC(ret) && pos < len) {
     int32_t val_len = 0;
     int16_t extra_id;
-    OB_LOG(TRACE, "deserialize flt extra info", KPHEX(buf+pos, len-pos));
     if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, buf_end, pos, extra_id, val_len))) {
     } else if (OB_FAIL(deserialize_field(static_cast<FullLinkTraceExtraInfoId>(extra_id),
                                                             val_len, buf, buf_end, pos))) {
@@ -89,7 +88,6 @@ int FLTControlInfo::serialize(char *buf, const int64_t len, int64_t &pos)
                                       slow_query_thres_, FLT_SLOW_QUERY_THRES))) {
   } else if (support_show_trace_ && OB_FAIL(ObProtoTransUtil::store_int1(buf, len, pos,
                                       show_trace_enable_, FLT_SHOW_TRACE_ENABLE))) {
-    OB_LOG(WARN,"failed to store extra info id", K(FLT_SHOW_TRACE_ENABLE), K(buf));
   } else {
     // fill type and len in the head
     int32_t total_len = pos - org_pos - FLT_HEADER_LEN;

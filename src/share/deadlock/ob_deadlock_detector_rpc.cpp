@@ -97,7 +97,6 @@ int ObDeadLockDetectorRpc::post_collect_info_message(const ObAddr &dest_addr,
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
-  DETECT_LOG(INFO, "post collect info msg", K(dest_addr), K(msg));
   if (false == is_inited_) {
     ret = OB_NOT_INIT;
     DETECT_LOG(WARN, "ObDeadLockDetectorRpc not inited", KR(ret));
@@ -132,7 +131,6 @@ int ObDeadLockDetectorRpc::post_notify_parent_message(const ObAddr &dest_addr,
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
-  DETECT_LOG(INFO, "post notify parent msg", K(dest_addr), K(msg));
   if (false == is_inited_) {
     ret = OB_NOT_INIT;
     DETECT_LOG(WARN, "ObDeadLockDetectorRpc not inited", KR(ret));

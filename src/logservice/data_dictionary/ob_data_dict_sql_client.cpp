@@ -112,7 +112,6 @@ int ObDataDictSqlClient::get_schema_version(
           DDLOG(WARN, "parse_record_from_row_ for schema_version failed", KR(ret),
               K(snapshot_scn), "sql", sql.ptr());
         } else {
-          DDLOG(INFO, "get_schema_version", K(schema_version));
         }
       }
     }

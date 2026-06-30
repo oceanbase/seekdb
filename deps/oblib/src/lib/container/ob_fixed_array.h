@@ -139,7 +139,6 @@ public:
   inline void destroy()
   {
     if (OB_ISNULL(allocator_)) {
-      OB_LOG(DEBUG, "fail to destory fixed array", K(allocator_));
     } else {
       if (NULL != data_) {
         for (uint32_t i = 0; i < init_cnt_; ++i) {
@@ -181,7 +180,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(capacity < 0) || OB_UNLIKELY(capacity > UINT32_MAX)) {
       ret = OB_INVALID_ARGUMENT;
-      LIB_LOG(WARN, "invalid argument", K(capacity));
     } else if (OB_UNLIKELY(NULL != data_)) {
       ret = OB_INIT_TWICE;
       OB_LOG(WARN, "reserve array size", K(ret), K_(data), K_(capacity));

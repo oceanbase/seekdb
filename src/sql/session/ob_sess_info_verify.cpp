@@ -389,7 +389,6 @@ int ObSessInfoVerify::deserialize_sess_info_veri_id(sql::ObSQLSessionInfo &sess,
     }
     default: {
       // For compatibility, no error
-      OB_LOG(WARN,"not support extra info id", K(extra_id));
       break;
     }
   }

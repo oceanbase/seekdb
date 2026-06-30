@@ -181,7 +181,6 @@ int ObKVCacheHazardStation::init(const int64_t waiting_node_threshold, const int
 
 void ObKVCacheHazardStation::destroy()
 {
-  COMMON_LOG(INFO, "Hazard station begin to destroy");
 
   inited_ = false;
   if (OB_NOT_NULL(hazard_slots_)) {
@@ -210,7 +209,6 @@ int ObKVCacheHazardStation::delete_node(const int64_t slot_id, ObKVCacheHazardNo
   } else {
     node->set_version(ATOMIC_FAA(&version_, 1));
     if (OB_UNLIKELY(nullptr != node->get_next())) {
-      COMMON_LOG(ERROR, "Unexpected hazard next", KPC(node));
       ob_abort();
     } else {
       hazard_slots_[slot_id].delete_node(*node);
@@ -326,8 +324,6 @@ int ObKVCacheHazardStation::print_current_status() const
           }
         }
         if (OB_SUCC(ret)) {
-          _OB_LOG(INFO, "[KVCACHE-HAZARD-VERSION] hazard version status info: current_version: %8ld | min_version=%8ld | total_nodes_count: %8ld |\n%s",
-              version_, get_min_version(), total_nodes_num, buf);
         }
       }
     }

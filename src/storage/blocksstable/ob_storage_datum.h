@@ -265,7 +265,6 @@ OB_INLINE int ObStorageDatum::from_obj_enhance(const common::ObObj &obj)
     set_ext_value(obj.get_ext());
   } else if (OB_FAIL(from_obj(obj))) {
   }
-  STORAGE_LOG(DEBUG, "chaser debug from obj", K(obj), K(*this));
 
   return ret;
 }
@@ -316,7 +315,6 @@ OB_INLINE bool ObStorageDatum::operator==(const ObStorageDatum &other) const
     bret = ObDatum::binary_equal(*this, other);
   }
   if (!bret) {
-    STORAGE_LOG(DEBUG, "datum and datum no equal", K(other), K(*this));
   }
   return bret;
 
@@ -333,7 +331,6 @@ OB_INLINE bool ObStorageDatum::operator==(const common::ObObj &other) const
     bret = *this == datum;
   }
   if (!bret) {
-    STORAGE_LOG(DEBUG, "obj and datum no equal", K(other), K(datum), KPC(this));
   }
   return bret;
 }

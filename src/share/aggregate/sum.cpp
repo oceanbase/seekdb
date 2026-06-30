@@ -82,7 +82,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -111,7 +110,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -119,7 +117,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   case (VEC_TC_FLOAT): { // float
     if (out_tc != VEC_TC_FLOAT) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     } else {
       INIT_SUM_AGGREGATE(VEC_TC_FLOAT, VEC_TC_FLOAT);
     }
@@ -128,7 +125,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   case (VEC_TC_FIXED_DOUBLE): { // fixed double
     if (out_tc != VEC_TC_FIXED_DOUBLE) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     } else {
       INIT_SUM_AGGREGATE(VEC_TC_FIXED_DOUBLE, VEC_TC_FIXED_DOUBLE);
     }
@@ -137,7 +133,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   case (VEC_TC_DOUBLE): { // double
     if (out_tc != VEC_TC_DOUBLE) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     } else {
       INIT_SUM_AGGREGATE(VEC_TC_DOUBLE, VEC_TC_DOUBLE);
     }
@@ -146,7 +141,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   case (VEC_TC_NUMBER): { // number
     if (out_tc != VEC_TC_NUMBER) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     } else {
       if (tmp_res_size != nullptr) {
         *tmp_res_size = 0;
@@ -169,7 +163,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -190,7 +183,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -211,7 +203,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -232,7 +223,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -249,7 +239,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     }
     }
     break;
@@ -257,7 +246,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   case VEC_TC_COLLECTION: {
     if (out_tc != VEC_TC_COLLECTION) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
     } else {
       if (tmp_res_size != nullptr) {
         *tmp_res_size = 0;
@@ -270,7 +258,6 @@ int init_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   }
   default: {
     ret = OB_ERR_UNEXPECTED;
-    SQL_LOG(WARN, "unexpected in & out type class", K(in_tc), K(out_tc));
   }
   }
   return ret;

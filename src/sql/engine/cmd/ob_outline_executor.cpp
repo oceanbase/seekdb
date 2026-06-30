@@ -94,7 +94,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid ctx", K(ret));
   } else if (NULL == buf) {
-    SQL_PC_LOG(WARN, "fail to alloc buf", K(outline_sql.length()));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(outline_stmt) || OB_ISNULL(outline_stmt->get_query_ctx())
              || OB_ISNULL(query_hint = &outline_stmt->get_query_ctx()->get_query_hint())) {

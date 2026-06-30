@@ -1085,7 +1085,6 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
                                                   is_same))) {
       } else if (false == is_same) { //do nothing
       } else {//param info already matched
-        SQL_PC_LOG(DEBUG, "add plan to plan set");
         need_new_planset = false;
         if (is_multi_stmt_batch &&
             OB_FAIL(match_and_generate_ext_params(cur_plan_set, pc_ctx, outline_param_idx))) {
@@ -1101,7 +1100,6 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
      *  and then add the plan set to plan cache value
      */
     if (OB_SUCC(ret) && need_new_planset) {
-      SQL_PC_LOG(DEBUG, "add new plan set");
       ObPlanSet *plan_set = nullptr;
       if (OB_FAIL(create_new_plan_set(ObPlanSet::get_plan_set_type_by_cache_obj_type(plan.get_ns()),
                                       plan_set))) {
@@ -1173,7 +1171,6 @@ void ObPlanCacheValue::reset()
   plan_sets_.clear();
   // free plan_cache_key
   if (NULL == pc_alloc_) {
-    SQL_PC_LOG(TRACE, "pc alloc not init, may be reset before", K(pc_alloc_));
   } else {
     for (int64_t i = 0; i < not_param_info_.count(); i++) {
       if (NULL != not_param_info_.at(i).raw_text_.ptr()) {

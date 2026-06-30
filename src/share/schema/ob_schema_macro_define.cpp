@@ -47,7 +47,6 @@ int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long, ", K(col_name_len));
   }
 
   if (OB_SUCC(ret)) {
@@ -160,7 +159,6 @@ int ADD_COLUMN_SCHEMA_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_sch
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long", K(col_name_len));
   }
  
   if(OB_SUCC(ret)) {
@@ -269,7 +267,6 @@ int ADD_COLUMN_SCHEMA_TS_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long", K(col_name_len));
   }
  
   if(OB_SUCC(ret)) {
@@ -374,7 +371,6 @@ int ADD_COLUMN_SCHEMA_TS_FULL(share::schema::ObTableSchema &table_schema,
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long, ", K(col_name_len));
   }
  
   if(OB_SUCC(ret)) {

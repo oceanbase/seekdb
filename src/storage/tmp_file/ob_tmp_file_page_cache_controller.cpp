@@ -29,7 +29,6 @@ int ObTmpFilePageCacheController::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "ObTmpFilePageCacheController init twice");
   } else if (OB_FAIL(task_allocator_.init(lib::ObMallocAllocator::get_instance(),
                                           OB_MALLOC_MIDDLE_BLOCK_SIZE,
                                           ObMemAttr("TmpFileCtl", ObCtxIds::DEFAULT_CTX_ID)))) {
@@ -49,7 +48,6 @@ int ObTmpFilePageCacheController::start()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    STORAGE_LOG(WARN, "tmp file page cache controller is not inited");
   } else if (OB_FAIL(flush_tg_.start())) {
   } else if (OB_FAIL(swap_tg_.start())) {
   }
@@ -60,7 +58,6 @@ void ObTmpFilePageCacheController::stop()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    STORAGE_LOG(WARN, "tmp file page cache controller is not inited");
   } else {
     // stop background threads should follow the order 'swap' -> 'flush' because 'swap' holds ref to 'flush'
     swap_tg_.stop();
@@ -72,7 +69,6 @@ void ObTmpFilePageCacheController::wait()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    STORAGE_LOG(WARN, "tmp file page cache controller is not inited");
   } else {
     swap_tg_.wait();
     flush_tg_.wait();

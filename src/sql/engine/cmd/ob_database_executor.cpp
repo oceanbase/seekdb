@@ -59,7 +59,6 @@ int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
   } else if (OB_ISNULL(GCTX.root_service_)) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "root_service_ not initialized");
   } else {
     // sync_call: direct business call, bypasses entire RPC stack
     if (OB_FAIL(oceanbase::rootserver::serial_call([&]{ return GCTX.root_service_->create_database(create_database_arg, database_id); }))) {
@@ -86,7 +85,6 @@ int ObUseDatabaseExecutor::execute(ObExecContext &ctx, ObUseDatabaseStmt &stmt)
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "session is NULL");
   } else {
     const bool is_oceanbase_db = is_oceanbase_sys_database_id(stmt.get_db_id());
     if (session->is_tenant_changed() && !is_oceanbase_db) {
@@ -104,7 +102,6 @@ int ObUseDatabaseExecutor::execute(ObExecContext &ctx, ObUseDatabaseStmt &stmt)
       } else if (OB_FAIL(session->set_default_database(stmt.get_db_name(), db_coll_type))) {
       } else {
         session->set_db_priv_set(stmt.get_db_priv_set());
-        SQL_ENG_LOG(INFO, "use default database", "db", stmt.get_db_name());
         session->set_database_id(stmt.get_db_id());
       }
     }
@@ -131,7 +128,6 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "session is NULL");
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
@@ -140,7 +136,6 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_database(alter_database_arg); }))) {
   } else if (! stmt.get_alter_option_set().has_member(obcall::ObAlterDatabaseArg::COLLATION_TYPE)) {
     // do nothing
@@ -186,10 +181,8 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "fail to get my session", K(ctx));
   } else {
     obcall::UInt64 affected_row(0);
     obcall::ObDropDatabaseRes drop_database_res;
@@ -243,7 +236,6 @@ int ObFlashBackDatabaseExecutor::execute(ObExecContext &ctx, ObFlashBackDatabase
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->flashback_database(flashback_database_arg); }))) {
   }
 
@@ -272,7 +264,6 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->purge_database(purge_database_arg); }))) {
   }
 
@@ -308,10 +299,8 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
 
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-      SQL_ENG_LOG(WARN, "get task executor context failed");
     } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->fork_database(fork_database_arg, res); }))) {
     } else {
-      SQL_ENG_LOG(INFO, "fork database executor finished", K(fork_database_arg), K(res));
     }
   }
 

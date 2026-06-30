@@ -109,7 +109,6 @@ void ObMemtableCtx::reset()
 {
   if (IS_INIT) {
     if ((ATOMIC_LOAD(&callback_mem_used_) > 8 * 1024 * 1024) && REACH_TIME_INTERVAL(200000)) {
-      TRANS_LOG(INFO, "memtable callback memory used > 8MB", K(callback_mem_used_), K(*this));
     }
     if (OB_UNLIKELY(callback_alloc_count_ != callback_free_count_)) {
       TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "callback alloc and free count not match", K(*this));
@@ -343,7 +342,6 @@ void ObMemtableCtx::old_row_free(void *row)
   if (OB_ISNULL(row)) {
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "row is null, unexpected error", KP(row), K(*this));
   } else {
-    TRANS_LOG(DEBUG, "row release succ", KP(row), K(*this), K(lbt()));
     ctx_cb_allocator_.free(row);
     row = NULL;
   }
@@ -372,7 +370,6 @@ void ObMemtableCtx::free_mvcc_row_callback(ObITransCallback *cb)
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "try to free ext info callback as mvcc row callback", KP(cb), K(*this));
   } else {
     ATOMIC_INC(&callback_free_count_);
-    TRANS_LOG(DEBUG, "callback release succ", KP(cb), K(*this), K(lbt()));
     trans_mgr_.free_mvcc_row_callback(cb);
     cb = NULL;
   }
@@ -405,7 +402,6 @@ void ObMemtableCtx::free_ext_info_callback(ObITransCallback *cb)
     ObExtInfoCallback *ext_cb = static_cast<ObExtInfoCallback *>(cb);
     ext_cb->~ObExtInfoCallback();
     mem_ctx_obj_pool_.free<storage::ObExtInfoCallback>(cb);
-    TRANS_LOG(DEBUG, "callback release succ", KP(cb), K(*this), K(lbt()));
     trans_mgr_.add_callback_ext_info_log_count(-1);
     cb = NULL;
   }
@@ -458,7 +454,6 @@ int ObMemtableCtx::trans_end(
   int ret = OB_SUCCESS;
 
   if (commit && get_trans_version().is_max()) {
-    TRANS_LOG(ERROR, "unexpected prepare version", K(*this));
     // no retcode
   }
 
@@ -512,7 +507,6 @@ int ObMemtableCtx::do_trans_end(
     set_commit_version(trans_version);
     if (OB_FAIL(trans_mgr_.trans_end(commit))) {
     } else {
-      TRANS_LOG(DEBUG, "trans commit", KPC(this), K(commit), K(trans_version));
     }
     // after a transaction finishes, callback memory should be released
     // and check memory leakage
@@ -577,11 +571,6 @@ int ObMemtableCtx::trans_replay_end(const bool commit,
       convert_checksum_for_commit_log(replay_checksum, checksum_collapsed, checksum_signature);
       if (checksum != checksum_collapsed) {
         cs_ret = OB_CHECKSUM_ERROR;
-        TRANS_LOG(ERROR, "MT_CTX: replay checksum error", K(cs_ret),
-                  "checksum_in_commit_log", checksum,
-                  "checksum_replayed", checksum_collapsed,
-                  "checksum_before_collapse", replay_checksum,
-                  K(checksum_signature), KPC(this));
         OB_SAFE_ABORT();
       }
     }
@@ -667,7 +656,6 @@ void ObMemtableCtx::sync_log_fail(const ObCallbackScopeArray &callbacks,
     }
   } else {
     if (callbacks.count() > 0) {
-      TRANS_LOG(INFO, "skip do callbacks because of trans_end", K(end_code_), KPC(ctx_));
       int fail_cnt = 0;
       ARRAY_FOREACH(callbacks, i) {
         fail_cnt += callbacks.at(i).cnt_;
@@ -750,7 +738,6 @@ int ObMemtableCtx::add_conflict_trans_id(const ObTransID conflict_trans_id)
 
   if (conflict_trans_ids_.count() >= MAX_RESERVED_CONFLICT_TX_NUM) {
     ret = OB_SIZE_OVERFLOW;
-    DETECT_LOG(WARN, "too many conflict trans_id", K(*this), K(conflict_trans_id), K(conflict_trans_ids_));
   } else if (if_contains(conflict_trans_id)) {
     // do nothing
   } else if (OB_FAIL(conflict_trans_ids_.push_back(conflict_trans_id))) {
@@ -812,7 +799,6 @@ int ObMemtableCtx::rollback(const transaction::ObTxSEQ to_seq_no,
   } else if (OB_FAIL(rollback_table_lock_(to_seq_no, from_seq_no))) {
   } else {
     const int64_t elapsed = common::ObClockGenerator::getClock() - start_ts;
-    TRANS_LOG(INFO, "memtable handle rollback to successfuly", K(from_seq_no), K(to_seq_no), K(remove_cnt), K(elapsed), KPC(this));
   }
   return ret;
 }
@@ -843,7 +829,6 @@ int ObMemtableCtx::remove_callback_for_uncommited_txn(const memtable::ObMemtable
 
   if (OB_ISNULL(memtable_set)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "memtable is NULL", K(memtable_set));
   } else if (OB_FAIL(reuse_log_generator_())) {
   } else if (OB_FAIL(trans_mgr_.remove_callback_for_uncommited_txn(memtable_set))) {
   }
@@ -957,7 +942,6 @@ int ObMemtableCtx::recover_from_table_lock_durable_info(const ObTableLockInfo &t
     tablelock::ObTableLockOp lock_op = table_lock_info.table_lock_ops_.at(i);
     if (!lock_op.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "the lock_op is not valid", K(lock_op));
       // NOTE: we only need recover the lock op at lock list and lock map.
       // the buffer at multi source data is recovered by multi source data.
       // the tx ctx table may be copied from other ls replica we need fix the lockop's create timestamp.
@@ -1066,7 +1050,6 @@ int ObMemtableCtx::add_lock_record(const tablelock::ObTableLockOp &lock_op)
   } else if (OB_FAIL(register_multi_source_data_if_need_(lock_op))) {
   } else if (OB_UNLIKELY(!lock_op.need_register_callback())) {
     // do nothing
-    TABLELOCK_LOG(DEBUG, "no need callback ObMemtableCtx::add_lock_record", K(lock_op));
   } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(memtable))) {
   } else if (OB_FAIL(register_table_lock_cb(memtable,
                                             lock_op_node))) {
@@ -1090,7 +1073,6 @@ int ObMemtableCtx::replay_add_lock_record(
   } else if (OB_FAIL(lock_mem_ctx_.add_lock_record(lock_op, lock_op_node))) {
   } else if (OB_UNLIKELY(!lock_op.need_register_callback())) {
     // do nothing
-    TABLELOCK_LOG(DEBUG, "no need callback ObMemtableCtx::add_lock_record", K(lock_op));
   } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(memtable))) {
   } else if (OB_FAIL(register_table_lock_replay_cb(memtable,
                                                    lock_op_node,
@@ -1182,7 +1164,6 @@ int ObMemtableCtx::replay_lock(const tablelock::ObTableLockOp &lock_op,
   ObLockMemtable *memtable = nullptr;
   if (OB_UNLIKELY(!lock_op.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(lock_op));
   } else if (OB_FAIL(lock_mem_ctx_.get_lock_memtable(memtable))) {
   } else if (OB_FAIL(memtable->replay_lock(this, lock_op, scn))) {
   } else {

@@ -37,7 +37,6 @@ int ObVirtualDataAccessService::table_scan(ObVTableScanParam &param, ObNewRowIte
   if (OB_FAIL(vt_iter_factory_.create_virtual_table_iterator(param, vt_iter))) {
   } else if (NULL == vt_iter) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "invalid argument", K(vt_iter));
   } else if (OB_FAIL(vt_iter->set_output_column_ids(param.column_ids_))) {
   } else {
     vt_iter->set_scan_param(&param);

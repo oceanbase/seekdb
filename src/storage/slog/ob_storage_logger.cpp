@@ -86,7 +86,6 @@ int ObStorageLogger::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_REDO_LOG(WARN, "Slogger has not been inited.");
   } else if (OB_FAIL(log_writer_->start())) {
   }
   return ret;
@@ -285,7 +284,6 @@ int ObStorageLogger::remove_useless_log_file(const int64_t end_file_id)
     for (; OB_SUCC(ret) && start_file_id < end_file_id; ++start_file_id) {
       if (OB_FAIL(log_writer_->delete_log_file(start_file_id))) {
       } else {
-        STORAGE_REDO_LOG(INFO, "Success to remove useless log file, ", K(start_file_id));
       }
     }
   }
@@ -325,7 +323,6 @@ int ObStorageLogger::build_log_item(const ObStorageLogParam &param, ObStorageLog
   } else if (OB_FAIL(log_item->fill_batch_header(total_data_len, 1, 0))) {
   } else {
     log_seq_++;
-    STORAGE_REDO_LOG(DEBUG, "the slog seq plus plus", K(log_seq_));
   }
 
   return ret;
@@ -357,7 +354,6 @@ int ObStorageLogger::build_log_item(
       if (OB_FAIL(log_item->fill_log(log_seq_, param_arr.at(i), i))) {
       } else {
         log_seq_++;
-        STORAGE_REDO_LOG(DEBUG, "the slog seq plus plus", K(log_seq_));
       }
     }
   }

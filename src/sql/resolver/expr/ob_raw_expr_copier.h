@@ -200,7 +200,6 @@ int ObRawExprCopier::copy_on_replace(const common::ObIArray<T *> &from_exprs,
     } else if (OB_ISNULL(to_expr) ||
                OB_UNLIKELY(tmp->get_expr_class() != to_expr->get_expr_class())) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "expr class is changed", KPC(tmp), KPC(to_expr));
     }
     if (OB_SUCC(ret) && OB_FAIL(tmp_arr.push_back(static_cast<T *>(to_expr)))) {
       SQL_RESV_LOG(WARN, "failed to push back to expr", K(ret));

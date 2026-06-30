@@ -105,7 +105,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->row_handle_.assign(other.row_handle_))) {
-      COMMON_LOG(WARN, "Fail to assign row_handle_");
       this->reset();
     } else {
       this->is_get_ = other.is_get_;
@@ -319,7 +318,6 @@ struct ObCachedLevelMicroDataHandle
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->handle_.assign(other.handle_))) {
-      COMMON_LOG(WARN, "Fail to assign handle_");
       this->reset();
     } else {
       this->is_valid_ = other.is_valid_;

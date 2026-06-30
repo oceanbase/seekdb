@@ -218,7 +218,6 @@ int ObPhysicalPlanCtx::set_row_matched_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(row_count));
   } else {
     row_matched_count_ = row_count;
   }
@@ -230,7 +229,6 @@ int ObPhysicalPlanCtx::set_row_duplicated_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(row_count));
   } else {
     row_duplicated_count_ = row_count;
   }
@@ -242,7 +240,6 @@ int ObPhysicalPlanCtx::set_row_deleted_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(row_count));
   } else {
     row_deleted_count_ = row_count;
   }

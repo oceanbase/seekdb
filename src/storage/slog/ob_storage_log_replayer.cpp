@@ -142,7 +142,6 @@ int ObStorageLogReplayer::replay(
     finish_cursor.file_id_ = 1;
     finish_cursor.log_id_ = 1;
     finish_cursor.offset_ = 0;
-    STORAGE_REDO_LOG(WARN, "There is no redo log", K(replay_start_cursor));
   } else {
     ObStorageLogEntry entry;
     char *log_data = nullptr;
@@ -156,11 +155,9 @@ int ObStorageLogReplayer::replay(
     while(OB_SUCC(ret) && OB_SUCC(slog_reader.read_log(entry, log_data, disk_addr))) {
       ObIRedoModule::parse_cmd(entry.cmd_, main_type, sub_type);
       if (ObRedoLogMainType::OB_REDO_LOG_SYS == main_type) {
-        STORAGE_REDO_LOG(INFO, "Skip these kinds of log", K(entry.cmd_));
       } else {
         if (OB_UNLIKELY(nullptr == redo_modules_[static_cast<int>(main_type)])) {
           ret = OB_ERR_UNEXPECTED;
-          STORAGE_REDO_LOG(WARN, "The module hasn't been registered", K(main_type));
         } else {
           replay_start_time = ObTimeUtility::current_time();
           ObRedoModuleReplayParam replay_param;

@@ -547,7 +547,6 @@ public:
   {
     if (OB_NOT_NULL(tx_desc_)) {
       if (need_release_tx_) {
-        TABLELOCK_LOG(TRACE, "free txDesc", KPC_(tx_desc));
         TxDescHelper::release_tx_desc(*tx_desc_);
       }
     }
@@ -663,7 +662,6 @@ OB_DEF_DESERIALIZE(ObLockTaskBatchRequest<T>, template <typename T>)
   } else if (OB_FAIL(TxDescHelper::deserialize_tx_desc(buf, data_len, pos, tx_desc_))) {
   } else {
     need_release_tx_ = true;
-    TABLELOCK_LOG(TRACE, "deserialize txDesc", KPC_(tx_desc));
   }
   return ret;
 }

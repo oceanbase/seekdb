@@ -84,7 +84,6 @@ int ObTenantMemoryPrinter::print_tenant_usage()
       print_buf[BUF_LEN - 1] = '\0';
     }
     if (OB_SUCCESS == ret) {
-      _STORAGE_LOG(INFO, "====== tenants memory info ======\n%s", print_buf);
     }
 
     print_mutex_.unlock();

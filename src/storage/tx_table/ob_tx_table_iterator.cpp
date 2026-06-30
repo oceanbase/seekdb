@@ -179,8 +179,6 @@ int ObTxDataMemtableScanIterator::init(ObTxDataMemtable *tx_data_memtable)
     STORAGE_LOG(WARN, "init ObTxDataMemtableScanIterator with a null tx_data_memtable.", KR(ret));
   } else if (ObTxDataMemtable::State::FROZEN != tx_data_memtable->get_state()) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "the state of this tx data memtable is not frozen",
-                K(tx_data_memtable->get_state()));
   } else if (tx_data_memtable->get_tx_data_count() != tx_data_memtable->get_inserted_count()) {
     ret = OB_ERR_UNEXPECTED;
     int64_t tx_data_count = tx_data_memtable->get_tx_data_count();
@@ -342,11 +340,9 @@ int ObTxDataMemtableScanIterator::drop_and_get_tx_data_(ObTxData *&tx_data)
       if (OB_UNLIKELY(next_tx_data->end_scn_ > tx_data->end_scn_)) {
         // pointer to next_tx_data cause its end_log_ts is larger
         ObCStringHelper helper;
-        STORAGE_LOG(DEBUG, "drop one rollback tx data", "droped : ", helper.convert(tx_data), "keeped", helper.convert(next_tx_data));
         tx_data = next_tx_data;
       } else {
         ObCStringHelper helper;
-        STORAGE_LOG(DEBUG, "drop one rollback tx data", "droped : ", helper.convert(next_tx_data), "keeped", helper.convert(tx_data));
       }
     } else {
       break;
@@ -363,7 +359,6 @@ int ObTxDataMemtableScanIterator::inner_get_next_row(const blocksstable::ObDatum
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "tx data memtable scan iterator is not inited");
   } else if (OB_SUCC(tx_data_2_datum_converter_.generate_next_now(row))) {
     // do nothing, next row is assigned out
   } else if (OB_ITER_END != ret) {
@@ -388,18 +383,14 @@ int ObTxDataMemtableScanIterator::inner_get_next_row(const blocksstable::ObDatum
   if (OB_NOT_NULL(row)
       && (!row->is_first_multi_version_row() || !row->is_last_multi_version_row())) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "Invalid tx data sstable row", KPC(row));
   }
 
   if (OB_ITER_END == ret) {
     if (is_parallel_merge_ && drop_tx_data_cnt_ > 0) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(ERROR, "parallel merge should not drop tx data", KPC(this), KPC(tx_data_memtable_));
     } else if (iterate_row_cnt_ != row_cnt_to_dump_) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(ERROR, "invalid iterate row count", K(iterate_row_cnt_), K(row_cnt_to_dump_), KPC(tx_data_memtable_));
     } else {
-      STORAGE_LOG(INFO, "[TX DATA MERGE]iterate tx data memtable done.", KPC(this), KPC(tx_data_memtable_));
     }
   }
   return ret;
@@ -436,7 +427,6 @@ int ObTxDataSingleRowGetter::get_next_row(ObTxData &tx_data)
       } else {
         recycled_scn_ = sstable_meta_hdl.get_sstable_meta().get_filled_tx_scn();
       }
-      STORAGE_LOG(WARN, "get tx data from sstable failed", K(recycled_scn_));
     }
   }
   return ret;
@@ -663,7 +653,6 @@ int ObTxCtxMemtableScanIterator::init(ObTxCtxMemtable *tx_ctx_memtable)
     row_.row_flag_.set_flag(ObDmlFlag::DF_INSERT);
     idx_ = 0;
     is_inited_ = true;
-    STORAGE_LOG(INFO, "ObTxCtxMemtableScanIterator init succ", KPC(this));
   }
 
   return ret;
@@ -708,14 +697,12 @@ int ObTxCtxMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "tx ctx memtable scan iterator is not inited");
   } else if (has_unmerged_buf_) {
     // a single row can not hold the whole tx ctx
     row_buf = buf_.get_ptr() + unmerged_buf_start_pos_;
     need_merge_length = prev_meta_.get_tx_ctx_serialize_size() - unmerged_buf_start_pos_;
     if (OB_FAIL(prev_meta_.get_multi_row_next_extent(curr_meta))) {
     }
-    STORAGE_LOG(DEBUG, "write prev tx ctx unmerged buffer", K(prev_meta_));
   } else {
     // get next tx ctx and serialize it into buffer
     int64_t serialize_size = 0;
@@ -731,7 +718,6 @@ int ObTxCtxMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
                            0 /* row_idx */);
       row_buf = buf_.get_ptr();
       need_merge_length = serialize_size;
-      STORAGE_LOG(DEBUG, "write tx ctx info", KPC(tx_ctx), K(serialize_size));
       ls_tx_ctx_iter_.revert_tx_ctx(tx_ctx);
     }
   }
@@ -756,7 +742,6 @@ int ObTxCtxMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
       if (OB_FAIL(curr_meta.serialize(meta_buf_.get_ptr(), meta_serialize_size, pos))) {
       } else {
         // do nothing
-        STORAGE_LOG(DEBUG, "Serialize curr_meta success", K(curr_meta));
       }
     }
   }
@@ -778,14 +763,12 @@ int ObTxCtxMemtableScanIterator::inner_get_next_row(const ObDatumRow *&row)
     row_.set_last_multi_version_row();
     row_.set_compacted_multi_version_row();
     row = &row_;
-    STORAGE_LOG(DEBUG, "write tx ctx info", K(idx_), K(curr_meta));
     idx_++;
   }
 
   if (OB_SUCC(ret)) {
     prev_meta_ = curr_meta;
   }
-  STORAGE_LOG(DEBUG, "ObTxCtxMemtableScanIterator::inner_get_next_row finished", K_(prev_meta));
   return ret;
 }
 

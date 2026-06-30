@@ -3586,7 +3586,6 @@ static void ob_charset_error_reporter(enum loglevel level, unsigned int ecode, .
     LIB_LOG_RET(WARN, OB_ERROR, "fail to init charset", K(ecode));
     break;
   case INFORMATION_LEVEL:
-    LIB_LOG(INFO, "fail to init charset", K(ecode));
     break;
   default:
     break;

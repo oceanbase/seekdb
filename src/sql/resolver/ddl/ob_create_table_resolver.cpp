@@ -881,7 +881,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                 int64_t pk_data_length = 0;
                 if (get_primary_key_size() > 0) {
                   ret = OB_ERR_MULTIPLE_PRI_KEY;
-                  SQL_RESV_LOG(WARN, "Multiple primary key defined");
                 } else if (stat.is_set_null_) {
                   ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
                 } else if (ob_is_string_tc(column.get_data_type()) && !column.is_string_lob()) {
@@ -978,7 +977,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       } else if (T_PRIMARY_KEY == element->type_) {
         if (primary_key_set_in_heap_table) {
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
-          SQL_RESV_LOG(WARN, "multiple primary key defined");
         } else if (NULL == primary_node) {
           if (is_organization_set_to_heap()) {
             primary_node_in_heap_table = element;
@@ -989,7 +987,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           }
         } else {
           ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
-          SQL_RESV_LOG(WARN, "multiple primary key defined");
         }
       } else if(ObItemType::T_INDEX == element->type_) {
         if (OB_MAX_INDEX_PER_TABLE == index_node_position_list.count()) {
@@ -1066,7 +1063,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(get_primary_key_size() > 0 && NULL != primary_node)) {
         ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
-        SQL_RESV_LOG(WARN, "multiple primary key defined");
       } else if (NULL == primary_node) {
         // do nothing
       } else if (OB_FAIL(resolve_primary_key_node(*primary_node, stats))) {
@@ -1083,7 +1079,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       // todo@lanyi add related case
       if (OB_UNLIKELY(is_organization_set_to_heap() && primary_key_set_in_heap_table && NULL != primary_node_in_heap_table)) {
         ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
-        SQL_RESV_LOG(WARN, "multiple primary key defined");
       } else if (NULL == primary_node_in_heap_table) {
         // do nothing
       // todo@lanyi This function should be placed in a separate document

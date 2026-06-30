@@ -9195,14 +9195,8 @@ int ObDDLService::check_new_column_for_index(
       const ObColumnSchemaV2 *origin_idx_column_schema =
         index_table_schema->get_column_schema(new_column_schema.get_column_id());
       if (NULL == origin_idx_column_schema) {
-        RS_LOG(INFO, "index table do not contain this column",
-               "column_name", new_column_schema.get_column_name_str(),
-               "index_table", index_table_schema->get_table_name_str());
         continue;
       } else if (!origin_idx_column_schema->is_rowkey_column()) {
-        RS_LOG(INFO, "ingore not rowkey column",
-               "column_name", new_column_schema.get_column_name_str(),
-               "index_table", index_table_schema->get_table_name_str());
       } else {
         copy_index_column_schema.reset();
         if (OB_FAIL(copy_index_column_schema.assign(new_column_schema))) {
@@ -9976,7 +9970,6 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
           }
           default: {
             ret = OB_ERR_UNEXPECTED;
-            RS_LOG(WARN, "invalid offline ddl operator type!", K_(alter_column_schema->alter_type));
             break;
           }
         }
@@ -10490,7 +10483,6 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
           }
           default: {
             ret = OB_INVALID_ARGUMENT;
-            RS_LOG(WARN, "unhandled operator type!", K_(alter_column_schema->alter_type));
             break;
           }
         }
@@ -30637,15 +30629,9 @@ int ObDDLService::check_new_columns_for_index(ObIArray<ObTableSchema> &idx_schem
         is_main_table_rowkey = true;
       }
       if (OB_ISNULL(orig_idx_col_schema)) {
-        RS_LOG(INFO, "index table do not contain this column", "column_name",
-               new_column_schemas.at(j).get_column_name_str(), "index_table",
-               index_table_schema->get_table_name_str());
         continue;
       } else if (!orig_idx_col_schema->is_rowkey_column()
                  && !is_main_table_rowkey) {
-        RS_LOG(INFO, "ingore not rowkey column", "column_name",
-               new_column_schemas.at(j).get_column_name_str(), "index_table",
-               index_table_schema->get_table_name_str());
       } else if (OB_FAIL(orig_column_names.push_back(orig_idx_col_schema->get_column_name_str()))) {
       } else {
         ObColumnSchemaV2 copy_index_column_schema;

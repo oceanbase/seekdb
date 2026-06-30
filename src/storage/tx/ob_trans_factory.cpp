@@ -116,11 +116,6 @@ ObTransCtx *ObTransCtxFactory::alloc(const int64_t ctx_type)
         tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
       } else if (NULL != (ctx = mtl_sop_borrow(ObPartTransCtx))) {
         (void)ATOMIC_FAA(&active_part_ctx_count_, 1);
-        TRANS_LOG(DEBUG,
-                  "[Tx Ctx] alloc part_ctx success",
-                  KP(ctx),
-                  K(active_part_ctx_count_),
-                  K(total_release_part_ctx_count_));
       } else {
         // do nothing
       }
@@ -130,10 +125,6 @@ ObTransCtx *ObTransCtxFactory::alloc(const int64_t ctx_type)
     }
   }
   if (REACH_TIME_INTERVAL(TRANS_MEM_STAT_INTERVAL)) {
-    TRANS_LOG(INFO, "ObTransCtx statistics",
-      K_(active_coord_ctx_count),
-      K_(active_part_ctx_count),
-      K_(total_release_part_ctx_count));
       (void)ATOMIC_STORE(&total_release_part_ctx_count_, 0);
   }
 
@@ -151,11 +142,6 @@ void ObTransCtxFactory::release(ObTransCtx *ctx)
     mtl_sop_return(ObPartTransCtx, part_ctx);
     (void)ATOMIC_FAA(&active_part_ctx_count_, -1);
     (void)ATOMIC_FAA(&total_release_part_ctx_count_, 1);
-    TRANS_LOG(DEBUG,
-              "[Tx Ctx] release part_ctx success",
-              KP(ctx),
-              K(active_part_ctx_count_),
-              K(total_release_part_ctx_count_));
     ctx = NULL;
   }
 }
@@ -167,14 +153,11 @@ ObLSTxCtxMgr *ObLSTxCtxMgrFactory::alloc()
   ObLSTxCtxMgr *partition_trans_ctx_mgr = NULL;
   ObMemAttr memattr(ObModIds::OB_PARTITION_TRANS_CTX_MGR, ObCtxIds::TRANS_CTX_MGR_ID);
   if (REACH_TIME_INTERVAL(TRANS_MEM_STAT_INTERVAL)) {
-    TRANS_LOG(INFO, "ObLSTxCtxMgr statistics",
-      K_(alloc_count), K_(release_count), "used", alloc_count_ - release_count_);
   }
   if (NULL != (ptr = ob_malloc(sizeof(ObLSTxCtxMgr), memattr))) {
     partition_trans_ctx_mgr = new(ptr) ObLSTxCtxMgr;
     (void)ATOMIC_FAA(&alloc_count_, 1);
   }
-  TRANS_LOG(INFO, "alloc ls tx ctx mgr", KP(partition_trans_ctx_mgr));
   return partition_trans_ctx_mgr;
 }
 
@@ -186,7 +169,6 @@ void ObLSTxCtxMgrFactory::release(ObLSTxCtxMgr *partition_trans_ctx_mgr)
   } else {
     partition_trans_ctx_mgr->~ObLSTxCtxMgr();
     ob_free(partition_trans_ctx_mgr);
-    TRANS_LOG(INFO, "release ls tx ctx mgr", KP(partition_trans_ctx_mgr));
     partition_trans_ctx_mgr = NULL;
     (void)ATOMIC_FAA(&release_count_, 1);
   }

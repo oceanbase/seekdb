@@ -137,7 +137,6 @@ void HazardDomain::print_info() const
   int ret = OB_SUCCESS;
   char buf[256];
   hazptr_allocator_.print_info(buf, 256);
-  _OB_LOG(INFO, "[KVCACHE-HAZARD-POINTER] retired memory size: %ld, %s", ATOMIC_LOAD_RLX(&retired_memory_size_), buf);
 }
 
 void HazardDomain::wash()
@@ -204,13 +203,10 @@ int HazptrHolder::hazptr_protect(bool& success, ObKVMemBlockHandle* mb_handle, i
   success = false;
   if (OB_ISNULL(mb_handle)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
   } else if (mb_handle->get_seq_num() != seq_num) {
   } else if (OB_ISNULL(hazptr_) && OB_FAIL(HazptrTLCache::get_instance().acquire_hazptr(hazptr_))) {
-    COMMON_LOG(WARN, "failed to allocate hazard pointer");
   } else if (OB_UNLIKELY(nullptr != hazptr_->get_mb_handle())) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "release is not called!");
   } else {
     success = hazptr_->protect(mb_handle, seq_num);
   }
@@ -223,13 +219,10 @@ int HazptrHolder::hazptr_protect(bool& success, ObKVMemBlockHandle* mb_handle)
   success = false;
   if (OB_ISNULL(mb_handle)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
   } else if (FREE == mb_handle->get_status()) {
   } else if (OB_ISNULL(hazptr_) && OB_FAIL(HazptrTLCache::get_instance().acquire_hazptr(hazptr_))) {
-    COMMON_LOG(WARN, "failed to allocate hazard pointer");
   } else if (OB_UNLIKELY(nullptr != hazptr_->get_mb_handle())) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "release is not called!");
   } else {
     success = hazptr_->protect(mb_handle);
   }
@@ -290,7 +283,6 @@ int HazptrHolder::hazptr_assign(const HazptrHolder& other)
       shared_hazptr_ = other.shared_hazptr_;
     } else if (OB_FAIL(SharedHazptr::make(*other.hazptr_, this->shared_hazptr_))) {
       hazptr_reset();
-      COMMON_LOG(WARN, "failed to make new shared hazptr");
     } else {
       is_shared_ = true;
       HazptrHolder& nc_other = const_cast<HazptrHolder&>(other);
@@ -320,10 +312,8 @@ int HazptrHolder::refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle, i
   success = false;
   if (OB_ISNULL(mb_handle)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
   } else if (OB_UNLIKELY(mb_handle_)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "release is not called!");
   } else {
     if ((success = ObKVGlobalCache::get_instance().store_.add_handle_ref(mb_handle, seq_num))) {
       this->mb_handle_ = mb_handle;
@@ -338,10 +328,8 @@ int HazptrHolder::refcnt_protect(bool& success, ObKVMemBlockHandle* mb_handle)
   success = false;
   if (OB_ISNULL(mb_handle)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "mb_handle is null", KP(mb_handle));
   } else if (OB_UNLIKELY(mb_handle_)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "release is not called!");
   } else {
     refcnt_reset();
     if ((success = ObKVGlobalCache::get_instance().store_.add_handle_ref(mb_handle))) {

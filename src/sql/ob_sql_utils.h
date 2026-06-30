@@ -250,7 +250,6 @@ public:
                                       ObEvalCtx &eval_ctx,
                                       int64_t check_size)
   {
-    SQL_LOG(TRACE, "enable datum ptr check", K(exprs), K(check_size));
     // TODO: add sanity check for vector formats
 
     // auto expr_idx = 0;

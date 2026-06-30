@@ -49,8 +49,6 @@ public:
                             const sql::ObBitVector &skip, const sql::EvalBound &bound,
                             char *agg_cell, const RowSelector row_sel = RowSelector{}) override
   {
-    SQL_LOG(DEBUG, "implicit first row", K(agg_col_id),
-            K(*agg_ctx.aggr_infos_.at(agg_col_id).expr_), K(bound));
     int ret = OB_SUCCESS;
     ObEvalCtx &ctx = agg_ctx.eval_ctx_;
     NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
@@ -204,7 +202,6 @@ public:
                      const int32_t agg_col_id, char *agg_cell, void *tmp_res, int64_t &calc_info)
   {
     UNUSEDx(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info);
-    SQL_LOG(DEBUG, "add_row do nothing");
     return OB_SUCCESS;
   }
 
@@ -214,7 +211,6 @@ public:
                               int64_t &calc_info)
   {
     UNUSEDx(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info);
-    SQL_LOG(DEBUG, "add_nullable_row do nothing");
     return OB_SUCCESS;
   }
 

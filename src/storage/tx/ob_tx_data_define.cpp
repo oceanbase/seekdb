@@ -85,10 +85,8 @@ int ObUndoStatusList::deserialize(const char *buf,
     STORAGE_LOG(WARN, "object version mismatch", K(ret), K(version));
   } else if (OB_UNLIKELY(undo_status_list_len < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "can't decode object with negative length", K(undo_status_list_len));
   } else if (OB_UNLIKELY(data_len < undo_status_list_len + pos)) {
     ret = OB_DESERIALIZE_ERROR;
-    STORAGE_LOG(WARN, "buf length not correct", K(undo_status_list_len), K(pos), K(data_len));
   } else {
     int64_t original_pos = pos;
     pos = 0;
@@ -579,19 +577,14 @@ bool ObTxData::equals_(ObTxData &rhs)
   bool bool_ret = true;
   if (tx_id_ != rhs.tx_id_) {
     bool_ret = false;
-    STORAGE_LOG(INFO, "tx_id is not equal.");
   } else if (state_ != rhs.state_) {
     bool_ret = false;
-    STORAGE_LOG(INFO, "state is not equal.");
   } else if (commit_version_ != rhs.commit_version_) {
     bool_ret = false;
-    STORAGE_LOG(INFO, "commit_version is not equal.");
   } else if (start_scn_ != rhs.start_scn_) {
     bool_ret = false;
-    STORAGE_LOG(INFO, "start_scn is not equal.");
   } else if (end_scn_ != rhs.end_scn_) {
     bool_ret = false;
-    STORAGE_LOG(INFO, "end_scn is not equal.");
   } else {
     ObUndoStatusNode *l_node = NULL;
     if (op_guard_.is_valid()) {
@@ -629,7 +622,6 @@ bool ObTxData::equals_(ObTxData &rhs)
       }
     }
     if (false == bool_ret) {
-      STORAGE_LOG(INFO, "undo status is not equal.");
     }
   }
 

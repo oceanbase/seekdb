@@ -47,7 +47,6 @@ int ObLogReader::read_log(LogCommand &cmd,
     ret = OB_NOT_INIT;
     SHARE_LOG(ERROR, "ObLogReader has not been initialized", K(ret));
   } else if (OB_ISNULL(log_file_reader_)) {
-    SHARE_LOG(ERROR, "log_file_reader_ is NULL, this should not be reached");
     ret = OB_ERROR;
   } else {
     if (!log_file_reader_->is_opened()) {
@@ -59,7 +58,6 @@ int ObLogReader::read_log(LogCommand &cmd,
         cur_log_seq_id_ = seq;
       }
       if (OB_SUCCESS == ret && OB_LOG_SWITCH_LOG == cmd) {
-        SHARE_LOG(INFO, "reach the end of log", K(cur_log_file_id_));
         // Regardless of opening success or failure: cur_log_file_id++, log_file_reader_->pos will be set to zero,
         if (OB_FAIL(log_file_reader_->close())) {
         } else if (OB_FAIL(open_log_(++cur_log_file_id_, seq))
@@ -85,7 +83,6 @@ int ObLogReader::open_log_(const uint64_t log_file_id,
     ret = OB_NOT_INIT;
     SHARE_LOG(ERROR, "ObLogReader has not been initialized", K(ret));
   } else if (OB_ISNULL(log_file_reader_)) {
-    SHARE_LOG(ERROR, "log_file_reader_ is NULL, this should not be reached");
     ret = OB_ERROR;
   } else if (is_wait_ && has_max_ && log_file_id > max_log_file_id_) {
     ret = OB_READ_NOTHING;
@@ -93,7 +90,6 @@ int ObLogReader::open_log_(const uint64_t log_file_id,
     ret = log_file_reader_->open(log_file_id, last_log_seq);
     if (is_wait_) {
       if (OB_FILE_NOT_EXIST == ret) {
-        SHARE_LOG(DEBUG, "log file doesnot exist", K(log_file_id));
         ret = OB_READ_NOTHING;
       } else if (OB_FAIL(ret)) {
       }
@@ -121,7 +117,6 @@ int ObLogReader::read_log_(LogCommand &cmd,
     ret = OB_NOT_INIT;
     SHARE_LOG(ERROR, "ObLogReader has not been initialized", K(ret));
   } else if (OB_ISNULL(log_file_reader_)) {
-    SHARE_LOG(ERROR, "log_file_reader_ is NULL, this should not be reached");
     ret = OB_ERROR;
   } else {
     if (OB_FAIL(log_file_reader_->read_log(cmd, log_seq, log_data, data_len))

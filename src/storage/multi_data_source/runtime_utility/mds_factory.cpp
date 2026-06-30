@@ -87,7 +87,6 @@ int deepcopy<BufferCtxTupleHelper::get_element_size()>(const transaction::ObTran
                                                        const int64_t line)
 {
   int ret = OB_ERR_UNEXPECTED;
-  MDS_LOG(ERROR, "invalid old ctx", K(trans_id), K(old_ctx.get_binding_type_id()), K(alloc_file), K(alloc_func), K(line));
   return ret;
 }
 
@@ -104,9 +103,7 @@ int MdsFactory::deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
   if (old_ctx.get_binding_type_id() == INVALID_VALUE) {
     ret = OB_INVALID_ARGUMENT;
     new_ctx = nullptr;// won't copy
-    MDS_LOG(WARN, "invalid old_ctx", K(old_ctx.get_binding_type_id()));
   } else if (MDS_FAIL(deepcopy<0>(trans_id, old_ctx, new_ctx, allocator, alloc_file, alloc_func, line))) {
-    MDS_LOG(WARN, "fail to deep copy buffer ctx", K(old_ctx.get_binding_type_id()));
   }
   return ret;
 }

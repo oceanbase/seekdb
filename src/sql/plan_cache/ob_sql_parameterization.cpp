@@ -194,11 +194,6 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
                && OB_NOT_NULL(select_item_param_infos)) {
       if (sql_info.total_ != raw_params->count()) {
         ret = OB_NOT_SUPPORTED;
-        SQL_PC_LOG(TRACE, "const number of fast parse and normal parse is different",
-                "fast_parse_const_num", raw_params->count(),
-                "normal_parse_const_num", sql_info.total_,
-                K(session.get_current_query_string()),
-                "result_tree_", SJ(ObParserResultPrintWrapper(*ctx.top_node_)));
       } else {
         select_item_param_infos->set_capacity(ctx.project_list_.count());
         for (int64_t i = 0; OB_SUCC(ret) && i < ctx.project_list_.count(); i++) {
@@ -218,8 +213,6 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
         } // for end
       }
     }
-    SQL_PC_LOG(DEBUG, "after transform_tree",
-               "result_tree_", SJ(ObParserResultPrintWrapper(*tree)));
   }
   return ret;
 }
@@ -890,9 +883,6 @@ int ObSqlParameterization::check_and_generate_param_info(const ObIArray<ObPCPara
   if (sql_info.total_ != raw_params.count()) {
     ret = OB_NOT_SUPPORTED;
     if (sql_info.need_check_fp_) {
-      SQL_PC_LOG(ERROR, "const number of fast parse and normal parse is different",
-                "fast_parse_const_num", raw_params.count(),
-                "normal_parse_const_num", sql_info.total_);
     }
   }
 
@@ -1052,7 +1042,6 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
       if (OB_NOT_SUPPORTED != ret) {
         SQL_PC_LOG(WARN, "fail to check and generate param info", K(ret));
       } else if (sql_info.need_check_fp_) {
-        SQL_PC_LOG(INFO, "print tree", K(session->get_current_query_string()), "result_tree_", SJ(ObParserResultPrintWrapper(*tree)));
       } else {
         // do nothing
       }
@@ -1067,7 +1056,6 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
       char* buf = (char *)allocator.alloc(len);
 
       if (NULL == buf) {
-        SQL_PC_LOG(WARN, "fail to alloc buf", K(pc_ctx.raw_sql_.length()));
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(construct_sql(pc_ctx.fp_result_.pc_key_.name_, special_params, buf, len, pos))) {
       } else if (!pc_ctx.is_batch_insert_opt_ &&
@@ -1789,7 +1777,6 @@ int ObSqlParameterization::raw_fast_parameterize_sql(ObIAllocator &allocator,
     } // for end
   }
 
-  SQL_PC_LOG(DEBUG, "after raw fp", K(parse_result.param_node_num_));
   return ret;
 }
 
@@ -2174,7 +2161,6 @@ int ObSqlParameterization::add_varchar_charset(const ParseNode *node, SqlInfo &s
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_PC_LOG(WARN, "invalid argument", K(node));
   } else if (T_VARCHAR == node->type_
              && NULL != node->children_
              && NULL != node->children_[0]
@@ -2587,7 +2573,6 @@ int ObSqlParameterization::formalize_sql_text(ObIAllocator &allocator, const ObS
   char* buf_format = (char *)allocator.alloc(format_len);
 
   if ((NULL == buf || NULL == buf_format)) {
-    SQL_PC_LOG(WARN, "fail to alloc buf", K(src_sql.length()));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(ObSqlParameterization::formalize_fast_parameter_sql(allocator,
                                                 src_sql, fmt_sql, fmt_raw_params, fp_ctx))) {

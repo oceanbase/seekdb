@@ -7842,8 +7842,6 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
   } else if (not_param_index.has_member(param_idx)) {
     /* do nothing */
     is_param = false;
-    SQL_PC_LOG(TRACE, "not_param", K(param_idx), K(raw_param->type_), K(raw_param->value_),
-                      "str_value", ObString(raw_param->str_len_, raw_param->str_value_));
   } else {
           // select -  1.2 from dual
           // "-  1.2" will be treated as a const node with neg sign

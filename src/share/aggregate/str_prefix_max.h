@@ -128,7 +128,6 @@ public:
     int ret = OB_SUCCESS;
     if (columns.is_null(row_num)) {
       // do nothing
-      SQL_LOG(DEBUG, "add null row", K(agg_col_id), K(row_num));
     } else if (OB_FAIL(
         add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
     } else {

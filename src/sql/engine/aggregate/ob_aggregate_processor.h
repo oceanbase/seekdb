@@ -1466,7 +1466,6 @@ OB_INLINE int ObAggregateProcessor::clone_cell(
           ((int64_t *)buff_ptr)[0] = need_size;
           ((int64_t *)buff_ptr)[1] = STORED_ROW_MAGIC_NUM;
           buf = (char *)((int64_t *)(buff_ptr) + 2);
-          SQL_LOG(DEBUG, "succ to alloc buff", K(need_size), K(target_cell));
         }
       } else {
         buf = (char *)(data_ptr);
@@ -1482,7 +1481,6 @@ OB_INLINE int ObAggregateProcessor::clone_cell(
       ((int64_t *)buff_ptr)[0] = need_size;
       ((int64_t *)buff_ptr)[1] = STORED_ROW_MAGIC_NUM;
       buf = (char *)((int64_t *)(buff_ptr) + 2);
-      SQL_LOG(DEBUG, "succ to alloc buff", K(need_size), K(target_cell));
     }
   }
 
@@ -1524,7 +1522,6 @@ OB_INLINE int ObAggregateProcessor::reuse_group(const int64_t group_id,
   if (OB_FAIL(group_rows_.at(group_id, group_row))) {
   } else if (OB_ISNULL(group_row)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_LOG(WARN, "stored_row is null", K(group_row));
   } else {
     group_row->reuse(release_mem);
   }

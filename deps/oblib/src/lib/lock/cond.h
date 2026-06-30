@@ -47,7 +47,6 @@ public:
   {
     bool ret = false;
     if (!lock.acquired()) {
-      _OB_LOG(ERROR,"%s","ThreadLockedException");
       ret = false;
     } else {
       ret = wait_impl(lock._mutex);
@@ -60,7 +59,6 @@ public:
   {
     bool ret = false;
     if (!lock.acquired()) {
-      _OB_LOG(ERROR,"%s","ThreadLockedException");
       ret = false;
     } else {
       ret = timed_wait_impl(lock._mutex, timeout);
@@ -92,7 +90,6 @@ Cond::wait_impl(const M& mutex) const
   mutex.lock(state);
 
   if ( 0 != rc ) {
-    _OB_LOG(ERROR,"%s","ThreadSyscallException");
     ret = false;
   }
   return ret;
@@ -103,7 +100,6 @@ Cond::timed_wait_impl(const M& mutex, const ObSysTime& timeout) const
 {
   bool ret = true;
   if (timeout < ObSysTime::microSeconds(0)) {
-    _OB_LOG(ERROR,"%s","InvalidTimeoutException");
     ret = false;
   } else {
     typedef typename M::LockState LockState;
@@ -118,7 +114,6 @@ Cond::timed_wait_impl(const M& mutex, const ObSysTime& timeout) const
 
     if (rc != 0) {
       if ( rc != ETIMEDOUT ) {
-        _OB_LOG(ERROR,"%s","ThreadSyscallException");
         ret = false;
       }
     }

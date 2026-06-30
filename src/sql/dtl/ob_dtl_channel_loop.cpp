@@ -149,10 +149,8 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
     last_msg_type_ = static_cast<int16_t>(ObDtlMsgType::PX_NEW_ROW);
     if (last_msg_type_ >= static_cast<int16_t>(ObDtlMsgType::MAX)) {
       ret = OB_INVALID_ARGUMENT;
-      SQL_DTL_LOG(WARN, "channel has received message with unknown type", K(last_msg_type_));
     } else if (proc_map_[last_msg_type_] == nullptr){
       ret = OB_INVALID_ARGUMENT;
-      SQL_DTL_LOG(WARN, "channel has received message without processor", K(last_msg_type_));
     } else if (OB_FAIL(proc_map_[last_msg_type_]->process(buffer, transferred))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("process message in channel fail", K(ret), K(last_msg_type_));

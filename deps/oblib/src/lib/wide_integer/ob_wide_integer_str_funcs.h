@@ -76,8 +76,7 @@ struct str_helper
       ret = int512_t::_impl::is_zero(*v);
       break;
     }
-    default:
-      COMMON_LOG(WARN, "invalid integer width", K(int_bytes));
+    default: break;
     }
     return ret;
   }
@@ -102,8 +101,7 @@ struct str_helper
       ret = int512_t::_impl::is_negative(*v);
       break;
     }
-    default:
-      COMMON_LOG(WARN, "invalid integer width", K(int_bytes));
+    default: break;
     }
     return ret;
   }

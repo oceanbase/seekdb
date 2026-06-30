@@ -112,7 +112,6 @@ int LogWritingThrottle::throttling(const int64_t throttling_size,
 
     if (stat_.has_ever_throttled()) {
       if (REACH_TIME_INTERVAL(2 * 1000 * 1000L)) {
-         PALF_LOG(INFO, "[LOG DISK THROTTLING] [STAT]", KPC(this));
       }
     }
     // release lock lastly.
@@ -128,7 +127,6 @@ int LogWritingThrottle::after_append_log(const int64_t log_size)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(log_size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(log_size));
   } else {/*do nothing*/}
   return ret;
 }
@@ -143,7 +141,6 @@ int LogWritingThrottle::update_throtting_options_guarded_by_lock_(IPalfEnvImpl *
     if (OB_FAIL(palf_env_impl->get_throttling_options(new_throttling_options))) {
     } else if (OB_UNLIKELY(!new_throttling_options.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(WARN, "options is invalid", K(new_throttling_options), KPC(this));
     } else {
       const bool need_throttling = new_throttling_options.need_throttling();
       const int64_t new_available_size_after_limit = new_throttling_options.get_available_size_after_limit();
@@ -163,8 +160,6 @@ int LogWritingThrottle::update_throtting_options_guarded_by_lock_(IPalfEnvImpl *
           if (OB_FAIL(ObThrottlingUtils::calc_decay_factor(new_available_size_after_limit, new_maximum_duration,
                   THROTTLING_CHUNK_SIZE, decay_factor_))) {
           } else {
-            PALF_LOG(INFO, "[LOG DISK THROTTLING] success to calc_decay_factor", K(decay_factor_), K(throttling_options_),
-                     K(new_throttling_options), K(THROTTLING_CHUNK_SIZE));
           }
         }
 
@@ -179,12 +174,10 @@ int LogWritingThrottle::update_throtting_options_guarded_by_lock_(IPalfEnvImpl *
           throttling_options_ = new_throttling_options;
           if (need_start_throttling) {
             stat_.start_throttling();
-            PALF_LOG(INFO, "[LOG DISK THROTTLING] [START]", KPC(this), K(THROTTLING_CHUNK_SIZE));
           }
         }
       } else {
         if (throttling_options_.need_throttling()) {
-          PALF_LOG(INFO, "[LOG DISK THROTTLING] [STOP]", KPC(this), K(THROTTLING_CHUNK_SIZE));
           clean_up_not_guarded_by_lock_();
           stat_.stop_throttling();
         }
@@ -192,7 +185,6 @@ int LogWritingThrottle::update_throtting_options_guarded_by_lock_(IPalfEnvImpl *
     }
   } else {
     if (throttling_options_.need_throttling()) {
-      PALF_LOG(INFO, "[LOG DISK THROTTLING] [STOP] no need throttling any more", KPC(this), K(THROTTLING_CHUNK_SIZE));
       clean_up_not_guarded_by_lock_();
       stat_.stop_throttling();
     }

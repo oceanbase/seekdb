@@ -92,7 +92,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(params_cnt < 0 || cols_cnt < 0 || sort_cnt < 0)) {
       ret = common::OB_INVALID_ARGUMENT;
-      SQL_ENG_LOG(WARN, "invalid cnt", K(params_cnt), K(cols_cnt), K(sort_cnt));
     } else if (params_cnt > 0 && OB_FAIL(param_exprs_.init(params_cnt))) {
       SQL_ENG_LOG(WARN, "fail to init array", K(ret), K(params_cnt));
     } else if (cols_cnt > 0 && OB_FAIL(partition_exprs_.init(cols_cnt))) {
@@ -401,9 +400,6 @@ public:
     {
       int ret = common::OB_SUCCESS;
       UNUSED(idx); // use BatchInfoScopeGuard instead
-      SQL_ENG_LOG(DEBUG, "add row with index", K(idx), K((void*)this),
-                  K(begin_idx_), K(output_row_idx_),
-      K(row_cnt_), K(stored_row_cnt_), K(ObToStringExprRow(*ctx, exprs)));
       if (OB_FAIL(add_row(exprs, ctx, stored_row, add_row_cnt))) {
       }
       return ret;
@@ -467,7 +463,6 @@ public:
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "get row failed", K(row_idx), K(ret));
       } else {
-        SQL_ENG_LOG(DEBUG, "get row", K(row_idx), KPC(sr));
       }
       return ret;
     }
@@ -567,7 +562,6 @@ public:
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "get row failed", K(row_idx), K(ret));
       } else {
-        SQL_ENG_LOG(DEBUG, "get row", K(row_idx), KPC(sr));
       }
       return ret;
     }

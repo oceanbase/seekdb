@@ -1527,7 +1527,6 @@ int ObServer::set_running_mode()
   } else {
     lib::update_mini_mode(memory_limit, cpu_cnt);
   }
-  _OB_LOG(INFO, "mini mode: %s", lib::is_mini_mode() ? "true" : "false");
   return ret;
 }
 

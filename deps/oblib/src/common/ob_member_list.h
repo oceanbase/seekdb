@@ -93,7 +93,6 @@ inline int member_list_to_string(const common::ObMemberList &member_list, ObSqlS
         need_comma = true;
       }
     }
-    COMMON_LOG(INFO, "member_list_to_string success", K(member_list), K(member_list_buf));
   }
   return ret;
 }

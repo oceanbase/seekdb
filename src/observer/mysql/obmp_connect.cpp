@@ -437,7 +437,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
     // TODO, checker ret
     if (tenant_name_.empty()) {
       tenant_name_ = ObString::make_string(OB_SYS_TENANT_NAME);
-      OB_LOG(INFO, "no tenant name set, use default tenant name", K_(tenant_name));
     }
 
     if (OB_NOT_NULL(tenant_name_.find('$'))) {

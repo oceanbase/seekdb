@@ -50,7 +50,6 @@ int ObTxReplayExecutor::execute(storage::ObLS *ls,
   if (OB_ISNULL(ls) || OB_ISNULL(ls_tx_srv) || OB_ISNULL(buf) || size <= 0
       || !log_timestamp.is_valid() || !lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invaild arguments", K(replay_executor), K(buf), K(size));
   } else if (OB_FAIL(replay_executor.do_replay_(buf, size, skip_pos))) {
   } else {
     if (log_timestamp <= ls->get_ls_wrs_handler()->get_ls_weak_read_ts()) {
@@ -75,7 +74,6 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || size <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invaild arguments", KPC(this), K(buf), K(size));
   } else if (OB_SUCC(prepare_replay_(buf, size, skip_pos))) {
     ObTxLogHeader header;
     ObTxLogType log_type;
@@ -89,7 +87,6 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
             ret = OB_SUCCESS;
             break;
           } else {
-            TRANS_LOG(WARN, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
           }
         }
       } else if (OB_FAIL(iter_next_log_for_replay_(header))) {
@@ -97,7 +94,6 @@ int ObTxReplayExecutor::do_replay_(const char *buf, const int64_t size, const in
           ret = OB_SUCCESS;
           break;
         }
-        TRANS_LOG(WARN, "[Replay Tx] get_next_log error in replay_buf", KPC(this));
       }
       if (OB_SUCC(ret)) {
         log_type = header.get_tx_log_type();
@@ -224,8 +220,6 @@ int ObTxReplayExecutor::replay_tx_log_(const ObTxLogType log_type)
   }
   default: {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "[Replay Tx] Unknown Log Type in replay buf",
-              K(log_type), KPC(this));
   }
   }
   return ret;
@@ -563,9 +557,7 @@ int ObTxReplayExecutor::replay_redo_in_memtable_(ObTxRedoLog &redo, const bool s
       } else if (MutatorType::MUTATOR_ROW_EXT_INFO == row_head.mutator_type_) {
         // ext info redo log is only used for obcdc, no need replay
         if (EXECUTE_COUNT_PER_SEC(8)) {
-          TRANS_LOG(INFO, "ext info redo log no need replay", K(row_head), K(redo));
         }
-        TRANS_LOG(DEBUG, "ext info redo log no need replay", K(row_head), K(redo));
       } else if (OB_FAIL(replay_one_row_in_memtable_(row_head, mmi_ptr_))) {
         if (OB_MINOR_FREEZE_NOT_ALLOW == ret) {
           if (TC_REACH_TIME_INTERVAL(1000 * 1000)) {
@@ -585,7 +577,6 @@ int ObTxReplayExecutor::replay_redo_in_memtable_(ObTxRedoLog &redo, const bool s
         const ObTxSEQ seq_no = mmi_ptr_->get_row_seq_no();
         if (OB_UNLIKELY(!seq_no.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          TRANS_LOG(ERROR, "seq no is invalid in mutator row", K(seq_no), KPC(this));
 #ifdef ENABLE_DEBUG_LOG
           ob_abort();
 #endif
@@ -630,11 +621,8 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
       ctx_->force_no_need_replay_checksum(!is_tx_log_replay_queue(), log_ts_ns_);
       ret = OB_SUCCESS;
-      TX_REPLAY_LOG(WARN, "tablet gc, skip this log entry", K(row_head.tablet_id_));
     } else if (OB_EAGAIN == ret) {
-      TX_REPLAY_LOG(INFO, "tablet not ready, retry this log entry", K(row_head.tablet_id_));
     } else {
-      TX_REPLAY_LOG(INFO, "get tablet failed, retry this log entry", K(row_head.tablet_id_));
       ret = OB_EAGAIN;
     }
   } else if (OB_FAIL(logservice::ObTabletReplayExecutor::replay_check_restore_status(tablet_handle, false/*update_tx_data*/))) {
@@ -642,14 +630,11 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
       ctx_->check_no_need_replay_checksum(log_ts_ns_, replay_queue_);
       ret = OB_SUCCESS;
       if (REACH_TIME_INTERVAL(1000 * 1000)) {
-        TX_REPLAY_LOG(INFO, "Not need replay, skip this log entry", K(row_head.tablet_id_));
       }
     } else if (OB_EAGAIN == ret) {
       if (REACH_TIME_INTERVAL(1000 * 1000)) {
-        TX_REPLAY_LOG(INFO, "tablet not ready, retry this log entry", K(row_head.tablet_id_));
       }
     } else {
-      TX_REPLAY_LOG(WARN, "replay check restore status error", K(row_head.tablet_id_));
     }
   } else {
     ObTablet *tablet = tablet_handle.get_obj();
@@ -673,8 +658,6 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
         } else if (OB_NO_NEED_UPDATE == ret) {
           ctx_->check_no_need_replay_checksum(log_ts_ns_, replay_queue_);
           ret = OB_SUCCESS;
-          TRANS_LOG(DEBUG, "[Replay Tx] Not need replay row becase of no_need_update", K(log_ts_ns_),
-                    K(tx_part_log_no_), K(row_head.tablet_id_));
         }
       }
       if (OB_SUCC(ret)) {
@@ -692,12 +675,10 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
       break;
     }
     case MutatorType::MUTATOR_ROW_EXT_INFO: {
-      TRANS_LOG(DEBUG, "[Replay Tx] ignore replay row ext info", K(row_head));      
       break;
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "[Replay Tx] Unknown mutator_type", K(row_head.mutator_type_));
     } // default
     }
   }
@@ -788,7 +769,6 @@ int ObTxReplayExecutor::replay_lock_(storage::ObStoreCtx &store_ctx,
   } else if (FALSE_IT(timeguard.click("get_memtable"))) {
   } else if (OB_FAIL(memtable->replay_row(store_ctx, log_ts_ns_, mmi_ptr))) {
   } else {
-    TRANS_LOG(DEBUG, "[Replay Tx] replay row in lock memtable success", KP(memtable));
   }
   return ret;
 }
@@ -799,8 +779,6 @@ void ObTxReplayExecutor::rewrite_replay_retry_code_(int &ret_code)
 {
   if (ret_code == OB_MINOR_FREEZE_NOT_ALLOW || ret_code == OB_SCN_OUT_OF_BOUND ||
       ret_code == OB_ALLOCATE_MEMORY_FAILED) {
-    TRANS_LOG(INFO, "rewrite replay error_code as OB_EAGAIN for retry", K(ret_code),
-              K(ls_->get_ls_id()), K(log_ts_ns_));
     ret_code = OB_EAGAIN;
   }
 }

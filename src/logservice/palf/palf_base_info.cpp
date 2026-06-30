@@ -136,7 +136,6 @@ int PalfBaseInfo::generate(const LSN &lsn, const LogInfo &prev_log_info)
       false == lsn.is_valid() ||
       lsn < prev_log_info.lsn_) {
     ret = OB_INVALID_ARGUMENT; 
-    PALF_LOG(WARN, "invalid argument", K(lsn), K(prev_log_info));
   } else {
     version_ = PALF_BASE_INFO_VERSION;
     curr_lsn_ = lsn;

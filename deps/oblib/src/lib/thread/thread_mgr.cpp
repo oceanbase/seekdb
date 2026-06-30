@@ -89,10 +89,6 @@ void TGMgr::destroy_tg(int tg_id, bool is_exist)
       if (tg->tg_helper_ != nullptr && !is_exist) {
         tg->tg_helper_->tg_destroy_cb(tg_id);
       }
-      OB_LOG(INFO, "destroy tg",
-             K(tg_id),
-             KP(tg),
-             K(tg->attr_));
       tg->stop();
       tg->wait();
       OB_DELETE(ITG, "", tg);

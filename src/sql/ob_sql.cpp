@@ -2639,10 +2639,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
         || OB_ISNULL(parse_result.result_tree_->children_)
         || OB_ISNULL(parse_result.result_tree_->children_[0])) {
       ret = OB_INVALID_ARGUMENT;
-      SQL_LOG(WARN, "invalid args",
-              KP(parse_result.result_tree_),
-              KP(parse_result.result_tree_->children_),
-              KP(parse_result.result_tree_->children_[0]));
   }
 
   if (OB_SUCC(ret)) {
@@ -2723,7 +2719,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       } else {
         // process stmt
         if (NULL != stmt && NULL != resolver_ctx.query_ctx_) {
-          SQL_LOG(DEBUG, "SET STMT PARAM COUNT", K(resolver.get_params().prepare_param_count_), K(&resolver_ctx));
           // secondary_namespace_ is not empty, indicating that it is the prepare stage of sql in PL
           // Dynamic SQL with a returning clause also needs to be rebuilt, used to remove the into clause
           //pl context not null indicate PL dynamic sql, only need rebuild PL dynamic sql
@@ -2796,7 +2791,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
             }
           }
           if (OB_SUCC(ret)) {
-            SQL_LOG(DEBUG, "Generate stmt success", K(*stmt));
           } else {
             LOG_WARN("failed to generate stmt", K(ret));
           }
@@ -2962,8 +2956,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
                       aggregate_setting))) {
   } else {
     ObDMLStmt *stmt = static_cast<ObDMLStmt*>(basic_stmt);
-    SQL_LOG(DEBUG, "stmt", "stmt", *stmt);
-    SQL_LOG(DEBUG, "stmt success", "query", SJ(*stmt));
     stmt->get_query_ctx()->root_stmt_ = stmt;
     const ObGlobalHint &global_hint = stmt->get_query_ctx()->get_global_hint();
     sql_ctx.session_info_->set_early_lock_release(global_hint.enable_lock_early_release_);
@@ -3099,10 +3091,8 @@ int ObSql::generate_plan(ParseResult &parse_result,
                                           option,
                                           plan_strs))) {
       } else {
-        _OB_LOG(INFO, "ddl sql:%.*s", parse_result.input_sql_len_, parse_result.input_sql_);
         LOG_INFO("ddl plan");
         for (int64_t i = 0; OB_SUCCESS == tmp_ret && i < plan_strs.count(); i++) {
-          _OB_LOG(INFO, "%.*s", plan_strs.at(i).length(), plan_strs.at(i).ptr());
         }
         LOG_INFO("ddl stmt:", KPC(stmt));
       }

@@ -79,13 +79,11 @@ int LogIOTask::do_task(int tg_id, IPalfEnvImpl *palf_env_impl)
 	IPalfHandleImplGuard guard;
 	int64_t palf_epoch = -1;
 	if (delay_ts >= MAX_DELAY_TIME) {
-		PALF_LOG(INFO, "[io delay]", K(do_task_ts), K(delay_ts));
 	}
 	if (OB_FAIL(palf_env_impl->get_palf_handle_impl(palf_id_, guard))) {
 	} else if (OB_FAIL(guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch))) {
 	} else if (palf_epoch != palf_epoch_) {
 	  ret = OB_STATE_NOT_MATCH;
-	  PALF_LOG(WARN, "palf_epoch has been changed, drop task", KPC(this), K(palf_epoch));
 	} else if (OB_FAIL(do_task_(tg_id, guard))) {
 	} else {}
 	return ret;
@@ -101,7 +99,6 @@ int LogIOTask::after_consume(IPalfEnvImpl *palf_env_impl)
   IPalfHandleImplGuard guard;
 	constexpr int64_t MAX_DELAY_TIME = 100 * 1000;
 	if (delay_ts >= MAX_DELAY_TIME) {
-		PALF_LOG(INFO, "[io delay]", K(after_consume_ts), K(delay_ts));
 	}
   if (OB_FAIL(palf_env_impl->get_palf_handle_impl(palf_id_, guard))) {
   } else if (OB_FAIL(guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch))) {
@@ -177,7 +174,6 @@ void LogIOFlushLogTask::destroy()
     is_inited_ = false;
     write_buf_.reset();
     flush_log_cb_ctx_.reset();
-    PALF_LOG(TRACE, "LogIOFlushLogTask destroy", KP(this));
   }
 }
 
@@ -206,7 +202,6 @@ int LogIOFlushLogTask::after_consume_(IPalfHandleImplGuard &guard)
     PALF_LOG(ERROR, "LogIOFlushLogTask not inited", K(ret), KPC(this));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_after_flush_log(flush_log_cb_ctx_))) {
   } else {
-    PALF_LOG(TRACE, "LogIOFlushLogTask after_consume success", K(time_guard));
   }
   return ret;
 }
@@ -506,7 +501,6 @@ int BatchLogIOFlushLogTask::push_back(LogIOFlushLogTask *task)
   } else {
     palf_id_ = palf_id;
     accum_size_ += task_size;
-    PALF_LOG(TRACE, "push_back success", K(palf_id_), KPC(this));
   }
   return ret;
 }
@@ -636,7 +630,6 @@ int LogIOFlashbackTask::init(const FlashbackCbCtx &flashback_ctx,
     flashback_ctx_ = flashback_ctx;
     palf_id_ = palf_id;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogIOFlashbackTask init success", K(flashback_ctx_), K(palf_id_));
   }
   return ret;
 }
@@ -672,7 +665,6 @@ int LogIOFlashbackTask::after_consume_(IPalfHandleImplGuard &guard)
     PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->inner_after_flashback(flashback_ctx_))) {
   } else {
-    PALF_LOG(INFO, "LogIOFlashbackTask after_consume success");
   }
   return ret;
 }
@@ -710,10 +702,8 @@ int LogIOPurgeThrottlingTask::init(const PurgeThrottlingCbCtx & purge_ctx)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    PALF_LOG(ERROR, "LogIOPurgeThrottlingTask init failed",KPC(this));
   } else if (OB_UNLIKELY(!purge_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid purge_ctx", K(purge_ctx), KPC(this));
   } else {
     purge_ctx_ = purge_ctx;
     is_inited_ = true;

@@ -273,7 +273,6 @@ int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTra
   ObLockWaitMgr *lwm = NULL;
   if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "MTL(LockWaitMgr) is null");
   } else if (OB_FAIL(lwm->get_hash_holder(hash, holder))){
   }
   return ret;

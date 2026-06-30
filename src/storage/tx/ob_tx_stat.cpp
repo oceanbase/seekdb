@@ -75,7 +75,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTxStat init twice");
     ret = OB_INIT_TWICE;
   } else if (OB_SUCCESS != (ret = participants_.assign(participants))) {
   } else {
@@ -131,7 +130,6 @@ int ObTxLockStat::init(const common::ObAddr &addr,
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTxLockStat init twice");
     ret = OB_INIT_TWICE;
   } else {
     is_inited_ = true;
@@ -187,7 +185,6 @@ int ObTxSchedulerStat::init(const common::ObAddr &addr,
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTxSchedulerStat init twice");
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(parts_.assign(parts))) {
   } else if (OB_FAIL(get_valid_savepoints(savepoints))) {

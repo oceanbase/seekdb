@@ -204,10 +204,6 @@ public:
       for (int64_t i = 0; i < detail_other_piece.ndv_info_.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(ObJoinFilterNdv::gather_piece_ndv(detail_other_piece.ndv_info_.at(i), ndv_info_.at(i)))) {
         }
-        SQL_LOG(TRACE, "[NDV_BLOOM_FILTER][SQC_LOCAL_AGGR] aggregate piece to *piece*:", K(i),
-                  K(detail_other_piece.ndv_info_.at(i)),
-                  K(detail_other_piece.ndv_info_.at(i).hllc_.estimate()), K(ndv_info_.at(i)),
-                  K(ndv_info_.at(i).hllc_.estimate()));
       }
       total_rows_ += detail_other_piece.total_rows_;
       piece_count_++;
@@ -264,10 +260,6 @@ public:
     } else {
       for (int64_t i = 0; i < detail_other_piece.ndv_info_.count(); ++i) {
         ObJoinFilterNdv::gather_piece_ndv(detail_other_piece.ndv_info_.at(i), ndv_info_.at(i));
-        SQL_LOG(TRACE, "[NDV_BLOOM_FILTER][SQC_LOCAL_AGGR] aggregate piece to *whole*:", K(i),
-                  K(detail_other_piece.ndv_info_.at(i)),
-                  K(detail_other_piece.ndv_info_.at(i).hllc_.estimate()), K(ndv_info_.at(i)),
-                  K(ndv_info_.at(i).hllc_.estimate()));
       }
       total_rows_ += detail_other_piece.total_rows_;
     }

@@ -309,7 +309,6 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (callback->need_submit_log()) {
       // Case 1: callback has not been proposed to paxos
       if (cond_for_remove(callback, ret)) {
@@ -400,19 +399,15 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (is_commit_ && callback->get_scn().is_max()) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "callback has not submitted log yet when commit callback", KP(callback));
 #ifdef ENABLE_DEBUG_LOG
       ob_abort();
 #endif
     } else if (is_commit_
                && OB_FAIL(callback->trans_commit())) {
-      TRANS_LOG(ERROR, "trans commit failed", KPC(callback));
     } else if (!is_commit_
                && OB_FAIL(callback->trans_abort())) {
-      TRANS_LOG(ERROR, "trans abort failed", KPC(callback));
     } else {
       need_remove_callback_ = true;
       print_callback_if_logging_block_(callback);
@@ -459,7 +454,6 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (callback->need_submit_log()) {
       if (before_remove_) {
         before_remove_->operator()();
@@ -486,7 +480,6 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (!callback->need_submit_log()) { // log has been submitted out
       if (OB_FAIL(callback->log_sync_fail_cb(max_committed_scn_))) {
       } else {

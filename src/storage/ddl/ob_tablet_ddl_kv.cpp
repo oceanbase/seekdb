@@ -1334,7 +1334,6 @@ int ObDDLKV::init(const ObITable::TableKey &table_key,
   const lib::ObMemAttr attr("DDLKVMemAlloc");
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "init twice", K(*this));
     ret = OB_INIT_TWICE;
   } else if (!table_key.is_valid() || OB_ISNULL(freezer) || OB_ISNULL(memtable_mgr) || schema_version < 0 ||
              OB_UNLIKELY(!ls_handle.is_valid())) {
@@ -1361,7 +1360,6 @@ int ObDDLKV::init(const ObITable::TableKey &table_key,
     ddl_kv_type_ = ObDDLKVType::DDL_KV_INC_MINOR;
     tablet_id_ = table_key.tablet_id_;
     is_inited_ = true;
-    TRANS_LOG(DEBUG, "inc direct load ddl kv init success", KPC(this));
   }
 
   // avoid calling destroy() when ret is OB_INIT_TWICE
@@ -1407,12 +1405,6 @@ bool ObDDLKV::ready_for_flush_() {
     const int64_t cur_time = ObClockGenerator::getClock();
     if (cur_time - get_frozen_time() > WARN_LOG_INTERVAL && cur_time - get_last_print_time() > WARN_LOG_INTERVAL) {
       (void)set_last_print_time(cur_time);
-      STORAGE_LOG(WARN,
-                  "direct load memtable not ready for flush for long time",
-                  K(ls_id),
-                  K(get_frozen_time()),
-                  K(max_decided_scn),
-                  KPC(this));
     }
   }
   
@@ -1479,12 +1471,6 @@ bool ObDDLKV::rec_scn_is_stable()
   const int64_t WARN_LOG_INTERVAL = 10LL * 1000LL * 1000LL;  // 10 seconds
   if (!rec_scn_is_stable &&
       (get_frozen_time() != 0 && ObClockGenerator::getClock() - get_frozen_time() > WARN_LOG_INTERVAL)) {
-    STORAGE_LOG(WARN,
-                "direct load memtable rec_scn not stable for long time",
-                K(ls_id),
-                KPC(this),
-                K(mt_stat_.frozen_time_),
-                K(max_decided_scn));
   }
   return rec_scn_is_stable;
 }
@@ -1496,11 +1482,6 @@ bool ObDDLKV::is_frozen_memtable()
   const bool cannot_freeze = !allow_freeze() || ObITabletMemtable::get_rec_scn().is_max();
   if (cannot_freeze && logstream_freeze_clock > memtable_freeze_clock) {
     ATOMIC_STORE(&freeze_clock_, logstream_freeze_clock);
-    TRANS_LOG(INFO,
-              "inc freeze_clock because the direct load memtable cannot be freezed",
-              K(memtable_freeze_clock),
-              K(logstream_freeze_clock),
-              KPC(this));
   }
   const bool bool_ret = logstream_freeze_clock > get_freeze_clock() || get_is_tablet_freeze();
 

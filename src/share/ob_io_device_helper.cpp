@@ -915,7 +915,6 @@ int ObIODeviceLocalFileOp::pread_impl(
 #endif
     if (sz < 0) {
       if (EINTR == errno) {
-        SHARE_LOG(INFO, "pread is interrupted before any data is read, just retry", K(errno), KERRMSG);
       } else {
         ret = ObIODeviceLocalFileOp::convert_sys_errno();
         SHARE_LOG(WARN, "failed to pread", K(ret), K(fd), K(read_sz), K(read_offset), K(errno), KERRMSG);
@@ -974,7 +973,6 @@ int ObIODeviceLocalFileOp::pwrite_impl(
       // if physical end of medium is reached and there's no space for any byte, EFBIG is set
       // and we think pwrite will never return 0
       if (EINTR == errno) {
-        SHARE_LOG(INFO, "pwrite is interrupted before any data is written, just retry", K(errno), KERRMSG);
       } else {
         ret = ObIODeviceLocalFileOp::convert_sys_errno();
         SHARE_LOG(WARN, "failed to pwrite", K(ret), K(fd), KP(buffer), K(write_sz), K(write_offset), K(errno), KERRMSG);

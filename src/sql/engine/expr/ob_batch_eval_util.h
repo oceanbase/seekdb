@@ -621,7 +621,6 @@ int def_fixed_len_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, Args &... args)
     }
   }
   if (OB_SUCC(ret)) {
-    SQL_LOG(DEBUG, "expr", K(ToStrVectorHeader(expr, ctx, &skip, pvt_bound)));
   }
   return ret;
 }
@@ -663,7 +662,6 @@ int def_variable_len_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, Args &... args)
     }
   }
   if (OB_SUCC(ret)) {
-    SQL_LOG(DEBUG, "expr", K(ToStrVectorHeader(expr, ctx, &skip, pvt_bound)));
   }
   return ret;
 }
@@ -712,9 +710,6 @@ int def_nested_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, Args &... args)
       }
     }
     if (OB_SUCC(ret)) {
-      SQL_LOG(DEBUG, "expr", K(ToStrVectorHeader(expr, ctx, &skip, pvt_bound)));
-      SQL_LOG(DEBUG, "expr.args_[0]", K(ToStrVectorHeader(*expr.args_[0], ctx, &skip, pvt_bound)));
-      SQL_LOG(DEBUG, "expr.args_[1]", K(ToStrVectorHeader(*expr.args_[1], ctx, &skip, pvt_bound)));
     }
   }
   return ret;

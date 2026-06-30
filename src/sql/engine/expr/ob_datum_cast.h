@@ -410,7 +410,6 @@ int ob_datum_to_ob_time_without_date(const T &datum,
             int64_t value = ObTimeConverter::ob_time_to_time(ob_time);
             if (value > time_max_val) {
               ret = OB_INVALID_DATE_VALUE;
-              SQL_ENG_LOG(WARN, "invalid date value", K(ob_time), K(value));
             }
           }
         }

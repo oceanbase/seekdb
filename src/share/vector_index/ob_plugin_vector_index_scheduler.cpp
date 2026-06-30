@@ -1230,8 +1230,6 @@ int ObPluginVectorIndexLoadScheduler::submit_log_()
         KR(ret), KP(cb_.log_buffer_), K(pos));
     } else {
       is_logging_ = true;
-      TRANS_LOG(INFO, "submit vector index memdata sync log success",
-        K(ls_->get_ls_id()), K(base_scn), K(lsn), K(scn));
     }
     tablet_id_array_.reuse();
     table_id_array_.reuse();
@@ -1244,8 +1242,6 @@ int ObPluginVectorIndexLoadScheduler::handle_submit_callback(const bool success)
   int ret = OB_SUCCESS;
   common::ObSpinLockGuard ctx_guard(logging_lock_);
   is_logging_ = false;
-  TRANS_LOG(INFO, "submit vector index memdata sync log success",
-            K(ls_->get_ls_id()), K(success));
   return ret;
 }
 

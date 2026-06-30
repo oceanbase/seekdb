@@ -644,8 +644,6 @@ int ObStorageRpc::init(
     STORAGE_LOG(WARN, "storage rpc has inited", K(ret));
   } else if (OB_ISNULL(rpc_proxy) || !self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "ObStorageRpc init with invalid argument",
-        KP(rpc_proxy), K(self));
   } else {
     rpc_proxy_ = rpc_proxy;
     self_ = self;

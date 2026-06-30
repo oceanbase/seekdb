@@ -209,7 +209,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
 
   if (NULL == memtable_) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "memtable is NULL");
   } else if (OB_FAIL(memtable_->get_tx_table_guard(tx_table_guard))) {
   } else if (!tx_table_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
@@ -217,7 +216,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
   } else if (OB_FAIL(compact_datum_row.init(OB_ROW_DEFAULT_COLUMNS_COUNT))) {
   }
 
-  TRANS_LOG(DEBUG, "chaser debug start compact memtable row", K(memtable_->get_key()));
   // Scan nodes till tail OR a previous compact node OR a delete node.
   bool giveup_compaction = false;
   while (OB_SUCCESS == ret && NULL != cur) {
@@ -233,19 +231,15 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
         ret = OB_ITER_END;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(ERROR, "unexpected cleanout state", K(snapshot_version), KP(next), K(*cur), K(*row_));
       }
     } else if (cur->is_aborted()) {
-      TRANS_LOG(INFO, "ignore aborted node when compact", K(*cur), K(*row_));
       cur = cur->prev_;
       find_committed_tnode = false;
     } else if (snapshot_version < cur->trans_version_) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected snapshot version", K(snapshot_version), K(*cur), K(*row_));
     } else if (NULL == (mtd = reinterpret_cast<const ObMemtableDataHeader *>(cur->buf_))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (blocksstable::ObDmlFlag::DF_LOCK == mtd->dml_flag_) {
-      TRANS_LOG(INFO, "ignore lock node when compact", K(*cur), K(*row_));
       cur = cur->prev_;
       find_committed_tnode = false;
     } else if (compact_row_cnt <= 0 && NDT_COMPACT == cur->type_) {
@@ -296,7 +290,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
             compact_datum_row.storage_datums_[i] = datum_row->storage_datums_[i];
           }
         }
-        TRANS_LOG(DEBUG, "chaser debug compact memtable row", KPC(datum_row), K(dml_flag), K(compact_datum_row));
         compact_row_cnt++;
         if (NDT_COMPACT == cur->type_) {
           // Stop at compact node.
@@ -350,7 +343,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
           trans_node->flag_ = save->flag_;
           trans_node->scn_ = save->scn_;
           trans_node->set_snapshot_version_barrier(snapshot_version, flag);
-          TRANS_LOG(DEBUG, "success to compact row, ", K(trans_node->tx_id_), K(dml_flag), K(compact_row_cnt), KPC(save));
         }
       }
     }

@@ -817,7 +817,6 @@ int ObRootService::do_after_full_service() {
 int ObRootService::execute_bootstrap()
 {
   int ret = OB_SUCCESS;
-  BOOTSTRAP_LOG(INFO, "STEP_1.1:execute_bootstrap start to executor.");
   DBA_STEP_RESET(bootstrap);
   LOG_DBA_INFO_V2(OB_BOOTSTRAP_BEGIN,
                   DBA_STEP_INC_INFO(bootstrap),
@@ -839,7 +838,6 @@ int ObRootService::execute_bootstrap()
     if (OB_FAIL(bootstrap.execute_bootstrap())) {
     }
 
-    BOOTSTRAP_LOG(INFO, "start to do_restart");
     ObGlobalStatProxy global_proxy(sql_proxy_);
     ObArray<ObAddr> self_addr;
     ObTimeoutCtx ctx;

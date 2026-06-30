@@ -884,7 +884,6 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
     LOG_WARN("invalid tenant id", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN,"invalid argument", K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
               schema_guard))) {
     ret = OB_SCHEMA_ERROR;
@@ -922,7 +921,6 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
     LOG_WARN("invalid tenant id", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN,"invalid argument", K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
               schema_guard))) {
     ret = OB_SCHEMA_ERROR;

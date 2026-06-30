@@ -1230,7 +1230,6 @@ int ObSqlPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
       if (NULL == partition_infos.at(i)) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_PC_LOG(TRACE, "invalid partition info");
       } else if (OB_FAIL(table_locations_.push_back(partition_infos.at(i)->get_table_location()))) {
       } else if (is_all_non_partition_
                  && partition_infos.at(i)->get_table_location().is_partitioned()) {
@@ -1743,7 +1742,6 @@ int ObSqlPlanSet::calc_phy_plan_type_v2(const common::ObIArray<ObCandiTableLoc> 
   int64_t N = table_locs.size();
   if (0 == N) {
     plan_type = OB_PHY_PLAN_LOCAL;
-    SQL_PC_LOG(DEBUG, "no table used, thus local plan");
   } else {
     bool is_all_empty = true;
     bool is_all_single_partition = true;
@@ -1812,13 +1810,10 @@ int ObSqlPlanSet::is_partition_in_same_server(const ObIArray<ObCandiTableLoc> &c
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        SQL_PC_LOG(WARN, "there is no partition_location in this phy_location",
-                   K(candi_table_locs.at(i)));
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    SQL_PC_LOG(WARN, "phy_locations is empty");
   }
 
   return ret;

@@ -520,10 +520,8 @@ inline int ObChunkRowStore::BlockBuffer::advance(int64_t size)
   if (size < -cur_pos_) {
     //overflow
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument", K(size), K_(cur_pos));
   } else if (size > remain()) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    SQL_ENG_LOG(WARN, "buffer not enough", K(size), "remain", remain());
   } else {
     cur_pos_ += size;
   }

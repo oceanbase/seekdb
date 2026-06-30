@@ -88,7 +88,6 @@ int ObAllVirtualPsStat::inner_get_next_row()
         SERVER_LOG(DEBUG, "ps_cache is not init, ignore this", K(ret));
       } else if (OB_FAIL(fill_cells(*ps_cache))) {
       } else {
-        SERVER_LOG(DEBUG, "fill_cells succeed");
       }
     }
     // ignore error

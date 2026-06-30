@@ -160,8 +160,6 @@ int ObTxRedoSubmitter::parallel_submit(const ObTxSEQ &write_seq_no)
     } else if (OB_EAGAIN == ret) {
       // others need flush firstly
       if (TC_REACH_TIME_INTERVAL(5_s)) {
-        TRANS_LOG(WARN, "blocked by other list has smaller wirte epoch unlogged",
-                  K(write_seq_no), K(tx_ctx_.get_trans_id()));
       }
       if (submit_cb_list_idx_ >= 0) {
         // try to submit blocking list
@@ -344,7 +342,6 @@ int ObTxRedoSubmitter::_submit_redo_pipeline_(const bool display_blocked_info)
   }
   if (OB_UNLIKELY(display_blocked_info) && fill_ret == OB_BLOCK_FROZEN) {
     if (TC_REACH_TIME_INTERVAL(5_s)) {
-      TRANS_LOG(INFO, "[display-blocked-info]", "submit_redo_ctx", ctx);
     }
   }
   FLUSH_REDO_TRACE("submit pipeline done", K(ctx), K_(tx_ctx));
@@ -434,7 +431,6 @@ int ObTxRedoSubmitter::fill_log_block_(memtable::ObTxFillRedoCtx &ctx)
         }
       } else {
         need_retry = true;
-        TRANS_LOG(INFO, "extend log buffer success", K(ctx.buf_pos_), KPC(this));
       }
     } else if (real_buf_pos > 0 && OB_FAIL(log_block_->add_new_log(log))) {
     } else {

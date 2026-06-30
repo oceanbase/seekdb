@@ -636,7 +636,6 @@ inline int ObTempBlockStore::ShrinkBuffer::fill_head(int64_t size)
   int ret = common::OB_SUCCESS;
   if (size > remain()) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    SQL_ENG_LOG(WARN, "buffer not enough", K(size), "remain", remain());
   } else {
     head_ += size;
   }
@@ -648,7 +647,6 @@ inline int ObTempBlockStore::ShrinkBuffer::fill_tail(int64_t size)
   int ret = common::OB_SUCCESS;
   if (size > remain()) {
     ret = common::OB_BUF_NOT_ENOUGH;
-    SQL_ENG_LOG(WARN, "buffer not enough", K(size), "remain", remain());
   } else {
     tail_ -= size;
   }

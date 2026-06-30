@@ -470,7 +470,6 @@ int MetaInfoQueryHelper::get_data_dict_meta_info_(const share::SCN &base_scn, Da
       DDLOG(WARN, "parse record from result failed", KR(ret),
           "sql", sql.ptr(), K(base_scn), K(record_count), K(valid_record_count));
     } else {
-      DDLOG(INFO, "get_data_dict_meta_info", K(base_scn), K(record_count), K(valid_record_count));
     }
   }
 
@@ -539,7 +538,6 @@ int MetaInfoQueryHelper::mark_dump_data_dict_()
     DDLOG(WARN, "data_dict_service is not valid, server may not has resource for ctx_tenant", KR(ret));
   } else {
     dict_service->mark_force_dump_data_dict();
-    DDLOG(INFO, "mark_force_dump_data_dict");
   }
 
   return ret;

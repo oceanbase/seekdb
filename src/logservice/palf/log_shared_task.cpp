@@ -66,7 +66,6 @@ int LogHandleSubmitTask::do_task(IPalfEnvImpl *palf_env_impl)
     PALF_LOG(WARN, "palf_epoch has changed, drop task", K(ret), K(palf_epoch), KPC(this));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->try_handle_next_submit_log())) {
   } else {
-    PALF_LOG(TRACE, "LogHandleSubmitTask handle_task success", K(time_guard), KPC(this));
   }
   return ret;
 }
@@ -98,7 +97,6 @@ int LogFillCacheTask::init(const LSN &begin_lsn, const int64_t size)
     begin_lsn_ = begin_lsn;
     size_ = size;
     is_inited_ = true;
-    PALF_LOG(TRACE, "LogFillCacheTask init successfully", K(begin_lsn), K(size), KP(this), K(this));
   }
 
   return ret;
@@ -118,7 +116,6 @@ int LogFillCacheTask::do_task(IPalfEnvImpl *palf_env_impl)
     PALF_LOG(WARN, "palf_epoch has changed, drop task", K(ret), K(palf_epoch), KPC(this));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->fill_cache_when_slide(begin_lsn_, size_))) {
   } else {
-    PALF_LOG(TRACE, "fill committed logs to cold cache successfully", K(palf_id_), K(begin_lsn_), K(size_));
   }
 
   return ret;

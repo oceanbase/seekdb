@@ -53,7 +53,6 @@ int ObTxSerCompatByte::init(int64_t total_object_count)
     TRANS_LOG(WARN, "init compat_bytes_ twice", K(ret), KPC(this));
   } else if (total_object_count < 0 || total_obj_cnt_ > 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(total_object_count), KPC(this));
   } else {
     const int64_t total_byte_cnt = total_object_count / MAX_OBJECT_COUNT_PER_BYTE
                                    + (total_object_count % MAX_OBJECT_COUNT_PER_BYTE == 0 ? 0 : 1);

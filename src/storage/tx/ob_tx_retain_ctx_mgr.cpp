@@ -89,7 +89,6 @@ int ObIRetainCtxCheckFunctor::init(ObPartTransCtx *ctx, RetainCause cause)
   int ret = OB_SUCCESS;
   if (ctx == nullptr || cause == RetainCause::UNKOWN) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KPC(ctx), K(cause));
     // } else if (ctx->)
   } else {
     cause_ = cause;
@@ -169,8 +168,6 @@ bool ObMDSRetainCtxFunctor::is_valid()
 void ObTxRetainCtxMgr::reset()
 {
   if (!retain_ctx_list_.is_empty()) {
-    TRANS_LOG(INFO, "some retain ctx has not been deleted", KPC(this),
-              K(retain_ctx_list_.get_first()));
   }
   max_wait_ckpt_ts_.reset();
   last_push_gc_task_ts_ = ObTimeUtility::current_time();
@@ -266,8 +263,6 @@ int ObTxRetainCtxMgr::print_retain_ctx_info(share::ObLSID ls_id)
   SpinRLockGuard guard(retain_ctx_lock_);
   tg.click();
   if (!retain_ctx_list_.is_empty()) {
-    TRANS_LOG(INFO, "[RetainCtxMgr] print retain ctx", K(ls_id), KPC(this),
-              KPC(retain_ctx_list_.get_first()), KPC(retain_ctx_list_.get_last()));
   }
   return ret;
 }

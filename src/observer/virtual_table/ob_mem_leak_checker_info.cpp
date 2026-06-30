@@ -50,7 +50,6 @@ int ObMemLeakCheckerInfo::sanity_check()
   int ret = OB_SUCCESS;
   if (NULL == leak_checker_ || NULL == addr_) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid argument", K_(leak_checker), K_(addr));
   }
   return ret;
 }

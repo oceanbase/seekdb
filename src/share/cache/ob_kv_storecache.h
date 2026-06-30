@@ -369,7 +369,6 @@ int ObKVCache<Key, Value>::init(const char *cache_name, const int64_t mem_limit_
     COMMON_LOG(WARN, "Invalid argument, ", KP(cache_name), K(ret));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().register_cache(cache_name, mem_limit_pct, cache_id_))) {
   } else {
-    COMMON_LOG(INFO, "Succ to register cache", K(cache_name), K_(cache_id));
     inited_ = true;
   }
   return ret;

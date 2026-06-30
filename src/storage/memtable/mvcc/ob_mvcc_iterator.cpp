@@ -201,7 +201,6 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(ERROR, "lock for read never go here", KPC(iter), KPC(ctx_), K(flag));
       }
     }
   } else {
@@ -313,7 +312,6 @@ int ObMvccValueIterator::get_next_node(const void *&tnode)
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   } else {
     tnode = NULL;
@@ -408,10 +406,8 @@ int ObMvccRowIterator::get_next_row(
         TRANS_LOG(WARN, "query engine iter next fail", K(ret), "ctx", *ctx_);
       }
     } else if (NULL == (tmp_key = query_engine_iter_->get_key())) {
-      TRANS_LOG(ERROR, "unexpected key null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
     } else if (NULL == (value = query_engine_iter_->get_value())) {
-      TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
     } else if (query_flag_.is_for_foreign_key_check() || query_flag_.is_plain_insert_gts_opt()) {
       if (OB_FAIL(ObRowConflictHandler::check_foreign_key_constraint_for_memtable(*ctx_, value, lock_state))) {

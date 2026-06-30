@@ -68,7 +68,6 @@ OB_WEAK_SYMBOL int ObTenantTxDataAllocator::init(const char *label)
     SHARE_LOG(WARN, "init tenant mds allocator twice", KR(ret), KPC(this));
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(slice_allocator_.init(
                  storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
@@ -169,7 +168,6 @@ int ObTenantTxDataOpAllocator::init()
     SHARE_LOG(WARN, "init tenant mds allocator twice", KR(ret), KPC(this));
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
     allocator_.set_nway(MDS_ALLOC_CONCURRENCY);

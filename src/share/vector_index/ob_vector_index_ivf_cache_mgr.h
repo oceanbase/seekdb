@@ -294,7 +294,6 @@ int ObIvfCacheMgr::get_or_create_cache_node(const IvfCacheKey &key, CacheType *&
   if (OB_FAIL(cache_objs_.get_refactored(key, icache))) {
     if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
-      OB_LOG(INFO, "cache obj not exist, create new one", K(key), K(cache_objs_.size()));
       if (OB_FAIL(create_cache_obj(key, icache))) {
       } else if (OB_FAIL(cache_objs_.set_refactored(key, icache))) {
         release_cache_obj(icache);

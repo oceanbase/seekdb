@@ -172,7 +172,6 @@ int ObTabletReplayExecutor::replay_get_tablet_(
       const bool allow_tablet_not_exist = replay_allow_tablet_not_exist_();
       if (!is_replay_update_tablet_status_() && is_replay_ddl_control_log_()) {
         share::ObTaskController::get().allow_next_syslog();
-        CLOG_LOG(INFO, "force replay ddl control log", K(ls_id), K(tablet_id), K(scn), K(allow_tablet_not_exist));
       }
       if (OB_FAIL(ls->replay_get_tablet_no_check(tablet_id, scn, allow_tablet_not_exist, tablet_handle))) {
       }
@@ -212,7 +211,6 @@ int ObTabletReplayExecutor::check_can_skip_replay_to_mds_(
     can_skip = false;
   } else if (tablet->get_tablet_meta().mds_checkpoint_scn_ >= scn) {
     can_skip = true;
-    CLOG_LOG(INFO, "skip replay to mds", KPC(tablet), K(scn));
   } else {
     can_skip = false;
   }
@@ -239,7 +237,6 @@ int ObTabletReplayExecutor::check_can_skip_replay_(
   } else if (FALSE_IT(tablet_change_scn = ls->get_tablet_change_checkpoint_scn())) {
   } else if (scn <= tablet_change_scn) {
     can_skip = true;
-    CLOG_LOG(INFO, "can skip replay", "ls_id", ls->get_ls_id(), K(tablet_change_scn), K(scn));
   }
 
   return ret;

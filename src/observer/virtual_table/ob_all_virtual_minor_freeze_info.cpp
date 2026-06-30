@@ -199,7 +199,6 @@ int ObAllVirtualMinorFreezeInfo::get_next_freeze_stat(ObFreezerStat &freeze_stat
       SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret));
     } else if (OB_FAIL(freezer->get_stat().deep_copy_to(freeze_stat))) {
     } else if (!(freeze_stat.is_valid())) {
-      SERVER_LOG(WARN, "freeze_stat is invalid", KP(ls), KP(freezer));
     } else {
       // freeze_stat is valid
       break;
@@ -251,7 +250,6 @@ int ObAllVirtualMinorFreezeInfo::generate_memtables_info()
           strcat(memtables_info_string_, "; ");
           size = size - 2;
         } else if (size < 0) {
-          SERVER_LOG(WARN, "size is invalid", K(size), K(memtable_info_count), K(memtables_info_string_));
         }
       }
     }

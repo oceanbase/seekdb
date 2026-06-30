@@ -63,7 +63,6 @@ int ObTmpFileFlushTG::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG init twice");
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < ObTmpFileGlobal::FLUSH_TIMER_CNT; ++i) {
       if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TmpFileFlush, flush_timer_tg_id_[i]))) {
@@ -167,7 +166,6 @@ void ObTmpFileFlushTG::clean_up_lists()
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "flush task is null", KR(ret));
     } else {
-      STORAGE_LOG(INFO, "free flush task in retry_list_", KPC(flush_task));
       flush_mgr_.free_flush_task(flush_task);
     }
   }
@@ -179,19 +177,16 @@ void ObTmpFileFlushTG::clean_up_lists()
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "flush task is null", KR(ret));
     } else {
-      STORAGE_LOG(INFO, "free flush task in finished_list_", KPC(flush_task));
       flush_mgr_.free_flush_task(flush_task);
     }
   }
 
   while (!wait_list_.is_empty()) { // clean up tasks after IO complete
-    STORAGE_LOG(WARN, "wait_list_ is not empty after flush thread stop", K(wait_list_size_));
     for (int64_t cnt = 0; cnt < wait_list_size_ && !wait_list_.is_empty(); ++cnt) {
       ObTmpFileFlushTask *flush_task = nullptr;
       pop_wait_list_(flush_task);
       if (OB_ISNULL(flush_task)) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "flush task is null", K(cnt), K(wait_list_size_));
       } else if (OB_FAIL(flush_task->wait_macro_block_handle())) {
         if (OB_EAGAIN == ret) {
           push_wait_list_(flush_task);
@@ -204,7 +199,6 @@ void ObTmpFileFlushTG::clean_up_lists()
         STORAGE_LOG(ERROR, "unexpected flush task state", KR(ret), KPC(flush_task));
       } else if (OB_FAIL(flush_mgr_.notify_write_back_failed(flush_task))) {
       } else {
-        STORAGE_LOG(DEBUG, "free flush task in wait_list_", KPC(flush_task));
         flush_mgr_.free_flush_task(flush_task);
       }
     }
@@ -302,7 +296,6 @@ int ObTmpFileFlushTG::do_work_()
     tmp_file_block_mgr_.print_block_usage();
     flush_monitor_.print_statistics();
     wbp_.print_statistics();
-    STORAGE_LOG(INFO, "ObTmpFileFlushTG information", KPC(this));
     normal_loop_cnt_ = 0;
     normal_idle_loop_cnt_ = 0;
     fast_loop_cnt_ = 0;
@@ -324,7 +317,6 @@ void ObTmpFileFlushTG::flush_fast_()
 
   int64_t flushing_block_num = ATOMIC_LOAD(&flushing_block_num_);
   if (flushing_block_num >= get_flushing_block_num_threshold_()) {
-    STORAGE_LOG(DEBUG, "reach flushing block num threshold, skip flush", KPC(this));
   } else {
     int64_t max_flushing_block_num_cur_round = get_flushing_block_num_threshold_() - flushing_block_num;
     int64_t flush_size = min(get_fast_flush_size_(), max_flushing_block_num_cur_round * BLOCK_SIZE);
@@ -332,7 +324,6 @@ void ObTmpFileFlushTG::flush_fast_()
       if (OB_FAIL(wash_(flush_size, RUNNING_MODE::FAST))) {
       }
     } else {
-      STORAGE_LOG(DEBUG, "current expect flush size is 0, skip flush", K(flush_size), KPC(this));
     }
   }
 }
@@ -351,7 +342,6 @@ void ObTmpFileFlushTG::flush_normal_()
     if (OB_FAIL(wash_(normal_flush_size, RUNNING_MODE::NORMAL))) {
     }
   } else {
-    STORAGE_LOG(DEBUG, "current expect flush size is 0, skip flush", K(normal_flush_size), K(this));
   }
 }
 
@@ -370,7 +360,6 @@ int ObTmpFileFlushTG::handle_generated_flush_tasks_(ObSpLinkQueue &flushing_list
       ObTmpFileFlushTask *flush_task = static_cast<ObTmpFileFlushTask *>(link);
       FlushState state = flush_task->get_state();
       bool need_release_resource = false;
-      STORAGE_LOG(DEBUG, "check flush task state", KPC(flush_task));
       if (FlushState::TFFT_WAIT == state) {
         ATOMIC_INC(&flushing_block_num_);
         push_wait_list_(flush_task);
@@ -397,7 +386,6 @@ int ObTmpFileFlushTG::handle_generated_flush_tasks_(ObSpLinkQueue &flushing_list
         }
         push_retry_list_(flush_task);
         ATOMIC_INC(&flushing_block_num_);
-        STORAGE_LOG(DEBUG, "push flush task to retry list", KPC(flush_task));
       }
 
       if (need_release_resource) {
@@ -462,7 +450,6 @@ int ObTmpFileFlushTG::retry_fast_flush_meta_task_()
       push_retry_list_(flush_task);
     } else {
       // only retry is_fast_flush_tree tasks
-      STORAGE_LOG(DEBUG, "retry is_fast_flush_tree flush task", KPC(flush_task));
       if (OB_FAIL(flush_mgr_.retry(*flush_task))) {
       }
 
@@ -490,13 +477,11 @@ int ObTmpFileFlushTG::retry_task_()
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "flush task is nullptr", KR(ret));
     } else {
-      STORAGE_LOG(DEBUG, "retry flush task", KPC(flush_task));
       if (OB_FAIL(flush_mgr_.retry(*flush_task))) {
       }
       // push task into wait_list_/retry_list_ according to task state, ignore error code
       FlushState state = flush_task->get_state();
       if (FlushState::TFFT_ABORT == state) {
-        STORAGE_LOG(INFO, "free abort flush task", KPC(flush_task));
         flush_task_finished_(flush_task);
       } else if (FlushState::TFFT_WAIT == state) {
         push_wait_list_(flush_task);
@@ -507,7 +492,6 @@ int ObTmpFileFlushTG::retry_task_()
         }
         push_retry_list_(flush_task);
         if (FlushState::TFFT_INSERT_META_TREE == state && OB_ALLOCATE_TMP_FILE_PAGE_FAILED == ret) {
-          STORAGE_LOG(WARN, "fail to retry insert meta item in TFFT_INSERT_META_TREE", KPC(flush_task));
           if (OB_FAIL(special_flush_meta_tree_page_())) {
           }
           break;
@@ -567,7 +551,6 @@ int ObTmpFileFlushTG::check_flush_task_io_finished_()
       if (OB_FAIL(flush_mgr_.io_finished(*flush_task))) {
       } else if (FlushState::TFFT_ASYNC_WRITE == flush_task->get_state()) {
         push_retry_list_(flush_task);
-        STORAGE_LOG(DEBUG, "write block failure flush task push to retry list", KPC(flush_task));
       } else {
         STORAGE_LOG(ERROR, "unexpected flush task state", KR(ret), KPC(flush_task));
       }
@@ -595,10 +578,8 @@ int ObTmpFileFlushTG::check_flush_task_io_finished_()
     } else {
       if (FlushState::TFFT_FINISH == flush_task->get_state()) {
         push_finished_list_(flush_task);
-        STORAGE_LOG(DEBUG, "flush task push to finished list", KPC(flush_task));
       } else if (FlushState::TFFT_ASYNC_WRITE == flush_task->get_state()) {
         push_retry_list_(flush_task);
-        STORAGE_LOG(DEBUG, "flush task push to retry list", KPC(flush_task));
       } else {
         STORAGE_LOG(ERROR, "unexpected flush task state", KR(ret), KPC(flush_task));
       }
@@ -612,7 +593,6 @@ int ObTmpFileFlushTG::check_flush_task_io_finished_()
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "flush task is nullptr", KR(ret));
     } else {
-      STORAGE_LOG(DEBUG, "flush task io complete", K(flushing_block_num_), KPC(flush_task));
       // if the update fails, it will be retried during the next wakeup
       if (OB_FAIL(flush_mgr_.update_file_meta_after_flush(*flush_task))) {
         STORAGE_LOG(WARN, "fail to drive flush state machine", KR(ret), KPC(flush_task));
@@ -775,7 +755,6 @@ int ObTmpFileSwapTG::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "ObTmpFileSwapTG init twice");
   } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TmpFileSwap, tg_id_))) {
   } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {

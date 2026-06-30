@@ -73,7 +73,6 @@ int ObSelfBufferWriter::ensure_space(int64_t size)
   if (size <= 0) {
     // do nothing.
   } else if (is_aligned_ && size % BUFFER_ALIGN_SIZE != 0) {
-    STORAGE_LOG(WARN, "not aligned buffer size", K(is_aligned_), K(size));
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == data_) {
     if (NULL == (data_ = alloc(size))) {

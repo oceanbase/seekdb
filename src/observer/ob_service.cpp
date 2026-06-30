@@ -1110,7 +1110,6 @@ int ObService::bootstrap()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("root service is null", K(ret));
   } else {
-    BOOTSTRAP_LOG(INFO, "begin bootstrap");
     ObPreBootstrap pre_bootstrap(*gctx_.config_);
     ObAddr master_rs;
     bool server_empty = false;
@@ -1120,16 +1119,13 @@ int ObService::bootstrap()
       BOOTSTRAP_LOG(WARN, "this observer is not empty", KR(ret), K(GCTX.self_addr()));
     } else if (OB_FAIL(pre_bootstrap.prepare_bootstrap(master_rs))) {
     } else {
-      BOOTSTRAP_LOG(INFO, "waiting for root service to be in service");
       while (OB_SUCC(ret) && !gctx_.root_service_->in_service()) {
         ob_throttle_usleep(200 * 1000, OB_RS_NOT_MASTER);
       }
-      BOOTSTRAP_LOG(INFO, "root service is in service");
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(gctx_.root_service_->execute_bootstrap())) {
     } else {
-      BOOTSTRAP_LOG(INFO, "succeed to do_boot_strap", K(master_rs));
     }
   }
 
@@ -1946,7 +1942,6 @@ int ObService::force_set_server_list(const obcall::ObForceSetServerListArg &arg,
     const int64_t new_membership_timestamp = ObTimeUtility::current_time();
     bool all_succeed = true;
     {
-      COMMON_LOG(INFO, "start to excute force_set_server_list");
       MOD_SCOPE {
         ObLSService *ls_svr = share::g_mp->ls_service();
         logservice::ObLogService *log_service = share::g_mp->log_service();
@@ -1965,7 +1960,6 @@ int ObService::force_set_server_list(const obcall::ObForceSetServerListArg &arg,
         }
 
         while (OB_SUCC(ret)) {
-          COMMON_LOG(INFO, "start to iterate every log stream of tenant");
           ObLS *ls = nullptr;
           logservice::ObLogHandler *log_handler = NULL;
           if (OB_FAIL(ls_iter_guard->get_next(ls))) {
@@ -2000,8 +1994,6 @@ int ObService::force_set_server_list(const obcall::ObForceSetServerListArg &arg,
                 LOG_WARN("new_member_list number does not equal to arg.replica_num", K(ret), K(arg), K(new_member_list.get_member_number()));
               } else if (OB_FAIL(log_handler->force_set_member_list(new_member_list, arg.replica_num_))) {
               } else {
-                COMMON_LOG(INFO, "execute force_set_server_list successfully with "
-                           "current tenant and ls", K(arg), K(ls_id));
               }
             }
 

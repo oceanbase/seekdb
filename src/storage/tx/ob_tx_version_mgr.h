@@ -45,14 +45,12 @@ public:
       max_elr_commit_ts_.inc_update(ts);
     }
 #ifdef ENABLE_DEBUG_LOG
-    TRANS_LOG(TRACE, "update max commit ts", K(ts), K(elr));
 #endif
   }
   void update_max_read_ts(const share::SCN &ts)
   {
     max_read_ts_.inc_update(ts);
 #ifdef ENABLE_DEBUG_LOG
-    TRANS_LOG(TRACE, "update max read ts", K(ts));
 #endif
   }
   share::SCN get_max_commit_ts(const bool elr) const
@@ -63,7 +61,6 @@ public:
       max_commit_ts = share::SCN::max(max_commit_ts, max_elr_commit_ts);
     }
 #ifdef ENABLE_DEBUG_LOG
-    TRANS_LOG(TRACE, "get max commit ts", K(max_commit_ts), K(elr));
 #endif
     return max_commit_ts;
   }
@@ -71,7 +68,6 @@ public:
   {
     const share::SCN max_read_ts = share::SCN::scn_inc(max_read_ts_);
 #ifdef ENABLE_DEBUG_LOG
-    TRANS_LOG(TRACE, "get max read ts", K(max_read_ts));
 #endif
     return max_read_ts;
   }

@@ -107,7 +107,6 @@ int ObRowStore::BlockInfo::append_row(const ObIArray<int64_t> &reserved_columns,
         const ObObj &cell = row.get_cell(i);
         if (cell.is_ext() && ObActionFlag::OP_END_FLAG == cell.get_ext()) {
           ret = OB_ERR_UNEXPECTED;
-          OB_LOG(WARN, "append row is invalid", K(row));
         } else if (OB_FAIL(cell_writer.append(OB_INVALID_ID, cell, &cell_clone))) {
           if (OB_BUF_NOT_ENOUGH != ret) {
             OB_LOG(WARN, "failed to append cell", K(ret));
@@ -127,8 +126,6 @@ int ObRowStore::BlockInfo::append_row(const ObIArray<int64_t> &reserved_columns,
       } // end for i
       if (OB_SUCC(ret)) {
         if (reserved_columns_count != reserved_count) {
-          OB_LOG(WARN, "reserved columns count not equeal to actual add count",
-                 K(reserved_columns_count), K(reserved_count));
           ret = OB_ERR_UNEXPECTED;
         }
       }
@@ -350,12 +347,9 @@ int ObRowStore::Iterator::get_next_row(ObNewRow &row,
   int ret = OB_SUCCESS;
   StoredRow *stored_row = NULL;
   if (OB_ISNULL(row_store_)) {
-    OB_LOG(WARN, "row_store_ is NULL, should not reach here");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(row.count_ < row_store_->get_col_count())) {
     ret = OB_BUF_NOT_ENOUGH;
-    OB_LOG(WARN, "column buffer count is not enough", K_(row.count),
-               K(row_store_->get_col_count()));
   } else if (OB_FAIL(get_next_stored_row(stored_row))) {
     // do nothing
   } else if (OB_ISNULL(stored_row)) {
@@ -583,7 +577,6 @@ int ObRowStore::add_row_by_projector(const ObNewRow &row,
     OB_LOG(WARN, "read only ObRowStore, not allowed to add row", K(ret));
   } else if (OB_UNLIKELY(0 < col_count_) && OB_UNLIKELY(row.get_count() != col_count_)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "all rows should have the same columns", K(col_count_), K(row.get_count()));
   } else {
     stored_row = NULL;
     const int32_t reserved_columns_count = static_cast<int32_t>(reserved_columns_.count());
@@ -678,7 +671,6 @@ int ObRowStore::add_row_by_projector(const ObNewRow &row,
     } // end while
     if (OB_SUCC(ret) && 3 < retry) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(ERROR, "unexpected branch");
     }
   }
   return ret;
@@ -731,7 +723,6 @@ int ObRowStore::rollback_last_row()
   if (0 >= last_row_size_
       || (0 < last_row_size_ && 0 >= last_last_row_size_ && 1 < row_count_)/*already rollbacked once*/) {
     ret = OB_NOT_SUPPORTED;
-    OB_LOG(WARN, "only one row could be rollback after called add_row() once");
   } else if (OB_ISNULL(last)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "last blockinfo is null ,can't rollback", K(ret), K(last));
@@ -765,7 +756,6 @@ ObRowStore::Iterator ObRowStore::begin() const
 void ObRowStore::dump() const
 {
   int ret = OB_SUCCESS;
-  OB_LOG(DEBUG, "DUMP row store:", K(*this));
   StoredRow *stored_row = NULL;
   ObNewRow row;
   static const int64_t INLINE_OBJS_SIZE = 16;
@@ -776,7 +766,6 @@ void ObRowStore::dump() const
     ObMemAttr attr(label_);
     buf = static_cast<char *>(ob_malloc(sizeof(ObObj) * col_count_, attr));
     if (OB_ISNULL(buf)) {
-      OB_LOG(WARN, "failed to alloc memory for objs");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       row.cells_ = new(buf) ObObj[col_count_];
@@ -787,8 +776,6 @@ void ObRowStore::dump() const
     Iterator it = begin();
     int64_t row_count = 1;
     while (OB_SUCCESS == (ret = it.get_next_row(row, NULL, &stored_row))) {
-      OB_LOG(DEBUG, "DUMP row", K(row_count), K(*stored_row));
-      OB_LOG(DEBUG, "DUMP row data", K(row_count), K(row));
       ++row_count;
     }
   }

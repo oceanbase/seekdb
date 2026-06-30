@@ -356,7 +356,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::create(
     buckets_ = new (buf) Bucket[bucket_num_];
     allocator_ = allocator;
     is_inited_ = true;
-    OB_LOG(DEBUG, "create hash map", K(bucket_num));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != buf) {
@@ -493,7 +492,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::erase_impl(
             }
           }
           if (OB_SUCC(ret)) {
-            OB_LOG(DEBUG, "erase element", "occupied_count", occupied_count_ - 1, K(overflow_count_), K(pair));
             pair.~pair_type();
             new (&pair) pair_type();
             b.occupied_[i] = false;
@@ -607,7 +605,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::erase(
             if (OB_SUCC(ret)) {
               pair.~pair_type();
               new (&pair) pair_type();
-              OB_LOG(DEBUG, "swap element", K(overflow_array_[overflow_count_ - 1]), K(i));
               if (i != overflow_count_ - 1) {
                 if (OB_FAIL(copy_assign(pair, overflow_array_[overflow_count_ - 1]))) {
                 } else {
@@ -617,7 +614,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::erase(
                 }
               }
               --overflow_count_;
-              OB_LOG(DEBUG, "erase element", K(occupied_count_), K(overflow_count_), K(key), K(i));
             }
           }
         }
@@ -647,7 +643,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::cuckoo_set_impl(
     int64_t slot_idx = -1;
     finished = false;
     Bucket &b = buckets_[bucket_pos];
-    OB_LOG(DEBUG, "cuckoo set impl", K(*pkey));
     for (int64_t i = 0; OB_SUCC(ret) && i < BUCKET_SLOT_COUNT; ++i) {
       bool occupied = b.occupied_[i];
       if (occupied) {
@@ -667,7 +662,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::cuckoo_set_impl(
           b.occupied_[i] = true;
           finished = true;
           ++occupied_count_;
-          OB_LOG(DEBUG, "cuckoo set end", K(pair.first), K(bucket_pos), K(is_first_hash), "slot_idx", i);
           break;
         }
       }
@@ -688,7 +682,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::cuckoo_set_impl(
         } else if (OB_FAIL(copy_assign(old_pair.second, old_pair_tmp.second))) {
         } else {
           b.occupied_[slot_idx] = true;
-          OB_LOG(DEBUG, "cuckoo set next key", K(*pkey), K(bucket_pos), K(old_pair.first), K(slot_idx));
         }
       }
     }
@@ -713,7 +706,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::cuckoo_set(
     const _value_type *pvalue_tmp = pvalue;
     bool is_first_hash = true;
     done = false;
-    OB_LOG(DEBUG, "begin cuckoo set", K(*pkey));
     while (OB_SUCC(ret) && !done && cuckoo_step < MAX_CUCKOO_INSERT_DEPTH) {
       int64_t hash_val1 = hash1(*pkey_tmp);
       int64_t hash_val = is_first_hash ? hash_val1 : hash2(hash_val1);
@@ -723,7 +715,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::cuckoo_set(
         is_first_hash = !is_first_hash;
         pkey_tmp = &old_pair.first;
         pvalue_tmp = &old_pair.second;
-        OB_LOG(DEBUG, "cuckset key for next round", K(*pkey_tmp), K(cuckoo_step));
       }
     }
   }
@@ -751,7 +742,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::set_impl(
       bool occupied = b.occupied_[i];
       if (occupied) {
         pair_type &pair = b.slots_[i];
-        STORAGE_LOG(DEBUG, "check key is equal", K(pair.first), K(*pkey));
         bool is_equal = equal_(pair.first, *pkey);
         if (is_equal) {
           if (is_overwrite) {
@@ -774,7 +764,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::set_impl(
           b.occupied_[i] = true;
           done = true;
           ++occupied_count_;
-          OB_LOG(DEBUG, "success to set", K(*pkey), K(*pvalue), K(bucket_pos), K(bucket_num), K(hash_val));
         }
       }
     }
@@ -834,7 +823,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::rehash()
     const int64_t bucket_num = bucket_num_;
     const int64_t new_bucket_num = std::max(11 * bucket_num_ / 10, bucket_num_ + 1) * BUCKET_SLOT_COUNT;
     self_t new_hash_map;
-    OB_LOG(DEBUG, "begin rehash", K(occupied_count_), K(new_bucket_num));
     if (OB_FAIL(new_hash_map.create(new_bucket_num, allocator_))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < bucket_num; ++i) {
@@ -897,7 +885,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::overflow_set(
           } else if (OB_FAIL(copy_assign(new_overflow_array[overflow_count_].second, value))) {
           } else {
             ++overflow_count_;
-            OB_LOG(DEBUG, "overflow set", K(key), K(overflow_count_), K(occupied_count_));
           }
         }
 
@@ -919,7 +906,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::overflow_set(
       } else if (OB_FAIL(copy_assign(overflow_array_[overflow_count_].second, value))) {
       } else {
         ++overflow_count_;
-        OB_LOG(DEBUG, "overflow set", K(key), K(overflow_count_), K(occupied_count_));
         done = true;
       }
     }
@@ -993,7 +979,6 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::set(
           pkey = &old_pair.first;
           pvalue = &old_pair.second;
           if (occupied_count_ > 0 && bucket_num_ * BUCKET_SLOT_COUNT / occupied_count_ >= MIN_REQUIRED_LOAD_FACTOR) {
-            OB_LOG(DEBUG, "do not need rehash", K(bucket_num_), K(occupied_count_), K(bucket_num_ * BUCKET_SLOT_COUNT / occupied_count_));
             break;
           } else if (OB_FAIL(rehash())) {
           }

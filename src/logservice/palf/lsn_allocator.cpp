@@ -64,11 +64,6 @@ int LSNAllocator::init(const int64_t log_id,
     lsn_ts_meta_.lsn_val_ = start_lsn.val_;
     lsn_ts_meta_.is_need_cut_ = 1;
     is_inited_ = true;
-    PALF_LOG(INFO, "LSNAllocator init success", K_(log_id_base), K_(scn_base), K(start_lsn),
-        "lsn_ts_meta_.is_need_cut_", lsn_ts_meta_.is_need_cut_,
-        "lsn_ts_meta_.log_id_delta_", lsn_ts_meta_.log_id_delta_,
-        "lsn_ts_meta_.scn_delta_", lsn_ts_meta_.scn_delta_,
-        "lsn_ts_meta_.lsn_val_", lsn_ts_meta_.lsn_val_);
   }
   return ret;
 }
@@ -94,7 +89,6 @@ int LSNAllocator::truncate(const LSN &lsn, const int64_t log_id, const SCN &scn)
       if (CAS128(&lsn_ts_meta_, last, next)) {
         log_id_base_ = log_id;
         scn_base_ = scn.get_val_for_logservice();
-        PALF_LOG(INFO, "truncate success", K(lsn), K(log_id), K(scn));
         break;
       } else {
         PAUSE();
@@ -131,7 +125,6 @@ int LSNAllocator::inc_update_last_log_info(const LSN &lsn, const int64_t log_id,
         } else if (CAS128(&lsn_ts_meta_, last, next)) {
           log_id_base_ = log_id;
           scn_base_ = scn.get_val_for_logservice();
-          PALF_LOG(TRACE, "inc_update_last_log_info success", K(lsn), K(scn), K(log_id));
         } else {
           ret = OB_ERR_UNEXPECTED;
           PALF_LOG(ERROR, "CAS128 failed, unexpected", K(ret));
@@ -191,12 +184,9 @@ int LSNAllocator::inc_update_scn_base(const SCN &ref_scn)
       next.is_need_cut_ = 1;
       if (scn_base_ + last.scn_delta_ > scn) {
         // no need update
-        PALF_LOG(INFO, "inc_update_scn_base success", K_(scn_base),
-            "scn_delta", last.scn_delta_, K(scn));
         break;
       } else if (CAS128(&lsn_ts_meta_, last, next)) {
         scn_base_ = scn;
-        PALF_LOG(INFO, "inc_update_scn_base success", K_(scn_base), K(scn));
         break;
       } else {
         PAUSE();

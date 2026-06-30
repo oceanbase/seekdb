@@ -827,7 +827,6 @@ int ObBitmap::from_bits_mask(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(valid_bytes_ < to || nullptr == bits)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "Invalid argument", K_(valid_bytes), K(to), KP(bits));
 #if OB_USE_MULTITARGET_CODE
   } else if (common::is_arch_supported(ObTargetArch::AVX2)) {
     common::specific::avx2::inner_from_bits_mask(from, to, bits, data_);
@@ -848,7 +847,6 @@ int ObBitmap::to_bits_mask(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(valid_bytes_ < to || nullptr == bits)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "Invalid argument", K_(valid_bytes), K(to), KP(bits));
 #if OB_USE_MULTITARGET_CODE
   } else if (common::is_arch_supported(ObTargetArch::AVX2)) {
     common::specific::avx2::bitmap_to_bits_mask(from, to, need_flip, data_, bits);

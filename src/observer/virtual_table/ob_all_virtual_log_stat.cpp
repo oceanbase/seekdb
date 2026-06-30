@@ -47,17 +47,14 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
       if (OB_FAIL(palf_handle.stat(log_stat.palf_stat_))) {
       } else if (OB_FAIL(insert_log_stat_(log_stat, &cur_row_))){
       } else {
-        SERVER_LOG(TRACE, "iterate this log_stream success", K(palf_id), K(log_stat));
         scanner_.add_row(cur_row_);
       }
       return ret;
     };
     logservice::ObLogService *log_service = share::g_mp->log_service();
     if (NULL == log_service) {
-      SERVER_LOG(INFO, "tenant has no ObLogService");
     } else if (OB_FAIL(log_service->iterate_palf(func_iterate_palf))) {
     } else {
-      SERVER_LOG(TRACE, "itearte this tenant success");
     }
     if (OB_FAIL(ret)) {
     } else {

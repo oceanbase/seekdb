@@ -320,7 +320,6 @@ protected:
         } else if (has_addon
                    && OB_FAIL(chunk->addon_store_.add_row(SK_CONST_UPCAST_P(addon_field_row),
                                                           dst_addon_row))) {
-          SQL_ENG_LOG(WARN, "copy row to row store failed");
         } else {
           stored_row_cnt++;
           if (level > 0) {

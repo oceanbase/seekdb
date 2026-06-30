@@ -445,8 +445,6 @@ int ObMPChangeUser::load_login_info(ObSQLSessionInfo *session)
       login_info.db_ = database_;
     }
     login_info.client_ip_ = session->get_client_ip();
-    OB_LOG(INFO, "com change user", "username", login_info.user_name_,
-          "tenant name", login_info.tenant_name_);
     const ObSMConnection &conn = *get_conn();
     login_info.scramble_str_.assign_ptr(conn.scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn.scramble_buf_)));
     login_info.passwd_ = auth_response_;

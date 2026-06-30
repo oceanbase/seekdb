@@ -306,7 +306,6 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, default_blk_alloc, mem_attr))) {
   } else if (OB_FAIL(iocb_pool_.init(allocator_))) {
   } else if (0 == opts.opt_cnt_) {
-    SHARE_LOG(INFO, "For utl_file usage, skip initializing block_file");
   } else {
     const char *store_dir = nullptr;
     const char *sstable_dir = nullptr;
@@ -421,7 +420,6 @@ int ObLocalDevice::start(const common::ObIODOpts &opts)
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (1 != opts.opt_cnt_ || NULL == opts.opts_) {
-    SHARE_LOG(WARN, "opts args is wrong ", K(opts.opt_cnt_));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(0 != STRCMP(opts.opts_[0].key_, "reserved size")
                       || opts.opts_[0].value_.value_int64 < 0)) {
@@ -695,7 +693,6 @@ int ObLocalDevice::mark_blocks(ObIBlockIterator &block_iter)
         block_idx = block_id.second_id_;
         if (block_idx >= total_block_cnt_ || block_idx == 0) {
           ret = OB_INVALID_DATA;
-          SHARE_LOG(WARN, "Invalid block id,", K(block_idx), K_(total_block_cnt));
         } else {
           block_bitmap_[block_idx] = 1;
         }
@@ -830,12 +827,9 @@ int ObLocalDevice::try_punch_hole(const int64_t block_index)
         // not support this operation; or the mode is not supported
         // by the file system containing the file referred to by fd.
         is_fs_support_punch_hole_ = false;
-        SHARE_LOG(WARN, "Punch hole not support", K(block_index), K(offset), K(len), K(sys_ret), K(sys_err), KERRMSG);
       } else {
-        SHARE_LOG(ERROR, "Punch hole fail", K(block_index), K(offset), K(len), K(sys_ret), K(sys_err), KERRMSG);
       }
     } else {
-      SHARE_LOG(INFO, "Punch hole success", K(block_index), K(offset), K(len));
     }
   }
 #endif
@@ -1087,7 +1081,6 @@ int ObLocalDevice::io_destroy(common::ObIOContext *io_context)
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (OB_ISNULL(io_context)) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context));
   } else if (OB_UNLIKELY(ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())) {
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "Invalid io context pointer", K(ret), KP(io_context),
@@ -1198,7 +1191,6 @@ int ObLocalDevice::io_submit(
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (OB_ISNULL(io_context) || OB_ISNULL(iocb)) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context), KP(iocb));
   } else if (OB_UNLIKELY((ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())
                          || (ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type()))) {
     ret = OB_INVALID_ARGUMENT;
@@ -1237,7 +1229,6 @@ int ObLocalDevice::io_cancel(
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (OB_ISNULL(io_context) || OB_ISNULL(iocb)) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context),KP(iocb));
   } else if (OB_UNLIKELY((ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())
                          || (ObIOCBType::IOCB_TYPE_LOCAL != iocb->get_type()))) {
     ret = OB_INVALID_ARGUMENT;
@@ -1275,7 +1266,6 @@ int ObLocalDevice::io_getevents(
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (OB_ISNULL(io_context) || OB_ISNULL(events)) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "Invalid argument, ", KP(io_context),KP(events));
   } else if (OB_UNLIKELY((ObIOContextType::IO_CONTEXT_TYPE_LOCAL != io_context->get_type())
                          || (ObIOEventsType::IO_EVENTS_TYPE_LOCAL != events->get_type()))) {
     ret = OB_INVALID_ARGUMENT;
@@ -1509,7 +1499,6 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
     SHARE_LOG(WARN, "Can not make the block file smaller, ", K(ret), K(new_size),
         K(block_file_size_));
   } else if (0 == delta_size) {
-    SHARE_LOG(INFO, "The file size is not changed, ", K(new_size), K(block_file_size_));
   } else {
 #ifdef __APPLE__
     // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
@@ -1597,7 +1586,6 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
       }
     }
     total_block_cnt_ = new_total_block_cnt;
-    SHARE_LOG(INFO, "succeed to resize file", K(new_size), K(total_block_cnt_), K(free_block_cnt_));
     }
   }
 

@@ -177,10 +177,8 @@ int Processor::advance_collect_result(const int64_t cur_group_id, const RowMeta 
         ExtraStores *&extra = agg_ctx_.get_extra_stores(agg_col_idx, curr_agg_cell);
         if (OB_ISNULL(extra)) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_LOG(WARN, "is null", K(extra), K(agg_col_idx));
         } else if (OB_UNLIKELY(agg_col_idx >= aggregates_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_LOG(WARN, "unexpected agg_col_idx", K(agg_col_idx), K(aggregates_));
         } else if (OB_ISNULL(aggr_info.expr_)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_LOG(WARN, "invalid null aggregate expr", K(ret));
@@ -201,7 +199,6 @@ int Processor::advance_collect_result(const int64_t cur_group_id, const RowMeta 
         int32_t cur_batch_size = 0;
         if (OB_UNLIKELY(agg_col_idx >= aggregates_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_LOG(WARN, "unexpected agg_col_idx", K(agg_col_idx), K(aggregates_));
         } else if (OB_ISNULL(aggr_info.expr_)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_LOG(WARN, "invalid null aggregate expr", K(ret));
@@ -246,7 +243,6 @@ int Processor::collect_group_results(const RowMeta &row_meta, int32_t &output_ba
       ObAggrInfo &aggr_info = agg_ctx_.aggr_infos_.at(agg_col_idx);
       if (OB_UNLIKELY(agg_col_idx >= aggregates_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "unexpected agg_col_idx", K(agg_col_idx), K(aggregates_));
       } else if (OB_ISNULL(aggr_info.expr_)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "invalid null aggregate expr", K(ret));
@@ -312,7 +308,6 @@ int Processor::collect_group_results(const RowMeta &row_meta,
       ObAggrInfo &aggr_info = agg_ctx_.aggr_infos_.at(agg_col_idx);
       if (OB_UNLIKELY(agg_col_idx >= aggregates_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "unexpected agg_col_idx", K(agg_col_idx), K(aggregates_));
       } else if (OB_ISNULL(aggr_info.expr_)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "invalid null aggregate expr", K(ret));
@@ -768,7 +763,6 @@ int Processor::single_row_agg_batch(AggrRowPtr *agg_rows, const int64_t batch_si
                                                   agg_ctx_, agg_col_id, i, i, 1, output_size, nullptr, false))) {
         } else if (OB_UNLIKELY(output_size != 1)) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_LOG(WARN, "invalid output size", K(output_size));
         }
       } // end for
     }
@@ -1071,7 +1065,6 @@ int Processor::reuse_group(const int64_t group_id)
       ExtraStores *&extra = agg_ctx_.get_extra_stores(col_id, curr_agg_cell);
       if (OB_ISNULL(extra)) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "is null", K(col_id));
       } else {
         extra->reuse();
       }

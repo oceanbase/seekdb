@@ -125,9 +125,6 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
         context.conn_->pkt_rec_wrapper_.end_seal_comp_pkt(
                           static_cast<uint32_t>(dst_data_size), context.seq_);
       }
-      SERVER_LOG(DEBUG, "succ to build compressed pkt", "comp_len", dst_data_size,
-                 "comp_seq", context.seq_, K(len_before_compress), K(next_compress_size),
-                 K(src_buf), K(dst_buf), K(context), K(context.conn_->sessid_));
       src_buf.read(next_compress_size);
       dst_buf.write(dst_data_size + OB_MYSQL_COMPRESSED_HEADER_SIZE);
       ++context.seq_;
@@ -199,8 +196,6 @@ static int reuse_compress_buffer(ObCompressionContext &comp_context, ObEasyBuffe
     if (new_size <= comp_buf_size) {
       //reusing last size is enough
     } else {
-      SERVER_LOG(DEBUG, "need resize compressed buf", "old_size", comp_buf_size, K(new_size),
-                 "orig_send_buf_", orig_send_buf);
       //realloc
       comp_buf_size = new_size;
       need_alloc = true;
@@ -334,8 +329,6 @@ int ObMySQLRequestUtils::flush_compressed_buffer(bool pkt_has_completed, ObCompr
   } else if (comp_context.need_hold_last_pkt(pkt_has_completed)) {
     need_hold_size = orig_send_buf.proxy_read_avail_size(comp_context.last_pkt_pos_);
     orig_send_buf.write(0 - need_hold_size);
-    SERVER_LOG(DEBUG, "need hold uncompleted proxy pkt", K(need_hold_size),
-            "orig_send_buf", orig_send_buf);
   }
 
   if (false == orig_send_buf.is_read_avail()) {
@@ -371,9 +364,6 @@ int ObMySQLRequestUtils::flush_compressed_buffer(bool pkt_has_completed, ObCompr
           orig_send_buf.write(need_hold_size);
       }
       comp_context.last_pkt_pos_ = orig_send_buf.begin();
-      SERVER_LOG(DEBUG, "need reset last_pkt_pos", K(need_hold_size),
-            "orig_send_buf_", orig_send_buf,
-            "comp_context", comp_context);
     }
   }
   

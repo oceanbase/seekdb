@@ -57,7 +57,6 @@ int ObInfoSchemaDiskStatTable::set_ip(common::ObAddr *addr)
   if (NULL == addr){
     ret = OB_ENTRY_NOT_EXIST;
   } else if (!addr_->ip_to_string(ipbuf, sizeof(ipbuf))) {
-    SERVER_LOG(ERROR, "ip to string failed");
     ret = OB_ERR_UNEXPECTED;
   } else {
     ipstr_ = ObString::make_string(ipbuf);

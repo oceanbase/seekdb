@@ -1521,7 +1521,6 @@ int ObIDag::alloc_task(T *&task, Args&&... args)
         COMMON_LOG(WARN, "dag is inactive", K(ret), K_(is_stop), K_(dag_status));
       } else if (OB_UNLIKELY(!inner_add_task_into_list(ntask))) {
         ret = common::OB_ERR_UNEXPECTED;
-        COMMON_LOG(ERROR, "Failed to add task", K(task), K_(id));
       }
     }
     if (OB_SUCC(ret)) {

@@ -238,11 +238,8 @@ int ObPxSQCProxy::aggregate_sqc_pieces_and_get_dh_msg(uint64_t op_id, dtl::ObDtl
                                                    need_sync, is_last_piece))) {
     } else if (is_last_piece && OB_ISNULL(sqc_piece)) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "unexpected null");
     } else if (is_last_piece && OB_FAIL(send_dh_piece_msg(*sqc_piece, timeout_ts))) {
-      SQL_LOG(WARN, "failed to send_dh_piece_msg");
     } else if (need_wait_whole_msg && OB_FAIL(wait_whole_msg(provider, whole, timeout_ts))) {
-      SQL_LOG(WARN, "failed to wait whole msg");
     }
   }
   return ret;
@@ -304,7 +301,6 @@ int ObPxSQCProxy::inner_get_dh_msg(
     }
     if (OB_SUCC(ret) && need_wait_whole_msg
         && OB_FAIL(wait_whole_msg(provider, whole, timeout_ts))) {
-      SQL_LOG(WARN, "failed to wait whole msg");
     }
   }
   return ret;

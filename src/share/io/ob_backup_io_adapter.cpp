@@ -128,7 +128,6 @@ int ObBackupIoAdapter::close_device_and_fd(ObIODevice*& device_handle, ObIOFd &f
   int ret = OB_SUCCESS;
   if (NULL == device_handle) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "device handle is empty");
   } else {
     // The close(fd) function decreases the reference count of fd.
     // However, at this point, since the io request might not have been destructed yet,
@@ -320,7 +319,6 @@ int ObBackupIoAdapter::mk_parent_dir(const common::ObString &uri, const common::
       if (path[i] == '/') {
         path[i] = '\0';
         found = true;
-        OB_LOG(INFO, "found parent dir", K(i), K(path));
         break;
       }
     }
@@ -769,7 +767,6 @@ int ObBackupIoAdapter::get_file_size(ObIODevice *device_handle, const ObIOFd &fd
              && OB_STORAGE_ACCESS_ADAPTIVE_READER != flag
              && OB_STORAGE_ACCESS_APPENDER != flag ) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "Invaild access type, object device only support reader and appender get file size!", K(flag));
   } else if (OB_FAIL(obj_device_handle->get_fd_mng().fd_to_ctx(fd, ctx))) {
   } else {
     if (OB_STORAGE_ACCESS_READER == flag) {
@@ -1050,7 +1047,6 @@ int ObDelTmpFileOp::func(const dirent *entry)
     OB_LOG(WARN, "failed to check lease", K(ret));
   } else if (DT_REG != entry->d_type) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "dt type is not a regular file!", K(entry->d_type));
   } else {
     if (OB_FAIL(get_tmp_file_format_timestamp(
         entry->d_name, is_tmp_file, tmp_file_timestamp))) {
@@ -1058,8 +1054,6 @@ int ObDelTmpFileOp::func(const dirent *entry)
       //do nothing
     } else if (now_ts_ - tmp_file_timestamp < MAX_OBSOLETE_INTERVAL) {
       if (REACH_TIME_INTERVAL(100 * 1000)/*100ms*/) {
-        OB_LOG(INFO, "tmp file can not delete",
-            K(now_ts_), K(tmp_file_timestamp), K(MAX_OBSOLETE_INTERVAL));
       }
     } else {
       char tmp_file_path[OB_MAX_URI_LENGTH] = "";
@@ -1210,7 +1204,6 @@ int ObBackupIoAdapter::set_access_type(ObIODOpts* opts, bool is_appender, int ma
   int ret = OB_SUCCESS;
   if (opts->opt_cnt_ >= max_opt_num) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "fail to set access type, opt size is small!", K(opts->opt_cnt_), K(max_opt_num));
   } else {
     const char* access_type = is_appender ? OB_STORAGE_ACCESS_TYPES_STR[OB_STORAGE_ACCESS_APPENDER] : OB_STORAGE_ACCESS_TYPES_STR[OB_STORAGE_ACCESS_READER];
     opts->opts_[opts->opt_cnt_].set("AccessType", access_type); 
@@ -1225,7 +1218,6 @@ int ObBackupIoAdapter::set_open_mode(ObIODOpts* opts, bool lock_mode, bool new_f
   int ret = OB_SUCCESS;
   if (opts->opt_cnt_ >= max_opt_num) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "fail to set access type, opt size is small!", K(opts->opt_cnt_), K(max_opt_num));
   } else {
     const char* open_mode = lock_mode ? "CREATE_OPEN_LOCK" : (new_file ? "EXCLUSIVE_CREATE" : "ONLY_OPEN_UNLOCK");
     opts->opts_[opts->opt_cnt_].set("OpenMode", open_mode);
@@ -1239,7 +1231,6 @@ int ObBackupIoAdapter::set_append_strategy(ObIODOpts* opts, bool is_data_file, i
   int ret = OB_SUCCESS;
   if ((opts->opt_cnt_ + 1) >= max_opt_num) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "fail to set access type, opt size is small!", K(opts->opt_cnt_), K(max_opt_num));
   } else {
     if (is_data_file) {
       opts->opts_[opts->opt_cnt_].set("AppendStrategy", "OB_APPEND_USE_SLICE_PUT");
@@ -1419,10 +1410,8 @@ int ObFileListArrayOp::func(const dirent *entry)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(entry)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid list entry, entry is null");
   } else if (OB_ISNULL(entry->d_name)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid list entry, d_name is null");
   } else if (name_array_.count() >= 1000000) { //temp fix for bug 
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "two many files in the directory", K(name_array_.count()), KR(ret));

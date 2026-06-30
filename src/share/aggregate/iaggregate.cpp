@@ -346,10 +346,7 @@ void print_input_rows(const RowSelector &row_sel, const sql::ObBitVector &skip,
           d.ptr_ = payload;
           d.len_ = len;
         }
-        SQL_LOG(DEBUG, "add row", K(DATUM2STR(*aggr_info.expr_, d)), K(*agg), K(col_id));
       } else {
-        SQL_LOG(DEBUG, "add row", K(VEC_ROWEXPR2STR(ctx, aggr_info.param_exprs_)), K(*agg),
-                K(col_id));
       }
     }
   } else {
@@ -366,10 +363,7 @@ void print_input_rows(const RowSelector &row_sel, const sql::ObBitVector &skip,
           d.ptr_ = payload;
           d.len_ = len;
         }
-        SQL_LOG(DEBUG, "add row", K(DATUM2STR(*aggr_info.expr_, d)), K(*agg), K(col_id));
       } else {
-        SQL_LOG(DEBUG, "add row", K(VEC_ROWEXPR2STR(ctx, aggr_info.param_exprs_)), K(*agg),
-                K(col_id));
       }
     }
   }

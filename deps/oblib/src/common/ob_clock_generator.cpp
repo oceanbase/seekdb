@@ -40,7 +40,6 @@ int ObClockGenerator::init()
   int ret = OB_SUCCESS;
 
   if (clock_generator_.inited_) {
-    TRANS_LOG(WARN, "ObClockGenerator inited twice");
     ret = OB_INIT_TWICE;
   } else {
 #ifndef OB_BUILD_EMBED_MODE
@@ -53,7 +52,6 @@ int ObClockGenerator::init()
       clock_generator_.inited_ = true;
       clock_generator_.stopped_ = false;
       clock_generator_.ready_ = true;
-      TRANS_LOG(INFO, "clock generator inited success");
     }
 #else
     clock_generator_.inited_ = true;

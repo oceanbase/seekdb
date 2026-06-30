@@ -253,7 +253,6 @@ protected:
             sep_str = aggr_info.separator_expr_->get_vector(eval_ctx)->get_string(first_idx);
           }
         }
-        SQL_LOG(DEBUG, "get sep str", K(sep_str));
       }
     }
 

@@ -45,10 +45,8 @@ public:
     int &ret = callback_ret_;
     if (OB_ISNULL(closed_ps_) || OB_ISNULL(expired_ps_)) {
       callback_ret_ = common::OB_NOT_INIT;
-      SQL_PC_LOG(WARN, "key_array not inited", K(callback_ret_));
     } else if (OB_ISNULL(entry.second)) {
       callback_ret_ = common::OB_INVALID_ARGUMENT;
-      SQL_PC_LOG(WARN, "ps session info is null", KP(entry.second), K_(callback_ret));
     } else if (1 == entry.second->get_ref_count()) {
       std::pair<ObPsStmtId, int64_t> id_time;
       id_time.first = entry.first;

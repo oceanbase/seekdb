@@ -397,7 +397,6 @@ int ObStorageFileUtil::mkdir(const common::ObString &uri)
         }
 
         if (0 == ::access(path, F_OK)) {
-          STORAGE_LOG(INFO, "path exist", K(pos), KCSTRING(path));
           found_exist_dir = true;
         } else if (ENOTDIR == errno) {
           ret = OB_FILE_ALREADY_EXIST;
@@ -440,7 +439,6 @@ int ObStorageFileUtil::mkdir(const common::ObString &uri)
                   K(ret), KCSTRING(path), K(errno), "errno", strerror_r(errno, errno_buf, sizeof(errno_buf)));
             }
           } else {
-            STORAGE_LOG(INFO, "succeed to create parent dir", KCSTRING(path), K(uri));
           }
         } else {
           convert_io_error(errno, ret);
@@ -694,8 +692,6 @@ int ObStorageFileUtil::del_dir(const common::ObString &uri)
 #endif
     if (ENOENT == errno) {
       ret = OB_SUCCESS;
-      STORAGE_LOG(INFO, "dir do not exist", KCSTRING(dir_path),
-          "errono_str", strerror_r(errno, errno_buf, sizeof(errno_buf)));
     } else {
       convert_io_error(errno, ret);
       STORAGE_LOG(WARN, "failed to ls stat dir", K(ret),
@@ -1002,7 +998,6 @@ int ObStorageFileBaseWriter::open(const int flags)
   } else {
     file_length_ = 0;
     is_opened_ = true;
-    STORAGE_LOG(DEBUG, "succceed to open file for write", KCSTRING(path_), K(fd_), K(flags));
   }
 
   if (OB_FAIL(ret)) {
@@ -1041,7 +1036,6 @@ int ObStorageFileBaseWriter::close()
     STORAGE_LOG(WARN, "failed to close write file",
         K(ret), K(fd_), KCSTRING(path_), K(errno), "errno", strerror_r(errno, errno_buf, sizeof(errno_buf)));
   } else {
-    STORAGE_LOG(DEBUG, "succeed to close write file", KCSTRING(path_), K(fd_));
   }
   is_opened_ = false;
   fd_ = -1;
@@ -1196,7 +1190,6 @@ int ObStorageFileSingleWriter::close_and_rename()
   }
 #endif
     if (has_error_) {
-      STORAGE_LOG(WARN, "writer has error, skip rename file", KCSTRING(path_), KCSTRING(real_path_));
 
       // has error, try delete file regardless of whether the temporary file exists
       if (0 != ::remove(path_)) {
@@ -1215,7 +1208,6 @@ int ObStorageFileSingleWriter::close_and_rename()
             K(errno), "errno", strerror_r(errno, errno_buf, sizeof(errno_buf)));
       }
     } else {
-      STORAGE_LOG(INFO, "succeed to rename file after close", KCSTRING(path_), KCSTRING(real_path_));
     }
   }
   has_error_ = false;
@@ -1406,7 +1398,6 @@ int ObStorageFileAppender::get_open_flag_and_mode_(int &flag, bool &need_lock)
     break;
   default:
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "unexpected open mode", K(open_mode_));
   }
   return ret;
 }
@@ -1430,15 +1421,11 @@ int ObStorageFileMultiPartWriter::complete()
 #endif
     // if total uploaded file size == 0, write an empty object
     if (has_error_) {
-      STORAGE_LOG(WARN, "multipart writer has error, skip complete",
-          KCSTRING(path_), KCSTRING(real_path_));
     } else if (0 != ::rename(path_, real_path_)) {
       convert_io_error(errno, ret);
       STORAGE_LOG(WARN, "failed to complete", K(ret), KCSTRING(real_path_),
           KCSTRING(path_), K(errno), "errno", strerror_r(errno, errno_buf, sizeof(errno_buf)));
     } else {
-      STORAGE_LOG(INFO, "succeed to rename file after complete",
-          KCSTRING(path_), KCSTRING(real_path_));
     }
   }
   return ret;

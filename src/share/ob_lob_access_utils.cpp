@@ -204,7 +204,6 @@ int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr
           } else {
             ctx_->content_byte_len_ = output_data.length();
             // Notice: content_len_ (char len) is not updated!
-            COMMON_LOG(DEBUG,"Lob: read output for obstring iter.", K(output_data));
           }
         }
       }
@@ -321,7 +320,6 @@ int ObTextStringIter::get_outrow_prefix_data(uint32_t prefix_char_len)
           } else {
             ctx_->content_byte_len_ = output_data.length();
             // Notice: content_len_ (char len) is not updated!
-            COMMON_LOG(DEBUG,"Lob: read output for obstring iter.", K(output_data));
           }
         }
       }
@@ -434,9 +432,6 @@ int ObTextStringIter::get_first_block(ObString &str)
       if (ctx_->reserved_byte_len_ > 0 || ctx_->reserved_len_ > 0) {
         int64_t max_reserved_byte = MAX(ctx_->reserved_byte_len_, ctx_->reserved_len_ * MAX_CHAR_MULTIPLIER);
         if (ctx_->buff_byte_len_ < max_reserved_byte) {
-          COMMON_LOG(INFO,"Lob: buffer size changed due to configurations",
-            K(ctx_->buff_byte_len_), K(ctx_->reserved_byte_len_),
-            K(ctx_->reserved_len_), K(max_reserved_byte));
           ctx_->buff_byte_len_ = static_cast<uint32_t>(max_reserved_byte);
         }
       }
@@ -619,7 +614,6 @@ ObTextStringIterState ObTextStringIter::get_next_block(ObString &str)
         break;
       }
       default: {
-        COMMON_LOG(WARN, "Lob: error state for common string or inrow lob", K(state_));
         break;
       }
     }
@@ -634,7 +628,6 @@ ObTextStringIterState ObTextStringIter::get_next_block(ObString &str)
         break;
       }
       default: {
-        COMMON_LOG(WARN, "Lob: error state for common string or inrow lob", K(state_));
         break;
       }
     }
@@ -863,7 +856,6 @@ int ObTextStringIter::convert_outrow_lob_to_inrow_templob(const ObObj &in_obj,
     } else if (OB_FAIL(loc.get_lob_data_byte_len(lob_data_byte_len))) {
     } else if (lob_data_byte_len < 0 || lob_data_byte_len > UINT32_MAX) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "Lob: inrow lob data length error", K(lob_data_byte_len));
     } else {
       is_pass_thougth = false;
       ObTextStringResult new_tmp_lob(in_obj.get_type(), in_obj.has_lob_header(), allocator);

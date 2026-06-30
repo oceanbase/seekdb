@@ -457,13 +457,11 @@ public:
         SQL_LOG(WARN, "serialize array is null", K(ret), K(pos), K(expr_cnt));
       } else {
         if (!expr_frame_info.is_mark_serialize()) {
-          SQL_LOG(TRACE, "exprs normal serialization", K(expr_cnt));
           for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
             if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
             }
           }
         } else {
-          SQL_LOG(TRACE, "exprs mark serialization", K(expr_cnt), K(exprs.count()));
           for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
             if (expr_frame_info.ser_expr_marks_.at(i)) {
               if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
@@ -1091,8 +1089,6 @@ public:
            OB_GOT_SIGNAL_ABORTING == current_error_code) &&
            OB_SUCCESS != new_error_code) {
         current_error_code = new_error_code;
-        SQL_LOG(WARN, "QC update the error code. Please visit the corresponding address for more details.",
-            K(new_error_code), K(exec_addr));
         FORWARD_USER_ERROR(new_error_code, from.msg_);
       }
     }

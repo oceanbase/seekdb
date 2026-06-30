@@ -72,7 +72,6 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
           const common::ObDataTypeCastParams dtc_params
                     = ObBasicSessionInfo::create_dtc_params(session_);
           if (SYS_VAR_INVALID == var_id) {
-            SERVER_LOG(INFO, "system variable maybe come from diff version", K(*sysvar_schema));
           } else if (OB_FAIL(sys_var_fac.create_sys_var(var_id, sysvar)) || OB_ISNULL(sysvar)) {
             ret = COVER_SUCC(OB_ERR_UNEXPECTED);
             SERVER_LOG(WARN, "create system variable failed", K(ret), K(var_id));

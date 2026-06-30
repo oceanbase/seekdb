@@ -59,10 +59,8 @@ int ObTxCtxTableCommonHeader::deserialize(const char *buf, const int64_t buf_len
     TRANS_LOG(WARN, "object des_version mismatch", K(ret), K(des_version));
   } else if (des_data_len < 0) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "can't decode object with negative length", K(des_data_len));
   } else if (buf_len < des_data_len + pos) {
     ret = OB_DESERIALIZE_ERROR;
-    TRANS_LOG(WARN, "buf length not enough", K(des_data_len), K(pos), K(buf_len));
   }
 
   return ret;
@@ -221,7 +219,6 @@ int ObTxCtxTableMeta::serialize_(char* buf, const int64_t buf_len, int64_t &pos)
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, row_idx_))) {
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, version_))) {
   } else {
-    TRANS_LOG(DEBUG, "ObTxCtxTableMeta encode succ", K(buf_len), K(pos));
   }
   return ret;
 }

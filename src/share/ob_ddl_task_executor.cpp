@@ -106,7 +106,6 @@ int ObDDLTaskQueue::push_task(const ObIDDLTask &task)
         STORAGE_LOG(WARN, "fail to set task to task set", K(ret));
       }
     } else {
-      STORAGE_LOG(INFO, "add task", K(*task_copy), KP(task_copy), K(common::lbt()));
     }
   }
   if (OB_FAIL(ret) && NULL != buf) {
@@ -152,7 +151,6 @@ int ObDDLTaskQueue::remove_task(ObIDDLTask *task)
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(task));
   } else if (OB_FAIL(task_set_.erase_refactored(task))) {
   } else {
-    STORAGE_LOG(INFO, "succ to remove task", K(*task), KP(task));
   }
   if (NULL != task) {
     allocator_.free(task);

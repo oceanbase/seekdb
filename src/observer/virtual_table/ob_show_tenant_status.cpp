@@ -107,7 +107,6 @@ int ObShowTenantStatus::add_all_tenant_status()
     if (OB_FAIL(schema_guard_->get_tenant_info(tenant_schema))) {
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
-      SERVER_LOG(WARN, "tenant not exist!");
     } else if (OB_FAIL(schema_guard_->get_sys_variable_schema( sys_variable_schema))) {
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;

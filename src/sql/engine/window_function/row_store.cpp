@@ -64,7 +64,6 @@ int RowStore::add_batch_rows(const ObIArray<ObExpr *> &exprs, const RowMeta &row
                                  (stored_rows == nullptr ? row_ptrs_ : stored_rows)))) {
     } else if (OB_UNLIKELY(stored_row_cnt != added_cnt)) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "unexpected added row count", K(stored_row_cnt), K(added_cnt));
     } else if (FALSE_IT(stored_row_cnt_ += added_cnt)) {
       // do nothing
     } else if (add_row_cnt) {

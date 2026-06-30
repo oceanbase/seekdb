@@ -640,7 +640,6 @@ int ObTablesHandleArray::get_table(const ObITable::TableKey &table_key, ObTableH
     const ObITable *table = nullptr;
     if (OB_ISNULL(table = handles_array_.at(i).get_table())) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "unexpected null table pointer");
     } else if (table->get_key() == table_key) {
       found = true;
       if (OB_FAIL(get_table(i, table_handle))) {

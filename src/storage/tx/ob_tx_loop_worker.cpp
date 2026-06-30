@@ -39,7 +39,6 @@ int ObTxLoopWorker::init()
 {
   int ret = OB_SUCCESS;
 
-  TRANS_LOG(INFO, "[Tx Loop Worker] init");
 
   return ret;
 }
@@ -48,7 +47,6 @@ int ObTxLoopWorker::start()
 {
   int ret = OB_SUCCESS;
 
-  TRANS_LOG(INFO, "[Tx Loop Worker] start");
   if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TxLoopWorkerTimer, timer_tg_id_))) {
   } else if (OB_FAIL(TG_START(timer_tg_id_))) {
   } else if (OB_FAIL(TG_SCHEDULE(timer_tg_id_, *this, LOOP_INTERVAL, true/*is_repeat*/))) {
@@ -62,7 +60,6 @@ int ObTxLoopWorker::start()
 
 void ObTxLoopWorker::stop()
 {
-  TRANS_LOG(INFO, "[Tx Loop Worker] stop");
   if (!stop_flag_ && timer_tg_id_ != -1) {
     TG_STOP(timer_tg_id_);
     stop_flag_ = true;
@@ -71,7 +68,6 @@ void ObTxLoopWorker::stop()
 
 void ObTxLoopWorker::wait()
 {
-  TRANS_LOG(INFO, "[Tx Loop Worker] wait");
   if (timer_tg_id_ != -1) {
     TG_WAIT(timer_tg_id_);
   }
@@ -79,7 +75,6 @@ void ObTxLoopWorker::wait()
 
 void ObTxLoopWorker::destroy()
 {
-  TRANS_LOG(INFO, "[Tx Loop Worker] destroy");
   if (timer_tg_id_ != -1) {
     TG_DESTROY(timer_tg_id_);
     timer_tg_id_ = -1;
@@ -116,28 +111,24 @@ void ObTxLoopWorker::runTimerTask()
 
     // tx gc, interval = 5s
     if (common::ObClockGenerator::getClock() - last_tx_gc_ts_ > TX_GC_INTERVAL) {
-      TRANS_LOG(INFO, "tx gc loop thread is running");
       last_tx_gc_ts_ = common::ObClockGenerator::getClock();
       can_gc_tx = true;
     }
     
     //retain ctx gc, interval = 5s
     if (common::ObClockGenerator::getClock() - last_retain_ctx_gc_ts_ > TX_RETAIN_CTX_GC_INTERVAL) {
-      TRANS_LOG(INFO, "try gc retain ctx");
       last_retain_ctx_gc_ts_ = common::ObClockGenerator::getClock();
       can_gc_retain_ctx = true;
     }
 
     if (common::ObClockGenerator::getClock() - last_check_start_working_retry_ts_
         > TX_START_WORKING_RETRY_INTERVAL) {
-      TRANS_LOG(INFO, "try to retry start_working");
       last_check_start_working_retry_ts_ = common::ObClockGenerator::getClock();
       can_check_and_retry_start_working = true;
     }
 
     if (common::ObClockGenerator::getClock() - last_log_cb_pool_adjust_ts_
         > TX_LOG_CB_POOL_ADJUST_INTERVAL) {
-      TRANS_LOG(INFO, "try to adjust log cb pool");
       last_log_cb_pool_adjust_ts_ = common::ObClockGenerator::getClock();
       can_adjust_log_cb_pool = true;
     }
@@ -188,7 +179,6 @@ int ObTxLoopWorker::scan_all_ls_(bool can_tx_gc,
     }
     TRANS_LOG(WARN, "[Tx Loop Worker] get ls iter failed", K(ret), KP(share::g_mp->ls_service()));
   } else if (OB_ISNULL(iter_ptr = ls_iter_guard.get_ptr())) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] ls iter_ptr is nullptr", KP(iter_ptr));
   } else {
     iter_ret = OB_SUCCESS;
     cur_ls_ptr = nullptr;
@@ -307,7 +297,6 @@ void ObTxLoopWorker::do_tx_gc_(ObLS *ls_ptr, SCN &min_start_scn, MinStartScnStat
 
   if (OB_FAIL(ls_ptr->get_tx_svr()->check_scheduler_status(min_start_scn, status))) {
   } else {
-    TRANS_LOG(INFO, "[Tx Loop Worker] check tx scheduler success", K(*ls_ptr));
   }
 
   UNUSED(ret);
@@ -340,11 +329,9 @@ void ObTxLoopWorker::update_max_commit_ts_()
       if (OB_EAGAIN == ret) {
         ob_usleep(500, true/*is_idle_sleep*/);
       } else {
-        TRANS_LOG(WARN, "get gts fail");
       }
     } else if (OB_UNLIKELY(!snapshot.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "invalid snapshot from gts", K(snapshot));
     } else if (OB_ISNULL(txs = share::g_mp->trans_service())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));

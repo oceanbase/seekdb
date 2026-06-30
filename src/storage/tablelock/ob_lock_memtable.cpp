@@ -1000,7 +1000,6 @@ int ObLockMemtable::scan(
   } else {
     // table lock memtable scan iterator init success
     row_iter = scan_iter_ptr;
-    STORAGE_LOG(INFO, "ob table lock memtable scan successfully", K(*this));
   }
 
   return ret;

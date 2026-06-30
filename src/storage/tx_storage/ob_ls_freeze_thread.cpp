@@ -74,7 +74,6 @@ void ObLSFreezeThread::destroy()
 
     inited_ = false;
     tg_id_ = -1;
-    STORAGE_LOG(INFO, "ls freeze thread destroy", KP(this));
   }
 }
 

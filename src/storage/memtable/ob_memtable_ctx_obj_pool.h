@@ -61,7 +61,6 @@ public:
       ATOMIC_INC(&hit_lock_op_cache_cnt_);
     }
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      STORAGE_LOG(INFO, "cache statistic", K(alloc_lock_op_cnt_), K(hit_lock_op_cache_cnt_));
     }
     return res;
   }
@@ -76,7 +75,6 @@ public:
       ATOMIC_INC(&hit_lock_cb_cache_cnt_);
     }
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      STORAGE_LOG(INFO, "cache statistic", K(alloc_lock_cb_cnt_), K(hit_lock_cb_cache_cnt_));
     }
     return res;
   }
@@ -91,7 +89,6 @@ public:
       ATOMIC_INC(&hit_mvcc_cb_cache_cnt_);
     }
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      STORAGE_LOG(INFO, "cache statistic", K(alloc_mvcc_cb_cnt_), K(hit_mvcc_cb_cache_cnt_));
     }
     return res;
   }

@@ -33,7 +33,6 @@ int CtxLock::init(ObTransCtx *ctx)
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(ctx)) {
-    TRANS_LOG(WARN, "invalid argument", KP(ctx));
     ret = OB_INVALID_ARGUMENT;
   } else {
     ctx_ = ctx;

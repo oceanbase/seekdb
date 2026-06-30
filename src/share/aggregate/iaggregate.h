@@ -500,11 +500,6 @@ protected:
           if (OB_FAIL(ret)) {
           } else {
             agg_cell_len = agg_ctx.row_meta().get_cell_len(agg_col_id, agg_row);
-            SQL_LOG(DEBUG, "collect group results", K(agg_col_id), K(output_start_idx), K(i),
-                    K(batch_size), K(row_start_idx),
-                    K(agg_ctx.aggr_infos_.at(agg_col_id).get_expr_type()), KP(agg_cell),
-                    K(agg_cell_len), K(agg_cell), K(row_meta), KP(row), KP(agg_expr),
-                    KPC(agg_expr));
             if (OB_FAIL(static_cast<Derived *>(this)->template collect_group_result<ResultFmt>(
                   agg_ctx, *agg_expr, agg_col_id, agg_cell, agg_cell_len))) {
             }
@@ -706,9 +701,6 @@ public:
         // distinct set is sorted and iterated in rollup_process(), rewind here.
         if (OB_FAIL(ad_result->rewind())) {
         }
-        SQL_LOG(DEBUG, "debug process distinct batch", K(group_id),
-                K(agg_ctx.rollup_context_->start_partial_rollup_idx_),
-                K(agg_ctx.rollup_context_->end_partial_rollup_idx_));
       }
     }
     char *skip_mem = nullptr;
@@ -734,7 +726,6 @@ public:
           ret = OB_ERR_UNEXPECTED;
           SQL_LOG(WARN, "read unexpected zero rows", K(ret));
         } else {
-          SQL_LOG(DEBUG, "read rows", K(read_rows), K(ctx.max_batch_size_));
           sql::EvalBound bound(read_rows, true);
           if (OB_FAIL(static_cast<Aggregate *>(agg_)->add_batch_rows(
                 agg_ctx, agg_col_id, mock_skip, bound, const_cast<char *>(agg_cell)))) {

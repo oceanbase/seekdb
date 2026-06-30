@@ -477,7 +477,6 @@ int ObSqlTransControl::decide_trans_read_interface_specs(
     trans_consistency_type = ObTxConsistencyType::BOUNDED_STALENESS_READ;
   } else {
     ret = OB_INVALID_ARGUMENT;
-    SQL_LOG(ERROR, "invalid consistency_level", K(sql_consistency_level));
   }
   return ret;
 }
@@ -658,12 +657,9 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
     if (OB_FAIL(txs->get_weak_read_snapshot_version(session->get_ob_max_read_stale_time(),
                                                     local_single_ls,
                                                     snapshot_version))) {
-      TRANS_LOG(WARN, "get weak read snapshot fail", KPC(txs));
       int64_t stale_time = session->get_ob_max_read_stale_time();
       int64_t refresh_interval = GCONF.weak_read_version_refresh_interval;
       if (stale_time > 0 && refresh_interval > stale_time) {
-        TRANS_LOG(WARN, "weak_read_version_refresh_interval is larger than ob_max_read_stale_time ", 
-                  K(refresh_interval), K(stale_time), KPC(txs));
       }
     } else {
       snapshot.init_weak_read(snapshot_version);
@@ -672,7 +668,6 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
   // 2) don't resolve RR and SERIALIZABLE isolation scenario temporarily, because of remote stmt plan
   } else if (!plan->is_plain_select() &&
     OB_FAIL(can_do_plain_insert(session, plan, exec_ctx, can_plain_insert))) {
-    TRANS_LOG(WARN, "check can do plain insert failed", KPC(txs));
   } else if (can_plain_insert) {
     ObTxDesc &tx_desc = *session->get_tx_desc();
     das_ctx.set_use_gts_opt(true);

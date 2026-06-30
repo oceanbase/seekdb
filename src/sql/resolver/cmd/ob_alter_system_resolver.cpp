@@ -604,7 +604,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
        Modifications to tenant-level configuration items are considered an extension, and control is exercised using alter system permission */
   if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid session");
   } else if (OB_UNLIKELY(T_FLUSH_CACHE != parse_tree.type_ || parse_tree.num_child_ != 6)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument",
@@ -723,7 +722,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid argument", K(GCTX.schema_service_));
     } else if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session info should not be null", K(ret));
@@ -1496,7 +1494,6 @@ int ObSetTPResolver::resolve(const ParseNode &parse_tree)
             case T_TP_NO: {        // event no
               if (stmt->get_rpc_arg().event_name_ != "") {
                 ret = OB_NOT_SUPPORTED;
-                SQL_RESV_LOG(WARN, "Setting tp_no and tp_name simultaneously is not supported.");
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "Setting tp_no and tp_name simultaneously is");
               } else {
                 stmt->get_rpc_arg().event_no_ = value->value_;
@@ -1506,7 +1503,6 @@ int ObSetTPResolver::resolve(const ParseNode &parse_tree)
             case T_TP_NAME: {     // event name
               if (stmt->get_rpc_arg().event_no_ != 0) {
                 ret = OB_NOT_SUPPORTED;
-                SQL_RESV_LOG(WARN, "Setting tp_no and tp_name simultaneously is not supported.");
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "Setting tp_no and tp_name simultaneously is");
               } else {
                 stmt->get_rpc_arg().event_name_.assign_ptr(
@@ -1525,7 +1521,6 @@ int ObSetTPResolver::resolve(const ParseNode &parse_tree)
               if (T_INT == value->type_) {
                 if (value->value_ < 0) {
                   ret = OB_INVALID_ARGUMENT;
-                  SQL_RESV_LOG(WARN, "invalid argument", K(value->value_));
                 } else {
                   stmt->get_rpc_arg().trigger_freq_ = value->value_;
                 }

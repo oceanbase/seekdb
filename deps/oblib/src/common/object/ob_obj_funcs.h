@@ -2099,7 +2099,6 @@ template <>
       ret = databuff_printf(buffer, length, pos, "'%s'", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql varchar literal", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }
@@ -2126,7 +2125,6 @@ template <>
       ret = databuff_printf(buffer, length, pos, "%s", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }
@@ -2173,7 +2171,6 @@ inline int obj_val_serialize<ObExtendType>(const ObObj &obj, char* buf, const in
   int ret = OB_SUCCESS;
   if (obj.is_pl_extend()) {
     OB_UNIS_ENCODE(obj.get_ext());
-    COMMON_LOG(ERROR, "Unexpected serialize", K(OB_NOT_SUPPORTED), K(obj), K(obj.get_meta().get_extend_type()));
     return OB_NOT_SUPPORTED; //TODO:@ryan.ly: close this feature before composite refactor
     if (NULL == serialize_composite_callback) {
       ret = OB_ERR_UNEXPECTED;
@@ -2203,7 +2200,6 @@ inline int obj_val_deserialize<ObExtendType>(ObObj &obj, const char* buf, const 
   OB_UNIS_DECODE(v);
   if (OB_SUCC(ret)) {
     if (!obj.is_ext_sql_array() && !ObObj::is_ext_val(v) && 0 != v) {
-      COMMON_LOG(ERROR, "Unexpected serialize", K(OB_NOT_SUPPORTED), K(v));
       return OB_NOT_SUPPORTED; //TODO:@ryan.ly: close this feature before composite refactor
       if (NULL == deserialize_composite_callback) {
         ret = OB_ERR_UNEXPECTED;

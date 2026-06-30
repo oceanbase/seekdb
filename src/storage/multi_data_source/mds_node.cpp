@@ -125,7 +125,6 @@ void MdsNode::remove_self_if_in_mds_ctx_()
   if (OB_NOT_NULL(mds_ctx_)) {
     MDS_TG(1_ms);
     mds_ctx_->remove_node(this);
-    MDS_LOG(INFO, "remove mds_node from mds_ctx", K(*this));
     mds_ctx_ = nullptr;
   }
 }

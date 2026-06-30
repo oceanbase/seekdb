@@ -90,8 +90,6 @@ T *TransObjFactory<T, STATISTIC_INTERVAL>::alloc()
   T *task= NULL;
 
   if (REACH_TIME_INTERVAL(STATISTIC_INTERVAL)) {
-    TRANS_LOG(INFO, "transaction memory statistics", "mod_type", mod_type_,
-      K_(alloc_count), K_(release_count), "used", alloc_count_ - release_count_);
   }
 
   if (NULL == (task = op_reclaim_alloc(T))) {

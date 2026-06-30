@@ -407,7 +407,6 @@ int ObTraceInfo::read_diagnose_info(const int64_t trace_id,
     const OP &op)
 {
   int ret = OB_SUCCESS;
-  TRANS_LOG(INFO, "read_diagenose_info in ObTraceInfo", KPC(this), K(trace_id));
   SpinRLockGuard lock(lock_);
   if (check_trace_id_(trace_id)) {
     FOREACH(iter, get_diagnose_info_map_<T>()) {
@@ -545,7 +544,6 @@ int ObCheckpointDiagnoseMgr::read_diagnose_info(const int64_t trace_id,
     const OP &op)
 {
   int ret = OB_SUCCESS;
-  TRANS_LOG(INFO, "read_diagnose_info in ObCheckpointDiagnoseMgr", K(first_pos_), K(last_pos_), K(get_trace_info_count()));
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObCheckpointDiagnoseMgr not inited.", KR(ret));

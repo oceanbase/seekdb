@@ -162,7 +162,6 @@ int ObKmeansAlgo::build(const ObIArray<float*> &input_vectors)
         ret = OB_CANCELED;
         SHARE_LOG(INFO, "kmeans ctx is fore stop", K(ret), K(*this));
       } else if (last_status != status_) {
-        SHARE_LOG(INFO, "status change", K(last_status), K(status_), K(ObTimeUtility::current_time_ms() - status_start_time));
         last_status = status_;
         status_start_time = ObTimeUtility::current_time_ms();
       }
@@ -843,7 +842,6 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
     if (OB_SUCC(ret)) {
       dis_obj = dis_obj / sample_cnt;
       float calc_sum_dis_rate = static_cast<float>(calc_dis_cnt + calc_half_dis_cnt / 2) / total_dis_cnt;
-      SHARE_LOG(TRACE, "dis_obj", K(dis_obj), K(calc_sum_dis_rate), K(calc_dis_cnt), K(calc_half_dis_cnt), K(total_dis_cnt));
     }
   }
   return ret;
@@ -917,7 +915,6 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
       
       // 4. check finish && switch center buffer
       if (OB_SUCC(ret)) {    
-        SHARE_LOG(TRACE, "kmeans timing", K(ObTimeUtility::current_time_ms() - iter_start_time), K(iter));
         float diff = (iter == 0) ? FLT_MAX : fabs(prev_dis_obj - dis_obj) / prev_dis_obj;
         prev_dis_obj = dis_obj;
         if (iter > 0 && diff <= EARLY_FINISH_THRESHOLD / 1000) {
@@ -1000,13 +997,13 @@ int ObIvfBuildHelper::init_ctx(int64_t dim)
 void ObIvfBuildHelper::inc_ref()
 {
   ATOMIC_INC(&ref_cnt_);
-  OB_LOG(DEBUG, "inc ref count", K(ref_cnt_), KP(this), KPC(this), K(lbt())); // remove later
+   // remove later
 }
 
 bool ObIvfBuildHelper::dec_ref_and_check_release()
 {
   int64_t ref_count = ATOMIC_SAF(&ref_cnt_, 1);
-  OB_LOG(DEBUG,"dec ref count", K(ref_count), KP(this), KPC(this), K(lbt())); // remove later
+   // remove later
   return (ref_count == 0);
 }
 

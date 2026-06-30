@@ -214,7 +214,6 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::heap_get_next_rowkey(const Rowkey
         if (OB_FAIL(heap_.pop())) {
         } else if (OB_FAIL(compare_.get_error_code())) {
         } else {
-          STORAGE_LOG(DEBUG, "pop a heap item");
         }
       }
     } else if (OB_ISNULL(heap_item.item_)) {
@@ -224,7 +223,6 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::heap_get_next_rowkey(const Rowkey
       if (OB_FAIL(heap_.replace_top(heap_item))) {
       } else if (OB_FAIL(compare_.get_error_code())) {
       } else {
-        STORAGE_LOG(DEBUG, "replace heap item", K(*heap_item.item_), K(last_iter_idx_));
       }
     }
     last_iter_idx_ = -1;

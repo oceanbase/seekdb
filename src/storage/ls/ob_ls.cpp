@@ -1080,7 +1080,6 @@ int ObLS::get_ls_info(ObLSVTInfo &ls_info)
       ls_info.mv_safe_scn_ = ls_meta_.get_major_mv_merge_info().major_mv_merge_scn_safe_calc_;
       ls_info.required_data_disk_size_ = required_data_disk_size;
       if (tx_blocked) {
-        TRANS_LOG(INFO, "current ls is blocked", K(ls_info));
       }
     }
   }
@@ -1476,7 +1475,6 @@ int ObLS::logstream_freeze(const int64_t trace_id,
 
   if (!is_valid_freeze_source(source)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "unexpected freeze source", K(source));
   } else if (is_sync) {
     const int64_t abs_timeout_ts = (0 == input_abs_timeout_ts)
                                        ? ObClockGenerator::getClock() + ObFreezer::SYNC_FREEZE_DEFAULT_RETRY_TIME
@@ -1548,7 +1546,6 @@ int ObLS::tablet_freeze(const ObTabletID &tablet_id,
 
   if (!is_valid_freeze_source(source)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "unexpected freeze source", K(source));
   } else if (tablet_id.is_ls_inner_tablet()) {
     ret = ls_freezer_.ls_inner_tablet_freeze(tablet_id);
   } else {
@@ -1574,13 +1571,10 @@ int ObLS::tablet_freeze(const int64_t trace_id,
                         const ObFreezeSourceFlag source)
 {
   int ret = OB_SUCCESS;
-  STORAGE_LOG(
-      DEBUG, "start tablet freeze", K(tablet_ids), K(is_sync), KTIME(input_abs_timeout_ts), K(need_rewrite_meta));
   int64_t freeze_epoch = ATOMIC_LOAD(&switch_epoch_);
 
   if (!is_valid_freeze_source(source)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "unexpected freeze source", K(source));
   } else if (need_rewrite_meta && (!is_sync)) {
     ret = OB_NOT_SUPPORTED;
     STORAGE_LOG(ERROR,

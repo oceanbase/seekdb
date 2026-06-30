@@ -94,11 +94,8 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_ISNULL(filename) || (FILE_OPEN_RFLAG != flag && FILE_OPEN_WFLAG != flag)) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param filename=%p flag=%x", filename, flag);
       ret = OB_INVALID_ARGUMENT;
     } else if (-1 == (fd_ = open(filename, flag, FILE_OPEN_MODE))) {
-      HASH_WRITE_LOG(HASH_WARNING, "open file fail, filename=[%s] flag=%x errno=%u",
-          filename, flag, errno);
       ret = OB_ERR_SYS;
     } else {
       // do nothing
@@ -118,14 +115,10 @@ public:
     int ret = OB_SUCCESS;
     ssize_t write_ret = 0;
     if (-1 == fd_) {
-      HASH_WRITE_LOG(HASH_WARNING, "have not inited");
       ret = OB_NOT_INIT;
     } else if (OB_ISNULL(data) || 0 == size) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param data=%p size=%ld", data, size);
       ret = OB_INVALID_ARGUMENT;
     } else if (size != (int64_t)(write_ret = write(fd_, data, size))) {
-      HASH_WRITE_LOG(HASH_WARNING, "write fail errno=%u fd_=%d data=%p size=%ld write_ret=%ld",
-          errno, fd_, data, size, write_ret);
       ret = OB_ERR_SYS;
     } else {
       // do nothing
@@ -137,14 +130,10 @@ public:
     int ret = OB_SUCCESS;
     ssize_t read_ret = 0;
     if (-1 == fd_) {
-      HASH_WRITE_LOG(HASH_WARNING, "have not inited");
       ret = OB_NOT_INIT;
     } else if (OB_ISNULL(data) || 0 == size) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param data=%p size=%ld", data, size);
       ret = OB_INVALID_ARGUMENT;
     } else if (size != (int64_t)(read_ret = read(fd_, data, size))) {
-      HASH_WRITE_LOG(HASH_WARNING, "read fail errno=%u fd_=%d data=%p size=%ld read_ret=%ld",
-          errno, fd_, data, size, read_ret);
       ret = OB_ERR_SYS;
     } else {
       // do nothing

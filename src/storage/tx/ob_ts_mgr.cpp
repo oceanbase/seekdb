@@ -51,7 +51,6 @@ int ObTsMgr::init(const ObAddr &server,
   } else {
     server_ = server;
     is_inited_ = true;
-    TRANS_LOG(INFO, "ObTsMgr inited success", KP(this), K(server));
   }
 
   if (OB_FAIL(ret)) {
@@ -88,7 +87,6 @@ int ObTsMgr::start()
   } else if (OB_FAIL(share::ObThreadPool::start())) {
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "ObTsMgr start success");
   }
   return ret;
 }
@@ -105,7 +103,6 @@ void ObTsMgr::stop()
     (void)share::ObThreadPool::stop();
     (void)ts_worker_.stop();
     is_running_ = false;
-    TRANS_LOG(INFO, "ObTsMgr stop success");
   }
 }
 
@@ -123,7 +120,6 @@ void ObTsMgr::wait()
   } else {
     (void)share::ObThreadPool::wait();
     (void)ts_worker_.wait();
-    TRANS_LOG(INFO, "ObTsMgr wait success");
   }
 }
 
@@ -142,7 +138,6 @@ void ObTsMgr::destroy()
     location_adapter_ = NULL;
     is_running_ = false;
     is_inited_ = false;
-    TRANS_LOG(INFO, "ObTsMgr destroyed");
   }
   if (NULL != gts_request_rpc_) {
     ObGtsRequestRpcFactory::release(gts_request_rpc_);
@@ -267,7 +262,6 @@ int ObTsMgr::interrupt_gts_callbacks()
     }
     if (OB_SUCCESS != ret) {
     } else {
-      TRANS_LOG(INFO, "interrupt gts callbacks success", K(ls_id));
     }
   }
   return ret;
@@ -513,7 +507,6 @@ int ObTsMgr::interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id)
 
     if (OB_SUCCESS != ret) {
     } else {
-      TRANS_LOG(INFO, "interrupt gts callback success", K(ls_id));
     }
   }
   return ret;

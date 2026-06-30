@@ -42,7 +42,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else if (OB_ISNULL(drop_table_stmt = create_stmt<ObDropTableStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "create drop table stmt failed");
   } else {
     stmt_ = drop_table_stmt;
     drop_table_stmt->set_is_view_stmt(T_DROP_VIEW == parse_tree.type_);

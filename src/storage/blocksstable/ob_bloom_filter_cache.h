@@ -212,7 +212,6 @@ public:
       }
     }
     if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) { // print task queue size every 5s
-      STORAGE_LOG(INFO, "current bloomfilter task queue size,", K(qsize), K_(bf_cache_miss_count_threshold));
     }
   }
   int check_need_build(const ObBloomFilterCacheKey &bf_key, bool &need_build);
@@ -235,8 +234,6 @@ inline int ObBloomFilterCache::set_bf_cache_miss_count_threshold(const int64_t t
   if (threshold < 0) {
     STORAGE_LOG(ERROR, "invalid cache_miss_count_threshold", K(ret), K(threshold));
   } else if (bf_cache_miss_count_threshold_ != threshold){
-    STORAGE_LOG(INFO, "set bf_cache_miss_count_threshold",
-        "old", bf_cache_miss_count_threshold_, "new", threshold);
     bf_cache_miss_count_threshold_ = threshold;
   }
   return ret;

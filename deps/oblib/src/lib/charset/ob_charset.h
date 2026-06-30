@@ -848,8 +848,6 @@ public:
         encoding.assign_ptr(temp_str.ptr(), length);
         if (OB_FAIL(func(encoding, wchar))) {
         }
-        COMMON_LOG(DEBUG, "foreach char", K(encoding),
-                   KPHEX(encoding.ptr(), encoding.length()), K(wchar));
       }
     }
     return ret;

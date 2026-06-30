@@ -237,7 +237,6 @@ template <typename T, int64_t MAX_CLASS_NUM, const char *LABEL,
       common::ObDList<T> range;
       int ret = OB_SUCCESS;
       if (OB_UNLIKELY(batch_count <= 0)) {
-        LIB_LOG(ERROR, "batch_count must not be 0!", K(gfactory));
         ptr_ret = NULL;
       } else if (OB_FAIL(gfactory->get_objs(type_id, move_num, range))) {
         LIB_LOG(WARN, "global factory get_objs failed", K(ret), K(type_id), K(move_num));
@@ -255,7 +254,6 @@ template <typename T, int64_t MAX_CLASS_NUM, const char *LABEL,
           int32_t new_length = std::min(list.get_max_length() + batch_count, MAX_FREE_LIST_LENGTH);
           new_length -= new_length % batch_count;
           if (OB_UNLIKELY(0 != (new_length % batch_count))) {
-            LIB_LOG(ERROR, "new_length mod batch_count != 0", K(new_length), K(batch_count));
           } else {
             list.set_max_length(new_length);
           }
@@ -385,7 +383,6 @@ void ObTCFactory<T, MAX_CLASS_NUM, LABEL, MEM_LIMIT, MAX_FREE_LIST_LENGTH>::stat
   memset(class_total_max_length, 0, sizeof(class_total_max_length));
   memset(allocated_count, 0, sizeof(allocated_count));
   while (NULL != tc_factory && OB_SUCC(ret)) {
-    LIB_LOG(INFO, "[TCFACTORY_STAT] type_id=ALL", "thread", i, "mem_size", tc_factory->mem_size_);
     total_mem_size += tc_factory->mem_size_;
     for (int32_t type_id = 0; OB_SUCC(ret) && type_id < MAX_CLASS_NUM; ++type_id) {
       length = tc_factory->freelists_[type_id].get_length();
@@ -400,22 +397,12 @@ void ObTCFactory<T, MAX_CLASS_NUM, LABEL, MEM_LIMIT, MAX_FREE_LIST_LENGTH>::stat
       class_total_max_length[type_id] += max_length;
 
       allocated_count[type_id] += tc_factory->get_count_[type_id] - tc_factory->put_count_[type_id];
-      LIB_LOG(INFO, "[TCFACTORY_STAT]", "thread", i,
-              K(type_id), K(length), K(max_length), K(low_water), K(overlimit_times),
-              "get_count", tc_factory->get_count_[type_id],
-              "put_count", tc_factory->put_count_[type_id]);
     }
     tc_factory = const_cast<self_t *>(tc_factory->next_);
     ++i;
   } // end while
   for (int32_t type_id = 0; OB_SUCC(ret) && type_id < MAX_CLASS_NUM; ++type_id) {
-    LIB_LOG(INFO, "[TCFACTORY_STAT] thread=ALL",
-            K(type_id), "length", class_total_length[type_id],
-            "max_length", class_total_max_length[type_id],
-            "allocated", allocated_count[type_id]);
   }
-  LIB_LOG(INFO, "[TCFACTORY_STAT] thread=ALL type_id=ALL",
-          "mem_size", total_mem_size, "length", total_length, "max_length", total_max_length);
 }
 } // end namespace common
 } // end namespace oceanbase

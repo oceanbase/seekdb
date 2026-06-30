@@ -41,10 +41,8 @@ int ObTimeWheelTask::schedule(const int64_t bucket_idx, const int64_t run_ticket
   int ret = OB_SUCCESS;
 
   if (bucket_idx < 0 || run_ticket <= 0) {
-    TRANS_LOG(WARN, "invalid argument", K(bucket_idx), K(run_ticket));
     ret = OB_INVALID_ARGUMENT;
   } else if (is_scheduled_) {
-    TRANS_LOG(WARN, "task has already been scheduled", "task", *this);
     ret = OB_TIMER_TASK_HAS_SCHEDULED;
   } else {
     bucket_idx_ = bucket_idx;
@@ -68,7 +66,6 @@ int ObTimeWheelTask::cancel()
     } else if (NULL == prev_ && NULL == next_) {
       // do nothing
     } else {
-      TRANS_LOG(WARN, "unlink error", KP(prev_), KP(next_));
       BACKTRACE(ERROR, true, "task unlink error, prev_ or next_ may be null");
       ret = OB_ERR_UNEXPECTED;
     }
@@ -97,10 +94,8 @@ int TimeWheelBase::init(const int64_t precision, const char *name)
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "TimeWheelBase inited twice");
     ret = OB_INIT_TWICE;
   } else if (precision <= 0 || OB_ISNULL(name)) {
-    TRANS_LOG(WARN, "invalid argument", K(precision), KP(name));
     ret = OB_INVALID_ARGUMENT;
   } else {
     precision_ = precision;
@@ -109,7 +104,6 @@ int TimeWheelBase::init(const int64_t precision, const char *name)
     tname_[sizeof(tname_) - 1] = '\0';
     (void)snprintf(tname_, sizeof(tname_) - 1, "%s", name);
     is_inited_ = true;
-    TRANS_LOG(INFO, "TimeWheelBase inited success", K_(precision), K_(start_ticket), K_(scan_ticket));
   }
 
   return ret;
@@ -120,16 +114,12 @@ int TimeWheelBase::schedule_(ObTimeWheelTask *task, const int64_t run_ticket)
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "TimeWheelBase not inited");
     ret = OB_NOT_INIT;
   } else if (has_set_stop()) {
-    TRANS_LOG(WARN, "TimeWheelBase is not running");
     ret = OB_NOT_RUNNING;
   } else if (NULL == task || run_ticket < 0) {
-    TRANS_LOG(WARN, "invalid argument", KP(task), K(run_ticket));
     ret = OB_INVALID_ARGUMENT;
   } else if (run_ticket < start_ticket_) {
-    TRANS_LOG(ERROR, "clock out of order", K(run_ticket), K_(start_ticket), "task", *task);
     ret = OB_CLOCK_OUT_OF_ORDER;
   } else {
     bool need_retry = true;
@@ -150,10 +140,8 @@ int TimeWheelBase::schedule_(ObTimeWheelTask *task, const int64_t run_ticket)
         } else {
           bucket->list_.add_last(task);
           if (OB_ISNULL(task->get_next())) {
-            TRANS_LOG(ERROR, "task next pointer is NULL");
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_ISNULL(task->get_prev())) {
-            TRANS_LOG(ERROR, "task prev pointer is NULL");
             ret = OB_ERR_UNEXPECTED;
           } else {
             // do nothing
@@ -174,13 +162,10 @@ int TimeWheelBase::schedule(ObTimeWheelTask *task, const int64_t delay)
   int64_t run_ticket = 0;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "TimeWheelBase not inited");
     ret = OB_NOT_INIT;
   } else if (has_set_stop()) {
-    TRANS_LOG(WARN, "TimeWheelBase is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_ISNULL(task) || delay < 0) {
-    TRANS_LOG(WARN, "invalid argument", KP(task), K(delay));
     ret = OB_INVALID_ARGUMENT;
   } else {
     run_ticket = (ObClockGenerator::getRealClock() + delay + precision_ - 1) / precision_;
@@ -196,12 +181,10 @@ int TimeWheelBase::cancel(ObTimeWheelTask *task)
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "TimeWheelBase not inited");
     ret = OB_NOT_INIT;
   // do not check transaction timer is running or not
   // we can unregister timeout task successful always
   } else if (OB_ISNULL(task)) {
-    TRANS_LOG(WARN, "invalid argument", KP(task));
     ret = OB_INVALID_ARGUMENT;
   } else {
     task->lock();
@@ -210,7 +193,6 @@ int TimeWheelBase::cancel(ObTimeWheelTask *task)
     } else {
       const int64_t idx = task->get_bucket_idx();
       if (ObTimeWheelTask::INVALID_BUCKET_IDX == idx) {
-        TRANS_LOG(ERROR, "invalid bucket index", K(idx));
         ret = OB_ERR_UNEXPECTED;
       } else {
         TaskBucket *bucket = &(buckets_[idx]);
@@ -244,12 +226,10 @@ int TimeWheelBase::scan()
         bucket->lock();
         ObTimeWheelTask *task = bucket->list_.get_first();
         if (NULL == task) {
-          TRANS_LOG(WARN, "task is NULL", KP(task));
           ret = OB_ERR_UNEXPECTED;
         } else if (bucket->list_.get_header() == task) {
           // bucket is empty
           if (!bucket->list_.is_empty()) {
-            TRANS_LOG(ERROR, "bucket is empty");
             ret = OB_ERR_UNEXPECTED;
           } else {
             need_retry = false;
@@ -259,7 +239,6 @@ int TimeWheelBase::scan()
           if (0 == task->trylock()) {
             const ObTimeWheelTask *const tmp_task = bucket->list_.remove(task);
             if (OB_ISNULL(tmp_task)) {
-              TRANS_LOG(ERROR, "task is NULL");
               ret = OB_ERR_UNEXPECTED;
             } else if (task->get_scan_ticket() == scan_ticket_) {
               bucket->list_.add_first(task);
@@ -335,11 +314,9 @@ int ObTimeWheel::init(const int64_t precision, const int64_t real_thread_num, co
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTimeWheel init twice");
     ret = OB_INIT_TWICE;
   } else if (precision <= 0 || real_thread_num <= 0 || MAX_THREAD_NUM < real_thread_num
       || OB_ISNULL(name) || strlen(name) == 0) {
-    TRANS_LOG(WARN, "invalid argument", K(precision), K(real_thread_num), KP(name));
     ret = OB_INVALID_ARGUMENT;
   } else {
     for (int64_t i = 0; i < real_thread_num && OB_SUCCESS == ret; ++i) {
@@ -366,7 +343,6 @@ int ObTimeWheel::init(const int64_t precision, const int64_t real_thread_num, co
     precision_ = precision;
     tname_[sizeof(tname_) - 1] = '\0';
     (void)snprintf(tname_, sizeof(tname_) - 1, "%s", name);
-    TRANS_LOG(INFO, "ObTimeWheel init success", K(precision), K(real_thread_num));
   }
 
   return ret;
@@ -389,10 +365,8 @@ int ObTimeWheel::start()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTimeWheel is not inited");
     ret = OB_NOT_INIT;
   } else if (is_running_) {
-    TRANS_LOG(WARN, "ObTimeWheel is already running", "timer_name", tname_);
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; i < real_thread_num_ && OB_SUCCESS == ret; ++i) {
@@ -410,7 +384,6 @@ int ObTimeWheel::start()
   }
   if (OB_SUCC(ret)) {
     is_running_ = true;
-    TRANS_LOG(INFO, "ObTimeWheel start success", "timer_name", tname_);
   }
 
   return ret;
@@ -421,10 +394,8 @@ int ObTimeWheel::stop()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTimeWheel is not inited");
     ret = OB_NOT_INIT;
   } else if (!is_running_) {
-    TRANS_LOG(WARN, "ObTimeWheel already has been stopped", "timer_name", tname_);
     ret = OB_NOT_RUNNING;
   } else {
     for (int64_t i = 0; i < real_thread_num_; ++i) {
@@ -433,7 +404,6 @@ int ObTimeWheel::stop()
       }
     }
     is_running_ = false;
-    TRANS_LOG(INFO, "ObTimeWheel stop success", "timer_name", tname_);
   }
 
   return ret;
@@ -444,10 +414,8 @@ int ObTimeWheel::wait()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTimeWheel is not inited");
     ret = OB_NOT_INIT;
   } else if (is_running_) {
-    TRANS_LOG(WARN, "ObTimeWheel is already running", "timer_name", tname_);
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < real_thread_num_; ++i) {
@@ -457,7 +425,6 @@ int ObTimeWheel::wait()
     }
   }
   if (OB_SUCC(ret)) {
-    TRANS_LOG(INFO, "ObTimeWheel wait success");
   }
 
   return ret;
@@ -485,7 +452,6 @@ void ObTimeWheel::destroy()
     }
     real_thread_num_ = 0;
     is_inited_ = false;
-    TRANS_LOG(INFO, "ObTimeWheel destroy success");
   }
 }
 int ObTimeWheel::schedule(ObTimeWheelTask *task, const int64_t delay)
@@ -493,13 +459,10 @@ int ObTimeWheel::schedule(ObTimeWheelTask *task, const int64_t delay)
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTimeWheel not init");
     ret = OB_NOT_INIT;
   } else if (!is_running_) {
-    TRANS_LOG(WARN, "ObTimeWheel is not running", "timer_name", tname_);
     ret = OB_NOT_RUNNING;
   } else if (OB_ISNULL(task) || delay <= 0) {
-    TRANS_LOG(WARN, "invalid argument", KP(task), K(delay));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS !=
       (ret = tw_base_[task->hash() % real_thread_num_]->schedule(task, delay))) {
@@ -514,12 +477,10 @@ int ObTimeWheel::cancel(ObTimeWheelTask *task)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTimeWheel not init");
     ret = OB_NOT_INIT;
   // do not check transaction timer is running or not
   // we can unregister timeout task successful always
   } else if (OB_ISNULL(task)) {
-    TRANS_LOG(WARN, "invalid argument", KP(task));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = tw_base_[task->hash() % real_thread_num_]->cancel(task))) {
   } else {

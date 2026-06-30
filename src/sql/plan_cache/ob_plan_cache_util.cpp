@@ -139,7 +139,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
           }
           duplicate_table_addr = replica_location.get_server();
           has_duplicate_tbl = true;
-          SQL_PC_LOG(DEBUG, "has duplicate table");
         } else if (duplicate_table_addr != replica_location.get_server()) {
           duplicate_table_addr.reset();
         }

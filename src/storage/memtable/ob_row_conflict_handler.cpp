@@ -172,7 +172,6 @@ int ObRowConflictHandler::check_foreign_key_constraint(const storage::ObTableIte
                   K(acc_ctx.get_snapshot_version()));
       }
     } else {
-      TRANS_LOG(WARN, "check row locked failed", K(param), K(context), K(rowkey));
     }
   }
   return ret;
@@ -268,7 +267,6 @@ int ObRowConflictHandler::post_row_read_conflict(ObMvccAccessCtx &acc_ctx,
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
   } else if (OB_ISNULL(lock_wait_mgr = MTL_WITH_CHECK(ObLockWaitMgr*))) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "can not get tenant lock_wait_mgr MTL");
   } else {
     int tmp_ret = OB_SUCCESS;
     ObTransID tx_id = acc_ctx.get_tx_id();

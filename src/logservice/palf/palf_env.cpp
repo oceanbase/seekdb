@@ -58,7 +58,6 @@ int PalfEnv::create_palf_env(
                                                    log_alloc_mgr, log_block_pool, monitor, 
                                                    log_local_device, resource_manager, io_manager))) {
   } else {
-    PALF_LOG(INFO, "create_palf_handle_impl success", K(base_dir));
   }
   if (NULL != palf_env && OB_FAIL(ret)) {
     MTL_DELETE(PalfEnv, "PalfEnv", palf_env);
@@ -106,7 +105,6 @@ int PalfEnv::create(const int64_t id,
   if (OB_FAIL(palf_env_impl_.create_palf_handle_impl(palf_id, access_mode, palf_base_info, palf_handle_impl))) {
   } else if (FALSE_IT(handle.palf_handle_impl_ = palf_handle_impl)) {
   } else {
-    PALF_LOG(INFO, "create palf handle success", K(id));
   }
   if (OB_FAIL(ret)) {
     handle.palf_handle_impl_ = NULL;
@@ -137,7 +135,6 @@ void PalfEnv::close(PalfHandle &handle)
   (void)handle.unregister_rebuild_cb();
   palf_env_impl_.revert_palf_handle_impl(handle.palf_handle_impl_);
   handle.palf_handle_impl_ = NULL;
-  PALF_LOG(TRACE, "PalfEnv close success", K(handle));
 }
 
 int PalfEnv::remove(int64_t id)

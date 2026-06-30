@@ -779,7 +779,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (nth_child >= n_child_) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "invalid child", K(nth_child), K(n_child_));
     } else {
       filter_executor = childs_[nth_child];
     }

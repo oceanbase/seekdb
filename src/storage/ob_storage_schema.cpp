@@ -920,7 +920,6 @@ int ObStorageSchema::serialize(char *buf, const int64_t buf_len, int64_t &pos) c
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(serialize_schema_array(buf, buf_len, pos, rowkey_array_))){
     } else if (!column_info_simplified_ && OB_FAIL(serialize_column_array(buf, buf_len, pos))){
-      STORAGE_LOG(WARN, "failed to serialize columns", K_(column_array));
     } else if (storage_schema_version_ >= STORAGE_SCHEMA_VERSION_V2) {
       if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, store_column_cnt_))) {
       } else if (storage_schema_version_ == STORAGE_SCHEMA_VERSION_V2) {
@@ -1371,7 +1370,6 @@ int ObStorageSchema::get_base_rowkey_column_group_index(int32_t &cg_idx) const
     STORAGE_LOG(WARN, "No column group exist", K(ret), KPC(this));
   } else if (OB_UNLIKELY(column_group_cnt > INT32_MAX)) {
     ret = OB_SIZE_OVERFLOW;
-    STORAGE_LOG(ERROR, "column group count is overflow", K(column_group_cnt));
   } else {
     for (int32_t i = 0; (OB_INVALID_INDEX == cg_idx) && i < column_group_cnt; i++) {
       if (column_group_array_.at(i).is_rowkey_column_group() || column_group_array_.at(i).is_all_column_group()) {
@@ -1401,7 +1399,6 @@ int ObStorageSchema::get_column_group_index(
     STORAGE_LOG(WARN, "No column group exist", K(ret), KPC(this));
   } else if (OB_UNLIKELY(column_group_cnt > INT32_MAX)) {
     ret = OB_SIZE_OVERFLOW;
-    STORAGE_LOG(ERROR, "column group count is overflow", K(column_group_cnt));
   } else if (column_id < OB_END_RESERVED_COLUMN_ID_NUM &&
       common::OB_HIDDEN_SESS_CREATE_TIME_COLUMN_ID != column_id &&
       common::OB_HIDDEN_SESSION_ID_COLUMN_ID != column_id &&
@@ -1576,7 +1573,6 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
   for ( ; OB_SUCC(ret) && iter != input_schema.column_end(); iter++) {
     if (OB_ISNULL(col = *iter)) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "The column is NULL", K(col));
     } else if (FALSE_IT(col_cnt_in_sstable += col->is_column_stored_in_sstable())) {
       // only record stored column count here
     } else if (!column_info_simplified_) {
@@ -1656,7 +1652,6 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info.get_size(); ++i) {
     if (NULL == (rowkey_column = rowkey_info.get_column(i))) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "The rowkey column is NULL", K(i));
     } else if (OB_FAIL(tmp_map.get_refactored(rowkey_column->column_id_, find_idx))) {
     } else if (OB_ISNULL(rowkey_col_schema =
                            input_schema.get_column_schema(rowkey_column->column_id_))) {
@@ -2066,7 +2061,6 @@ void ObStorageSchema::update_column_cnt(const int64_t input_col_cnt)
   store_column_cnt_ = MAX(store_column_cnt_, input_col_cnt);
   if (column_cnt_ != column_array_.count()) {
     column_info_simplified_ = true;
-    STORAGE_LOG(INFO, "update column cnt", K(column_cnt_), K(store_column_cnt_), K(column_cnt_), K(column_array_.count()));
   }
 }
 

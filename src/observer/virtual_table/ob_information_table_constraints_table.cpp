@@ -249,8 +249,6 @@ int ObInfoSchemaTableConstraintsTable::add_index_constraints(const ObTableSchema
                 index_schema))) {
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "invalid index table id",
-                 "index_table_id", simple_index_infos.at(i).table_id_);
     } else {
       if (!index_schema->is_unique_index()) {
         continue;

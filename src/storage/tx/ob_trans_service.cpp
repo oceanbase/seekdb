@@ -93,7 +93,6 @@ int ObTransService::init(const ObAddr &self,
     msg_task_cnt = MAX_MSG_TASK_CNT;
   }
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTransService inited twice", KPC(this));
     ret = OB_INIT_TWICE;
   } else if (OB_UNLIKELY(!self.is_valid())
              || OB_ISNULL(rpc)
@@ -101,10 +100,6 @@ int ObTransService::init(const ObAddr &self,
              || OB_ISNULL(gti_source)
              || OB_ISNULL(ts_mgr)
              || OB_ISNULL(schema_service)) {
-    TRANS_LOG(WARN, "invalid argument", K(self),
-              KP(location_adapter), KP(rpc), 
-              KP(location_adapter), KP(ts_mgr),
-              KP(schema_service));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
   } else if (OB_FAIL(ObLinkQueueThreadPool::init(1, msg_task_cnt, "TransService"))) {
@@ -125,7 +120,6 @@ int ObTransService::init(const ObAddr &self,
     ts_mgr_ = ts_mgr;
     rollback_sp_msg_sequence_ = ObTimeUtil::current_time();
     is_inited_ = true;
-    TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(tenant_memory_limit), K_(tablet_to_ls_cache));
   }
   if (OB_SUCC(ret)) {
 #ifdef ENABLE_DEBUG_LOG
@@ -159,10 +153,8 @@ int ObTransService::start()
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is already running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(timer_.start())) {
   } else if (OB_FAIL(rpc_->start())) {
@@ -172,7 +164,6 @@ int ObTransService::start()
   } else {
     is_running_ = true;
 
-    TRANS_LOG(INFO, "transaction service start success", KPC(this));
   }
 
   return ret;
@@ -183,10 +174,8 @@ void ObTransService::stop()
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited", KPC(this));
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransService already has stopped", KPC(this));
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tx_ctx_mgr_.stop())) {
   } else if (OB_FAIL(tx_desc_mgr_.stop())) {
@@ -197,7 +186,6 @@ void ObTransService::stop()
     gti_source_->stop();
     ObLinkQueueThreadPool::stop();
     is_running_ = false;
-    TRANS_LOG(INFO, "transaction service stop success", KPC(this));
   }
 }
 
@@ -206,10 +194,8 @@ int ObTransService::wait_()
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited", KPC(this));
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tx_ctx_mgr_.wait())) {
   } else if (OB_FAIL(tx_desc_mgr_.wait())) {
@@ -217,7 +203,6 @@ int ObTransService::wait_()
   } else {
     rpc_->wait();
     gti_source_->wait();
-    TRANS_LOG(INFO, "transaction service wait success", KPC(this));
   }
   return ret;
 }
@@ -247,7 +232,6 @@ void ObTransService::destroy()
     }
 #endif
     is_inited_ = false;
-    TRANS_LOG(INFO, "transaction service destroyed", KPC(this), K_(tablet_to_ls_cache));
   }
 }
 
@@ -260,10 +244,8 @@ int ObTransService::get_trans_start_session_id(const share::ObLSID &ls_id, const
   ObLSHandle ls_handle;
   session_id = ObBasicSessionInfo::INVALID_SESSID;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD))) {
   } else if (!ls_handle.is_valid()) {
@@ -295,7 +277,6 @@ void ObTransService::handle(LinkTask *task)
 
   if (OB_ISNULL(task)) {
     // ignore ret
-    TRANS_LOG(ERROR, "task is null", KP(task));
   } else {
     trans_task = static_cast<ObTransTask*>(task);
     if (!trans_task->ready_to_handle()) {
@@ -320,7 +301,6 @@ void ObTransService::handle(LinkTask *task)
       ObAdvanceLSCkptTask *advance_ckpt_task = static_cast<ObAdvanceLSCkptTask *>(trans_task);
       if (OB_ISNULL(advance_ckpt_task)) {
         // ignore ret
-        TRANS_LOG(WARN, "advance ckpt task is null", KP(advance_ckpt_task));
       } else if (OB_FAIL(advance_ckpt_task->try_advance_ls_ckpt_ts())) {
       }
 
@@ -332,7 +312,6 @@ void ObTransService::handle(LinkTask *task)
       ObTxStandbyCleanupTask *standby_cleanup_task = static_cast<ObTxStandbyCleanupTask *>(trans_task);
       if (OB_ISNULL(standby_cleanup_task)) {
         // ignore ret
-        TRANS_LOG(WARN, "standby cleanup task is null");
       } else if (OB_FAIL(do_standby_cleanup())) {
       }
       if (OB_NOT_NULL(standby_cleanup_task)) {
@@ -347,12 +326,8 @@ void ObTransService::handle(LinkTask *task)
     // print task queue status periodically
     if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
       int64_t queue_num = get_queue_num();
-      TRANS_LOG(INFO, "[statisic] trans service task queue statisic : ", K(queue_num), K_(input_queue_count), K_(output_queue_count));
       ATOMIC_STORE(&input_queue_count_, 0);
       ATOMIC_STORE(&output_queue_count_, 0);
-      TRANS_LOG(INFO, "[statisic] tx desc statisic : ",
-                "alloc_count", tx_desc_mgr_.get_alloc_count(),
-                "total_count", tx_desc_mgr_.get_total_count());
     }
   }
   UNUSED(ret); //make compiler happy
@@ -363,20 +338,15 @@ int ObTransService::get_ls_min_uncommit_prepare_version(const ObLSID &ls_id, SCN
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (!ls_id.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", K(ls_id));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tx_ctx_mgr_.get_ls_min_uncommit_tx_prepare_version(ls_id, min_prepare_version))) {
   } else if (!min_prepare_version.is_valid()) {
-    TRANS_LOG(ERROR, "invalid min prepare version, unexpected error", K(ls_id), K(min_prepare_version));
     ret = OB_ERR_UNEXPECTED;
   } else {
-    TRANS_LOG(DEBUG, "get min uncommit prepare version success", K(ls_id), K(min_prepare_version));
   }
   return ret;
 }
@@ -388,13 +358,10 @@ int ObTransService::get_max_decided_scn(const share::ObLSID &ls_id, share::SCN &
 
   ObLSTxCtxMgr *ls_tx_mgr_ptr = nullptr;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else if (!ls_id.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", K(ls_id));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tx_ctx_mgr_.get_ls_tx_ctx_mgr(ls_id, ls_tx_mgr_ptr))) {
   } else {
@@ -411,19 +378,15 @@ int ObTransService::remove_callback_for_uncommited_txn(
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is not running");
   } else if (OB_ISNULL(memtable_set)) {
-    TRANS_LOG(WARN, "memtable is NULL");
     ret = OB_INVALID_ARGUMENT;
   } else if (!ls_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected ls id", KR(ret), K(ls_id), KPC(memtable_set));
   } else if (OB_FAIL(tx_ctx_mgr_.remove_callback_for_uncommited_tx(ls_id, memtable_set))) {
   } else {
-    TRANS_LOG(DEBUG, "participant remove callback for uncommitt txn success", K(ls_id), KP(memtable_set));
   }
 
   return ret;
@@ -646,14 +609,11 @@ int ObTransService::get_max_commit_version(SCN &commit_version) const
 {
  int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
   } else {
     commit_version = tx_version_mgr_.get_max_commit_ts(false);
-    TRANS_LOG(DEBUG, "get publish version success", K(commit_version));
   }
   return ret;
 }

@@ -192,10 +192,8 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
   }
   if (-1 == bucket_num) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(ERROR, "reserved memory is not enough!", K(memory_limit), K(server_memory_factor), K(reserved_memory));
   } else {
     share::ObTaskController::get().allow_next_syslog();
-    COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num), K(server_memory_factor), K(reserved_memory));
   }
 
   return ret;
@@ -250,7 +248,6 @@ int ObKVGlobalCache::init(
     destroy();
     COMMON_LOG(ERROR, "Fail to create ObKVGlobalCache, ", K(ret));
   } else {
-    COMMON_LOG(INFO, "ObKVGlobalCache has been inited!", K(bucket_num), K(max_cache_size), K(block_size));
   }
 
   return ret;
@@ -276,7 +273,6 @@ void ObKVGlobalCache::wait()
 void ObKVGlobalCache::destroy()
 {
   if (inited_) {
-    COMMON_LOG(INFO, "Begin destroy the ObKVGlobalCache!");
     // should destroy store_ before timer threads exit, before some mb_handles may
     // cache in wash thread.
     stop();
@@ -292,7 +288,6 @@ void ObKVGlobalCache::destroy()
     mem_limit_getter_ = nullptr;
 
     inited_ = false;
-    COMMON_LOG(INFO, "The ObKVGlobalCache has been destroyed!");
   }
 }
 
@@ -559,7 +554,6 @@ void ObKVGlobalCache::deregister_cache(const int64_t cache_id)
   }
 
   if (OB_SUCC(ret)) {
-    COMMON_LOG(INFO, "Success to deregister cache, ", K(cache_id));
   }
 }
 
@@ -625,7 +619,6 @@ int ObKVGlobalCache::reload_wash_interval()
     } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheRep, replace_task_, wash_interval, true))) {
     }
     if (OB_SUCC(ret)) {
-      COMMON_LOG(INFO, "success to reload_wash_interval", K(wash_interval));
     }
   } else if (!inited_) {
     if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::KVCacheWash, wash_task_, cache_wash_interval_, true))) {

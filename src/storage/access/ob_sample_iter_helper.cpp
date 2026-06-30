@@ -154,7 +154,6 @@ int ObGetSampleIterHelper::get_memtable_sample_ranges_(const ObIArray<memtable::
   // if we can not split ranges from all memtables, just push the input_range into sample ranges array
   if (split_failed_count == memtables.count()) {
     if (sample_ranges.count() != 0) {
-      STORAGE_LOG(WARN, "unexpected sample memtable ranges", K(sample_ranges));
       sample_ranges.reuse();
     }
 

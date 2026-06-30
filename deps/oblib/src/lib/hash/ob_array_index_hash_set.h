@@ -76,8 +76,6 @@ public:
           break;
         } else if (OB_LIKELY((*array_)[ARRAY_INDEX(pos)] == item)) {
           if (OB_UNLIKELY(idx != ARRAY_INDEX(pos))) {
-            _OB_LOG(WARN, "idx %ld, exist idx %lu", idx,
-                    static_cast<uint64_t>(ARRAY_INDEX(pos)));
             ret = OB_ENTRY_EXIST;
           }
           break;

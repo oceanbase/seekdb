@@ -47,7 +47,6 @@ int ObTscTimestamp::init()
         MEM_BARRIER();
         WEAK_BARRIER();
         is_init_ = true;
-        LIB_LOG(INFO, "TSC TIMESTAMP init succ", K(cpu_freq_khz));
       } else {
         ret = OB_ERR_UNEXPECTED;
         LIB_LOG(WARN, "TSC TIMESTAMP init fail", K(ret), K_(tsc_count), K(cpu_freq_khz));
@@ -101,7 +100,6 @@ uint64_t ObTscTimestamp::get_cpufreq_khz_()
     }
     RegCloseKey(hKey);
   }
-  LIB_LOG(INFO, "TSC freq : ", K(freq_khz));
   return freq_khz;
 }
 #else
@@ -129,7 +127,6 @@ uint64_t ObTscTimestamp::get_cpufreq_khz_()
     }
     fclose(stream);
   }
-  LIB_LOG(INFO, "TSC freq : ", K(freq_khz));
   return freq_khz;
 }
 #endif
@@ -164,7 +161,6 @@ uint64_t ObTscTimestamp::get_cpufreq_khz_(void)
 {
   uint64_t timer_frequency = 0;
   asm volatile("mrs %0, cntfrq_el0":"=r"(timer_frequency));
-  LIB_LOG(INFO, "TSC freq : ", "freq", timer_frequency/1000);
   return timer_frequency/1000;
 }
 

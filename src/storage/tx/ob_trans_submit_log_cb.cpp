@@ -203,7 +203,6 @@ int ObTxLogCb::on_failure()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(group_ptr_)) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObTxLogCb not inited", K(*this));
   } else {
     const int64_t bk_submit_ts = submit_ts_;
     const int64_t bk_log_size = log_size_;

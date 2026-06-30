@@ -40,7 +40,6 @@ int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
     if (OB_FAIL(TG_CREATE(lib::TGDefIDs::TSWorker, tg_id_))) {
     } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
     } else {
-      TRANS_LOG(INFO, "ts worker thread pool init success");
     }
   } else {
     // do nothing
@@ -49,7 +48,6 @@ int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
     use_local_worker_ = use_local_worker;
     ts_mgr_ = ts_mgr;
     is_inited_ = true;
-    TRANS_LOG(INFO, "ts worker init success", KP(this), KP(ts_mgr), K(use_local_worker));
   } else {
     TRANS_LOG(WARN, "ts worker init failed", KR(ret), KP(this), KP(ts_mgr), K(use_local_worker));
   }
@@ -109,11 +107,9 @@ void ObTsWorker::handle(void *task)
   if (NULL != task) {
     ObTsResponseTask *ts_task = reinterpret_cast<ObTsResponseTask *>(task);
     if (NULL == ts_mgr_) {
-      TRANS_LOG(WARN, "ts mgr is NULL", KP_(ts_mgr));
     } else if (OB_FAIL(ts_mgr_->handle_gts_result(ts_task->get_arg1(),
                                                   ts_task->get_ts_type()))) {
     } else {
-      TRANS_LOG(DEBUG, "handle gts result success", K(*ts_task));
     }
     ObTsResponseTaskFactory::free(ts_task);
     ts_task = NULL;

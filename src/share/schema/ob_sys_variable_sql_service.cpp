@@ -105,7 +105,6 @@ int ObSysVariableSqlService::replace_system_variable(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
       } else {
-        OB_LOG(INFO, "replace sysvar schema success", K(affected_rows), K(sysvar_schema));
       }
     }
 

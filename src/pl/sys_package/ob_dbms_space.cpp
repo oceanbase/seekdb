@@ -179,7 +179,6 @@ int ObDbmsSpace::extract_info_from_stmt(ObExecContext &ctx,
     if (OB_SUCC(ret)) {
       if (OB_FAIL(info.part_ids_.push_back(partition_id))) {
       } else {
-        SQL_ENG_LOG(TRACE, "DBMS_SPACE: finial info is ", K(info));
       }
     }
   }
@@ -216,7 +215,6 @@ int ObDbmsSpace::get_index_column_ids(const share::schema::ObTableSchema *table_
   }
   
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: final column ids are", K(column_ids));
   }
 
   return ret;
@@ -237,7 +235,6 @@ int ObDbmsSpace::get_optimizer_stats(const IndexCostInfo &info,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: get optimizer statistics", K(opt_stats.table_stats_), K(opt_stats.column_stats_));
   }
 
   return ret;
@@ -258,7 +255,6 @@ int ObDbmsSpace::get_compressed_ratio(ObExecContext &ctx,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: get compression ratio", K(info.compression_ratio_));
   }
 
   return ret;
@@ -405,11 +401,6 @@ int ObDbmsSpace::inner_calc_index_size(const ObOptTableStat &table_stat,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: result", K(target_part_id),
-                                             K(row_count),
-                                             K(block_count),
-                                             K(index_column_len),
-                                             K(actual_size));
   }
   return ret;
 }
@@ -445,7 +436,6 @@ int ObDbmsSpace::fill_tablet_infos(const ObTableSchema *table_schema,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: tablet_info", K(tablet_infos));
   }
 
   return ret;
@@ -561,7 +551,6 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: get each tablet size", K(tablet_size));
   }
 
   return ret;
@@ -712,7 +701,6 @@ int ObDbmsSpace::estimate_index_table_size(ObMySQLProxy *sql_proxy,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: table_size", K(table_size));
   }
 
   return ret;
@@ -773,7 +761,6 @@ int ObDbmsSpace::estimate_index_table_size_by_opt_stats(ObMySQLProxy *sql_proxy,
   }
 
   if (OB_SUCC(ret)) {
-    SQL_ENG_LOG(TRACE, "DBMS_SPACE: get_tablet info by opt_stats", K(opt_stats), K(table_size), K(info));
   }
   return ret;
 }
@@ -858,7 +845,6 @@ int ObDbmsSpace::get_default_index_column_len(const ObTableSchema *table_schema,
             info.default_index_len_ = index_fix_column_len + avg_var_column_len * index_var_column_cnt;
           } else {
             info.default_index_len_ = 0;
-            SQL_ENG_LOG(INFO, "the var column len is less than 0", K(global_tablet_info->row_len_), K(fix_column_len));
           }
         } else {
           info.default_index_len_ = index_fix_column_len;

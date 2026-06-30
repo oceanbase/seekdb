@@ -611,12 +611,8 @@ int ObDataStoreDesc::get_emergency_row_store_type()
             if (get_tablet_id() == emergency_tablet_id
                           && get_ls_id().id() == emergency_ls_id
                           && true) {
-              STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
-                  K(emergency_ls_id), K(emergency_tablet_id), K(*this));
               row_store_type_ = FLAT_ROW_STORE;
             } else {
-              STORAGE_LOG(INFO, "this partition is not the emergency partition to skip encoding",
-                  K(emergency_ls_id), K(emergency_tablet_id), K(*this));
             }
           }
         }
@@ -748,8 +744,6 @@ bool ObDataStoreDesc::is_store_type_valid() const
   }
 
   if (!ret) {
-    STORAGE_LOG(WARN, "invalid row store type",
-        K_(row_store_type), K_(is_force_flat_store_type), K_(data_store_type));
   }
   return ret;
 }

@@ -752,7 +752,6 @@ int ObZlibDecompressor::init()
     int zlib_ret = inflateInit2(zstream_ptr, 32 + MAX_WBITS);
     if (Z_OK != zlib_ret) {
       ret = OB_ERROR;
-      LIB_LOG(WARN, "failed to inflateInit2", K(zlib_ret));
     }
   }
   return ret;

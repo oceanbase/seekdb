@@ -1838,7 +1838,6 @@ struct SchemaObj
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->handle_.assign(other.handle_))) {
-      COMMON_LOG(WARN, "fail to assign handle");
       this->schema_type_ = OB_MAX_SCHEMA;
       
       this->schema_id_ = common::OB_INVALID_ID;
@@ -6808,9 +6807,6 @@ int ObPartitionUtils::check_partition_value(
     if (l_part.get_high_bound_val().get_obj_cnt() != r_part.get_high_bound_val().get_obj_cnt()) {
       is_equal = false;
       ASSIGN_PARTITION_ERROR(user_error, "range_part partition value count not equal");
-      SHARE_SCHEMA_LOG(TRACE, "fail to check partition value, value count not equal",
-                       "left", l_part.get_high_bound_val(),
-                       "right", r_part.get_high_bound_val());
     } else {
       for (int64_t i = 0; i < l_part.get_high_bound_val().get_obj_cnt() && is_equal; i++) {
         const common::ObObjMeta meta1 = l_part.get_high_bound_val().get_obj_ptr()[i].get_meta();
@@ -6820,15 +6816,10 @@ int ObPartitionUtils::check_partition_value(
           is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
           if (!is_equal) {
             ASSIGN_PARTITION_ERROR(user_error, "range_part partition meta type not equal");
-            SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
-                           "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
           }
         } else {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "range_part partition collation type not matched");
-          SHARE_SCHEMA_LOG(TRACE, "collation type not matched", "left", meta1.get_collation_type(),
-                           "right", meta2.get_collation_type());
         }
         if (!is_equal) {
           //do nothing
@@ -6836,9 +6827,6 @@ int ObPartitionUtils::check_partition_value(
                                                                       r_part.get_high_bound_val().get_obj_ptr()[i].get_collation_type())) {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "range_part partition value not equal");
-          SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value not equal",
-                           "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
         }
       }
     }
@@ -6848,9 +6836,6 @@ int ObPartitionUtils::check_partition_value(
     if (l_list_values.count() != r_list_values.count()) {
       is_equal = false;
       ASSIGN_PARTITION_ERROR(user_error, "list_part partition value count not equal");
-      SHARE_SCHEMA_LOG(TRACE, "fail to check list_part partition value, value count not equal",
-                       "left", l_list_values,
-                       "right", r_list_values);
     } else {
       for (int64_t i = 0; i < l_list_values.count() && is_equal; i++) {
         const common::ObNewRow &l_rowkey = l_list_values.at(i);
@@ -6861,8 +6846,6 @@ int ObPartitionUtils::check_partition_value(
           if (l_rowkey.get_count() != r_rowkey.get_count()) {
             is_equal = false;
             ASSIGN_PARTITION_ERROR(user_error, "list_part partition value count not equal");
-            SHARE_SCHEMA_LOG(TRACE, "fail to check partition value, value count not equal",
-                            "left", l_rowkey, "right", r_rowkey);
           } else {
             for (int64_t z = 0; z < l_rowkey.get_count() && is_equal; z++) {
               const common::ObObjMeta meta1 = l_rowkey.get_cell(z).get_meta();
@@ -6872,14 +6855,10 @@ int ObPartitionUtils::check_partition_value(
                 is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
                 if (!is_equal) {
                   ASSIGN_PARTITION_ERROR(user_error, "list_part partition meta type not equal");
-                  SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
-                                 "left", l_rowkey.get_cell(z), "right", r_rowkey.get_cell(z));
                 }
               } else {
                 is_equal = false;
                 ASSIGN_PARTITION_ERROR(user_error, "list_part partition collation type not matched");
-                SHARE_SCHEMA_LOG(TRACE,"collation type not matched", "left", meta1.get_collation_type(),
-                                 "right", meta2.get_collation_type());
               }
             }
           }
@@ -6891,7 +6870,6 @@ int ObPartitionUtils::check_partition_value(
         if (!find_equal_item) {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "list_part partition value not equal");
-          SHARE_SCHEMA_LOG(TRACE,"list_part partition value not equal");
         }
       } //end for (int64_t i = 0;
     }

@@ -225,18 +225,14 @@ private:
     int64_t pos = curr_read_pos_;
     if (true == matched_type) {
       if (curr_entry_is_padding_ && OB_FAIL(construct_padding_log_entry_(pos, padding_entry_size_))) {
-        PALF_LOG(WARN, "construct_padding_log_entry_ failed", KPC(this));
       } else if (OB_FAIL(curr_entry_.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
       } else if (curr_entry_is_raw_write_ && curr_entry_.get_scn() > replayable_point_scn) {
         ret = OB_ITER_END;
         info.log_scn_ = curr_entry_.get_scn();
         info.reason_ = IterateEndReason::DUE_TO_REPLAYABLE_POINT_SCN_LOG_ENTRY;
-        PALF_LOG(TRACE, "iterate end by replayable_point", KPC(this), K(replayable_point_scn), K(info));
       }
     } else {
       ret = OB_PARTIAL_LOG;
-      PALF_LOG(WARN, "parse LogEntry failed, may be in flashback mode and this replica has not finished flashback",
-               KPC(this), K(replayable_point_scn), K(info));
     }
     return ret;
   }
@@ -256,17 +252,13 @@ private:
       if (OB_FAIL(curr_entry_.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
       } else if (OB_FAIL(handle_each_log_group_entry_(curr_entry_, replayable_point_scn, info))) {
         if (OB_ITER_END != ret) {
-          PALF_LOG(WARN, "handle_each_log_group_entry_ failed", KPC(this), K(info), K(replayable_point_scn));
         } else {
-          PALF_LOG(TRACE, "handle_each_log_group_entry_ failed", KPC(this), K(info), K(replayable_point_scn));
         }
       }
     } else if (OB_FAIL(actual_entry.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
     } else if (OB_FAIL(handle_each_log_group_entry_(actual_entry, replayable_point_scn, info))) {
       if (OB_ITER_END != ret) {
-        PALF_LOG(WARN, "handle_each_log_group_entry_ failed", KPC(this), K(actual_entry), K(info), K(replayable_point_scn));
       } else {
-        PALF_LOG(TRACE, "handle_each_log_group_entry_ failed", KPC(this), K(actual_entry), K(info), K(replayable_point_scn));
       }
     } else {
       ret = OB_EAGAIN;
@@ -294,7 +286,6 @@ private:
                                    const SCN &replayable_point_scn,
                                    IterateEndInfo &info)
   {
-    PALF_LOG(TRACE, "T is not LogGroupEntry, do no thing", K(entry));
     return OB_SUCCESS;
   }
 
@@ -314,7 +305,6 @@ private:
     int ret = OB_SUCCESS;
     bool curr_entry_is_raw_write = entry.get_header().is_raw_write();
     int64_t new_accumulate_checksum = -1;
-    PALF_LOG(TRACE, "T is LogGroupEntry", K(entry));
     if (OB_FAIL(verify_accum_checksum_(entry, new_accumulate_checksum))) {
     } else if (true == curr_entry_is_raw_write) {
       SCN min_scn;
@@ -636,7 +626,6 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
   (void) try_clean_up_cache_();
   if (!replayable_point_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(replayable_point_scn), KPC(this));
   } else if (OB_FAIL(get_next_entry_(replayable_point_scn, info, io_ctx))) {
     // NB: if the data which has been corrupted or accum_checksum_ is not match, clean cache.
     if (need_clean_cache_(ret)) {
@@ -688,13 +677,10 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
       next_min_scn = MIN(
           (replayable_point_scn.is_valid() ? SCN::plus(replayable_point_scn, 1) : SCN::max_scn()), 
           info.log_scn_);
-      PALF_LOG(TRACE, "update next_min_scn to min of replayable_point_scn and log_group_entry_min_scn_", KPC(this), K(info));
 
       next_min_scn = MAX(
           (prev_entry_scn_.is_valid() ? SCN::plus(prev_entry_scn_, 1) : SCN::min_scn()),
           next_min_scn);
-      PALF_LOG(TRACE, "update next_min_scn to max of prev_entry_scn_ and next_min_scn",
-          KPC(this), K(info), K(replayable_point_scn));
       // NB: To make 'next_min_scn' newly, advance 'prev_entry_scn_' when 'curr_entry_' need control by readable point scn.
       //     consider follower case:
       //     T1, iterate an entry successfully, and make prev_entry_scn to 5;
@@ -704,12 +690,10 @@ int LogIteratorImpl<ENTRY>::next(const share::SCN &replayable_point_scn,
       //     to 8.
       if (info.log_scn_ > replayable_point_scn) {
         prev_entry_scn_ = MAX(replayable_point_scn, prev_entry_scn_);
-        PALF_LOG(TRACE, "update prev_entry_scn_ to replayable_point_scn", KPC(this), K(info), K(replayable_point_scn));
       }
       // NB: if has not read any log, we should set next_min_scn to invalid.
     } else if (IterateEndReason::DUE_TO_FILE_END_LSN_NOT_READ_NEW_DATA == info.reason_) {
         next_min_scn = prev_entry_scn_.is_valid() ? SCN::plus(prev_entry_scn_, 1) : SCN::min_scn();
-        PALF_LOG(TRACE, "update next_min_scn to prev_entry_scn_ + 1", KPC(this), K(info), K(replayable_point_scn));
     } else {
     }
   }
@@ -756,8 +740,6 @@ int LogIteratorImpl<ENTRY>::verify_accum_checksum_(const LogGroupEntry &entry,
     PALF_LOG(WARN, "invalid data", K(ret), KPC(this), K(entry));
   } else if (-1 == accumulate_checksum_) {
     new_accumulate_checksum = expected_verify_checksum;
-    PALF_LOG(TRACE, "init accumulate_checksum to first LogGroupEntry", K(entry), KPC(this), 
-        K(new_accumulate_checksum));
   } else if (OB_FAIL(LogChecksum::verify_accum_checksum(
                 accumulate_checksum_, data_checksum, 
                 expected_verify_checksum, new_accumulate_checksum))) {
@@ -776,15 +758,10 @@ int LogIteratorImpl<ENTRY>::construct_padding_log_entry_(const int64_t memset_st
   // defense code
   if (!curr_entry_is_padding_) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "only call this function when LogGroupEntry is padding", KPC(this));
   } else if (!is_padding_entry_end_lsn_(padding_log_entry_start_lsn + padding_log_entry_len)) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, the end lsn of padding log entry is not the header of nexet block!!!",
-        KPC(this), K(memset_start_pos), K(padding_log_entry_len));
   } else if (memset_start_pos + padding_log_entry_len > curr_read_buf_end_pos_) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, the end pos of 'curr_read_buf_' is not enough!!!",
-        KPC(this), K(memset_start_pos), K(padding_log_entry_len));
   } else {
     // set memory which contained padding log entry to PADDING_LOG_CONTENT_CHAR
     memset(buf_+memset_start_pos, PADDING_LOG_CONTENT_CHAR, padding_log_entry_len);
@@ -799,7 +776,6 @@ int LogIteratorImpl<ENTRY>::construct_padding_log_entry_(const int64_t memset_st
                                                          buf_+serialize_log_entry_header_pos,
                                                          LogEntryHeader::PADDING_LOG_ENTRY_SIZE))) {
     } else {
-      PALF_LOG(INFO, "generate padding log entry successfully", KPC(this));
       reset_padding_info_();
     }
   }
@@ -942,7 +918,6 @@ int LogIteratorImpl<ENTRY>::get_log_entry_type_(LogEntryType &log_entry_type)
              // entry again.(In this case, curr_entry_is_padding_ is the value of prev log entry)
              && !is_padding_entry_end_lsn_(log_storage_->get_lsn(curr_read_pos_))) {
     log_entry_type = LogEntryType::LOG_ENTRY_HEADER;
-    PALF_LOG(INFO, "need consume padding log", KPC(this));
   } else {
     ret = OB_INVALID_DATA;
   }

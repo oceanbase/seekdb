@@ -109,7 +109,6 @@ int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
   if (OB_SUCC(ret)) {
     if (operator_stat_array_idx_ < 0) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid operator_stat_array index", K(operator_stat_array_idx_));
     } else if (operator_stat_array_idx_ >= operator_stat_array_.count()) {
       is_end = true;
       operator_stat_array_idx_ = OB_INVALID_ID;

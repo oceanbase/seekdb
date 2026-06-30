@@ -154,7 +154,6 @@ int ObIndexTreeRootCtx::add_absolute_row_offset(const int64_t absolute_row_offse
   } else if (!absolute_offsets_->empty() &&
       OB_UNLIKELY(absolute_row_offset <= absolute_offsets_->at(absolute_offsets_->count() - 1))) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "unexpected absolute offset", K(absolute_row_offset), KPC(absolute_offsets_));
   } else if (OB_FAIL(absolute_offsets_->push_back(absolute_row_offset))) {
   }
 
@@ -3079,9 +3078,7 @@ int ObDataIndexBlockBuilder::append_index_micro_block_and_macro_meta(
         WARN, "error!!!fail to write leaf/meta block into data macro block",
         K(ret), K_(estimate_leaf_block_size), K_(estimate_meta_block_size),
         K(leaf_block_desc), K(macro_row_desc));
-    STORAGE_LOG(INFO, "print error leaf block");
     micro_writer_->dump_diagnose_info();
-    STORAGE_LOG(INFO, "print error meta block");
     meta_block_writer_->dump_diagnose_info();
     if (common::ObStoreFormat::is_row_store_type_with_encoding(
             macro_block.get_row_store_type())) {
@@ -3177,7 +3174,6 @@ int ObDataIndexBlockBuilder::close(ObMacroBlocksWriteCtx &data_write_ctx) {
     } else if (OB_FAIL(macro_meta_dumper_.get_last_rowkey().deep_copy(index_tree_root_ctx_->last_key_, *index_tree_root_ctx_->allocator_))) {
     }
     if (OB_SUCC(ret)) {
-      STORAGE_LOG(INFO, "succeed to close data index builder", KPC_(index_tree_root_ctx));
     }
   }
   is_closed_ = true; // close() is not re-entrant
@@ -3508,7 +3504,6 @@ int ObMetaIndexBlockBuilder::build_single_node_tree(
   }
   if (OB_FAIL(ret) && nullptr != root_buf) {
     allocator.free(root_buf);
-    STORAGE_LOG(INFO, "succeed to close meta index builder", K(block_desc));
   }
   return ret;
 }
@@ -3970,7 +3965,6 @@ int ObIndexBlockRebuilder::get_meta_block(
   } else {
     meta_block.get_buf() = buf + macro_header.fixed_header_.meta_block_offset_;
     meta_block.get_buf_size() = macro_header.fixed_header_.meta_block_size_;
-    STORAGE_LOG(DEBUG, "meta block and read info", K(macro_header));
   }
   return ret;
 }
@@ -4059,8 +4053,6 @@ int ObIndexBlockRebuilder::inner_append_macro_row(
     } else if (index_tree_root_ctx_->use_absolute_offset() && OB_FAIL(index_tree_root_ctx_->add_absolute_row_offset(abs_offset))) {
       STORAGE_LOG(WARN, "failed to add abs row offset", K(ret), K(abs_offset));
     } else {
-      STORAGE_LOG(DEBUG, "append macro meta with absolute offset",
-          K(abs_offset), K(absolute_row_offset), K(macro_meta));
     }
   }
   return ret;
@@ -4111,7 +4103,6 @@ int ObIndexBlockRebuilder::close()
   } else if (OB_UNLIKELY(index_tree_dumper_ != nullptr &&
                          meta_tree_dumper_->get_row_count() != index_tree_dumper_->get_row_count())) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "unexpect row count is not same", KPC(meta_tree_dumper_), KPC(index_tree_dumper_));
   } else if (nullptr != index_tree_root_ctx_->absolute_offsets_ &&
              index_tree_root_ctx_->absolute_offsets_->count() !=
                  meta_tree_dumper_->get_row_count()) {

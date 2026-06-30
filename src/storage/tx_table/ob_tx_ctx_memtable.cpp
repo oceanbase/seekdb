@@ -66,7 +66,6 @@ int ObTxCtxMemtable::init(const ObITable::TableKey &table_key,
     ls_id_ = ls_id;
     max_end_scn_.set_min();
     is_inited_ = true;
-    TRANS_LOG(INFO, "ob tx ctx memtable init successfully", K(ls_id), K(table_key));
   }
 
   return ret;
@@ -102,7 +101,6 @@ int ObTxCtxMemtable::scan(const ObTableIterParam &param,
   } else {
     // tx ctx memtable scan iterator init success
     row_iter = scan_iter_ptr;
-    TRANS_LOG(INFO, "ob tx ctx memtable scan successfully", KPC(this));
   }
 
   return ret;
@@ -179,7 +177,6 @@ SCN ObTxCtxMemtable::get_rec_scn()
 
   if (OB_FAIL(get_ls_tx_ctx_mgr()->get_rec_scn(rec_scn))) {
   } else {
-    TRANS_LOG(INFO, "tx ctx memtable get rec scn", KPC(this), K(rec_scn));
   }
 
   return rec_scn;
@@ -200,9 +197,7 @@ int ObTxCtxMemtable::on_memtable_flushed()
   int ret = OB_SUCCESS;
   if (get_scn_range().end_scn_ >= max_end_scn_) {
     max_end_scn_.atomic_store(get_scn_range().end_scn_);
-    TRANS_LOG(INFO, "on memtable flushed succeed", KPC(this), K(get_scn_range()));
   } else {
-    TRANS_LOG(ERROR, "on memtable flushed failed", KPC(this), K(get_scn_range()));
   }
   ATOMIC_STORE(&is_frozen_, false);
   return get_ls_tx_ctx_mgr()->on_tx_ctx_table_flushed();
@@ -226,7 +221,6 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_fr
   if (need_freeze) {
     SCN rec_scn = get_rec_scn();
     if (rec_scn >= recycle_scn) {
-      TRANS_LOG(INFO, "no need to freeze", K(rec_scn), K(recycle_scn));
     } else if (is_active_memtable()) {
       int64_t cur_time_us = ObTimeUtility::current_time();
       share::SCN cur_time_scn;
@@ -254,7 +248,6 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_fr
           TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
       }
     } else {
-      TRANS_LOG(INFO, "tx ctx memtable flush successfully", KPC(this), K(ls_id_));
     }
   }
 
@@ -266,9 +259,7 @@ void ObTxCtxMemtable::set_max_end_scn(const share::SCN scn)
   int ret = OB_SUCCESS;
   if (scn >= max_end_scn_) {
     max_end_scn_.atomic_store(scn);
-    TRANS_LOG(INFO, "set memtable end scn succeed", KPC(this), K(scn));
   } else {
-    TRANS_LOG(ERROR, "set memtable end scn failed", KPC(this), K(scn));
   }
 }
 

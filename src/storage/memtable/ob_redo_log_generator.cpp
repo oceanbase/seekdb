@@ -78,7 +78,6 @@ public:
   {}
   int operator()(ObITransCallback *iter)
   {
-    TRANS_LOG(DEBUG, "fill_redo_for_callback", KPC(iter));
     int ret = OB_SUCCESS;
     if (iter->get_epoch() > ctx_.epoch_to_) {
       ret = OB_ITER_END;
@@ -155,7 +154,6 @@ private:
     } else {
       ObMemtable *memtable = static_cast<memtable::ObMemtable *>(riter->get_memtable());
       if (OB_ISNULL(memtable)) {
-        TRANS_LOG(ERROR, "memtable is null", K(riter));
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(mmw_.append_row_kv(mem_ctx_->get_max_table_version(),
                                             redo,
@@ -237,7 +235,6 @@ int ObRedoLogGenerator::fill_redo_log(ObTxFillRedoCtx &ctx)
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(ctx.buf_) || ctx.buf_len_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid_argument", KP(ctx.buf_), K(ctx.buf_len_));
   } else {
     // prepare the global varibles
     ObMutatorWriter mmw;

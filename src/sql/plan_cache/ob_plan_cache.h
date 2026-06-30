@@ -313,12 +313,10 @@ public:
 
   uint64_t inc_mem_used(uint64_t mem_delta)
   {
-    SQL_PC_LOG(DEBUG, "before inc mem_used", K(mem_used_));
     return ATOMIC_FAA((uint64_t*)&mem_used_, mem_delta);
   };
   uint64_t dec_mem_used(uint64_t mem_delta)
   {
-    SQL_PC_LOG(DEBUG, "before dec mem_used, mem_used", K(mem_used_));
     int64_t old_val = 0;
     int64_t new_val = 0;
     do {

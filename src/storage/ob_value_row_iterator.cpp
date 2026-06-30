@@ -251,7 +251,6 @@ int ObRowGetter::prepare_cached_iter_node(const ObDMLBaseParam &dml_param,
     } else if (nullptr != cached_iter_node_) {
       access_param_.set_use_global_iter_pool();
       access_param_.iter_param_.set_use_stmt_iter_pool();
-      STORAGE_LOG(TRACE, "use global iter pool", K(access_param_));
     }
   }
   return ret;

@@ -137,7 +137,6 @@ int ObAllVirtualDtlChannel::inner_open()
       char ipbuf[common::OB_IP_STR_BUFF];
       const common::ObAddr &addr = GCTX.self_addr();
       if (!addr.ip_to_string(ipbuf, sizeof(ipbuf))) {
-        SERVER_LOG(ERROR, "ip to string failed");
         ret = OB_ERR_UNEXPECTED;
       } else {
         ipstr_ = ObString::make_string(ipbuf);
@@ -268,7 +267,6 @@ int ObAllVirtualDtlChannel::get_row(ObVirtualChannelInfo &chan_info, ObNewRow *&
       case PEER_IP: {// OB_APP_MIN_COLUMN_ID + 25
         const common::ObAddr &addr = chan_info.peer_;
         if (!addr.ip_to_string(peer_ip_buf_, sizeof(peer_ip_buf_))) {
-          SERVER_LOG(ERROR, "ip to string failed");
           ret = OB_ERR_UNEXPECTED;
         } else {
           ObString ipstr = ObString::make_string(peer_ip_buf_);

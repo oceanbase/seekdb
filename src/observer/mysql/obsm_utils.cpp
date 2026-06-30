@@ -139,7 +139,6 @@ int ObSMUtils::cell_str(
     precision = field->accuracy_.get_precision();
     zerofill = field->flags_ & ZEROFILL_FLAG;
     zflength = field->length_;
-    OB_LOG(DEBUG, "get field accuracy_", K(field->accuracy_), K(zerofill), K(obj));
   }
   if (OB_SUCC(ret)) {
     switch (obj.get_type_class()) {
@@ -202,7 +201,6 @@ int ObSMUtils::cell_str(
           bit_len = precision;
         } else {
           bit_len = ObAccuracy::MAX_ACCURACY[obj.get_type()].precision_;
-          _OB_LOG(WARN, "max precision is used. origin precision is %d", precision);
         }
         ret = ObMySQLUtil::bit_cell_str(buf, len, obj.get_bit(), bit_len, type, pos);
         break;
@@ -235,7 +233,6 @@ int ObSMUtils::cell_str(
         ret = ObMySQLUtil::mdatetime_cell_str(buf, len, obj.get_mysql_datetime(), type, pos, NULL, scale);
         break;
       default:
-        _OB_LOG(ERROR, "invalid ob type=%d", obj.get_type());
         ret = OB_ERROR;
         break;
     }
@@ -323,7 +320,6 @@ int ObSMUtils::get_mysql_type(ObObjType ob_type, EMySQLFieldType &mysql_type,
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        _OB_LOG(WARN, "unexpected mysql_type=%d", mysql_type);
         break;
     } // end switch
   }
@@ -409,7 +405,6 @@ int ObSMUtils::get_ob_type(ObObjType &ob_type, EMySQLFieldType mysql_type, const
       ob_type = ObGeometryType;
       break;
     default:
-      _OB_LOG(WARN, "unsupport MySQL type %d", mysql_type);
       ret = OB_OBJ_TYPE_ERROR;
   }
   return ret;

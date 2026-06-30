@@ -109,7 +109,6 @@ int ObDiskUsageReportTask::count_tenant_data()
         } else if (OB_FAIL(ls_service->get_ls(tablet_map_key.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
         } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
           ret = OB_ERR_UNEXPECTED;
-          STORAGE_LOG(WARN, "unexpected error!!! ls must not nullptr", K(tablet_map_key.ls_id_));
         } else if (OB_FAIL(ls->get_ls_role(ls_role))) {
         } 
         

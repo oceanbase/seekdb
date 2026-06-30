@@ -59,7 +59,6 @@ private:
     {
       if (key == key_) {
         if (is_concerned()) {
-          TRANS_LOG(INFO, "unset leak checker item which is concerned", K(*this));
         }
         key_ = 0;
       }
@@ -201,7 +200,6 @@ public:
       if (!oldest_items[i].is_valid()) {
         break;
       } else {
-        TRANS_LOG(INFO, "leak checker, dump oldest item", K(oldest_items[i]));
       }
     }
     for (int64_t i = 0; i < MAX_DUMP_CNT; i++) {
@@ -215,11 +213,9 @@ public:
           }
         }
         if (need_dump) {
-          TRANS_LOG(INFO, "leak checker, dump newest item", K(newest_items[i]));
         }
       }
     }
-    TRANS_LOG(INFO, "finish dump leak checker", K(suspect_item_cnt), K(tg));
   }
 private:
   int64_t get_new_item_idx(const Item *items, const int64_t item_cnt)

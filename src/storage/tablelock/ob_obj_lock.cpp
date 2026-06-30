@@ -1063,11 +1063,9 @@ int ObOBJLockMap::get_lock_op_iter(const ObLockID &lock_id,
     }
   } else if (OB_ISNULL(obj_lock)) {
     ret = OB_ERR_UNEXPECTED;
-    TABLELOCK_LOG(WARN, "op list map should not be NULL.", K(lock_id));
   } else if (OB_FAIL(obj_lock->get_lock_op_iter(lock_id,
                                                 iter))) {
   } else {
-    TABLELOCK_LOG(DEBUG, "succeed get lock op iter.", K(lock_id));
   }
   if (OB_NOT_NULL(obj_lock)) {
     lock_map_.revert(obj_lock);

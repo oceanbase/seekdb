@@ -151,7 +151,6 @@ int ObStorageLoggerManager::alloc_item(
     STORAGE_REDO_LOG(WARN, "Invalid arguments.", K(ret), K(buf_size), K(num));
   } else if (alloc_locally) {
     total_size = upper_align(buf_size, ObLogConstants::LOG_FILE_ALIGN_SIZE);
-    STORAGE_REDO_LOG(INFO, "Large log item", LITERAL_K(NORMAL_LOG_ITEM_SIZE), K(total_size));
   } else {
     total_size = NORMAL_LOG_ITEM_SIZE;
   }

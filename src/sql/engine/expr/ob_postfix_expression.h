@@ -257,7 +257,6 @@ OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &p
         value = &get_obj();
       } else {
         ret = common::OB_ERR_UNEXPECTED;
-        SQL_ENG_LOG(WARN, "invalid item type", K(item_type_));
       }
       break;
     }
@@ -275,7 +274,6 @@ OB_INLINE int ObPostExprItem::get_indirect_const(const ObPhysicalPlanCtx &plan_c
       if (OB_FAIL(get_obj().get_unknown(param_idx))) {
       } else if (OB_UNLIKELY(param_idx < 0 || param_idx >= param_store.count())) {
         ret = common::OB_ARRAY_OUT_OF_RANGE;
-        SQL_ENG_LOG(WARN, "wrong index of question mark position", K(param_idx), "param_count", param_store.count());
       } else {
         val = &param_store.at(param_idx);
       }

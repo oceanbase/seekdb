@@ -56,7 +56,6 @@ int ObPointerSwizzleNode::swizzle(const blocksstable::ObMicroBlockBufferHandle &
     ObPointerSwizzleGuard guard(node_version_);
     if (guard.is_multi_thd_safe() && nullptr == mb_handle_ && nullptr == value_) {
       set(mb_handle, value);
-      COMMON_LOG(DEBUG, "swizzle successfully", KPC(this));
     }
   }
   
@@ -87,7 +86,6 @@ int ObPointerSwizzleNode::access_mem_ptr(blocksstable::ObMicroBlockBufferHandle 
     ++tmp_ps_node.mb_handle_->recent_get_cnt_;
     ATOMIC_AAF(&tmp_ps_node.mb_handle_->get_cnt_, 1);
     handle.set_micro_block(reinterpret_cast<const blocksstable::ObMicroBlockCacheValue*>(tmp_ps_node.value_));
-    COMMON_LOG(DEBUG, "access the memory successfully which the swizzling pointer points to", KPC(this));
   }
   return ret;
 }

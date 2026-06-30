@@ -71,7 +71,6 @@ int ObAllVirtualSessionPsInfo::inner_open()
     } else {
       int64_t cnt = 0;
       GCTX.session_mgr_->get_session_count(cnt);
-      SERVER_LOG(WARN, "all virtual ssinfo get_session_count", K(cnt));
     }
   }
 

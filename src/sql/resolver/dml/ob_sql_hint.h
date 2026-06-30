@@ -204,7 +204,6 @@ int ObQueryHint::create_hint(ObIAllocator *allocator, ObItemType hint_type, Hint
     SQL_LOG(WARN, "unexpected params",K(ret), K(allocator), K(hint_type));
   } else if (OB_ISNULL(ptr = allocator->alloc(sizeof(HintType)))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "no more memory to create hint");
   } else {
     hint = new(ptr) HintType(hint_type);
   }

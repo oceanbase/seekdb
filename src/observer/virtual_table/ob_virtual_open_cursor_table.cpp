@@ -55,7 +55,6 @@ int ObVirtualOpenCursorTable::set_addr(const common::ObAddr &addr)
   int ret = OB_SUCCESS;		
   char ipbuf[common::OB_IP_STR_BUFF];		
   if (!addr.ip_to_string(ipbuf, sizeof(ipbuf))) {		
-    SERVER_LOG(ERROR, "ip to string failed");		
     ret = OB_ERR_UNEXPECTED;		
   } else {		
     ObString ipstr = ObString::make_string(ipbuf);		
@@ -151,7 +150,6 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
         if (OB_ISNULL(cursor_info)) {
           // do not report error
           // ignore ret
-          SERVER_LOG(WARN, "get a NULL cursor when record for v$open_cursor.");
         } else if (!cursor_info->isopen()) { //cursor does not open now, skip it
         } else {
           OZ (fill_cursor_cell(*sess_info, cursor_info, true));
@@ -164,7 +162,6 @@ bool ObVirtualOpenCursorTable::FillScanner::operator()(sql::ObSQLSessionMgr::Key
         if (OB_ISNULL(cursor_info)) {
           // do not report error
           // ignore ret
-          SERVER_LOG(WARN, "get a NULL cursor when record for v$open_cursor.");
         } else if (!cursor_info->isopen()) { //cursor does not open now, skip it
         } else {
           OZ (fill_cursor_cell(*sess_info, cursor_info, false));

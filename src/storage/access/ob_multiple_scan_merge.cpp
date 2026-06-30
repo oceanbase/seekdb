@@ -190,8 +190,6 @@ int ObMultipleScanMerge::construct_iters()
     STORAGE_LOG(WARN, "iter cnt is not equal to table cnt", K(ret), "iter cnt", iters_.count(),
         "di_base_iter cnt", di_base_iters_.count(), "table cnt", tables_.count(), KP(this));
   } else if (tables_.count() > 0) {
-    STORAGE_LOG(TRACE, "construct iters begin", K(tables_.count()), K(iters_.count()), K(di_base_iters_.count()),
-                K(access_param_->iter_param_.is_delete_insert_), KPC_(range), KPC_(di_base_range), K_(access_ctx_->trans_version_range), K_(tables), KPC_(access_param));
     ObITable *table = NULL;
     ObStoreRowIterator *iter = NULL;
     const ObTableIterParam *iter_param = NULL;
@@ -215,7 +213,6 @@ int ObMultipleScanMerge::construct_iters()
         } else if (OB_FAIL(iter->init(*iter_param, *access_ctx_, table, di_base_range_))) {
         }
         if (OB_SUCC(ret)) {
-          STORAGE_LOG(DEBUG, "add di base iter for consumer", KPC(table));
         }
       }
     }
@@ -246,7 +243,6 @@ int ObMultipleScanMerge::construct_iters()
         }
         if (OB_SUCC(ret)) {
           consumers_[consumer_cnt_++] = i - di_base_cnt;
-          STORAGE_LOG(DEBUG, "add iter for consumer", K(i), KPC(table));
         }
       }
     }
@@ -434,7 +430,6 @@ int ObMultipleScanMerge::advance_scan(const blocksstable::ObDatumRange &range)
       } else if (FALSE_IT(item.iter_idx_ = pop_iter_idx)) {
       } else if (OB_FAIL(rows_merger_->push(item))) {
       } else {
-        STORAGE_LOG(DEBUG, "yuanzhe debug", K(consumer_cnt_), K(pop_iter_idx), K(item));
       }
     }
     if (FAILEDx(rows_merger_->rebuild())) {
@@ -514,8 +509,6 @@ int ObMultipleScanMerge::inner_get_next_row(ObDatumRow &row)
     ret = OB_ITER_END;
   } else {
     while (OB_SUCC(ret)) {
-      STORAGE_LOG(DEBUG, "[PUSHDOWN] check condition of blockscan",
-                  K(access_param_->iter_param_.pd_storage_flag_), K(consumer_cnt_));
 
       final_result = false;
       need_supply_consume = true;
@@ -611,8 +604,6 @@ int ObMultipleScanMerge::inner_merge_row(ObDatumRow &row)
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "item or row is null", K(ret), KP(top_item));
     } else {
-      STORAGE_LOG(DEBUG, "top_item", K(top_item->iter_idx_), K(*top_item->row_), K(row),
-                  K(has_same_rowkey), K(first_row));
     }
 
     if (OB_SUCC(ret)) {
@@ -714,7 +705,6 @@ int ObMultipleScanMerge::set_rows_merger(const int64_t table_cnt)
   int ret = OB_SUCCESS;
   const int64_t max_table_cnt = 2 * common::MAX_TABLE_CNT_IN_STORAGE;
   if (table_cnt <= ObScanSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
-    STORAGE_LOG(DEBUG, "Use simple rows merger", K(table_cnt));
     if (nullptr == simple_merge_) {
       if (OB_ISNULL(simple_merge_ = OB_NEWx(ObScanSimpleMerger, long_life_allocator_, tree_cmp_))) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
@@ -723,7 +713,6 @@ int ObMultipleScanMerge::set_rows_merger(const int64_t table_cnt)
     }
     rows_merger_ = simple_merge_;
   } else {
-    STORAGE_LOG(DEBUG, "Use loser tree", K(table_cnt));
     if (nullptr == loser_tree_) {
       if (OB_ISNULL(loser_tree_ = OB_NEWx(ObScanMergeLoserTree, long_life_allocator_, tree_cmp_))) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;

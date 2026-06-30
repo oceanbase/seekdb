@@ -246,7 +246,6 @@ int ObStmtFactory::create_stmt<ObSelectStmt>(ObSelectStmt *&stmt)
   stmt = NULL;
   if (OB_UNLIKELY(NULL == ptr)) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "no more memory to stmt");
   } else {
     stmt = new(ptr) ObSelectStmt();
     if (OB_FAIL(stmt_store_.store_obj(stmt))) {

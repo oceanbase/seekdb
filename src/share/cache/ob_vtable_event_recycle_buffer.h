@@ -71,13 +71,10 @@ public:
         recycle_buffer_size_each < 1 ||
         hash_idx_bkt_num_each < 1) {
       ret = OB_INVALID_ARGUMENT;
-      OCCAM_LOG(WARN, "invalid argument", PRINT_WRAPPER);
     } else if (OB_NOT_NULL(alloc_)) {
       ret = OB_INIT_TWICE;
-      OCCAM_LOG(WARN, "invalid argument", PRINT_WRAPPER);
     } else if (nullptr == (buffer_bkt_ = (ObRecycleMultiKVCacheAligedWrapper<K, V> *)alloc.alloc(sizeof(ObRecycleMultiKVCacheAligedWrapper<K, V>) * recycle_buffer_number))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OCCAM_LOG(WARN, "fail to allocate", PRINT_WRAPPER);
     } else {
       alloc_ = &alloc;
       for (int64_t idx = 0; idx < recycle_buffer_number && OB_SUCC(ret); ++idx) {
@@ -163,7 +160,6 @@ public:
       }
       databuff_printf(info, stack_buffer_size, pos, ", buffer_size_each:");
       databuff_printf(info, stack_buffer_size, pos, ObSizeLiteralPrettyPrinter(buffer_size));
-      OCCAM_LOG(INFO, "DUMP VTableBuffer STATISTICS", K(info));
     }
   }
 private:

@@ -189,14 +189,11 @@ int ObMicroBlockHashIndex::init(const ObMicroBlockData &micro_block_data)
     const uint8_t reserved_byte = reinterpret_cast<const uint8_t *>(start_data)[0];
     bucket_table_ = reinterpret_cast<const uint8_t *>(start_data + get_fixed_header_size());
     num_buckets_ = reinterpret_cast<const uint16_t *>(start_data + 1)[0];                        
-    STORAGE_LOG(DEBUG, "ObMicroBlockHashIndex init", K(num_buckets_), K(reserved_byte));
     bool is_valid = num_buckets_ != 0 && num_buckets_ <= MAX_BUCKET_NUMBER
                         && reserved_byte == RESERVED_BYTE
                         && get_serialize_size(num_buckets_) == hash_index_offset_from_end;
     if (OB_UNLIKELY(!is_valid)) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "Unexpected hash index in data micro block", K_(num_buckets),
-                   K(reserved_byte), K(hash_index_offset_from_end), KPC(micro_block_header));
     } else {
       is_inited_ = true;
     }

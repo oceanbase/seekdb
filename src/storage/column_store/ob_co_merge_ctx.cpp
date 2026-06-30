@@ -84,7 +84,7 @@ int ObCOTabletMergeCtx::schedule_minor_errsim(bool &schedule_minor) const
         ret = OB_E((EventTable::tracepoint)) OB_SUCCESS;                \
         if (OB_FAIL(ret)) {                                             \
           ret = OB_SUCCESS;                                             \
-          STORAGE_LOG(INFO, "ERRSIM " #tracepoint);                     \
+                               \
           schedule_minor = get_tables_handle().get_count() > 1;         \
         }                                                               \
       }                                                                 \
@@ -942,7 +942,6 @@ int ObCOTabletMergeCtx::mock_row_store_table_read_info()
     STORAGE_LOG(WARN, "storage schema is nullptr", K(ret));
   } else if (OB_UNLIKELY(column_cnt > INT32_MAX)) {
     ret = OB_SIZE_OVERFLOW;
-    STORAGE_LOG(ERROR, "column count is overflow", K(column_cnt));
   } else {
     static const int64_t COMMON_COLUMN_NUM = 16;
     ObSEArray<ObColumnParam *, COMMON_COLUMN_NUM> tmp_cols;

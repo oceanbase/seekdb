@@ -30,7 +30,6 @@ ObExprDocID::ObExprDocID(ObIAllocator &allocator)
   : ObFuncExprOperator(allocator, T_FUN_SYS_DOC_ID, N_DOC_ID, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
   need_charset_convert_ = false;
-  STORAGE_FTS_LOG(DEBUG, "construct doc id expr", K(common::lbt()));
 }
 
 int ObExprDocID::calc_result_typeN(ObExprResType &type,

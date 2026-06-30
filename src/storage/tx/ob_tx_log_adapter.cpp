@@ -61,7 +61,6 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
   if (base_scn.convert_to_ts() > cur_ts + 86400000000L) {
     // only print error log
     if (REACH_TIME_INTERVAL(1000000)) {
-      TRANS_LOG(ERROR, "base scn is too large", K(base_scn));
     }
   }
   if (NULL == buf || 0 >= size || OB_ISNULL(cb) || !base_scn.is_valid()

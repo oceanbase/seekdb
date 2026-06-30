@@ -126,18 +126,12 @@ public:
   };
   virtual ~ObBaseResourcePool()
   {
-    _COMMON_LOG(INFO,
-                "Destruction ObResourcePool this=%p type=%s free_list=%p",
-                this, typeid(T).name(), &free_list_);
     destroy();
   };
 protected:
   void destroy()
   {
     if (OB_NOT_NULL(allocator_)) {
-      _COMMON_LOG(INFO,
-                  "Destroy ObResourcePool this=%p type=%s allocator=%p free_list=%p",
-                  this, typeid(T).name(), &allocator_, &free_list_);
       Node *node = NULL;
       while (common::OB_SUCCESS == free_list_.pop(node)) {
         node->~Node();
@@ -312,9 +306,6 @@ ObResourcePool<T, RPLabel>::ObResourcePool()
                               ObBaseResourcePool<T, RPLabel>::mem_attr_))) {
   }
   abort_unless(OB_SUCCESS == ret);
-  _COMMON_LOG(INFO,
-              "Construction ObDefaultResourcePool this=%p type=%s bt=%s",
-              this, typeid(T).name(), lbt());
 }
 
 template <class T, class RPLabel>
@@ -329,8 +320,6 @@ ObResourcePool<T, RPStrLabel<LABEL>> &get_resource_pool()
   static ObResourcePool<T, RPStrLabel<LABEL> > resource_pool;
   static bool once = false;
   if (!once) {
-    _COMMON_LOG(INFO, "get_resource_pool ptr=%p name=%s label=%s",
-                &resource_pool, typeid(T).name(), LABEL);
     once = true;
   }
   return resource_pool;
@@ -342,8 +331,6 @@ ObResourcePool<T, RPModIdLabel<MOD_ID>> &get_resource_pool()
   static ObResourcePool<T, RPModIdLabel<MOD_ID> > resource_pool;
   static bool once = false;
   if (!once) {
-    _COMMON_LOG(INFO, "get_resource_pool ptr=%p name=%s label=%d",
-                &resource_pool, typeid(T).name(), MOD_ID);
     once = true;
   }
   return resource_pool;

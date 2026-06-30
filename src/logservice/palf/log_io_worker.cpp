@@ -139,7 +139,6 @@ int LogIOWorker::submit_io_task(LogIOTask *io_task)
       SpinLockGuard guard(lock_);
       const int64_t submit_seq = inc_and_fetch_purge_throttling_submitted_seq_();
       (void)io_task->set_submit_seq(submit_seq);
-      PALF_LOG(INFO, "submit flush meta task success", KPC(io_task));
       if (OB_FAIL(queue_.push(io_task))) {
         PALF_LOG(WARN, "fail to push io task into queue", K(ret), KP(io_task));
         dec_purge_throttling_submitted_seq_();
@@ -148,7 +147,6 @@ int LogIOWorker::submit_io_task(LogIOTask *io_task)
       if (OB_FAIL(queue_.push(io_task))) {
       }
     }
-    PALF_LOG(TRACE, "after submit_io_task", KP(io_task));
   }
   return ret;
 }
@@ -197,7 +195,6 @@ int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
     if (OB_SUCCESS != (tmp_ret = throttle_->after_append_log(throttling_size))) {
       LOG_ERROR_RET(tmp_ret, "after_append failed", KP(io_task));
     }
-    PALF_LOG(TRACE, "handle_io_task_ success", K(submit_seq), KPC(this));
   }
   return ret;
 }
@@ -215,9 +212,6 @@ int LogIOWorker::handle_io_task_(LogIOTask *io_task)
 	do_task_used_ts_ += cost_ts;
 	do_task_count_ ++;
 	if (palf_reach_time_interval(5 * 1000 * 1000, print_log_interval_)) {
-		PALF_LOG(INFO, "[PALF STAT IO STAT]", K_(do_task_used_ts), K_(do_task_count),
-				"average_cost_ts", do_task_used_ts_ / do_task_count_,
-				"io_queue_size", queue_.size());
 		do_task_count_ = 0;
 		do_task_used_ts_ = 0;
 	};
@@ -246,14 +240,12 @@ int LogIOWorker::run_loop_()
   if (true == has_set_stop()) {
     ObLink *task = NULL;
     ObILogAllocator *allocator = palf_env_impl_->get_log_allocator();
-    CLOG_LOG(INFO, "before LogIOWorker destory", KPC(this), KPC(allocator));
     while (OB_SUCC(queue_.pop(task))) {
       LogIOTask *io_task = static_cast<LogIOTask *>(task);
       ATOMIC_STORE(&last_working_time_, common::ObTimeUtility::fast_current_time());
       (void)handle_io_task_(io_task);
       ATOMIC_STORE(&last_working_time_, OB_INVALID_TIMESTAMP);
     }
-    CLOG_LOG(INFO, "after LogIOWorker destory", KPC(this), KPC(allocator));
   }
   return ret;
 }

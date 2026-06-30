@@ -54,7 +54,6 @@ int ObAllVirtualLSInfo::next_ls_info_(ObLSVTInfo &ls_info)
         SERVER_LOG(WARN, "get_next_ls failed", K(ret));
       }
     } else if (NULL == ls) {
-      SERVER_LOG(WARN, "ls shouldn't NULL here", K(ls));
       // try another ls
       ret = OB_EAGAIN;
     } else if (OB_FAIL(ls->get_ls_info(ls_info))) {

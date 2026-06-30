@@ -140,7 +140,6 @@ public:
         COMMON_LOG_RET(WARN, tmp_ret, "failed to add msg", K(mod), K(ref_cnt), K(msg));
       }
     }
-    COMMON_LOG(INFO, "RefMgr mod ref", "type", typeid(T).name(), K(this), K(msg));
   }
 private:
   void lock_all_slot() {

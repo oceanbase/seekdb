@@ -1488,7 +1488,6 @@ int ObDMLStmt::set_part_expr(uint64_t table_id, uint64_t index_tid, ObRawExpr *p
     if (table_id == part_expr_items_.at(i).table_id_
         && index_tid == part_expr_items_.at(i).index_tid_) {
       ret = OB_ERR_TABLE_EXIST;
-      SQL_RESV_LOG(WARN, "table part expr exists", K(table_id));
     }
   }
   if (OB_SUCC(ret)) {

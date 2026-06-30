@@ -62,7 +62,6 @@ int ObOptDmlStatMapGetter::operator()(common::hash::HashMapPair<StatKey, ObOptDm
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unexpected column id", K(col_id));
       }
     }
   }

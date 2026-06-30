@@ -80,8 +80,6 @@ int ObLobLocatorHelper::init(const ObTableScanParam &scan_param,
       if (OB_FAIL(tx_read_snapshot_.assign(scan_param.snapshot_))) {
       } else if (snapshot_version != ctx.mvcc_acc_ctx_.snapshot_.version().get_val_for_tx()) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "snapshot version mismatch",
-          K(snapshot_version), K(tx_read_snapshot_), K(ctx.mvcc_acc_ctx_.snapshot_));
       } else {
         is_inited_ = true;
       }

@@ -47,7 +47,6 @@ static int check_and_assign_ptr_(const char *others_ptr,
 
   if (nullptr == others_ptr) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(ERROR, "invalid argument", PRINT_WRAPPER);
   } else {
     if (calculated_len == 0) {
       calculated_len = strlen(others_ptr);
@@ -55,8 +54,6 @@ static int check_and_assign_ptr_(const char *others_ptr,
 
     if (calculated_len <= 0 || calculated_len >= STR_LEN_LIMIT) {
       ret = OB_ERR_UNEXPECTED;
-      DETECT_LOG(WARN, "string length is not satisfied length limit",
-                        PRINT_WRAPPER, K(STR_LEN_LIMIT));
     } else {
       self_string->assign_ptr(others_ptr, static_cast<int32_t>(calculated_len));
     }
@@ -295,10 +292,8 @@ int ObDetectorUserReportInfo::set_columns_(const int64_t idx,
 
   if (nullptr == column_info) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "invalid argument", PRINT_WRAPPER);
   } else if (STR_LEN_LIMIT <= (str_len = strlen(column_info))) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "string length reach limit", PRINT_WRAPPER, K(STR_LEN_LIMIT));
   } else if (ValueType::COLUMN_NAME == type) {
     ret = extra_columns_names_.push_back(ObString(str_len, column_info));
   } else if (ValueType::COLUMN_VALUE == type) {
@@ -306,7 +301,6 @@ int ObDetectorUserReportInfo::set_columns_(const int64_t idx,
   } else {
     ret = OB_ERR_UNEXPECTED;
     int type_ = static_cast<int>(type);
-    DETECT_LOG(ERROR, "code error! unknown type", PRINT_WRAPPER, K_(type));
   }
 
   return ret;
@@ -333,7 +327,6 @@ int ObDetectorUserReportInfo::set_columns_(const int64_t idx,
   } else {
     ret = OB_ERR_UNEXPECTED;
     int type_ = static_cast<int>(type);
-    DETECT_LOG(ERROR, "code error! unknown type", PRINT_WRAPPER, K_(type));
   }
 
   return ret;

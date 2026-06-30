@@ -40,7 +40,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_ISNULL(types) || OB_UNLIKELY(param_num <= 1)) {
       ret = common::OB_INVALID_ARGUMENT;
-      SQL_ENG_LOG(WARN, "invalid argument", K(types), K(param_num));
     } else {
       type = types[param_num - 1];
     }

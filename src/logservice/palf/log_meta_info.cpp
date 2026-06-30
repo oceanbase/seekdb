@@ -176,7 +176,6 @@ DEFINE_SERIALIZE(LogPrepareMeta)
              OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, log_proposal_id_))) {
     PALF_LOG(ERROR, "LogPrepareMeta serialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogPreareMeta serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -196,7 +195,6 @@ DEFINE_DESERIALIZE(LogPrepareMeta)
                  serialization::decode_i64(buf, data_len, new_pos, reinterpret_cast<int64_t *>(&log_proposal_id_)))) {
     PALF_LOG(ERROR, "LogPrepareMeta deserialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogPreareMeta deserialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -405,7 +403,6 @@ bool LogConfigInfo::is_all_list_unique() const
   GlobalLearnerList server_list;
   if (arbitration_member_.is_valid() &&
       OB_FAIL(server_list.add_learner(arbitration_member_))) {
-    PALF_LOG(WARN, "add_learner failed", K(server_list), K_(arbitration_member));
   } else if (OB_FAIL(check_list_unique(server_list, log_sync_memberlist_))) {
   } else if (OB_FAIL(check_list_unique(server_list, degraded_learnerlist_))) {
   } else if (OB_FAIL(check_list_unique(server_list, learnerlist_))) {
@@ -508,7 +505,6 @@ void LogConfigInfo::operator=(const LogConfigInfo &config_info)
   learnerlist_.deep_copy(config_info.learnerlist_);
   degraded_learnerlist_.deep_copy(config_info.degraded_learnerlist_);
   config_version_ = config_info.config_version_;
-  PALF_LOG(TRACE, "LogConfigInfo operator =", KPC(this), K(config_info));
 }
 
 bool LogConfigInfo::operator==(const LogConfigInfo &config_info) const
@@ -807,7 +803,6 @@ void LogConfigInfoV2::operator=(const LogConfigInfoV2 &config_info)
   version_ = config_info.version_;
   config_ = config_info.config_;
   lock_meta_ = config_info.lock_meta_;
-  PALF_LOG(TRACE, "LogConfigInfoV2 operator =", KPC(this), K(config_info));
 }
 
 bool LogConfigInfoV2::operator==(const LogConfigInfoV2 &config_info) const
@@ -970,7 +965,6 @@ DEFINE_SERIALIZE(LogConfigMeta)
           OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, prev_mode_pid_))) {
         PALF_LOG(ERROR, "LogConfigMeta Version 2 serialize failed", K(ret), K(new_pos));
       } else {
-        PALF_LOG(TRACE, "LogConfigMeta Version 2 serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
         pos = new_pos;
       }
     }
@@ -982,7 +976,6 @@ DEFINE_SERIALIZE(LogConfigMeta)
         OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, prev_mode_pid_))) {
       PALF_LOG(ERROR, "LogConfigMeta Version 3 serialize failed", K(ret), K(new_pos));
     } else {
-      PALF_LOG(TRACE, "LogConfigMeta Version 3 serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
       pos = new_pos;
     }
   } else {
@@ -991,7 +984,6 @@ DEFINE_SERIALIZE(LogConfigMeta)
   }
 
   if (OB_SUCC(ret)) {
-    PALF_LOG(TRACE, "LogConfigMeta serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1036,7 +1028,6 @@ DEFINE_DESERIALIZE(LogConfigMeta)
   }
 
   if (OB_SUCC(ret)) {
-    PALF_LOG(TRACE, "LogConfigMeta deserialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1142,7 +1133,6 @@ DEFINE_SERIALIZE(LogModeMeta)
              OB_FAIL(ref_scn_.fixed_serialize(buf, buf_len, new_pos))) {
     PALF_LOG(ERROR, "LogModeMeta serialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogModeMeta serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1161,7 +1151,6 @@ DEFINE_DESERIALIZE(LogModeMeta)
              OB_FAIL(ref_scn_.fixed_deserialize(buf, data_len, new_pos))) {
     PALF_LOG(ERROR, "LogModeMeta deserialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogModeMeta deserialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1248,7 +1237,6 @@ int LogSnapshotMeta::get_prev_log_info(const LSN &curr_lsn,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, version is invalid", KPC(this), K(curr_lsn));
   }
   return ret;
 }
@@ -1275,7 +1263,6 @@ DEFINE_SERIALIZE(LogSnapshotMeta)
              && OB_FAIL(prev_log_tail_lsn_.serialize(buf, buf_len, new_pos))) {
     PALF_LOG(ERROR, "serialize prev_log_tail_lsn_ failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogSnapshotMeta serialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1295,7 +1282,6 @@ DEFINE_DESERIALIZE(LogSnapshotMeta)
              && OB_FAIL(prev_log_tail_lsn_.deserialize(buf, data_len, new_pos))) {
     PALF_LOG(ERROR, "deserialize prev_log_tail_lsn_ failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogSnapshotMeta deserialize", K(*this), K(buf + pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1357,7 +1343,6 @@ DEFINE_SERIALIZE(LogReplicaPropertyMeta)
             || OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, replica_type_))) {
     PALF_LOG(ERROR, "LogReplicaPropertyMeta serialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogReplicaPropertyMeta serialize", K(*this), K(buf+pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;
@@ -1374,7 +1359,6 @@ DEFINE_DESERIALIZE(LogReplicaPropertyMeta)
             || OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, reinterpret_cast<int32_t*>(&replica_type_)))) {
     PALF_LOG(ERROR, "LogReplicaPropertyMeta deserialize failed", K(ret), K(new_pos));
   } else {
-    PALF_LOG(TRACE, "LogReplicaPropertyMeta deserialize", K(*this), K(buf+pos), KP(buf), K(pos), K(new_pos));
     pos = new_pos;
   }
   return ret;

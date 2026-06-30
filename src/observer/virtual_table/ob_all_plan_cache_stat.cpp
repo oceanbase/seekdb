@@ -100,7 +100,6 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
     case HIT_RATE: {
       if (pc_stat.access_count_ !=0) {
         cells[i].set_int(pc_stat.hit_count_*100/pc_stat.access_count_);
-        SERVER_LOG(DEBUG, "rate:", "hit_count", pc_stat.hit_count_, "access_count", pc_stat.access_count_);
       } else {
         cells[i].set_int(0);
       }
@@ -326,7 +325,6 @@ int ObAllPlanCacheStat::get_row_from_tenants()
       ObPlanCache *plan_cache = share::g_mp->plan_cache(); 
       if (OB_FAIL(fill_cells(*plan_cache))) {
       } else {
-        SERVER_LOG(DEBUG, "add plan cache");
       }
       iter_end_ = true;
     }
@@ -359,7 +357,6 @@ int ObAllPlanCacheStatI1::set_ids(const common::ObIArray<common::ObNewRange> &ra
       end_key_obj_ptr = end_key.get_obj_ptr();
       if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
         ret = OB_INVALID_ARGUMENT;
-        SERVER_LOG(WARN, "invalid args", KP(start_key_obj_ptr), KP(end_key_obj_ptr));
       } else if ((!start_key_obj_ptr[0].is_min_value() || !end_key_obj_ptr[0].is_max_value())
           && start_key_obj_ptr[0] != end_key_obj_ptr[0]) {
         ret = OB_NOT_IMPLEMENT;

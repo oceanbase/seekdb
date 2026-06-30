@@ -82,7 +82,6 @@ int ObHashPartInfrasVecGroup::init_one_hp_infras(
     {
       total_mem_used += hp_infras->get_total_mem_used();
     }
-    SQL_ENG_LOG(TRACE, "calc total mem used", K(total_mem_used));
     return total_mem_used;
   };
   auto slice_cnt_func = [this]() -> int64_t {
@@ -119,8 +118,6 @@ int ObHashPartInfrasVecGroup::init_one_hp_infras(
     SQL_ENG_LOG(WARN, "failed to add hash partition infrastructure", K(ret));
   } else {
     hp_infras->set_io_event_observer(io_event_observer_);
-    SQL_ENG_LOG(TRACE, "trace info", K(hp_infras_list_.get_size()),
-                K(hp_infras_free_list_.get_size()));
   }
   return ret;
 }
@@ -140,7 +137,6 @@ int ObHashPartInfrasVecGroup::init_hash_table(HashPartInfrasVec *&hp_infras, con
                                                 ObHashPartInfrasVecMgr::MIN_BUCKET_COUNT,
                                                 ObHashPartInfrasVecMgr::MAX_BUCKET_COUNT))) {
   } else {
-    SQL_ENG_LOG(TRACE, "init_hash_table", K(est_bucket_num_), K(est_rows), K(width));
   }
   return ret;
 }

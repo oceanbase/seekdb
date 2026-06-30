@@ -148,7 +148,6 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("The column is null", K(ret));
     } else {
-      SHARE_SCHEMA_LOG(DEBUG, "print_table_definition_columns", KPC(col));
       if (col->is_shadow_column()) {
         // do nothing
       } else if (col->is_hidden()) {
@@ -627,7 +626,6 @@ int ObSchemaPrinter::print_table_definition_indexes(const ObTableSchema &table_s
                 simple_index_infos.at(i).table_id_, index_schema))) {
     } else if (NULL == index_schema) {
       ret = OB_TABLE_NOT_EXIST;
-      SHARE_SCHEMA_LOG(ERROR, "invalid index table id", "index_table_id", simple_index_infos.at(i).table_id_);
     } else if (INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_schema->get_index_type()) {
       continue;
     } else if (index_schema->is_in_recyclebin()) {
@@ -701,7 +699,6 @@ int ObSchemaPrinter::print_table_definition_constraints(const ObTableSchema &tab
     const ObConstraint *cst = *it;
     if (NULL == cst) {
       ret = OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(ERROR, "NULL ptr", K(cst));
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                allocator,
                cst->get_constraint_name_str(),
@@ -1375,7 +1372,6 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
     int64_t paxos_replica_num = 1;
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, "REPLICA_NUM = %ld ", paxos_replica_num))) {
     } else {
-      SHARE_SCHEMA_LOG(INFO, "XXX", K(paxos_replica_num));
     } // no more to do
   }
   if (OB_SUCCESS == ret && !strict_compat_ && table_schema.get_block_size() >= 0
@@ -1441,11 +1437,9 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        SHARE_SCHEMA_LOG(WARN, "tablegroup name is null");
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN, "tablegroup schema is null");
     }
   }
 
@@ -1780,7 +1774,6 @@ int ObSchemaPrinter::print_table_definition_table_options(
   if (OB_SUCC(ret) && (table_schema.is_fts_index_aux() || table_schema.is_fts_doc_word_aux())) {
     if (full_text_columns.count() <= 0 || OB_UNLIKELY(virtual_column_id == OB_INVALID_ID)) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "invalid domain index infos", K(full_text_columns), K(virtual_column_id));
     } else if (!strict_compat_ && OB_FAIL(print_table_definition_fulltext_indexs(
                full_text_columns, virtual_column_id, buf, buf_len, pos))) {
       OB_LOG(WARN, "failed to print table definition full text indexes", K(ret));
@@ -1856,11 +1849,9 @@ int ObSchemaPrinter::print_table_definition_table_options(
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        OB_LOG(WARN, "tablegroup name is null");
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "tablegroup schema is null");
     }
   }
 
@@ -2033,7 +2024,6 @@ int ObSchemaPrinter::print_index_definition_columns(
                         default_session, expr, columns, &data_schema, false /* sequence_allowed */, NULL))) {
                 } else if (OB_ISNULL(expr)) {
                   ret = OB_ERR_UNEXPECTED;
-                  OB_LOG(WARN, "expr is null");
                 } else if (3 != expr->get_param_count()) {
                   // Prefix index expression, with three columns
                   ret = OB_ERR_UNEXPECTED;
@@ -2937,11 +2927,9 @@ int ObSchemaPrinter::print_database_definiton(const uint64_t database_id,
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          SHARE_SCHEMA_LOG(WARN, "tablegroup name is empty");
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        SHARE_SCHEMA_LOG(WARN, "tablegroup schema is null");
       }
     }
   }

@@ -123,7 +123,6 @@ int ObGlobalInterruptManager::register_checker(ObInterruptChecker *checker,
     LIB_LOG(ERROR, "interrupt manager not inited", K(ret));
   } else if (OB_ISNULL(checker)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invaild checker pointer");
   } else if (FALSE_IT(map_.read_atomic(tid, get_node_call))) {
   } else if (get_node_call.is_checker_exist()) {
     ret = OB_HASH_EXIST;
@@ -166,10 +165,8 @@ int ObGlobalInterruptManager::unregister_checker(ObInterruptChecker *checker,
   UNUSED(ignore);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LIB_LOG(ERROR, "interrupt manager not inited");
   } else if (OB_ISNULL(checker)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invaild checker pointer");
   } else {
     ObInterruptGetCheckerNodeCall get_node_call(checker);
     if (OB_HASH_NOT_EXIST == (ret = map_.read_atomic(tid, get_node_call))) {
@@ -208,7 +205,6 @@ int ObGlobalInterruptManager::interrupt(const ObInterruptibleTaskID &tid, ObInte
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LIB_LOG(ERROR, "interrupt manager not inited", K(tid));
   } else {
     ObInterruptCheckerUpdateCall updatecall(interrupt_code);
     ret = map_.atomic_refactored(tid, updatecall);

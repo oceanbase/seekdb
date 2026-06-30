@@ -38,7 +38,6 @@ const int64_t ObEmptyShellTask::GLOBAL_EMPTY_CHECK_INTERVAL_TIMES = 24 * 720;
 
 void ObEmptyShellTask::runTimerTask()
 {
-  STORAGE_LOG(INFO, "====== [emptytablet] empty shell timer task ======", K(GC_EMPTY_TABLET_SHELL_INTERVAL));
   int ret = OB_SUCCESS;
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
@@ -51,7 +50,6 @@ void ObEmptyShellTask::runTimerTask()
 
   if (!SERVER_STORAGE_META_SERVICE.is_started()) {
     // do nothing
-    STORAGE_LOG(DEBUG, "ob block manager has not started");
   } else if (OB_ISNULL(ls_svr)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "mtl ObLSService should not be null", KR(ret));
@@ -75,9 +73,7 @@ void ObEmptyShellTask::runTimerTask()
           STORAGE_LOG(WARN, "ls is NULL", KR(ret));
         } else if (FALSE_IT(tablet_empty_shell_handler = ls->get_tablet_empty_shell_handler())) {
         } else if (tablet_empty_shell_handler->check_stop()) {
-          STORAGE_LOG(INFO, "[emptytablet] tablet_gc_handler is stop", K(ls->get_ls_id()));
         } else if (0 == times || tablet_empty_shell_handler->get_empty_shell_trigger()) {
-          STORAGE_LOG(INFO, "[emptytablet] task check ls", "ls_id", ls->get_ls_id(), K(tablet_empty_shell_handler));
           tablet_empty_shell_handler->set_empty_shell_trigger(false);
           obsys::ObRLockGuard lock(tablet_empty_shell_handler->wait_lock_);
           bool need_retry = false;
@@ -314,8 +310,6 @@ int ObTabletEmptyShellHandler::check_transfer_out_deleted_tablet_(
   } else {
     need_retry = true;
     if (REACH_THREAD_TIME_INTERVAL(1_s)) {
-      STORAGE_LOG(INFO, "decided_scn is smaller than tablet delete commit scn",
-        "ls_id", ls_->get_ls_id(), K(tablet_id), K(user_data), K(decided_scn));
     }
   }
   return ret;
@@ -337,7 +331,6 @@ bool ObTabletEmptyShellHandler::get_empty_shell_trigger() const
 void ObTabletEmptyShellHandler::set_empty_shell_trigger(bool is_trigger)
 {
   ATOMIC_STORE(&is_trigger_, is_trigger);
-  STORAGE_LOG(INFO, "[emptytablet] set empty shell trigger", "ls_id", ls_->get_ls_id(), K(is_trigger));
 }
 
 int ObTabletEmptyShellHandler::offline()
@@ -348,7 +341,6 @@ int ObTabletEmptyShellHandler::offline()
     ret = OB_EAGAIN;
     STORAGE_LOG(INFO, "tablet empty shell handler not finish, retry", KR(ret), KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
   } else {
-    STORAGE_LOG(INFO, "tablet empty shell handler offline", KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
   }
   return ret;
 }
@@ -357,7 +349,6 @@ void ObTabletEmptyShellHandler::online()
 {
   set_empty_shell_trigger(true);
   set_start();
-  STORAGE_LOG(INFO, "empty shell handler online", KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
 }
 
 } // checkpoint

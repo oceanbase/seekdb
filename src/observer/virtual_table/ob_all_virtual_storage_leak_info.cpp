@@ -89,7 +89,6 @@ int ObAllVirtualStorageLeakInfo::inner_open()
   INIT_SUCC(ret);
   if (OB_UNLIKELY(opened_)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "Unexpected opened", K(opened_));
   } else if (OB_FAIL(set_ip())) {
   } else if (OB_FAIL(map_info_.create(MAP_BUCKET_NUM, "CACHE_CHECKER_T", "CACHE_CHECKER_T"))) {
   } else if (OB_FAIL(ObStorageLeakChecker::get_instance().get_aggregate_bt_info(map_info_))) {

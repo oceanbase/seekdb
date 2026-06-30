@@ -90,7 +90,6 @@ int LogStorage::load_manifest_for_meta_storage(block_id_t &expected_next_block_i
     ret = OB_NOT_INIT;
   } else if (0 == log_tail_offset && 0 == log_tail_block_id) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, there is no valid meta at first block", KPC(this));
   // NB: nowdays, we not support switch block when updat manifest failed, therefore, we don't need
   // handle this case.
   //
@@ -119,7 +118,6 @@ void LogStorage::destroy()
   log_tail_.reset();
   log_reader_.destroy();
   block_mgr_.destroy();
-  PALF_LOG(INFO, "LogStorage destroy success");
 }
 
 int LogStorage::writev(const LSN &lsn, const LogWriteBuf &write_buf, const SCN &scn)
@@ -278,7 +276,6 @@ int LogStorage::pread(const LSN &read_lsn,
                                   need_read_with_block_header, read_buf,
                                   out_read_size, io_ctx))) {
   } else {
-    PALF_LOG(TRACE, "inner_pread_ succeed", K(read_lsn), K(in_read_size), K(read_buf), K(out_read_size));
   }
   return ret;
 }
@@ -368,13 +365,11 @@ int LogStorage::truncate_prefix_blocks(const LSN &lsn)
     PALF_LOG(WARN, "get_block_id_range failed", K(ret), KPC(this));
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
-    PALF_LOG(INFO, "there is no block on disk, truncate_prefix_blocks success", KPC(this));
   } else {
     // If 'block_id' is smaller than or equal to 'max_block_id', need delete all blocks
     // before 'block_id' (not include 'block_id'), otherwise, need delete all blocks
     // before 'max_block_id'(include 'max_block_id') and reset 'log_tail_' to 'lsn';
     truncate_end_block_id = MIN(block_id, max_block_id + 1);
-    PALF_LOG(INFO, "truncate_prefix_blocks trace", K(truncate_end_block_id), KPC(this));
     for (block_id_t i = min_block_id; i < truncate_end_block_id && OB_SUCC(ret); i++) {
       if (OB_FAIL(delete_block(i)) && OB_NO_SUCH_FILE_OR_DIRECTORY != ret) {
         PALF_LOG(ERROR, "ObLogStorage delete_block failed", K(ret), KPC(this), K(i),
@@ -421,7 +416,6 @@ int LogStorage::begin_flashback(const LSN &start_lsn_of_block)
     ObSpinLockGuard guard(tail_info_lock_);
     if (check_in_flashback_(flashback_version_)) {
       ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "unexpected error, flashback_version_ must be even number", KPC(this), K(start_lsn_of_block));
     } else {
       // In process of flashback, each block after start_lsn_of_block is still readable.
       readable_log_tail_ = origin_log_tail;
@@ -441,7 +435,6 @@ int LogStorage::end_flashback(const LSN &start_lsn_of_block)
   const block_id_t block_id = lsn_2_block(start_lsn_of_block, logical_block_size_);
   if (check_in_flashback_(flashback_version_)) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "unexpected error, flashback_version_ must be even number", KPC(this), K(start_lsn_of_block));
   } else {
     // to ensure the integrity of each read data, before delete blocks,
     // reset readable_log_tail_
@@ -499,7 +492,6 @@ int LogStorage::get_block_min_scn(const block_id_t &block_id, SCN &min_scn) cons
   } else if (OB_FAIL(read_block_header_(block_id, block_header))) {
   } else {
     min_scn = block_header.get_min_scn();
-    PALF_LOG(TRACE, "get_block_min_scn success", K(block_id), K(min_scn), KPC(this));
   }
   return ret;
 }
@@ -541,7 +533,6 @@ int LogStorage::update_manifest_used_for_meta_storage(const block_id_t expected_
   // 'curr_writable_block_id' is 0.
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogMetaStorage not inited", KPC(this), K(expected_max_block_id));
   } else if (OB_FAIL(update_block_header_(last_block_id, LSN(expected_max_block_id*logical_block_size_), SCN::min_scn()))) {
   } else {
     PALF_LOG(INFO, "update_manifest_used_for_meta_storage success", K(ret), KPC(this));
@@ -593,7 +584,6 @@ int LogStorage::load_last_block_(const block_id_t min_block_id,
     // for restart, update_manifest_cb_ will check whther expected_next_block_id is 'manifest' + 1
     if (OB_FAIL(update_manifest_cb_(expected_next_block_id, in_restart))) {
     } else {
-      PALF_LOG(INFO, "need update manifest in restart", KPC(this), K(expected_next_block_id));
     }
   }
   return ret;
@@ -685,35 +675,24 @@ int LogStorage::check_read_out_of_bound_(const block_id_t &block_id,
   //     overwriting.
   } else if (block_id >= readable_end_block_id && (flashback_version != curr_flashback_version || check_in_flashback_(curr_flashback_version))) {
     ret = OB_NEED_RETRY;
-    PALF_LOG(WARN, "there is flashbacking during read data, need read retry",
-             KPC(this), K(flashback_version), K(curr_flashback_version),
-             K(min_block_id), K(max_block_id), K(block_id));
     // double check after read data. the block whose name is smaller than 'min_block_id' has been deleted
     // by GC or rebuild, and the data which read successfully may be not intergrity, therefore return OB_ERR_OUT_OF_LOWER_BOUND
   } else if (min_block_id > block_id) {
     ret = OB_ERR_OUT_OF_LOWER_BOUND;
-    PALF_LOG(INFO, "read something out of lower bound, the block may be deleted by GC or rebuild",
-             K(min_block_id), K(max_block_id), K(block_id));
     // there is no possibility read data out of upper bound because we have checked flashback_version and checkd
     // read_lsn whether is greater than readable_log_tail before 'check_read_out_of_bound_'.
   } else if (block_id > max_block_id) {
     ret = OB_ERR_UNEXPECTED; 
-    PALF_LOG(ERROR, "unexpected error, the block to be read is greater than max_block_id",
-             K(min_block_id), K(max_block_id), K(block_id));
   }
   if (OB_SUCC(ret) && no_such_block) {
     // if there is no block whose names with 'block_id' and 'block_id' is in range of [min_block_id, max_block_id)
     // return OB_ERR_UNEXPECTED.
     if (min_block_id <= block_id && block_id < max_block_id) {
       ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "unexpected error, the block may be deleted by human", KPC(this), K(flashback_version),
-               K(min_block_id), K(max_block_id), K(block_id));
     // if max_block_id == block_id, means that the block whose names with 'block_id' is renaming during
     // flashback, therefore return OB_NEED_RETRY.
     } else if (max_block_id == block_id) {
       ret = OB_NEED_RETRY;
-      PALF_LOG(WARN, "in flashback, the block is renaming", KPC(this), K(flashback_version), K(min_block_id),
-               K(max_block_id), K(block_id));
     }
   }
   return ret;
@@ -848,7 +827,6 @@ int LogStorage::read_block_header_(const block_id_t block_id,
   bool last_block_has_data = (0 == lsn_2_offset(readable_log_tail, logical_block_size_) ? false : true);
   if (!read_buf.is_valid()) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(WARN, "allocate memory failed");
   } else if (block_id > max_block_id || (block_id == max_block_id && false == last_block_has_data)) {
     ret = OB_ERR_OUT_OF_UPPER_BOUND;
     PALF_LOG(WARN, "block_id is large than max_block_id", K(ret), K(block_id),
@@ -859,7 +837,6 @@ int LogStorage::read_block_header_(const block_id_t block_id,
     } else if (OB_FAIL(log_block_header.deserialize(read_buf.buf_, out_read_size, pos))) {
     } else if (false == log_block_header.check_integrity()) {
       ret = OB_INVALID_DATA;
-      PALF_LOG(ERROR, "info block has been corrupted!!!", K(log_block_header), K(block_id));
       LOG_DBA_ERROR_V2(OB_LOG_CHECKSUM_MISMATCH, ret, "info block has been corrupted!!!");
     } else {
       PALF_LOG(TRACE, "read_block_header_ success", K(ret), K(block_id),
@@ -932,8 +909,6 @@ int LogStorage::inner_pread_(const LSN &read_lsn,
       if (OB_FAIL(log_cache_->read(flashback_version, read_lsn, real_in_read_size, 
                                    read_buf, out_read_size, io_ctx))) {
       } else {
-        PALF_LOG(TRACE, "read log cache successfully", K(read_lsn), K(in_read_size), 
-                 K(need_read_log_block_header), K(read_buf), K(out_read_size));
       }
     } else if (OB_FAIL(log_reader_.pread(read_block_id,
                                          real_read_offset,
@@ -993,7 +968,6 @@ int LogStorage::get_logical_block_size(int64_t &logical_block_size) const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogStorage not init", KPC(this));
   } else {
     logical_block_size = logical_block_size_;
   }

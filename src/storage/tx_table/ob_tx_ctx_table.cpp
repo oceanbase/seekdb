@@ -125,7 +125,6 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
                                            tx_ctx))) {
   } else if (OB_FAIL(tx_ctx->recover_tx_ctx_table_info(ctx_info))) {
   } else {
-    STORAGE_LOG(INFO, "restore trans state in memory", K(ctx_info));
   }
 
   if (NULL != tx_ctx) {
@@ -194,12 +193,10 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
         deserialize_buf = get_buf_ptr_();
         deserialize_buf_length = curr_meta.get_tx_ctx_serialize_size();
         clear_in_multi_row_state_();
-        STORAGE_LOG(INFO, "curr meta is multi row last extent", K(curr_meta));
       } else if (curr_meta.is_single_row_tx_ctx()) {
         buf_completed = true;
         deserialize_buf = value_str.ptr();
         deserialize_buf_length = value_str.length();
-        STORAGE_LOG(INFO, "curr meta is is_single_row_tx_ctx", K(curr_meta));
       } else {
         // do nothing
       }
@@ -266,9 +263,7 @@ OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
     } else if (OB_FAIL(txs->get_tx_ctx_mgr().get_ls_tx_ctx_mgr(ls_id, ls_tx_ctx_mgr_))) {
     } else if (NULL == ls_tx_ctx_mgr_) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "ls tx ctx mgr is null", KP(txs));
     } else {
-      TRANS_LOG(INFO, "get ls tx ctx mgr successfully", KP(txs));
     }
   }
 
@@ -286,7 +281,6 @@ OB_WEAK_SYMBOL int ObTxCtxTable::release_ref_()
       TRANS_LOG(ERROR, "trans_service get fail", K(ret));
     } else if (OB_FAIL(txs->get_tx_ctx_mgr().revert_ls_tx_ctx_mgr(ls_tx_ctx_mgr_))) {
     } else {
-      TRANS_LOG(INFO, "revert ls tx ctx mgr successfully", K(ls_id_), K(this));
       ls_tx_ctx_mgr_ = NULL;
     }
   }
@@ -342,7 +336,6 @@ int ObTxCtxTable::check_with_tx_data(const transaction::ObTransID tx_id, ObITxDa
       TRANS_LOG(WARN, "check with tx data failed", KR(ret), K(tx_id));
     }
   } else {
-    TRANS_LOG(DEBUG, "check with tx data in tx ctx table successfully", K(tx_id));
   }
 
   return ret;

@@ -92,7 +92,6 @@ int ObVirtualShowTrace::retrive_all_span_info()
                                                      K(ObString(sql_len, sql)));
       if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
         ret = OB_SIZE_OVERFLOW;
-        SERVER_LOG(WARN, "failed to format sql. size not enough");
       } else {
 
         { // make sure %res destructed before execute other sql in the same transaction
@@ -114,7 +113,6 @@ int ObVirtualShowTrace::retrive_all_span_info()
                 if (OB_FAIL(alloc_trace_rec(rec))) {
                 } else if (OB_ISNULL(rec)) {
                   ret = OB_ERR_UNEXPECTED;
-                  SERVER_LOG(WARN, "record ptr is null");
                 } else {
                   OZ(read_show_trace_rec_from_result(*result, *rec));
                   OZ(show_trace_arr_.push_back(rec));
@@ -244,7 +242,6 @@ int ObVirtualShowTrace::generate_span_info_tree()
     for (int64_t i = 0; OB_SUCC(ret) && i < show_trace_arr_.count(); ++i) {
       if (OB_ISNULL(show_trace_arr_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null", K(i));
       } else if (session_->get_last_flt_span_id().empty() && 
             show_trace_arr_.at(i)->data_.parent_span_id_ == "00000000-0000-0000-0000-000000000000") {
         found_root = true;
@@ -268,7 +265,6 @@ int ObVirtualShowTrace::generate_span_info_tree()
       for (int64_t i = 0; OB_SUCC(ret) && i < root_arr.count(); ++i) {
         if (OB_ISNULL(root_arr.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "record ptr is null", K(i));
         } else if (OB_FAIL(tmp_arr.push_back(root_arr.at(i)))) {
         } else if (OB_FAIL(find_child_span_info(NULL, root_arr.at(i)->data_.span_id_, tmp_arr, depth+1))) {
         } else {
@@ -282,7 +278,6 @@ int ObVirtualShowTrace::generate_span_info_tree()
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_arr.count(); ++i) {
           if (OB_ISNULL(tmp_arr.at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "record ptr is null", K(i));
           } else {
             if (is_row_format_) {
               OZ(format_flt_show_trace_record(*tmp_arr.at(i)));
@@ -322,7 +317,6 @@ int ObVirtualShowTrace::merge_span_info() {
       // if span id is same, just merge it.
       if (OB_ISNULL(show_trace_arr_.at(l))) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null", K(l));
       } else {
         ObString l_span_id = show_trace_arr_.at(l)->data_.span_id_;
         while (OB_SUCC(ret) && 
@@ -335,13 +329,11 @@ int ObVirtualShowTrace::merge_span_info() {
         if (r+1 < show_trace_arr_.count()
               && OB_ISNULL(show_trace_arr_.at(r+1))) {
           ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "record ptr is null", K(r+1));
         } else {
           sql::ObFLTShowTraceRec* rec;
           if (OB_FAIL(alloc_trace_rec(rec))) {
           } else if (OB_ISNULL(rec)) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "record ptr is null");
           } else {
             OZ(merge_range_span_info(l, r, *rec));
             OZ(tmp_arr.push_back(rec));
@@ -369,7 +361,6 @@ int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTSh
   char *tag_buf = NULL;
   if (OB_ISNULL(show_trace_arr_.at(l))) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "record ptr is null");
   } else if (FALSE_IT(rec = *show_trace_arr_.at(l))) {
     // do nothing
   } else if (OB_FAIL(get_tag_buf(tag_buf))) {
@@ -382,7 +373,6 @@ int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTSh
     for (int64_t i = l; OB_SUCC(ret) && i < r+1; i++) {
       if (OB_ISNULL(show_trace_arr_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null");
       } else {
         rec.data_.end_ts_ = max(rec.data_.end_ts_, show_trace_arr_.at(i)->data_.end_ts_);
         ObString str = show_trace_arr_.at(i)->data_.tags_.trim();
@@ -415,7 +405,6 @@ int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTSh
     for (int64_t i = l; OB_SUCC(ret) && i < r+1; i++) {
       if (OB_ISNULL(show_trace_arr_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null");
       } else {
         ObString str = show_trace_arr_.at(i)->data_.logs_.trim();
         if (str.length() == 0) {
@@ -509,7 +498,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
   for (int64_t i = 0; OB_SUCC(ret) && i < show_trace_arr_.count(); ++i) {
     if (OB_ISNULL(show_trace_arr_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(i));
     } else if (show_trace_arr_.at(i)->data_.parent_span_id_ == parent_span_id) {
        show_trace_arr_.at(i)->formatter_.level_ = depth;
        show_trace_arr_.at(i)->formatter_.tree_line_ =
@@ -556,7 +544,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
   for (int64_t i = 0; OB_NOT_NULL(parent_type) && OB_SUCC(ret) && i < tmp_arr.count(); ++i) {
     if (OB_ISNULL(tmp_arr.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(i));
     } else {
       sql::ObFLTShowTraceRec& rec = *tmp_arr.at(i);
       for (int64_t j = 0; OB_SUCC(ret) && j < depth-1; j++) {
@@ -582,7 +569,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
   } else if (tmp_arr.count() == 0) {
     if (OB_ISNULL(tmp_arr.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null");
     } else {
       tmp_arr.at(0)->formatter_.tree_line_[depth-1].line_type_
                                     = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LAST_NODE;
@@ -591,7 +577,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_arr.count()-1; ++i) {
       if (OB_ISNULL(tmp_arr.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "record ptr is null", K(i));
       } else {
         tmp_arr.at(i)->formatter_.tree_line_[depth-1].line_type_
                                     = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_NODE;
@@ -600,7 +585,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(tmp_arr.at(tmp_arr.count()-1))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null");
     } else {
       tmp_arr.at(tmp_arr.count()-1)->formatter_.tree_line_[depth-1].line_type_
                                     = sql::ObFLTShowTraceRec::trace_formatter::LineType::LT_LAST_NODE;
@@ -627,7 +611,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(tmp_arr.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(i));
     } else if (OB_FAIL(arr.push_back(tmp_arr.at(i)))) {
     } else if (OB_FAIL(find_child_span_info(tmp_arr.at(i)->formatter_.tree_line_,
                                             tmp_arr.at(i)->data_.span_id_,
@@ -667,14 +650,12 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
   } else if (OB_SUCC(ret)) {
     if (show_trace_rec_idx_ < 0) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid operator_stat array index", K(show_trace_rec_idx_));
     } else if (show_trace_rec_idx_ >= show_trace_arr_.count()) {
       ret = OB_ITER_END;
       show_trace_rec_idx_ = OB_INVALID_ID;
       show_trace_arr_.reset();
     } else if (OB_ISNULL(show_trace_arr_.at(show_trace_rec_idx_))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "record ptr is null", K(show_trace_rec_idx_));
     } else {
       sql::ObFLTShowTraceRec rec = *show_trace_arr_.at(show_trace_rec_idx_);
       ++show_trace_rec_idx_;
@@ -696,7 +677,6 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
 
   if (OB_ISNULL(cells)) {
     ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(cells));
   } else {
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
       uint64_t col_id = output_column_ids_.at(cell_idx);

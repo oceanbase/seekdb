@@ -190,7 +190,6 @@ int ObSingleMerge::get_and_fuse_cache_row(const int64_t read_snapshot_version,
     }
   } else if (OB_UNLIKELY(handle_.value_->get_read_snapshot_version() <= multi_version_start
                         || handle_.value_->get_read_snapshot_version() > read_snapshot_version)) {
-    STORAGE_LOG(DEBUG, "fuse row cache useless", K(handle_), K(read_snapshot_version), KPC(rowkey_));
     handle_.reset();
     end_table_idx = 0;
     need_update_fuse_cache = true;
@@ -226,11 +225,9 @@ int ObSingleMerge::get_and_fuse_cache_row(const int64_t read_snapshot_version,
     cache_row.storage_datums_ = handle_.value_->get_datums();
     cache_row.row_flag_ = handle_.value_->get_flag();
     ++access_ctx_->table_store_stat_.fuse_row_cache_hit_cnt_;
-    STORAGE_LOG(DEBUG, "find fuse row cache", K(handle_), KPC(rowkey_));
     if (cache_row.row_flag_.is_exist()) {
       if (OB_FAIL(ObRowFuse::fuse_row(cache_row, fuse_row, nop_pos_, final_result))) {
       } else {
-        STORAGE_LOG(TRACE, "fuse row cache", K(cache_row), K(fuse_row));
       }
     }
   }
@@ -266,8 +263,6 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
     full_row_.snapshot_version_ = 0L;
     access_ctx_->use_fuse_row_cache_ = enable_fuse_row_cache;
 
-    STORAGE_LOG(DEBUG, "single merge start to get next row", KPC(rowkey_), K(access_ctx_->use_fuse_row_cache_),
-                K(access_param_->iter_param_.enable_fuse_row_cache(access_ctx_->query_flag_, scan_type)), K(access_param_->iter_param_));
     if (is_mview_table_scan(scan_type)) {
       if (OB_FAIL(get_mview_table_scan_row(enable_fuse_row_cache, have_uncommited_row, need_update_fuse_cache))) {
       }
@@ -279,7 +274,6 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
     }
 
     if (OB_SUCC(ret)) {
-      STORAGE_LOG(DEBUG, "row before project", K(iter_del_row_), K(full_row_));
       if (!full_row_.row_flag_.is_exist_without_delete() && !(need_iter_del_row() && full_row_.row_flag_.is_delete())) {
         ret = OB_ITER_END;
       } else {
@@ -291,7 +285,6 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
           row.row_flag_ = full_row_.row_flag_;
           row.group_idx_ = rowkey_->get_group_idx();
           row.trans_info_ = full_row_.trans_info_;
-          STORAGE_LOG(TRACE, "succ to do single get", K(full_row_), K(row), K(have_uncommited_row), K(cols_index), K(access_param_->iter_param_.table_id_));
         }
         if (OB_FAIL(ret)) {
         } else if (!have_uncommited_row && need_update_fuse_cache
@@ -386,11 +379,9 @@ int ObSingleMerge::get_mview_table_scan_row(const bool enable_fuse_row_cache,
       cache_row.storage_datums_ = handle_.value_->get_datums();
       cache_row.row_flag_ = handle_.value_->get_flag();
       ++access_ctx_->table_store_stat_.fuse_row_cache_hit_cnt_;
-      STORAGE_LOG(DEBUG, "find fuse row cache", K(handle_), KPC(rowkey_));
       if (cache_row.row_flag_.is_exist()) {
         if (OB_FAIL(ObRowFuse::fuse_row(cache_row, full_row_, nop_pos_, final_result))) {
         } else {
-          STORAGE_LOG(TRACE, "fuse row cache", K(cache_row), K(full_row_), K(final_result));
           final_result = true;
         }
       }

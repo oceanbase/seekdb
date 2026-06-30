@@ -43,7 +43,6 @@ int ObGtiSource::init(const ObAddr &server)
   } else {
     server_ = server;
     is_inited_ = true;
-    TRANS_LOG(INFO, "gti source init success", K(server), KP(this));
   }
   if (OB_FAIL(ret)) {
     if (NULL != gti_request_rpc_) {
@@ -68,7 +67,6 @@ int ObGtiSource::start()
   } else if (OB_FAIL(gti_request_rpc_->start())) {
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "ObGtiSource start success");
   }
   return ret;
 }
@@ -83,7 +81,6 @@ void ObGtiSource::stop()
   } else if (OB_FAIL(gti_request_rpc_->stop())) {
   } else {
     is_running_ = false;
-    TRANS_LOG(INFO, "ObGtiSource stop success");
   }
 }
 
@@ -99,7 +96,6 @@ void ObGtiSource::wait()
     TRANS_LOG(ERROR, "ObGtiSource is running", KR(ret));
   } else if (OB_FAIL(gti_request_rpc_->wait())) {
   } else {
-    TRANS_LOG(INFO, "ObGtiSource wait success");
   }
 }
 
@@ -116,7 +112,6 @@ void ObGtiSource::destroy()
     ObGtiRequestRpcFactory::release(gti_request_rpc_);
     gti_request_rpc_ = NULL;
   }
-  TRANS_LOG(INFO, "ObGtiSource destroyed");
 }
 
 void ObGtiSource::reset()
@@ -152,14 +147,12 @@ int ObGtiSource::update_trans_id(const int64_t start_id, const int64_t end_id)
   const int64_t cache_idx = ATOMIC_LOAD(&cache_idx_);
   const int64_t cur_idx = ATOMIC_LOAD(&cur_idx_);
   if (cache_idx - cur_idx >= MAX_CACHE_NUM - 1) {
-    TRANS_LOG(WARN, "drop trans id", K(start_id), K(end_id));
   } else {
     IdCache *id_cache = &(id_cache_[cache_idx % MAX_CACHE_NUM]);
     inc_update(&(id_cache->start_id), start_id);
     inc_update(&(id_cache->end_id), end_id);
     (void)ATOMIC_FAA(&cache_idx_, 1);
     retry_request_cnt_ = 0;
-    TRANS_LOG(INFO, "update trans id", K(start_id), K(end_id));
   }
 
   return ret;

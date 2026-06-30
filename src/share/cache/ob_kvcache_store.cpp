@@ -75,9 +75,7 @@ int ObIKVCacheStore::alloc_kvpair(
   int64_t washed_size;
   if (OB_SUCC(alloc_kvpair_without_retry(key_size, value_size, kvpair, hazptr_holder, policy))) {
   } else if (OB_ALLOCATE_MEMORY_FAILED != ret) {
-    COMMON_LOG(WARN, "failed to allocate kvpair", K(key_size), K(value_size), K(policy));
   } else if (0 >= (washed_size = ObMallocAllocator::get_instance()->sync_wash(0, INT64_MAX))) {
-    COMMON_LOG(WARN, "failed to sync wash");
   } else if (OB_FAIL(alloc_kvpair_without_retry(key_size, value_size, kvpair, hazptr_holder, policy))) {
   }
 
@@ -148,7 +146,6 @@ int ObKVCacheStore::init(const int64_t max_cache_size,
   if (OB_SUCC(ret)) {
     mem_limit_getter_ = &mem_limit_getter;
     inited_ = true;
-    COMMON_LOG(INFO, "ObKVCacheStore init success", K(max_cache_size), K(block_size));
   }
   if (!inited_) {
     destroy();
@@ -429,9 +426,6 @@ bool ObKVCacheStore::wash()
   //wash memory in tenant wash heap
   if (wash_heap_.mb_cnt_ > 0) {
     wash_mbs(wash_heap_);
-    COMMON_LOG(INFO, "Wash memory globally, ",
-        K(global_wash_size),
-        "wash_heap_cnt", wash_heap_.mb_cnt_);
   }
   wash_time = ObTimeUtility::current_time() - start_time;
   WashCallBack callback(*this, reclaimed_size);
@@ -439,12 +433,6 @@ bool ObKVCacheStore::wash()
   HazardDomain::get_instance().reclaim(callback);
   reclaim_time = ObTimeUtility::current_time() - reclaim_time;
   purge_mb_handle_retire_station();
-  COMMON_LOG(INFO,
-      "Wash time detail, ",
-      K(compute_wash_size_time),
-      K(wash_time),
-      K(reclaim_time),
-      K(reclaimed_size));
 
   return reclaimed_size > 0;
 }
@@ -562,7 +550,6 @@ int ObKVCacheStore::sync_wash_mbs(const int64_t size_to_wash,
     }
   } else if (OB_ISNULL(wash_blocks)) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(ERROR, "wash_blocks is null!");
   }
 
   return ret;
@@ -716,7 +703,6 @@ int ObKVCacheStore::inner_flush_washable_mb(const int64_t size_to_wash, int64_t&
             const int64_t cost = ObTimeUtility::current_time() - start;
             if (cost > SYNC_WASH_MB_TIMEOUT_US) {
               ret = OB_SYNC_WASH_MB_TIMEOUT;
-              COMMON_LOG(WARN, "sync wash mb timeout", K(cost), LITERAL_K(SYNC_WASH_MB_TIMEOUT_US));
             }
           }
           ++check_idx;
@@ -731,7 +717,6 @@ int ObKVCacheStore::inner_flush_washable_mb(const int64_t size_to_wash, int64_t&
         // avoid reclaiming while holding qclock
         HazardDomain::get_instance().reclaim(callback);
         int64_t reclaim_time = ObTimeUtility::current_time() - start_time;
-        COMMON_LOG(INFO, "KVCache sync wash / flush reclaim", K(size_washed), K(size_to_wash), K(reclaim_time));
         if (size_to_wash == INT64_MAX) {
           // flush
           break;
@@ -801,7 +786,6 @@ int ObKVCacheStore::inner_flush_washable_mb(const int64_t size_to_wash, int64_t&
         const int64_t cost = ObTimeUtility::current_time() - start;
         if (cost > SYNC_WASH_MB_TIMEOUT_US) {
           ret = OB_SYNC_WASH_MB_TIMEOUT;
-          COMMON_LOG(WARN, "sync wash mb timeout", K(cost), LITERAL_K(SYNC_WASH_MB_TIMEOUT_US));
         }
       }
       ++check_idx;
@@ -909,7 +893,6 @@ int ObKVCacheStore::print_tenant_memblock_info(ObDLink* head)
       } // qclock guard
       if (OB_SUCC(ret)) {
         HazardDomain::get_instance().print_info();
-        _OB_LOG(WARN, "[CACHE-SYNC-WASH] len: %8ld tenant sync wash failed, cache memblock info: \n%s", ctx_pos, buf);
       }
     }
   }
@@ -1062,7 +1045,6 @@ bool ObKVCacheStore::compute_global_wash_size(int64_t &wash_size)
     is_wash_valid = true;
   }
 
-  COMMON_LOG(INFO, "Wash compute global wash size", K(is_wash_valid), K(sys_total_wash_size), K(global_cache_size), K(wash_size));
   return is_wash_valid;
 }
 
@@ -1218,7 +1200,6 @@ void *ObKVCacheStore::alloc_mb(ObTenantResourceMgrHandle &resource_handle,
     COMMON_LOG(WARN, "invalid arguments", K(ret), "handle valid", resource_handle.is_valid(), K(block_size), K_(block_size));
   } else if (NULL == (ptr = resource_handle.get_memory_mgr()->alloc_cache_mb(block_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    COMMON_LOG(WARN, "failed to alloc cache mem block", K(block_size));
   }
   return ptr;
 }

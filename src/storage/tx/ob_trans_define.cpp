@@ -116,7 +116,6 @@ int ObTraceInfo::set_app_trace_info(const ObString &app_trace_info)
   int ret = OB_SUCCESS;
 
   if (len < 0 || len > OB_MAX_TRACE_INFO_BUFFER_SIZE) {
-    TRANS_LOG(WARN, "unexpected trace info str", K(app_trace_info));
     ret = OB_INVALID_ARGUMENT;
   } else if (0 != app_trace_info_.length()) {
     ret = OB_ERR_UNEXPECTED;
@@ -146,7 +145,6 @@ int ObTraceInfo::set_app_trace_id(const ObString &app_trace_id)
   const int64_t len = app_trace_id.length();
 
   if (len < 0 || len > OB_MAX_TRACE_ID_BUFFER_SIZE) {
-    TRANS_LOG(WARN, "unexpected trace id str", K(app_trace_id));
     ret = OB_INVALID_ARGUMENT;
   } else if (0 != app_trace_id_.length()) {
     ret = OB_ERR_UNEXPECTED;
@@ -231,7 +229,6 @@ int ObTransTask::make(const int64_t task_type)
   int ret = OB_SUCCESS;
 
   if (!ObTransRetryTaskType::is_valid(task_type)) {
-    TRANS_LOG(WARN, "invalid argument", K(task_type));
     ret = OB_INVALID_ARGUMENT;
   } else {
     task_type_ = task_type;

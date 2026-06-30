@@ -1014,8 +1014,6 @@ class BigArrayTemp
       } else if (0 == array_size || NULL == allocer) {
         ret = -1;
       } else if (NULL == (array_ = (T *)allocer->alloc(array_size * sizeof(T)))) {
-        HASH_WRITE_LOG(HASH_WARNING, "alloc fail size=%ld array_size=%ld", array_size * sizeof(T),
-                       array_size);
         ret = -1;
       } else {
 #if defined(__APPLE__) || defined(_WIN32)
@@ -1069,7 +1067,6 @@ public:
     if (0 >= total_size || 0 >= array_size) {
       ret = -1;
     } else if (!is_2exp(array_size)) {
-      HASH_WRITE_LOG(HASH_WARNING, "array_size=%ld invalid,  must be 2exp", array_size);
       ret = -1;
     } else {
       if (INT32_MAX == array_size) {
@@ -1080,8 +1077,6 @@ public:
         array_size_ = array_size;
       }
       if (NULL == (blocks_ = (Block *)allocer_.alloc(blocks_num_ * sizeof(Block)))) {
-        HASH_WRITE_LOG(HASH_WARNING, "alloc blocks fail blocks_num=%ld array_size=%ld", blocks_num_,
-                       array_size_);
         ret = -1;
       } else {
         memset(blocks_, 0, blocks_num_ * sizeof(Block));
@@ -1218,7 +1213,6 @@ int do_create(Array &array, const int64_t total_size, const int64_t array_size, 
     ret = OB_ERR_UNEXPECTED;
   } else if (NULL == (array = (Array)alloc.alloc(total_size * item_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    _OB_LOG(WARN, "alloc memory failed,size:%ld", total_size * item_size);
   } else {
 #if defined(__APPLE__) || defined(_WIN32)
     // On macOS/Windows, we must call constructors to initialize complex types like pthread_rwlock_t

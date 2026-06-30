@@ -60,7 +60,6 @@ DEFINE_DESERIALIZE(ObString)
             K(ret), K_(buffer_size), K(str_len), "remain", data_len - pos);
       } else if (NULL == serialization::decode_vstr(buf, data_len, pos, ptr_, buffer_size_, &len)) {
         ret = OB_ERROR;
-        LIB_LOG(WARN, "fail to decode_vstr", K(str_len), K(pos), K(data_len), K(buffer_size_));
       }
     }
     if (OB_SUCC(ret)) {

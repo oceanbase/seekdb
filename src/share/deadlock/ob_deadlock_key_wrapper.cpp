@@ -130,7 +130,6 @@ int UserBinaryKey::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
 
   // roll back path
   if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "serialization failed", PRINT_WRAPPER);
     pos = start_pos;
   } else {
     // do nothing
@@ -208,8 +207,6 @@ int UserBinaryKey::compare(const UserBinaryKey &other) const
         ret = -1;
       } else {
         if (key_binary_code_buffer_length_ > BUFFER_LIMIT_SIZE) {
-          DETECT_LOG(ERROR, "key_binary_code_buffer_length_ over buffer length limit",
-                     K_(key_binary_code_buffer_length), K(BUFFER_LIMIT_SIZE));
         }
         for (uint64_t i = 0; i < key_binary_code_buffer_length_; ++i) {
           if (key_binary_code_buffer_[i] > other.key_binary_code_buffer_[i]) {

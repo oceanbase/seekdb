@@ -43,7 +43,6 @@ int LogRpc::init(const ObAddr &self,
     
     cluster_id_ = cluster_id;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogRpc init success", K(self));
   }
   return ret;
 }
@@ -52,7 +51,6 @@ void LogRpc::destroy()
 {
   if (IS_INIT) {
     is_inited_ = false;
-    PALF_LOG(INFO, "LogRpc destroy success");
   }
 }
 
@@ -62,10 +60,8 @@ int LogRpc::update_transport_compress_options(const PalfTransportCompressOptions
   ObSpinLockGuard guard(opt_lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "LogRpc not inited");
   } else {
     options_ = compress_opt;
-    PALF_LOG(INFO, "update_transport_compress_options success", K(compress_opt));
   }
   return ret;
 }

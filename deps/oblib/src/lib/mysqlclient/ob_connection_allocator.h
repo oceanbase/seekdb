@@ -78,7 +78,6 @@ private:
 template<typename T>
 ObSimpleConnectionAllocator<T>::~ObSimpleConnectionAllocator()
 {
-  _OB_LOG(DEBUG, "free cached conn, size=%ld", cached_objs_.size());
   T *conn = NULL;
   while (OB_SUCCESS == cached_objs_.pop_back(conn)) {
     ObSimpleConnectionAllocator<T>::free(conn);
@@ -183,7 +182,6 @@ private:
     inline int operator()(common::hash::HashMapPair<uint32_t, ObArray<T *>> &entry)
     {
       int ret = OB_SUCCESS;
-      _OB_LOG(DEBUG, "free conns in session, sessid=%u", entry.first);
       T *conn = NULL;
       if (NULL == free_ptr_) {
         _OB_LOG(WARN, "free ptr_ is NULL, ret=%d", ret);
@@ -390,7 +388,6 @@ int ObLruConnectionAllocator<T>::free_session_conn_array(uint32_t sessid, int64_
       for (int64_t i = 0; i < local_array.count() && OB_SUCC(ret); i++) {
         T *conn = local_array.at(i);
         conn->close(); //close immedately
-        _OB_LOG(TRACE, "close connection, conn=%p", conn);
       }
       {
         ObSpinLockGuard guard(ObIConnectionAllocator<T>::lock_);
@@ -430,7 +427,6 @@ int ObLruConnectionAllocator<T>::alloc(T *&conn, uint32_t sessid)
     void *p = ObIConnectionAllocator<T>::pool_.alloc();
     if (NULL == p) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      _OB_LOG(ERROR, "no memory");
     } else {
       conn = new(p) T();
     }

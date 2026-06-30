@@ -66,7 +66,6 @@ int ObTenantDataVersionMgr::get(uint64_t &data_version) const
   } else if (NULL == version) {
     data_version = LAST_BARRIER_DATA_VERSION;
     ret = OB_SUCCESS;
-    COMMON_LOG(WARN, "data_version fallback to LAST_BARRIER_DATA_VERSION", KDV(data_version));
   } else if (version->is_removed()) {
     ret = OB_ENTRY_NOT_EXIST;
   } else {
@@ -152,7 +151,6 @@ int ObTenantDataVersionMgr::load_from_file()
       COMMON_LOG(WARN, "fail to open data_version file", K(ret), K(errno), K(file_path));
     } else {
       // when errno is ENOENT, the file does not exist
-      COMMON_LOG(WARN, "data_version file doesn't exist, skip load");
     }
   } else {
     char *load_buf = NULL;
@@ -231,12 +229,6 @@ int ObTenantDataVersionMgr::set_(const uint64_t data_version)
 
   if (OB_SUCC(ret)) {
     if (OB_NOT_NULL(version) && (version->is_removed() || data_version <= old_version)) {
-      COMMON_LOG(INFO,
-                 "tenant is removed or new data_version is not bigger than old "
-                 "value, no need to update tenant data_version", 
-                 "is_removed", version->is_removed(),
-                 "old_version", old_version,
-                 "new_version", data_version);
     } else if (OB_FAIL(set_and_dump_to_file_(data_version, need_to_insert))) {
     } else {
       if (need_to_insert) {
@@ -383,9 +375,6 @@ int ObTenantDataVersionMgr::load_data_version_(char *buf, int64_t &pos) {
                  K(token), K(version_val), K(version_str),
                  K(removed), K(remove_timestamp));
     } else {
-      COMMON_LOG(INFO, "[DATA_VERSION] successfully parse data_version",
-                 K(version_val), K(version_str), K(removed),
-                 K(remove_timestamp), K(pos));
       void *version_buf = NULL;
       if (OB_ISNULL(version_buf =
                         allocator_.alloc(sizeof(ObTenantDataVersion)))) {

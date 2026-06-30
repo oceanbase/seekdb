@@ -48,7 +48,6 @@ public:
     int ret = OB_SUCCESS;
     if (inited_) {
       ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(WARN, "init twice");
     } else {
       
       alloc_.set_label("ObSmallHashSet");
@@ -90,7 +89,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(!inited_)) {
       ret = OB_NOT_INIT;
-      COMMON_LOG(ERROR, "not inited");
     }
     for (int64_t i = 0; i < batch_size && OB_SUCC(ret); ++i) {
       ret = insert_hash(hashs[i]);
@@ -110,7 +108,6 @@ public:
       buckets_[offset] = hash;
       size_++;
       if (size_ * 2 > capacity_ && OB_FAIL(expand(capacity_))) {
-        COMMON_LOG(WARN, "failed to expand", K(capacity_));
       }
     }
     return ret;
@@ -169,7 +166,6 @@ private:
     void *buf = nullptr;
     if (OB_ISNULL(buf = alloc_.alloc_aligned(sizeof(bucket_t) * new_capacity, CACHE_LINE_SIZE))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "failed to allocate bucket memory", K(new_capacity));
     } else {
       bucket_t *old_buckets = buckets_;
       buckets_= static_cast<bucket_t *>(buf);
@@ -191,7 +187,6 @@ private:
         buckets_[offset] = hash;
       }
     }
-    COMMON_LOG(DEBUG, "expand capacity to ", K(capacity_));
     return ret;
   }
 

@@ -78,7 +78,6 @@ int ObMultipleMultiSkipScanMerge::inner_get_next_row(blocksstable::ObDatumRow &r
         }
       }
     } else {
-      STORAGE_LOG(DEBUG, "get next row", K(row));
       break;
     }
   }

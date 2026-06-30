@@ -351,7 +351,6 @@ public:
 
   void destroy() {
     ObIDiagnoseInfoMgr::destroy();
-    STORAGE_LOG(INFO, "ObScheduleSuspectInfoMgr destroy finish");
   }
   int add_suspect_info(const int64_t key_value, ObScheduleSuspectInfo &info);
 

@@ -563,8 +563,6 @@ int ObMicroBlockEncoder::build_block(char *&buf, int64_t &size)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "fail to alloc fix header buf", K(ret), K(encoders_need_size));
   } else {
-    STORAGE_LOG(DEBUG, "[debug] build micro block", K_(estimate_size), K_(header_size), K_(expand_pct),
-        K(datum_rows_.count()), K(ctx_));
 
     // <1> store encoding metas and fix cols data in encoding_meta_buffer
     int64_t encoding_meta_offset = 0;

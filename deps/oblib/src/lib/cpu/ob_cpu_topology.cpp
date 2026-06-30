@@ -86,7 +86,6 @@ int CpuFlagSet::init_from_os(uint64_t& flags)
     if (system_ret != 0) {
       if (-1 != system_ret && 1 == WEXITSTATUS(system_ret)) {
         // not found
-        COMMON_LOG(WARN, "cpu flag is not found", K(CPU_FLAG_CMDS[i]));
       } else {
         ret = OB_ERR_SYS;
         _LOG_WARN("system(\"%s\") returns %d", CPU_FLAG_CMDS[i], system_ret);

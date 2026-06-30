@@ -846,8 +846,6 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
       if (OB_FAIL(ret) && OB_ITER_END != ret) {
         SQL_RESV_LOG(WARN, "failed to check column visibility", K(ret));
         if (NULL != column_schema) {
-          SQL_RESV_LOG(WARN, "failed column schema", K(*column_schema),
-                                                      K(column_schema->is_hidden()));
         }
       } else {
         ret = OB_SUCCESS;
@@ -1894,18 +1892,6 @@ int ObAlterTableResolver::mock_part_func_node(const ObTableSchema &table_schema,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(parser.parse(sql_str.string(), parse_result))) {
     ret = OB_ERR_PARSE_SQL;
-    _OB_LOG(WARN, "parse: %p, %p, %p, msg=[%s], start_col_=[%d], end_col_[%d], line_[%d], yycolumn[%d], yylineno_[%d], sql[%.*s]",
-            parse_result.yyscan_info_,
-            parse_result.result_tree_,
-            parse_result.malloc_pool_,
-            parse_result.error_msg_,
-            parse_result.start_col_,
-            parse_result.end_col_,
-            parse_result.line_,
-            parse_result.yycolumn_,
-            parse_result.yylineno_,
-            static_cast<int>(sql_str.length()),
-            sql_str.ptr());
   } else if (OB_ISNULL(stmt_node = parse_result.result_tree_) ||
              OB_UNLIKELY(stmt_node->type_ != T_STMT_LIST)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1937,7 +1923,6 @@ int ObAlterTableResolver::generate_index_arg(obcall::ObCreateIndexArg &index_arg
   ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
   if (OB_ISNULL(session_info_) || OB_ISNULL(alter_table_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "session info should not be null", K(session_info_), K(alter_table_stmt));
   } else {
     //add storing column
     for (int32_t i = 0; OB_SUCC(ret) && i < store_column_names_.count(); ++i) {
@@ -5022,7 +5007,6 @@ int ObAlterTableResolver::resolve_column_index(const ObString &column_name)
   void *tmp_ptr = NULL;
   if (OB_ISNULL(allocator_)) {
       ret = OB_NOT_INIT;
-      SQL_RESV_LOG(WARN, "allocator is null");
   } else if (NULL == (tmp_ptr = (ObCreateIndexArg *)allocator_->alloc(sizeof(obcall::ObCreateIndexArg)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
@@ -5385,7 +5369,6 @@ int ObAlterTableResolver::resolve_alter_column_groups(const ParseNode &node)
             SQL_RESV_LOG(WARN, "drop column group in delayed mode is not supported", K(ret));
           } else {
             alter_table_stmt->get_alter_table_arg().is_alter_column_group_delayed_ = true;
-            SQL_RESV_LOG(INFO, "set is_alter_column_group_delayed_ to true");
           } 
         } else {
           ret = OB_ERR_UNEXPECTED;

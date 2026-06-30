@@ -45,7 +45,6 @@ int get_and_init_io_device(const ObString &uri,
   } else if (OB_FAIL(ObDeviceManager::get_instance().get_device(uri, tmp_storage_info, storage_id_mod, io_device))) {
   } else if (OB_FAIL(io_device->start(opts))) {
   } else {
-    CLOG_LOG(TRACE, "get_io_device success", K(uri), KP(io_device));
   }
   return ret;
 }
@@ -68,7 +67,6 @@ int convert_to_storage_access_type(const OPEN_FLAG &open_flag,
     storage_access_type = ObStorageAccessType::OB_STORAGE_ACCESS_DIRECT_MULTIPART_WRITER;
   } else {
     ret = OB_NOT_SUPPORTED;
-    CLOG_LOG(WARN, "not supported flag", K(open_flag));
   }
   return ret;
 }
@@ -90,7 +88,6 @@ int open_io_fd(const ObString &uri,
     // flag=-1 and mode=0 are invalid, because ObObjectDevice does not use flag and mode;
   } else if (OB_FAIL(io_device->open(uri.ptr(), -1, 0, io_fd, &iod_opts))) {
   } else {
-    CLOG_LOG(TRACE, "open fd success", K(uri), K(open_flag));
   }
   return ret;
 }
@@ -101,10 +98,8 @@ int close_io_fd(ObIODevice *io_device,
   int ret = OB_SUCCESS;
   if (NULL == io_device || !io_fd.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "io device is empty");
   } else if (OB_FAIL(io_device->close(io_fd))) {
   } else {
-    CLOG_LOG(TRACE, "close_io_fd success", KP(io_device), K(io_fd));
   }
   return ret;
 }
@@ -208,7 +203,6 @@ int ObLogExternalStorageCtx::wait(int64_t &out_size)
       } else if (OB_TMP_FAIL(item->io_handle_.wait())) {
       } else {
         out_size += item->io_handle_.get_data_size();
-        CLOG_LOG(TRACE, "wait success", K(i), K(out_size), KPC(item));
       }
       if (OB_SUCCESS != tmp_ret && OB_SUCCESS == ret) {
         ret = tmp_ret;
@@ -319,7 +313,6 @@ int ObLogExternalStorageHandleAdapter::get_file_size(const ObString &uri,
   } else if (OB_FAIL(io_device->adaptive_stat(uri.ptr(), file_stat))) {
   } else {
     file_size = file_stat.size_;
-    CLOG_LOG(TRACE, "get_file_size success", K(uri), KP(io_device), K(file_size));
   }
   release_io_device(io_device);
   return ret;
@@ -340,7 +333,6 @@ int ObLogExternalStorageHandleAdapter::async_pread(const int64_t offset,
                                             offset, read_buf_size, io_ctx.io_handle_, common::ObIOModule::CLOG_READ_IO))) {
   } else if (FALSE_IT(time_guard.click("after async_pread"))) {
   } else {
-    CLOG_LOG(TRACE, "pread success", K(time_guard), K(io_ctx), K(offset), K(read_buf_size), KP(buf));
   }
   return ret;
 }

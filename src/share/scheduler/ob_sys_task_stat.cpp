@@ -161,7 +161,6 @@ int ObSysTaskStatMgr::add_task(ObSysTaskStat &task)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(task_array_.push_back(task))) {
     } else {
-      SERVER_LOG(INFO, "succeed to add sys task", K(task));
     }
   }
 
@@ -189,7 +188,6 @@ int ObSysTaskStatMgr::del_task(const ObTaskId &task_id)
         ObSysTaskStat removed_task = task_array_.at(status_idx);
         if (OB_FAIL(task_array_.remove(status_idx))) {
         } else {
-          SERVER_LOG(INFO, "succeed to del sys task", K(removed_task));
         }
       } else {
         ret = OB_ENTRY_NOT_EXIST;
@@ -247,7 +245,6 @@ int ObSysTaskStatMgr::cancel_task(const ObTaskId &task_id)
       if (task_id.equals(task_array_.at(i).task_id_)) {
         found_task = true;
         task_array_.at(i).is_cancel_ = true;
-        SERVER_LOG(INFO, "cancel task", "task", task_array_.at(i), K(i));
       }
     }
 

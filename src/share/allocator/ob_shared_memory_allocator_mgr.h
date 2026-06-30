@@ -57,7 +57,6 @@ public:
     } else {
       
       share_resource_throttle_tool_.enable_adaptive_limit<FakeAllocatorForTxShare>();
-      SHARE_LOG(INFO, "finish init mtl share mem allocator mgr", KP(this));
     }
     return ret;
   }
@@ -124,13 +123,6 @@ public:
       } else if ((expected_wait_time =
                       throttle_tool.expected_wait_time<ALLOCATOR>(share_ti_guard, module_ti_guard)) <= 0) {
         if (expected_wait_time < 0) {
-          SHARE_LOG(ERROR,
-                    "expected wait time should not smaller than 0",
-                    K(expected_wait_time),
-                    KPC(share_ti_guard.throttle_info()),
-                    KPC(module_ti_guard.throttle_info()),
-                    K(clock),
-                    K(left_interval));
         }
         break;
       }

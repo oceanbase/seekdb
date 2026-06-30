@@ -227,7 +227,6 @@ int ObInfoSchemaTablePrivilegesTable::fill_row_with_table_priv(
                   break;
                 }
               default: {
-                  SERVER_LOG(WARN, "Unsupported column in TABLE_PRIVILEGES", K(column_id));
                   break;
                 }
               }

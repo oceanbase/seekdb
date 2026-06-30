@@ -122,7 +122,6 @@ OB_INLINE static int simple_fuse_row(
         ret = common::OB_INVALID_ARGUMENT;
         STORAGE_LOG(WARN, "Invalid arguments", K(ret), K(former), K(result), K(nop_pos.count()));
       } else {
-        STORAGE_LOG(DEBUG, "start to fuse", K(former), K(result), K(nop_pos.count()));
         int64_t idx = -1;
         int64_t left_cnt = 0;
         bool is_former_nop = true;
@@ -218,7 +217,6 @@ int ObRowFuse::fuse_row(const blocksstable::ObDatumRow &former,
         ret = common::OB_INVALID_ARGUMENT;
         STORAGE_LOG(WARN, "Invalid arguments", K(ret), K(former), K(result), K(nop_pos.count()));
       } else {
-        STORAGE_LOG(DEBUG, "start to fuse", K(former), K(result), K(nop_pos.count()));
         int64_t idx = -1;
         int64_t left_cnt = 0;
         bool is_former_nop = true;

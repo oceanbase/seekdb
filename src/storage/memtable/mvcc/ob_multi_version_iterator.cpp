@@ -147,7 +147,6 @@ int ObMultiVersionValueIterator::get_next_uncommitted_node(
       } else if (version_iter_->scn_ > merge_scn_) {
         // skip tx node which not log succ
         if (REACH_TIME_INTERVAL(100_ms)) {
-          TRANS_LOG(INFO, "skip txn-node log sync failed", KPC(version_iter_), K(merge_scn_));
         }
         version_iter_ = version_iter_->prev_;
       } else {
@@ -535,7 +534,6 @@ int ObMultiVersionRowIterator::get_next_row(
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   }
 
@@ -547,10 +545,8 @@ int ObMultiVersionRowIterator::get_next_row(
         TRANS_LOG(WARN, "query engine iter next fail", K(ret), "ctx", *ctx_);
       }
     } else if (NULL == (tmp_key = query_engine_iter_->get_key())) {
-      TRANS_LOG(ERROR, "unexpected key null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
     } else if (NULL == (value = query_engine_iter_->get_value())) {
-      TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(try_cleanout_mvcc_row_(value))) {
     } else if (OB_FAIL(value_iter_.init(ctx_,

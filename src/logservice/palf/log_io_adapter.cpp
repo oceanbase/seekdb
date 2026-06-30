@@ -57,7 +57,6 @@ int LogIODeviceWrapper::init(const char *clog_dir,
     } else {
       device_manager_ = device_manager;
       is_inited_ = true;
-      PALF_LOG(INFO, "log_local_device_ init successfully", KP_(log_local_device));
     }
 
     if (OB_FAIL(ret) && OB_NOT_NULL(log_local_device_)) {
@@ -78,7 +77,6 @@ void LogIODeviceWrapper::destroy()
     }
     device_manager_ = NULL;
     is_inited_ = false;
-    PALF_LOG(INFO, "LogIODeviceWrapper destory");
   }
 }
 
@@ -131,7 +129,6 @@ int LogIOAdapter::open(const char *block_path,
   } else if (OB_FAIL(log_local_device_->open(block_path, flags, mode, io_fd))) {
   } else {
     io_fd.device_handle_ = log_local_device_;
-    PALF_LOG(TRACE, "open file sucessfully", K(block_path), K(flags), K(mode), K(io_fd));
   }
 
   return ret;
@@ -151,7 +148,6 @@ int LogIOAdapter::close(ObIOFd &io_fd)
     PALF_LOG(WARN, " the block has been closed", K(ret), K(io_fd));
   } else if (OB_FAIL(log_local_device_->close(io_fd))) {
   } else {
-    PALF_LOG(TRACE, "close block successfully", K(io_fd));
     io_fd.reset();
   }
 
@@ -173,7 +169,6 @@ int LogIOAdapter::pwrite(const ObIOFd &io_fd,
     PALF_LOG(WARN, "LogIOAdapter is not inited", K(ret));
   } else if (!io_fd.is_valid() || OB_ISNULL(buf) || 0 >= count || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(io_fd), KP(buf), K(count), K(offset));
   } else {
     CONSUMER_GROUP_FUNC_GUARD(share::ObFunctionType::PRIO_CLOG_HIGH);
 
@@ -194,7 +189,6 @@ int LogIOAdapter::pwrite(const ObIOFd &io_fd,
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "partital write", K(ret), K(io_info), K(write_size));
     } else {
-      PALF_LOG(TRACE, "pwrite by io_manager_ successfully", K(io_info), K(write_size));
     }
   }
   return ret;
@@ -216,7 +210,6 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
     PALF_LOG(WARN, "LogIOAdapter is not inited", K(ret));
   } else if (!io_fd.is_valid() || OB_ISNULL(buf) || 0 > count || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(io_fd), KP(buf), K(count), K(offset));
   } else {
     CONSUMER_GROUP_FUNC_GUARD(io_ctx.get_function_type());
     
@@ -239,7 +232,6 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
       PALF_LOG(WARN, "the read size is not as same as read count, maybe concurrently with truncate",
                K(ret), K(io_info), K(out_read_size));
     } else {
-      PALF_LOG(TRACE, "pread by io_manager_ successfully", K(io_info), K(out_read_size));
     }
   }
 
@@ -259,12 +251,10 @@ int LogIOAdapter::pread(const ObIOFd &io_fd,
     PALF_LOG(WARN, "LogIOAdapter is not inited", K(ret));
   } else if (!io_fd.is_valid() || OB_ISNULL(buf) || 0 > count || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(io_fd), KP(buf), K(count), K(offset));
   } else if (count != (out_read_size = ob_pread(io_fd.second_id_, buf, count, offset))) {
     ret = convert_sys_errno();
     PALF_LOG(WARN, "ob_pread failed", K(ret), K(errno), K(offset), K(count), K(out_read_size), K(io_fd));
   } else {
-    PALF_LOG(TRACE, "obpread successfully", K(offset), K(count), K(out_read_size), K(io_fd));
   }
   return ret;
 }                                          
@@ -274,7 +264,6 @@ int LogIOAdapter::truncate(const ObIOFd &io_fd, const int64_t offset)
   int ret = OB_SUCCESS;
   if (!io_fd.is_valid() || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(io_fd), K(offset));
 #ifdef _WIN32
   } else if (0 != ob_ftruncate(io_fd.second_id_, offset)) {
 #else

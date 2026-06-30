@@ -112,7 +112,6 @@ public:
     int ret = malloc_info_.create(512, attr, attr);
     if (OB_FAIL(ret)) {
     } else {
-      _OB_LOG(INFO, "leak checker init succ");
     }
     return ret;
   }
@@ -129,7 +128,6 @@ public:
     CheckType tmp_ct = NOCHECK;
     DEFER(ct_ = tmp_ct);
 
-    _OB_LOG(INFO, "leak mod to check: %s", str);
     if (nullptr == str || 0 == STRLEN(str) || 0 == STRNCMP(str, "NONE", STRLEN("NONE"))) {
       origin_str_[0] = '\0';
       tmp_ct = NOCHECK;
@@ -164,7 +162,6 @@ public:
 
   void set_rate(int64_t rate)
   {
-    _OB_LOG(INFO, "leak rate, current: %ld, new: %ld", rl_.rate(), rate);
     rl_.set_rate(rate);
   }
 
@@ -221,21 +218,18 @@ public:
         //_OB_LOG(INFO, "hash value, bt=%s, hash=%lu", it->second.bt_, it->second.hash());
         ret = info_map->get_refactored(node_it->second, item);
         if (OB_FAIL(ret) && OB_HASH_NOT_EXIST != ret) {
-          _OB_LOG(INFO, "LEAK_CHECKER, ptr=%p bt=%s", node_it->first.ptr_, node_it->second.bt_);
         } else {
           if (OB_SUCC(ret)) {
             item.first += 1;
             item.second += node_it->second.bytes_;
             if (OB_FAIL(info_map->set_refactored(node_it->second, item, 1, 0, 1))) {
             } else {
-              _OB_LOG(DEBUG, "LEAK_CHECKER hash updated");
             }
           } else {
             item.first = 1;
             item.second = node_it->second.bytes_;
             if (OB_FAIL(info_map->set_refactored(node_it->second, item, 1, 0, 0))) {
             } else {
-              _OB_LOG(DEBUG, "LEAK_CHECKER hash inserted");
             }
           }
         }
@@ -252,15 +246,11 @@ public:
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(load_leak_info_map(tmp_map))) {
     } else {
-      _OB_LOG(INFO, "######## LEAK_CHECKER (str = %s)########", origin_str_);
 
       mod_info_map_t::hashmap::const_iterator jt = tmp_map->begin();
       for (; jt != tmp_map->end(); ++jt)
       {
-        _OB_LOG(INFO, "[LC] bt=%s, count=%ld, bytes=%ld",
-                jt->first.bt_, jt->second.first, jt->second.second);
       }
-      _OB_LOG(INFO, "######## LEAK_CHECKER (END) ########");
     }
   }
   bool label_match(lib::AObject &obj)

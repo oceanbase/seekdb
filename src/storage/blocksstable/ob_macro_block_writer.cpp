@@ -316,7 +316,6 @@ int ObMicroBlockAdaptiveSplitter::update_compression_info(const int64_t micro_ro
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(micro_row_count <= 0 || original_size < 0 || compressed_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid compression info argument", K(micro_row_count), K(original_size), K(compressed_size));
   } else {
     compression_infos_[0].update(original_size, compressed_size);
     if (micro_row_count <= DEFAULT_MICRO_ROW_COUNT) {
@@ -943,7 +942,6 @@ int ObMacroBlockWriter::append_row(const ObDatumRow &row, const int64_t split_si
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid split_size", K(ret), K(split_size));
   } else if (!data_store_desc_->is_cg() && OB_FAIL(check_order(row))) {
-    STORAGE_LOG(WARN, "macro block writer fail to check order", K(row), KPC(data_store_desc_));
   }
 
   if (OB_SUCC(ret)) {
@@ -1007,7 +1005,6 @@ int ObMacroBlockWriter::append_micro_block(const ObMicroBlock &micro_block, cons
   bool need_merge = false;
   ObMicroIndexData micro_index_data(*micro_block.micro_index_info_);
 
-  STORAGE_LOG(DEBUG, "append micro_block", K(micro_block));
   if (NULL == data_store_desc_) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "The ObMacroBlockWriter has not been opened", K(ret));
@@ -1048,7 +1045,6 @@ int ObMacroBlockWriter::append_micro_block(const ObMicroBlock &micro_block, cons
     // `append_row`, and `append_row` will automatically insert row into bloom filter.
     if (OB_FAIL(merge_micro_block(micro_block))) {
     } else {
-      STORAGE_LOG(TRACE, "merge micro block", K(micro_block));
     }
   }
 
@@ -1524,7 +1520,6 @@ int ObMacroBlockWriter::build_micro_block_desc(
     }
   } else if (OB_FAIL(build_micro_block_desc_with_rewrite(micro_block, micro_block_desc, header_for_rewrite))) {
   }
-  STORAGE_LOG(DEBUG, "build micro block desc", K(micro_block), K(micro_block_desc));
   return ret;
 }
 
@@ -1819,8 +1814,6 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
     if (FAILEDx(macro_block.get_pre_warm_list_count() != micro_block_idx || 
         macro_block.get_micro_block_count() != micro_block_idx)) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "micro block count not equal.", K(macro_block.get_pre_warm_list_count()),
-                                                        K(macro_block.get_micro_block_count()), K(micro_block_idx));
     } else if (need_clustered_micro_blocks && OB_FAIL(builder_->write_clustered_index_micro_block())) {
       STORAGE_LOG(WARN, "fail to write clustered index micro block", K(ret));
     }
@@ -2208,10 +2201,8 @@ int ObMacroBlockWriter::alloc_block()
   }
   if (macro_handle.get_macro_id().is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "block maybe wrong, should never valid macro id.", K(macro_handle));
   } else if (OB_UNLIKELY(macro_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(INFO, "block maybe wrong", K(macro_handle));
   } else if (OB_NOT_NULL(device_handle_)) {
     if (OB_FAIL(alloc_block_from_device(macro_handle))) {
     }
@@ -2285,8 +2276,6 @@ int ObMacroBlockWriter::check_micro_block_need_merge(
         need_merge = false;
       }
     }
-    STORAGE_LOG(DEBUG, "check micro block need merge", K(micro_writer_->get_row_count()), K(micro_block.data_.get_buf_size()),
-        K(micro_writer_->get_block_size()), K(data_store_desc_->get_micro_block_size()), K(need_merge));
   }
   return ret;
 }
@@ -2368,7 +2357,6 @@ int ObMacroBlockWriter::save_last_key(const ObDatumRowkey &last_key)
     last_key_.set_min_rowkey(); // used to protect cg sstable
   } else if (OB_FAIL(last_key.deep_copy(last_key_, rowkey_allocator_))) {
   } else {
-    STORAGE_LOG(DEBUG, "save last key", K(last_key_));
   }
   return ret;
 }

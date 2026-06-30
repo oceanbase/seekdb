@@ -43,7 +43,6 @@ int ObTransIDService::handle_request(const ObGtiRequest &request, obcall::ObGtiR
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(request));
   } else {
-    TRANS_LOG(DEBUG, "handle gti request", K(request));
     
     const int64_t range = request.get_range();
     int64_t start_id = 0;

@@ -170,7 +170,6 @@ int ObTableAccessContext::build_lob_locator_helper(ObTableScanParam &scan_param,
       K(ret), KPC(scan_param.table_param_), K(scan_param.ls_id_), K(trans_version_range));
     reset_lob_locator_helper();
   } else {
-    STORAGE_LOG(DEBUG, "succ to init lob locator helper", KPC(lob_locator_helper_));
   }
 
   return ret;
@@ -197,7 +196,6 @@ int ObTableAccessContext::build_lob_locator_helper(const ObStoreCtx &ctx,
     STORAGE_LOG(WARN, "Failed to init lob locator helper limit", K(ret), K(ls_id_), K(trans_version_range));
     reset_lob_locator_helper();
   } else {
-    STORAGE_LOG(DEBUG, "succ to init lob locator helper", KPC(lob_locator_helper_));
   }
 
   return ret;

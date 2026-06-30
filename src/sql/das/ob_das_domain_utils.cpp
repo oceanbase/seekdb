@@ -1282,7 +1282,6 @@ int ObFTDMLIterator::get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store
                                                           ft_meta.has_lob_header(),
                                                           ft))) {
     } else {
-      STORAGE_FTS_LOG(DEBUG, "succeed to get fulltext and doc id", K(doc_id_datum), K(ft_meta), K(ft));
     }
   }
   return ret;
@@ -1316,7 +1315,6 @@ int ObFTDMLIterator::get_ft_and_doc_id_for_update(const ObChunkDatumStore::Store
                                                                  true /* has lob header */,
                                                                  ft))) {
     } else {
-      STORAGE_FTS_LOG(DEBUG, "succeed to get fulltext and doc id", K(doc_id_datum), K(ft_meta), K(ft));
     }
   }
   return ret;

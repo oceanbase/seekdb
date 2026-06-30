@@ -97,11 +97,8 @@ int check_stack_overflow(bool &is_overflow,
       if (used_size != nullptr) {
         *used_size = cur_stack_used;
       }
-      COMMON_LOG(DEBUG, "stack info ", K(cur_stack_used), K(stack_size), K(reserved_size));
       if (OB_UNLIKELY(cur_stack_used > (static_cast<int64_t>(stack_size) - reserved_size))) {
         is_overflow = true;
-        COMMON_LOG(WARN, "stack possible overflow", KP(cur_stack), KP(stack_eof),
-            KP(stack_start), K(stack_size), K(reserved_size), K(cur_stack_used), KCSTRING(lbt()));
       }
     }
   }

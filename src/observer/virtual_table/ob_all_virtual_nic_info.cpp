@@ -53,7 +53,6 @@ int ObAllVirtualNicInfo::inner_open()
     common::ObArenaAllocator tmp_allocator(lib::ObLabel("NicInfo"));
     if (OB_UNLIKELY(false == svr_addr.ip_to_string(svr_ip_, sizeof(svr_ip_)))) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ip to string failed");
     } else if (OB_FAIL(GCONF.devname.deep_copy_value_string(tmp_allocator, tmp_devname))) {
     } else if (sizeof(devname_) < tmp_devname.length() + 1) {
       ret = OB_SIZE_OVERFLOW;

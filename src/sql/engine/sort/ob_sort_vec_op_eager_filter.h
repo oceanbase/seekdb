@@ -72,8 +72,6 @@ public:
         }
       } else {
         is_by_pass_ = true;
-        SQL_ENG_LOG(INFO, "no need to use filter ", K(dumped_rows_cnt),
-                    K(topn_cnt));
       }
       is_inited_ = true;
     }

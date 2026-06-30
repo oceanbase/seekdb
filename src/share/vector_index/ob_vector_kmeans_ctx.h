@@ -388,9 +388,7 @@ public:
         ObIAllocator *allocator = helper_->get_allocator();
         if (OB_ISNULL(allocator)) {
           const int ret = OB_ERR_UNEXPECTED;
-          OB_LOG(WARN, "null allocator", KPC(helper_));
         } else {
-          OB_LOG(INFO, "build helper released", KPC(helper_), K(lbt()));
           helper_->~ObIvfBuildHelper(); // TODO: different type
           allocator->free(helper_);
         }
@@ -406,7 +404,6 @@ public:
     int ret = OB_SUCCESS;
     if (is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "vector index build helper guard can only set once", KPC(helper_), KPC(helper));
     } else {
       helper_ = helper;
       (void)helper_->inc_ref();

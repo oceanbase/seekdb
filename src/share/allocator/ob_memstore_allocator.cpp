@@ -89,13 +89,11 @@ void ObMemstoreAllocator::init_handle(AllocHandle& handle)
     hlist_.init_handle(handle);
     arena_.update_nway_per_group(nway);
   }
-  COMMON_LOG(TRACE, "MTALLOC.init", KP(&handle.mt_));
 }
 
 void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 {
   ObTimeGuard time_guard("ObMemstoreAllocator::destroy_handle", 100 * 1000);
-  COMMON_LOG(TRACE, "MTALLOC.destroy", KP(&handle.mt_));
   arena_.free(handle.arena_handle_);
   time_guard.click();
   {
@@ -119,7 +117,6 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 
   bool is_out_of_mem = false;
   if (!handle.is_id_valid()) {
-    COMMON_LOG(TRACE, "MTALLOC.first_alloc", KP(&handle.mt_));
     LockGuard guard(lock_);
     if (handle.is_frozen()) {
       ret = OB_EAGAIN;
@@ -144,7 +141,6 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
   void *res = nullptr;
   if (OB_FAIL(ret) || is_out_of_mem) {
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      STORAGE_LOG(WARN, "this tenant is already out of memstore limit or some thing wrong.", K(1UL));
     }
     res = nullptr;
   } else {
@@ -161,7 +157,6 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 
 void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 {
-  COMMON_LOG(TRACE, "MTALLOC.set_frozen", KP(&handle.mt_));
   LockGuard guard(lock_);
   hlist_.set_frozen(handle);
 }

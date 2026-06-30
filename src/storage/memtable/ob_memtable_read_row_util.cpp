@@ -49,7 +49,6 @@ int ObReadRow::iterate_row(
     if (!bitmap.is_empty()) {
       bitmap.set_nop_datums(row.storage_datums_);
     }
-    TRANS_LOG(DEBUG, "Success to iterate memtable row", K(key), K(row), K(bitmap.get_nop_cnt()));
     // do nothing
   }
   return ret;
@@ -125,7 +124,6 @@ int ObReadRow::fill_in_row_with_tx_node_(const storage::ObITableReadInfo &read_i
     if (row.snapshot_version_ == INT64_MAX) {
       row.set_have_uncommited_row();
     }
-    TRANS_LOG(DEBUG, "row snapshot version", K(row.snapshot_version_));
 
     if (OB_FAIL(
             reader.read_memtable_row(mtd->buf_, mtd->buf_len_, read_info, row, bitmap, read_finished, row_header))) {
@@ -136,13 +134,10 @@ int ObReadRow::fill_in_row_with_tx_node_(const storage::ObITableReadInfo &read_i
       row_scn = row_version.get_val_for_tx();
       if (!row.is_have_uncommited_row() && !value_iter.get_mvcc_acc_ctx()->is_standby_read_ &&
           !(snapshot_tx_id == tx_node->get_tx_id() || reader_tx_id == tx_node->get_tx_id()) && row_version.is_max()) {
-        TRANS_LOG(
-            ERROR, "meet row scn with undecided value", KPC(tx_node), K(is_committed), K(trans_version), K(value_iter));
       }
     }
     if (OB_SUCC(ret) && ObDmlFlag::DF_INSERT == mtd->dml_flag_) {
       read_finished = true;
-      STORAGE_LOG(DEBUG, "chaser debug iter memtable row", KPC(mtd), K(read_finished));
     }
   }
   return ret;
@@ -249,7 +244,6 @@ int ObReadRow::iterate_delete_insert_row(const ObITableReadInfo &read_info,
           latest_row.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
         }
       }
-      STORAGE_LOG(DEBUG, "Delete-Insert", K(latest_row), K(earliest_row), K(latest_row_scn));
     }
   }
   return ret;
@@ -279,7 +273,6 @@ int ObReadRow::acquire_delete_insert_tx_node_(ObMvccValueIterator &value_iter,
       const int64_t trans_version = tx_node->trans_version_.get_val_for_tx();
       if (trans_version <= value_iter.get_major_snapshot()) {
         // fold multi-version rows less than major snapshot
-        TRANS_LOG(DEBUG, "fold rows by major snapshot", K(value_iter.get_major_snapshot()), KPC(tx_node));
         break;
       } else {
         // Use two tx_node pointer to record the tx_node range need to be fused

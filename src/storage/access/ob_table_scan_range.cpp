@@ -120,7 +120,6 @@ int ObTableScanRange::init(ObTableScanParam &scan_param, const ObTablet &tablet,
 
     if (OB_SUCC(ret)) {
       is_inited_ = true;
-      STORAGE_LOG(DEBUG, "Succ to init table scan range", K(*this), K(scan_param));
     }
   }
 
@@ -176,7 +175,6 @@ int ObTableScanRange::init(
     status_ = ranges_.empty() ? EMPTY : SCAN;
     enable_new_false_range_ = scan_param.enable_new_false_range_;
     is_inited_ = true;
-    STORAGE_LOG(DEBUG, "Succ to init table scan range", K(*this), K(simple_batch));
   }
 
   return ret;
@@ -400,7 +398,6 @@ int ObTableScanRange::init_ranges_in_skip_scan(const ObTablet &tablet,
     if (OB_SUCC(ret) && EMPTY != status_) {
       for (int64_t i = 0; OB_SUCC(ret) && i < wrapped_ranges_.count(); i++) {
         const ObSkipScanWrappedRange &wrapped_range = wrapped_ranges_.at(i);
-        STORAGE_LOG(DEBUG, "skip scan range", K(wrapped_range));
         if (OB_FAIL(ranges_.push_back(wrapped_range.datum_range_))) {
         } else if (OB_FAIL(skip_scan_ranges_.push_back(wrapped_range.datum_skip_range_))) {
         }
@@ -415,7 +412,6 @@ int ObTableScanRange::get_query_iter_type(ObQRIterType &iter_type) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "not inited");
   } else {
     iter_type = T_INVALID_ITER_TYPE;
     if (is_get()) {

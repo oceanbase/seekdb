@@ -168,7 +168,6 @@ int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_
       SERVER_LOG(ERROR, "get ls failed from ls handle", KR(ret), K(ls_handle));
     } else if (OB_FAIL(ls->generate_virtual_tx_data_row(tx_id_, tx_data_row))) {
     } else {
-      SERVER_LOG(DEBUG, "generate tx data row succeed", KPC(ls), K(tx_data_row));
     }
   }
 

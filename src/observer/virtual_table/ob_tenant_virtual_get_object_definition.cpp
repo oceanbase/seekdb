@@ -360,14 +360,12 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
       int64_t pos = 0;
       if (is_unique_cst && OB_FAIL(schema_printer.print_unique_cst_definition(*database_schema,
           *table_schema, *unique_index_table_schema, cons_def_buf, cons_def_buf_size, pos))) {
-        SERVER_LOG(WARN, "Generate unique constraint definition failed");
       } else if (!is_unique_cst && OB_FAIL(schema_printer.print_constraint_definition(*database_schema,
                                                               *table_schema,
                                                               constraint_id,
                                                               cons_def_buf,
                                                               cons_def_buf_size,
                                                               pos))) {
-        SERVER_LOG(WARN, "Generate constraint definition failed");
       } else {
         ddl_str.assign(cons_def_buf, pos);
       }

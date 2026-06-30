@@ -97,8 +97,6 @@ OB_INLINE int ObStringPrefixDecoder::init(
     meta += column_header.offset_;
     meta_header_ = reinterpret_cast<const ObStringPrefixMetaHeader *>(meta);
     meta_data_ = meta + sizeof(ObStringPrefixMetaHeader);
-    STORAGE_LOG(DEBUG, "debug", K(meta_header_->is_hex_packing()),
-        K(meta_header_->hex_char_array_size_));
     meta_data_ += meta_header_->is_hex_packing() ? meta_header_->hex_char_array_size_ : 0;
   }
   return ret;

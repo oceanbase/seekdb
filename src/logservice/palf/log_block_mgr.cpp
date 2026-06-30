@@ -105,12 +105,10 @@ void LogBlockMgr::reset(const block_id_t init_block_id)
   max_block_id_ = init_block_id;
   curr_writable_handler_.close();
   curr_writable_block_id_ = LOG_INVALID_BLOCK_ID;
-  PALF_LOG(INFO, "LogBlockMgr reset success", K(init_block_id), K(min_block_id_), K(max_block_id_));
 }
 
 void LogBlockMgr::destroy()
 {
-  PALF_LOG(INFO, "destroy LogBlockMgr success");
   is_inited_ = false;
   align_size_ = -1;
   align_buf_size_ = -1;
@@ -149,7 +147,6 @@ int LogBlockMgr::switch_next_block(const block_id_t next_block_id)
     ObSpinLockGuard guard(block_id_cache_lock_);
     // NB: just only set 'max_block_id_' is continous with 'prev_block_id'.
     max_block_id_ = next_block_id + 1;
-    PALF_LOG(INFO, "switch_next_block success", KPC(this));
   }
   return ret;
 }
@@ -271,7 +268,6 @@ int LogBlockMgr::load_block_handler(const block_id_t block_id, const offset_t of
   } else if (OB_FAIL(curr_writable_handler_.load_data(offset))) {
   } else {
     curr_writable_block_id_ = block_id;
-    PALF_LOG(INFO, "load_block_handler success", K(block_id), K(offset));
   }
   return ret;
 }
@@ -374,7 +370,6 @@ int LogBlockMgr::check_after_truncate_(const char *block_path, const offset_t of
   
   do {
     if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
-      PALF_LOG(ERROR, "open by io_adapter failed", KPC(this), K(block_path));
       ob_usleep(RETRY_INTERVAL);
     } else {
       ret = OB_SUCCESS;
@@ -385,26 +380,20 @@ int LogBlockMgr::check_after_truncate_(const char *block_path, const offset_t of
   } else if (NULL == (expected_data = \
       reinterpret_cast<char*>(ob_malloc(buf_len, "LogBlockMgr")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(ERROR, "malloc failed", KPC(this));
   } else if (FALSE_IT(memset(expected_data, 0, buf_len))) {
   } else if (NULL == (buf = \
       reinterpret_cast<char*>(ob_malloc_align(LOG_DIO_ALIGN_SIZE, buf_len, "LogBlockMgr")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(ERROR, "malloc failed", KPC(this));
   } else if (OB_FAIL(io_adapter_->pread(io_fd, in_read_size, read_offset, buf, out_read_size))) {
   } else if (0 != MEMCMP(buf+backoff, expected_data, in_read_size-backoff)) {
     ret = OB_ERR_UNEXPECTED;
     while (OB_FAIL(ret)) {
-      PALF_LOG(ERROR, "after truncate, data is not zero", KPC(this), K(io_fd), K(offset),
-          KP(buf), KP(expected_data), K(in_read_size), K(backoff));
       ob_usleep(1000*1000);
     }
   } else {
-    PALF_LOG(INFO, "check_after_truncate_ success", KPC(this), K(block_path), K(offset));
   }
   
   if (!io_fd.is_valid() && OB_FAIL(io_adapter_->close(io_fd))) {
-    PALF_LOG(ERROR, "io_adapter close failed", KPC(this), K(block_path));
   }
   if (NULL != buf) {
     ob_free_align(buf);
@@ -500,11 +489,9 @@ int LogBlockMgr::try_recovery_last_block_(const char *log_dir,
   block_id_t block_id = max_block_id_ - 1;
   int fd = -1;
   if (true == empty_()) {
-    PALF_LOG(INFO, "dir is empty, no need to recovery last block");
   } else if (OB_FAIL(convert_to_normal_block(log_dir, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
   } else if (OB_FAIL(FileDirectoryUtils::get_file_size(block_path, file_size))) {
   } else if (file_size == log_block_size) {
-    PALF_LOG(INFO, "last block no need to recovery", K(block_id));
 #ifdef _WIN32
   } else if (-1 == ob_win_truncate(block_path, log_block_size)) {
 #else
@@ -513,7 +500,6 @@ int LogBlockMgr::try_recovery_last_block_(const char *log_dir,
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "ftruncate failed", K(ret), KPC(this), K(file_size));
   } else {
-    PALF_LOG(INFO, "try_recovery_last_block_ success", "origin_size", file_size);
   }
   if (-1 != fd) {
     ::close(fd);

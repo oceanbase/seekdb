@@ -271,7 +271,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   VecValueTypeClass out_tc = get_vec_value_tc(out_meta.type_, out_meta.scale_, out_meta.precision_);
   if (out_tc != VEC_TC_ROARINGBITMAP) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    SQL_LOG(WARN, "invalid output type", K(in_tc), K(in_meta), K(out_tc));
   } else if (func_type == T_FUN_SYS_RB_BUILD_AGG) {
     switch (in_tc) {
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_BUILD_AGG, VEC_TC_NULL)
@@ -279,7 +278,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_BUILD_AGG, VEC_TC_UINTEGER)
       default: {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        SQL_LOG(WARN, "invalid input type", K(in_tc), K(in_meta));
       }
     }
   } else if (func_type == T_FUN_SYS_RB_AND_AGG) {
@@ -289,7 +287,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_AND_AGG, VEC_TC_ROARINGBITMAP)
       default: {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        SQL_LOG(WARN, "invalid input type", K(in_tc), K(in_meta));
       }
     }
   } else if (func_type == T_FUN_SYS_RB_OR_AGG) {
@@ -299,7 +296,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_OR_AGG, VEC_TC_ROARINGBITMAP)
       default: {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        SQL_LOG(WARN, "invalid input type", K(in_tc), K(in_meta));
       }
     }
   } else {

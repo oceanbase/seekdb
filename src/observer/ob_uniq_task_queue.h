@@ -228,7 +228,6 @@ int ObUniqTaskQueue<Task, Process>::init_only(Process *updater, const int64_t th
     SERVER_LOG(WARN, "init twice", K(ret));
   } else if (thread_num <= 0 || queue_size <= 0 || OB_ISNULL(updater)) {
     ret = common::OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(thread_num), K(queue_size), K(updater));
   } else if (OB_FAIL(cond_.init(common::ObWaitEventIds::PARTITION_TABLE_UPDATER_COND_WAIT))) {
   } else if (OB_FAIL(task_set_.create(queue_size, attr, attr))) {
   } else if (OB_FAIL(group_map_.create(group_count,
@@ -373,7 +372,6 @@ int ObUniqTaskQueue<Task, Process>::add(const Task &task)
 template <typename Task, typename Process>
 void ObUniqTaskQueue<Task, Process>::run1()
 {
-  SERVER_LOG(INFO, "UniqTaskQueue thread start");
   int ret = common::OB_SUCCESS;
   Group *group = NULL;
   const int64_t batch_exec_cnt = common::UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM;
@@ -458,7 +456,6 @@ void ObUniqTaskQueue<Task, Process>::run1()
             SERVER_LOG(WARN, "get invalid task", K(ret), K(task));
           } else if (task->is_barrier()) {
             if (is_batch_execute) {
-              SERVER_LOG(ERROR, "barrier task should not execute with non-barrier task", K(*task));
             }
             common::ObThreadCondGuard guard(cond_);
             ++barrier_task_count_;
@@ -499,7 +496,6 @@ void ObUniqTaskQueue<Task, Process>::run1()
       }
     }
   }
-  SERVER_LOG(INFO, "UniqTaskQueue thread stop");
 }
 
 template <typename Task, typename Process>
@@ -626,7 +622,6 @@ int ObUniqTaskQueue<Task, Process>::try_lock(const Task &task)
   } else if (OB_FAIL(processing_task_set_.set_refactored(task, 0))) {
     if (common::OB_HASH_EXIST == ret) {
       ret = common::OB_EAGAIN;
-      SERVER_LOG(TRACE, "same task exist", K(task));
     } else {
       SERVER_LOG(WARN, "fail to lock task", K(ret), K(task));
     }

@@ -83,21 +83,6 @@ void ObSharedMemAllocMgr::update_throttle_config()
 
     if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed ||
         vector_config_changed) {
-      SHARE_LOG(INFO,
-                "[Throttle] Update Config",
-                K(total_memory),
-                K(share_mem_limit_percentage),
-                K(share_mem_limit),
-                K(tenant_memstore_limit_percentage),
-                K(memstore_limit),
-                K(tx_data_limit_percentage),
-                K(tx_data_limit),
-                K(mds_limit_percentage),
-                K(mds_limit),
-                K(trigger_percentage),
-                K(max_duration),
-                K(tenant_vector_limit_percentage),
-                K(vector_limit));
 
     }
   }

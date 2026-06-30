@@ -300,7 +300,6 @@ int ObIndexBlockRowBuilder::init(ObIAllocator &allocator,
     data_desc_ = &data_desc;
     rowkey_column_count_ = index_desc.get_rowkey_column_count();
     is_inited_ = true;
-    STORAGE_LOG(TRACE, "success to init ObIndexBlockRowBuilder", K(rowkey_column_count_), K(data_desc), K(index_desc));
   }
   return ret;
 }

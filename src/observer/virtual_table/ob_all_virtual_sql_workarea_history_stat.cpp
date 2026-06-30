@@ -116,7 +116,6 @@ int ObSqlWorkareaHistoryStat::get_server_ip_and_port()
   char ipbuf[common::OB_IP_STR_BUFF];
   const common::ObAddr &addr = GCTX.self_addr();
   if (!addr.ip_to_string(ipbuf, sizeof(ipbuf))) {
-    SERVER_LOG(ERROR, "ip to string failed");
     ret = OB_ERR_UNEXPECTED;
   } else {
     ipstr_ = ObString::make_string(ipbuf);

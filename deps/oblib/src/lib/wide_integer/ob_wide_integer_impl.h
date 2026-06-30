@@ -1024,7 +1024,6 @@ inline int from_number_to_int512(const number::ObNumber &nmb, const int16_t scal
   } else {
     if (OB_ISNULL(digits)) {
       ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(WARN, "invalid null digits");
     } else {
       last_digit = digits[nmb.get_length() - 1];
       if (in_scale > 0) { // remove trailing zeros for decimal part
@@ -1397,7 +1396,6 @@ int to_number(const ObDecimalInt *decint, const int32_t int_bytes, int16_t scale
   int ret = OB_SUCCESS;
   if (OB_ISNULL(decint) || OB_UNLIKELY(int_bytes <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid decimal int", K(decint), K(int_bytes));
   } else if (OB_UNLIKELY(scale == NUMBER_SCALE_UNKNOWN_YET)) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "invalid scale", K(ret), K(scale), K(false));

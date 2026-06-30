@@ -90,18 +90,14 @@ void ObTabletHandle::reset()
     int ret = OB_SUCCESS;
     obj_->update_wash_score(calc_wash_score(wash_priority_));
     if (OB_UNLIKELY(!is_valid())) {
-      STORAGE_LOG(ERROR, "object pool and allocator is nullptr", K_(obj), K_(obj_pool), K_(allocator));
       ob_abort();
     } else {
       const int64_t ref_cnt = obj_->dec_ref();
       const int64_t hold_time = ObClockGenerator::getClock() - hold_start_time_;
       if (OB_UNLIKELY(hold_time > HOLD_OBJ_MAX_TIME && need_hold_time_check())) {
         int ret = OB_ERR_TOO_MUCH_TIME;
-        STORAGE_LOG(WARN, "The meta obj reference count was held for more "
-            "than two hours ", K(ref_cnt), KP(this), K(hold_time), K(hold_start_time_), KPC(this), K(common::lbt()));
       }
       if (OB_UNLIKELY(ref_cnt < 0)) {
-        STORAGE_LOG(ERROR, "obj ref cnt may be leaked", K(ref_cnt), KPC(this));
       } else if (0 == ref_cnt) {
         if (obj_->is_external_tablet()) {
           int tmp_ret = OB_SUCCESS; // let tablet finish deconstruct in case some resource can't be released

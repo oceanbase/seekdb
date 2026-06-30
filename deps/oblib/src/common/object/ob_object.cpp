@@ -1203,7 +1203,6 @@ int ObObj::build_not_strict_default_value(
       break;
     default:
       ret = OB_INVALID_ARGUMENT;
-      _OB_LOG(WARN, "unexpected data type=%u", data_type);
   }
   if (OB_FAIL(ret)) {
   } else if (is_string_type()) {
@@ -1551,8 +1550,6 @@ int ObObj::apply(const ObObj &mutation)
                       && ObExtendType != mut_type
                       && ObNullType != mut_type
                       && org_type != mut_type))) {
-    _OB_LOG(WARN, "type not coincident or invalid type[this->type:%d,mutation.type:%d]",
-              org_type, mut_type);
     ret = OB_INVALID_ARGUMENT;
   } else {
     switch (mut_type) {
@@ -1578,7 +1575,6 @@ int ObObj::apply(const ObObj &mutation)
             break;
           default:
             ret = OB_INVALID_ARGUMENT;
-            _OB_LOG(ERROR, "unsupported ext value [value:%ld]", mutation.get_ext());
             break;
         }  // end switch
         break;

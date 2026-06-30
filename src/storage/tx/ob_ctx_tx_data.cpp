@@ -312,7 +312,6 @@ int ObCtxTxData::check_tx_data_writable_()
 
   if (OB_ISNULL(tx_data_guard_.tx_data())) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "tx_data_ is not valid", K(this));
   } else if (read_only_) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "try to write a read-only tx_data", K(ret), K(this));
@@ -328,7 +327,6 @@ int ObCtxTxData::insert_tx_data_(ObTxTable *tx_table, ObTxData *tx_data)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(tx_table));
   } else if (OB_ISNULL(tx_data)) {
-    TRANS_LOG(INFO, "tx_data is nullptr, no need to insert", KP(tx_data), K(*this));
     // no need to insert, do nothing
   } else if (OB_FAIL(tx_table->insert(tx_data))) {
   }
@@ -341,7 +339,6 @@ int ObCtxTxData::revert_tx_data_(ObTxData *&tx_data)
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(tx_data)) {
-    TRANS_LOG(INFO, "tx_data is nullptr, no need to free", KP(tx_data), K(*this));
     // no need to free, do nothing
   } else {
     tx_data = nullptr;

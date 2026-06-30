@@ -37,7 +37,6 @@ int ObMemDumpQueue::push(void *p)
     if (OB_TIMEOUT == ret) {
       ret = OB_SUCCESS;
       count ++;
-      STORAGE_LOG(WARN, "the push operation has been timeout n times", K(count));
       continue;
     } else if (OB_FAIL(ret)) {
     } else {
@@ -62,7 +61,6 @@ int ObMemDumpQueue::pop(void *&p)
     } else if (ret == OB_ENTRY_NOT_EXIST) { // queue timeout returns this error code, can only go with it
       ret = OB_SUCCESS; // prevent timeout
       count ++;
-      STORAGE_LOG(WARN, "the pop operation has been timeout n times", K(count));
       continue;
     } else {
       STORAGE_LOG(WARN, "fail to pop queue", KR(ret));
@@ -76,7 +74,6 @@ ObMemDumpQueue::~ObMemDumpQueue()
   int ret = OB_SUCCESS;
   int64_t queue_size = queue_.size();
   if (queue_size > 0) {
-    STORAGE_LOG(ERROR, "mem dump queue should be empty", K(queue_size));
   }
   for (int64_t i = 0; i < queue_size; i ++) {
     void *tmp = nullptr;

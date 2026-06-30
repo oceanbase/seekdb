@@ -112,10 +112,7 @@ public:
     void rollback_freeze_ts(const int64_t expected_val, const int64_t rollback_val)
     {
       if (ATOMIC_BCAS(&last_freeze_ts_, expected_val, rollback_val)) {
-        STORAGE_LOG(INFO, "rollback freeze ts success", KTIME(expected_val), KTIME(rollback_val));
       } else {
-        STORAGE_LOG(
-            INFO, "rollback freeze ts failed", KTIME(last_freeze_ts_), KTIME(expected_val), KTIME(rollback_val));
       }
     }
   };

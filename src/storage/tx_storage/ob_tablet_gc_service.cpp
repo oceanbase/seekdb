@@ -104,7 +104,6 @@ void ObTabletGCService::destroy()
 
 void ObTabletGCService::ObTabletChangeTask::runTimerTask()
 {
-  STORAGE_LOG(INFO, "====== [tabletchange] timer task ======", K(GC_CHECK_INTERVAL));
   RLOCAL_STATIC(int64_t, times) = 0;
   times = (times + 1) % GLOBAL_GC_CHECK_INTERVAL_TIMES;
   int ret = OB_SUCCESS;
@@ -134,10 +133,8 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
         STORAGE_LOG(WARN, "ls is NULL", KR(ret));
       } else if (FALSE_IT(tablet_gc_handler = ls->get_tablet_gc_handler())) {
       } else if (tablet_gc_handler->check_stop()) {
-        STORAGE_LOG(INFO, "[tabletchange] tablet_gc_handler is offline", K(ls->get_ls_id()));
       } else {
         uint8_t tablet_persist_trigger = tablet_gc_handler->get_tablet_persist_trigger_and_reset();
-        STORAGE_LOG(INFO, "[tabletchange] task check ls", K(ls->get_ls_id()), K(tablet_persist_trigger));
         if (times == 0
             || ObTabletGCHandler::is_set_tablet_persist_trigger(tablet_persist_trigger)
             || ObTabletGCHandler::is_tablet_gc_trigger(tablet_persist_trigger)) {
@@ -165,8 +162,6 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
                      || SCN::min_scn() == decided_scn
                      || decided_scn < ls->get_tablet_change_checkpoint_scn()) {
             need_retry = true;
-            STORAGE_LOG(INFO, "no any log callback and no need to update clog checkpoint",
-              K(freezer->get_ls_id()), K(decided_scn), KPC(ls), K(ls->get_ls_meta()));
           }
           // 2. get gc tablet and get unpersist_tablet_ids
           else if (OB_FAIL(tablet_gc_handler->get_unpersist_tablet_ids(deleted_tablets,
@@ -268,7 +263,6 @@ void ObTabletGCHandler::set_tablet_persist_trigger()
       break;
     }
   } while (ATOMIC_CAS(&tablet_persist_trigger_, old_v, new_v) != old_v);
-  STORAGE_LOG(INFO, "set_tablet_persist_trigger", KPC(this));
 }
 
 void ObTabletGCHandler::set_tablet_gc_trigger()
@@ -282,7 +276,6 @@ void ObTabletGCHandler::set_tablet_gc_trigger()
       break;
     }
   } while (ATOMIC_CAS(&tablet_persist_trigger_, old_v, new_v) != old_v);
-  STORAGE_LOG(INFO, "set_tablet_gc_trigger", KPC(this));
 }
 
 uint8_t ObTabletGCHandler::get_tablet_persist_trigger_and_reset()
@@ -502,7 +495,6 @@ int ObTabletGCHandler::get_unpersist_tablet_ids(common::ObIArray<ObTabletHandle>
           && OB_FAIL(immediately_deleted_tablets.push_back(tablet_handle))) {
         STORAGE_LOG(WARN, "failed to push_back", KR(ret));
       } else {
-        STORAGE_LOG(INFO, "[tabletgc] get tablet for gc", KPC(tablet), K(decided_scn), K(need_gc));
       }
 
       if (OB_FAIL(ret)) {
@@ -511,7 +503,6 @@ int ObTabletGCHandler::get_unpersist_tablet_ids(common::ObIArray<ObTabletHandle>
       } else if (!need_persist) {
       } else if (OB_FAIL(unpersist_tablet_ids.push_back(tablet->get_tablet_meta().tablet_id_))) {
       } else {
-        STORAGE_LOG(INFO, "[tabletgc] get tablet for persist", KPC(tablet), K(decided_scn));
       }
     }
   }
@@ -591,12 +582,8 @@ int ObTabletGCHandler::wait_unpersist_tablet_ids_flushed(const common::ObTabletI
 
       if (OB_FAIL(ret)) {
       } else if (rec_scn > decided_scn) {
-        STORAGE_LOG(INFO, "[tabletgc] finish tablet flush", K(rec_scn), K(decided_scn),
-                    K(retry_times), K(i), K(ls_->get_ls_id()), KPC(tablet));
         i++;
       } else {
-        STORAGE_LOG(INFO, "[tabletgc] wait tablet flush", K(rec_scn), K(decided_scn),
-                    K(retry_times), K(i), K(ls_->get_ls_id()), KPC(tablet));
         break;
       }
     }
@@ -732,7 +719,6 @@ int ObTabletGCHandler::offline()
     LOG_WARN("tablet gc handler not finish, retry", KPC(ls_), K(ret));
   } else {
     gc_rwlock_.wrunlock();
-    STORAGE_LOG(INFO, "tablet gc handler offline", KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
   }
   return ret;
 }
@@ -742,7 +728,6 @@ void ObTabletGCHandler::online()
   set_tablet_persist_trigger();
   set_tablet_gc_trigger();
   set_start();
-  STORAGE_LOG(INFO, "tablet gc handler online", KPC(this), KPC(ls_), K(ls_->get_ls_meta()));
 }
 
 int64_t ObTabletGCHandler::get_gc_lock_abs_timeout() const

@@ -108,7 +108,6 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
     } while (OB_TENANT_NOT_IN_SERVER == ret || OB_LS_NOT_EXIST == ret);
   }
   if (OB_SUCC(ret)) {
-    SERVER_LOG(INFO, "ObAllVirtualTimestampService iter success", K(*this));
     const ObAddr self = GCTX.self_addr();
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {

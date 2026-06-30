@@ -103,7 +103,6 @@ int ObIndependentDag::add_task(ObITask &task)
         ObThreadCondGuard guard(cond_);
         if (OB_TMP_FAIL(cond_.signal())) {
         } else {
-          COMMON_LOG(TRACE, "add task and wake up cond", K(task));
         }
       }
       COMMON_LOG(INFO, "independent dag add task success", K(ret), KTASK(task));
@@ -127,7 +126,6 @@ int ObIndependentDag::batch_add_task(const ObIArray<ObITask *> &task_array)
       ObThreadCondGuard guard(cond_);
       if (OB_TMP_FAIL(cond_.broadcast())) {
       } else {
-        COMMON_LOG(TRACE, "batch add task and wake up cond");
       }
     }
   }
@@ -181,7 +179,6 @@ void ObIndependentDag::dump_dag_status(const char *log_info /*= "Print the statu
     COMMON_LOG(WARN, "dag is not inited, can not dump dag status", K(ret));
   } else {
     lib::ObMutexGuard guard(lock_);
-    COMMON_LOG(INFO, log_info, K(ObPrintIndependentDag(*this)));
   }
 }
 
@@ -197,7 +194,6 @@ int ObIndependentDag::process()
     COMMON_LOG(WARN, "invalid dag status", K(ret), K_(is_independent));
   } else {
     ObTraceIdGuard trace_id_guard(id_);
-    COMMON_LOG(INFO, "dag start process", KPC(this));
     int task_ret = OB_SUCCESS;
     while (OB_SUCC(ret) && OB_SUCCESS == task_ret && !is_final_status()) {
       ObITask *task = nullptr;
@@ -389,7 +385,6 @@ void ObIndependentDag::wait_signal()
     }
   } else {
     const int64_t cost_time_us = ObTimeUtility::fast_current_time() - begin_wait_time;
-    COMMON_LOG(TRACE, "wait cond success", K(cost_time_us));
   }
 }
 int ObIndependentDag::execute_task(ObITask &task)
@@ -461,7 +456,6 @@ int ObIndependentDag::deal_with_finish_task(
       ObThreadCondGuard guard(cond_);
       if (OB_TMP_FAIL(ready_task_cnt == 1 ? cond_.signal() : cond_.broadcast())) {
       } else {
-        COMMON_LOG(TRACE, "task execute success, wake up cond", K(ready_task_cnt));
       }
     }
 
@@ -577,7 +571,6 @@ void ObDagExecutor::release_()
     --ref_cnt_;
     if (0 == ref_cnt_) {
       dag_status_ = dag_->get_dag_status();
-      COMMON_LOG(INFO, "dag run finish and destory it", K_(dag_status));
       dag_->~ObIndependentDag();
       allocator_->free(dag_);
       dag_ = nullptr;

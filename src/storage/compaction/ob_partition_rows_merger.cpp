@@ -84,7 +84,6 @@ int ObPartitionMergeLoserTreeCmp::compare_hybrid(const ObDatumRow &row,
     cmp_ret = -1;
   } else if (temp_cmp_ret == 0) {
     cmp_ret = RIGHT_MACRO_NEED_OPEN;
-    STORAGE_LOG(INFO, "rowkey equal last end_key, maybe aborted trans", K(rowkey), K(range));
   } else if (OB_FAIL(rowkey.compare(range.get_end_key(), datum_utils_, temp_cmp_ret))) {
   } else if (temp_cmp_ret == 0) {
     if (!range.get_border_flag().inclusive_end()) {

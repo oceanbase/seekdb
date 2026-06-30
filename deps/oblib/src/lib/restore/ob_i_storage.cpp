@@ -77,13 +77,10 @@ int c_str_to_int(const char *str, int64_t &num)
   char *end_str = NULL;
   if (OB_ISNULL(str) || OB_UNLIKELY(0 == strlen(str))) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "c_str_to_int str should not be null/empty", KP(str));
   } else {
     num = strtoll(str, &end_str, 10);
     if (errno != 0 || (NULL != end_str && *end_str != '\0')) {
       ret = OB_INVALID_DATA;
-      OB_LOG(WARN, "strtoll convert string to int value fail", K(str), K(num),
-          "error", strerror(errno), K(end_str));
     }
   }
   return ret;
@@ -104,7 +101,6 @@ int handle_listed_object(ObBaseDirEntryOperator &op,
     if (op.need_get_file_size()) {
       if (OB_UNLIKELY(obj_size < 0)) {
         ret = OB_INVALID_ARGUMENT;
-        OB_LOG(WARN, "invalid object size", K(obj_size));
       } else {
         op.set_size(obj_size);
       }
@@ -242,7 +238,6 @@ int build_bucket_and_object_name(ObIAllocator &allocator,
   }
 
   if (OB_SUCC(ret)) {
-    OB_LOG(DEBUG, "get bucket object name", K(uri), K(bucket), K(object));
   }
   return ret;
 }
@@ -416,7 +411,6 @@ int ObAppendableFragmentMeta::parse_from(ObString &fragment_name)
     ObString end_string;
     if (OB_UNLIKELY(!start_part.is_numeric() || !fragment_name.is_numeric())) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "unexpected fragment name", K(start_part), K(fragment_name));
     } else if (OB_FAIL(ob_write_string(allocator, start_part, start_string, true))) {
     } else if (OB_FAIL(ob_write_string(allocator, fragment_name, end_string, true))) {
     } else if (OB_FAIL(c_str_to_int(start_string.ptr(), start_))) {
@@ -505,7 +499,6 @@ int ObStorageObjectMeta::get_needed_fragments(
   fragments.reset();
   if (OB_UNLIKELY(start < 0 || end <= start)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid arguments", K(start), K(end));
   } else if (OB_UNLIKELY(!is_simulate_append_type() || !is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid storage object meta", K(ret), K_(type), K_(fragment_metas));

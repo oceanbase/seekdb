@@ -1356,7 +1356,6 @@ int ObChunkRowStore::RowIterator::store_row2new_row(common::ObNewRow &row, const
   int ret = OB_SUCCESS;
   if (row.count_ < sr.cnt_){
     ret = OB_BUF_NOT_ENOUGH;
-    OB_LOG(WARN, "column buffer count is not enough", K_(row.count), K_(sr.cnt));
   } else {
     //do not overwite row.count_
     //row.count_ = sr.cnt_;
@@ -1374,7 +1373,6 @@ int ObChunkRowStore::RowIterator::convert_to_row_full(common::ObNewRow &row, con
     LOG_WARN("NULL store row returned", K(ret));
   } else if (row.count_ < sr->cnt_){
     ret = OB_BUF_NOT_ENOUGH;
-    OB_LOG(WARN, "column buffer count is not enough", K_(row.count), K(store_->get_col_cnt()));
   } else {
     //do not overwite row.count_
     //row.count_ = sr->cnt_;

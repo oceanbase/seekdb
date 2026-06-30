@@ -66,8 +66,6 @@ int ObMultipleSkipScanMerge::init(
     } else if (FALSE_IT(datums_ = new (buf) ObStorageDatum[datums_cnt_])) {
     } else if (OB_FAIL(prepare_range(start_key_of_scan_rowkey_range(), scan_rowkey_range_))) {
     } else {
-      STORAGE_LOG(DEBUG, "success to init ObMultipleSkipScanMerge", K(param), K(context), K(get_table_param),
-          K(schema_rowkey_cnt_), K(ss_rowkey_prefix_cnt_));
     }
   }
   return ret;
@@ -201,7 +199,6 @@ int ObMultipleSkipScanMerge::inner_get_next_row(blocksstable::ObDatumRow &row)
             state_ = UPDATE_SCAN_ROWKEY_RANGE;
           }
         } else {
-          STORAGE_LOG(DEBUG, "skip scan get next row", K(row));
           got_row = true;
         }
         break;
@@ -229,7 +226,6 @@ int ObMultipleSkipScanMerge::inner_get_next_row(blocksstable::ObDatumRow &row)
       }
       default : {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "Unexpected state", K(state_));
       }
     }
   }
@@ -317,7 +313,6 @@ int ObMultipleSkipScanMerge::inner_get_next_rows()
         }
         default : {
           ret = OB_ERR_UNEXPECTED;
-          STORAGE_LOG(WARN, "Unexpected state", K(state_));
         }
       }
     }

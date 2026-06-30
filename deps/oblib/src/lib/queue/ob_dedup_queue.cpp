@@ -168,8 +168,6 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
              || total_mem_limit <= 0 || hold_mem_limit <= 0
              || page_size <= 0 || false) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid argument", K(thread_num), K(queue_size),
-               K(total_mem_limit), K(hold_mem_limit), K(page_size));
   } else if (OB_FAIL(task_queue_sync_.init(ObWaitEventIds::DEDUP_QUEUE_COND_WAIT))) {
   } else if (OB_FAIL(work_thread_sync_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
   } else {
@@ -193,9 +191,6 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
   if (OB_FAIL(ret)) {
     destroy();
   } else {
-    COMMON_LOG(INFO, "init dedup-queue:",
-        K(thread_num), K(queue_size), K(task_map_size), K(total_mem_limit), K(hold_mem_limit),
-        K(page_size), KP(this), "lbt", lbt());
   }
 
   return ret;
@@ -243,7 +238,6 @@ int ObDedupQueue::add_task(const IObDedupTask &task)
       if (OB_FAIL(add_task_(task))) {
       }
     } else {
-      COMMON_LOG(WARN, "unexpected hash_ret", K(hash_ret));
       ret = hash_ret;
     }
     if (OB_SUCC(ret)) {
@@ -254,7 +248,6 @@ int ObDedupQueue::add_task(const IObDedupTask &task)
       for (int64_t i = 0; i < thread_num_; i++) {
         if (thread_metas_[i].check_dead(thread_dead_threshold_)) {
           // ignore ret
-          COMMON_LOG(WARN, "thread maybe dead", K(i), K(thread_metas_[i]));
         }
       }
     }
@@ -315,7 +308,6 @@ int ObDedupQueue::map_callback_(const IObDedupTask &task, TaskMapKVPair &kvpair)
     IObDedupTask *task2add = NULL;
     if (kvpair.first != kvpair.second
         || NULL == (task2remove = kvpair.second)) {
-      COMMON_LOG(WARN, "unexpected key null pointer", K(kvpair.first), K(kvpair.second));
       ret = OB_ERR_UNEXPECTED;
     } else if (0 != task2remove->trylock()) {
       ret = OB_EAGAIN;
@@ -325,7 +317,6 @@ int ObDedupQueue::map_callback_(const IObDedupTask &task, TaskMapKVPair &kvpair)
       ret = OB_EAGAIN;
     } else if (NULL == (task2add = copy_task_(task))) {
       task2remove->unlock();
-      COMMON_LOG(WARN, "copy task fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_SUCCESS != (ret = task_queue_.push(task2add))) {
       task2remove->unlock();
@@ -354,7 +345,6 @@ int ObDedupQueue::add_task_(const IObDedupTask &task)
   } else {
     IObDedupTask *task2add = NULL;
     if (NULL == (task2add = copy_task_(task))) {
-      COMMON_LOG(WARN, "copy task fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       // lockstat is to aviod that job not insert task_queue was deleted from map by other thread.
@@ -363,7 +353,6 @@ int ObDedupQueue::add_task_(const IObDedupTask &task)
       if (OB_SUCCESS != hash_ret) {
         if (OB_HASH_EXIST != hash_ret) {
           // OB_HASH_EXIST is a possible case, do not log any warn
-          COMMON_LOG(WARN, "set to task map fail", K(hash_ret));
         }
         task2add->unlock();
         destroy_task_(task2add);
@@ -373,7 +362,6 @@ int ObDedupQueue::add_task_(const IObDedupTask &task)
         COMMON_LOG(WARN, "push task to queue fail", K(ret));
         if (OB_SUCCESS != (hash_ret = task_map_.erase_refactored(task2add))) {
           task2add->unlock();
-          COMMON_LOG(WARN, "unexpected erase from task_map fail", K(hash_ret));
         } else {
           task2add->unlock();
           destroy_task_(task2add);
@@ -432,7 +420,6 @@ void ObDedupQueue::run1()
   int64_t thread_pos = (int64_t)get_thread_idx();
   ThreadMeta &thread_meta = thread_metas_[thread_pos];
   thread_meta.init();
-  COMMON_LOG(INFO, "dedup queue thread start", KP(this));
   if (OB_NOT_NULL(thread_name_)) {
     lib::set_thread_name(thread_name_);
   }

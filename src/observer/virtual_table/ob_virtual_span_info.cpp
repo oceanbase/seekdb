@@ -81,7 +81,6 @@ int ObVirtualSpanInfo::set_ip(common::ObAddr *addr)
   if (NULL == addr){
     ret = OB_ENTRY_NOT_EXIST;
   } else if (!addr_->ip_to_string(server_ip_, sizeof(server_ip_))) {
-    SERVER_LOG(ERROR, "ip to string failed");
     ret = OB_ERR_UNEXPECTED;
   } else {
     ipstr_ = ObString::make_string(server_ip_);
@@ -113,7 +112,6 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
 
       if (nullptr == cur_flt_span_mgr_) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "req manager doest not exist");
       } else if (OB_SUCC(ret)) {
         start_id_ = cur_flt_span_mgr_->get_start_idx();
         end_id_ = cur_flt_span_mgr_->get_end_idx();
@@ -122,14 +120,11 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
         } else {
           cur_id_ = start_id_;
         }
-        SERVER_LOG(TRACE, "start to get rows from virtual span info",
-                   K(start_id_), K(end_id_), K(cur_id_));
       }
     }
 
     if (cur_id_ < start_id_ || cur_id_ >= end_id_) {
       ret = OB_ITER_END;
-      SERVER_LOG(INFO, "scan finished", K(start_id_), K(end_id_), K(cur_id_));
     }
     // if has no more record, free current flt span manager
     if (OB_ITER_END == ret) {
@@ -158,7 +153,6 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
         } else {
           //finish fetch one row
           row = &cur_row_;
-          SERVER_LOG(TRACE, "request_info_table get next row succ", K(cur_id_), K(cur_row_));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -186,7 +180,6 @@ int ObVirtualSpanInfo::fill_cells(sql::ObFLTSpanRec &record)
 
   if (OB_ISNULL(cells)) {
     ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(cells));
   } else {
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
       uint64_t col_id = output_column_ids_.at(cell_idx);
@@ -265,7 +258,6 @@ int ObVirtualSpanInfo::check_ip_and_port(bool &is_valid)
   is_valid = true;
   // Since svr_ip and svr_port are removed, we always return true
   // The key_ranges_ check is no longer needed
-  SERVER_LOG(DEBUG, "check ip and port", K(key_ranges_), K(is_valid), K(ipstr_), K(port_));
   return ret;
 }
 } //namespace observer

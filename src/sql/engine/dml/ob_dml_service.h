@@ -387,8 +387,6 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
 {
   int ret = common::OB_SUCCESS;
   affected_rows = 0;
-  SQL_DAS_LOG(DEBUG, "begin to write the main tablet",
-              K(ls_id_), K(tablet_id_), K(ctdef_->table_id_), K(ctdef_->index_tid_));
   if (ctdef_->is_ignore_) {
     if (OB_FAIL(write_tablet_with_ignore(iter, affected_rows))) {
     }
@@ -417,9 +415,6 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
         ObTabletID related_tablet_id = related_tablet_ids_->at(i);
         ObFTDocWordInfo *doc_word_info = nullptr == ft_doc_word_infos_ ? nullptr : &(ft_doc_word_infos_->at(i));
         int64_t index_affected_rows = 0;
-        SQL_DAS_LOG(DEBUG, "rewind iterator and write local index tablet",
-                    K(ls_id_), K(related_tablet_id), K(related_ctdef->table_id_), K(related_ctdef->index_tid_),
-                    KPC(doc_word_info));
         if (OB_FAIL(iter.rewind(related_ctdef, doc_word_info))) {
         } else if (OB_FAIL(ObDMLService::init_dml_param(*related_ctdef, *related_rtdef,
             *snapshot_, write_branch_id_, *das_allocator_, store_ctx_guard, dml_param_, is_do_gts_opt_))) {
@@ -470,8 +465,6 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
       ret = OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "add row to single row buffer failed", K(ret));
     } else {
-      SQL_DAS_LOG(TRACE, "write table dml row with ignore", KPC(dml_row), K(ls_id_), K(tablet_id_),
-                  K(ctdef_->table_id_), K(ctdef_->index_tid_));
       DMLIterator single_row_iter(ctdef_, single_row_buffer, *das_allocator_);
       storage::ObStoreCtxGuard store_ctx_guard;
       concurrent_control::ObWriteFlag write_flag;
@@ -501,9 +494,6 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
           ObFTDocWordInfo *doc_word_info = nullptr == ft_doc_word_infos_ ? nullptr : &(ft_doc_word_infos_->at(i));
           ObTabletID related_tablet_id = related_tablet_ids_->at(i);
           int64_t index_affected_rows = 0;
-          SQL_DAS_LOG(TRACE, "rewind and write index dml row with ignore", KPC(dml_row),
-                      K(ls_id_), K(related_tablet_id),
-                      K(related_ctdef->table_id_), K(related_ctdef->index_tid_));
           if (OB_FAIL(single_row_iter.rewind(related_ctdef, doc_word_info))) {
           } else if (OB_FAIL(ObDMLService::init_dml_param(*related_ctdef,
                                                           *related_rtdef,

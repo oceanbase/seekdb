@@ -1022,11 +1022,6 @@ public:
       ret = common::OB_INIT_FAIL;
     } else {
       tgs_[tg_id] = tg;
-      OB_LOG(INFO, "create tg succeed",
-             "tg_id", tg_id,
-             "tg", tg,
-             "thread_cnt", tg->thread_cnt(),
-             K(tg->attr_));
     }
     return ret;
   }
@@ -1063,11 +1058,6 @@ public:
       }
       tg->set_queue_size(qsize);
       tgs_[tg_id] = tg;
-      OB_LOG(INFO, "create tg succeed",
-             "tg_id", tg_id,
-             "tg", tg,
-             "thread_cnt", tg->thread_cnt(),
-             K(tg->attr_), KP(tg));
     }
     return ret;
   }

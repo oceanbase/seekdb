@@ -196,7 +196,6 @@ int ObAllVirtualUnit::get_clog_disk_used_size_(int64_t &log_used_size)
     int64_t unused_log_disk_total_size = 0;
     if (OB_ISNULL(log_service)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ObLogService is nullptr", KP(log_service));
     } else if (OB_FAIL(log_service->get_palf_stable_disk_usage(log_used_size,
                                                                unused_log_disk_total_size))) {
     }

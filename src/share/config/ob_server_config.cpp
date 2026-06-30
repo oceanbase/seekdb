@@ -115,16 +115,13 @@ int ObServerConfig::check_all() const
 
 void ObServerConfig::print() const
 {
-  OB_LOG(INFO, "===================== *begin server config report * =====================");
   ObConfigContainer::const_iterator it = container_.begin();
   for (; it != container_.end(); ++it) {
     if (OB_ISNULL(it->second)) {
       OB_LOG_RET(WARN, OB_ERROR, "config item is null", "name", it->first.str());
     } else {
-      _OB_LOG(INFO, "| %-36s = %s", it->first.str(), it->second->str());
     }
   }
-  OB_LOG(INFO, "===================== *stop server config report* =======================");
 }
 
 int ObServerConfig::add_extra_config(const char *config_str,

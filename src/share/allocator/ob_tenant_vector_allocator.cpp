@@ -92,7 +92,6 @@ int ObTenantVectorAllocator::init()
     SHARE_LOG(WARN, "init tenant vector allocator twice", KR(ret), KPC(this));
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
   } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, throttle_tool_))) {
   } else {

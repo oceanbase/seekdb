@@ -1841,13 +1841,10 @@ int ObMultipleMerge::refresh_table_on_demand()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObMultipleMerge has not been inited", K(ret));
   } else if (ScanState::NONE == scan_state_) {
-    STORAGE_LOG(DEBUG, "skip refresh table");
   } else if (get_table_param_->sample_info_.is_block_sample() ||
              get_table_param_->sample_info_.is_ddl_block_sample() ||
              (nullptr != block_row_store_ && !block_row_store_->can_refresh())) {
     // TODO : @yuanzhe refactor block sample for table refresh
-    STORAGE_LOG(DEBUG, "skip refresh table for block sample or aggregated in prefetch",
-        K(get_table_param_->sample_info_.is_block_sample()), K(get_table_param_->sample_info_.is_ddl_block_sample()), KPC(block_row_store_));
   } else if (OB_FAIL(check_need_refresh_table(need_refresh))) {
     STORAGE_LOG(WARN, "fail to check need refresh table", K(ret));
 #ifdef ERRSIM
@@ -1858,8 +1855,6 @@ int ObMultipleMerge::refresh_table_on_demand()
     bool refreshed = false;
     bool is_di_merge_scan = use_di_merge_scan();
     if (ScanState::BATCH == scan_state_) {
-      STORAGE_LOG(TRACE, "in vectorize batch scan, do refresh at next time",
-                  "tablet_id", access_param_->iter_param_.tablet_id_);
       if (OB_NOT_NULL(block_row_store_)) {
         block_row_store_->disable();
       }
@@ -1887,8 +1882,6 @@ int ObMultipleMerge::refresh_table_on_demand()
     }
 
     if (OB_SUCC(ret) && refreshed) {
-      STORAGE_LOG(INFO, "table refreshed", "tablet_id", access_param_->iter_param_.tablet_id_,
-                  K(curr_scan_index_), K(di_base_curr_scan_index_), K(scan_state_), K(use_di_merge_scan()), K_(major_table_version));
     }
   }
   return ret;
@@ -2080,7 +2073,6 @@ int ObMultipleMerge::handle_4377(const char* func)
   int ret = OB_ERR_DEFENSIVE_CHECK;
   // check whether txn is aborted
   if (access_ctx_->store_ctx_->is_uncommitted_data_rollbacked()) {
-    STORAGE_LOG(WARN, "transaction has been aborted", KPC(access_ctx_->store_ctx_));
     ret = OB_TRANS_KILLED;
   } else {
     ObString func_name = ObString::make_string(func);

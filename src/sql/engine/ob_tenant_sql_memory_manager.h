@@ -818,10 +818,6 @@ OB_INLINE bool ObTenantSqlMemoryManager::need_manual_calc_bound()
       }
     }
   }
-  SQL_ENG_LOG(DEBUG, "print need calc bound", K(manual_calc_bound),
-             K(global_bound_size_),
-             K(drift_size_), K(mem_target_), K(profile_cnt_),
-             K(pre_profile_cnt_), K(profile_cnt_));
   return manual_calc_bound;
 }
 

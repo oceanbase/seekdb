@@ -39,7 +39,6 @@ int ObGTSTaskQueue::init(const ObGTSCacheTaskType &type)
   } else {
     task_type_ = type;
     is_inited_ = true;
-    TRANS_LOG(INFO, "gts task queue init success", KP(this), K(type));
   }
   return ret;
 }
@@ -89,7 +88,6 @@ int ObGTSTaskQueue::foreach_task(const MonotonicTs srr,
                 TRANS_LOG(WARN, "get gts callback failed", KR(ret), K(srr), K(gts), KP(task));
               }
             } else {
-              TRANS_LOG(DEBUG, "get gts callback success", K(srr), K(gts), KP(task));
             }
           } else if (WAIT_GTS_ELAPSING == task_type_) {
             if (OB_FAIL(task->gts_elapse_callback(srr, scn))) {
@@ -97,7 +95,6 @@ int ObGTSTaskQueue::foreach_task(const MonotonicTs srr,
                 TRANS_LOG(WARN, "gts elapse callback failed", KR(ret), K(srr), K(gts), KP(task));
               }
             } else {
-              TRANS_LOG(DEBUG, "gts elapse callback success", K(srr), K(gts), KP(task));
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
@@ -109,7 +106,6 @@ int ObGTSTaskQueue::foreach_task(const MonotonicTs srr,
               ret = tmp_ret;
               TRANS_LOG(ERROR, "push gts task failed", KR(ret), KP(task));
             } else {
-              TRANS_LOG(DEBUG, "push back gts task", KP(task));
               break;
             }
           } else {
@@ -143,7 +139,6 @@ int ObGTSTaskQueue::push(ObTsCbTask *task)
     TRANS_LOG(WARN, "invalid argument", KR(ret), KP(task));
   } else if (OB_FAIL(queue_.push(task))) {
   } else {
-    TRANS_LOG(DEBUG, "push gts task success", KP(task));
   }
   return ret;
 }
@@ -157,7 +152,6 @@ int ObGTSTaskQueue::gts_callback_interrupted(const int errcode, const share::ObL
     int64_t count = queue_.size();
     int64_t again_count = 0;
     int64_t error_count = 0;
-    TRANS_LOG(INFO, "interrupt gts callback start", K(count), K(errcode), K(ls_id));
     while (OB_SUCC(ret) && count > 0) {
       common::ObLink *data = NULL;
       (void)queue_.pop(data);
@@ -180,11 +174,9 @@ int ObGTSTaskQueue::gts_callback_interrupted(const int errcode, const share::ObL
               // return OB_EAGAIN
               if (OB_FAIL(queue_.push(task))) {
               } else {
-                TRANS_LOG(DEBUG, "push back gts task", KP(task));
               }
             }
           } else {
-            TRANS_LOG(DEBUG, "gts callback interrupted success", KP(task));
           }
         } else {
           error_count++;
@@ -192,7 +184,6 @@ int ObGTSTaskQueue::gts_callback_interrupted(const int errcode, const share::ObL
         }
       }
     }
-    TRANS_LOG(INFO, "interrupt gts callback end", K(again_count), K(error_count));
   }
   return ret;
 }

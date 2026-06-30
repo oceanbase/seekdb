@@ -143,7 +143,6 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
   #define REFINE_LENGTH(len) ((len) > MAX_LENGTH ? MAX_LENGTH : (len))
   if (OB_ISNULL(cells) || OB_ISNULL(plan_item)) {
     ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(cells));
   }
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
@@ -427,9 +426,6 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
       if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() || 
           (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "expect plan id type to be int",
-                    K(start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()),
-                    K(end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()));
       } else {
         int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
         PlanInfo info;
@@ -487,7 +483,6 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     SERVER_LOG(WARN, "no more plan", K(ret));
   } else if (OB_INVALID_INDEX == 1UL || 
              OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
-    SERVER_LOG(DEBUG, "invalid plan_id");
     //next plan
     ++plan_idx_;
   } else {

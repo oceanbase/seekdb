@@ -153,7 +153,6 @@ int ObStorageLogReader::get_finish_cursor(common::ObLogCursor &cursor) const
 int ObStorageLogReader::check_switch_file()
 {
   int ret = OB_SUCCESS;
-  STORAGE_REDO_LOG(INFO, "reach the end of log", K(cursor_.file_id_));
 
   if (OB_FAIL(close())) {
   } else {
@@ -169,7 +168,6 @@ int ObStorageLogReader::check_switch_file()
     } else {
       ret = OB_EAGAIN;
       pread_pos_ = 0;
-      STORAGE_REDO_LOG(INFO, "Read log again", K(cursor_.file_id_), K(log_buffer_));
     }
   }
 
@@ -190,7 +188,6 @@ int ObStorageLogReader::open()
     STORAGE_REDO_LOG(WARN, "Log file doesn't exist", K(ret), K(cursor_.file_id_));
   } else if (OB_FAIL(file_handler_.open(cursor_.file_id_, ObLogDefinition::LOG_READ_FLAG))) {
   } else {
-    STORAGE_REDO_LOG(INFO, "Successfully open slog file", K(cursor_.file_id_));
   }
 
   return ret;
@@ -268,7 +265,6 @@ int ObStorageLogReader::get_next_log(
     } else {
       log_buffer_.get_position() += entry.data_len_;
       cursor_.offset_ += entry.get_serialize_size() + entry.data_len_;
-      STORAGE_REDO_LOG(TRACE, "successfully get next log", K(entry), K(cursor_));
     }
   }
 
@@ -335,7 +331,6 @@ int ObStorageLogReader::check_and_update_seq_number(const ObStorageLogEntry &ent
   ObIRedoModule::parse_cmd(entry.cmd_, main_type, sub_type);
 
   if (0 == cursor_.log_id_ || ObRedoLogMainType::OB_REDO_LOG_SYS == main_type) {
-    STORAGE_REDO_LOG(INFO, "Skip check and update seq number", K(cursor_.log_id_), K(entry));
   } else if (OB_UNLIKELY(entry.seq_ != cursor_.log_id_)) {
     ret = OB_ERROR;
     STORAGE_REDO_LOG(WARN, "Log sequence is not continuous", K(ret), K(cursor_.log_id_), K(entry));

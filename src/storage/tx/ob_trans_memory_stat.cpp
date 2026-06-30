@@ -36,8 +36,6 @@ int ObTransMemoryStat::init(const common::ObAddr &addr, const char *mod_type,
   int ret = OB_SUCCESS;
 
   if (!addr.is_valid() || OB_ISNULL(mod_type) || alloc_count < 0 || release_count < 0) {
-    TRANS_LOG(WARN, "invalid argument", K(addr), KP(mod_type), K(alloc_count),
-      K(release_count));
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t len = strlen(mod_type);

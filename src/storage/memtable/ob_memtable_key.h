@@ -136,13 +136,11 @@ public:
     if (OB_ISNULL(new_key = (ObMemtableKey *)allocator.alloc(sizeof(*new_key)))
         || OB_ISNULL(new(new_key) ObMemtableKey())) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "alloc memory for MemtableKey fail");
     } else if (OB_ISNULL(new_key->rowkey_ = (common::ObStoreRowkey *)allocator.alloc(sizeof(common::ObStoreRowkey)))
                || OB_ISNULL(new(new_key->rowkey_) common::ObStoreRowkey())) {
       allocator.free((char *)new_key);
       new_key = nullptr;
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "alloc memory for StoreRowkey fail");
     } else if (OB_FAIL(rowkey_->deep_copy(*(new_key->rowkey_), allocator))) {
       allocator.free(new_key->rowkey_);
       new_key->rowkey_ = nullptr;
@@ -164,9 +162,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "trying to encode an irregular rowkey", K(rowkey), K(ret));
     } else if (rowkey->get_obj_cnt() > columns.count()) {
-      TRANS_LOG(WARN, "size does not match",
-                "rowkey_len", rowkey->get_obj_cnt(),
-                "columns_size", columns.count());
       ret = common::OB_ERR_UNEXPECTED;
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < rowkey->get_obj_cnt(); ++i) {
@@ -177,18 +172,12 @@ public:
           && schema_meta.get_type() != value.get_type()
           && !(common::is_match_alter_integer_column_online_ddl_rules(schema_meta, value.get_meta())
               || common::is_match_alter_integer_column_online_ddl_rules(value.get_meta(), schema_meta))) { // small integer -> big integer; mysql mode;
-        TRANS_LOG(WARN, "data/schema type does not match",
-                  "index", i,
-                  "data_type", value.get_type(),
-                  "schema_type", schema_meta.get_type(), KP(this));
         ret = common::OB_ERR_UNEXPECTED;
       } else if ((common::ObVarcharType == schema_meta.get_type()
                   || common::ObCharType == schema_meta.get_type())
                  && common::ObNullType != value.get_type()
                  && common::ObExtendType != value.get_type()
                  && value.get_collation_type() != schema_meta.get_collation_type()) {
-        TRANS_LOG(WARN, "data/schema collation_type not match", K(value.get_meta()), K(schema_meta),
-                  K(value));
         //TODO: return OB_ERR_UNEXPECTED;
       }
     }
@@ -207,9 +196,6 @@ public:
        ret = common::OB_ERR_UNEXPECTED;
        TRANS_LOG(WARN, "trying to encode an irregular rowkey", K(rowkey), K(ret));
     } else if (rowkey->get_obj_cnt() > columns.count()) {
-      TRANS_LOG(WARN, "size does not match",
-                "rowkey_len", rowkey->get_obj_cnt(),
-                "columns_size", columns.count());
       ret = common::OB_ERR_UNEXPECTED;
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < rowkey->get_obj_cnt(); ++i) {
@@ -220,18 +206,12 @@ public:
           && schema_meta.get_type() != value.get_type()
           && !(common::is_match_alter_integer_column_online_ddl_rules(schema_meta, value.get_meta())
               || common::is_match_alter_integer_column_online_ddl_rules(value.get_meta(), schema_meta))) { // small integer -> big integer; mysql mode;
-        TRANS_LOG(WARN, "data/schema type does not match",
-                  "index", i,
-                  "data_type", value.get_type(),
-                  "schema_type", schema_meta.get_type());
         ret = common::OB_ERR_UNEXPECTED;
       } else if ((common::ObVarcharType == schema_meta.get_type()
                   || common::ObCharType == schema_meta.get_type())
                  && common::ObNullType != value.get_type()
                  && common::ObExtendType != value.get_type()
                  && value.get_collation_type() != schema_meta.get_collation_type()) {
-        TRANS_LOG(WARN, "data/schema collation_type not match", K(value.get_meta()), K(schema_meta),
-                  K(value));
         //TODO: return OB_ERR_UNEXPECTED;
       }
     }

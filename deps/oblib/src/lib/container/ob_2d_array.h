@@ -246,7 +246,6 @@ inline int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   int ret = OB_SUCCESS;
   T *blk = alloc_block(block_capacity);
   if (OB_ISNULL(blk)) {
-    LIB_LOG(WARN, "no memory");
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(blocks_.push_back(blk))) {
     LIB_LOG(WARN, "failed to add block", K(ret));
@@ -299,12 +298,10 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   } else {
     const int64_t need_blocks = (new_size - 1) / BLOCK_CAPACITY + 1;
     int64_t left_count = new_size;
-    LIB_LOG(DEBUG, "trace init 2darray", K(new_size), K(need_blocks), K(capacity_));
     for (int64_t i = 0; OB_SUCC(ret) && i < need_blocks; ++i) {
       if (i != need_blocks - 1) {
         if (BLOCK_CAPACITY >= left_count) {
           ret = OB_ERR_UNEXPECTED;
-          LIB_LOG(WARN, "failed: left count is not match", K(left_count), K(need_blocks), K(i));
         } else {
           if (need_construct_items) {
             construct_items(blocks_.at(i), BLOCK_CAPACITY);
@@ -316,7 +313,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
         // last one
         if (left_count > BLOCK_CAPACITY) {
           ret = OB_ERR_UNEXPECTED;
-          LIB_LOG(WARN, "failed: left count is not match", K(left_count), K(need_blocks), K(i));
         } else {
           if (need_construct_items) {
             construct_items(blocks_.at(i), left_count);
@@ -328,8 +324,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
     }
     if (0 != left_count || count_ != new_size) {
       ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(WARN, "failed: left count is not 0", K(left_count),
-        K(need_blocks), K(count_), K(new_size));
     }
   }
   return ret;
@@ -347,7 +341,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   } else if (0 != count_) {
     // do not force capacity = 0, because it will init when reuse
     ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(WARN, "failed: capacity or count is 0", K(capacity_), K(count_));
   } else {
     if (OB_FAIL(reserve(new_size))) {
     } else if (OB_FAIL(set_default(new_size))) {

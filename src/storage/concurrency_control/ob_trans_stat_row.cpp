@@ -27,9 +27,6 @@ void build_trans_stat_datum(const storage::ObTableIterParam *param,
 {
   const int64_t MAX_SIZE_FOR_TRANS_STAT_DATUM = 100;
   // trans stat datum index for vectorized execution
-  TRANS_LOG(DEBUG, "memtable try to generate trans_info",
-            K(trans_stat_row), K(param), K(param->op_), K(row.trans_info_),
-            K(lbt()));
   char *trans_stat_ptr = row.trans_info_;
   if (param->need_trans_info()
       && OB_NOT_NULL(trans_stat_ptr)) {
@@ -37,9 +34,6 @@ void build_trans_stat_datum(const storage::ObTableIterParam *param,
     concurrency_control::build_trans_stat_(trans_stat_row,
                                            MAX_SIZE_FOR_TRANS_STAT_DATUM,
                                            trans_stat_ptr);
-    TRANS_LOG(DEBUG, "memtable generate trans_info",
-        K(ObString(strlen(trans_stat_ptr), trans_stat_ptr)),
-        K(trans_stat_row), K(param));
   }
 }
 
@@ -63,7 +57,6 @@ void build_trans_stat_(const ObTransStatRow &trans_stat_row,
   } else {
     if (pos > trans_stat_len) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected length for datum", K(pos));
       trans_stat_ptr[0] = '\0';
     }
   }

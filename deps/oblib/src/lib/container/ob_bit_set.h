@@ -55,7 +55,6 @@ public:
   {
     BitSetWord word = 0;
     if (index < 0 || index >= bitset_word_array_.count()) {
-      LIB_LOG(INFO, "bitmap word index exceeds the scope", K(index), K(bitset_word_array_.count()));
       //indeed,as private function, index would never be negative
       //just return 0
     } else {
@@ -235,7 +234,6 @@ int ObFixedBitSet<N>::add_member(int64_t index)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(index < 0) || OB_UNLIKELY(index >= N)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "negative bitmapset member not allowed", K(index));
   } else {
     int64_t pos = index >> PER_BITSETWORD_MOD_BITS;
     BitSetWord &word = bitset_word_array_[pos];
@@ -249,7 +247,6 @@ int ObFixedBitSet<N>::del_member(int64_t index)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(index < 0) || OB_UNLIKELY(index >= N)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "negative bitmapset member not allowed", K(index));
   } else {
     int64_t pos = index >> PER_BITSETWORD_MOD_BITS;
     BitSetWord &word = bitset_word_array_[pos];
@@ -671,7 +668,6 @@ typename ObBitSet<N, BlockAllocatorT, auto_free>::BitSetWord ObBitSet<N, BlockAl
 {
   BitSetWord word = 0;
   if (index < 0 || index >= bitset_word_array_.count()) {
-    LIB_LOG(INFO, "bitmap word index exceeds the scope", K(index), K(bitset_word_array_.count()));
     //indeed,as private function, index would never be negative
     //just return 0
   } else {

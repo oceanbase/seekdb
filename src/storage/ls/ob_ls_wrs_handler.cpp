@@ -39,7 +39,6 @@ int ObLSWRSHandler::init(const share::ObLSID &ls_id)
     ls_weak_read_ts_.set_min();
     is_inited_ = true;
     ls_id_ = ls_id;
-    STORAGE_LOG(INFO, "ObLSWRSHandler init success", K(*this));
   }
 
   return ret;
@@ -61,7 +60,6 @@ int ObLSWRSHandler::offline()
   is_enabled_ = false;
   // set weak read ts to 1
   ls_weak_read_ts_.set_base();
-  STORAGE_LOG(INFO, "weak read handler disabled", K(*this));
   return ret;
 }
 
@@ -75,7 +73,6 @@ int ObLSWRSHandler::online()
   } else {
     ObSpinLockGuard guard(lock_);
     is_enabled_ = true;
-    STORAGE_LOG(INFO, "weak read handler enabled", K(*this));
   }
   return ret;
 }
@@ -98,7 +95,6 @@ int ObLSWRSHandler::generate_ls_weak_read_snapshot_version(ObLS &ls,
   } else if (!is_enabled_) {
     need_skip = true;
     if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-      STORAGE_LOG(INFO, "weak read handler not enabled", K(*this));
     }
   } else if (OB_FAIL(generate_weak_read_timestamp_(ls, max_stale_time, timestamp))) {
     need_skip = true;
@@ -113,10 +109,6 @@ int ObLSWRSHandler::generate_ls_weak_read_snapshot_version(ObLS &ls,
       // rule out these ls to avoid too old weak read timestamp
       need_skip = true;
       if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        STORAGE_LOG(INFO, "wead read timestamp is too old", K(timestamp),
-                                                            K(gts_scn),
-                                                            K(max_stale_time),
-                                                            K(*this));
       }
     } else {
       need_skip = false;
@@ -179,11 +171,6 @@ int ObLSWRSHandler::generate_weak_read_timestamp_(ObLS &ls, const int64_t max_st
     const int64_t current_us = ObClockGenerator::getClock();
     if (current_us - timestamp.convert_to_ts() > 3000 * 1000L /*3s*/
         || REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-      TRANS_LOG(INFO, "get wrs ts", K(ls_id),
-                                    "delta", current_us - timestamp.convert_to_ts(),
-                                    "log_service_ts", min_log_service_scn.convert_to_ts(),
-                                    "min_tx_service_ts", min_tx_service_ts.convert_to_ts(),
-                                    K(timestamp));
       // print keep alive info
       ls.get_keep_alive_ls_handler()->print_stat_info();
     }

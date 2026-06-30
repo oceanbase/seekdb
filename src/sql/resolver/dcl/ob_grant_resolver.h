@@ -134,7 +134,6 @@ int ObGrantResolver::resolve_col_names_mysql(
       const ParseNode *child_node = NULL;
       if (OB_ISNULL(child_node = column_list->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "child node is null");
       } else {
         const share::schema::ObColumnSchemaV2 *column_schema = NULL;
         const ObSimpleTableSchemaV2 *table_schema = NULL;

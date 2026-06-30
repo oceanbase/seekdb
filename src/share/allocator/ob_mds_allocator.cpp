@@ -70,7 +70,6 @@ int ObTenantMdsAllocator::init()
     SHARE_LOG(WARN, "init tenant mds allocator twice", KR(ret), KPC(this));
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (MDS_FAIL(allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
     MDS_LOG(WARN, "init vslice allocator failed", K(ret), K(OB_MALLOC_NORMAL_BLOCK_SIZE), KP(this), K(mem_attr));
   } else {
@@ -108,7 +107,6 @@ void *ObTenantMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_t
   }
 
   void *obj = allocator_.alloc(size);
-  MDS_LOG(DEBUG, "mds alloc ", K(size), KP(obj), K(abs_expire_time));
   if (OB_NOT_NULL(obj)) {
     share::g_mp->tenant_mds_service()
         ->record_alloc_backtrace(obj,

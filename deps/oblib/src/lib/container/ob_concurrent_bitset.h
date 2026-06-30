@@ -184,7 +184,6 @@ int ObConcurrentBitset<SIZE, IS_USE_LOCK>::find_and_set_first_zero_without_lock(
   pos = 0;
   if (IS_USE_LOCK) {
     ret = OB_ERR_UNEXPECTED;
-    OB_LOG(ERROR, "this function only used for lock free mod bitset");
   } else {
     bool is_succ = false;
     uint64_t start_pos = ATOMIC_FAA(&start_pos_, 1);
@@ -230,7 +229,6 @@ int ObConcurrentBitset<SIZE, IS_USE_LOCK>::find_and_set_first_zero_with_lock(uin
 
   if (false == IS_USE_LOCK) {
     ret = OB_ERR_UNEXPECTED;
-    OB_LOG(ERROR, "this function only used for lock mod bitset");
   } else {
     bool is_found = false;
     uint64_t first_zero_idx = 0;

@@ -302,7 +302,6 @@ int ObTxDataTable::insert(ObTxData *&tx_data)
     STORAGE_LOG(WARN, "tx data table is not init.", KR(ret), KP(this), KPC(tx_data), K(tablet_id_));
   } else if (OB_ISNULL(tx_data)) {
     ret = OB_ERR_NULL_VALUE;
-    STORAGE_LOG(ERROR, "trying to insert a null tx data.", KP(this), K(tablet_id_));
   } else if (!tx_data->is_valid_in_tx_data_table()) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "trying to insert an invalid tx data into tx data table", KR(ret),
@@ -345,7 +344,6 @@ int ObTxDataTable::insert_(ObTxData *&tx_data, ObTxDataMemtableWriteGuard &write
       }
     } else {
       // should not insert into this memtable
-      STORAGE_LOG(DEBUG, "skip this tx data memtable", KPC(tx_data), KPC(tx_data_memtable));
     }
   }
 
@@ -356,7 +354,6 @@ int ObTxDataTable::insert_(ObTxData *&tx_data, ObTxDataMemtableWriteGuard &write
     if (tx_data->end_scn_ <= clog_checkpoint_scn) {
       // Filter this tx data. The part trans ctx need to handle this error code because the memory
       // of tx data need to be freed.
-      STORAGE_LOG(DEBUG, "This tx data is filtered.", K(clog_checkpoint_scn), KPC(tx_data));
     } else {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "cannot find the correct tx data memtable to insert", KR(ret),
@@ -378,10 +375,8 @@ int ObTxDataTable::check_with_tx_data(const ObTransID tx_id,
     STORAGE_LOG(WARN, "tx data table is not init.", KR(ret), KP(this), K(tx_id));
   } else if (OB_SUCC(check_tx_data_in_memtable_(tx_id, fn, tx_data_guard))) {
     // successfully do check function in memtable, check done
-    STORAGE_LOG(DEBUG, "tx data table check with tx memtable data succeed", K(tx_id), K(fn));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret && OB_SUCC(check_tx_data_in_sstable_(tx_id, fn, tx_data_guard, recycled_scn))) {
     // successfully do check function in sstable
-    STORAGE_LOG(DEBUG, "tx data table check with tx sstable data succeed", K(tx_id), K(fn));
   } else {
     STORAGE_LOG(WARN, "check something in tx data fail.", KR(ret), K(tx_id), KP(this),
                 K(tablet_id_));
@@ -658,11 +653,9 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
   } else if (OB_FAIL(ls_->get_migration_status(migration_status))) {
   } else if (ObMigrationStatus::OB_MIGRATION_STATUS_NONE != migration_status) {
     recycle_scn.set_min();
-    STORAGE_LOG(INFO, "logstream is in migration state. skip recycle tx data", "ls_id", ls_->get_ls_id());
   } else if (OB_FAIL(ls_->get_restore_status(restore_status))) {
   } else if (ObRestoreStatus::Status::NONE != restore_status.get_status()) {
     recycle_scn.set_min();
-    STORAGE_LOG(INFO, "logstream is in restore state. skip recycle tx data", "ls_id", ls_->get_ls_id());
   } else if (FALSE_IT(tg.click("iterate tablets start"))) {
   } else if (OB_FAIL(ls_tablet_svr_->get_ls_min_end_scn(min_end_scn_from_latest_tablets,
                                                         min_end_scn_from_old_tablets))) {
@@ -713,7 +706,6 @@ int ObTxDataTable::self_freeze_task()
   int ret = OB_SUCCESS;
   const ObLSID ls_id = get_ls_id();
 
-  STORAGE_LOG(DEBUG, "start tx data table self freeze task", K(ls_id));
 
   const int64_t current_time = ObClockGenerator::getClock();
   int64_t last_freeze_ts = 0;
@@ -742,7 +734,6 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
   bool skip_calc = false;
   upper_trans_version.set_max();
 
-  STORAGE_LOG(DEBUG, "start get upper trans version", K(get_ls_id()));
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -761,7 +752,6 @@ int ObTxDataTable::get_upper_trans_version_before_given_scn(const SCN sstable_en
     TCRLockGuard lock_guard(calc_upper_trans_version_cache_.lock_);
     if (0 == calc_upper_trans_version_cache_.commit_versions_.array_.count()) {
       ret = OB_EAGAIN;
-      STORAGE_LOG(WARN, "empty commit versions. may be a concurrent transfer.", K(calc_upper_trans_version_cache_));
     } else if (!calc_upper_trans_version_cache_.commit_versions_.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "invalid cache for upper trans version calculation. ", KR(ret));
@@ -891,23 +881,7 @@ bool ObTxDataTable::skip_this_sstable_end_scn_(const SCN &sstable_end_scn)
   }
 
   if (!need_skip) {
-    STORAGE_LOG(INFO,
-                "do calculate upper trans version.",
-                K(need_skip),
-                K(sstable_end_scn),
-                K(max_decided_scn),
-                K(min_start_scn_in_ctx),
-                K(effective_scn),
-                K(min_start_scn_in_tx_data_memtable));
   } else {
-    STORAGE_LOG(TRACE,
-                "do calculate upper trans version.",
-                K(need_skip),
-                K(sstable_end_scn),
-                K(max_decided_scn),
-                K(min_start_scn_in_ctx),
-                K(effective_scn),
-                K(min_start_scn_in_tx_data_memtable));
   }
 
   return need_skip;
@@ -929,14 +903,6 @@ int ObTxDataTable::check_min_start_in_ctx_(const SCN &sstable_end_scn,
   } else if (min_start_scn <= sstable_end_scn || max_decided_scn <= effective_scn ||
              (latest_transfer_scn_.is_valid() && effective_scn < latest_transfer_scn_)) {
     need_skip = true;
-    STORAGE_LOG(DEBUG,
-                "skip calculate upper_trans_version",
-                K(sstable_end_scn),
-                K(max_decided_scn),
-                K(min_start_scn),
-                K(effective_scn),
-                K(latest_transfer_scn_),
-                K(need_skip));
   } else {
     // there is no ctx whose start_scn less than sstable_end_scn
   }
@@ -1024,7 +990,6 @@ int ObTxDataTable::update_cache_if_needed_(bool &skip_calc)
 int ObTxDataTable::update_calc_upper_trans_version_cache_(ObITable *table)
 {
   int ret = OB_SUCCESS;
-  STORAGE_LOG(DEBUG, "update calc upper trans version cache once.");
   const ObTableIterParam &iter_param = read_schema_.iter_param_;
   ObTabletHandle tablet_handle;
 
@@ -1080,14 +1045,6 @@ int ObTxDataTable::calc_upper_trans_scn_(const SCN sstable_end_scn, SCN &upper_t
     upper_trans_version = array.at(l).commit_version_;
   }
 
-  STORAGE_LOG(INFO,
-              "calculate upper trans version finish",
-              K(sstable_end_scn),
-              K(upper_trans_version),
-              K(calc_upper_trans_version_cache_),
-              K(ls_id_),
-              "array_count", array.count(),
-              "chose_idx", l);
 
   return ret;
 }
@@ -1142,7 +1099,6 @@ int ObTxDataTable::get_start_tx_scn(SCN &start_tx_scn)
   } else if (OB_ISNULL(oldest_minor_sstable = static_cast<ObSSTable *>(
       table_store_wrapper.get_member()->get_minor_sstables().get_boundary_table(false /*is_last*/)))) {
     start_tx_scn.set_max();
-    STORAGE_LOG(INFO, "this logstream do not have tx data sstable", K(start_tx_scn), K(get_ls_id()), KPC(tablet));
   } else if (OB_FAIL(oldest_minor_sstable->get_meta(meta_handle))) {
   } else if (FALSE_IT(start_tx_scn = meta_handle.get_sstable_meta().get_filled_tx_scn())) {
   } else if (start_tx_scn.is_max()) {
@@ -1185,10 +1141,8 @@ int ObTxDataTable::dump_single_tx_data_2_text(const int64_t tx_id_int, FILE *fd)
     STORAGE_LOG(WARN, "tx data table is not init.", KR(ret), KP(this), K(tx_id));
   } else if (OB_SUCC(dump_tx_data_in_memtable_2_text_(tx_id, fd))) {
     // successfully do check function in memtable, check done
-    STORAGE_LOG(DEBUG, "tx data table check with tx memtable data succeed", K(tx_id));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret && OB_SUCC(dump_tx_data_in_sstable_2_text_(tx_id, fd))) {
     // successfully do check function in sstable
-    STORAGE_LOG(DEBUG, "tx data table check with tx sstable data succeed", K(tx_id));
   } else {
     STORAGE_LOG(WARN, "check something in tx data fail.", KR(ret), K(tx_id), KP(this),
                 K(tablet_id_));
@@ -1256,13 +1210,6 @@ bool ObTxDataTable::FreezeFrequencyController::need_re_freeze(const share::ObLSI
   bool condition2_satisfied = (last_freeze_ts != 0) && (current_time - last_freeze_ts > max_freeze_interval);
   if (condition1_satisfied || condition2_satisfied) {
     need_re_freeze = true;
-    STORAGE_LOG(INFO,
-                "tx data table need refreeze",
-                K(ls_id),
-                K(max_freeze_interval),
-                KTIME(last_request_ts),
-                KTIME(last_freeze_ts),
-                KTIME(current_time));
   }
 
   return need_re_freeze;

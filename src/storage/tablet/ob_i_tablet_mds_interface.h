@@ -266,7 +266,6 @@ struct GetTabletStatusNodeFromMdsTableOp
   int operator()(const mds::UserMdsNode<mds::DummyKey, ObTabletCreateDeleteMdsUserData> &node) {
     tablet_status_.assign(node.user_data_);
     redo_scn_ = node.redo_scn_;
-    MDS_LOG(TRACE, "read tablet status in mds_table", K(node));
     return OB_SUCCESS;
   }
   ObTabletCreateDeleteMdsUserData &tablet_status_;

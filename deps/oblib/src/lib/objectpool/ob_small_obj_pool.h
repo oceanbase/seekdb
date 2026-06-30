@@ -112,16 +112,13 @@ int ObSmallObjPool<T>::init(const int64_t fixed_count,
   int64_t obj_size = sizeof(ObjItem);
   lib::ObMemAttr attr(label);
   if (OB_UNLIKELY(inited_)) {
-    LIB_LOG(ERROR, "small obj pool has been initialized");
     ret = OB_INIT_TWICE;
   } else if (OB_UNLIKELY(fixed_count <= 0)) {
-    LIB_LOG(ERROR, "invalid argument", K(fixed_count));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(allocator_.init(obj_size, label, block_size))) {
     LIB_LOG(ERROR, "init small allocator fail", K(ret), K(obj_size), K(label),
         K(block_size));
   } else if (OB_FAIL(free_list_.init("SmallObjPool", 0))) {
-    LIB_LOG(ERROR, "init free list fail", K(fixed_count));
   } else {
     fixed_count_ = fixed_count;
     free_count_ = 0;
@@ -136,8 +133,6 @@ void ObSmallObjPool<T>::destroy()
 {
   if (inited_) {
     if (free_count_ != alloc_count_) {
-      LIB_LOG(INFO, "ObSmallObjPool object info on destroy",
-          K_(alloc_count), K_(free_count), K_(fixed_count));
     }
 
     inited_ = false;
@@ -164,7 +159,6 @@ int ObSmallObjPool<T>::alloc(T *&obj)
   ObjItem *obj_item = NULL;
 
   if (OB_UNLIKELY(! inited_)) {
-    LIB_LOG(ERROR, "small obj pool has not been initialized");
     ret = OB_NOT_INIT;
   } else if (OB_NOT_NULL(obj_item = (ObjItem*)free_list_.pop())) {
     obj = &obj_item->obj_;
@@ -183,10 +177,8 @@ int ObSmallObjPool<T>::free(T* obj)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(! inited_)) {
-    LIB_LOG(ERROR, "small obj pool has not been initialized");
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(obj)) {
-    LIB_LOG(ERROR, "invalid argument", K(obj));
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObjItem *obj_item = CONTAINER_OF(obj, ObjItem, obj_);
@@ -200,7 +192,6 @@ int ObSmallObjPool<T>::free(T* obj)
       obj_item = NULL;
       (void)ATOMIC_AAF(&alloc_count_, -1);
     } else {
-      LIB_LOG(ERROR, "invalid object", K(obj), K(obj_item), "src_type", obj_item->src_type_);
       ret = OB_INVALID_DATA;
     }
   }
@@ -218,7 +209,6 @@ int ObSmallObjPool<T>::alloc_obj_(T *&obj)
   obj = NULL;
 
   if (OB_ISNULL(ptr)) {
-    LIB_LOG(ERROR, "allocate memory fail", K_(allocator));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     obj_item = new(ptr) ObjItem();

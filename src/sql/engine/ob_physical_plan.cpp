@@ -1330,7 +1330,6 @@ int ObPhysicalPlan::print_this_plan_info(ObExecContext &ctx)
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < plan_strs.count(); i++) {
-    _OB_LOG(INFO, "%*s", plan_strs.at(i).length(), plan_strs.at(i).ptr());
   }
   return ret;
 }

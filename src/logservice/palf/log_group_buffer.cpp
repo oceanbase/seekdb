@@ -84,7 +84,6 @@ int LogGroupBuffer::init(const LSN &start_lsn)
 
 void LogGroupBuffer::destroy()
 {
-  PALF_LOG(INFO, "LogGroupBuffer destroy", K(is_inited_), K_(start_lsn), KP(data_buf_), K_(reserved_buffer_size));
   is_inited_ = false;
   start_lsn_.reset();
   readable_begin_lsn_.reset();
@@ -395,7 +394,6 @@ void LogGroupBuffer::inc_update_readable_begin_lsn_(const LSN &new_readable_begi
   LSN old_readable_begin_lsn;
   get_readable_begin_lsn_(old_readable_begin_lsn);
   inc_update(&readable_begin_lsn_.val_, new_readable_begin_lsn.val_);
-  PALF_LOG(TRACE, "inc_update_readable_begin_lsn_ success", K(old_readable_begin_lsn), K(new_readable_begin_lsn));
 }
 
 int LogGroupBuffer::inc_update_readable_begin_lsn(const LSN &new_lsn)
@@ -403,7 +401,6 @@ int LogGroupBuffer::inc_update_readable_begin_lsn(const LSN &new_lsn)
   int ret = OB_SUCCESS;
   if (!new_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argumetns", K(new_lsn));
   } else {
     inc_update_readable_begin_lsn_(new_lsn);
   }
@@ -415,7 +412,6 @@ int LogGroupBuffer::inc_update_reuse_lsn(const LSN &new_reuse_lsn)
   int ret = OB_SUCCESS;
   if (!new_reuse_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argumetns", K(new_reuse_lsn));
   } else {
     LSN curr_reuse_lsn;
     get_reuse_lsn_(curr_reuse_lsn);
@@ -426,7 +422,6 @@ int LogGroupBuffer::inc_update_reuse_lsn(const LSN &new_reuse_lsn)
         get_reuse_lsn_(curr_reuse_lsn);
       }
     }
-    PALF_LOG(TRACE, "inc_update_reuse_lsn success", K(curr_reuse_lsn), K(new_reuse_lsn));
   }
   return ret;
 }
@@ -439,10 +434,8 @@ int LogGroupBuffer::truncate(const LSN &new_lsn)
   get_start_lsn_(curr_start_lsn);
   if (!new_lsn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argumetns", K(new_lsn));
   } else if (new_lsn < curr_start_lsn) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "new_lsn is less than current start_lsn", K(new_lsn), K(curr_start_lsn));
   } else {
     // Acquiring truncate_lock_ to ensure data range won't be re-written
     // by mismatched lsn which is concurrently read by read_data().
@@ -456,8 +449,6 @@ int LogGroupBuffer::truncate(const LSN &new_lsn)
     // for truncate log scene: readable_begin_lsn_ cannot fallback.
     (void) inc_update_readable_begin_lsn_(new_lsn);
     ATOMIC_STORE(&reuse_lsn_.val_, new_lsn.val_);
-    PALF_LOG(INFO, "LogGroupBuffer truncate success", K(curr_start_lsn), K(old_reuse_lsn),
-        K(old_readable_begin_lsn), K_(readable_begin_lsn), K(new_lsn));
   }
   return ret;
 }
@@ -473,7 +464,6 @@ int LogGroupBuffer::read_data(const LSN &read_begin_lsn,
   ObSpinLockGuard guard(truncate_lock_);
   if (!read_begin_lsn.is_valid() || in_read_size <= 0 || OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argumetns", K(read_begin_lsn), K(in_read_size), KP(buf));
   } else if (OB_FAIL(get_buffer_pos_(read_begin_lsn, start_pos))) {
   } else {
     LSN curr_reuse_lsn;

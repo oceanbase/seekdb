@@ -322,8 +322,6 @@ int ObInsertResolver::process_values_function(ObRawExpr *&expr)
             //do nothing
           } else if (OB_FAIL(ObRawExprUtils::replace_ref_column(expr, b_expr, value_expr))) {
           } else {
-            SQL_RESV_LOG(DEBUG, "replace ref column", K(expr), K(b_expr),
-                         K(value_expr), K(column_id));
           }
         }
       }
@@ -374,7 +372,6 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
       if (OB_ENTRY_NOT_EXIST == ret) {
         if (OB_FAIL(replace_column_to_default(expr))) {
         } else {
-          SQL_RESV_LOG(DEBUG, "replace column ref to default", K(*expr));
         }
       } else if (OB_ISNULL(column_item = insert_stmt->get_column_item_by_id(
                   get_insert_stmt()->get_insert_table_info().table_id_, column_id))) {
@@ -400,7 +397,6 @@ int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
                                                              session_info_))) {
           } else {
             insert_stmt->set_is_all_const_values(false);
-            SQL_RESV_LOG(DEBUG, "replace column ref to value", K(*expr), K(value_index));
           }
         }
       }

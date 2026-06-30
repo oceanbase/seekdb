@@ -156,8 +156,6 @@ int ObSessionValMap::free_mem()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid internal args", KP(str_buf_[current_buf_index_]));
   } else if (str_buf_[current_buf_index_]->used() > next_free_mem_point_) {
-    _OB_LOG(DEBUG, "string buf[%d] is large[%ld], switch string buf", current_buf_index_,
-              str_buf_[current_buf_index_]->used());
     int32_t next_index = (current_buf_index_ == 0 ? 1 : 0);
 
     int64_t count = 0;
@@ -171,12 +169,10 @@ int ObSessionValMap::free_mem()
         }
       }
     }
-    _OB_LOG(DEBUG, "[%ld] val migrate", count);
     if (OB_SUCC(ret)) {
       str_buf_[current_buf_index_]->reuse();
       current_buf_index_ = next_index;
       next_free_mem_point_ = std::max(2 * str_buf_[next_index]->used(), str_buf_free_threshold_);
-      _OB_LOG(DEBUG, "next_free_mem_point_[%ld]", next_free_mem_point_);
     }
   }
   return ret;

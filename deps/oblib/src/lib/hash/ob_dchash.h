@@ -298,7 +298,6 @@ public:
 #ifdef ENABLE_DEBUG_LOG
     if (tg.get_diff() > 100000) {
       ObCStringHelper helper;
-      _OB_LOG(INFO, "ObDCHash insert cost too much time, click diff (%s)", helper.convert(tg));
     }
 #endif
 
@@ -367,8 +366,6 @@ private:
     if (cur_size > (int64_t)target_size ||
         cur_size < (int64_t)target_size/shrink_threshold) {
       ATOMIC_STORE(&target_size_, next2n(cur_size));
-      _OB_LOG(INFO, "DCHash: change_size: %s this=%p node_count=%ld new_size=%ld",
-           typeid(key_t).name(), this, cur_size, next2n(cur_size));
     }
   }
 
@@ -411,8 +408,6 @@ private:
     }
     if (tg.get_diff() > 100000) {
       ObCStringHelper helper;
-      _OB_LOG(INFO, "ObDCHash alloc and init array cost too much time, click diff (%s)",
-          helper.convert(tg));
     }
     return array;
   }
@@ -420,8 +415,6 @@ private:
   Array* alloc_array(Array* prev, int64_t size) {
     Array* array = NULL;
     if (NULL != (array = (Array*)alloc_.alloc(Array::calc_nbytes(size)))) {
-      _OB_LOG(INFO, "DCHash: alloc_array: %s this=%p array=%p array_size=%ld prev_array=%p",
-           typeid(key_t).name(), this, array, size, prev);
       new(array)Array(prev, size);
     }
     return array;
@@ -429,8 +422,6 @@ private:
 
   void destroy_array(Array* array) {
     if (NULL != array) {
-      _OB_LOG(INFO, "DCHash: destroy_array: %s this=%p array=%p array_size=%ld",
-           typeid(key_t).name(), this, array, array->capacity());
       alloc_.free(array);
       array = NULL;
     }

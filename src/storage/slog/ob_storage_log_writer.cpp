@@ -243,7 +243,6 @@ int ObStorageLogWriter::batch_process_log_items(ObIBaseLogItem **items,
 {
   int ret = OB_SUCCESS;
 
-  STORAGE_REDO_LOG(DEBUG, "batch process start", K(item_cnt), K(cursor_));
 
   finish_cnt = 0;
   int64_t batch_begin_index = 0;
@@ -265,7 +264,6 @@ int ObStorageLogWriter::batch_process_log_items(ObIBaseLogItem **items,
           // skip the reserved data and nop log, write at next 4K offset
           occupied_len = write_offset_ + batch_write_buf_.get_write_len();
           write_offset_ = occupied_len;
-          STORAGE_REDO_LOG(INFO, "Modify write_offset due to single large item", K_(write_offset));
         }
         file_end = is_log_file_reach_end(*log_item, occupied_len);
         if (!file_end) {
@@ -470,7 +468,6 @@ int ObStorageLogWriter::write_logs(
   if (OB_SUCC(ret)) {
     const int64_t duration = ObTimeUtility::fast_current_time() - start_ts;
     if (duration > TIME_THRESHOLD) {
-      STORAGE_REDO_LOG(INFO, "Slow write", K(duration), K(write_len));
     }
   }
 
@@ -504,11 +501,8 @@ int ObStorageLogWriter::notify_flush(
       ObStorageLogItem *log_item = static_cast<ObStorageLogItem *>(items[i]);
       if (OB_UNLIKELY(flush_seq_ != log_item->get_seq())) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_REDO_LOG(ERROR, "The flush_seq_ doesn't match", K(flush_seq_),
-            K(log_item->start_cursor_), K(log_item->end_cursor_));
       } else {
         flush_seq_ += log_item->get_log_cnt();
-        STORAGE_REDO_LOG(INFO, "Successfully flush", "log_item", *log_item);
       }
       log_item->finish_flush(OB_SUCCESS);
     }
@@ -529,7 +523,6 @@ int ObStorageLogWriter::advance_file_id()
     write_offset_ = 0;
     cursor_.offset_ = write_offset_;
     batch_write_buf_.reuse();
-    STORAGE_REDO_LOG(INFO, "Successfully open slog file", K(cursor_.file_id_));
   }
 
   return ret;
@@ -651,7 +644,6 @@ void ObStorageLogWriter::ObSLogWriteRunner::wait()
 
 void ObStorageLogWriter::ObSLogWriteRunner::run1()
 {
-  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(tg_id_), K(is_inited_));
   lib::set_thread_name(log_writer_->get_thread_name());
   log_writer_->flush_log();
 }

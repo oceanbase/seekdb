@@ -212,8 +212,6 @@ int ObResultSet::open_result()
     if (!is_inner_result_set_ && OB_FAIL(set_mysql_info())) {
       SQL_LOG(WARN, "fail to get mysql info", K(ret));
     } else if (NULL != get_exec_context().get_physical_plan_ctx()) {
-      SQL_LOG(DEBUG, "get affected row", K(get_stmt_type()),
-              K(get_exec_context().get_physical_plan_ctx()->get_affected_rows()));
         set_affected_rows(get_exec_context().get_physical_plan_ctx()->get_affected_rows());
     }
     if (OB_SUCC(ret) && get_stmt_type() == stmt::T_ANONYMOUS_BLOCK) {
@@ -388,10 +386,8 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      _OB_LOG(ERROR, "should not call get_next_row in CMD SQL");
     }
   } else {
-    _OB_LOG(ERROR, "phy_plan not init");
     ret = OB_NOT_INIT;
   }
   //Save the current execution state to determine whether to refresh location
@@ -530,7 +526,6 @@ int ObResultSet::set_mysql_info()
   int64_t pos = 0;
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_LOG(WARN, "fail to get physical plan ctx");
   } else if (stmt::T_UPDATE == get_stmt_type()) {
     int result_len = snprintf(message_ + pos, MSG_SIZE - pos, OB_UPDATE_MSG_FMT, plan_ctx->get_row_matched_count(),
                               plan_ctx->get_row_duplicated_count(), warning_count_);
@@ -661,7 +656,6 @@ int ObResultSet::store_last_insert_id(ObExecContext &ctx)
     ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
     if (OB_ISNULL(plan_ctx)) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(WARN, "get plan ctx is NULL", K(plan_ctx));
     } else {
       uint64_t last_insert_id_session = plan_ctx->calc_last_insert_id_session();
       SQL_LOG(DEBUG, "debug last_insert_id for session", K(last_insert_id_session), K(ret));

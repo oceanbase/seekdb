@@ -93,8 +93,6 @@ int ObMicroBlockCompressor::compress(const char *in, const int64_t in_size, cons
     if (OB_FAIL(comp_buf_.ensure_space(need_size))) {
     } else if (OB_FAIL(compressor_->compress(in, in_size, comp_buf_.data(), max_comp_size, comp_size))) {
     } else if (comp_size >= in_size) {
-      STORAGE_LOG(TRACE, "compressed_size is larger than origin_size",
-                  K(comp_size), K(in_size));
       out = in;
       out_size = in_size;
     } else {
@@ -371,7 +369,6 @@ int ObMacroBlock::flush(ObIMacroBlockFlusher &macro_block_flusher, const bool is
 #ifdef ERRSIM
   ret = OB_E(EventTable::EN_BAD_BLOCK_ERROR) OB_SUCCESS;
   if (OB_CHECKSUM_ERROR == ret) { // obtest will set this code
-    STORAGE_LOG(INFO, "ERRSIM bad block: Insert a bad block.");
     macro_header_.fixed_header_.magic_ = 0;
     macro_header_.fixed_header_.data_checksum_ = 0;
   }

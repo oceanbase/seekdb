@@ -195,7 +195,6 @@ int ObAllVirtualCSReplicaTabletStats::inner_get_next_row(common::ObNewRow *&row)
     }
   } else if (OB_UNLIKELY(!tablet_handle.is_valid()) || OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "tablet is invalid", K(tablet_handle), KPC(tablet));
   } else {
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {

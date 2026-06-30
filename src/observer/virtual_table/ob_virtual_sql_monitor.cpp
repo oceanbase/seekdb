@@ -177,7 +177,6 @@ int ObVirtualSqlMonitor::inner_get_next_row(common::ObNewRow *&row)
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(plan_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "fail to get plan info");
     } else if (OB_FAIL(plan_info_->get_plan_info(plan_info))) {
     } else if (OB_ISNULL(plan_info)) {
       ret = OB_ERR_UNEXPECTED;
@@ -244,9 +243,6 @@ int ObVirtualSqlMonitor::inner_get_next_row(common::ObNewRow *&row)
 
       if (OB_SUCC(ret)) {
         row = &cur_row_;
-        SERVER_LOG(DEBUG, "get next row", K(plan_info_), K(plan_info_->get_operator_count()),
-                   K(request_id_), K(plan_id_), K(*plan_info),
-                   K(start_id_), K(end_id_));
       }
     }
   }

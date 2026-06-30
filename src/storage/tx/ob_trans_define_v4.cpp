@@ -639,7 +639,6 @@ void ObTxDesc::dump_and_print_trace()
   if (OB_FAIL(lock_.trylock())) {
   } else {
     share::ObTaskController::get().allow_next_syslog();
-    TRANS_LOG(INFO, "[tx desc dump]", KPC(this));
     print_trace_();
     lock_.unlock();
   }
@@ -926,7 +925,6 @@ int ObTxDesc::get_inc_exec_info(ObTxExecResult &exec_info)
   if (OB_SUCC(ret) && OB_SUCC(exec_info.merge_cflict_txs(conflict_txs_))) {
     conflict_txs_.reset();
   }
-  DETECT_LOG(TRACE, "merge conflict txs to exec result", K(conflict_txs_), K(exec_info));
   return ret;
 }
 
@@ -941,7 +939,6 @@ int ObTxDesc::add_exec_info(const ObTxExecResult &exec_info)
     TRANS_LOG(WARN, "exec_info is incomplete set incomplete also", K(ret), K(exec_info));
   }
   (void) merge_conflict_txs_(exec_info.conflict_txs_);
-  DETECT_LOG(TRACE, "add exec result conflict txs to desc", K(conflict_txs_), K(exec_info));
   return ret;
 }
 
@@ -1025,8 +1022,6 @@ bool ObTxDesc::execute_commit_cb()
 #ifdef ENABLE_DEBUG_LOG
           ob_abort();
 #endif
-          TRANS_LOG(ERROR, "unexpected error happen, cb_tid_ should smaller than 0", 
-                    KP(this), K(tx_id), KP(cb_tid_));
         }
         ATOMIC_STORE_REL(&cb_tid_, GETTID());
         // NOTE: it is required add trace event before callback,
@@ -1041,7 +1036,6 @@ bool ObTxDesc::execute_commit_cb()
         commit_cb_lock_.unlock();
       }
     }
-    TRANS_LOG(TRACE, "execute_commit_cb", KP(this), K(tx_id), KP(cb), K(executed));
   }
   return executed;
 }
@@ -1096,8 +1090,6 @@ void ObTxDesc::release_implicit_savepoint(const ObTxSEQ savepoint)
   }
   // invalid txn snapshot if it was created after the savepoint
   if (with_tx_snapshot() && savepoint < snapshot_scn_) {
-    TRANS_LOG(INFO, "release txn snapshot_version", K_(snapshot_version),
-              K(savepoint), K_(snapshot_scn), K_(tx_id));
     snapshot_version_.reset();
   }
 }
@@ -1122,7 +1114,6 @@ int ObTxDesc::add_conflict_tx_(const ObTransIDAndAddr &conflict_tx) {
   if (conflict_txs_.count() >= MAX_RESERVED_CONFLICT_TX_NUM) {
     ret = OB_SIZE_OVERFLOW;
     int64_t max_reserved_conflict_tx_num = MAX_RESERVED_CONFLICT_TX_NUM;
-    DETECT_LOG(WARN, "too many conflict trans id", K(max_reserved_conflict_tx_num), K(conflict_txs_), K(conflict_tx));
   } else if (!is_contain(conflict_txs_, conflict_tx)) {
     if (OB_FAIL(conflict_txs_.push_back(conflict_tx))) {
     }
@@ -1395,7 +1386,6 @@ static int append_dedup(ObIArray<T> &a, const ObIArray<T> &b)
 int ObTxExecResult::merge_result(const ObTxExecResult &r)
 {
   int ret = OB_SUCCESS;
-  TRANS_LOG(TRACE, "txExecResult.merge with.start", K(r), KPC(this), K(lbt()));
   incomplete_ |= r.incomplete_;
   if (OB_FAIL(append_dedup(parts_, r.parts_))) {
     incomplete_ = true;
@@ -1408,10 +1398,8 @@ int ObTxExecResult::merge_result(const ObTxExecResult &r)
     ret = merge_cflict_txs(r.conflict_txs_);
   }
   if (incomplete_) {
-    TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
   }
 
-  TRANS_LOG(TRACE, "txExecResult.merge with.end", KPC(this));
   return ret;
 }
 
@@ -1481,7 +1469,6 @@ int ObTxDescMgr::start()
   CK(stoped_);
   OX(stoped_ = false);
   int active_cnt = map_.alloc_cnt();
-  TRANS_LOG(INFO, "txDescMgr.start", K(inited_), K(stoped_), K(active_cnt));
   return ret;
 }
 
@@ -1493,12 +1480,9 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_ISNULL(tx_desc) || !tx_desc->is_valid()) {
-      TRANS_LOG(ERROR, "stop tx desc invalid argument", KPC(tx_desc));
     } else {
-      TRANS_LOG(INFO, "stop tx desc", "tx_id", tx_desc->get_tx_id());
       if (OB_FAIL(txs_.stop_tx(*tx_desc))) {
       } else {
-        TRANS_LOG(INFO, "stop tx desc succeed");
       }
     }
     return true;
@@ -1532,7 +1516,6 @@ int ObTxDescMgr::stop()
   StopTxDescFunctor fn(txs_);
   if (OB_FAIL(map_.for_each(fn))) {
   }
-  TRANS_LOG(INFO, "txDescMgr.stop", K(inited_), K(stoped_), K(active_cnt));
   return OB_SUCCESS;
 }
 
@@ -1548,11 +1531,9 @@ int ObTxDescMgr::wait()
     while (!done && i++ < MAX_RETRY_TIMES) {
       active_cnt = map_.alloc_cnt();
       if (!active_cnt) {
-        TRANS_LOG(INFO, "txDescMgr.wait done.");
         done = true;
         break;
       }
-      TRANS_LOG(WARN, "txDescMgr.waiting.", K(active_cnt));
       ob_usleep(SLEEP_US);
     }
     if (!done) {
@@ -1644,7 +1625,6 @@ int ObTxDescMgr::get(const ObTransID &tx_id, ObTxDesc *&tx_desc)
   if (OB_SUCC(ret)) {
     ret = map_.get(tx_id, tx_desc);
   }
-  TRANS_LOG(TRACE, "txDescMgr.get trans", K(tx_id), KP(tx_desc));
   return ret;
 }
 
@@ -1657,14 +1637,12 @@ void ObTxDescMgr::revert(ObTxDesc &tx)
     map_.revert(&tx);
   }
   // tx_id may be invalid when tx was reused before.
-  TRANS_LOG(TRACE, "txDescMgr.revert trans", K(tx_id), KP(&tx));
 }
 
 int ObTxDescMgr::remove(ObTxDesc &tx)
 {
   int ret = OB_SUCCESS;
   ObTransID tx_id = tx.get_tx_id();
-  TRANS_LOG(TRACE, "txDescMgr.unregister trans:", K(tx_id), KP(&tx));
   OV(inited_, OB_NOT_INIT);
   OX(map_.del(tx_id, &tx));
   OX(tx.flags_.SHADOW_ = true);
@@ -1694,7 +1672,6 @@ int ObTxDescMgr::iterate_tx_scheduler_stat(ObTxSchedulerStatIterator &tx_schedul
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
-    TRANS_LOG(WARN, "ObTxDescMgr not inited");
     ret = OB_NOT_INIT;
   } else {
     IterateTxSchedulerFunctor fn(tx_scheduler_stat_iter);
@@ -1720,7 +1697,6 @@ int TxCtxStateHelper::switch_state(const int64_t op)
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(op));
   } else if (OB_UNLIKELY(!TxCtxRoleState::is_valid(state_))) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "unexpected state", K(state_));
   } else {
     const int64_t new_state = STATE_MAP[state_][op];
     if (OB_UNLIKELY(!TxCtxRoleState::is_valid(new_state))) {
@@ -1793,7 +1769,6 @@ int ObTxDesc::clear_state_for_autocommit_retry()
       snapshot_version_.reset();
       snapshot_scn_.reset();
       snapshot_uncertain_bound_ = 0;
-      TRANS_LOG(TRACE, "", KPC(this));
     }
   }
   return OB_SUCCESS;

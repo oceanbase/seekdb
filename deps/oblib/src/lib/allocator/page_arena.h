@@ -422,8 +422,6 @@ public: // API
   {
     int ret = OB_SUCCESS;
     if (page_size < (int64_t)sizeof(Page)) {
-      _OB_LOG(ERROR, "invalid page size(page_size=%ld, page=%ld)", page_size,
-              (int64_t)sizeof(Page));
     } else {
       page_size_ = page_size;
       page_allocator_ = alloc;
@@ -962,8 +960,6 @@ public: // API
     int64_t count = 0;
     while (NULL != page) {
       abort_unless(page->check_magic_code());
-      _OB_LOG(INFO, "DUMP PAGEARENA page[%ld]:rawsize[%ld],used[%ld],remain[%ld]",
-                count++, page->raw_size(), page->used(), page->remain());
       page = page->next_page_;
     }
   }

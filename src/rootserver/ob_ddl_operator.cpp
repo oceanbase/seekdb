@@ -229,7 +229,6 @@ int ObDDLOperator::alter_database(ObDatabaseSchema &new_database_schema,
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
   } else {
     if (need_update_schema_version) {
       
@@ -787,7 +786,6 @@ int ObDDLOperator::create_table(ObTableSchema &table_schema,
   ObSchemaGetterGuard schema_guard;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
   } else {
@@ -821,7 +819,6 @@ int ObDDLOperator::sync_version_for_cascade_table(const ObIArray<uint64_t> &tabl
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
   } else {
     for (int64_t i = 0; i < table_ids.count() && OB_SUCC(ret); i++) {
       id = table_ids.at(i);
@@ -1116,7 +1113,6 @@ int ObDDLOperator::alter_table_drop_aux_column(
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
   } else if (!is_index
              && OB_FAIL(new_table_schema.get_aux_vp_tid_array(aux_vp_tid_array))) {
@@ -1219,7 +1215,6 @@ int ObDDLOperator::update_prev_id_for_delete_column(const ObTableSchema &origin_
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
   } else if (OB_ISNULL(new_origin_col)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Failed to get column from new table schema", K(ret));
@@ -2198,7 +2193,6 @@ int ObDDLOperator::alter_table_alter_index(
   } else {
     
     int64_t new_schema_version = OB_INVALID_VERSION;
-    RS_LOG(INFO, "start alter table alter index", K(alter_index_arg));
     const ObTableSchema *index_table_schema = NULL;
     ObString index_table_name;
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -2380,7 +2374,6 @@ int ObDDLOperator::sync_version_for_cascade_mock_fk_parent_table(
   ObSchemaService *schema_service = schema_service_.get_schema_service();
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
-    RS_LOG(ERROR, "schema_service must not null");
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count() ; ++i) {
       ObSchemaGetterGuard schema_guard;
@@ -2540,7 +2533,6 @@ int ObDDLOperator::alter_table_rename_index(
     LOG_WARN("schema_service is NULL", KR(ret));
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
   } else {
-    RS_LOG(INFO, "start alter table rename index", K(rename_index_arg));
     const ObTableSchema *index_table_schema = nullptr;
     ObString index_table_name;
     ObString new_index_table_name;
@@ -2810,7 +2802,6 @@ int ObDDLOperator::alter_table_rename_index_with_origin_index_name(const uint64_
   ObString new_index_table_name;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *index_table_schema = nullptr;
-  RS_LOG(INFO, "start alter table rename index", K(index_table_id), K(new_index_name));
   if (OB_UNLIKELY(false || OB_INVALID_ID == index_table_id || new_index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(index_table_id), K(new_index_name));
@@ -2887,7 +2878,6 @@ int ObDDLOperator::alter_index_table_parallel(
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
   } else {
     int64_t new_schema_version = OB_INVALID_VERSION;
-    RS_LOG(INFO, "start alter table alter index parallel", K(alter_parallel_arg));
     const ObTableSchema *index_table_schema = NULL;
     ObString index_table_name;
     ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -4675,7 +4665,6 @@ int ObDDLOperator::init_tenant_database(const ObTenantSchema &tenant_schema,
 
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_SYS;
-      RS_LOG(ERROR, "schema_service must not null");
     } else if (OB_FAIL(ObSchema::set_charset_and_collation_options(tenant_schema.get_charset_type(),
                                                                    tenant_schema.get_collation_type(),
                                                                    db_schema))) {
@@ -4693,7 +4682,6 @@ int ObDDLOperator::init_tenant_database(const ObTenantSchema &tenant_schema,
     ObSchemaService *schema_service = schema_service_.get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_SYS;
-      RS_LOG(ERROR, "schema_service must not null");
     } else {
       ObSqlString ddl_stmt_str;
       ObString ddl_sql;

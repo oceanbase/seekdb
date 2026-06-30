@@ -244,7 +244,6 @@ int VectorRangeUtil::common_bound(sql::ObExpr *expr, sql::ObEvalCtx &ctx,
         LST_DO_CODE(FIND_BOUND_USE_FIXED_FMT, FIXED_VEC_LIST);
         default: {
           ret = OB_ERR_UNEXPECTED;
-          COMMON_LOG(WARN, "unexpected type class", K(vec_tc));
         }
       }
       break;

@@ -378,8 +378,6 @@ private:
     if (total_mem_used_func_) {
       total_mem_used = total_mem_used_func_();
     }
-    SQL_ENG_LOG(INFO, "dump hp infras group info", K(period_row_cnt_), K(est_part_cnt_), K(slice_cnt),
-      K(mem_bound), K(data_size), K(total_mem_used));
   }
   bool need_dump()
   {
@@ -392,8 +390,6 @@ private:
     }
     int64_t avg_mem_bound = get_each_slice_avg_size(sql_mem_processor_->get_mem_bound());
     avg_mem_bound = avg_mem_bound > MIN_MEM_BOUND ? avg_mem_bound : MIN_MEM_BOUND;
-    SQL_ENG_LOG(TRACE, "check need dump", K(period_row_cnt_), K(est_part_cnt_), K(slice_cnt),
-      K(avg_mem_bound), K(sql_mem_processor_->get_mem_bound()));
     return (avg_mem_bound <= est_part_cnt_ * BLOCK_SIZE + get_mem_used()) && (period_row_cnt_ > MIN_PERIOD_ROW_CNT);
   }
   OB_INLINE int64_t get_bucket_idx(const uint64_t hash_value)
@@ -2013,7 +2009,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
           if (OB_FAIL(hash_table_.set(*new_part_cols))) {
           } else {
             inserted = true;
-            SQL_ENG_LOG(DEBUG, "insert exprs", K(hash_value), K(ROWEXPR2STR(*eval_ctx_, exprs)));
           }
         }
       } else {
@@ -2024,7 +2019,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
     } else {
       // exists, return exists error
       exists = true;
-      SQL_ENG_LOG(DEBUG, "insert exprs", K(hash_value), K(ROWEXPR2STR(*eval_ctx_, exprs)));
     }
   }
   return ret;
@@ -2082,7 +2076,6 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
                 if (OB_FAIL(hash_table_.set(*new_part_cols))) {
                 } else {
                   inserted = true;
-                  SQL_ENG_LOG(DEBUG, "insert exprs", K(hash_value), K(ROWEXPR2STR(*eval_ctx_, exprs)));
                 }
               }
             }
@@ -2095,7 +2088,6 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
       } else {
         // exists, return exists error
         exists = true;
-        SQL_ENG_LOG(DEBUG, "insert exprs", K(hash_value), K(ROWEXPR2STR(*eval_ctx_, exprs)));
       }
     }
   }
@@ -2249,10 +2241,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::finish_insert_row()
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(cur_dumped_parts_)) {
     for (int64_t i = 0; i < est_part_cnt_ && OB_SUCC(ret); ++i) {
-      SQL_ENG_LOG(TRACE, "trace dumped partition",
-        K(cur_dumped_parts_[i]->store_.get_row_cnt_in_memory()),
-        K(cur_dumped_parts_[i]->store_.get_row_cnt_on_disk()),
-        K(i), K(est_part_cnt_), K(cur_dumped_parts_[i]->part_key_));
       if (OB_FAIL(cur_dumped_parts_[i]->store_.dump(false, true))) {
       } else if (OB_FAIL(cur_dumped_parts_[i]->store_.finish_add_row(true))) {
       }
@@ -2266,7 +2254,6 @@ template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_left_partition()
 {
   int ret = OB_SUCCESS;
-  SQL_ENG_LOG(TRACE, "trace left part count", K(left_part_list_.get_size()));
   cur_left_part_ = left_part_list_.remove_last();
   if (OB_NOT_NULL(cur_left_part_)) {
     ObIntraPartition *tmp_part = nullptr;
@@ -2286,7 +2273,6 @@ template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_right_partition()
 {
   int ret = OB_SUCCESS;
-  SQL_ENG_LOG(TRACE, "trace right part count", K(right_part_list_.get_size()));
   cur_right_part_ = right_part_list_.remove_last();
   if (OB_NOT_NULL(cur_right_part_)) {
     ObIntraPartition *tmp_part = nullptr;
@@ -2458,7 +2444,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_partition(InputSid
   } else if (is_left()) {
     if (OB_FAIL(get_next_left_partition())) {
       if (OB_ITER_END != ret) {
-        SQL_ENG_LOG(WARN, "failed to get next left partition");
       }
     } else if (OB_ISNULL(cur_left_part_)
         || InputSide::LEFT != cur_left_part_->part_key_.nth_way_) {
@@ -2470,7 +2455,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_partition(InputSid
   } else {
     if (OB_FAIL(get_next_right_partition())) {
       if (OB_ITER_END != ret) {
-        SQL_ENG_LOG(WARN, "failed to get next right partition");
       }
     } else if (OB_ISNULL(cur_right_part_)
         || InputSide::RIGHT != cur_right_part_->part_key_.nth_way_) {
@@ -2513,7 +2497,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_right_next_row(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_right_part_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_right_part_));
   } else if (OB_FAIL(right_row_store_iter_.get_next_row(store_row))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
@@ -2529,7 +2512,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_left_next_row(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_left_part_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_left_part_));
   } else if (OB_FAIL(left_row_store_iter_.get_next_row(store_row))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
@@ -2566,7 +2548,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_left_next_batch(
     SQL_ENG_LOG(WARN, "hash values vector is not init", K(ret));
   } else if (OB_ISNULL(cur_left_part_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_left_part_));
   } else if (OB_FAIL(left_row_store_iter_.get_next_batch(exprs,
                                                          *eval_ctx_,
                                                          max_row_cnt,
@@ -2595,7 +2576,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_right_next_batch(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_right_part_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_right_part_));
   } else if (OB_FAIL(right_row_store_iter_.get_next_batch(exprs, *eval_ctx_, max_row_cnt, read_rows))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
@@ -2659,7 +2639,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_right_next_row(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_right_part_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_right_part_));
   } else if (OB_FAIL(right_row_store_iter_.get_next_row(store_row))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
@@ -2677,7 +2656,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_left_next_row(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_left_part_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_left_part_));
   } else if (OB_FAIL(left_row_store_iter_.get_next_row(store_row))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));

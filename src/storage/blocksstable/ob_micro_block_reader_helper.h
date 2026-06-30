@@ -52,7 +52,6 @@ int ObMicroBlockReaderHelper::init(ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(allocator_)) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "allocator is not null, might double init", KP(allocator_));
   } else {
     allocator_ = &allocator;
   }

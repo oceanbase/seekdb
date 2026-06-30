@@ -50,7 +50,6 @@ bool ObAllVirtualMdsEventHistory::judge_key_in_ranges_(const MdsEventKey &key) c
 int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
 {
   int ret = OB_SUCCESS;
-  MDS_LOG(INFO, "start range read", K(*this));
   if (OB_FAIL(ObMdsEventBuffer::for_each([this, temp_buffer, buf_len](const MdsEventKey &key, const MdsEvent &event) -> int {
     int ret = OB_SUCCESS;
     int tmp_ret = OB_SUCCESS;
@@ -63,9 +62,7 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
           if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
             MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
           } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-            MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
           } else {
-            MDS_LOG(TRACE, "scan", K(key));
           }
         }
       }
@@ -79,7 +76,6 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
 int ObAllVirtualMdsEventHistory::point_read_(char *temp_buffer, int64_t buf_len)
 {
   int ret = OB_SUCCESS;
-  MDS_LOG(INFO, "start point read", K(*this));
   {
     for (int64_t idx = 0; idx < tablet_points_.count() && OB_SUCC(ret); ++idx) {
       MdsEventKey key(share::SYS_LS, tablet_points_[idx]);
@@ -94,7 +90,6 @@ int ObAllVirtualMdsEventHistory::point_read_(char *temp_buffer, int64_t buf_len)
             if (OB_FAIL(convert_event_info_to_row_(key, event, temp_buffer, buf_len, cur_row_))) {
               MDS_LOG(WARN, "failed to convert_node_info_to_row_", K(ret), K(*this));
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-              MDS_LOG(WARN, "fail to add_row to scanner_", K(*this));
             }
           }
         }
@@ -102,12 +97,10 @@ int ObAllVirtualMdsEventHistory::point_read_(char *temp_buffer, int64_t buf_len)
       }))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
-          MDS_LOG(WARN, "OB_ENTRY_NOT_EXIST", K(key));
         } else {
           MDS_LOG(WARN, "failed to do for_each", K(ret), K(*this));
         }
       } else {
-        MDS_LOG(INFO, "read key", K(key), K(*this));
       }
     }
   }
@@ -124,7 +117,6 @@ int ObAllVirtualMdsEventHistory::inner_get_next_row(common::ObNewRow *&row)
       constexpr int64_t BUFFER_SIZE = 32_MB;
       if (OB_ISNULL(temp_buffer = (char *)ob_malloc(BUFFER_SIZE, "VirMdsEvent"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        MDS_LOG(WARN, "fail to alloc buffer", K(*this));
       } else {
         if (key_ranges_.count() >= 1 || !tablet_ranges_.empty()) {// scan read
           ret = range_scan_(temp_buffer, BUFFER_SIZE);

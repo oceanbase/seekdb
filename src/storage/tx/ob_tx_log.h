@@ -1533,10 +1533,8 @@ int ObTxLogBlock::deserialize_log_body(T &tx_log_body)
   int64_t tmp_pos = pos_;
   if (OB_ISNULL(replay_buf_)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
   } else if (T::LOG_TYPE != cur_log_type_) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid log_body type", K(T::LOG_TYPE), K(cur_log_type_));
   } else {
     if (OB_NOT_NULL(big_segment_buf_)) {
       if (OB_FAIL(big_segment_buf_->deserialize_object(tx_log_body))) {
@@ -1562,16 +1560,13 @@ int ObTxLogBlock::add_new_log(T &tx_log_body, ObTxBigSegmentBuf *big_segment_buf
   ObTxLogHeader header(T::LOG_TYPE);
   if ((OB_ISNULL(fill_buf_.get_buf()))) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(ERROR, "invalid argument", K(*this));
   } else if (ObTxLogType::TX_REDO_LOG == cur_log_type_) {
     ret = OB_EAGAIN;
-    TRANS_LOG(WARN, "MutatorBuf is using");
   } else if (OB_NOT_NULL(big_segment_buf_) && big_segment_buf_->is_active()) {
     ret = OB_NOT_SUPPORTED;
     TRANS_LOG(WARN, "big segment is not empty, can not add new log", K(ret), KPC(this));
   } else if (T::LOG_TYPE == ObTxLogType::TX_REDO_LOG) {
     // ret = OB_EAGAIN;
-    TRANS_LOG(DEBUG, "insert redo_log type into cb_arg_array_", K(tx_log_body), KPC(this));
   } else if (OB_FAIL(tx_log_body.before_serialize())) {
   } else {
     const int64_t serialize_size = header.get_serialize_size() + tx_log_body.get_serialize_size();

@@ -169,19 +169,19 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
                   if (OB_FAIL(HELPER_CLASS::on_register(buf, len, buffer_ctx))) {\
                     MDS_LOG(WARN, "call user helper on_register failed", KR(ret));\
                   } else {\
-                    MDS_LOG(INFO, "buffer ctx on_register", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+                    \
                   }\
                 } else {\
                   if (OB_FAIL(HELPER_CLASS::on_replay(buf, len, arg.scn_, buffer_ctx))) {\
                     MDS_LOG(WARN, "call user helper on_replay failed", KR(ret));\
                   } else {\
-                    MDS_LOG(INFO, "buffer ctx on_replay", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+                    \
                   }\
                 }\
               }\
               break;\
               case NotifyType::ON_REDO:\
-              MDS_LOG(INFO, "buffer ctx on_redo", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+              \
               buffer_ctx.on_redo(arg.scn_);\
               break;\
               case NotifyType::TX_END:\
@@ -200,16 +200,16 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
                 MDS_ASSERT(OB_NOT_NULL(can_not_do_tx_end_reason));\
                 MDS_LOG(INFO, "check can do tx end return false", KR(ret), K(node), K(can_not_do_tx_end_reason));\
               } else {\
-                MDS_LOG(INFO, "buffer ctx before_prepare", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+                \
                 buffer_ctx.before_prepare();\
               }\
               break;\
               case NotifyType::ON_PREPARE:\
-              MDS_LOG(INFO, "buffer ctx on_prepare", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+              \
               buffer_ctx.on_prepare(arg.trans_version_);\
               break;\
               case NotifyType::ON_COMMIT:\
-              MDS_LOG(INFO, "buffer ctx on_commit", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+              \
               if (OB_FAIL(common::meta::MdsCommitForOldMdsWrapper<HELPER_CLASS>::\
                           on_commit_for_old_mds(buf,\
                                                 len,\
@@ -227,7 +227,7 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
               }\
               break;\
               case NotifyType::ON_ABORT:\
-              MDS_LOG(INFO, "buffer ctx on_abort", K(node), KP(&buffer_ctx), K(buffer_ctx));\
+              \
               buffer_ctx.on_abort(arg.scn_);\
               break;\
               default:\

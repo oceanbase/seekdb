@@ -216,7 +216,6 @@ public:
   ~ObLatch()
   {
     if (0 != lock_) {
-      COMMON_LOG(DEBUG, "invalid lock,", K(lock_), KCSTRING(lbt()));
     }
   }
   int try_rdlock(const uint32_t latch_id);

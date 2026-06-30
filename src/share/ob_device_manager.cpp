@@ -55,7 +55,6 @@ int ObTenantStsCredentialMgr::get_sts_credential(
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "sts_credential is null", K(ret), KP(tmp_credential));
       }
-      OB_LOG(INFO, "get sts credential successfully");
     }
     if (OB_FAIL(ret) && REACH_TIME_INTERVAL(LOG_INTERVAL_US)) {
       OB_LOG(WARN, "try to get sts credential", K(ret), KP(tmp_credential));
@@ -172,7 +171,6 @@ void ObDeviceManager::destroy()
     device_count_ = 0;
     OB_LOG_RET(WARN, ret_dev, "release the init resource", K(ret_dev), K(ret_handle));
   }
-  OB_LOG(INFO, "destroy device manager!");
 }
 
 ObDeviceManager& ObDeviceManager::get_instance()
@@ -216,13 +214,11 @@ int parse_storage_info(common::ObString storage_type_prefix, ObIODevice*& device
     OB_LOG(WARN, "HDFS storage is not supported", K(ret), K(storage_type_prefix));
   } else {
     ret = OB_INVALID_BACKUP_DEST;
-    OB_LOG(WARN, "invaild device name info!", K(storage_type_prefix));
   }
 
   if (OB_SUCCESS != ret) {
   } else if (OB_ISNULL(mem)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "fail to alloc mem for device ins!", K(storage_type_prefix));
   } else {
     device_handle = static_cast<ObIODevice*>(mem);
     device_handle->device_type_ = device_type;
@@ -281,8 +277,6 @@ int ObDeviceManager::alloc_device_(
           abort_unless(device_count_ == MAX_DEVICE_INSTANCE);
           device_count_--;
           avai_idx = last_no_ref_idx;
-          OB_LOG(INFO, "release one device for realloc another!", KP(old_key.ptr()),
-              K(storage_type_prefix), KP(device_key.ptr()));
         }
       }
 
@@ -294,7 +288,6 @@ int ObDeviceManager::alloc_device_(
         } else if (OB_FAIL(device_map_.set_refactored(cur_key, &(device_ins_[avai_idx])))) {
         } else if (OB_FAIL(handle_map_.set_refactored((int64_t)(device_handle), &(device_ins_[avai_idx])))) {
         } else {
-          OB_LOG(INFO, "success insert into map!", K(storage_type_prefix), KP(device_key.ptr()));
         }
       }
     }
@@ -308,8 +301,6 @@ int ObDeviceManager::alloc_device_(
   } else {
     device_ins_[avai_idx].device_ = device_handle;
     device_count_++;
-    OB_LOG(INFO, "alloc a new device!",
-           K(storage_type_prefix), K(avai_idx), K(device_count_), K(device_handle));
     device_info = &(device_ins_[avai_idx]);
   }
 
@@ -472,30 +463,24 @@ int ObDeviceManager::release_device(ObIODevice *&device_handle)
   // device_->inc_ref/dec_ref/get_ref_cnt are atomic operations, so acquiring a read lock suffices
   ObQSyncLockReadGuard guard(lock_);
   if (!is_init_) {
-    OB_LOG(WARN, "device manager not init!");
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(device_handle)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "device_handle is null!");
   } else if (OB_FAIL(handle_map_.get_refactored((int64_t)(device_handle), device_info))) {
   }
 
   if (OB_SUCCESS == ret) {
     if (OB_ISNULL(device_info) || OB_ISNULL(device_info->device_)) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "Exception: get a null device handle!", K(device_handle));
     } else {
       if (0 >= device_info->device_->get_ref_cnt()) {
-        OB_LOG(WARN, "the device ref is 0/small 0, maybe a invalid release!", K(device_info->device_));
         ret = OB_INVALID_ARGUMENT;
       } else {
         abort_unless(device_count_ > 0);
         abort_unless(device_info->device_->get_ref_cnt() > 0);
         device_info->device_->dec_ref();
         if (0 == device_info->device_->get_ref_cnt()) {
-          OB_LOG(DEBUG, "A Device has no others ref", K(device_info->device_), KP(device_info->device_key_));
         } else {
-          OB_LOG(DEBUG, "released dev info", K(device_info->device_), K(device_info->device_->get_ref_cnt()));
         }
         device_handle = NULL;
       }

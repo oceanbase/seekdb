@@ -83,16 +83,12 @@ int ObBase64Encoder::encode(const uint8_t *input, const int64_t input_len,
   if (OB_ISNULL(input) || OB_ISNULL(output) ||
       OB_UNLIKELY(input_len < 0 || output_len < 0) || pos < 0) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(WARN, "invalid argument input=%p output=%p, input_len=%ld, pos=%ld",
-            input, output, input_len, pos);
   } else {
     uint8_t output_idxes[4] = {0, 0, 0, 0};
 
     int64_t rounds = input_len / 3;
     if (OB_UNLIKELY(pos + rounds * 4 > output_len)) {
       ret = OB_BUF_NOT_ENOUGH;
-      _OB_LOG(WARN, "buffer is not enough pos = %ld, output_len = %ld, rounds = %ld",
-                  pos, output_len, rounds);
     }
     const uint8_t *iter_input = input;
     for (int64_t i = 0; OB_SUCC(ret) && i < rounds; i++) {
@@ -125,8 +121,6 @@ int ObBase64Encoder::encode(const uint8_t *input, const int64_t input_len,
 
         if (OB_UNLIKELY(pos + 3 >= output_len)) {
           ret = OB_BUF_NOT_ENOUGH;
-          _OB_LOG(WARN, "buffer is not enough pos = %ld, output_len = %ld",
-                  pos, output_len);
         } else {
           output[pos++] = BASE64_CHARS[idx1];
           output[pos++] = BASE64_CHARS[idx2];
@@ -141,8 +135,6 @@ int ObBase64Encoder::encode(const uint8_t *input, const int64_t input_len,
 
         if (OB_UNLIKELY(pos + 3 >= output_len)) {
           ret = OB_BUF_NOT_ENOUGH;
-          _OB_LOG(WARN, "buffer is not enough, pos = %ld, output_len = %ld",
-                  pos, output_len);
         } else {
           output[pos++] = BASE64_CHARS[idx1];
           output[pos++] = BASE64_CHARS[idx2];
@@ -163,8 +155,6 @@ int ObBase64Encoder::decode(const char *input, const int64_t input_len,
   bool all_skipped = false;
   if (OB_ISNULL(input) || OB_UNLIKELY(input_len < 0 || output_len < 0 || pos< 0)) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(WARN, "invalid argument input=%p, output=%p, input_len=%ld, output_len=%ld, pos=%ld",
-            input, output, input_len, output_len, pos);
   } else if (skip_spaces) {
     all_skipped = true;
     for (int64_t i = 0; all_skipped && i < input_len; ++i) {
@@ -179,8 +169,6 @@ int ObBase64Encoder::decode(const char *input, const int64_t input_len,
     pos = 0;
   } else if (OB_ISNULL(output)) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(WARN, "invalid argument input=%p, output=%p, input_len=%ld, output_len=%ld, pos=%ld",
-            input, output, input_len, output_len, pos);
   } else {
     uint8_t uint8_array_3[3];
     uint8_t uint8_array_4[4];
@@ -188,8 +176,6 @@ int ObBase64Encoder::decode(const char *input, const int64_t input_len,
     int64_t rounds = input_len / 4;
     if (OB_UNLIKELY(rounds * 3) + pos > output_len) {
       ret = OB_BUF_NOT_ENOUGH;
-      _OB_LOG(WARN, "buffer not enough, pos=%ld, output_len=%ld, input_len=%ld",
-                    pos, output_len, input_len);
     }
     const char *iter_input = input;
     int64_t skipped_spaces = 0;
@@ -199,8 +185,6 @@ int ObBase64Encoder::decode(const char *input, const int64_t input_len,
           ++skipped_spaces;
         } else {
           ret = OB_INVALID_ARGUMENT;
-          _OB_LOG(WARN, "invalid base64 char, cur_idx=%ld, char=%c",
-                      iter_input - input, *iter_input);
         }
       } else {
         uint8_array_4[i++] = (uint8_t)(*iter_input);
@@ -254,7 +238,6 @@ int ObBase64Encoder::decode(const char *input, const int64_t input_len,
         if (skip_spaces && (pos + i - 1 >= output_len)) {
           ret = OB_INVALID_ARGUMENT;
         } else {
-          _OB_LOG(WARN, "buffer not enough, pos=%ld, output_len = %ld, i = %ld", pos, output_len, i);
         }
       } else {
         for (int k = 0; k < i - 1; k++) {

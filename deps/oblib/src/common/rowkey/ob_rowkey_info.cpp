@@ -333,7 +333,6 @@ int ObRowkeyInfo::expand(const int64_t size)
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "allocator is NULL.", K(ret));
   } else if (size > capacity_) {
-    COMMON_LOG(DEBUG, "Expand rowkey info array.", "old_size", capacity_, "new_size", size);
     ObRowkeyColumn *tmp = static_cast<ObRowkeyColumn*>(allocator_->alloc(sizeof(ObRowkeyColumn)
         * size));
     if (NULL == tmp) {
@@ -412,7 +411,6 @@ int ObRowkeyInfo::get_column_ids(ObIArray<uint64_t> &column_ids) const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(columns_)) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "invalid columns array", K(columns_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < size_; i++) {
     if (OB_FAIL(column_ids.push_back(columns_[i].column_id_))) {
@@ -428,7 +426,6 @@ int ObRowkeyInfo::get_spatial_col_id_by_type(uint64_t &column_id, ObObjType type
   bool found = false;
   if (OB_ISNULL(columns_)) {
     ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "columns is null");
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < size_ && !found; i++) {
     if (columns_[i].spatial_flag_ && columns_[i].type_.get_type() == type) {

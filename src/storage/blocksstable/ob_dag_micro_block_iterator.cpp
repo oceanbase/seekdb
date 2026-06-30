@@ -62,7 +62,6 @@ int ObDagMicroBlockIterator::open(const char *macro_block_buf,
     STORAGE_LOG(WARN, "already inited", K(ret), K(is_inited_));
   } else if (OB_ISNULL(macro_block_buf) || OB_UNLIKELY(macro_block_buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid macro block buf", KP(macro_block_buf), K(macro_block_buf_size));
   } else if (OB_FAIL(simplified_macro_header_.deserialize(macro_block_buf, macro_block_buf_size, read_pos_))) {
   } else if (OB_UNLIKELY(!simplified_macro_header_.is_valid())) {
     STORAGE_LOG(WARN, "invalid simplified macro header", K(ret), K(simplified_macro_header_));
@@ -134,12 +133,10 @@ int ObDagMicroBlockIterator::fast_locate_micro_block(const int64_t cg_block_offs
   int ret = OB_SUCCESS;
   if (micro_block_idx < 0 || micro_block_idx > end_idx_) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid micro_block_idx", K(micro_block_idx), K(end_idx_));
   } else if (0 == cg_block_offset ||  0 == micro_block_idx) {
     //cg block has not written any micro blocks before, skip it
     if (0 != cg_block_offset || 0 != micro_block_idx) {
       ret = OB_INVALID_DATA;
-      STORAGE_LOG(WARN, "invalid cg_block_offset or micro_block_idx", K(cg_block_offset), K(micro_block_idx));
     }
   } else {
     iter_idx_ = micro_block_idx;
@@ -153,10 +150,8 @@ int ObDagMicroBlockIterator::update_cg_block_offset_and_micro_idx()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(cg_block_))) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObDagMicroBlockIterator hasn't been inited.", KP(cg_block_));
   } else if (OB_UNLIKELY(0 == read_pos_ || 0 == iter_idx_ || !cg_block_->is_valid())) {
     ret = OB_INVALID_DATA;
-    STORAGE_LOG(WARN, "invalid read_pos_ or iter_idx_ or cg_block_", K(read_pos_), K(iter_idx_), KPC(cg_block_));
   } else {
     cg_block_->set_cg_block_offset(read_pos_);
     cg_block_->set_micro_block_idx(iter_idx_);

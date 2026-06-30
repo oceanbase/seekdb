@@ -186,22 +186,15 @@ int ObCheckpointExecutor::update_clog_checkpoint()
         const share::ObLSID ls_id = ls_->get_ls_id();
         LSN clog_checkpoint_lsn;
         if (checkpoint_scn == checkpoint_scn_in_ls_meta) {
-          STORAGE_LOG(INFO, "[CHECKPOINT] clog checkpoint no change", K(checkpoint_scn),
-                      K(checkpoint_scn_in_ls_meta), K(ls_id), K(service_type));
         } else if (checkpoint_scn < checkpoint_scn_in_ls_meta) {
           if (min_rec_scn_service_type_index == 0) {
-            STORAGE_LOG(INFO, "[CHECKPOINT] expexted when no log callbacked or replayed",
-                        K(checkpoint_scn), K(checkpoint_scn_in_ls_meta), K(ls_id));
           } else {
-            STORAGE_LOG(ERROR, "[CHECKPOINT] can not advance clog checkpoint", K(checkpoint_scn),
-                        K(checkpoint_scn_in_ls_meta), K(ls_id), K(service_type));
           }
         } else if (OB_FAIL(loghandler_->locate_by_scn_coarsely(checkpoint_scn, clog_checkpoint_lsn))) {
           if (OB_NOT_INIT == ret) {
             STORAGE_LOG(WARN, "palf has been disabled", K(ret), K(checkpoint_scn), K(ls_->get_ls_id()));
             ret = OB_SUCCESS;
           } else if (OB_NEED_RETRY == ret || OB_ENTRY_NOT_EXIST == ret) {
-            STORAGE_LOG(WARN, "locate_by_scn_coarsely need retry", K(checkpoint_scn), K(ls_->get_ls_id()));
             ret = OB_SUCCESS;
           } else {
             STORAGE_LOG(ERROR, "locate lsn by logts failed", K(ret), K(ls_id),
@@ -217,10 +210,8 @@ int ObCheckpointExecutor::update_clog_checkpoint()
         add_server_event_history_for_update_clog_checkpoint(checkpoint_scn, service_type);
       }
     } else {
-      STORAGE_LOG(WARN, "freezer should not null", K(ls_->get_ls_id()));
     }
   } else {
-    STORAGE_LOG(WARN, "update_checkpoint is not enabled", K(ls_->get_ls_id()));
   }
 
   return ret;
@@ -242,7 +233,6 @@ int ObCheckpointExecutor::advance_checkpoint_by_flush(const share::SCN input_rec
       }
     } else if (OB_FAIL(check_need_flush_(max_decided_scn, recycle_scn))) {
     } else {
-      STORAGE_LOG(INFO, "start flush", K(recycle_scn), K(input_recycle_scn), K(ls_id));
       for (int i = 1; i < ObLogBaseType::MAX_LOG_BASE_TYPE; i++) {
         int tmp_ret = OB_SUCCESS;
         if (OB_NOT_NULL(handlers_[i]) && OB_TMP_FAIL(handlers_[i]->flush(recycle_scn))) {
@@ -251,7 +241,6 @@ int ObCheckpointExecutor::advance_checkpoint_by_flush(const share::SCN input_rec
       }
     }
   } else {
-    STORAGE_LOG(WARN, "update_checkpoint is not enabled", K(ls_id));
   }
 
   return ret;
@@ -333,12 +322,6 @@ int ObCheckpointExecutor::calculate_recycle_scn_(const SCN max_decided_scn, SCN 
       STORAGE_LOG_RET(WARN, 0, "attention! clog checkpiont has not changed for a long time", K(ls_id));
       recycle_scn.set_max();
     }
-    STORAGE_LOG(INFO,
-                "clog checkpoint has not changed yet. use previous recycle_scn to advance checkpoint",
-                K(ls_id),
-                K(reuse_recycle_scn_times_),
-                K(clog_checkpoint_lsn),
-                K(recycle_scn));
   } else {
     SCN min_recycle_scn;
     SCN expected_recycle_scn;
@@ -359,15 +342,6 @@ int ObCheckpointExecutor::calculate_recycle_scn_(const SCN max_decided_scn, SCN 
         prev_clog_checkpoint_lsn_ = clog_checkpoint_lsn;
         prev_recycle_scn_ = recycle_scn;
         reuse_recycle_scn_times_ = 0;
-        STORAGE_LOG(INFO,
-                    "advance checkpoint by flush to avoid clog disk full",
-                    K(ls_id),
-                    K(recycle_scn),
-                    K(max_decided_scn),
-                    K(clog_checkpoint_lsn),
-                    K(clog_checkpoint_scn),
-                    K(min_recycle_scn),
-                    K(expected_recycle_scn));
       }
     }
   }
@@ -440,19 +414,8 @@ int ObCheckpointExecutor::check_need_flush_(const SCN max_decided_scn, const SCN
     // must do flush
   } else if (recycle_scn < clog_checkpoint_scn) {
     ret = OB_NO_NEED_UPDATE;
-    STORAGE_LOG(WARN,
-                "recycle_scn should not smaller than checkpoint_log_scn",
-                K(recycle_scn),
-                K(clog_checkpoint_scn),
-                K(ls_id));
   } else if (recycle_scn > max_decided_scn) {
     ret = OB_EAGAIN;
-    STORAGE_LOG(WARN,
-                "recycle_scn is larger than max_decided_scn",
-                K(recycle_scn),
-                K(clog_checkpoint_scn),
-                K(ls_id),
-                K(max_decided_scn));
   }
   return ret;
 }
@@ -491,7 +454,6 @@ int ObCheckpointExecutor::traversal_flush() const
   int ret = OB_SUCCESS;
   ObLSTxService *ls_tx_ser = nullptr;
   if (!update_checkpoint_enabled_) {
-    STORAGE_LOG(WARN, "update_checkpoint is not enabled", K(ls_->get_ls_id()));
   } else if (OB_ISNULL(ls_tx_ser = ls_->get_tx_svr())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls_tx_ser should not be null", K(ret), K(ls_->get_ls_id()));

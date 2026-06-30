@@ -2814,7 +2814,6 @@ int ObPartitionSchema::inner_add_partition(const T &part, T **&part_array,
   if (0 == part_array_capacity) {
     if (NULL == (part_array = static_cast<T **>(alloc(sizeof(T *) * DEFAULT_ARRAY_CAPACITY)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SHARE_SCHEMA_LOG(WARN, "failed to allocate memory for partition arrary");
     } else {
       part_array_capacity = DEFAULT_ARRAY_CAPACITY;
     }
@@ -2823,7 +2822,6 @@ int ObPartitionSchema::inner_add_partition(const T &part, T **&part_array,
     T **tmp = NULL;
     if (NULL == (tmp = static_cast<T **>(alloc((sizeof(T *) * new_size))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SHARE_SCHEMA_LOG(WARN, "failed to allocate memory for partition array", K(new_size));
     } else {
       MEMCPY(tmp, part_array, sizeof(T *) * part_num);
       MEMSET(tmp + part_num, 0, sizeof(T *) * (new_size - part_num));
@@ -4940,7 +4938,6 @@ int ObPartition::inner_add_partition(
     if (NULL == (part_array = static_cast<ObSubPartition **>(
                  alloc(sizeof(ObSubPartition *) * DEFAULT_ARRAY_CAPACITY)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SHARE_SCHEMA_LOG(WARN, "failed to allocate memory for partition arrary");
     } else {
       part_array_capacity = DEFAULT_ARRAY_CAPACITY;
     }
@@ -4950,7 +4947,6 @@ int ObPartition::inner_add_partition(
     if (NULL == (tmp = static_cast<ObSubPartition **>(
                  alloc((sizeof(ObSubPartition *) * new_size))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SHARE_SCHEMA_LOG(WARN, "failed to allocate memory for partition array", K(new_size));
     } else {
       MEMCPY(tmp, part_array, sizeof(ObSubPartition *) * part_num);
       MEMSET(tmp + part_num, 0, sizeof(ObSubPartition *) * (new_size - part_num));
@@ -7874,7 +7870,6 @@ int get_part_type_str(ObPartitionFuncType type,
   int ret = common::OB_SUCCESS;
   if (type >= PARTITION_FUNC_TYPE_MAX) {
     ret = common::OB_INVALID_ARGUMENT;
-    SHARE_SCHEMA_LOG(WARN, "invalid partition function type", K(type));
   } else {
     str = common::ObString::make_string(PART_TYPE_STR[type]);
   }

@@ -33,7 +33,6 @@ ObLatchMutexV2::ObLatchMutexV2()
 ObLatchMutexV2::~ObLatchMutexV2()
 {
   if (0 != lock_.val()) {
-    COMMON_LOG(DEBUG, "invalid lock,", K(lock_.val()), K(lbt()));
   }
 }
 

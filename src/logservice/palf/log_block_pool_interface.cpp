@@ -79,7 +79,6 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
     PALF_LOG(ERROR, "open_directory failed", K(ret), K(dir));
   } else if (OB_FAIL(log_block_pool->remove_block_at(fd, path))) {
   } else {
-    PALF_LOG(INFO, "remove_file_at success", K(dir), K(path));
   }
 
   if (-1 != fd) {
@@ -106,7 +105,6 @@ int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(path))) {
     ret = convert_sys_errno();
-    PALF_LOG(WARN, "opendir failed", K(path));
   } else {
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
@@ -124,7 +122,6 @@ int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
       } else if (false == is_dir && OB_FAIL(remove_file_at(path, entry->d_name, log_block_pool))) {
         PALF_LOG(WARN, "remove_file_at failed", K(ret), K(current_file_path));
       } else {
-        PALF_LOG(INFO, "remove directory or file success", K(path), K(current_file_path));
       }
     }
   }
@@ -144,7 +141,6 @@ int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_p
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(path))) {
     ret = OB_ERR_SYS;
-    PALF_LOG(WARN, "opendir failed", K(path));
   } else {
     auto check_is_tmp_file_or_dir = [](const char* file_name) -> bool {
       return NULL != strstr(file_name, ".tmp");

@@ -131,28 +131,13 @@ struct ObReadOnlyTxPrinter
     bool ret = true;
     if (true && v.ls_id_ == ls_id_) {
       if (OB_ISNULL(v.extra_)) {
-        COMMON_LOG(INFO, "LEAK_CHECKER ",
-                   "key", k,
-                   "value", v);
       } else if (OB_NOT_NULL(v.extra_)) {
         if (v.extra_->type_ >= ObReadExInfo::WITH_LBT) {
           ObReadExInfoBT *extra_info = static_cast<ObReadExInfoBT *>(v.extra_);
-          COMMON_LOG(INFO, "LEAK_CHECKER ",
-                 "key", k,
-                 "value", v,
-                 KPC(extra_info));
         } else if (v.extra_->type_ >= ObReadExInfo::WITH_TRACE) {
           ObReadExInfoTrace *extra_info = static_cast<ObReadExInfoTrace *>(v.extra_);
-          COMMON_LOG(INFO, "LEAK_CHECKER ",
-                 "key", k,
-                 "value", v,
-                 KPC(extra_info));
         } else if (v.extra_->type_ >= ObReadExInfo::WITH_PLAN) {
           ObReadExInfoPlan *extra_info = static_cast<ObReadExInfoPlan *>(v.extra_);
-          COMMON_LOG(INFO, "LEAK_CHECKER ",
-                 "key", k,
-                 "value", v,
-                 KPC(extra_info));
         }
       }
     }

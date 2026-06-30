@@ -187,7 +187,6 @@ int openat_with_retry(const int dir_fd,
   int ret = OB_SUCCESS;
   if (-1 == dir_fd || NULL == block_path || -1 == flag || -1 == mode) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(dir_fd), KP(block_path), K(flag), K(mode));
   } else {
     do {
       if (-1 == (fd = ::openat(dir_fd, block_path, flag, mode))) {
@@ -207,7 +206,6 @@ int close_with_ret(const int fd)
   int ret = OB_SUCCESS;
   if (-1 == fd) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid argument", K(fd));
   } else if (-1 == (::close(fd))) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "close block failed", K(ret), K(errno), K(fd));
@@ -308,7 +306,6 @@ int rename_with_retry(const char *src_name,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(src_name) || OB_ISNULL(dest_name)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KP(src_name), KP(dest_name));
   } else {
     do {
       if (-1 == ::rename(src_name, dest_name)) {
@@ -338,7 +335,6 @@ int renameat_with_retry(const int src_dir_fd,
   if (src_dir_fd < 0 || OB_ISNULL(src_name)
       || dest_dir_fd < 0 || OB_ISNULL(dest_name)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KP(src_name), KP(dest_name));
   } else {
     do {
       if (-1 == ::renameat(src_dir_fd, src_name, dest_dir_fd, dest_name)) {
@@ -493,15 +489,12 @@ int TrimLogDirectoryFunctor::try_to_remove_block_(const int dir_fd, const char *
   if (OB_FAIL(ret)) {
     if (OB_NO_SUCH_FILE_OR_DIRECTORY == ret) {
       ret = OB_SUCCESS;
-      PALF_LOG(INFO, "before rename flashback to normal and after delete normal file, restart!!!", K(file_name));
     } else {
-      PALF_LOG(ERROR, "open file failed", K(file_name)); 
     }
   } else if (OB_FAIL(log_block_pool_->remove_block_at(dir_fd, file_name))) {
   }
   if (-1 != fd && -1 == ::close(fd)) {
     ret = convert_sys_errno();
-    PALF_LOG(ERROR, "close fd failed", K(file_name));
   }
   return ret;
 }

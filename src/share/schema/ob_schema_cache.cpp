@@ -432,7 +432,6 @@ int ObSchemaCache::init()
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "null memory entity returned");
     } else {
       is_inited_ = true;
     }

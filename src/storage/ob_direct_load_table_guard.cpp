@@ -58,7 +58,6 @@ void ObDirectLoadTableGuard::reset()
     if (OB_FAIL(table_handle_.get_tablet_memtable(memtable))) {
     } else {
       if (need_print_debug_log) {
-        STORAGE_LOG(INFO, "Print Debug Info", KPC(memtable), KPC(this));
       }
       memtable->dec_write_ref();
     }
@@ -85,7 +84,6 @@ int ObDirectLoadTableGuard::prepare_memtable(ObDDLKV *&res_memtable)
     if (OB_FAIL(acquire_memtable_once_())) {
     } else if (is_write_filtered_) {
       // TODO : @gengli.wzy change this log to debug level
-      STORAGE_LOG(INFO, "filtered one ddl redo write", KPC(this));
     } else if (FALSE_IT(ddl_kv = static_cast<ObDDLKV*>(table_handle_.get_table()))) {
     } else if (!tried_freeze && (ddl_kv->get_macro_block_cnt() >= INC_MACRO_BLOCK_COUNT_FREEZE_TRIGGER ||
                                  ddl_kv->get_memory_used() >= INC_MACRO_BLOCK_MEMORY_FREEZE_TRIGGER)) {
@@ -98,7 +96,6 @@ int ObDirectLoadTableGuard::prepare_memtable(ObDDLKV *&res_memtable)
         // tmp_ret = OB_ENTRY_EXIST; means this ddl kv has been freezed by other thread
       } else {
         (void)async_freeze_();
-        STORAGE_LOG(INFO, "trigger inc ddlkv freeze", K(ddl_kv->get_macro_block_cnt()), K(ddl_kv->get_memory_used()));
       }
     } else {
       res_memtable = ddl_kv;
@@ -181,7 +178,6 @@ int ObDirectLoadTableGuard::try_get_direct_load_memtable_for_write(ObLSHandle &l
   } else if (OB_FAIL(protected_handle->get_direct_load_memtables_for_write(local_table_handles))) {
   } else if (0 == local_table_handles.count()) {
     need_create_new_memtable = true;
-    STORAGE_LOG(INFO, "need create new direct load memtable", K(ddl_redo_scn_));
   } else {
     int64_t table_count = local_table_handles.count();
     ObITabletMemtable *head_memtable = static_cast<ObITabletMemtable *>(local_table_handles.at(0).get_table());
@@ -192,7 +188,6 @@ int ObDirectLoadTableGuard::try_get_direct_load_memtable_for_write(ObLSHandle &l
       is_write_filtered_ = true;
     } else if (tail_memtable->get_end_scn() < ddl_redo_scn_) {
       need_create_new_memtable = true;
-      STORAGE_LOG(INFO, "need create new direct load memtable", K(ddl_redo_scn_), KPC(tail_memtable));
     } else {
       need_create_new_memtable = false;
       for (int64_t i = 0; i < local_table_handles.count(); i++) {

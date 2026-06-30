@@ -95,7 +95,6 @@ int ObFixedMetaObjArray<T>::init(const int64_t capacity, ObIAllocator &allocator
     STORAGE_LOG(WARN, "double initialization", K(ret), KPC(this));
   } else if (OB_UNLIKELY(capacity < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "invalid argument", K(capacity));
   } else {
     allocator_ = &allocator;
     count_ = 0;
@@ -126,7 +125,6 @@ int ObFixedMetaObjArray<T>::init(
     STORAGE_LOG(WARN, "init twice", K(ret), KPC(this));
   } else if (OB_UNLIKELY(capacity < 0 || (buf_len - pos) < inner_array_size) || OB_ISNULL(data_buf)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "invalid argument", K(capacity), K(buf_len), K(pos), K(inner_array_size), KP(data_buf));
   } else {
     allocator_ = nullptr;
     count_ = 0;

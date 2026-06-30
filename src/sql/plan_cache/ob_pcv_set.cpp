@@ -111,10 +111,6 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
   } else {
     if (normal_parse_const_cnt_ != pc_ctx.fp_result_.raw_params_.count()) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_PC_LOG(TRACE, "const number of fast parse and normal parse is different",
-                 "fast_parse_const_num", pc_ctx.fp_result_.raw_params_.count(),
-                 K_(normal_parse_const_cnt),
-                 K(pc_ctx.fp_result_.raw_params_));
     }
   }
   if (OB_FAIL(ret)) {

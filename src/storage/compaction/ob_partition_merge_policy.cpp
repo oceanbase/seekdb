@@ -1530,7 +1530,7 @@ int ObAdaptiveMergePolicy::find_adaptive_merge_tables(
         ret = OB_E((EventTable::tracepoint)) OB_SUCCESS;      \
         if (OB_FAIL(ret)) {                                   \
           ret = OB_SUCCESS;                                   \
-          STORAGE_LOG(INFO, "ERRSIM " #tracepoint);           \
+                     \
           scanty_tx_determ_table = false;                     \
           scanty_inc_row_cnt = false;                         \
         }                                                     \

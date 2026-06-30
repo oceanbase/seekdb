@@ -105,7 +105,6 @@ int ObLogCursor:: advance(LogCommand cmd, int64_t seq, const int64_t data_len)
   ObLogEntry entry;
   if (OB_UNLIKELY(cmd < 0) || OB_UNLIKELY(seq < 0) || OB_UNLIKELY(data_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid arguments", K(cmd), K(seq), K(data_len));
   } else if (OB_LIKELY(log_id_ > 0) && OB_UNLIKELY(seq != log_id_)) {
     ret = OB_DISCONTINUOUS_LOG;
     SHARE_LOG(ERROR, "entry.advance", K_(log_id), K(seq), K(ret));

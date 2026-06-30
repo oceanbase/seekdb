@@ -46,7 +46,6 @@ int ObHelpResolver::resolve(const ParseNode &parse_tree)
     like_pattern.assign(const_cast<char *>(parse_tree.children_[0]->str_value_), size);
     if (NULL == (help_stmt = create_stmt<ObHelpStmt>())) {
       ret = OB_SQL_RESOLVER_NO_MEMORY;
-      SQL_RESV_LOG(WARN, "failed to create help stmt");
     } else {
       stmt_ = help_stmt;
       if (OB_FAIL(create_topic_sql(like_pattern, sql))) {
@@ -127,7 +126,6 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
     } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "failed to get result", K(sql));
     } else {
       ObString last_name;
       while (OB_SUCCESS == ret && OB_SUCCESS == (ret = result->next())) {
@@ -177,7 +175,6 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
         row_count++;
       }
       if (OB_UNLIKELY(OB_SUCCESS != ret && OB_ITER_END != ret)) {
-        SQL_RESV_LOG(WARN,"get result failed");
       } else {
         topic_count = row_count;
         ret = OB_SUCCESS;
@@ -249,7 +246,6 @@ int ObHelpResolver::search_category(ObHelpStmt *help_stmt,
           }
         }
         if (OB_UNLIKELY(OB_SUCCESS != ret && OB_ITER_END != ret)) {
-          SQL_RESV_LOG(WARN,"get result failed");
         } else {
           category_count = row_count;
           ret = OB_SUCCESS;

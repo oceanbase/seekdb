@@ -131,7 +131,6 @@ int AlterTableSchema::deserialize_columns(const char *buf, const int64_t data_le
       if (OB_FAIL(column.deserialize(buf, data_len, pos))) {
       } else if (OB_FAIL(add_alter_column(column, true))) {
       } else {
-        SHARE_SCHEMA_LOG(DEBUG, "add alter column", K(column));
       }
     }
   }
@@ -511,7 +510,6 @@ int AlterTableSchema::add_alter_column(const AlterColumnSchema &alter_column_sch
           SHARE_LOG(WARN, "The local column is not valid, ", K(ret));
         } else if (OB_FAIL(add_col_to_column_array(local_column))) {
         } else {
-          SHARE_SCHEMA_LOG(DEBUG, "add column", K(local_column));
         }
       }
     }

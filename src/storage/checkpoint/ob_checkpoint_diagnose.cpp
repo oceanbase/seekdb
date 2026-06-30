@@ -40,7 +40,6 @@ void ObTraceInfo::init(const int64_t trace_id,
 
 void ObTraceInfo::reset_without_lock_()
 {
-  TRANS_LOG(INFO, "trace info reset", KPC(this));
   trace_id_ = INVALID_TRACE_ID;
   freeze_clock_ = 0;
   ls_id_.reset();
@@ -164,7 +163,6 @@ void UpdateScheduleDagInfo::operator()(ObCheckpointUnitDiagnoseInfo &info) const
   info.start_scn_ = start_scn_;
   info.end_scn_ = end_scn_;
   info.create_flush_dag_time_ = start_time;
-  TRANS_LOG(INFO, "update_schedule_dag_info", K(info), K(param_));
 }
 int ObCheckpointDiagnoseMgr::update_schedule_dag_info(const ObCheckpointDiagnoseParam &param,
     const share::SCN &rec_scn,
@@ -231,7 +229,6 @@ void UpdateFreezeInfo::operator()(ObMemtableDiagnoseInfo &info) const
   info.end_scn_ = end_scn_;
   info.occupy_size_ = occupy_size_;
   info.frozen_finish_time_ = start_time;
-  TRANS_LOG(INFO, "update_freeze_info", K(info), K(param_));
 }                               
 int ObCheckpointDiagnoseMgr::update_freeze_info(const ObCheckpointDiagnoseParam &param,
     const share::SCN &rec_scn,
@@ -330,7 +327,6 @@ void UpdateMergeInfoForMemtable::operator()(ObMemtableDiagnoseInfo &info) const
   info.merge_finish_time_ = merge_finish_time_;
   info.occupy_size_ = occupy_size_;
   info.concurrent_cnt_ = concurrent_cnt_;
-  TRANS_LOG(DEBUG, "update_merge_info", K(info), K(param_));
 }                               
 int ObCheckpointDiagnoseMgr::update_merge_info_for_memtable(const ObCheckpointDiagnoseParam &param,
     int64_t merge_start_time,
@@ -394,7 +390,6 @@ int ObCheckpointDiagnoseMgr::update_max_trace_info_size(int64_t max_trace_info_s
     SpinWLockGuard lock(pos_lock_);
     max_trace_info_size_ = max_trace_info_size;
     reset_old_trace_infos_without_pos_lock_();
-    TRANS_LOG(INFO, "max_trace_info_size update.", KPC(this));
   }
   return ret;
 }

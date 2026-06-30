@@ -84,11 +84,9 @@ namespace obsys {
         } else {
             ret = parseValue(data, key, value);
             if (ret == -2) {
-                _OB_LOG(ERROR, "解析错误, Line: %s", data);
             } else if (ret < 0) {
                 ret = 0;
             } else if (m == NULL) {
-                _OB_LOG(ERROR, "没在配置section, Line: %s", data);
                 ret = -1;
             } else {
                 STR_STR_MAP_ITER it1 = m->find(key);
@@ -134,7 +132,6 @@ namespace obsys {
         char            data[4096];
 
         if ((fp = fopen(filename, "rb")) == NULL) {
-            _OB_LOG(ERROR, "不能打开配置文件: %s", filename);
             return EXIT_FAILURE;
         }
 
@@ -142,7 +139,6 @@ namespace obsys {
         while (fgets(data, 4096, fp)) {
             ret = parseLine(m, data);
             if (ret != 0) {
-                _OB_LOG(ERROR, "parseLine error: %s", data);
                 break;
             }
         }
@@ -162,18 +158,15 @@ namespace obsys {
             do {
                 ret = getLine(data, 4096, content, content_len, pos);
                 if (ret != 0) {
-                    _OB_LOG(ERROR, "getLine error: %d, %s", pos, content);
                     break;
                 } else {
                     ret = parseLine(m, data);
                     if (ret != 0) {
-                        _OB_LOG(ERROR, "parseLine error: %s", data);
                         break;
                     }
                 }
             } while (pos < content_len);
         } else {
-            _OB_LOG(INFO, "content is empty");
         }
         return ret;
     }
@@ -186,7 +179,6 @@ namespace obsys {
             int end = pos;
             while (end < content_len && content[end] != '\n') end++;
             if (end - pos >= buf_len) {
-                _OB_LOG(ERROR, "line size exceed max: %d %d", end - pos, buf_len);
                 ret = -1;
             } else {
                 memcpy(buf, content + pos, end - pos);
@@ -198,7 +190,6 @@ namespace obsys {
                 }
             }
         } else {
-            _OB_LOG(ERROR, "error pos: %d", pos);
             ret = -1;
         }
         return ret;

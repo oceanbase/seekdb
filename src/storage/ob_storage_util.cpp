@@ -254,7 +254,6 @@ int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(VectorFormat::VEC_DISCRETE != expr.get_format(eval_ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected vector format for padding column", K(expr.get_format(eval_ctx)));
   } else {
     ObDiscreteFormat *discrete_format = static_cast<ObDiscreteFormat *>(expr.get_vector(eval_ctx));
     ObLength *lens = discrete_format->get_lens();

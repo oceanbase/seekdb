@@ -48,7 +48,6 @@ int ObTimer::init(const char* timer_name, const ObMemAttr &attr)
     IRunWrapper *expect_wrapper = Threads::get_expect_run_wrapper();
     if (expect_wrapper != nullptr && expect_wrapper != run_wrapper_) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(ERROR, "ObTimer::init tenant ctx not match", KP(expect_wrapper), KP(run_wrapper_));
     } else {
       is_inited_ = true;
       is_stopped_ = false;

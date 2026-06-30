@@ -123,7 +123,6 @@ int ObPsPCVSetAtomicOp::get_value(ObPCVSet *&pcvs)
   pcvs = NULL;
   if (OB_ISNULL(pcv_set_)) {
     ret = OB_NOT_INIT;
-    SQL_PC_LOG(WARN, "invalid argument", K(pcv_set_));
   } else if (OB_SUCC(lock(*pcv_set_))) {
     pcvs = pcv_set_;
   } else {

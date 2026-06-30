@@ -313,7 +313,6 @@ int ObTxMDSCache::fill_mds_log(ObPartTransCtx *ctx,
 
   if (mds_log.count() != mds_range.count()) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "unmatched mds_range and mds_log", K(mds_log), K(mds_range));
   } else if (0 == mds_range.count() && 0 == mds_log.count()) {
     if (OB_EAGAIN == ret) {
       ret = OB_ERR_UNEXPECTED;
@@ -373,8 +372,6 @@ int ObTxMDSCache::generate_final_notify_array(const ObTxBufferNodeArray &mds_dur
 
   if (!allow_log_overflow) {
     if (final_notify_array_.get_serialize_size() > ObTxMultiDataSourceLog::MAX_MDS_LOG_SIZE) {
-      TRANS_LOG(WARN, "MDS array is overflow, use empty MDS array",
-                K(final_notify_array_.get_serialize_size()), K(mds_durable_arr.count()), KPC(this));
       final_notify_array_.reuse();
     }
   }

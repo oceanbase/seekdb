@@ -1641,7 +1641,6 @@ int ObPluginVectorIndexUtils::release_vector_index_adapter(ObPluginVectorIndexAd
       ObIAllocator *allocator = adapter->get_allocator();
       if (OB_ISNULL(allocator)) {
         const int ret = OB_ERR_UNEXPECTED;
-        OB_LOG(WARN, "release vector index adapter failed", KPC(adapter));
       } else {
         // OB_LOG(DEBUG, "adatper released", KPC(adapter));
         adapter->~ObPluginVectorIndexAdaptor();
@@ -1663,7 +1662,6 @@ int ObPluginVectorIndexUtils::release_vector_index_build_helper(ObIvfBuildHelper
       ObIAllocator *allocator = helper->get_allocator();
       if (OB_ISNULL(allocator)) {
         const int ret = OB_ERR_UNEXPECTED;
-        OB_LOG(WARN, "release ivf vector index build helper failed", KPC(helper));
       } else {
         helper->~ObIvfBuildHelper();
         allocator->free(helper);

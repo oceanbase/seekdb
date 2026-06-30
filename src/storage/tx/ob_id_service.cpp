@@ -58,7 +58,6 @@ int ObIDService::submit_log_with_lock_(const int64_t last_id, const int64_t limi
       }
     }
   } else {
-    TRANS_LOG(INFO, "submit log with lock success", K(service_type_), K(last_id), K(limited_id));
   }
   if (locked) {
     rwlock_.unlock();
@@ -83,7 +82,6 @@ int ObIDService::check_and_fill_ls()
       TRANS_LOG(WARN, "id service log stream not exist", K(ret), K(IDS_LS));
     } else {
       ls_ = ls;
-      TRANS_LOG(INFO, "ls set success", K(IDS_LS), KP(ls_));
     }
   }
   return ret;
@@ -101,7 +99,6 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
   if (is_logging_) {
     ret = OB_EAGAIN;
     if (EXECUTE_COUNT_PER_SEC(20)) {
-      TRANS_LOG(INFO, "is logging");
     }
     if (submit_log_ts_ == OB_INVALID_TIMESTAMP) {
       ret = OB_ERR_UNEXPECTED;
@@ -109,7 +106,6 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     } else if (ObTimeUtility::current_time() - submit_log_ts_ > SUBMIT_LOG_ALARM_INTERVAL) {
       if (log_interval_.reach()) {
         // ignore ret
-        TRANS_LOG(WARN, "submit log callback use too mush time", K_(submit_log_ts), K_(cb), K_(service_type), K_(latest_log_ts), K_(self));
       }
     }
   } else if (last_id < 0 || limited_id < 0) {
@@ -117,7 +113,6 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
     TRANS_LOG(WARN, "invalid argument", K(ret), K(last_id), K(limited_id));
   } else if (limited_id <= ATOMIC_LOAD(&limited_id_)) {
     if (EXECUTE_COUNT_PER_SEC(10)) {
-      TRANS_LOG(INFO, "no log required", K(limited_id), K(ATOMIC_LOAD(&limited_id_)));
     }
   } else if (OB_FAIL(check_and_fill_ls())) {
   } else {
@@ -147,7 +142,6 @@ int ObIDService::submit_log_(const int64_t last_id, const int64_t limited_id)
         cb_.set_log_ts(log_ts);
         cb_.set_limited_id(limited_id);
         is_logging_ = true;
-        TRANS_LOG(INFO, "submit log success", K(service_type_), K(last_id), K(limited_id));
       }
     }
   }
@@ -160,7 +154,6 @@ int ObIDService::handle_submit_callback(const bool success, const int64_t limite
   int ret = OB_SUCCESS;
   WLockGuard guard(rwlock_);
   if (limited_id < 0 || !log_ts.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", K(limited_id), K(log_ts));
   } else if (success) {
     if (ATOMIC_LOAD(&tmp_last_id_) != 0) {
       ATOMIC_STORE(&last_id_, tmp_last_id_);
@@ -178,7 +171,6 @@ int ObIDService::handle_submit_callback(const bool success, const int64_t limite
   const int64_t used_ts = ObTimeUtility::current_time() - submit_log_ts_;
   submit_log_ts_ = OB_INVALID_TIMESTAMP;
   cb_.reset();
-  TRANS_LOG(INFO, "handle submit callback", K(service_type_), K(success), K(used_ts), K(log_ts), K(limited_id));
   return ret;
 }
 
@@ -287,7 +279,6 @@ int ObIDService::check_leader(bool &leader)
 SCN ObIDService::get_rec_scn()
 {
   const SCN rec_log_ts = rec_log_ts_.atomic_get();
-  TRANS_LOG(INFO, "get rec log scn", K(service_type_), K(rec_log_ts));
   return rec_log_ts;
 }
 
@@ -321,7 +312,6 @@ int ObIDService::switch_to_follower_gracefully()
   //   locked = false;
   // }
   // TRANS_LOG(INFO, "switch to follower gracefully", K(ret), K(service_type_), K(locked));
-  TRANS_LOG(INFO, "switch to follower gracefully", K(last_id_), K(limited_id_), K(service_type_));
   // There is no failure scenario for ObIDService to switch the follower,
   // so return OB_SUCCESS directly.
   return OB_SUCCESS;
@@ -510,7 +500,6 @@ int ObPresistIDLogCb::serialize_ls_log(ObPresistIDLog &ls_log, int64_t service_t
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "unknown service type", K(service_type));
       break;
     }
   }
@@ -567,7 +556,6 @@ int ObPresistIDLogCb::on_success()
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "unknown service type", K(*this));
       break;
     }
   }
@@ -618,7 +606,6 @@ int ObPresistIDLogCb::on_failure()
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "unknown service type", K(*this));
       break;
     }
   }

@@ -1356,7 +1356,7 @@ void ObTenantTabletScheduler::errsim_after_mini_schedule_adaptive(
         ret = OB_E((EventTable::tracepoint)) OB_SUCCESS;                     \
         if (OB_FAIL(ret)) {                                                  \
           ret = OB_SUCCESS;                                                  \
-          STORAGE_LOG(INFO, "ERRSIM " #tracepoint);                          \
+                                    \
           reason = ObAdaptiveMergePolicy::TOMBSTONE_SCENE;                   \
           medium_is_cooling_down = cooling_down;                             \
         }                                                                    \

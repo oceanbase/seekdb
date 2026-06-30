@@ -32,10 +32,8 @@ int ObAllVirtualHADiagnose::inner_get_next_row(common::ObNewRow *&row)
       storage::DiagnoseInfo diagnose_info;
       if (OB_FAIL(ls.diagnose(diagnose_info))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
-          SERVER_LOG(WARN, "ls may have been removed, just skip", K(ls));
           ret = OB_SUCCESS;
         } else if (OB_NOT_RUNNING == ret) {
-          SERVER_LOG(WARN, "ls may be during rebalancing ", K(ls));
           ret = OB_SUCCESS;
         } else {
           SERVER_LOG(WARN, "ls stat diagnose info failed", K(ret), K(ls));
@@ -43,13 +41,11 @@ int ObAllVirtualHADiagnose::inner_get_next_row(common::ObNewRow *&row)
       } else if (OB_FAIL(insert_stat_(diagnose_info))) {
       } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
       } else {
-        SERVER_LOG(INFO, "iter diagnose info succ", K(diagnose_info));
       }
       return ret;
     };
     storage::ObLSService *ls_service = share::g_mp->ls_service();
     if (NULL == ls_service) {
-      SERVER_LOG(INFO, "tenant has no ObLSService");
     } else if (OB_FAIL(ls_service->iterate_diagnose(func_iter_ls))) {
       if (OB_NOT_RUNNING == ret) {
         ret = OB_SUCCESS;
@@ -237,7 +233,6 @@ int ObAllVirtualHADiagnose::insert_stat_(storage::DiagnoseInfo &diagnose_info)
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unkown column");
         break;
     }
   }

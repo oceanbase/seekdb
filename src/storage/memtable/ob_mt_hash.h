@@ -410,7 +410,6 @@ public:
           TRANS_LOG(WARN, "insert mt_node error", K(ret), K(insert_key), KP(insert_value));
         }
       }
-      TRANS_LOG(TRACE, "insert", K(genealogy), KP(bucket_node), K(op_bucket_node));
     }
     return ret;
   }
@@ -550,8 +549,6 @@ private:
           child_bucket_node->set_bucket_filled(child_bucket_idx);
           break;
         } else {
-          TRANS_LOG(TRACE, "try insert fill error", KP(prev_node), KP(child_bucket_node),
-                    K(child_bucket_idx), K(next_node));
         }
       }
     } else {

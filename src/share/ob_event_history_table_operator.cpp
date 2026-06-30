@@ -381,13 +381,9 @@ int ObEventHistoryTableOperator::add_event_to_timer_(const common::ObSqlString &
     const char *sql = helper.convert(uniq_holder->get_ob_string());
     if (OB_ISNULL(sql)) {
       ret = OB_ERR_NULL_VALUE;
-      SHARE_LOG(WARN, "sql is NULL, maybe convert ob_string failed",
-          "ob_string", uniq_holder->get_ob_string());
     } else if (OB_ISNULL(proxy)) {
-      SHARE_LOG(WARN, "proxy_ is NULL", KP(proxy));
     } else if (!self_addr.ip_to_string(ip, sizeof(ip))) {
       ret = OB_ERR_UNEXPECTED;
-      SHARE_LOG(WARN, "ip to string failed");
     } else if (OB_FAIL(proxy->write(sql, affected_rows))) {
       SHARE_LOG(WARN, "sync execute sql failed", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {

@@ -29,7 +29,6 @@ int PalfFSCbWrapper::add_cb_impl(PalfFSCbNode *cb_impl)
   if (false == list_.add_last(cb_impl)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    PALF_LOG(INFO, "PalfFSCbWrapper add_cb_impl success");
   }
   return ret;
 }
@@ -44,7 +43,6 @@ int PalfFSCbWrapper::update_end_lsn(int64_t id, const LSN &end_lsn, const share:
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(true == list_.is_empty())) {
-    PALF_LOG(TRACE, "the block size callback list is empty", K(id), K(end_lsn));
   } else {
     int tmp_ret = OB_SUCCESS;
     ObSpinLockGuard guard(lock_);
@@ -52,7 +50,6 @@ int PalfFSCbWrapper::update_end_lsn(int64_t id, const LSN &end_lsn, const share:
       PalfFSCb *cb = node->fs_cb_;
       if (NULL == cb) {
         ret = OB_ERR_UNEXPECTED;
-        PALF_LOG(ERROR, "PalfFSCb is NULL, unexpect error", KPC(node));
       } else if (OB_SUCCESS != (tmp_ret = cb->update_end_lsn(id, end_lsn, end_scn, proposal_id))) {
       }
     }
@@ -70,7 +67,6 @@ int PalfRoleChangeCbWrapper::add_cb_impl(PalfRoleChangeCbNode *cb_impl)
   if (false == list_.add_last(cb_impl)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    PALF_LOG(INFO, "PalfRoleChangeCbWrapper add_cb_impl success");
   }
   return ret;
 }
@@ -80,7 +76,6 @@ void PalfRoleChangeCbWrapper::del_cb_impl(PalfRoleChangeCbNode *cb_impl)
   ObSpinLockGuard guard(lock_);
   if (NULL == list_.remove(cb_impl)) {
   } else {
-    PALF_LOG(INFO, "PalfRoleChangeCbWrapper del_cb_impl success");
   }
 }
 
@@ -88,7 +83,6 @@ int PalfRoleChangeCbWrapper::on_role_change(int64_t id)
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(true == list_.is_empty())) {
-    PALF_LOG(INFO, "the role change callback list is empty", K(id));
   } else {
     ObSpinLockGuard guard(lock_);
     DLIST_FOREACH(node, list_) {
@@ -107,7 +101,6 @@ int PalfRoleChangeCbWrapper::on_need_change_leader(const int64_t id, const ObAdd
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(true == list_.is_empty())) {
-    PALF_LOG(INFO, "the role change callback list is empty", K(id), K(dest_addr));
   } else {
     ObSpinLockGuard guard(lock_);
     DLIST_FOREACH(node, list_) {
@@ -132,7 +125,6 @@ int PalfRebuildCbWrapper::add_cb_impl(PalfRebuildCbNode *cb_impl)
   if (false == list_.add_last(cb_impl)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    PALF_LOG(INFO, "PalfRebuildCbWrapper add_cb_impl success");
   }
   return ret;
 }
@@ -142,7 +134,6 @@ void PalfRebuildCbWrapper::del_cb_impl(PalfRebuildCbNode *cb_impl)
   ObSpinLockGuard guard(lock_);
   if (NULL == list_.remove(cb_impl)) {
   } else {
-    PALF_LOG(INFO, "PalfRebuildCbWrapper del_cb_impl success");
   }
 }
 
@@ -150,7 +141,6 @@ int PalfRebuildCbWrapper::on_rebuild(const int64_t id, const LSN &lsn)
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(true == list_.is_empty())) {
-    PALF_LOG(INFO, "the role change callback list is empty", K(id));
   } else {
     ObSpinLockGuard guard(lock_);
     DLIST_FOREACH(node, list_) {
@@ -202,13 +192,10 @@ int LogPlugins::add_plugin(PalfLocationCacheCb *plugin)
   common::RWLock::WLockGuard guard(loc_lock_);
   if (OB_ISNULL(plugin)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "Palf plugin is NULL", KP(plugin));
   } else if (OB_NOT_NULL(loc_cb_)) {
     ret = OB_OP_NOT_ALLOW;
-    PALF_LOG(INFO, "Palf plugin is not NULL", KP(plugin), KP_(loc_cb));
   } else {
     loc_cb_ = plugin;
-    PALF_LOG(INFO, "add_plugin success", KP(plugin));
   }
   return ret;
 }
@@ -219,7 +206,6 @@ int LogPlugins::del_plugin(PalfLocationCacheCb *plugin)
   int ret = OB_SUCCESS;
   common::RWLock::WLockGuard guard(loc_lock_);
   if (OB_NOT_NULL(loc_cb_)) {
-    PALF_LOG(INFO, "del_plugin success", KP_(loc_cb));
     loc_cb_ = NULL;
   }
   return ret;
@@ -232,13 +218,10 @@ int LogPlugins::add_plugin(PalfMonitorCb *plugin)
   common::RWLock::WLockGuard guard(palf_monitor_lock_);
   if (OB_ISNULL(plugin)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "Palf plugin is NULL", KP(plugin));
   } else if (OB_NOT_NULL(palf_monitor_)) {
     ret = OB_OP_NOT_ALLOW;
-    PALF_LOG(INFO, "Palf plugin is not NULL", KP(plugin), KP_(palf_monitor));
   } else {
     palf_monitor_ = plugin;
-    PALF_LOG(INFO, "add_plugin success", KP(plugin));
   }
   return ret;
 }
@@ -249,7 +232,6 @@ int LogPlugins::del_plugin(PalfMonitorCb *plugin)
   int ret = OB_SUCCESS;
   common::RWLock::WLockGuard guard(palf_monitor_lock_);
   if (OB_NOT_NULL(palf_monitor_)) {
-    PALF_LOG(INFO, "del_plugin success", KP_(palf_monitor));
     palf_monitor_ = NULL;
   }
   return ret;
@@ -262,13 +244,10 @@ int LogPlugins::add_plugin(PalfLiteMonitorCb *plugin)
   common::RWLock::WLockGuard guard(palf_monitor_lock_);
   if (OB_ISNULL(plugin)) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "Palf plugin is NULL", KP(plugin));
   } else if (OB_NOT_NULL(palflite_monitor_)) {
     ret = OB_OP_NOT_ALLOW;
-    PALF_LOG(INFO, "Palf plugin is not NULL", KP(plugin), KP_(loc_cb));
   } else {
     palflite_monitor_ = plugin;
-    PALF_LOG(INFO, "add_plugin success", KP(plugin));
   }
   return ret;
 }
@@ -279,7 +258,6 @@ int LogPlugins::del_plugin(PalfLiteMonitorCb *plugin)
   int ret = OB_SUCCESS;
   common::RWLock::WLockGuard guard(palf_monitor_lock_);
   if (OB_NOT_NULL(palflite_monitor_)) {
-    PALF_LOG(INFO, "del_plugin success", KP_(palflite_monitor));
     palflite_monitor_ = NULL;
   }
   return ret;

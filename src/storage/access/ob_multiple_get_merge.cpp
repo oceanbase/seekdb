@@ -48,7 +48,6 @@ int ObMultipleGetMerge::open(const common::ObIArray<ObDatumRowkey> &rowkeys)
     if (OB_FAIL(construct_iters())) {
     } else {
       get_row_range_idx_ = 0;
-      STORAGE_LOG(DEBUG, "Success to open ObMultipleGetMerge", K(rowkeys));
     }
   }
 
@@ -116,7 +115,6 @@ int ObMultipleGetMerge::calc_scan_range()
         if (OB_FAIL(cow_rowkeys_.push_back(tmp_rowkeys.at(i)))) {
         }
       }
-      STORAGE_LOG(DEBUG, "skip rowkeys", K(cow_rowkeys_), K(range_idx_delta_));
     }
   }
 
@@ -205,7 +203,6 @@ int ObMultipleGetMerge::inner_get_next_row(ObDatumRow &row)
           if (!final_result) {
             if (OB_FAIL(ObRowFuse::fuse_row(*tmp_row, fuse_row, nop_pos_, final_result))) {
             } else {
-              STORAGE_LOG(DEBUG, "fuse row, ", K(*tmp_row), K(fuse_row));
             }
           }
         }
@@ -220,7 +217,6 @@ int ObMultipleGetMerge::inner_get_next_row(ObDatumRow &row)
             // find result
             fuse_row.scan_index_ = get_row_range_idx_ - 1;
             fuse_row.group_idx_ = rowkeys_->at(get_row_range_idx_ - 1).get_group_idx();
-            STORAGE_LOG(DEBUG, "Success to merge get row, ", KP(this), K(fuse_row), K(get_row_range_idx_), K(fuse_row.group_idx_));
           }
           break;
         } else if (access_ctx_->query_flag_.skip_4377_for_async_index_lookup()) {

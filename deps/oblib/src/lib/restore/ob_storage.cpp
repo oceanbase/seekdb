@@ -247,8 +247,6 @@ int ListAppendableObjectFragmentOp::gen_object_meta(ObStorageObjectMeta &obj_met
     } else if (selected_idx == i) {
       if (i <  meta_arr_.size() - 1) {
         // do not return error
-        OB_LOG(WARN, "cannot find a fragment that intersects with the current fragment",
-            K(i), K(j), K(tmp_meta));
       }
       i = j;
     } else {
@@ -286,7 +284,6 @@ int DelAppendableObjectFragmentOp::func(const dirent *entry)
     EVENT_INC(ObStatEventIds::BACKUP_IO_DEL_FAIL_COUNT);
     OB_LOG(WARN, "fail to del appendable object fragment", K(ret), K(obj_fragment_path));
   } else {
-    OB_LOG(DEBUG, "succ to del appendable object fragment", K(obj_fragment_path));
   }
   EVENT_INC(ObStatEventIds::BACKUP_DELETE_COUNT);
   return ret;
@@ -1436,9 +1433,6 @@ int ObStorageUtil::batch_del_files(
   if (OB_NOT_SUPPORTED == ret
       || (OB_SUCC(ret) && !use_batch_del_flag)) {
     ret = OB_SUCCESS;
-    STORAGE_LOG(WARN, "batch_del interface is not supported, "
-        "falling back to a looped single-delete calls instead",
-        K(n_files_to_delete), KPC_(storage_info), K_(device_type));
     // Initiating a loop to call the delete interface individually for each file
     cur_deleted_pos = 0;
     while (OB_SUCC(ret) && cur_deleted_pos < n_files_to_delete) {
@@ -1477,7 +1471,6 @@ int ObStorageUtil::mkdir(const common::ObString &uri)
   const int64_t start_ts = ObTimeUtility::current_time();
   OBJECT_STORAGE_GUARD(storage_info_, uri, IO_HANDLED_SIZE_ZERO);
 
-  STORAGE_LOG(DEBUG, "mkdir", K(uri));
 #ifdef ERRSIM
   ret = OB_E(EventTable::EN_BACKUP_IO_BEFORE_MKDIR) OB_SUCCESS;
 #endif
@@ -2536,8 +2529,6 @@ int ObStorageAppender::seal_for_adaptive()
       // The seal operation includes listing fragments and writing this data to a meta file.
       // Here, 'serialize_size' is used as an approximation of the data throughput of the list operation.
       handled_size = serialize_size + pos;
-      OB_LOG(DEBUG, "succeed to write seal meta file",
-          K_(uri),  K(seal_meta_uri), KP(buf), K(pos), K(appendable_obj_meta));
     }
     util.close();
     if (OB_FAIL(ret)) {
@@ -2726,7 +2717,6 @@ int ObStorageMultiPartWriter::abort()
   if (OB_FAIL(ret)) {
   } else if (ObStorageGlobalIns::get_instance().is_io_prohibited()) {
     ret = OB_BACKUP_IO_PROHIBITED;
-    STORAGE_LOG(WARN, "current observer backup io is prohibited");
   } else if (OB_ISNULL(multipart_writer_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "multipart writer not opened", K(ret));

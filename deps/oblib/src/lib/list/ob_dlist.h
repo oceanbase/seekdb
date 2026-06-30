@@ -155,12 +155,9 @@ bool ObDList<DLinkNode>::add_last(DLinkNode *e)
   bool ret = true;
   if (OB_ISNULL(e)) {
     ret = false;
-    LIB_LOG(ERROR, "the poniter is null",K(e));
   } else if (OB_UNLIKELY(e->get_prev() != NULL
              || e->get_next() != NULL)) {
     ret = false;
-    LIB_LOG(ERROR, "link node is not alone",
-              K(e->get_prev()), K(e->get_next()), K(e));
   } else {
     header_.add_before(e);
     ++size_;
@@ -175,12 +172,9 @@ bool ObDList<DLinkNode>::add_first(DLinkNode *e)
   bool ret = true;
   if (OB_ISNULL(e)) {
     ret = false;
-    LIB_LOG(ERROR, "the poniter is null",K(e));
   } else if (e->get_prev() != NULL
              || e->get_next() != NULL) {
     ret = false;
-    LIB_LOG(ERROR, "link node is not alone",
-              K(e->get_prev()), K(e->get_next()), K(e));
   } else {
     header_.add_after(e);
     ++size_;
@@ -194,12 +188,9 @@ bool ObDList<DLinkNode>::add_before(const DLinkNode *pos, DLinkNode *e)
   bool ret = true;
   if (OB_ISNULL(pos) || OB_ISNULL(e)) {
     ret = false;
-    LIB_LOG(ERROR, "the pointer is null",K(e));
   } else if (NULL == pos->get_prev() || NULL == pos->get_next()
       || NULL != e->get_prev() || NULL != e->get_next()) {
     ret = false;
-    LIB_LOG(ERROR, "position node not linked or link node is not alone",
-        K(pos->get_prev()), K(pos->get_next()), K(e->get_prev()), K(e->get_next()), K(e));
   } else {
     const_cast<DLinkNode *>(pos)->add_before(e);
     ++size_;

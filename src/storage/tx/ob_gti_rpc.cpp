@@ -59,7 +59,6 @@ int ObGtiRequestRpc::init(const ObAddr &self, ObGtiSource *gti_source)
   } else {
     self_ = self;
     is_inited_ = true;
-    TRANS_LOG(INFO, "gti request rpc inited success", KP(this), K(self));
   }
   return ret;
 }
@@ -75,7 +74,6 @@ int ObGtiRequestRpc::start()
     TRANS_LOG(WARN, "gti request rpc already running", KR(ret));
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "gti request rpc start success");
   }
   return ret;
 }
@@ -88,7 +86,6 @@ int ObGtiRequestRpc::stop()
     TRANS_LOG(WARN, "gti request rpc not inited", KR(ret));
   } else {
     is_running_ = false;
-    TRANS_LOG(INFO, "gti request rpc stop success");
   }
   return ret;
 }
@@ -103,7 +100,6 @@ int ObGtiRequestRpc::wait()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "gti request rpc is running", KR(ret));
   } else {
-    TRANS_LOG(INFO, "gti request rpc wait success");
   }
   return ret;
 }
@@ -123,7 +119,6 @@ void ObGtiRequestRpc::destroy()
     }
     is_inited_ = false;
     self_.reset();
-    TRANS_LOG(INFO, "gti request rpc destroy");
   }
 }
 

@@ -118,7 +118,6 @@ int ObDMLResolver::alloc_joined_table_item(JoinedTable *&joined_table)
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_ISNULL(ptr = allocator_->alloc(sizeof(JoinedTable)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "alloc memory for JoinedTable failed", "size", sizeof(JoinedTable));
   } else {
     joined_table = new (ptr) JoinedTable();
   }
@@ -5441,18 +5440,6 @@ int ObDMLResolver::resolve_partition_expr(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(parser.parse(sql_str.string(), parse_result))) {
       ret = OB_ERR_PARSE_SQL;
-      _OB_LOG(WARN, "parse: %p, %p, %p, msg=[%s], start_col_=[%d], end_col_[%d], line_[%d], yycolumn[%d], yylineno_[%d], sql[%.*s]",
-              parse_result.yyscan_info_,
-              parse_result.result_tree_,
-              parse_result.malloc_pool_,
-              parse_result.error_msg_,
-              parse_result.start_col_,
-              parse_result.end_col_,
-              parse_result.line_,
-              parse_result.yycolumn_,
-              parse_result.yylineno_,
-              static_cast<int>(sql_str.length()),
-              sql_str.ptr());
     } else {
       if (OB_ISNULL(stmt_node = parse_result.result_tree_) || OB_UNLIKELY(stmt_node->type_ != T_STMT_LIST)) {
         ret = OB_ERR_UNEXPECTED;
@@ -6020,7 +6007,6 @@ int ObDMLResolver::resolve_order_item(const ParseNode &sort_node, OrderItem &ord
     // do nothing
   } else if (OB_UNLIKELY(sort_node.children_[0]->type_ == T_INT)) {
     ret = OB_ERR_PARSER_SYNTAX;
-    SQL_RESV_LOG(WARN, "index order item not support in update");
   } else if (OB_FAIL(resolve_sql_expr(*(sort_node.children_[0]), expr))) {
   } else {
     // check if order by item has var assign expr, which will cause uncertain behavior

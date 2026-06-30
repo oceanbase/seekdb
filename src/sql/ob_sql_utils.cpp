@@ -139,7 +139,6 @@ int ObSQLUtils::md5(const ObString &stmt, char *sql_id, int32_t len)
   int ret = OB_SUCCESS;
   if (sql_id == NULL || len < 32) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_PC_LOG(WARN, "invalid args", KP(sql_id), K(len));
   }
   char md5_sum_buf[MD5_LENGTH];
   ObString::obstr_size_t md5_sum_len = MD5_LENGTH;
@@ -468,7 +467,6 @@ int ObSQLUtils::calc_calculable_expr(ObSQLSessionInfo *session,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr) || OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_LOG(WARN, "Invalid arguments", K(expr), K(allocator));
   } else if (!expr->is_static_scalar_const_expr()) {
     ret = OB_INVALID_ARGUMENT;
     SQL_LOG(WARN, "expr should be calculable expr", K(*expr), K(ret));
@@ -490,7 +488,6 @@ int ObSQLUtils::calc_const_expr(ObExecContext &exec_ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_LOG(WARN, "Invalid arguments", K(expr));
   } else if (OB_FAIL(calc_const_expr(exec_ctx.get_my_session(),
                                      *expr,
                                      result,

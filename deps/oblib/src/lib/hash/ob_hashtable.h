@@ -824,11 +824,8 @@ public:
   {
     int ret = OB_SUCCESS;;
     if (OB_UNLIKELY(0 >= bucket_num) || OB_UNLIKELY(NULL == allocer)) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param bucket_num=%ld allocer=%p", bucket_num, allocer);
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_UNLIKELY(inited(buckets_))) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable has already been created allocer=%p bucket_num=%ld",
-                     allocer_, bucket_num_);
       ret = OB_INIT_TWICE;
     } else if (OB_UNLIKELY(0 != (ret = hash::create(buckets_, bucket_num, ARRAY_SIZE,
                                                     sizeof(hashbucket), *bucket_allocer)))) {
@@ -847,7 +844,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_DEBUG, "hashtable is empty");
     } else {
       for (int64_t i = 0; i < bucket_num_; i++) {
         hashnode *cur_node = NULL;
@@ -925,11 +921,8 @@ public:
     hashbucket *bucket = NULL;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
       ret = OB_NOT_INIT;
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init, backtrace=%s", lbt());
     } else if (OB_UNLIKELY((bucket_pos < 0) || (bucket_pos >= bucket_num_))) {
       ret = OB_INVALID_ARGUMENT;
-      HASH_WRITE_LOG(HASH_WARNING, "invalid bucket pos, bucket_pos = %ld, bucket_num = %ld",
-                     bucket_pos, bucket_num_);
     } else {
       bucket = &buckets_[bucket_pos];
       iterator = bucket_iterator(this, bucket_pos, bucket);
@@ -993,7 +986,6 @@ private:
     if (OB_SUCC(internal_get(bucket, key, tmp_value, is_fake))) {
       if (OB_ISNULL(tmp_value)) {
         ret = OB_ERR_UNEXPECTED;
-        HASH_WRITE_LOG(HASH_FATAL, "hashtable internal get null value, backtrace=%s", lbt());
       } else if (OB_FAIL(copy_assign(value, *tmp_value))) { // it is ok since this function is always called under lock protection
         HASH_WRITE_LOG(HASH_FATAL, "failed to copy data, ret = %d", ret);
       }
@@ -1093,13 +1085,11 @@ private:
           bucket_lock_cond blc(bucket);
           if (get_cur_microseconds_time() > abs_timeout_us
               || ETIMEDOUT == cond_waiter()(blc.cond(), blc.lock(), ts)) {
-            HASH_WRITE_LOG(HASH_WARNING, "wait fake node become normal node timeout");
             ret = OB_HASH_GET_TIMEOUT;
             break;
           }
           ret = internal_get(bucket, key, value, is_fake);
           if (OB_HASH_NOT_EXIST == ret) {
-            HASH_WRITE_LOG(HASH_WARNING, "after wake up, fake node is non-existent or deleted");
             ret = OB_ERROR;
             break;
           }
@@ -1131,7 +1121,6 @@ public:
     int ret = OB_HASH_NOT_EXIST;
     uint64_t hash_value = 0;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1166,7 +1155,6 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_value = 0;
     if (!inited(buckets_) || NULL == allocer_) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
         HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1212,7 +1200,6 @@ public:
     uint64_t hash_value = 0;
     UNUSED(overwrite_key);
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1365,7 +1352,6 @@ public:
     uint64_t hash_value = 0;
     //if (NULL == buckets_ || NULL == allocer_)
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1431,7 +1417,6 @@ public:
     uint64_t hash_value = 0;
     is_erased = false;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1487,7 +1472,6 @@ public:
     static_assert(std::is_same<decltype(callback(*(_value_type*)0)), int>::value,
         "hash table foreach callback format error");
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < bucket_num_; i++) {
@@ -1531,7 +1515,6 @@ public:
     static_assert(std::is_same<decltype(callback(*(_value_type*)0)), int>::value,
         "hash table foreach callback format error");
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else {
       const int64_t real_start = MAX(0, MIN(start_bucket, bucket_num_));
@@ -1571,7 +1554,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hash::serialization(archive, bucket_num_))) {
       HASH_WRITE_LOG(HASH_WARNING,
@@ -1596,7 +1578,6 @@ public:
     int64_t bucket_num = 0;
     int64_t size = 0;
     if (OB_UNLIKELY(NULL == allocer)) {
-      HASH_WRITE_LOG(HASH_WARNING, "invalid param allocer null pointer");
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(hash::deserialization(archive, bucket_num))
                || OB_UNLIKELY(0 >= bucket_num)) {
@@ -1636,7 +1617,6 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_value = 0;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1669,7 +1649,6 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_value = 0;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
         HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);
@@ -1702,7 +1681,6 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_value;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
-      HASH_WRITE_LOG(HASH_WARNING, "hashtable not init");
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(hashfunc_(key, hash_value))) {
       HASH_WRITE_LOG(HASH_WARNING, "hash key failed, ret = %d", ret);

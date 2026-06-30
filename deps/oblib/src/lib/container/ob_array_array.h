@@ -221,8 +221,6 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::reserv
       if (OB_ISNULL(new_array_ptrs = reinterpret_cast<LocalArrayT **>
                                      (alloc_.alloc(sizeof(LocalArrayT *) * new_ptr_capacity)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LIB_LOG(ERROR, "Failed to alloc memory for obarrayarray", K(new_ptr_capacity), K_(count),
-                K_(capacity));
       } else {
         MEMSET(new_array_ptrs, 0, sizeof(LocalArrayT *) * new_ptr_capacity);
         MEMCPY(new_array_ptrs, array_ptrs_, sizeof(LocalArrayT *) * capacity_);
@@ -233,8 +231,6 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::reserv
       for (int64_t i = capacity_; OB_SUCC(ret) && i < capacity; i++) {
         if (OB_NOT_NULL(new_array_ptrs[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LIB_LOG(ERROR, "Unexpecte not null array array ptr", K(i), K_(count), K_(capacity), K(capacity),
-                  KP(new_array_ptrs[i]));
         } else if (OB_ISNULL(ptr = alloc_.alloc(sizeof(LocalArrayT)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LIB_LOG(ERROR, "Failed to alloc memory for obarrayarray", K(ret), K(i), K_(capacity));

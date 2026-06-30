@@ -108,7 +108,6 @@ int ObDDLEmptyShellChecker::check_disk_space_exceeds(
       if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
         ret = OB_SUCCESS;
         can_become_empty_shell = true;
-        STORAGE_LOG(INFO, "delete split src tablet when reaching data disk used limit", K(tablet_id), K(required_size));
       } else {
         STORAGE_LOG(WARN, "check data disk space full failed", K(ret), K(required_size));
       }
@@ -128,7 +127,6 @@ int ObDDLEmptyShellChecker::check_tablets_cnt_exceeds(
     if (OB_TOO_MANY_PARTITIONS_ERROR == ret) {
       ret = OB_SUCCESS;
       can_become_empty_shell = true;
-      STORAGE_LOG(INFO, "delete split src tablet when reaching unit tablet cnt limit", K(tablet_id));
     } else {
       STORAGE_LOG(WARN, "check tablet cnt reach limit failed", K(ret), K(tablet_id));
     }
@@ -159,7 +157,6 @@ int ObDDLEmptyShellChecker::check_delay_deleted_time_exceeds(
     can_become_empty_shell = true;
     STORAGE_LOG(INFO, "delete split src tablet when reaching predefined time limit", K(ret), K(tablet_id));
   } else {
-    STORAGE_LOG(TRACE, "can not change to empty shell", K(tablet_id), K(tag_deleted_us));
   }
   return ret;
 }
@@ -203,8 +200,6 @@ int ObDDLEmptyShellChecker::check_split_src_deleted_tablet(
   } else if (decided_scn < user_data.delete_commit_scn_) {
     need_retry = true;
     if (REACH_THREAD_TIME_INTERVAL(1 * 1000 * 1000/*1s*/)) {
-      STORAGE_LOG(INFO, "decided_scn is smaller than tablet delete commit scn",
-        K(ls_id), K(tablet_id), K(user_data), K(decided_scn));
     }
   } else {
     int tmp_ret = OB_SUCCESS;

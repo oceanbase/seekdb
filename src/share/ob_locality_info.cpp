@@ -44,7 +44,6 @@ void ObLocalityInfo::reset()
 void ObLocalityInfo::destroy()
 {
   locality_zone_array_.destroy();
-  STORAGE_LOG(INFO, "ObLocalityInfo destroy finished");
 }
 
 int ObLocalityInfo::add_locality_zone(const ObLocalityZone &item)

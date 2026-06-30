@@ -157,7 +157,6 @@ int ObMerger::try_filter_row(
         filter_ret))) {
     } else if (OB_UNLIKELY(!ObICompactionFilter::is_valid_filter_ret(filter_ret))) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "get wrong filter ret", K(filter_ret));
     } else {
       filter_statistics_.inc(filter_ret);
     }
@@ -273,8 +272,6 @@ int ObPartitionMerger::inner_open_macro_writer(
                    NULL /*ObIMacroBlockFlushCallback*/,
                    validator_))) {
     } else {
-      STORAGE_LOG(INFO, "success to open macro writer with pre warmer", K(data_store_desc_), K(macro_seq_param),
-        KPC(macro_writer_), K(ctx.get_pre_warm_param()), K_(validator));
     }
 
     if (OB_FAIL(ret) && nullptr != macro_writer_) {
@@ -698,7 +695,6 @@ int ObPartitionMajorMerger::rewrite_macro_block(MERGE_ITER_ARRAY &minimum_iters)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "curr macro is null", K(ret), KPC(curr_macro));
   } else {
-    STORAGE_LOG(DEBUG, "Rewrite macro block", KPC(iter));
     curr_macro_id = curr_macro->macro_block_id_;
     // TODO maybe we need use macro_block_ctx to decide whether the result row came from the same macro block
     while (OB_SUCC(ret) && !iter->is_iter_end() && iter->is_macro_block_opened()) {
@@ -1175,8 +1171,6 @@ int ObPartitionMinorMerger::set_result_flag(MERGE_ITER_ARRAY &fuse_iters,
           "result_row", partition_fuser_->get_result_row(),
           "sql_seq_col_idx", data_store_desc_.get_schema_rowkey_col_cnt() + 1);
     } else {
-      STORAGE_LOG(DEBUG, "succ to set multi version row flag and dml", K(partition_fuser_->get_result_row()),
-                  K(row_flag), KPC(base_row));
     }
   }
 
@@ -1585,8 +1579,6 @@ void ObPartitionMergeDumper::print_error_info(const int err_no,
       const ObDatumRow *curr_row = cur_iter->get_curr_row();
       if (!cur_iter->is_macro_merge_iter()) {
         if (OB_NOT_NULL(curr_row)) {
-          STORAGE_LOG(WARN, "merge iter content: ", K(midx), K(cur_iter->get_table()->get_key()),
-              KPC(cur_iter->get_curr_row()));
         }
       } else if (OB_FAIL(cur_iter->get_curr_macro_block(macro_desc))) {
       } else if (OB_ISNULL(macro_desc)) {
@@ -1594,11 +1586,7 @@ void ObPartitionMergeDumper::print_error_info(const int err_no,
         STORAGE_LOG(WARN, "Unexpected null macro block", K(ret), KPC(macro_desc), KPC(cur_iter));
       } else if (OB_ISNULL(curr_row)) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "merge iter content: ", K(midx), K(cur_iter->get_table()->get_key()),
-                    KPC(macro_desc));
       } else {
-        STORAGE_LOG(WARN, "merge iter content: ", K(midx), K(cur_iter->get_table()->get_key()),
-                    KPC(macro_desc), KPC(cur_iter->get_curr_row()));
       }
     }
     // dump all sstables in this merge
@@ -1610,7 +1598,6 @@ void ObPartitionMergeDumper::print_error_info(const int err_no,
       ObITable *dump_table = nullptr;
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "The store is NULL", K(idx), K(tables_handle));
       } else if (OB_FAIL(compaction::ObPartitionMergeDumper::judge_disk_free_space(dump_table_dir,
                          table))) {
         if (OB_SERVER_OUTOF_DISK_SPACE != ret) {

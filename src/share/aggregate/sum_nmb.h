@@ -192,7 +192,6 @@ public:
                      const int32_t agg_col_id, char *aggr_cell, void *tmp_res, int64_t &calc_info)
   {
     UNUSEDx(agg_ctx, columns, row_num, agg_col_id, aggr_cell, tmp_res, calc_info);
-    SQL_LOG(DEBUG, "add_row do nothing");
     return OB_SUCCESS;
   }
 
@@ -202,7 +201,6 @@ public:
                               int64_t &calc_info)
   {
     UNUSEDx(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info);
-    SQL_LOG(DEBUG, "add_nullable_row do nothing");
     return OB_SUCCESS;
   }
 

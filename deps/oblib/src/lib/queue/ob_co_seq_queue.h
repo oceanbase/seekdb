@@ -38,10 +38,8 @@ public:
     int ret = common::OB_SUCCESS;
     if (limit <= MIN_QUEUE_SIZE || NULL == allocator) {
       ret = common::OB_INVALID_ARGUMENT;
-      LIB_LOG(ERROR, "invalid args", K(limit), K(allocator));
     } else if (NULL == (items_ = static_cast<int64_t*>(allocator->alloc(sizeof(int64_t) * limit)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LIB_LOG(ERROR, "alloc memory for items failed", "size", sizeof(int64_t) * limit);
     }
 
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < limit; i++) {

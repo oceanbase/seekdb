@@ -1110,10 +1110,8 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
   #elif defined(__aarch64__)
     #if 1
     ob_crc64_sse42_func = &crc64_sse42;
-    _OB_LOG(INFO, "Use CPU crc32 instructs for crc64 calculate");
     #else
     ob_crc64_sse42_func = &fast_crc64_sse42_manually;
-    _OB_LOG(INFO, "Use manual crc32 table lookup for crc64 calculate");
     #endif
   #else
     #error arch unsupported

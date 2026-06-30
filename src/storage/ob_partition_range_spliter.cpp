@@ -2362,7 +2362,6 @@ int ObPartitionIncrementalRangeSpliter::check_is_incremental(bool &is_incrementa
       while (OB_SUCC(ret) && OB_SUCC(iter_->get_next_row(row)) && OB_NOT_NULL(row) &&
             ++row_count <= default_noisy_row_num_skipped_);
       if (OB_ITER_END == ret) {
-        STORAGE_LOG(DEBUG, "incremental row num less than skipped num");
         ret = OB_SUCCESS;
       } else if (OB_SUCC(ret) && row_count > default_noisy_row_num_skipped_) {
         // compare with base sstable last rowkey

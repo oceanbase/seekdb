@@ -141,7 +141,6 @@ int ObInfoSchemaUserPrivilegesTable::inner_get_next_row(common::ObNewRow *&row)
           const ObUserInfo *user_info = user_info_array.at(user_id);
           if (OB_ISNULL(user_info)) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "Failed to get user info");
           } else if (OB_FAIL(fill_row_with_user_info(*user_info))) {
           }// get user info success
         }// traverse userinfo
@@ -258,7 +257,6 @@ int ObInfoSchemaUserPrivilegesTable::fill_row_with_user_info(
               break;
             }
             default: {
-              SERVER_LOG(WARN, "Unsupported column in USER_PRIVILEGES", K(column_id));
               break;
             }
             }// switch

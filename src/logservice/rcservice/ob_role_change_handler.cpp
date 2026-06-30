@@ -65,7 +65,6 @@ void ObRoleChangeHandler::unregister_handler(const ObLogBaseType &type)
   ObSpinLockGuard guard(lock_);
   if (true == is_valid_log_base_type(type)) {
     sub_role_change_handler_arr_[type] = NULL;
-    CLOG_LOG(INFO, "unregister_handler success", K(type));
   }
 }
 
@@ -83,8 +82,6 @@ void ObRoleChangeHandler::switch_to_follower_forcedly()
     }
     if (NULL != handler) {
       handler->switch_to_follower_forcedly();
-      CLOG_LOG(INFO, "leader to follower forcedly, current role change handler is",
-          "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
     }
   }
 }
@@ -92,7 +89,6 @@ void ObRoleChangeHandler::switch_to_follower_forcedly()
 int ObRoleChangeHandler::switch_to_leader(RCDiagnoseInfo &diagnose_info)
 {
   int ret = OB_SUCCESS;
-  CLOG_LOG(INFO, "ObRoleChangeHandler::switch_to_leader called");
   ObSpinLockGuard guard(lock_);
   for (int i = 0; i < ObLogBaseType::MAX_LOG_BASE_TYPE && OB_SUCC(ret); i++) {
     ObIRoleChangeSubHandler *handler = sub_role_change_handler_arr_[i];
@@ -106,12 +102,9 @@ int ObRoleChangeHandler::switch_to_leader(RCDiagnoseInfo &diagnose_info)
     }
     if (NULL == handler) {
       if (i == static_cast<int>(ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE)) {
-        CLOG_LOG(WARN, "TIMESTAMP_LOG_BASE_TYPE handler is NULL", K(i));
       }
     } else if (OB_FAIL(handler->switch_to_leader())) {
     } else {
-      CLOG_LOG(INFO, "follower to leader, current role change handler is",
-          "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
     }
   }
   CLOG_LOG(INFO, "ObRoleChangeHandler::switch_to_leader finished", K(ret));
@@ -143,8 +136,6 @@ int ObRoleChangeHandler::switch_to_follower_gracefully()
     } else if (OB_LS_NEED_REVOKE == ret) {
       CLOG_LOG(WARN, "ObIRoleChangeSubHandler resume leader failed", K(ret), K(cursor));
     } else {
-      CLOG_LOG(INFO, "leader to follower gracefully, current role change handler is",
-          "cursor", cursor, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
       cursor++;
     }
   }
@@ -170,7 +161,6 @@ int ObRoleChangeHandler::resume_to_leader()
   int cursor = ObLogBaseType::MAX_LOG_BASE_TYPE;
   if (OB_FAIL(resume_leader_when_switch_failure_(cursor))) {
   } else {
-    CLOG_LOG(INFO, "resume_to_leader success");
   }
   return ret;
 }

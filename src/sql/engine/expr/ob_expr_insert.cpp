@@ -178,8 +178,6 @@ int ObExprInsert::calc(ObString &result, const ObString &text, const int64_t sta
                                                              + rep_text_len_char + start_char));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          _OB_LOG(ERROR, "alloc memory failed. size=%d", static_cast<int>(text_len_char
-                                                                         - res_length + rep_text_len_char + start_char));
         } else {
           if (0 == rep_text_len) {
             MEMCPY(buf, origin_text.ptr(), start_char);

@@ -676,7 +676,6 @@ int ObIndexBlockLoader::get_next_array_row(ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (curr_block_row_idx_ >= curr_block_row_cnt_) {
     ret = OB_ITER_END;
-    STORAGE_LOG(DEBUG, "iter end", K(curr_block_row_idx_), K(curr_block_row_cnt_));
   } else {
     row_allocator_.reuse();
     const ObDataMacroBlockMeta *macro_meta = index_block_info_->macro_meta_list_->at(curr_block_row_idx_);
@@ -840,7 +839,6 @@ int ObIndexBlockLoader::get_next_mem_row(ObDatumRow &row)
     STORAGE_LOG(WARN, "Fail to open mem micro block", K(ret));
   } else if (curr_block_row_idx_ >= curr_block_row_cnt_) {
     ret = OB_ITER_END;
-    STORAGE_LOG(DEBUG, "iter end", K(curr_block_row_idx_), K(curr_block_row_cnt_));
   } else if (OB_FAIL(micro_reader_->get_row(curr_block_row_idx_, row))) {
   } else {
     curr_block_row_idx_++;

@@ -4815,7 +4815,6 @@ int ObTablet::create_memtable(CreateMemtableArg &arg)
     } while(OB_FAIL(ret));
   }
 
-  STORAGE_LOG(DEBUG, "Tablet finish create memtable", K(arg), K(lbt()));
   return ret;
 }
 
@@ -5287,8 +5286,6 @@ int ObTablet::build_migration_sstable_param(
   if (OB_FAIL(ret)) {
     mig_sstable_param.reset();
   } else {
-    STORAGE_LOG(INFO, "succeed to build migration param",
-        K(mig_sstable_param), K(sstable_meta_handle.get_sstable_meta()));
   }
   return ret;
 }
@@ -5372,8 +5369,6 @@ int ObTablet::build_migration_sstable_param(
   if (OB_FAIL(ret)) {
     mig_sstable_param.reset();
   } else {
-    STORAGE_LOG(INFO, "succeed to build migration param with merge result",
-        K(mig_sstable_param), K(res), K(sstable_meta_handle.get_sstable_meta()));
   }
   return ret;
 }

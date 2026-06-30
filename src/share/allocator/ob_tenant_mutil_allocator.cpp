@@ -67,13 +67,11 @@ ObTenantMutilAllocator::ObTenantMutilAllocator()
 
 ObTenantMutilAllocator::~ObTenantMutilAllocator()
 {
-  OB_LOG(INFO, "~ObTenantMutilAllocator");
   destroy();
 }
 
 void ObTenantMutilAllocator::destroy()
 {
-  OB_LOG(INFO, "ObTenantMutilAllocator destroy");
   clog_ge_alloc_.destroy();
   log_handle_submit_task_alloc_.destroy();
   log_io_flush_log_task_alloc_.destroy();
@@ -338,7 +336,6 @@ void ObTenantMutilAllocator::set_nway(const int32_t nway)
 {
   if (nway > 0) {
     clog_ge_alloc_.set_nway(nway);
-    OB_LOG(INFO, "finish set nway", K(nway));
   }
 }
 
@@ -352,8 +349,6 @@ void ObTenantMutilAllocator::set_limit(const int64_t total_limit)
     clog_blk_alloc_.set_limit(clog_limit);
     replay_log_task_alloc_.set_limit(replay_limit);
     clog_compressing_blk_alloc_.set_limit(clog_compress_limit);
-    OB_LOG(INFO, "ObTenantMutilAllocator set tenant mem limit finished", K(total_limit), K(clog_limit),
-        K(replay_limit), K(clog_compress_limit));
   }
 }
 

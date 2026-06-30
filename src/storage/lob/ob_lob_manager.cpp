@@ -108,7 +108,6 @@ int ObLobManager::start()
 
 int ObLobManager::stop()
 {
-  STORAGE_LOG(INFO, "[LOB]stop");
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -123,14 +122,12 @@ int ObLobManager::stop()
 
 void ObLobManager::wait()
 {
-  STORAGE_LOG(INFO, "[LOB]wait");
   // TODO
   // 1. Wait for the asynchronous flush of memory data in LobOperator to complete
 }
 
 void ObLobManager::destroy()
 {
-  STORAGE_LOG(INFO, "[LOB]destroy");
   // TODO
   // 1. LobOperator.destroy()
   allocator_.reset();

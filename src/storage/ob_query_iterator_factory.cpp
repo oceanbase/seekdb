@@ -41,12 +41,6 @@ void ObQueryIteratorFactory::print_count()
   int64_t stat_time = ObTimeUtility::current_time();
   const int64_t stat_interval = 10000000;
   if (stat_time - ATOMIC_LOAD(&last_stat_time) > stat_interval) {
-    STORAGE_LOG(INFO, "ObQueryIteratorFactory statistics",
-        K_(multi_scan_merge_alloc_count), K_(multi_scan_merge_release_count),
-        K_(multi_get_merge_alloc_count), K_(multi_get_merge_release_count),
-        K_(table_scan_alloc_count), K_(table_scan_release_count),
-        K_(insert_dup_alloc_count), K_(insert_dup_release_count),
-        K_(col_map_alloc_count), K_(col_map_release_count));
     ATOMIC_STORE(&last_stat_time, stat_time);
   }
 }

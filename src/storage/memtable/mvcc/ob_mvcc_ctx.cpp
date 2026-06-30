@@ -70,8 +70,6 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
         || OB_ISNULL(memtable)
         || column_cnt <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      TRANS_LOG(WARN, "invalid argument", K(stored_key), K(value), K(node),
-                K(data_size), K(memtable), K(column_cnt));
     } else if (OB_ISNULL(cb = alloc_row_callback(*this, *value, memtable))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "alloc row callback failed", K(ret));
@@ -206,7 +204,6 @@ int ObIMvccCtx::register_row_replay_cb(
   if (OB_ISNULL(key) || OB_ISNULL(value) || OB_ISNULL(node)
       || data_size <= 0 || OB_ISNULL(memtable)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(key), K(value), K(node), K(data_size), K(memtable));
   } else if (OB_ISNULL(cb = alloc_row_callback(*this, *value, memtable))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc row callback failed", K(ret));
@@ -264,7 +261,6 @@ int ObIMvccCtx::register_table_lock_cb_(
     }
     if (OB_FAIL(append_callback(cb))) {
     } else {
-      TRANS_LOG(DEBUG, "append table lock callback", K(*cb));
     }
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(cb)) {
@@ -308,7 +304,6 @@ int ObIMvccCtx::register_table_lock_replay_cb(
                                              cb,
                                              scn))) {
   } else {
-    TRANS_LOG(DEBUG, "replay register table lock callback", K(*cb));
   }
   return ret;
 }

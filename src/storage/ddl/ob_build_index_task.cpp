@@ -252,7 +252,6 @@ int ObUniqueIndexChecker::generate_index_output_param(
       }
     }
 
-    STORAGE_LOG(INFO, "output index projector", K(output_projector), K(col_ids), K(org_col_ids));
   }
 
   return ret;
@@ -318,7 +317,6 @@ int ObUniqueIndexChecker::scan_main_table_with_column_checksum(
     param.is_scan_index_ = false;
     param.task_id_ = task_id;
     
-    STORAGE_LOG(INFO, "scan main table column checksum", K(col_ids), K(org_col_ids));
     if (OB_FAIL(scan_table_with_column_checksum(param, column_checksum, row_count))) {
     }
     LOG_INFO("scan main table column checksum", K(org_col_ids), K(column_checksum));
@@ -359,7 +357,6 @@ int ObUniqueIndexChecker::scan_index_table_with_column_checksum(
       param.output_projector_ = &output_projector;
       param.is_scan_index_ = true;
       param.task_id_ = task_id;
-      STORAGE_LOG(INFO, "scan index table column checksum", K(column_ids));
       if (OB_FAIL(scan_table_with_column_checksum(param, tmp_column_checksum, row_count))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
@@ -424,7 +421,6 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
       if (OB_FAIL(share::g_mp->ls_service()->get_ls(param_->ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
       } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle, param_->tablet_id_, tablet_handle_))) {
       } else if (param_->index_schema_->is_fts_index() || param_->index_schema_->is_vec_index()) {
-        STORAGE_LOG(INFO, "do not need to check unique for domain index", "index_id", param_->index_schema_->get_table_id());
       } else {
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(wait_trans_end(dag))) {
@@ -909,7 +905,6 @@ int ObUniqueCheckingMergeTask::process()
   // overwrite ret
   if (NULL != param_->callback_) {
     if (NULL != param_->index_schema_) {
-      STORAGE_LOG(INFO, "unique checking callback", K(param_->tablet_id_), "index_id", param_->index_schema_->get_table_id());
     }
     if (OB_FAIL(param_->callback_->operator()(context_->unique_checking_ret_))) {
     }
@@ -944,7 +939,6 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(GCTX.root_service_->calc_column_checksum_repsonse(arg))) {
   } else {
-    STORAGE_LOG(INFO, "send column checksum response", K(arg));
   }
   return ret;
 }

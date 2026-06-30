@@ -471,14 +471,11 @@ void ObTenantMdsService::dump_map_holding_item(int64_t check_alive_time_threshol
     void *obj = (void *)(int64_t)obj_wrapper.get_value();
     ++scan_cnt;
     if (ObTimeUtility::fast_current_time() - debug_info.alloc_ts_ >= check_alive_time_threshold) {
-      MDS_LOG(INFO, "print item alloc backtrace",
-                    KP(obj), K(debug_info), K(ObTimeLiteralPrettyPrinter(check_alive_time_threshold)));
     }
     return true;
   };
   if (OB_FAIL(memory_leak_debug_map_.for_each(op))) {
   } else {
-    MDS_LOG(INFO, "finish scan map holding items", K(scan_cnt));
   }
 }
 

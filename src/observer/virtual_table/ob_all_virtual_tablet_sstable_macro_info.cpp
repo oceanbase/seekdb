@@ -719,7 +719,6 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_tablet_need_ignore(const ObTablet
       }
     }
   }
-  SERVER_LOG(DEBUG, "sstable_macro_info try to skip tablet", K(need_ignore), K(tablet_range), K(tablet_meta));
   return need_ignore;
 }
 
@@ -767,7 +766,6 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_sstable_need_ignore(const ObITabl
       }
     }
   }
-  SERVER_LOG(DEBUG, "sstable_macro_info try to skip sstable", K(need_ignore), K(sstable_range), K(table_key));
   return need_ignore;
 }
 

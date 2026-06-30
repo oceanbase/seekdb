@@ -29,7 +29,6 @@ OB_DEF_SERIALIZE(ObDataBuffer)
   LST_DO_CODE(OB_UNIS_ENCODE, position_);
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(pos + position_ > buf_len)) {
-    COMMON_LOG(WARN, "ObDataBuffer serialized error", K(pos), K_(position), K(buf_len));
     ret = OB_SERIALIZE_ERROR;
   } else {
     MEMCPY(buf + pos, data_, position_);
@@ -44,7 +43,6 @@ OB_DEF_DESERIALIZE(ObDataBuffer)
   LST_DO_CODE(OB_UNIS_DECODE, position_);
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(pos + position_ > data_len)) {
-    COMMON_LOG(WARN, "ObDataBuffer deserialized error", K(pos), K_(position), K(data_len));
     ret = OB_DESERIALIZE_ERROR;
   } else if (OB_ISNULL(data_)) {
     ret = OB_NOT_INIT;

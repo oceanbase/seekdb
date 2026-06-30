@@ -56,7 +56,6 @@ ObLatchMutex::ObLatchMutex()
 ObLatchMutex::~ObLatchMutex()
 {
   if (0 != lock_.val()) {
-    COMMON_LOG(DEBUG, "invalid lock,", K(lock_.val()), KCSTRING(lbt()));
   }
 }
 

@@ -80,7 +80,6 @@ LogIOWorker *LogIOWorkerWrapper::get_log_io_worker(const int64_t palf_id)
 {
   int64_t index = palf_id_to_index_(palf_id);
   LogIOWorker *iow = log_io_workers_ + index;
-  PALF_LOG(INFO, "get_log_io_worker success", KPC(this), K(palf_id), K(index), KP(iow));
   return iow;
 }
 
@@ -96,16 +95,12 @@ int LogIOWorkerWrapper::start()
 
 void LogIOWorkerWrapper::stop()
 {
-  PALF_LOG(INFO, "LogIOWorkerWrapper starts stopping", KPC(this));
   stop_();
-  PALF_LOG(INFO, "LogIOWorkerWrapper has finished stopping", KPC(this));
 }
 
 void LogIOWorkerWrapper::wait()
 {
-  PALF_LOG(INFO, " LogIOWorkerWrapper starts waiting", KPC(this));
   wait_();
-  PALF_LOG(INFO, "LogIOWorkerWrapper has finished waiting", KPC(this));
 }
 
 int LogIOWorkerWrapper::notify_need_writing_throttling(const bool &need_throttling)
@@ -147,7 +142,6 @@ int LogIOWorkerWrapper::create_and_init_log_io_workers_(const LogIOWorkerConfig 
     (log_writer_parallelism) * sizeof(LogIOWorker), "LogIOWS"));
   if (NULL == log_io_workers_) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    PALF_LOG(WARN, "allocate memory failed", K(log_writer_parallelism));
   }
   for (int64_t i = 0; i < log_writer_parallelism && OB_SUCC(ret); i++) {
     LogIOWorker *iow = log_io_workers_ + i;
@@ -158,9 +152,6 @@ int LogIOWorkerWrapper::create_and_init_log_io_workers_(const LogIOWorkerConfig 
                           &throttle_, need_ignoring_throttling, palf_env_impl))) {
     } else {
       log_writer_parallelism_++;
-      PALF_LOG(INFO, "init LogIOWorker success", K(i), K(config),
-               K(cb_thread_pool_tg_id), KP(allocator), KP(palf_env_impl), KP(iow),
-               KP(log_io_workers_));
     }
   }
   if (OB_FAIL(ret)) {
@@ -199,7 +190,6 @@ void LogIOWorkerWrapper::wait_()
 
 void LogIOWorkerWrapper::destory_and_free_log_io_workers_()
 {
-  PALF_LOG(INFO, "destory_log_io_workers_ success", KPC(this));
   if (NULL != log_io_workers_) {
     for (int64_t i = 0; i < log_writer_parallelism_; i++) {
       LogIOWorker *iow = log_io_workers_ + i;
@@ -228,7 +218,6 @@ int64_t LogIOWorkerWrapper::palf_id_to_index_(const int64_t palf_id)
     }
     // NB: SYS_LOG_IO_WORKER_INDEX is 0, others should not use this LogIOWorker.
     index = (round_robin_idx_++ % hash_factor) + 1;
-    PALF_LOG(INFO, "palf_id_to_index_ success", KPC(this), K(palf_id), K(index));
     OB_ASSERT(index < log_writer_parallelism_);
   }
   return index;

@@ -606,7 +606,6 @@ private:
       int64_t seg_cnt = 0;
       if (NULL == old_dir) {
         ret = OB_ERR_UNEXPECTED;
-        LIB_LOG(ERROR, "err dir", K(old_dir));
         // double check, need_shrink may be based on a stale dir
       } else if (dir != old_dir) {
         ret = OB_EAGAIN;

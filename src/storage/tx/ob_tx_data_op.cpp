@@ -89,7 +89,6 @@ ObTxOp *ObTxOpVector::at(int64_t idx)
   } else if (idx >= 0 && idx < count_) {
     tx_op = &tx_op_[idx];
   } else {
-    STORAGE_LOG(WARN, "out of range", KPC(this), K(idx));
   }
   return tx_op;
 }
@@ -113,7 +112,6 @@ int ObTxOpVector::check_stat()
   if (count_ < 0 || capacity_ < 0 || count_ > capacity_
       || (count_ > 0 && OB_ISNULL(tx_op_))) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "check_stat failed", KPC(this), KP(this));
   }
   return ret;
 }
@@ -225,7 +223,6 @@ int ObTxDataOp::add_tx_op_batch(transaction::ObTransID tx_id, share::ObLSID ls_i
     // !!! we must promise tx_op_batch atomic append into tx_op_list
     // otherwise tx_op replay filter with log_scn compare op_scn will cause serious problem
     if (OB_FAIL(ret)) {
-      STORAGE_LOG(ERROR, "tx_op_batch is not atomic append", K(tx_id), K(ls_id), K(tx_op_list_), K(tx_op_batch), K(op_scn));
       ob_abort();
     }
   }

@@ -65,7 +65,6 @@ int ObAllVirtualTmpFileInfo::get_next_tmp_file_info_(tmp_file::ObTmpFileInfo *tm
            && !has_get) {
       if (fd_idx_ >= fd_arr_.count()) {
         ret = OB_ITER_END;
-        SERVER_LOG(INFO, "iterate current tenant reach end", K(fd_idx_), K(fd_arr_.count()));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_info(fd_arr_.at(fd_idx_), tmp_file_info))) {
         if (OB_ENTRY_NOT_EXIST == ret || OB_TIMEOUT == ret) {
           SERVER_LOG(INFO, "tmp file does not exist or is locked by others", KR(ret), K(fd_arr_.at(fd_idx_)));

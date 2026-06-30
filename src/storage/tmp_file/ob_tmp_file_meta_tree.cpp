@@ -1081,8 +1081,6 @@ int ObSharedNothingTmpFileMetaTree::flush_meta_pages_for_block(
     ObTmpFileTreeIOInfo tree_io_info;
     if (flush_context.is_valid()) {
       if (flush_context.tree_epoch_ != tree_epoch_) {
-        STORAGE_LOG(INFO, "the tree_epoch_ in flush context is not equal to current tree_epoch_",
-            K(fd_), K(flush_context), K(tree_epoch_));
         need_flush = false;
         flush_context.is_meta_reach_end_ = true;
       } else {
@@ -1498,8 +1496,6 @@ int ObSharedNothingTmpFileMetaTree::update_after_flush(
         ret = OB_INVALID_ARGUMENT;
         STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(tree_io), KPC(this));
       } else if (tree_io.tree_epoch_ != tree_epoch_) {
-        STORAGE_LOG(INFO, "the tree_epoch_ in tree_io is not equal to current tree_epoch_",
-            K(fd_), K(tree_io), K(tree_epoch_));
       } else if (tree_io.page_level_ >= level_page_range_array_.count()) {
         ret = OB_INVALID_ARGUMENT;
         STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(tree_io), KPC(this));
@@ -2955,7 +2951,6 @@ void ObSharedNothingTmpFileMetaTree::print_meta_tree_total_info()
   ObArray<ObSharedNothingTmpFileDataItem> data_items;
   ObArray<ObSharedNothingTmpFileMetaItem> meta_items;
   SpinRLockGuard guard(lock_);
-  STORAGE_LOG(INFO, "dump meta tree", KPC(this));
   ARRAY_FOREACH_N(level_page_range_array_, level, level_cnt) {
     const uint32_t start_page_id = level_page_range_array_[level].start_page_id_;
     const uint32_t end_page_id = level_page_range_array_[level].end_page_id_;

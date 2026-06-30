@@ -29,7 +29,6 @@ int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg)
   IRunWrapper *expect_run_wrapper = Threads::get_expect_run_wrapper();
   Threads::get_expect_run_wrapper() = NULL;
   DEFER(Threads::get_expect_run_wrapper() = expect_run_wrapper);
-  OB_LOG(INFO, "ob_pthread_create start");
   if (OB_ISNULL(thread = OB_NEW(ObPThread, SET_USE_500("PThread"), start_routine, arg))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "alloc memory failed", K(ret));
@@ -41,7 +40,6 @@ int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg)
     }
   } else {
     ATOMIC_STORE(ptr, thread);
-    OB_LOG(INFO, "ob_pthread_create succeed", KP(thread));
   }
   return ret;
 }
@@ -50,7 +48,6 @@ void ob_pthread_join(void *ptr)
   if (OB_NOT_NULL(ptr)) {
     ObPThread *thread = (ObPThread*) ptr;
     thread->wait();
-    OB_LOG(INFO, "ob_pthread_join succeed", KP(thread));
     OB_DELETE(ObPThread, SET_USE_500("PThread"), thread);
   }
 }
@@ -61,7 +58,6 @@ int ob_pthread_tryjoin_np(void *ptr)
   if (OB_NOT_NULL(ptr)) {
     ObPThread *thread = (ObPThread*) ptr;
     if (OB_SUCC(thread->try_wait())) {
-      OB_LOG(INFO, "ob_pthread_tryjoin_np succeed", KP(thread));
       OB_DELETE(ObPThread, SET_USE_500("PThread"), thread);
     }
   }

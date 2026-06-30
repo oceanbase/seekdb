@@ -11388,8 +11388,6 @@ int otimestamp_scale_check(const ObCastMode &cast_mode,
             static_cast<int32_t>(ot_data.time_ctx_.tail_nsec_))) {
         res_datum.set_otimestamp_tiny(ot_data);
       } else {
-        OB_LOG(DEBUG, "invalid otimestamp, set it null ", K(ot_data), K(scale),
-            "orig_date", in_val);
         res_datum.set_null();
       }
     }
@@ -11427,8 +11425,6 @@ int otimestamp_scale_check(const ObCastMode &cast_mode,
         ott_data.from_timestamp_data(ot_data);
         out_vec.set_otimestamp_tiny(idx, ott_data);
       } else {
-        OB_LOG(DEBUG, "invalid otimestamp, set it null ", K(ot_data), K(scale),
-            "orig_date", in_val);
         out_vec.set_null(idx);
       }
     }
@@ -11872,8 +11868,6 @@ int string_length_check(const ObExpr &expr,
                         str_len_byte :
                         static_cast<int32_t>(ObCharset::strlen_char(
                                                         cs_type, str, str_len_byte));
-        OB_LOG(WARN, "char type length is too long", K(max_accuracy_len),
-                      K(str_len_char));
       }
     } else {
       int32_t trunc_len_byte = -1;
@@ -11991,8 +11985,6 @@ int string_length_check(const ObExpr &expr,
                         str_len_byte :
                         static_cast<int32_t>(ObCharset::strlen_char(
                                                         cs_type, str, str_len_byte));
-        OB_LOG(WARN, "char type length is too long", K(max_accuracy_len),
-                      K(str_len_char));
       }
     } else {
       int32_t trunc_len_byte = -1;

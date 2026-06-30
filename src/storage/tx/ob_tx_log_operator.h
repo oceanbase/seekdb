@@ -668,8 +668,6 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_in_ctx_()
   if (OB_FAIL(tx_ctx_->check_replay_avaliable_(lsn_, scn_, log_op_arg_.replay_arg_.part_log_no_,
                                                need_replay))) {
   } else if (!need_replay) {
-    TRANS_LOG(INFO, "need not replay log", KPC(log_object_ptr_), K(log_op_arg_.replay_arg_),
-              KPC(tx_ctx_));
   } else if (construct_arg_->ddl_log_type_
              == ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_START) {
     if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.before_submit_ddl_start(

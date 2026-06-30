@@ -137,7 +137,6 @@ int ObMacroBufferWriter<T>::write_item(const T &item)
     ret = common::OB_EAGAIN;
   } else if (OB_FAIL(item.serialize(buf_, buf_cap_, buf_pos_))) {
   } else {
-    STORAGE_LOG(DEBUG, "write_item", K(buf_pos_), K(item));
   }
   return ret;
 }
@@ -150,7 +149,6 @@ int ObMacroBufferWriter<T>::serialize_header()
   int64_t tmp_pos_ = 0;
   if (OB_FAIL(common::serialization::encode_i64(buf_, header_size, tmp_pos_, buf_pos_))) {
   } else {
-    STORAGE_LOG(DEBUG, "serialize header success", K(tmp_pos_), K(buf_pos_));
   }
   return ret;
 }
@@ -391,7 +389,6 @@ int ObMacroBufferReader<T>::read_item(T &item)
       ret = common::OB_EAGAIN;
     } else if (OB_FAIL(item.deserialize(buf_, buf_len_, buf_pos_))) {
     } else {
-      STORAGE_LOG(DEBUG, "macro buffer reader", K(buf_len_), K(buf_pos_));
     }
   }
   return ret;
@@ -404,7 +401,6 @@ int ObMacroBufferReader<T>::deserialize_header()
   const int64_t header_size = ObExternalSortConstant::BUF_HEADER_LENGTH;
   if (OB_FAIL(common::serialization::decode_i64(buf_, header_size, buf_pos_, &buf_len_))) {
   } else {
-    STORAGE_LOG(DEBUG, "deserialize header success", K(buf_len_), K(buf_pos_));
   }
   return ret;
 }
@@ -854,7 +850,6 @@ int ObFragmentMerge<T, Compare>::build_heap()
       if (OB_FAIL(heap_.push(heap_item))) {
       } else if (OB_FAIL(compare_.get_error_code())) {
       } else {
-        STORAGE_LOG(DEBUG, "push a heap item", K(*item));
       }
     }
   }
@@ -897,7 +892,6 @@ int ObFragmentMerge<T, Compare>::heap_get_next_item(const T *&item)
       } else if (OB_FAIL(heap_.pop())) {
       } else if (OB_FAIL(compare_.get_error_code())) {
       } else {
-        STORAGE_LOG(DEBUG, "pop a heap item");
       }
     } else if (NULL == heap_item.item_) {
       ret = common::OB_ERR_UNEXPECTED;
@@ -907,7 +901,6 @@ int ObFragmentMerge<T, Compare>::heap_get_next_item(const T *&item)
       if (OB_FAIL(heap_.replace_top(heap_item))) {
       } else if (OB_FAIL(compare_.get_error_code())) {
       } else {
-        STORAGE_LOG(DEBUG, "replace heap item", K(*heap_item.item_), K(last_iter_idx_));
       }
     }
     last_iter_idx_ = -1;
@@ -927,7 +920,6 @@ int ObFragmentMerge<T, Compare>::heap_get_next_item(const T *&item)
     } else {
       last_iter_idx_ = item_ptr->idx_;
       item = item_ptr->item_;
-      STORAGE_LOG(DEBUG, "top heap item", K(*item), K(last_iter_idx_));
     }
   }
 
@@ -1084,7 +1076,6 @@ int ObExternalSortRound<T, Compare>::build_fragment()
     STORAGE_LOG(WARN, "fail to placement new FragmentReader", K(ret));
   } else if (OB_FAIL(writer_.sync())) {
   } else {
-    STORAGE_LOG(INFO, "build fragment", K(writer_.get_fd()), K(writer_.get_sample_item()));
     if (OB_FAIL(reader->init(writer_.get_fd(), writer_.get_dir_id(), expire_timestamp_,
         writer_.get_sample_item(), file_buf_size_))) {
     } else if (OB_FAIL(iters_.push_back(reader))) {
@@ -1163,7 +1154,6 @@ int ObExternalSortRound<T, Compare>::do_merge(
     STORAGE_LOG(WARN, "ObExternalSortRound has not been inited", K(ret));
   } else {
     int64_t reader_idx = 0;
-    STORAGE_LOG(INFO, "external sort do merge start");
     while (OB_SUCC(ret) && reader_idx < iters_.count()) {
       if (OB_FAIL(do_one_run(reader_idx, next_round))) {
       } else {
@@ -1175,7 +1165,6 @@ int ObExternalSortRound<T, Compare>::do_merge(
       if (OB_FAIL(next_round.finish_write())) {
       }
     }
-    STORAGE_LOG(INFO, "external sort do merge end");
   }
   return ret;
 }
@@ -1494,7 +1483,6 @@ int ObMemorySortRound<T, Compare>::build_fragment()
       ret = compare_->result_code_;
     } else {
       const int64_t sort_fragment_time = common::ObTimeUtility::current_time() - start;
-      STORAGE_LOG(INFO, "ObMemorySortRound", K(sort_fragment_time));
     }
 
     start = common::ObTimeUtility::current_time();
@@ -1507,7 +1495,6 @@ int ObMemorySortRound<T, Compare>::build_fragment()
       if (OB_FAIL(next_round_->build_fragment())) {
       } else {
         const int64_t write_fragment_time = common::ObTimeUtility::current_time() - start;
-        STORAGE_LOG(INFO, "ObMemorySortRound", K(write_fragment_time));
         destruct_vector_list(item_list_);
         item_list_.reset();
         allocator_.reuse();
@@ -1766,7 +1753,6 @@ int ObExternalSort<T, Compare>::do_sort(const bool final_merge)
     STORAGE_LOG(WARN, "ObExternalSort has not been inited", K(ret));
   } else if (OB_FAIL(memory_sort_round_.finish())) {
   } else if (memory_sort_round_.has_data() && memory_sort_round_.is_in_memory()) {
-    STORAGE_LOG(INFO, "all data sorted in memory");
     is_empty_ = false;
   } else if (0 == curr_round_->get_fragment_count()) {
     is_empty_ = true;
@@ -1779,7 +1765,6 @@ int ObExternalSort<T, Compare>::do_sort(const bool final_merge)
     is_empty_ = false;
     while (OB_SUCC(ret) && curr_round_->get_fragment_count() > final_round_limit) {
       const int64_t start_time = common::ObTimeUtility::current_time();
-      STORAGE_LOG(INFO, "do sort start round", K(round_id));
       if (OB_FAIL(next_round_->init(merge_count_per_round_, file_buf_size_,
           expire_timestamp_, compare_))) {
       } else if (OB_FAIL(curr_round_->do_merge(*next_round_))) {
@@ -1787,7 +1772,6 @@ int ObExternalSort<T, Compare>::do_sort(const bool final_merge)
       } else {
         std::swap(curr_round_, next_round_);
         const int64_t round_cost_time = common::ObTimeUtility::current_time() - start_time;
-        STORAGE_LOG(INFO, "do sort end round", K(round_id), K(round_cost_time));
         ++round_id;
       }
     }
@@ -1856,7 +1840,6 @@ void ObExternalSort<T, Compare>::clean_up()
   is_sorted_ = false;
   add_count_ = 0;
   get_count_ = 0;
-  STORAGE_LOG(INFO, "do external sort clean up");
   for (int64_t i = 0; i < EXTERNAL_SORT_ROUND_CNT; ++i) {
     // ignore ret
     if (sort_rounds_[i].is_inited() && common::OB_SUCCESS != (tmp_ret = sort_rounds_[i].clean_up())) {
@@ -1873,7 +1856,6 @@ int ObExternalSort<T, Compare>::add_fragment_iter(ObFragmentIterator<T> *iter)
     ret = common::OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObExternalSort has not been inited", K(ret));
   } else if (OB_FAIL(curr_round_->add_fragment_iter(iter))) {
-    STORAGE_LOG(WARN, "fail to add fragment iter");
   } else {
     is_empty_ = false;
   }

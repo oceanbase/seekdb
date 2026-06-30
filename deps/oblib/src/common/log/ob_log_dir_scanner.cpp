@@ -26,7 +26,6 @@ int ObSimpleLogFile::assign(const char *filename, FileType &type)
 {
   int ret = OB_SUCCESS;
   if (NULL == filename) {
-    SHARE_LOG(ERROR, "parameter filename=NULL. SHOULD NOT REACH HERE");
     ret = OB_ERROR;
   } else {
     char basename[OB_MAX_FILE_NAME_LENGTH];
@@ -154,17 +153,13 @@ int ObLogDirScanner::search_log_dir_(const char *log_dir)
         if (ObSimpleLogFile::LOG == file_type) {
           if (OB_FAIL(log_files.push_back(log_file))) {
           } else {
-            SHARE_LOG(DEBUG, "find a valid log file", KCSTRING(log_file.name));
           }
         } else if (ObSimpleLogFile::CKPT == file_type) {
-          SHARE_LOG(DEBUG, "find a valid checkpoint file", KCSTRING(log_file.name));
           if (max_ckpt_id_ < log_file.id) {
             max_ckpt_id_ = log_file.id;
             has_ckpt_ = true;
           }
         } else {
-          _SHARE_LOG(DEBUG, "ignore file(\"%s\"): \"%s\" is not valid log file",
-                    pentry->d_name, pentry->d_name);
         }
         if (OB_SUCC(ret)) {
           func_ret = readdir_r(plog_dir, pentry, &pentry);
@@ -172,12 +167,10 @@ int ObLogDirScanner::search_log_dir_(const char *log_dir)
       }
     }
     if (0 != func_ret) {
-      SHARE_LOG(ERROR, "readdir_r error", K(func_ret), K(pentry), K(plog_dir));
       ret = OB_ERROR;
     }
     func_ret = closedir(plog_dir);
     if (func_ret < 0) {
-      SHARE_LOG(ERROR, "closedir", KCSTRING(log_dir), KERRMSG);
       ret = OB_SUCCESS;
     }
   }

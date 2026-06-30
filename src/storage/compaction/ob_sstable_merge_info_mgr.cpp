@@ -110,7 +110,6 @@ void ObTenantSSTableMergeInfoMgr::reset()
   major_info_pool_.destroy();
   minor_info_pool_.destroy();
   is_inited_ = false;
-  STORAGE_LOG(INFO, "ObTenantSSTableMergeInfoMgr destroy finish");
 }
 
 int ObTenantSSTableMergeInfoMgr::open_iter(compaction::ObIDiagnoseInfoMgr::Iterator &major_iter, 

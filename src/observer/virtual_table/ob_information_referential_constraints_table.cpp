@@ -248,7 +248,6 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
                 break;
               } else if (OB_ISNULL(index_schema)) {
                 ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "index_schema is null");
                 break;
               } else if (index_schema->is_user_table()) {
                 cells[cell_idx].set_varchar(ObString("PRIMARY"));
@@ -282,8 +281,6 @@ int ObInfoSchemaReferentialConstraintsTable::add_fk_constraints_in_table(
                                                                    ObCharset::get_default_charset()));
             } else {
               ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "foreign_key_info.fk_ref_type_ is invalid type",
-                               K(foreign_key_info.fk_ref_type_));
               break;
             }
             break;

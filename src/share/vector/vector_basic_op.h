@@ -260,7 +260,6 @@ struct VecTCHashCalc<VEC_TC_GEO, HashMethod, hash_v2>
     if (!loc.is_valid()) {
       COMMON_LOG(WARN, "invalid lob", K(ret));
     } else if (!loc.has_inrow_data()) {
-      COMMON_LOG(WARN, "meet outrow lob do calc hash value", K(loc));
     } else if (OB_FAIL(loc.get_inrow_data(wkb))) {
     } else {
       res = seed;
@@ -331,7 +330,6 @@ struct VecTCHashCalc<VEC_TC_ROARINGBITMAP, HashMethod, hash_v2>
     if (!loc.is_valid()) {
       COMMON_LOG(WARN, "invalid lob", K(ret));
     } else if (!loc.has_inrow_data()) {
-      COMMON_LOG(WARN, "meet outrow lob do calc hash value", K(loc));
     } else if (OB_FAIL(loc.get_inrow_data(bin_str))) {
     } else {
       res = seed;

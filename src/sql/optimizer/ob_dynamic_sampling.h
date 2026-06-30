@@ -140,7 +140,6 @@ struct ObDSResultItem
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->stat_handle_.assign(other.stat_handle_))) {
-      COMMON_LOG(WARN, "failed to assign stat_handle");
       this->reset();
     } else if (OB_FAIL(exprs_.assign(other.exprs_))) {
     } else if (OB_FAIL(non_ds_exprs_.assign(other.non_ds_exprs_))) {

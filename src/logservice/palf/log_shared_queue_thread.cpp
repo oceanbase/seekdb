@@ -82,7 +82,6 @@ int LogSharedQueueTh::stop()
   } else {
     TG_STOP(submit_log_tg_id_);
     TG_STOP(shared_tg_id_);
-    PALF_LOG(INFO, "stop LogSharedQueueTh success", K(submit_log_tg_id_));
   }
   return ret;
 }
@@ -96,7 +95,6 @@ int LogSharedQueueTh::wait()
   } else {
     TG_WAIT(submit_log_tg_id_);
     TG_WAIT(shared_tg_id_);
-    PALF_LOG(INFO, "wait LogSharedQueueTh success", K(submit_log_tg_id_));
   }
   return ret;
 }
@@ -108,11 +106,9 @@ void LogSharedQueueTh::destroy()
   is_inited_ = false;
   if (-1 != submit_log_tg_id_) {
     TG_DESTROY(submit_log_tg_id_);
-    PALF_LOG(INFO, "destroy LogSharedQueueTh success", K(submit_log_tg_id_));
   }
   if (-1 != shared_tg_id_) {
     TG_DESTROY(shared_tg_id_);
-    PALF_LOG(INFO, "destroy LogSharedQueueTh success", K(shared_tg_id_));
   }
   shared_tg_id_ = -1;
   submit_log_tg_id_ = -1;
@@ -166,7 +162,6 @@ void LogSharedQueueTh::handle(void *task)
     PALF_LOG(ERROR, "Invalid argument", K(ret), K(log_shared_task));
   } else if (OB_FAIL(log_shared_task->do_task(palf_env_impl_))) {
   } else {
-    PALF_LOG(TRACE, "LogSharedQueueTh handle success", KPC(log_shared_task));
   }
   if (OB_NOT_NULL(log_shared_task)) {
     log_shared_task->free_this(palf_env_impl_);

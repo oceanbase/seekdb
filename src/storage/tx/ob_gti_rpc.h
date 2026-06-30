@@ -105,16 +105,13 @@ private:
     bool update = false;
 
     if (!is_inited_) {
-      TRANS_LOG(WARN, "ObGtiRPCCB not inited");
       ret = OB_NOT_INIT;
     } else if (!true) {
-      TRANS_LOG(WARN, "invalid argument", K(dst));
       ret = OB_ERR_UNEXPECTED;
     } else {
       MOD_SCOPE {
         if (OB_SUCCESS != rcode.rcode_) {
           status = rcode.rcode_;
-          TRANS_LOG(WARN, "gti rpc error", K(rcode), K(dst));
           if (OB_NOT_MASTER == status
               || OB_TENANT_NOT_IN_SERVER == status) {
             if (OB_FAIL(gti_source_->refresh_gti_location())) {
@@ -133,7 +130,6 @@ private:
           TRANS_LOG(INFO, "gti request callback", KR(ret), K(result), K(rcode));
         }
       } else {
-        TRANS_LOG(WARN, "tenant switch fail", K(dst));
       }
     }
     return ret;

@@ -163,7 +163,6 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
     void *page_end_addr = reinterpret_cast<void*>(page_end);
     if (page_cnt <= 0) {
       //The page to mprotect exceeds the protected address, mprotect cannot be added
-      LIB_LOG(INFO, "can not mprotect mem_ptr", K(mem_start), K(pagesize), K(len), KCSTRING(addr_name), KCSTRING(action));
 #ifdef _WIN32
     } else {
       DWORD old_prot;
@@ -173,9 +172,6 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
                 K(ret), K(GetLastError()), K(mem_start_addr), K(page_start_addr), K(pagesize),
                 K(page_cnt), K(prot), KCSTRING(addr_name), KCSTRING(action));
       } else {
-        LIB_LOG(INFO, "VirtualProtect success", K(mem_start_addr), K(mem_end_addr),
-                K(page_start_addr), K(page_end_addr),
-                K(pagesize), K(page_cnt), KCSTRING(addr_name), KCSTRING(action));
       }
     }
 #else
@@ -186,9 +182,6 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
               K(ret), KCSTRING(errmsg), K(mem_start_addr), K(page_start_addr), K(pagesize),
               K(page_cnt), K(prot), KCSTRING(addr_name), KCSTRING(action));
     } else {
-      LIB_LOG(INFO, "mprotect success", K(mem_start_addr), K(mem_end_addr),
-              K(page_start_addr), K(page_end_addr),
-              K(pagesize), K(page_cnt), KCSTRING(addr_name), KCSTRING(action));
     }
 #endif
   }

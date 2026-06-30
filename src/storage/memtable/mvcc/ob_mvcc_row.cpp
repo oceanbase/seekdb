@@ -61,7 +61,6 @@ void ObMvccTransNode::cal_acc_checksum(const uint32_t last_acc_checksum)
 {
   acc_checksum_ = m_cal_acc_checksum(last_acc_checksum);
   if (0 == last_acc_checksum) {
-    TRANS_LOG(DEBUG, "calc first trans node checksum", K(last_acc_checksum), K(*this));
   }
 }
 
@@ -457,8 +456,6 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
       } else {
         if (!tmp->is_elr() && tmp->is_safe_read_barrier()) {
           // ignore ret
-          TRANS_LOG(ERROR, "meet safe read barrier when unlink trans node",
-                    K(*this), K(*tmp), K(node));
         }
         prev = &(tmp->prev_);
         tmp = ATOMIC_LOAD(prev);
@@ -475,7 +472,6 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
     } else {
       if (ObDmlFlag::DF_LOCK == node.get_dml_flag()) {
       } else if (EXECUTE_COUNT_PER_SEC(100)) {
-        TRANS_LOG(WARN, "unlink middle trans node", K(node), K(*this));
       }
     }
     ATOMIC_STORE(prev, ATOMIC_LOAD(&(node.prev_)));
@@ -488,7 +484,6 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
         if (&node == index_->get_index_node(i)) {
           index_->set_index_node(i, ATOMIC_LOAD(&(node.prev_)));
           if (NULL == node.prev_ && TC_REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-            TRANS_LOG(INFO, "reset index node success", K(i), K(node), K(*this));
           }
         }
       }
@@ -567,7 +562,6 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
     if (!is_re_thread && NULL != index_) {
       index_->reset();
       if (TC_REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-        TRANS_LOG(INFO, "reset index node success", K(replay_queue_index), K(node), K(*this));
       }
     }
     ObMvccTransNode *index_node = NULL;
@@ -577,7 +571,6 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
       if (index_node->is_aborted()) {
         index_->set_index_node(replay_queue_index, NULL);
         index_node = NULL;
-        TRANS_LOG(ERROR, "unexpected transaction node state", K(ctx), K(replay_queue_index), K(node));
       }
     }
     if (NULL != index_node && is_re_thread) {
@@ -633,8 +626,6 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
         } else {
           if (tmp->is_safe_read_barrier()) {
             // ignore ret
-            TRANS_LOG(ERROR, "meet safe read barrier when insert trans node",
-                      K(*this), K(*tmp), K(node));
           }
           next_node = tmp;
           prev = &(tmp->prev_);
@@ -677,7 +668,6 @@ int ObMvccRow::insert_trans_node(ObIMvccCtx &ctx,
             if (OB_SUCC(ret) && OB_SUCCESS == tmp_ret) {
               index_->set_index_node(replay_queue_index, &node);
               if (TC_REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-                TRANS_LOG(INFO, "set index node success", K(replay_queue_index), K(node), K(*this));
               }
             }
           }
@@ -706,7 +696,6 @@ int ObMvccRow::elr(const ObTransID &tx_id,
       } else if (SCN::max_scn() != iter->trans_version_ && iter->trans_version_ > elr_commit_version) {
         // leader revoke
         ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(ERROR, "unexpected transaction version", K(*iter), K(elr_commit_version));
       } else {
         iter->trans_version_ = elr_commit_version;
         iter->set_elr();
@@ -765,9 +754,6 @@ int ObMvccRow::trans_commit(const SCN commit_version, ObMvccTransNode &node)
           // do nothing
         } else {
           // ignore ret
-          TRANS_LOG(ERROR, "unexpected commit version", K(snapshot_version_barrier),
-                    "cur_node", node, "prev_node", *(node.prev_), K(flag), K(*this),
-                    K(commit_version));
         }
       }
     }
@@ -1097,7 +1083,6 @@ int ObMvccRow::mvcc_write(ObStoreCtx &ctx,
     ret = OB_TRANSACTION_SET_VIOLATION;
     TRANS_LOG(WARN, "transaction set violation", K(ret), K(ctx), K(node), KPC(this));
     if (!res.has_insert()) {
-      TRANS_LOG(ERROR, "TSC will occurred when already inserted", K(ctx), K(node), KPC(this));
     } else {
       // Tip1: mvcc_write guarantee the tnode will not be inserted if error is reported
       (void)mvcc_undo();
@@ -1117,7 +1102,6 @@ int ObMvccRow::mvcc_write(ObStoreCtx &ctx,
     }
   }
 
-  TRANS_LOG(DEBUG, "mvcc_write end", KPC(this), K(res), K(snapshot), K(node), K(ctx), K(check_exist));
 
   return ret;
 }
@@ -1232,13 +1216,10 @@ void ObMvccRow::print_row()
   blocksstable::ObDatumRow datum_row;
   blocksstable::ObRowReader row_reader;
   ObMvccRow *row = this;
-  TRANS_LOG(INFO, "qianchen print row", K(*row));
   for (ObMvccTransNode *node = row->get_list_head(); OB_SUCC(ret) && OB_NOT_NULL(node); node = node->prev_) {
     const ObMemtableDataHeader *mtd = reinterpret_cast<const ObMemtableDataHeader *>(node->buf_);
-    TRANS_LOG(INFO, "qianchen row: ", K(*node), K(mtd));
     if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, datum_row))) {
     } else {
-      TRANS_LOG(INFO, "    qianchen datum row: ", K(datum_row));
     }
   }
 }

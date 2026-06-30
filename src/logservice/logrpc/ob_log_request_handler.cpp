@@ -90,7 +90,6 @@ int LogRequestHandler::get_flashback_service_(ObLogFlashbackService *&flashback_
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "log_service.get_flashback_service failed", K(ret));
   } else {
-    CLOG_LOG(TRACE, "get_flashback_service success", KP(flashback_srv), KP(log_service));
   }
   return ret;
 }
@@ -106,7 +105,6 @@ int LogRequestHandler::get_replay_service_(ObLogReplayService *&replay_srv) cons
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "log_service.get_log_replay_service failed", K(ret));
   } else {
-    CLOG_LOG(TRACE, "get_replay_service success", KP(replay_srv), KP(log_service));
   }
   return ret;
 }

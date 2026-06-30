@@ -43,8 +43,6 @@ int FetchLogTask::set(const int64_t id,
       || log_count < 0
       || INVALID_PROPOSAL_ID == accepted_mode_pid) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(id), K(server), K(proposal_id), K(prev_lsn),
-             K(start_lsn), K(log_size), K(log_count), K(accepted_mode_pid));
   } else {
     timestamp_us_ = ObTimeUtility::current_time();
     id_ = id;
@@ -115,11 +113,9 @@ int FetchLogEngine::init(IPalfEnvImpl *palf_env_impl,
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    PALF_LOG(WARN, "FetchLogEngine init twice");
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(palf_env_impl)
              || OB_ISNULL(alloc_mgr)) {
-    PALF_LOG(WARN, "invalid argument", KP(palf_env_impl), K(alloc_mgr));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::LSFetchLogEngine, tg_id_))) {
   } else if (OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(0.5, tg_id_))) {
@@ -157,7 +153,6 @@ int FetchLogEngine::stop()
     PALF_LOG(WARN, "FetchLogEngine not inited!!!", K(ret));
   } else {
     TG_STOP(tg_id_);
-    PALF_LOG(INFO, "stop FetchLogEngine success", K(tg_id_));
   }
   return ret;
 }
@@ -170,7 +165,6 @@ int FetchLogEngine::wait()
     PALF_LOG(WARN, "FetchLogEngine not inited!!!", K(ret));
   } else {
     TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "wait FetchLogEngine success", K(tg_id_));
   }
   return ret;
 }
@@ -188,7 +182,6 @@ void FetchLogEngine::destroy()
   palf_env_impl_ = NULL;
   allocator_ = NULL;
   fetch_task_cache_.destroy();
-  PALF_LOG(INFO, "destroy FetchLogEngine success", K(tg_id_));
 }
 
 int FetchLogEngine::submit_fetch_log_task(FetchLogTask *fetch_log_task)
@@ -260,7 +253,6 @@ void FetchLogEngine::handle(common::LinkTask *task)
   int ret = OB_SUCCESS;
   IPalfHandleImpl *palf_handle_impl = NULL;
   if (!is_inited_) {
-    PALF_LOG(WARN, "FetchLogEngine not init");
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "invalid argument", KR(ret), KP(task));
@@ -274,7 +266,6 @@ void FetchLogEngine::handle(common::LinkTask *task)
       PALF_LOG(ERROR, "fetch_log_task is NULL", KR(ret));
     } else {
       palf_id = fetch_log_task->get_id();
-      PALF_LOG(INFO, "handle fetch_log_task", KPC(fetch_log_task));
       IPalfHandleImplGuard guard;
       if (OB_FAIL(palf_env_impl_->get_palf_handle_impl(palf_id, guard))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
@@ -325,10 +316,8 @@ void FetchLogEngine::handle_drop(common::LinkTask *task)
   IPalfHandleImpl *palf_handle_impl = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "FetchLogEngine not init");
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(WARN, "invalid argument", KP(task));
   } else {
     FetchLogTask *fetch_log_task = static_cast<FetchLogTask *>(task);
     free_fetch_log_task(fetch_log_task);

@@ -84,7 +84,6 @@ int open(const ObString &fname, const T &file, int &fd)
 {
   int ret = OB_SUCCESS;
   if (-1 != fd) {
-    _OB_LOG(WARN, "file has been open fd=%d", fd);
     ret = OB_INIT_TWICE;
   } else if (NULL == fname.ptr()
              || 0 == fname.length()) {
@@ -101,7 +100,6 @@ int open(const ObString &fname, const T &file, int &fd)
       fname_ptr = fname.ptr();
     }
     if (NULL == fname_ptr) {
-      _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
     } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags()
 #ifdef _WIN32
@@ -113,11 +111,9 @@ int open(const ObString &fname, const T &file, int &fd)
       } else if (EEXIST == errno) {
         ret = OB_FILE_ALREADY_EXIST;
       } else {
-        _OB_LOG(WARN, "open fname=[%s] fail errno=%u", fname_ptr, errno);
         ret = OB_IO_ERROR;
       }
     } else {
-      _OB_LOG(INFO, "open fname=[%s] fd=%d flags=%d succ", fname_ptr, fd, file.get_open_flags());
     }
   }
   return ret;
@@ -187,11 +183,8 @@ int BufferFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
   } else if (NULL == buf || 0 > count) {
     ret = OB_INVALID_ARGUMENT;
   } else if (-1 == fd) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (0 > (read_ret = unintr_pread(fd, buf, count, offset))) {
-    _OB_LOG(WARN, "read fail fd=%d count=%ld offset=%ld read_ret=%ld errno=%u",
-              fd, count, offset, read_ret, errno);
     ret = OB_IO_ERROR;
   } else {
     read_size = read_ret;
@@ -269,14 +262,10 @@ int DirectFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
   } else if (NULL == buf || 0 > count) {
     ret = OB_INVALID_ARGUMENT;
   } else if (-1 == fd) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (!param_align
              && NULL == buffer_
              && NULL == (buffer_ = (char *)memalign(align_size_, buffer_size_))) {
-    _OB_LOG(WARN,
-              "prepare buffer fail param_align=%s buffer=%p buf=%p count=%ld offset=%ld align_size=%ld buffer_size=%ld",
-              STR_BOOL(param_align), buffer_, buf, count, offset, align_size_, buffer_size_);
     ret = OB_ERROR;
   } else {
     int64_t read_ret = 0;
@@ -286,8 +275,6 @@ int DirectFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
       read_ret = pread_align(fd, buf, count, offset, buffer_, buffer_size_, align_size_);
     }
     if (0 > read_ret) {
-      _OB_LOG(WARN, "read fail fd=%d count=%ld offset=%ld read_ret=%ld errno=%u",
-                fd_, count, offset, read_ret, errno);
       ret = OB_IO_ERROR;
     } else {
       read_size = read_ret;
@@ -316,14 +303,11 @@ int DirectFileReader::pread_by_fd(const int fd, const int64_t count, const int64
     _OB_LOG(WARN, "file_buf assign fail count=%ld ret=%d or get_buffer null pointer", count, ret);
     ret = (OB_SUCCESS == ret) ? OB_INVALID_ARGUMENT : ret;
   } else if (-1 == fd) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else {
     int64_t buffer_offset = offset - offset2read;
     int64_t read_ret = 0;
     if (0 > (read_ret = unintr_pread(fd, file_buf.get_buffer(), size2read, offset2read))) {
-      _OB_LOG(WARN, "read fail fd=%d count=%ld offset=%ld read_ret=%ld errno=%u",
-                fd, count, offset, read_ret, errno);
       ret = OB_IO_ERROR;
     } else {
       file_buf.set_base_pos(buffer_offset);
@@ -441,12 +425,8 @@ int BufferFileAppender::buffer_sync_()
       && 0 != buffer_pos_) {
     int64_t write_ret = 0;
     if (buffer_pos_ != (write_ret = unintr_pwrite(fd_, buffer_, buffer_pos_, file_pos_))) {
-      _OB_LOG(WARN, "write buffer fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u",
-                fd_, buffer_, buffer_pos_, file_pos_, write_ret, errno);
       ret = OB_IO_ERROR;
     } else {
-      _OB_LOG(DEBUG, "write buffer succ fd=%d buffer_size=%ld file_pos=%ld", fd_, buffer_pos_,
-                file_pos_);
       file_pos_ += buffer_pos_;
       buffer_pos_ = 0;
     }
@@ -458,7 +438,6 @@ int BufferFileAppender::fsync()
 {
   int ret = OB_SUCCESS;
   if (-1 == fd_) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (OB_SUCCESS == (ret = buffer_sync_())) {
 #ifdef _WIN32
@@ -466,7 +445,6 @@ int BufferFileAppender::fsync()
 #else
     if (0 != ::fsync(fd_)) {
 #endif
-      _OB_LOG(WARN, "fsync fail fd=%d errno=%u", fd_, errno);
       ret = OB_IO_ERROR;
     }
   }
@@ -486,12 +464,10 @@ int BufferFileAppender::append(const void *buf, const int64_t count, const bool 
 {
   int ret = OB_SUCCESS;
   if (-1 == fd_) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (0 == count) {
     // do nothing
   } else if (NULL == buf || 0 > count) {
-    _OB_LOG(WARN, "invalid param buf=%p count=%ld", buf, count);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if ((buffer_size_ - buffer_pos_) < count) {
@@ -502,8 +478,6 @@ int BufferFileAppender::append(const void *buf, const int64_t count, const bool 
       if ((buffer_size_ - buffer_pos_) < count) {
         int64_t write_ret = 0;
         if (count != (write_ret = unintr_pwrite(fd_, buf, count, file_pos_))) {
-          _OB_LOG(WARN, "write fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u",
-                    fd_, buf, count, file_pos_, write_ret, errno);
           ret = OB_IO_ERROR;
         } else {
           file_pos_ += count;
@@ -526,7 +500,6 @@ int BufferFileAppender::prepare_buffer_()
   int ret = OB_SUCCESS;
   if (NULL == buffer_
       && NULL == (buffer_ = (char *)::malloc(buffer_size_))) {
-    _OB_LOG(WARN, "prepare buffer fail buffer_size=%ld", buffer_size_);
     ret = OB_ERROR;
   }
   return ret;
@@ -620,10 +593,6 @@ int DirectFileAppender::buffer_sync_(bool *need_truncate)
     int64_t write_ret = 0;
     memset(buffer_ + buffer_pos_, 0, size2write - buffer_pos_);
     if (size2write != (write_ret = unintr_pwrite(fd_, buffer_, size2write, offset2write))) {
-      _OB_LOG(WARN, "write buffer fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u "
-                "file_pos=%ld align_size=%ld buffer_pos=%ld",
-                fd_, buffer_, size2write, offset2write, write_ret, errno,
-                file_pos_, align_size_, buffer_pos_);
       ret = OB_IO_ERROR;
     } else {
       file_pos_ += buffer_length_;
@@ -648,7 +617,6 @@ int DirectFileAppender::fsync()
   int ret = OB_SUCCESS;
   bool need_truncate = false;
   if (-1 == fd_) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (OB_SUCCESS == (ret = buffer_sync_(&need_truncate))) {
     if (need_truncate
@@ -657,7 +625,6 @@ int DirectFileAppender::fsync()
 #else
         && 0 != ::ftruncate(fd_, file_pos_)) {
 #endif
-      _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, file_pos_, errno);
       ret = OB_IO_ERROR;
     }
   }
@@ -667,7 +634,6 @@ int DirectFileAppender::fsync()
 #else
     if (0 != ::fsync(fd_)) {
 #endif
-      _OB_LOG(WARN, "fsync fail fd=%d errno=%u", fd_, errno);
       ret = OB_IO_ERROR;
     }
   }
@@ -688,18 +654,15 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
 {
   int ret = OB_SUCCESS;
   if (-1 == fd_) {
-    _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (0 == count) {
     // do nothing
   } else if (NULL == buf || 0 > count) {
-    _OB_LOG(WARN, "invalid param buf=%p count=%ld", buf, count);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (0 == align_warn_
         && 0 != file_pos_ % align_size_) {
       align_warn_++;
-      _OB_LOG(WARN, "file_pos_=%ld do not match align_size=%ld", file_pos_, align_size_);
     }
 
     bool buffer_synced = false;
@@ -720,10 +683,6 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
                                    buffer_pos_);
         }
         if (count != write_ret) {
-          _OB_LOG(WARN, "write fail fd=%d buffer=%p count=%ld offset=%ld write_ret=%ld errno=%u "
-                    "align_buffer=%p align_size=%ld buffer_pos=%ld",
-                    fd_, buf, count, file_pos_, write_ret, errno,
-                    buffer_, align_size_, buffer_pos_);
           ret = OB_IO_ERROR;
         } else {
           file_pos_ += count;
@@ -734,7 +693,6 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
 #else
             && 0 != ::ftruncate(fd_, file_pos_)) {
 #endif
-          _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, file_pos_, errno);
           ret = OB_IO_ERROR;
         }
       } else {
@@ -756,16 +714,12 @@ int DirectFileAppender::prepare_buffer_()
   int ret = OB_SUCCESS;
   if (NULL == buffer_
       && NULL == (buffer_ = (char *)memalign(align_size_, buffer_size_))) {
-    _OB_LOG(WARN, "prepare buffer fail align_size=%ld buffer_size=%ld", align_size_, buffer_size_);
     ret = OB_ERROR;
   } else if (0 != (file_pos_ % align_size_)) {
     int64_t offset2read = lower_align(file_pos_, align_size_);
     int64_t size2read = file_pos_ - offset2read;
     int64_t read_ret = 0;
     if (size2read != (read_ret = unintr_pread(fd_, buffer_, align_size_, offset2read))) {
-      _OB_LOG(WARN,
-                "read buffer fail fd=%d buffer=%p align_size=%ld offset2read=%ld size2read=%ld read_ret=%ld errno=%u",
-                fd_, buffer_, align_size_, offset2read, size2read, read_ret, errno);
       ret = OB_IO_ERROR;
     } else {
       buffer_pos_ = read_ret;
@@ -813,11 +767,8 @@ int DirectFileAppender::set_align_size(const int64_t align_size)
 {
   int ret = OB_SUCCESS;
   if (align_size != align_size_) {
-    _OB_LOG(INFO, "change align size from align_size=%ld to new_align_size=%ld",
-              align_size_, align_size);
   }
   if (-1 != fd_) {
-    _OB_LOG(WARN, "file is open cannot modify align_size");
     ret = OB_INIT_TWICE;
   } else {
     align_size_ = align_size;
@@ -1112,7 +1063,6 @@ int ObFileBuffer::assign(const int64_t size, const int64_t align)
       || 0 >= align
       || !is2n(align)
       || 0 != size % align) {
-    _OB_LOG(WARN, "invalid size=%ld or donot match align=%ld", size, align);
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == buffer_
              || buffer_size_ < size
@@ -1129,8 +1079,6 @@ int ObFileBuffer::assign(const int64_t size, const int64_t align)
       buffer_size_ = 0;
     }
     if (NULL == (buffer_ = (char *)memalign(align, alloc_size))) {
-      _OB_LOG(WARN, "memalign fail align=%ld alloc_size=%ld size=%ld errno=%u", align, alloc_size, size,
-                errno);
       ret = OB_ERROR;
     } else {
       buffer_size_ = alloc_size;
@@ -1145,7 +1093,6 @@ int ObFileBuffer::assign(const int64_t size)
 {
   int ret = OB_SUCCESS;
   if (0 >= size) {
-    _OB_LOG(WARN, "invalid size=%ld", size);
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == buffer_
              || buffer_size_ < size
@@ -1161,7 +1108,6 @@ int ObFileBuffer::assign(const int64_t size)
       buffer_size_ = 0;
     }
     if (NULL == (buffer_ = (char *)::malloc(alloc_size))) {
-      _OB_LOG(WARN, "malloc fail alloc_size=%ld size=%ld errno=%u", alloc_size, size, errno);
       ret = OB_ERROR;
     } else {
       buffer_size_ = alloc_size;
@@ -1192,7 +1138,6 @@ int ObFileReader::open(const ObString &fname, const bool dio, const int64_t alig
   if (NULL != file_) {
     ret = OB_INIT_TWICE;
   } else if (!is2n(align_size)) {
-    _OB_LOG(WARN, "invalid align_size=%ld", align_size);
     ret = OB_INVALID_ARGUMENT;
   } else {
     using namespace FileComponent;
@@ -1203,7 +1148,6 @@ int ObFileReader::open(const ObString &fname, const bool dio, const int64_t alig
     }
 
     if (NULL == file_) {
-      _OB_LOG(WARN, "construct file reader fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_ERROR;
     } else {
       ret = file_->open(fname);
@@ -1254,10 +1198,8 @@ int ObFileReader::read_record(const int fd,
   int ret = OB_SUCCESS;
   int flags = 0;
   if (-1 == fd) {
-    _OB_LOG(WARN, "invalid fd");
     ret = OB_INVALID_ARGUMENT;
   } else if (-1 == (flags = fcntl(fd, F_GETFL))) {
-    _OB_LOG(WARN, "fcntl F_GETFL fail fd=%d errno=%u", fd, errno);
     ret = OB_ERROR;
   } else {
     FileComponent::BufferFileReader buffer_reader;
@@ -1271,7 +1213,6 @@ int ObFileReader::read_record(const int fd,
     int64_t read_size = 0;
     ret = preader->pread_by_fd(fd, size, offset, file_buf, read_size);
     if (size != read_size) {
-      _OB_LOG(WARN, "read_size=%ld do not equal size=%ld", read_size, size);
       ret = (OB_SUCCESS == ret) ? OB_ERROR : ret;
     }
   }
@@ -1299,7 +1240,6 @@ int ObFileAppender::open(const ObString &fname, const bool dio, const bool is_cr
   if (NULL != file_) {
     ret = OB_INIT_TWICE;
   } else if (!is2n(align_size)) {
-    _OB_LOG(WARN, "invalid align_size=%ld", align_size);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (dio) {
@@ -1310,7 +1250,6 @@ int ObFileAppender::open(const ObString &fname, const bool dio, const bool is_cr
     }
   }
   if (NULL == file_) {
-    _OB_LOG(WARN, "construct file appender fail fname=[%.*s]", fname.length(), fname.ptr());
     ret = OB_ERROR;
   } else if (OB_FAIL(ret)) {
   } else {
@@ -1328,7 +1267,6 @@ int ObFileAppender::create(const ObString &fname, const bool dio, const int64_t 
   if (NULL != file_) {
     ret = OB_INIT_TWICE;
   } else if (!is2n(align_size)) {
-    _OB_LOG(WARN, "invalid align_size=%ld", align_size);
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (dio) {
@@ -1338,7 +1276,6 @@ int ObFileAppender::create(const ObString &fname, const bool dio, const int64_t 
       file_ = &buffer_file_;
     }
     if (NULL == file_) {
-      _OB_LOG(WARN, "construct file appender fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_ERROR;
     } else if (OB_FAIL(ret)) {
     } else {
@@ -1424,13 +1361,11 @@ int ObFileAsyncAppender::open(const ObString &fname,
     ret = OB_INIT_TWICE;
   } else if (!dio
              || !is2n(align_size)) {
-    _OB_LOG(WARN, "invalid param dio=%s align_size=%ld", STR_BOOL(dio), align_size);
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = FileComponent::open(fname, op, fd_))) {
   } else {
     file_pos_ = get_file_size(fd_);
     if (0 != (file_pos_ % align_size)) {
-      _OB_LOG(WARN, "file_size=%ld do not align, align_size=%ld fd=%d", file_pos_, align_size, fd_);
       close();
     } else {
       align_size_ = align_size;
@@ -1452,7 +1387,6 @@ int ObFileAsyncAppender::create(const ObString &fname,
     ret = OB_INIT_TWICE;
   } else if (!dio
              || !is2n(align_size)) {
-    _OB_LOG(WARN, "invalid param dio=%s align_size=%ld", STR_BOOL(dio), align_size);
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = FileComponent::open(fname, op, fd_))) {
   } else {
@@ -1526,7 +1460,6 @@ int ObFileAsyncAppender::append(const void *buf,
         && 0 != size2append
         && count != size2append) {
       // Fatal error
-      _OB_LOG(ERROR, "iocb timeout, to protect the file, will set fd=-1, and the fd will leek");
       fd_ = -1;
       cur_iocb_ = NULL;
     }

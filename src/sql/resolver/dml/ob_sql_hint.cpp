@@ -55,7 +55,6 @@ int ObQueryHint::create_hint_table(ObIAllocator *allocator, ObTableInHint *&tabl
     LOG_WARN("unexpected params", K(ret), K(allocator));
   } else if (OB_ISNULL(ptr = allocator->alloc(sizeof(ObTableInHint)))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "no more memory to create hint table");
   } else {
     table = new(ptr) ObTableInHint();
   }
@@ -72,7 +71,6 @@ int ObQueryHint::create_leading_table(ObIAllocator *allocator, ObLeadingTable *&
     LOG_WARN("unexpected params", K(ret), K(allocator));
   } else if (OB_ISNULL(ptr = allocator->alloc(sizeof(ObLeadingTable)))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "no more memory to create leading table");
   } else {
     table = new(ptr) ObLeadingTable();
   }

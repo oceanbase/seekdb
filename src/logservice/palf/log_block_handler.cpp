@@ -72,7 +72,6 @@ void LogDIOAlignedBuf::destroy()
       mtl_free_align(aligned_data_buf_);
       aligned_data_buf_ = NULL;
     }
-    PALF_LOG(INFO, "destroy LogDIOAlignedBuf success");
   }
 }
 
@@ -118,7 +117,6 @@ void LogDIOAlignedBuf::truncate_buf()
     }
     int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
     truncate_used_ts_ += cost_ts;
-    PALF_LOG(TRACE, "truncate_buf success", KPC(this), K(buf_write_offset_), K(buf_padding_size_), K(tail_part_start));
   }
 }
 
@@ -197,7 +195,6 @@ void LogBlockHandler::destroy()
     io_adapter_ = NULL;
     log_block_size_ = 0;
     dio_aligned_buf_.destroy();
-    PALF_LOG(INFO, "LogFileHandler destroy success");
   }
 }
 
@@ -434,7 +431,6 @@ int LogBlockHandler::inner_write_impl_(const ObIOFd &io_fd, const char *buf, con
       }
       ob_usleep(RETRY_INTERVAL);
     } else {
-      PALF_LOG(TRACE, "pwrite successfully", K(io_fd), K(offset), K(count), K(write_size));
     }
   } while (OB_FAIL(ret));
   int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;

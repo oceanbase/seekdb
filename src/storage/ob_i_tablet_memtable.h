@@ -347,7 +347,6 @@ public:
     if (get_logging_blocked()) {
       clear_logging_blocked_();
       int64_t cost_time = ObClockGenerator::getClock() - logging_blocked_start_time_;
-      TRANS_LOG(INFO, "the cost time of logging blocked: ", K(cost_time), K(this), K(key_.tablet_id_));
     }
   }
   // *************** setter *****************

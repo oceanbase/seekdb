@@ -219,7 +219,6 @@ public:
       int64_t i = 0;
       int64_t j = 0;
       ObArithFlag flags = op_flags_;
-      OB_LOG(DEBUG, "foreach assign", K(type1_bitset_), K(type2_bitset_), K(flags));
 
       for (int op_k = flags.pop(); OB_SUCC(ret) && op_k >= 0; op_k = flags.pop()) {
         for (type1_bitset_.find_first(i); OB_SUCC(ret) && i >= 0; type1_bitset_.find_next(i, i)) {
@@ -230,7 +229,6 @@ public:
               ret = common::OB_ERR_UNEXPECTED;
             } else {
               ret = f(map_.arith_rule_maps_[op_k].get_rule(type1, type2), type1, type2);
-              OB_LOG(DEBUG, "assign rules", K(type1), K(type2));
             }
           }
         }
@@ -319,7 +317,6 @@ public:
     RulesApplyer applyer = RulesApplyer(*this, ObArithFlag(flags), set1, set2);
     applyer.update_ret(ret1);
     applyer.update_ret(ret2);
-    OB_LOG(DEBUG, "new rules", K(set1), K(set2), K(flags));
     return applyer;
   }
 

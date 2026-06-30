@@ -696,7 +696,6 @@ void ObMemoryDump::handle(void *task)
                                     ObTimeUtility::current_time() - start_ts);
     }
     if (log_pos > 0) {
-      _OB_LOG(INFO, "statistics: %.*s", static_cast<int32_t>(log_pos), print_buf_);
     }
     // switch stat as long as one tenant-ctx is generated, ignore the error code.
     if (w_stat_->tcr_cnt_ > 0) {
@@ -717,7 +716,6 @@ void ObMemoryDump::handle(void *task)
       static const int64_t CHUNK_BUF_LEN = 4LL << 10;
       char chunk_buf[CHUNK_BUF_LEN] = "";
       int64_t chunk_pos = CHUNK_MGR.to_string(chunk_buf, CHUNK_BUF_LEN);
-      _OB_LOG(INFO, "%.*s", static_cast<int>(chunk_pos), chunk_buf);
     }
   } else {
     int fd = -1;

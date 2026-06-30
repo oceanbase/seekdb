@@ -264,21 +264,17 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
                                                           auto_activate_when_detected,
                                                           p_detector))) {
     } else if (OB_FAIL(detector_map_.insert_and_get(binary_key, p_detector))) {
-      DETECT_LOG(WARN, "detector_map_ insert key and value failed", PRINT_WRAPPER, KP(p_detector));
       inner_alloc_handle_.inner_factory_.release(p_detector);
     } else if (OB_FAIL(p_detector->register_timer_task())) {
       if (common::OB_ENTRY_NOT_EXIST == ret) {
         ret = common::OB_EAGAIN;// telling user there is a concurrent problem, need retry
       }
-      DETECT_LOG(WARN, "start timer task failed", PRINT_WRAPPER, KP(p_detector));
       (void)detector_map_.del(binary_key);
       detector_map_.revert(p_detector);
     } else {
       detector_map_.revert(p_detector);
-      DETECT_LOG(TRACE, "register key success", PRINT_WRAPPER);
     }
   } else {
-    DETECT_LOG(ERROR, "get key error, couldn't handle", PRINT_WRAPPER);
   }
 
   return ret;
@@ -369,7 +365,6 @@ int ObDeadLockDetectorMgr::block(const T1 &src_key,
         if (OB_ENTRY_EXIST == ret) {
           ret = OB_SUCCESS;
         } else {
-          DETECT_LOG(WARN, "detector block op failed", PRINT_WRAPPER);
         }
       }
     }
@@ -406,7 +401,6 @@ int ObDeadLockDetectorMgr::block(const T1 &src_key,
     ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->block(resource))) {
     } else {
-      DETECT_LOG(INFO, "detector block op success", PRINT_WRAPPER);
     }
   }
 
@@ -537,15 +531,12 @@ int ObDeadLockDetectorMgr::activate(const T1 &src_key,
   UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(dest_user_key.set_user_key(dest_key))) {
-    DETECT_LOG(WARN, "dest_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
   } else {
     ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->activate(resource))) {
     } else {
-      DETECT_LOG(INFO, "detector activate op success", PRINT_WRAPPER, K(resource));
     }
   }
 
@@ -600,7 +591,6 @@ int ObDeadLockDetectorMgr::add_parent(const KeyType1 &key,
     ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->add_parent(resource))) {
     } else {
-      DETECT_LOG(INFO, "detector add parent success", PRINT_WRAPPER, K(resource));
     }
   }
 
@@ -622,7 +612,6 @@ int ObDeadLockDetectorMgr::set_timeout(const KeyType &key, const int64_t timeout
   } else if (OB_FAIL(get_detector_(user_key, ref_guard))) {
   } else {
     if (timeout > 1_hour && REACH_TIME_INTERVAL(1_s)) {
-      DETECT_LOG(INFO, "timeout value more than 1 hour", PRINT_WRAPPER);
     }
     ref_guard.get_detector()->set_timeout(timeout);
   }

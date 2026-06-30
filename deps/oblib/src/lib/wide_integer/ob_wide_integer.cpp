@@ -182,7 +182,6 @@ int common_scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     ret = scale_down_decimalint(*v, in_scale - out_scale, is_trunc, val);                          \
   }
   int ret = OB_SUCCESS;
-  COMMON_LOG(DEBUG, "scale decimalint", K(int_bytes), K(in_scale), K(out_scale), K(lbt()));
   if (OB_ISNULL(decint)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid null decimal int", K(ret), K(decint));

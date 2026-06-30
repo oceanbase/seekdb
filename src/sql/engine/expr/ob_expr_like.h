@@ -277,8 +277,6 @@ int ObExprLike::calc_with_non_instr_mode(T &result,
   } else {
     bool b = ObCharset::wildcmp(coll_type, text_val, pattern_val, escape_wc,
                                 static_cast<int32_t>('_'), static_cast<int32_t>('%'));
-    SQL_LOG(DEBUG, "calc_with_non_instr_mode1", K(escape_coll), K(escape_val), K(escape_wc), K(pattern_val),
-             K(coll_type), KPHEX(text_val.ptr(), text_val.length()), KPHEX(pattern_val.ptr(), pattern_val.length()), K(b));
     result.set_int(static_cast<int64_t>(b));
   }
   return ret;

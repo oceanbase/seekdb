@@ -547,13 +547,11 @@ ssize_t ob_read_regard_ssl(int fd, void *buf, size_t nbytes, ssl_state_st &ssl_s
         int ssl_ret = SSL_do_handshake(ssl_st.ssl);
         if (ssl_ret > 0) {
           if ((rbytes = SSL_read(ssl_st.ssl, buf, nbytes)) > 0) {
-            COMMON_LOG(INFO, "read data after SSL_do_handshake succ", K(rbytes), K(fd));
           } else {
             rbytes = -1;
             errno = EINTR;
           }
           ssl_st.hand_shake_done = 1;
-          COMMON_LOG(INFO, "SSL_do_handshake succ", K(fd));
         } else {
           int err = SSL_get_error(ssl_st.ssl, ssl_ret);
           if (SSL_ERROR_WANT_READ == err) {
@@ -624,7 +622,6 @@ ssize_t ob_write_regard_ssl(int fd, const void *buf, size_t nbytes, ssl_state_st
           wbytes = -1;
           errno = EINTR;
           ssl_st.hand_shake_done = 1;
-          COMMON_LOG(INFO, "SSL_do_handshake succ", K(fd));
         } else {
           int err = SSL_get_error(ssl_st.ssl, ssl_ret);
           if (SSL_ERROR_WANT_WRITE == err || SSL_ERROR_WANT_READ == err) {

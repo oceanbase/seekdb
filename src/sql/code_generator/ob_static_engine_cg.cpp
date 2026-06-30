@@ -6390,8 +6390,6 @@ int ObStaticEngineCG::fill_aggr_infos(ObLogGroupBy &op,
                                              distinct_exprs,
                                              all_non_aggr_exprs))) {
     } else {
-      OB_LOG(DEBUG, "finish extract_non_aggr_expr", KPC(expr), K(raw_expr),  K(child_output),
-             K(all_aggr_exprs), KPC(group_exprs), KPC(rollup_exprs), K(all_non_aggr_exprs));
     }
   }
 
@@ -6411,8 +6409,6 @@ int ObStaticEngineCG::fill_aggr_infos(ObLogGroupBy &op,
                                              distinct_exprs,
                                              all_non_aggr_exprs))) {
     } else {
-      OB_LOG(DEBUG, "finish extract_non_aggr_expr", KPC(expr), K(raw_expr), K(child_output),
-             K(all_aggr_exprs), KPC(group_exprs), KPC(rollup_exprs), K(all_non_aggr_exprs));
     }
   }
 

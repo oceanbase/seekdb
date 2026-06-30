@@ -50,13 +50,11 @@ int ObMvccEngine::init(
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
-    TRANS_LOG(WARN, "init twice", KP(this));
     ret = OB_INIT_TWICE;
   } else if (NULL == allocator
              || NULL == kv_builder
              || NULL == query_engine
              || NULL == memtable) {
-    TRANS_LOG(WARN, "invalid param", K(allocator), K(kv_builder), K(query_engine), K(memtable));
     ret = OB_INVALID_ARGUMENT;
   } else {
     engine_allocator_ = allocator;
@@ -115,10 +113,8 @@ int ObMvccEngine::get(ObMvccAccessCtx &ctx,
   const bool for_read = true;
   const bool for_replay = false;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(parameter_key)) {
-    TRANS_LOG(WARN, "invalid param");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(query_engine_->get(parameter_key, value, returned_key))) {
     if (OB_LIKELY(OB_ENTRY_NOT_EXIST == ret)) {
@@ -156,10 +152,8 @@ int ObMvccEngine::scan(
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   } else if (!range.is_valid()) {
-    TRANS_LOG(WARN, "invalid param");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(row_iter.init(*query_engine_,
                                    ctx,
@@ -182,10 +176,8 @@ int ObMvccEngine::scan(
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   } else if (!range.is_valid()) {
-    TRANS_LOG(WARN, "invalid param");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(row_iter.init(*query_engine_,
                                    ctx,
@@ -207,10 +199,8 @@ int ObMvccEngine::estimate_scan_row_count(
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
     ret = OB_NOT_INIT;
   } else if (!range.is_valid()) {
-    TRANS_LOG(WARN, "invalid param");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(query_engine_->estimate_row_count(
               tx_id,
@@ -232,7 +222,6 @@ int ObMvccEngine::check_row_locked(ObMvccAccessCtx &ctx,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "mvcc_engine not init", K(this));
   } else if (OB_FAIL(query_engine_->get(key, value, &stored_key))) {
     if (OB_LIKELY(OB_ENTRY_NOT_EXIST == ret)) {
       // rewrite ret
@@ -282,7 +271,6 @@ int ObMvccEngine::create_kv(const ObMemtableKey *key,
   value = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "mvcc_engine not init", K(this));
   } else {
 
     while (OB_SUCCESS == ret && NULL == value) {
@@ -297,7 +285,6 @@ int ObMvccEngine::create_kv(const ObMemtableKey *key,
           && OB_SUCC(query_engine_->get(key, value, stored_key))) {
         if (NULL == value) {
           ret = OB_ERR_UNEXPECTED;
-          TRANS_LOG(WARN, "get NULL value");
         }
       } else if (OB_FAIL(kv_builder_->dup_key(tmp_key,
                                               *engine_allocator_,
@@ -306,7 +293,6 @@ int ObMvccEngine::create_kv(const ObMemtableKey *key,
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(stored_key->encode(tmp_key))) {
       } else if (NULL == (value = (ObMvccRow *)engine_allocator_->alloc(sizeof(*value)))) {
-        TRANS_LOG(WARN, "alloc ObMvccRow fail");
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         value = new(value) ObMvccRow();
@@ -492,7 +478,6 @@ int ObMvccEngine::ensure_kv(const ObMemtableKey *stored_key,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "mvcc_engine not init", K(this));
   } else {
     ObRowLatchGuard guard(value->latch_);
     if (OB_FAIL(query_engine_->ensure(stored_key,

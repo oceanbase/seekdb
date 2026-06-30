@@ -395,7 +395,6 @@ void ObKVCacheInstMap::print_all_cache_info()
               "[CACHE] shared_cache_map_size=%12ld | total_kv_cnt=%8ld\n",
               total_map_size, total_kv_cnt);
         }
-        _OB_LOG(INFO, "[CACHE] cache memory info: \n%s", buf);
       }
     }
   }

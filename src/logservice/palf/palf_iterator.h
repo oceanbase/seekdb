@@ -182,7 +182,6 @@ public:
       print_error_log(ret);
     } else {
       if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, last_print_time_)) {
-        PALF_LOG(INFO, "[PALF STAT ITERATOR INFO]", K_(io_ctx));
       }
       PALF_LOG(TRACE, "PalfIterator next success", K(iterator_impl_), K(ret), KPC(this),
                K(replayable_point_scn), K(next_min_scn), K(iterate_end_by_replayable_point));
@@ -267,10 +266,8 @@ public:
     int ret = OB_SUCCESS; 
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      PALF_LOG(WARN, "not inited");
     } else if (!destroy_func.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      PALF_LOG(WARN, "invalid argument", K(destroy_func));
     } else if (FALSE_IT(destroy_storage_functor_ = destroy_func)) {
     } else if (!destroy_storage_functor_.is_valid()) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

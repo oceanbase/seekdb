@@ -93,7 +93,6 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(node)) {
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(stmt), K(node));
   } else {
     ParseNode *option_node = NULL;
     int32_t num = node->num_child_;

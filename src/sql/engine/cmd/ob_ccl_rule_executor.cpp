@@ -61,7 +61,6 @@ int ObCreateCCLRuleExecutor::execute(ObExecContext &ctx, ObCreateCCLRuleStmt &st
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
@@ -103,10 +102,8 @@ int ObDropCCLRuleExecutor::execute(ObExecContext &ctx, ObDropCCLRuleStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "fail to get my session", K(ctx));
   } else {
     if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_ccl_rule_ddl(drop_ccl_rule_arg); }))) {
     }

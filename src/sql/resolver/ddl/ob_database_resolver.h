@@ -59,12 +59,10 @@ int ObDatabaseResolver<T>::resolve_database_options(T *stmt, ParseNode *node, Ob
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(node)) {
     ret = common::OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(stmt), K(node));
   } else if (OB_UNLIKELY(T_DATABASE_OPTION_LIST != node->type_)
              || OB_UNLIKELY(0 > node->num_child_)
              || OB_ISNULL(node->children_)) {
     ret = common::OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "invalid node info", K(node->type_), K(node->num_child_), K(node->children_));
   } else {
     ParseNode *option_node = NULL;
     int32_t num = node->num_child_;
@@ -92,7 +90,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
   ParseNode *option_node = node;
   if (OB_ISNULL(stmt)) {
     ret = common::OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(stmt), K(node));
   } else if (OB_ISNULL(option_node)) {
     //nothing to do
   } else {
@@ -101,7 +98,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         int32_t replica_num = static_cast<int32_t>(option_node->value_);
         if (replica_num <= 0 || replica_num > common::OB_TABLET_MAX_REPLICA_COUNT) {
           ret = common::OB_NOT_SUPPORTED;
-          OB_LOG(WARN, "Invalid replica_num", K(replica_num));
         } else {
           if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
             if (OB_FAIL(alter_option_bitset_.add_member(
@@ -134,7 +130,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
             // mysql executes the following sql statement and will report an error, to be consistent with mysql behavior, check for collation/charset inconsistency issues during resolve
             // create database db charset utf8 charset utf16; 
             ret = OB_ERR_CONFLICTING_DECLARATIONS;
-            SQL_RESV_LOG(WARN, "charsets mismatch", K(stmt->get_charset_type()), K(charset_type));
             const char *charset_name1 = ObCharset::charset_name(stmt->get_charset_type());
             const char *charset_name2 = ObCharset::charset_name(charset_type);
             LOG_USER_ERROR(OB_ERR_CONFLICTING_DECLARATIONS, charset_name1, charset_name2);
@@ -153,8 +148,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
           } else if (OB_UNLIKELY(collation_already_set_
                               && stmt->get_charset_type() != charset_type)) {
             ret = OB_ERR_COLLATION_MISMATCH;
-            SQL_RESV_LOG(WARN, "charset and collation mismatch",
-                          K(stmt->get_charset_type()), K(charset_type));
           }
         }
         if (OB_SUCC(ret)) {
@@ -172,8 +165,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
       case T_READ_ONLY: {
         if (OB_ISNULL(option_node->children_[0])) {
           ret = common::OB_ERR_UNEXPECTED;
-          OB_LOG(WARN, "invalid option node for read_only", K(option_node),
-                 K(option_node->children_[0]));
         } else if (T_ON == option_node->children_[0]->type_) {
           stmt->set_read_only(true);
         } else if (T_OFF == option_node->children_[0]->type_) {
@@ -217,7 +208,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         break;
       }
       default: {
-        OB_LOG(WARN, "invalid type of parse node", K(option_node));
         break;
       }
     }
@@ -237,7 +227,6 @@ int ObDatabaseResolver<T>::resolve_zone_list(T *stmt, ParseNode *node) const
       ParseNode *elem = node->children_[i];
       if (OB_ISNULL(elem)) {
         ret = common::OB_ERR_PARSER_SYNTAX;
-        OB_LOG(WARN, "Wrong zone", K(node));
       } else {
         if (OB_LIKELY(T_VARCHAR == elem->type_)) {
           common::ObSqlString buf;
@@ -247,7 +236,6 @@ int ObDatabaseResolver<T>::resolve_zone_list(T *stmt, ParseNode *node) const
           }
         } else {
           ret = common::OB_ERR_PARSER_SYNTAX;
-          OB_LOG(WARN, "Wrong zone");
           break;
         }
       }

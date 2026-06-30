@@ -101,7 +101,6 @@ int ObMapQueue<T>::init(const char *label)
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
-    LIB_LOG(ERROR, "init twice");
     ret = common::OB_INIT_TWICE;
   } else if (OB_FAIL(map_.init(label))) {
   } else {
@@ -130,7 +129,6 @@ int ObMapQueue<T>::push(const T &val)
   int ret = common::OB_SUCCESS;
 
   if (OB_UNLIKELY(! inited_)) {
-    LIB_LOG(ERROR, "not init");
     ret = common::OB_NOT_INIT;
   } else {
     // Get sn.
@@ -160,7 +158,6 @@ int ObMapQueue<T>::pop(T &val)
   int ret = common::OB_SUCCESS;
 
   if (OB_UNLIKELY(! inited_)) {
-    LIB_LOG(ERROR, "not init");
     ret = common::OB_NOT_INIT;
   } else {
     int64_t head = 0;
@@ -196,7 +193,6 @@ int ObMapQueue<T>::reset()
   int ret = common::OB_SUCCESS;
 
   if (OB_UNLIKELY(! inited_)) {
-    LIB_LOG(ERROR, "not init");
     ret = common::OB_NOT_INIT;
   } else {
     // non-thread safe

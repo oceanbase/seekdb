@@ -456,7 +456,6 @@ int ObCompactionSuggestionMgr::diagnose_for_suggestion(
     }
     // force to print log
     int64_t end_time = common::ObTimeUtility::fast_current_time();
-    STORAGE_LOG(INFO, "[COMPACTION DAG STATUS] ", "start_time", click_time_, K(end_time), K(dag_status));
     click_time_ = end_time;
     // ayalyze
     for (int64_t i = 0; i < ObIDag::MergeDagPrioCnt; ++i) {

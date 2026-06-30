@@ -32,9 +32,6 @@ class ObBaseLeakChecker
     bool operator()(const Key &k, const Value &v)
     {
       bool ret = true;
-      COMMON_LOG(INFO, "LEAK_CHECKER ",
-                 "key:", k,
-                 "value:", v);
       return ret;
     }
   };
@@ -75,7 +72,6 @@ int ObBaseLeakChecker<Key, Value>::init()
   int ret = checker_info_.init(attr);
   if (OB_FAIL(ret)) {
   } else {
-    COMMON_LOG(INFO, "leak checker init succ");
   }
   return ret;
 }

@@ -225,7 +225,6 @@ bool ObConfigIntListItem::set(const char *str)
         int64_t v = strtoll(s, &endptr, 10);
         if (endptr != s + STRLEN(s)) {
           value_.valid_ = false;
-          _OB_LOG(ERROR, "not a valid config, [%s]", s);
         }
         value_.int_list_[value_.size_++] = v;
       } while (OB_LIKELY(NULL != (s = STRTOK_R(NULL, ";", &saveptr))) && value_.valid_);
@@ -367,7 +366,6 @@ bool ObConfigIntegralItem::parse_range(const char *range)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_ISNULL(range)) {
-    OB_LOG(ERROR, "Range is NULL!");
     bool_ret = false;
   } else if ('\0' == range[0]) {
     // do nothing
@@ -520,7 +518,6 @@ bool ObConfigDoubleItem::parse_range(const char *range)
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_ISNULL(range)) {
-    OB_LOG(ERROR, "Range is NULL!");
     bool_ret = false;
   } else if ('\0' == range[0]) {
     // do nothing
@@ -734,7 +731,6 @@ bool ObConfigMomentItem::set(const char *str)
     if (sscanf(str, "%d:%d", &h, &m) != 2 || h < 0 || h > 23 || m < 0 || m > 59) {
       value_.disable_ = true;
       ret = false;
-      OB_LOG(ERROR, "Not well-formed moment item value", K(str));
     } else {
       value_.disable_ = false;
       value_.hour_ = h;
@@ -745,7 +741,6 @@ bool ObConfigMomentItem::set(const char *str)
   } else if (OB_ISNULL(strptime(str, "%H:%M", &tm_value))) {
     value_.disable_ = true;
     ret = false;
-    OB_LOG(ERROR, "Not well-formed moment item value", K(str));
   } else {
     value_.disable_ = false;
     value_.hour_ = tm_value.tm_hour;
@@ -917,7 +912,6 @@ bool ObConfigVersionItem::set(const char *str)
   int64_t new_value = get_value();
   if (old_value != new_value) {
     ObTaskController::get().allow_next_syslog();
-    OB_LOG(INFO, "Config data version changed", K(old_value), K(new_value), K(valid));
   }
   return valid;
 }

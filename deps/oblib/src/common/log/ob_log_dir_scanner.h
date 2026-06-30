@@ -91,7 +91,6 @@ private:
   {
     int ret = OB_SUCCESS;
     if (!is_init_) {
-      SHARE_LOG(ERROR, "ObLogDirScanner has not been initialized.");
       ret = OB_NOT_INIT;
     }
     return ret;

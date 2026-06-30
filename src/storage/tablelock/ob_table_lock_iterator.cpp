@@ -43,7 +43,6 @@ int ObTableLockScanIterator::inner_get_next_row(const blocksstable::ObDatumRow *
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "table lock memtable scan iterator is not inited");
   } else if (idx_ == table_lock_store_info_.count()) {
     ret = OB_ITER_END;
   } else {
@@ -67,7 +66,6 @@ int ObTableLockScanIterator::inner_get_next_row(const blocksstable::ObDatumRow *
           row_.set_compacted_multi_version_row();
 
           row = &row_;
-          STORAGE_LOG(INFO, "write ctx info", K(store_info), K(idx_));
           idx_++;
         }
       }

@@ -148,7 +148,6 @@ void ObTransCtx::set_exiting_()
       TRANS_LOG_RET(ERROR, tmp_ret, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), "context", *this);
     } else {
       ls_tx_ctx_mgr_->del_tx_ctx(this);
-      TRANS_LOG(DEBUG, "transaction exiting", "context", *this, K(lbt()));
       REC_TRANS_TRACE_EXT2(tlog_, exiting, OB_ID(ref), ctx_ref, OB_ID(arg1), session_id_);
     }
   }
@@ -235,14 +234,11 @@ int ObTransCtx::register_timeout_task_(const int64_t interval_us)
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(interval_us < 0)) {
-    TRANS_LOG(WARN, "invalid argument", K(interval_us));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(timer_)) {
-    TRANS_LOG(ERROR, "transaction timer is null", K_(trans_id));
     ret = OB_ERR_UNEXPECTED;
     // add ref first, and then register the time task
   } else if (OB_ISNULL(ls_tx_ctx_mgr_)) {
-    TRANS_LOG(ERROR, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), K_(trans_id));
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(acquire_ctx_ref_())) {
   } else {
@@ -264,7 +260,6 @@ int ObTransCtx::unregister_timeout_task_()
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(timer_)) {
-    TRANS_LOG(ERROR, "transaction timer is null", K_(trans_id));
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(timer_->unregister_timeout_task(timeout_task_))) {
     // rewrite ret
@@ -274,7 +269,6 @@ int ObTransCtx::unregister_timeout_task_()
   } else {
     // just dec ctx ref
     if (NULL == ls_tx_ctx_mgr_) {
-      TRANS_LOG(ERROR, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), K_(trans_id));
       ret = OB_ERR_UNEXPECTED;
     } else {
       (void)ls_tx_ctx_mgr_->revert_tx_ctx_without_lock(this);
@@ -304,7 +298,6 @@ int ObTransCtx::set_app_trace_info_(const ObString &app_trace_info)
   const int64_t len = app_trace_info.length();
 
   if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(len > OB_MAX_TRACE_ID_BUFFER_SIZE)) {
-    TRANS_LOG(WARN, "invalid argument", "context", *this);
     ret = OB_INVALID_ARGUMENT;
   } else if (0 == trace_info_.get_app_trace_info().length()) {
     // set for the first time
@@ -325,7 +318,6 @@ int ObTransCtx::set_app_trace_id_(const ObString &app_trace_id)
   const int64_t len = app_trace_id.length();
 
   if (OB_UNLIKELY(len < 0) || OB_UNLIKELY(len > OB_MAX_TRACE_ID_BUFFER_SIZE)) {
-    TRANS_LOG(WARN, "invalid argument", K(app_trace_id), "context", *this);
     ret = OB_INVALID_ARGUMENT;
   } else if (0 == trace_info_.get_app_trace_id().length()) {
     // set for the first time

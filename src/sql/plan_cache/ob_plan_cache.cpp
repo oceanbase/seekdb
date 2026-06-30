@@ -1071,7 +1071,6 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
         if (OB_FAIL(add_cache_obj(ctx, key, cache_obj))) {
         }
       } else if (OB_SUCCESS == hash_err) {
-        SQL_PC_LOG(TRACE, "succeed to set node to key_node_map");
         /* stat must be added after set_refactored is successful, otherwise the following may occur:
          *              Thread A                                            Thread B
          *    create_node_and_add_cache_obj
@@ -1160,7 +1159,6 @@ int ObPlanCache::get_cache_obj(ObILibCacheCtx &ctx,
   } else if (OB_FAIL(get_value(key, cache_node, r_ref_lock /*read locked*/))) {
   } else if (OB_UNLIKELY(NULL == cache_node)) {
     ret = OB_SQL_PC_NOT_EXIST;
-    SQL_PC_LOG(DEBUG, "cache obj does not exist!", K(key));
   } else {
     LOG_DEBUG("inner_get_cache_obj", K(key), K(cache_node));
     if (cache_node->is_invalid()) {
@@ -1204,7 +1202,6 @@ int ObPlanCache::get_value(ObILibCacheKey *key,
       break;
     }
   case OB_HASH_NOT_EXIST: { // return when node = NULL; ret = OB_SUCCESS;
-      SQL_PC_LOG(TRACE, "entry does not exist.", KPC(key));
       break;
     }
   default: {
@@ -1258,24 +1255,20 @@ template int ObPlanCache::foreach_cache_evict<pl::ObGetPLKVEntryByDbIdOp>(pl::Ob
 int ObPlanCache::cache_evict_all_obj()
 {
   int ret = OB_SUCCESS;
-  SQL_PC_LOG(TRACE, "cache evict all plan start");
   LCKeyValueArray to_evict_keys;
   ObKVEntryTraverseOp get_ids_op(&to_evict_keys, PCV_GET_PLAN_KEY_HANDLE);
   if (OB_FAIL(foreach_cache_evict(get_ids_op))) {
   }
-  SQL_PC_LOG(TRACE, "cache evict all plan end");
   return ret;
 }
 
 int ObPlanCache::cache_evict_by_ns(ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
-  SQL_PC_LOG(TRACE, "cache evict all obj by ns start");
   LCKeyValueArray to_evict_keys;
   ObGetKVEntryByNsOp get_ids_op(ns, &to_evict_keys, PCV_GET_PLAN_KEY_HANDLE);
   if (OB_FAIL(foreach_cache_evict(get_ids_op))) {
   }
-  SQL_PC_LOG(TRACE, "cache evict all obj by ns end");
   return ret;
 }
 
@@ -1292,12 +1285,10 @@ int ObPlanCache::cache_evict_all_plan()
 int ObPlanCache::cache_evict_plan_by_sql_id(uint64_t db_id, common::ObString sql_id)
 {
   int ret = OB_SUCCESS;
-  SQL_PC_LOG(TRACE, "cache evict plan by sql id start");
   LCKeyValueArray to_evict_keys;
   ObGetKVEntryBySQLIDOp get_ids_op(db_id, sql_id, &to_evict_keys, PCV_GET_PLAN_KEY_HANDLE);
   if (OB_FAIL(foreach_cache_evict(get_ids_op))) {
   }
-  SQL_PC_LOG(TRACE, "cache evict plan by sql id end");
   return ret;
 }
 
@@ -1326,12 +1317,6 @@ int ObPlanCache::cache_evict()
   int ret = OB_SUCCESS;
   int64_t cache_evict_num = 0;
   ObGlobalReqTimeService::check_req_timeinfo();
-  SQL_PC_LOG(INFO, "start lib cache evict",
-             
-             "mem_hold", get_mem_hold(),
-             "mem_limit", get_mem_limit(),
-             "cache_obj_num", get_cache_obj_size(),
-             "cache_node_num", cache_key_node_map_.size());
   //determine whether it is still necessary to evict
   if (get_mem_hold() > get_mem_high()) {
     if (calc_evict_num(cache_evict_num) && cache_evict_num > 0) {
@@ -1344,8 +1329,6 @@ int ObPlanCache::cache_evict()
       }
       // also evict idle-expired nodes collected during the same scan
       if (OB_SUCC(ret) && idle_evict_keys.count() > 0) {
-        SQL_PC_LOG(INFO, "idle eviction during memory evict",
-                   "idle_evict_count", idle_evict_keys.count());
         if (OB_FAIL(batch_remove_cache_node(idle_evict_keys))) {
         }
         for (int64_t i = 0; i < idle_evict_keys.count(); i++) {
@@ -1359,13 +1342,6 @@ int ObPlanCache::cache_evict()
       idle_evict_done_round_ = true;
     }
   }
-  SQL_PC_LOG(INFO, "end lib cache evict",
-             
-             "cache_evict_num", cache_evict_num,
-             "mem_hold", get_mem_hold(),
-             "mem_limit", get_mem_limit(),
-             "cache_obj_num", get_cache_obj_size(),
-             "cache_node_num", cache_key_node_map_.size());
   return ret;
 }
 
@@ -1381,13 +1357,6 @@ int ObPlanCache::cache_evict_by_glitch_node()
     } else {
       int64_t N = co_list.count();
       int64_t mem_to_free = traverse_op.get_total_mem_used() / 2;
-      SQL_PC_LOG(INFO, "cache evict plan by glitch node start",
-             
-             "mem_hold", get_mem_hold(),
-             "mem_high", get_mem_high(),
-             "mem_to_free", mem_to_free,
-             "cache_obj_num", get_cache_obj_size(),
-             "cache_node_num", cache_key_node_map_.size());
       LCKeyValueArray to_evict_list;
       std::pop_heap(co_list.begin(), co_list.end(), [](const LCKeyValue &left, const LCKeyValue &right) {
         return left.node_->get_node_stat()->weight() > right.node_->get_node_stat()->weight();
@@ -1406,14 +1375,6 @@ int ObPlanCache::cache_evict_by_glitch_node()
           co_list.at(i).node_->dec_ref_count(PCV_EXPIRE_BY_MEM_HANDLE);
         }
       }
-      SQL_PC_LOG(INFO, "cache evict plan by glitch node end",
-             
-             "cache_evict_num", cache_evict_num,
-             "mem_hold", get_mem_hold(),
-             "mem_high", get_mem_high(),
-             "mem_low", get_mem_low(),
-             "cache_obj_num", get_cache_obj_size(),
-             "cache_node_num", cache_key_node_map_.size());
     }
   }
   return ret;
@@ -1467,12 +1428,6 @@ int ObPlanCache::cache_evict_by_idle()
     idle_scan_cursor_ = (bucket_pos >= bucket_num_) ? 0 : bucket_pos;
 
     if (to_evict.count() > 0) {
-      SQL_PC_LOG(INFO, "idle eviction collected plans",
-                 "idle_evict_count", to_evict.count(),
-                 "scanned_nodes", op.scanned_nodes_,
-                 "scanned_buckets", scanned_buckets,
-                 "start_cursor", start_cursor,
-                 "new_cursor", idle_scan_cursor_);
       if (OB_FAIL(batch_remove_cache_node(to_evict))) {
       }
       for (int64_t i = 0; i < to_evict.count(); i++) {
@@ -1562,7 +1517,6 @@ int ObPlanCache::batch_remove_cache_node(const LCKeyValueArray &to_evict)
 {
   int ret = OB_SUCCESS;
   int64_t N = to_evict.count();
-  SQL_PC_LOG(INFO, "actual evict number", "evict_value_num", to_evict.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (OB_FAIL(remove_cache_node(to_evict.at(i).key_))) {
     }
@@ -1581,13 +1535,10 @@ int ObPlanCache::remove_cache_node(ObILibCacheKey *key)
       del_node->dec_ref_count(LC_NODE_HANDLE);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      SQL_PC_LOG(ERROR, "pcv_set should not be null", K(key));
     }
   } else if (OB_HASH_NOT_EXIST == hash_err) {
-    SQL_PC_LOG(INFO, "plan cache key is alreay be deleted", K(key));
   } else {
     ret = hash_err;
-    SQL_PC_LOG(WARN, "failed to erase pcv_set from plan cache by key", K(key), K(hash_err));
   }
   return ret;
 }
@@ -2398,11 +2349,7 @@ void ObPlanCacheEliminationTask::runTimerTask()
       && 0 == run_task_counter_ % auto_flush_pc_interval) {
       IGNORE_RETURN plan_cache_->flush_plan_cache();
     }
-    SQL_PC_LOG(INFO, "schedule next cache evict task",
-              "evict_interval", (int64_t)(GCONF.plan_cache_evict_interval));
   }
-  SQL_PC_LOG(INFO, "schedule next cache evict task",
-             "evict_interval", (int64_t)(GCONF.plan_cache_evict_interval));
 }
 
 void ObPlanCacheEliminationTask::run_plan_cache_task()

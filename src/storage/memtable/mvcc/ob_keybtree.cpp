@@ -563,7 +563,6 @@ int WriteHandle<BtreeKey, BtreeVal>::insert_and_split_upward(BtreeKey key, Btree
     ret = OB_ENTRY_EXIST;
     BtreeVal old_val = val;
     val = old_node->get_val(pos, index);
-    OB_LOG(WARN, "duplicate key", K(old_node->get_key(pos, index)), K(key), K(old_node->get_val(pos, index)), K(val), K(old_val));
   } else {
     ret = insert_into_node(old_node, pos, key, val, new_node_1, new_node_2);
   }
@@ -867,9 +866,6 @@ int Iterator<BtreeKey, BtreeVal>::estimate_one_level(const int64_t level,
                                             batch_count,
                                             level,
                                             batch_element_count))) {
-    STORAGE_LOG(TRACE, "iter one batch", K(batch_physical_row_count), K(batch_count), K(level),
-                K(batch_element_count), K(level_physical_row_count), K(level_element_count),
-                K(node_count));
     level_physical_row_count += batch_physical_row_count;
     level_element_count += batch_element_count;
     node_count += batch_count;
@@ -902,7 +898,6 @@ int Iterator<BtreeKey, BtreeVal>::estimate_element_count(int64_t &physical_row_c
   }
   physical_row_count += level_physical_row_count;
   element_count += level_element_count;
-  STORAGE_LOG(TRACE, "finish sample leaf level", K(physical_row_count), K(element_count), K(node_count));
   if (OB_SUCCESS == ret && node_count >= MAX_SAMPLE_LEAF_COUNT) {
     avg_element_count_per_leaf = MAX(std::lround(static_cast<double>(level_element_count) / static_cast<double>(node_count)), 1);
     if (OB_FAIL(estimate_one_level(1,         /*level*/
@@ -919,7 +914,6 @@ int Iterator<BtreeKey, BtreeVal>::estimate_element_count(int64_t &physical_row_c
     physical_row_count += level_physical_row_count * avg_element_count_per_leaf;
     element_count += level_element_count * avg_element_count_per_leaf;
   }
-  STORAGE_LOG(TRACE, "finish sample second level", K(physical_row_count), K(element_count), K(node_count));
   if (OB_SUCCESS != ret) {
     scan_handle_.release_ref();
   }
@@ -1380,11 +1374,6 @@ int BtreeRawIterator<BtreeKey, BtreeVal>::split_range(int64_t top_level,
       // do nothing
     } else if (OB_FAIL(ret) || range_idx < range_count) {
       ret = OB_SUCC(ret) ? OB_ERR_UNEXPECTED : ret;
-      OB_LOG(WARN,
-             "btree split range: can not get enough sub range",
-             K(btree_node_count),
-             K(range_idx),
-             K(range_count));
     }
   }
 

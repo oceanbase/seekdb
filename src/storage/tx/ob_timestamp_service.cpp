@@ -121,14 +121,12 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(request));
   } else {
-    TRANS_LOG(DEBUG, "handle gts request", K(request));
     int64_t gts = 0;
     const MonotonicTs srr = request.get_srr();
     
     const ObAddr &requester = request.get_sender();
     if (requester == self_) {
      // Go local call to get gts
-     TRANS_LOG(DEBUG, "handle local gts request", K(requester));
      ret = handle_local_request_(request, result);
     } else if (OB_FAIL(get_timestamp(gts))) {
       // single-replica: remote requester path is dead; only local requests occur
@@ -156,9 +154,6 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
   ObTransStatistic::get_instance().add_gts_request_total_count( 1);
   (void)ATOMIC_FAA(&total_rt, end.mts_ - start.mts_);
   if (REACH_TIME_INTERVAL(STATISTICS_INTERVAL_US)) {
-    TRANS_LOG(INFO, "handle gts request statistics", K(total_rt), K(total_cnt),
-        "avg_rt", (double)total_rt / (double)(total_cnt + 1),
-        "avg_cnt", (double)total_cnt / (double)(STATISTICS_INTERVAL_US / 1000000));
     ATOMIC_STORE(&total_cnt, 0);
     ATOMIC_STORE(&total_rt, 0);
   }
@@ -205,7 +200,6 @@ int ObTimestampService::switch_to_follower_gracefully()
   if (ObTimestampAccess::ServiceType::GTS_LEADER == type) {
     share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::FOLLOWER);
   }
-  TRANS_LOG(INFO, "ObTimestampService switch to follower gracefully success", K(type), "service_type", share::g_mp->timestamp_access()->get_service_type());
   return OB_SUCCESS;
 }
 
@@ -215,13 +209,11 @@ void ObTimestampService::switch_to_follower_forcedly()
   if (ObTimestampAccess::ServiceType::GTS_LEADER == type) {
     share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::FOLLOWER);
   }
-  TRANS_LOG(INFO, "ObTimestampService switch to follower forcedly success", K(type), "service_type", share::g_mp->timestamp_access()->get_service_type());
 }
 
 int ObTimestampService::resume_leader()
 {
   share::g_mp->timestamp_access()->set_service_type(ObTimestampAccess::ServiceType::GTS_LEADER);
-  TRANS_LOG(INFO, "ObTimestampService resume leader success", "service_type", share::g_mp->timestamp_access()->get_service_type());
   return OB_SUCCESS;
 }
 

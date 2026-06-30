@@ -135,8 +135,6 @@ int binary_operand_vector_eval(const ObExpr &expr,
     }
   }
   if (OB_SUCC(ret)) {
-    SQL_LOG(DEBUG, "expr.args_[0]", K(ToStrVectorHeader(*expr.args_[0], ctx, &skip, bound)));
-    SQL_LOG(DEBUG, "expr.args_[1]", K(ToStrVectorHeader(*expr.args_[1], ctx, rskip, bound)));
   }
   return ret;
 }

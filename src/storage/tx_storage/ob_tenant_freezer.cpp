@@ -255,14 +255,6 @@ bool ObTenantFreezer::memstore_remain_memory_is_exhausting()
       remain_mem_exhausting = tenant_memory_exhausting || memstore_memory_exhausting;
 
       if (remain_mem_exhausting && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
-        STORAGE_LOG(INFO,
-                    "[TenantFreezer] memstore remain memory is exhausting",
-                    K(tenant_memory_limit),
-                    K(tenant_memory_remain),
-                    K(tenant_memory_exhausting),
-                    K(memstore_limit),
-                    K(memstore_remain),
-                    K(memstore_memory_exhausting));
       }
     }
 
@@ -746,7 +738,6 @@ void ObTenantFreezer::record_freezer_source_event(const ObLSID &ls_id,
 {
   if (is_valid_freeze_source((source))) {
     ATOMIC_AAF(&freezer_stat_.captured_source_times_[static_cast<int64_t>(source)], 1);
-    STORAGE_LOG(INFO, "[Freezer] freeze from source", K(ls_id), "freeze_source", obj_to_cstring(source));
   }
 }
 
@@ -755,7 +746,6 @@ void ObTenantFreezer::report_freezer_source_events()
   int ret = OB_SUCCESS;
   int64_t pos = 0;
 
-  TRANS_LOG(INFO, "[TENANT_FREEZER_EVENT] print freeze source");
   char server_event_value[MAX_ROOTSERVICE_EVENT_VALUE_LENGTH] = {0};
 
   ret = common::databuff_printf(server_event_value,
@@ -766,9 +756,6 @@ void ObTenantFreezer::report_freezer_source_events()
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_FREEZE_SOURCE_TYPE_COUNT; i++) {
     if (is_valid_freeze_source((ObFreezeSourceFlag(i)))) {
       int64_t captured_source_times = ATOMIC_LOAD(&(freezer_stat_.captured_source_times_[i]));
-      TRANS_LOG(INFO, "[TENANT_FREEZER_EVENT] print source", K(i),
-                "source_type", obj_to_cstring(ObFreezeSourceFlag(i)),
-                K(captured_source_times));
       ret = common::databuff_printf(server_event_value,
                                     MAX_ROOTSERVICE_EVENT_VALUE_LENGTH,
                                     pos,
@@ -1807,17 +1794,12 @@ void ObTenantFreezerStat::add_merge_event(const compaction::ObMergeType type, co
 
 void ObTenantFreezerStat::print_activity_metrics()
 {
-  TRANS_LOG(INFO, "[TENANT_FREEZER_EVENT] print captured event", KPC(this));
 
   for (int64_t i = 0; i < ObFreezerMergeType::MAX_MERGE_TYPE; i++) {
     int64_t captured_merge_time_cost = ATOMIC_LOAD(&(captured_merge_time_cost_[i]));
     int64_t captured_merge_times = ATOMIC_LOAD(&(captured_merge_times_[i]));
     const ObFreezerMergeType type = (ObFreezerMergeType)i;
 
-    TRANS_LOG(INFO, "[TENANT_FREEZER_EVENT] print merge event",
-              K(freezer_merge_type_to_str(type)),
-              K(captured_merge_times),
-              K(captured_merge_time_cost));
   }
 }
 
@@ -1845,7 +1827,6 @@ void ObTenantFreezerStatHistory::add_activity_metric(const ObTenantFreezerStat s
 
   if (start_ < 0 || start_ >= MAX_HISTORY_LENGTH) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "unexpected start position", K(start_), K(length_));
   } else if (length_ == MAX_HISTORY_LENGTH) {
     (void)history_[start_].assign(stat);
     start_ = (start_ + 1) % MAX_HISTORY_LENGTH;
@@ -1854,7 +1835,6 @@ void ObTenantFreezerStatHistory::add_activity_metric(const ObTenantFreezerStat s
     length_++;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "unexpected history length", K(start_), K(length_));
   }
 }
 

@@ -115,7 +115,6 @@ int ObTableLoadRow<T>::allocate_cells(T *&cells, int64_t count,
     cells = (T *)(allocator_handle->alloc(sizeof(T) * count));
     if (OB_ISNULL(cells)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OB_LOG(WARN, "failed to allocate cells", K(count));
     } else {
       new (cells) T[count];
     }

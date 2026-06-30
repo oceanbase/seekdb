@@ -1178,7 +1178,6 @@ int ObExtendHashTableVec<GroupRowBucket>::extend(const int64_t new_bucket_num)
           const_cast<GroupRowBucket &>(locate_empty_bucket(*new_buckets, old.get_hash())) = old;
         } else if (old.is_occupyed()) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_ENG_LOG(WARN, "extend is prepare allocated", K(old.get_hash()));
         }
       }
       buckets_->destroy();

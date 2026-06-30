@@ -167,7 +167,6 @@ bool ObRowkey::simple_equal(const ObRowkey &rhs) const
       const ObObj &rhs_obj = rhs.obj_ptr_[i];
       tc = obj.get_type_class();
       if (ObMaxTC <= tc) {
-        COMMON_LOG(WARN, "invalid type class", K(tc));
         common::right_to_die_or_duty_to_live();
       } else if (tc != rhs_obj.get_type_class()) {
         ret = false;
@@ -237,7 +236,6 @@ bool ObRowkey::simple_equal(const ObRowkey &rhs) const
           break;
         }
         default:
-          COMMON_LOG(WARN, "not_supported type class", K(tc));
           common::right_to_die_or_duty_to_live();
           break;
         }
@@ -288,7 +286,6 @@ int ObRowkey::deserialize(const char *buf, const int64_t buf_len, int64_t &pos, 
     }
     // Otherwise, check whether the number of reserved primary keys meets the requirements
     else if (obj_cnt_ < obj_cnt) {
-      COMMON_LOG(ERROR, "preserved obj count is not enough", K(obj_cnt_), K(obj_cnt), K(obj_ptr_));
       ret = OB_BUF_NOT_ENOUGH;
     } else {
       // Use the reserved obj array

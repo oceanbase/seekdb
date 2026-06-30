@@ -135,7 +135,6 @@ int ObLSTxService::get_tx_start_session_id(const transaction::ObTransID &tx_id, 
     if (OB_FAIL(mgr_->get_tx_ctx_directly_from_hash_map(tx_id, ctx))) {
       if (OB_TRANS_CTX_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        TRANS_LOG(INFO, "ctx not existed on this LS", K(tx_id), K(ls_id_));
       } else {
         TRANS_LOG(WARN, "get ctx failed", K(ret), K(tx_id), K(ls_id_));
       }
@@ -270,7 +269,6 @@ int ObLSTxService::revert_store_ctx(storage::ObStoreCtx &store_ctx) const
     int tmp_ret = OB_SUCCESS;
     ObLSHandle &src_ls_handle = store_ctx.mvcc_acc_ctx_.get_tx_table_guards().src_ls_handle_;
     if (!src_ls_handle.is_valid()) {
-      TRANS_LOG(ERROR, "src tx guard is valid when src ls handle not valid", K(store_ctx));
       ObLSHandle ls_handle;
       if (OB_TMP_FAIL(share::g_mp->ls_service()->get_ls(src_tx_table_guard.get_ls_id(), ls_handle, ObLSGetMod::TRANS_MOD))) {
       } else if (OB_TMP_FAIL(ls_handle.get_ls()->get_tx_svr()->end_request_for_transfer())) {
@@ -326,7 +324,6 @@ int ObLSTxService::check_all_tx_clean_up() const
     // there is some tx not finished, retry.
     ret = OB_EAGAIN;
   } else {
-    TRANS_LOG(INFO, "wait_all_tx_cleaned_up cleaned up success", K_(ls_id));
   }
   return ret;
 }
@@ -342,17 +339,14 @@ int ObLSTxService::check_all_readonly_tx_clean_up() const
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if ((active_readonly_request_count = mgr_->get_total_active_readonly_request_count()) > 0) {
     if (REACH_TIME_INTERVAL(5000000)) {
-      TRANS_LOG(INFO, "readonly requests are active", K(active_readonly_request_count));
       READ_CHECKER_PRINT(ls_id_);
     }
     ret = OB_EAGAIN;
   } else if ((total_request_by_transfer_dest = mgr_->get_total_request_by_transfer_dest()) > 0) {
     if (REACH_TIME_INTERVAL(5000000)) {
-      TRANS_LOG(INFO, "readonly requests are active", K(total_request_by_transfer_dest));
     }
     ret = OB_EAGAIN;
   } else {
-    TRANS_LOG(INFO, "wait_all_readonly_tx_cleaned_up cleaned up success", K_(ls_id));
   }
 
 #ifdef ERRSIM
@@ -375,7 +369,6 @@ int ObLSTxService::block_tx()
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->block_tx(unused_is_all_tx_clean_up))) {
   } else {
-    TRANS_LOG(INFO, "block rw tx success", K_(ls_id));
   }
   return ret;
 }
@@ -389,7 +382,6 @@ int ObLSTxService::block_all()
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
   } else {
-    TRANS_LOG(INFO, "block all success", K_(ls_id));
   }
   return ret;
 }
@@ -403,7 +395,6 @@ int ObLSTxService::kill_all_tx(const bool graceful)
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->kill_all_tx(graceful, unused_is_all_tx_clean_up))) {
   } else {
-    TRANS_LOG(INFO, "kill_all_tx success", K_(ls_id));
   }
   return ret;
 }
@@ -419,7 +410,6 @@ int ObLSTxService::check_modify_schema_elapsed(const ObTabletID &tablet_id,
   } else if (OB_UNLIKELY(!tablet_id.is_valid()) ||
              OB_UNLIKELY(schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(tablet_id), K(schema_version));
   } else if (OB_FAIL(mgr_->check_modify_schema_elapsed(tablet_id,
                                                        schema_version,
                                                        block_tx_id))) {
@@ -444,7 +434,6 @@ int ObLSTxService::check_modify_time_elapsed(const ObTabletID &tablet_id,
   } else if (OB_UNLIKELY(!tablet_id.is_valid()) ||
              OB_UNLIKELY(timestamp < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", K(tablet_id), K(timestamp));
   } else if (OB_FAIL(mgr_->check_modify_time_elapsed(tablet_id,
                                                      timestamp,
                                                      block_tx_id))) {
@@ -609,10 +598,6 @@ SCN ObLSTxService::get_rec_scn()
   get_min_rec_scn_common_checkpoint_type_by_index_(min_rec_scn_common_checkpoint_type_index,
                                                    common_checkpoint_type);
 
-  TRANS_LOG(INFO, "[CHECKPOINT] ObLSTxService::get_rec_scn",
-            K(common_checkpoint_type),
-            KPC(common_checkpoints_[min_rec_scn_common_checkpoint_type_index]),
-            K(min_rec_scn), K(ls_id_));
 
   return min_rec_scn;
 }
@@ -633,13 +618,6 @@ int ObLSTxService::flush(SCN &recycle_scn)
         has_gen_diagnose_trace = true;
         share::g_mp->checkpoint_diagnose_mgr()->acquire_trace_id(ls_id_, trace_id);
       }
-      TRANS_LOG(INFO,
-                "common_checkpoints flush",
-                K(i),
-                K(trace_id),
-                K(ls_id_),
-                K(has_gen_diagnose_trace),
-                K(common_checkpoints_[i]));
       if (OB_SUCCESS != (tmp_ret = common_checkpoints_[i]->flush(recycle_scn, trace_id))) {
       }
     }
@@ -674,7 +652,6 @@ int ObLSTxService::get_common_checkpoint_info(
     ObCommonCheckpoint *common_checkpoint = common_checkpoints_[i];
     if (OB_ISNULL(common_checkpoint)) {
       // ignore ret
-      TRANS_LOG(WARN, "the common_checkpoint should not be null", K(i));
     } else {
       ObCommonCheckpointVTInfo info;
       info.rec_scn = common_checkpoint->get_rec_scn(info.tablet_id);
@@ -719,12 +696,8 @@ int ObLSTxService::unregister_common_checkpoint(const ObCommonCheckpointType &ty
     WLockGuard guard(rwlock_);
     if (OB_ISNULL(common_checkpoints_[type])) {
       // ignore ret
-      STORAGE_LOG(WARN, "common_checkpoint is null, no need unregister", K(type),
-                  K(common_checkpoint));
     } else if (common_checkpoints_[type] != common_checkpoint) {
       ret = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "common checkpoint not equal, not unregister", K(type),
-                  K(common_checkpoints_[type]), K(common_checkpoint));
     } else {
       common_checkpoints_[type] = nullptr;
     }
@@ -739,7 +712,6 @@ int ObLSTxService::check_in_leader_serving_state(bool& bool_ret)
 
   if (OB_ISNULL(mgr_)) {
     ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "ObLSTxService::mgr_ is nullptr", K(ls_id_));
   } else {
     bool_ret = mgr_->in_leader_serving_state();
   }
@@ -926,7 +898,6 @@ int ObLSTxService::set_max_replay_commit_version(share::SCN commit_version)
   } else {
     mgr_->update_max_replay_commit_version(commit_version);
     share::g_mp->trans_service()->get_tx_version_mgr().update_max_commit_ts(commit_version, false /*elr*/);
-    TRANS_LOG(INFO, "succ set max_replay_commit_version", K(commit_version));
   }
   return ret;
 }

@@ -34,7 +34,6 @@ struct DefaultItemEncode
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", KP(buf));
     } else {
       ret = encode_item_enum(buf, buf_len, pos, item, BoolType<__is_enum(T)>());
     }
@@ -45,7 +44,6 @@ struct DefaultItemEncode
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", KP(buf));
     } else {
       ret = decode_item_enum(buf, data_len, pos, item, BoolType<__is_enum(T)>());
     }
@@ -64,7 +62,6 @@ private:
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", KP(buf));
     } else {
       ret = item.serialize(buf, buf_len, pos);
     }
@@ -76,7 +73,6 @@ private:
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", KP(buf));
     } else {
       ret = item.deserialize(buf, data_len, pos);
     }
@@ -96,7 +92,6 @@ private:
     STATIC_ASSERT(sizeof(int32_t) == sizeof(item), "type length mismatch");
     if (OB_ISNULL(buf)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", KP(buf));
     } else {
       ret = serialization::encode_vi32(buf, buf_len, pos, static_cast<int32_t>(item));
     }
@@ -110,7 +105,6 @@ private:
     STATIC_ASSERT(sizeof(v) == sizeof(item), "type length mismatch");
     if (OB_ISNULL(buf)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid args", KP(buf));
     } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, &v))) {
     } else {
       item = static_cast<T>(v);
@@ -130,7 +124,6 @@ int encode_item(char *buf, const int64_t buf_len, int64_t &pos, const T &item)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid args", KP(buf));
   } else {
     ret = DefaultItemEncode<T>::encode_item(buf, buf_len, pos, item);
   }
@@ -142,7 +135,6 @@ int decode_item(const char *buf, const int64_t data_len, int64_t &pos, T &item)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid args", KP(buf));
   } else {
     ret = DefaultItemEncode<T>::decode_item(buf, data_len, pos, item);
   }
@@ -181,7 +173,6 @@ int encode_item(char *buf, const int64_t buf_len, int64_t &pos, const char(&item
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid args", KP(buf));
   } else {
     ret = serialization::encode_vstr(buf, buf_len, pos, item);
   }
@@ -194,7 +185,6 @@ int decode_item(const char *buf, const int64_t data_len, int64_t &pos, char(&ite
   int64_t ret_str_length;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid args", KP(buf));
   } else {
     ret = serialization::decode_vstr(buf, data_len, pos, item, SIZE, &ret_str_length);
   }

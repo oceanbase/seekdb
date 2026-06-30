@@ -204,7 +204,6 @@ int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
       is_sub_end = false;
       if (OB_UNLIKELY(table_schema_idx_ < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "table_schema_idx_ is wrong", K(table_schema_idx_));
       } else if (table_schema_idx_ >= table_schemas_.count()) {
         is_end = true;
         table_schema_idx_ = OB_INVALID_ID;
@@ -285,7 +284,6 @@ int ObTableIndex::get_rowkey_index_column(const ObTableSchema &table_schema,
   is_end = false;
   if (OB_UNLIKELY(rowkey_info_idx_ < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "rowkey_info_idx_ is wrong", K(rowkey_info_idx_));
   } else if (OB_FAIL(table_schema.get_store_column_ids(store_column_ids, true))) {
   } else if (rowkey_info_idx_ >= store_column_ids.count()) {
     is_end = true;
@@ -536,7 +534,6 @@ int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
       is_sub_end = false;
       if (OB_UNLIKELY(index_tid_array_idx_ < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "index_tid_array_idx_ is wrong", K(index_tid_array_idx_));
       } else if (index_tid_array_idx_ >= simple_index_infos_.count()) {
         is_end = true;
         index_tid_array_idx_ = OB_INVALID_ID;

@@ -197,7 +197,6 @@ protected:
         } else if (!p_future_base_->ready_) {
           ret = OB_TIMEOUT;
         } else {
-          OCCAM_LOG(WARN, "data is ready");
         }
       }
     } else {
@@ -224,7 +223,6 @@ protected:
       ObThreadCondGuard guard(p_future_base_->cv_);
       ret = p_future_base_->ready_;
     } else {
-      OCCAM_LOG(WARN, "p_future_base_ not init yet", K(lbt()));
     }
     return ret;
   }
