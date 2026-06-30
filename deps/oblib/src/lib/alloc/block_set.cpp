@@ -356,6 +356,49 @@ void BlockSet::take_off_purged_block(ABlock *block, int nblocks, AChunk *chunk)
   }
 }
 
+ABlock *BlockSet::merge_with_adjacent_purged_blocks(ABlock *block,
+    int &nblocks,
+    AChunk *chunk,
+    int64_t &merged_blocks)
+{
+  abort_unless(NULL != block && NULL != chunk && !block->in_use_ && block->is_washed_);
+  ABlock *head = block;
+  merged_blocks = 0;
+  int offset = chunk->blk_offset(block);
+  int prev_offset = -1;
+  if (!chunk->is_first_blk_offset(offset, &prev_offset)) {
+    ABlock *prev_block = chunk->offset2blk(prev_offset);
+    if (!prev_block->in_use_ && prev_block->is_washed_) {
+      const int prev_nblocks = offset - prev_offset;
+    #if MEMCHK_LEVEL >= 1
+      abort_unless(prev_nblocks == chunk->blk_nblocks(prev_block));
+    #endif
+      take_off_purged_block(prev_block, prev_nblocks, chunk);
+      block->clear_magic_code();
+      chunk->unmark_blk_offset_bit(offset);
+      head = prev_block;
+      nblocks += prev_nblocks;
+      offset = prev_offset;
+      merged_blocks++;
+    }
+  }
+
+  int next_offset = -1;
+  if (!chunk->is_last_blk_offset(offset, &next_offset)) {
+    ABlock *next_block = chunk->offset2blk(next_offset);
+    if (!next_block->in_use_ && next_block->is_washed_) {
+      const int next_nblocks = chunk->blk_nblocks(next_block);
+      take_off_purged_block(next_block, next_nblocks, chunk);
+      next_block->clear_magic_code();
+      chunk->unmark_blk_offset_bit(next_offset);
+      nblocks += next_nblocks;
+      merged_blocks++;
+    }
+  }
+
+  return head;
+}
+
 AChunk *BlockSet::alloc_chunk(const uint64_t size, const ObMemAttr &attr)
 {
   AChunk *chunk = NULL;
@@ -521,14 +564,26 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
               }
               take_off_free_block(block, cls, chunk);
               block->is_washed_ = true;
-              add_purged_block(block, cls, chunk);
+              int merged_nblocks = cls;
+              int64_t merged_blocks = 0;
+              ABlock *merged_block = merge_with_adjacent_purged_blocks(block,
+                  merged_nblocks,
+                  chunk,
+                  merged_blocks);
+              add_purged_block(merged_block, merged_nblocks, chunk);
               if (0 == chunk->washed_blks_) {
                 abort_unless(0 == chunk->washed_size_);
                 related_chunks++;
               }
               chunk->washed_size_ += len;
-              chunk->washed_blks_++;
-              washed_blks += 1;
+              const int64_t washed_blk_delta = 1 - merged_blocks;
+              if (washed_blk_delta >= 0) {
+                chunk->washed_blks_ += washed_blk_delta;
+              } else {
+                abort_unless(chunk->washed_blks_ >= static_cast<uint64_t>(-washed_blk_delta));
+                chunk->washed_blks_ -= static_cast<uint64_t>(-washed_blk_delta);
+              }
+              washed_blks += washed_blk_delta;
               washed_size += len;
             }
           }

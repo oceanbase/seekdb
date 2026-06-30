@@ -242,6 +242,48 @@ TEST_F(TestBlockSet, SplitPurgedBlock)
   Free(p4);
 }
 
+TEST_F(TestBlockSet, MergeAdjacentPurgedBlocks)
+{
+  const uint64_t blocks = 32;
+  const uint64_t tail_blocks = BLOCKS_PER_CHUNK - 3 * blocks;
+  const uint64_t sz = blocks * ABLOCK_SIZE;
+  ABlock *p1 = Malloc(sz);
+  ABlock *p2 = Malloc(sz);
+  ABlock *p3 = Malloc(sz);
+  ABlock *p4 = Malloc(tail_blocks * ABLOCK_SIZE);
+  check_ptr(p1);
+  check_ptr(p2);
+  check_ptr(p3);
+  check_ptr(p4);
+  AChunk *chunk = p1->chunk();
+  ASSERT_EQ(chunk, p2->chunk());
+  ASSERT_EQ(chunk, p3->chunk());
+  ASSERT_EQ(chunk, p4->chunk());
+
+  Free(p1);
+  ASSERT_EQ(static_cast<int64_t>(sz), cs_.sync_wash(INT64_MAX));
+  ASSERT_EQ(sz, chunk->washed_size_);
+  ASSERT_EQ(1, chunk->washed_blks_);
+
+  Free(p3);
+  ASSERT_EQ(static_cast<int64_t>(sz), cs_.sync_wash(INT64_MAX));
+  ASSERT_EQ(2 * sz, chunk->washed_size_);
+  ASSERT_EQ(2, chunk->washed_blks_);
+
+  Free(p2);
+  ASSERT_EQ(static_cast<int64_t>(sz), cs_.sync_wash(INT64_MAX));
+  ASSERT_EQ(3 * sz, chunk->washed_size_);
+  ASSERT_EQ(1, chunk->washed_blks_);
+
+  ABlock *p5 = Malloc(3 * sz);
+  ASSERT_EQ(p1, p5);
+  ASSERT_EQ(0, chunk->washed_size_);
+  ASSERT_EQ(0, chunk->washed_blks_);
+
+  Free(p4);
+  Free(p5);
+}
+
 TEST_F(TestBlockSet, Single)
 {
   uint64_t sz = INTACT_NORMAL_AOBJECT_SIZE;

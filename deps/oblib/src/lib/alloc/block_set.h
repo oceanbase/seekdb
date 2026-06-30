@@ -64,6 +64,10 @@ private:
   void add_purged_block(ABlock *block, int nblocks, AChunk *chunk);
   ABlock *get_purged_block(const int cls, const ObMemAttr &attr);
   void take_off_purged_block(ABlock *block, int nblocks, AChunk *chunk);
+  ABlock *merge_with_adjacent_purged_blocks(ABlock *block,
+      int &nblocks,
+      AChunk *chunk,
+      int64_t &merged_blocks);
   int64_t purge_free_blocks(const int64_t wash_size,
       const int64_t delay_us,
       const int64_t max_blocks_per_round,
