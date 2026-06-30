@@ -27,9 +27,6 @@
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "pl/ob_pl_exception_handling.h"
 #include "pl/ob_pl_interpreter.h"
-#ifdef _WIN32
-#include "core/ob_jit_allocator.h"
-#endif
 
 namespace oceanbase
 {
@@ -4097,29 +4094,6 @@ int ObPLExecState::check_pl_execute_priv(ObSchemaGetterGuard &guard,
   }
   return ret;
 }
-
-
-#ifdef _WIN32
-static int call_pl_entry_with_seh(int(*fp)(ObPLExecCtx*, int64_t, int64_t*),
-                                ObPLExecCtx *ctx, int64_t argc, int64_t *argv,
-                                bool &has_exception)
-{
-  int ret = OB_SUCCESS;
-  has_exception = false;
-  if (OB_ISNULL(fp) || OB_ISNULL(ctx) || argc < 0 || (argc > 0 && OB_ISNULL(argv))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(fp), KP(ctx), K(argc), KP(argv));
-  } else {
-    __try {
-      ret = fp(ctx, argc, argv);
-    } __except (GetExceptionCode() == OB_PL_SEH_EXCEPTION_CODE
-                  ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-      has_exception = true;
-    }
-  }
-  return ret;
-}
-#endif
 
 int ObPLExecState::execute()
 {
